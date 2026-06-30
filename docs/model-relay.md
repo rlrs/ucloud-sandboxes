@@ -26,7 +26,9 @@ uv run ucloud-sandboxes serve-model-relay \
   --host 0.0.0.0 \
   --port 8092 \
   --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token \
-  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token
+  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token \
+  --worker-lease-seconds 60 \
+  --completed-request-retention-seconds 3600
 ```
 
 Use the sandbox bearer token as the sandbox's `OPENAI_API_KEY`. Use the worker
@@ -80,23 +82,38 @@ curl -sS -X POST https://relay.example.org/register_rollout \
   -d '{"rollout_id":"run-001"}'
 ```
 
-Long-poll for work:
+Workers may heartbeat separately for observability:
 
 ```bash
-curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&timeout_seconds=30" \
+curl -sS -X POST https://relay.example.org/worker/heartbeat \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"rollout_id":"run-001","worker_id":"lumi-worker-1","metadata":{"host":"lumi"}}'
+```
+
+Long-poll for work. `limit` batches requests; `lease_seconds` reserves returned
+requests for this worker before they are retried; `worker_id` is recorded in
+stats and request envelopes:
+
+```bash
+curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&worker_id=lumi-worker-1&timeout_seconds=30&limit=8&lease_seconds=60" \
   -H "Authorization: Bearer $WORKER_TOKEN"
 ```
 
 If no request is available before the timeout, the relay returns
-`{"request": null}`.
+`{"request": null, "requests": []}`.
 
-The response is:
+The response contains `requests`; `request` is the first item for convenience:
 
 ```json
 {
   "request": {
     "request_id": "7fd...",
     "rollout_id": "run-001",
+    "lease_id": "c4b...",
+    "lease_expires_at": 1780000000.0,
+    "leased_by": "lumi-worker-1",
+    "delivery_count": 1,
     "endpoint": "/v1/chat/completions",
     "method": "POST",
     "headers": {},
@@ -104,9 +121,19 @@ The response is:
       "model": "local-model",
       "messages": []
     }
-  }
+  },
+  "requests": [
+    {
+      "request_id": "7fd...",
+      "lease_id": "c4b..."
+    }
+  ]
 }
 ```
+
+Workers must echo `request_id` and `lease_id` when responding. If a worker misses
+the lease window, the request can be delivered to another worker and the stale
+response is rejected with `409`.
 
 After calling local inference, post the OpenAI-compatible response body:
 
@@ -114,8 +141,12 @@ After calling local inference, post the OpenAI-compatible response body:
 curl -sS -X POST https://relay.example.org/worker/respond \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"7fd...","response":{"choices":[]}}'
+  -d '{"request_id":"7fd...","lease_id":"c4b...","response":{"choices":[]}}'
 ```
+
+Duplicate responses for already-completed requests are accepted and reported as
+`{"duplicate": true}` while the completed request id is retained. This makes
+worker retry-after-timeout behavior idempotent.
 
 Post worker failures with:
 
@@ -123,8 +154,18 @@ Post worker failures with:
 curl -sS -X POST https://relay.example.org/worker/error \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"7fd...","error":"local model failed"}'
+  -d '{"request_id":"7fd...","lease_id":"c4b...","error":"local model failed"}'
 ```
+
+Relay stats are available to workers:
+
+```bash
+curl -sS https://relay.example.org/v1/relay/stats \
+  -H "Authorization: Bearer $WORKER_TOKEN"
+```
+
+Stats include pending and leased counts by rollout, retained completed request
+ids, worker heartbeats, counters, and average queue/worker/request timings.
 
 The relay currently handles non-streaming requests. If a sandbox sends
 `stream: true`, the relay returns a clear `400` until streaming is implemented.
@@ -142,3 +183,18 @@ curl -sS -X POST https://relay.example.org/unregister_rollout \
 
 Unregistering a rollout fails any pending model calls for that rollout with an
 OpenAI-shaped error response.
+
+## Reliability Model
+
+The in-memory relay now uses explicit request leases:
+
+- pending requests are assigned to a worker for `lease_seconds`
+- expired leases are retried and can be delivered again
+- stale responses with old leases are rejected
+- completed request ids are retained temporarily for idempotent worker retries
+- workers can long-poll batches with `limit=N`
+
+This is still single-process state. If the relay process restarts, in-flight
+requests are lost. The lease/idempotency contract is the API shape a durable
+Redis/Postgres/NATS backend should preserve when we need multi-process or
+restart-safe relay state.

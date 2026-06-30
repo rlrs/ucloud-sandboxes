@@ -419,6 +419,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=30.0,
         help="Default long-poll timeout for /worker/poll.",
     )
+    model_relay.add_argument(
+        "--worker-lease-seconds",
+        type=float,
+        default=60.0,
+        help="How long a polled request is reserved for one worker before retry.",
+    )
+    model_relay.add_argument(
+        "--completed-request-retention-seconds",
+        type=float,
+        default=3600.0,
+        help="How long completed request ids are retained for idempotent responses.",
+    )
     model_relay.set_defaults(func=cmd_serve_model_relay)
 
     runtime_conformance = subparsers.add_parser(
@@ -1739,11 +1751,17 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         worker_bearer_token=worker_bearer_token,
         request_timeout_seconds=max(0.1, args.request_timeout_seconds),
         worker_poll_timeout_seconds=max(0.0, args.worker_poll_timeout_seconds),
+        worker_lease_seconds=max(0.001, args.worker_lease_seconds),
+        completed_request_retention_seconds=max(
+            1.0,
+            args.completed_request_retention_seconds,
+        ),
     )
     print(f"Serving model relay on http://{args.host}:{args.port}")
     print(f"Sandbox auth: {'required' if sandbox_bearer_token else 'disabled'}")
     print(f"Worker auth: {'required' if worker_bearer_token else 'disabled'}")
     print(f"Request timeout: {max(0.1, args.request_timeout_seconds):g}s")
+    print(f"Worker lease: {max(0.001, args.worker_lease_seconds):g}s")
     web.run_app(app, host=args.host, port=args.port, print=None)
     return 0
 

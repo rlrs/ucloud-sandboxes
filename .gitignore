@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+ucloud-sandboxes-sdk/
+
+# Virtual environments
+.venv
+
+# Local secrets and run output
+.env
+logs/
+inspect-logs/

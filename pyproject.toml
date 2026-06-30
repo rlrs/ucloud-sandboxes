@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ucloud-sandboxes"
+version = "0.1.0"
+description = "Autoscaler for gVisor sandbox pools on UCloud VM jobs"
+readme = "README.md"
+requires-python = ">=3.10.13"
+dependencies = [
+    "aiohttp>=3.10,<4",
+]
+
+[project.scripts]
+ucloud-sandboxes = "ucloud_sandboxes.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ucloud_sandboxes"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/ucloud-sandboxes-sdk"]

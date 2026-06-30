@@ -559,6 +559,30 @@ uv run ucloud-sandboxes serve-control-plane \
   --execute-image-builds
 ```
 
+Run the outbound model relay as a sibling service on the same gateway/control
+VM. It uses separate bearer tokens: the sandbox token is passed to sandboxes as
+`OPENAI_API_KEY`, and the worker token is used by the LUMI-side worker that
+registers rollouts, polls work, renews leases, and posts responses:
+
+```bash
+uv run ucloud-sandboxes serve-model-relay \
+  --host 0.0.0.0 \
+  --port 8092 \
+  --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token \
+  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token \
+  --request-timeout-seconds 7200 \
+  --worker-lease-seconds 600 \
+  --completed-request-retention-seconds 3600
+```
+
+The systemd unit template for production-like gateway VMs is
+`deploy/systemd/ucloud-sandbox-relay.service`. Expose the relay publicly with a
+UCloud public link bound to port `8092`, or put a reverse proxy on the existing
+gateway ingress and forward relay paths to the local relay process.
+
+Live note: `https://app-sandboxes-relay.cloud.sdu.dk` is bound to gateway VM job
+`12346251` through UCloud public link `12346842` on port `8092`.
+
 The gateway writes dashboard metrics to `<state-dir>/metrics.jsonl` by default
 and exposes a snapshot at `GET /v1/metrics`. The snapshot includes fresh node
 scheduler load, actual VM CPU/memory pressure sampled from `/proc`, aggregate

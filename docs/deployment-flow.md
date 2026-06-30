@@ -44,14 +44,16 @@ sandboxes. The intended rollout flow is:
 4. Generate a dedicated gateway SSH keypair under gateway state and run
    `ensure-ucloud-ssh-key` with the public key so first-boot node SSH accepts
    the gateway key.
-5. Run the autoscaler with `--execute` and `--execute-init`.
-6. Let the autoscaler submit sandbox-node and builder VMs with matching
+5. Start the public gateway service, model relay service, and autoscaler service
+   from the same installed wheel.
+6. Run the autoscaler with `--execute` and `--execute-init`.
+7. Let the autoscaler submit sandbox-node and builder VMs with matching
    deployment/version labels.
-7. Let the autoscaler run post-boot init over the UCloud-announced SSH command
+8. Let the autoscaler run post-boot init over the UCloud-announced SSH command
    using `--init-package-spec /work/...whl`,
    `--init-authorized-key-file`, and `--init-ssh-private-key-file`.
-8. Wait for matching heartbeats before scheduling sandboxes to those nodes.
-9. Drain old/mismatched nodes, then scale them down only after they are idle.
+9. Wait for matching heartbeats before scheduling sandboxes to those nodes.
+10. Drain old/mismatched nodes, then scale them down only after they are idle.
 
 ## Credentials
 
@@ -98,9 +100,13 @@ network:
    - submitted with `submit-vm --role gateway`
    - submitted with private network `12345327`
    - submitted with public link `12345368` bound to the gateway API port
+   - live relay public link `12346842` is attached to the same VM and bound to
+     relay port `8092`
    - opened with `open-vm-web <job-id> --port 8090` after the gateway service
      is listening; without this UCloud's ingress can return `449` even though
      the public link resource is bound to the VM job
+   - opened with `open-vm-web <job-id> --port 8092` after the relay service is
+     listening for the same reason
    - live job id: `12346251`
    - install the wheel in `/work/ucloud-sandboxes/gateway-venv`
    - store the UCloud session secret outside the repo
@@ -112,6 +118,9 @@ network:
    - pass `--gateway-bearer-token-file` before binding a public link
    - pass `--enable-image-builds --execute-image-builds` only on a
      build-capable control-plane machine with registry access
+   - run `serve-model-relay --host 0.0.0.0 --port 8092` as
+     `ucloud-sandbox-relay.service`
+   - store separate relay sandbox and worker bearer tokens outside the repo
    - run `autoscaler-loop` with the same state dir and UCloud session file
 2. Sandbox-node VMs:
    - autoscaled from pending sandbox resource demand
@@ -124,8 +133,62 @@ network:
    - authenticated public sandbox create/exec/delete works through the gateway
    - route file is empty after cleanup
    - autoscaler loop observes fresh heartbeats plus pending sandbox and image-build demand
+   - local `GET http://127.0.0.1:8092/healthz` returns 200 on the gateway VM
+   - public `GET https://app-sandboxes-relay.cloud.sdu.dk/healthz` returns 200
+   - unauthenticated public `GET /v1/relay/stats` on the relay returns 401
    - zero demand plus idle timeout produces safe labelled stop intents for sandbox
      and builder nodes
+
+The relay service is deployed from the same wheel as the gateway. The checked-in
+unit template is `deploy/systemd/ucloud-sandbox-relay.service`; install it on
+the control-plane VM with:
+
+```bash
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-relay.service \
+  /etc/systemd/system/ucloud-sandbox-relay.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ucloud-sandbox-relay.service
+```
+
+Create the relay token files before starting the service:
+
+```bash
+install -d -m 0700 /work/ucloud-sandboxes/state
+umask 077
+[ -s /work/ucloud-sandboxes/state/relay-sandbox-token ] \
+  || openssl rand -hex 32 > /work/ucloud-sandboxes/state/relay-sandbox-token
+[ -s /work/ucloud-sandboxes/state/relay-worker-token ] \
+  || openssl rand -hex 32 > /work/ucloud-sandboxes/state/relay-worker-token
+```
+
+The sandbox token becomes `OPENAI_API_KEY` inside sandboxes. The worker token is
+used by the LUMI-side worker for rollout registration, polling, lease renewal,
+responses, and errors. For long inference calls, keep
+`--worker-lease-seconds` moderate, such as 600 seconds, and have workers renew
+leases every minute or two until local inference returns.
+
+UCloud public links are bound to one VM-local port. The live gateway VM has
+public link `12345368` bound to port `8090` for the sandbox gateway and public
+link `12346842` bound to port `8092` for the model relay.
+
+To create and bind a relay ingress on a running VM:
+
+```bash
+ucloud request POST /api/ingresses \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --json '{"type":"bulk","items":[{"domain":"app-sandboxes-relay.cloud.sdu.dk","product":{"id":"u1-publiclink","category":"u1-publiclink","provider":"ucloud"}}]}'
+
+ucloud request POST /api/jobs/attachResource \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --json '{"jobId":"12346251","resource":{"type":"ingress","id":"12346842","port":8092}}'
+
+uv run ucloud-sandboxes open-vm-web 12346251 \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --port 8092
+```
+
+The live relay smoke path is
+`https://app-sandboxes-relay.cloud.sdu.dk/rollouts/<rollout-id>/v1/chat/completions`.
 
 The gateway VM cannot SSH into node VMs through `ssh.cloud.sdu.dk` unless it has
 an accepted private key. The bootstrap path is to generate a dedicated keypair

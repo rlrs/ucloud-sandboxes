@@ -1,0 +1,16 @@
+[Unit]
+Description=UCloud Sandbox model relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ucloud
+Group=ucloud
+WorkingDirectory=/work/ucloud-sandboxes
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-model-relay --host 0.0.0.0 --port 8092 --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token --request-timeout-seconds 7200 --worker-lease-seconds 600 --completed-request-retention-seconds 3600
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

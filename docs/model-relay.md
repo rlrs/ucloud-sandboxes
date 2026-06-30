@@ -36,6 +36,16 @@ Use the sandbox bearer token as the sandbox's `OPENAI_API_KEY`. Use the worker
 bearer token for `/register_rollout`, `/worker/poll`, `/worker/respond`, and
 `/worker/error`.
 
+Live development relay:
+
+- URL: `https://app-sandboxes-relay.cloud.sdu.dk`
+- UCloud ingress id: `12346842`
+- gateway VM job id: `12346251`
+- VM-local port: `8092`
+- token files on the gateway VM:
+  `/work/ucloud-sandboxes/state/relay-sandbox-token` and
+  `/work/ucloud-sandboxes/state/relay-worker-token`
+
 ## Sandbox Environment
 
 For unmodified OpenAI-compatible clients, put the rollout id in the base URL:

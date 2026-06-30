@@ -494,7 +494,9 @@ uv run ucloud-sandboxes serve-model-relay \
   --host 0.0.0.0 \
   --port 8092 \
   --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token \
-  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token
+  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token \
+  --request-timeout-seconds 7200 \
+  --worker-lease-seconds 600
 ```
 
 Then create sandboxes with outbound networking and an OpenAI-compatible base URL

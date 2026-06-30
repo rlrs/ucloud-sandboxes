@@ -27,7 +27,8 @@ uv run ucloud-sandboxes serve-model-relay \
   --port 8092 \
   --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token \
   --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token \
-  --worker-lease-seconds 60 \
+  --request-timeout-seconds 7200 \
+  --worker-lease-seconds 600 \
   --completed-request-retention-seconds 3600
 ```
 
@@ -93,10 +94,11 @@ curl -sS -X POST https://relay.example.org/worker/heartbeat \
 
 Long-poll for work. `limit` batches requests; `lease_seconds` reserves returned
 requests for this worker before they are retried; `worker_id` is recorded in
-stats and request envelopes:
+stats and request envelopes. For long inference, use a lease long enough for
+normal scheduler jitter, then renew while the model call is running:
 
 ```bash
-curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&worker_id=lumi-worker-1&timeout_seconds=30&limit=8&lease_seconds=60" \
+curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&worker_id=lumi-worker-1&timeout_seconds=30&limit=8&lease_seconds=600" \
   -H "Authorization: Bearer $WORKER_TOKEN"
 ```
 
@@ -134,6 +136,20 @@ The response contains `requests`; `request` is the first item for convenience:
 Workers must echo `request_id` and `lease_id` when responding. If a worker misses
 the lease window, the request can be delivered to another worker and the stale
 response is rejected with `409`.
+
+Workers can renew a lease before it expires:
+
+```bash
+curl -sS -X POST https://relay.example.org/worker/renew \
+  -H "Authorization: Bearer $WORKER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"request_id":"7fd...","lease_id":"c4b...","worker_id":"lumi-worker-1","lease_seconds":600}'
+```
+
+For long inference, poll with a lease such as 10 minutes and renew every minute
+or two while the local model call is still running. This keeps retry responsive
+if a worker dies without forcing the lease to cover the absolute worst-case
+generation time.
 
 After calling local inference, post the OpenAI-compatible response body:
 
@@ -189,6 +205,7 @@ OpenAI-shaped error response.
 The in-memory relay now uses explicit request leases:
 
 - pending requests are assigned to a worker for `lease_seconds`
+- active workers renew leases during long inference
 - expired leases are retried and can be delivered again
 - stale responses with old leases are rejected
 - completed request ids are retained temporarily for idempotent worker retries

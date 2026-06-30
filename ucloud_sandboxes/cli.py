@@ -410,7 +410,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_relay.add_argument(
         "--request-timeout-seconds",
         type=float,
-        default=300.0,
+        default=3600.0,
         help="Maximum time a sandbox model request waits for a worker response.",
     )
     model_relay.add_argument(
@@ -422,7 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     model_relay.add_argument(
         "--worker-lease-seconds",
         type=float,
-        default=60.0,
+        default=600.0,
         help="How long a polled request is reserved for one worker before retry.",
     )
     model_relay.add_argument(

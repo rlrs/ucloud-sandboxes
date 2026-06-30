@@ -391,6 +391,154 @@ class ModelRelayTests(unittest.TestCase):
         self.assertEqual(sandbox_result, (200, {"ok": True}))
         self.assertEqual(stats["counters"]["lease_expired"], 1)
 
+    def test_worker_can_renew_lease_for_long_inference(self) -> None:
+        async def scenario() -> tuple[dict, int, tuple[int, dict], dict]:
+            app = create_model_relay_app(request_timeout_seconds=5, worker_lease_seconds=0.01)
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "127.0.0.1", 0)
+            await site.start()
+            sockets = site._server.sockets if site._server else []
+            port = sockets[0].getsockname()[1]
+            base = f"http://127.0.0.1:{port}"
+            try:
+                async with ClientSession() as client:
+                    async with client.post(
+                        f"{base}/register_rollout",
+                        json={"rollout_id": "rollout-renew"},
+                    ) as response:
+                        self.assertEqual(response.status, 201)
+
+                    async def sandbox_request() -> tuple[int, dict]:
+                        async with client.post(
+                            f"{base}/rollouts/rollout-renew/v1/chat/completions",
+                            json={"model": "m", "messages": []},
+                        ) as response:
+                            return response.status, await response.json()
+
+                    sandbox_task = asyncio.create_task(sandbox_request())
+                    async with client.get(
+                        f"{base}/worker/poll",
+                        params={
+                            "rollout_id": "rollout-renew",
+                            "worker_id": "worker-renew",
+                            "lease_seconds": "0.05",
+                        },
+                    ) as response:
+                        self.assertEqual(response.status, 200)
+                        leased = (await response.json())["request"]
+
+                    await asyncio.sleep(0.02)
+
+                    async with client.post(
+                        f"{base}/worker/renew",
+                        json={
+                            "request_id": leased["request_id"],
+                            "lease_id": leased["lease_id"],
+                            "worker_id": "worker-renew",
+                            "lease_seconds": "1",
+                        },
+                    ) as response:
+                        self.assertEqual(response.status, 200)
+                        renewed = (await response.json())["request"]
+
+                    await asyncio.sleep(0.04)
+
+                    async with client.post(
+                        f"{base}/worker/respond",
+                        json={
+                            "request_id": leased["request_id"],
+                            "lease_id": leased["lease_id"],
+                            "response": {"renewed": True},
+                        },
+                    ) as response:
+                        respond_status = response.status
+
+                    sandbox_result = await sandbox_task
+                    async with client.get(f"{base}/v1/relay/stats") as response:
+                        stats = await response.json()
+                    return renewed, respond_status, sandbox_result, stats
+            finally:
+                await runner.cleanup()
+
+        renewed, respond_status, sandbox_result, stats = asyncio.run(scenario())
+
+        self.assertGreater(renewed["lease_expires_at"], renewed["delivered_at"])
+        self.assertEqual(respond_status, 200)
+        self.assertEqual(sandbox_result, (200, {"renewed": True}))
+        self.assertEqual(stats["counters"]["lease_renewed"], 1)
+        self.assertEqual(stats["counters"]["lease_expired"], 0)
+
+    def test_expired_lease_cannot_be_renewed(self) -> None:
+        async def scenario() -> int:
+            app = create_model_relay_app(request_timeout_seconds=5, worker_lease_seconds=0.01)
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "127.0.0.1", 0)
+            await site.start()
+            sockets = site._server.sockets if site._server else []
+            port = sockets[0].getsockname()[1]
+            base = f"http://127.0.0.1:{port}"
+            try:
+                async with ClientSession() as client:
+                    async with client.post(
+                        f"{base}/register_rollout",
+                        json={"rollout_id": "rollout-expired-renew"},
+                    ) as response:
+                        self.assertEqual(response.status, 201)
+
+                    async def sandbox_request() -> tuple[int, dict]:
+                        async with client.post(
+                            f"{base}/rollouts/rollout-expired-renew/v1/chat/completions",
+                            json={"model": "m", "messages": []},
+                        ) as response:
+                            return response.status, await response.json()
+
+                    sandbox_task = asyncio.create_task(sandbox_request())
+                    async with client.get(
+                        f"{base}/worker/poll",
+                        params={
+                            "rollout_id": "rollout-expired-renew",
+                            "lease_seconds": "0.01",
+                        },
+                    ) as response:
+                        self.assertEqual(response.status, 200)
+                        leased = (await response.json())["request"]
+                    await asyncio.sleep(0.03)
+                    async with client.post(
+                        f"{base}/worker/renew",
+                        json={
+                            "request_id": leased["request_id"],
+                            "lease_id": leased["lease_id"],
+                            "lease_seconds": "1",
+                        },
+                    ) as response:
+                        status = response.status
+                    async with client.get(
+                        f"{base}/worker/poll",
+                        params={
+                            "rollout_id": "rollout-expired-renew",
+                            "lease_seconds": "1",
+                        },
+                    ) as response:
+                        self.assertEqual(response.status, 200)
+                        retried = (await response.json())["request"]
+                    async with client.post(
+                        f"{base}/worker/respond",
+                        json={
+                            "request_id": retried["request_id"],
+                            "lease_id": retried["lease_id"],
+                            "response": {"ok": True},
+                        },
+                    ) as response:
+                        self.assertEqual(response.status, 200)
+                    self.assertEqual(await sandbox_task, (200, {"ok": True}))
+                    return status
+            finally:
+                await runner.cleanup()
+
+        self.assertEqual(asyncio.run(scenario()), 409)
+
     def test_worker_heartbeat_updates_stats(self) -> None:
         async def scenario() -> dict:
             app = create_model_relay_app()

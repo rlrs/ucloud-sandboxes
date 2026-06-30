@@ -14,9 +14,9 @@ from aiohttp import web
 JsonObject = dict[str, Any]
 ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
-DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 300.0
+DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
-DEFAULT_WORKER_LEASE_SECONDS = 60.0
+DEFAULT_WORKER_LEASE_SECONDS = 600.0
 DEFAULT_COMPLETED_REQUEST_RETENTION_SECONDS = 3600.0
 SANDBOX_TOKEN_KEY = web.AppKey("model_relay_sandbox_token", str | None)
 WORKER_TOKEN_KEY = web.AppKey("model_relay_worker_token", str | None)
@@ -98,6 +98,7 @@ class ModelRelayState:
             "worker_errors": 0,
             "timed_out": 0,
             "lease_expired": 0,
+            "lease_renewed": 0,
             "unregister_canceled": 0,
             "polls": 0,
             "empty_polls": 0,
@@ -286,6 +287,42 @@ class ModelRelayState:
                     await asyncio.wait_for(self._condition.wait(), remaining)
                 except asyncio.TimeoutError:
                     continue
+
+    async def renew_lease(
+        self,
+        *,
+        request_id: str,
+        lease_id: str,
+        lease_seconds: float,
+        worker_id: str | None = None,
+    ) -> RelayRequest:
+        if worker_id is not None:
+            validate_worker_id(worker_id)
+        lease_seconds = max(0.001, lease_seconds)
+        async with self._condition:
+            self._prune_completed_locked(time.time())
+            request = self._requests.get(request_id)
+            if request is None:
+                if request_id in self._completed:
+                    raise web.HTTPGone(text="request is already completed")
+                raise web.HTTPNotFound(text=f"request not found: {request_id}")
+            if request.state != "leased" or request.lease_id != lease_id:
+                raise web.HTTPConflict(text="request lease is no longer active")
+            now = time.time()
+            if request.lease_expires_at is not None and request.lease_expires_at <= now:
+                self._requeue_expired_leases_locked(now)
+                raise web.HTTPConflict(text="request lease has expired")
+            if worker_id:
+                request.leased_by = worker_id
+                await self._record_worker_heartbeat_locked(
+                    rollout_id=request.rollout_id,
+                    worker_id=worker_id,
+                    metadata=None,
+                )
+            request.lease_expires_at = now + lease_seconds
+            self._counters["lease_renewed"] += 1
+            self._condition.notify_all()
+            return request
 
     async def respond(
         self,
@@ -499,6 +536,7 @@ def create_model_relay_app(
     app.router.add_post("/unregister_rollout", unregister_rollout)
     app.router.add_post("/worker/heartbeat", worker_heartbeat)
     app.router.add_get("/worker/poll", worker_poll)
+    app.router.add_post("/worker/renew", worker_renew)
     app.router.add_post("/worker/respond", worker_respond)
     app.router.add_post("/worker/error", worker_error)
     app.router.add_post("/v1/chat/completions", openai_chat_completions)
@@ -589,6 +627,34 @@ async def worker_heartbeat(request: web.Request) -> web.Response:
         metadata=metadata,
     )
     return web.json_response({"ok": True, "worker": record})
+
+
+async def worker_renew(request: web.Request) -> web.Response:
+    _require_worker_token(request)
+    payload = await _json_object(request)
+    request_id = str(payload.get("request_id") or "")
+    lease_id = str(payload.get("lease_id") or "")
+    if not request_id:
+        raise web.HTTPBadRequest(text="request_id is required")
+    if not lease_id:
+        raise web.HTTPBadRequest(text="lease_id is required")
+    raw_lease_seconds = payload.get("lease_seconds")
+    try:
+        lease_seconds = (
+            request.app[LEASE_SECONDS_KEY]
+            if raw_lease_seconds is None
+            else float(raw_lease_seconds)
+        )
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text="lease_seconds must be a number") from exc
+    worker_id = payload.get("worker_id")
+    renewed = await _state(request).renew_lease(
+        request_id=request_id,
+        lease_id=lease_id,
+        lease_seconds=lease_seconds,
+        worker_id=str(worker_id) if worker_id else None,
+    )
+    return web.json_response({"ok": True, "request": renewed.envelope()})
 
 
 async def worker_respond(request: web.Request) -> web.Response:

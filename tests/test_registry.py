@@ -30,6 +30,28 @@ class RegistryTests(unittest.TestCase):
 
         self.assertTrue(nodes[0].is_provisioning)
 
+    def test_marks_suspended_vm_as_provisioning(self) -> None:
+        job = VmJob(
+            id="123",
+            project_id="project-1",
+            name="ucloud-sandbox-node-123",
+            application_name="vm-ubuntu",
+            application_version="24.04",
+            product_id="cpu-amd-zen5-16-vcpu",
+            product_category="cpu-amd-zen5",
+            state="SUSPENDED",
+            cpu=16,
+            disk_gb=250,
+        )
+
+        nodes = merge_jobs_and_heartbeats(
+            [job],
+            {},
+            ScalePolicy(),
+        )
+
+        self.assertTrue(nodes[0].is_provisioning)
+
     def test_heartbeat_store_roundtrip(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "heartbeats.json"
@@ -38,6 +60,7 @@ class RegistryTests(unittest.TestCase):
                 node_id="node-1",
                 node_url="http://node-1:8090",
                 active_sandboxes=2,
+                active_image_builds=1,
                 agent_version="0.1.0-test",
                 deployment_id="prod-a",
                 init_version="init-1",
@@ -66,6 +89,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(loaded["job-1"].deployment_id, "prod-a")
             self.assertEqual(loaded["job-1"].init_version, "init-1")
             self.assertEqual(loaded["job-1"].active_sandboxes, 2)
+            self.assertEqual(loaded["job-1"].active_image_builds, 1)
             self.assertEqual(loaded["job-1"].capabilities, ("sandbox", "image-build"))
             self.assertEqual(loaded["job-1"].labels, {"role": "worker"})
             self.assertIsNotNone(loaded["job-1"].runtime_metrics)
@@ -107,6 +131,33 @@ class RegistryTests(unittest.TestCase):
                     node_id="node-1",
                     active_sandboxes=0,
                     now=later_at,
+                )
+            )
+            self.assertEqual(store.load()["job-1"].idle_since, idle_at)
+
+    def test_heartbeat_store_treats_image_build_as_active_work(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "heartbeats.json"
+            store = HeartbeatStore(path)
+            busy_at = utc_now()
+            idle_at = busy_at + timedelta(seconds=30)
+
+            store.upsert(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    active_image_builds=1,
+                    now=busy_at,
+                )
+            )
+            self.assertIsNone(store.load()["job-1"].idle_since)
+
+            store.upsert(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    active_image_builds=0,
+                    now=idle_at,
                 )
             )
             self.assertEqual(store.load()["job-1"].idle_since, idle_at)

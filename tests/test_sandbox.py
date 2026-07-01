@@ -331,6 +331,50 @@ class SandboxRuntimeTests(unittest.TestCase):
             ),
         )
 
+    def test_streams_file_upload_and_download_through_exec(self) -> None:
+        executor = RecordingExecutor(stdout_bytes=b"downloaded bytes\n")
+        runtime = DockerGvisorRuntime(executor=executor)
+
+        upload = runtime.write_file_to_container(
+            "abc-123",
+            "/workspace/payload.txt",
+            b"uploaded bytes\n",
+            owner="1000:1000",
+        )
+        content, download = runtime.read_file_from_container(
+            "abc-123",
+            "/workspace/payload.txt",
+        )
+
+        self.assertEqual(executor.inputs[0], b"uploaded bytes\n")
+        self.assertIsNone(executor.inputs[1])
+        self.assertEqual(content, b"downloaded bytes\n")
+        self.assertEqual(
+            upload.argv[:9],
+            (
+                "docker",
+                "exec",
+                "-i",
+                "-e",
+                "UCLOUD_SANDBOX_FILE=/workspace/payload.txt",
+                "-e",
+                "UCLOUD_SANDBOX_OWNER=1000:1000",
+                "-u",
+                "0",
+            ),
+        )
+        self.assertEqual(
+            download.argv[:6],
+            (
+                "docker",
+                "exec",
+                "-e",
+                "UCLOUD_SANDBOX_FILE=/workspace/payload.txt",
+                "-u",
+                "0",
+            ),
+        )
+
     def test_container_file_copy_rejects_directory_paths(self) -> None:
         runtime = DockerGvisorRuntime(dry_run=True)
 

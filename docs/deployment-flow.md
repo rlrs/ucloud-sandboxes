@@ -46,14 +46,17 @@ sandboxes. The intended rollout flow is:
    the gateway key.
 5. Start the public gateway service, model relay service, and autoscaler service
    from the same installed wheel.
-6. Run the autoscaler with `--execute` and `--execute-init`.
-7. Let the autoscaler submit sandbox-node and builder VMs with matching
+6. Start the private Docker registry service on the control-plane VM. Builder
+   output must be pushed to a durable registry tag before sandbox nodes can pull
+   it.
+7. Run the autoscaler with `--execute` and `--execute-init`.
+8. Let the autoscaler submit sandbox-node and builder VMs with matching
    deployment/version labels.
-8. Let the autoscaler run post-boot init over the UCloud-announced SSH command
+9. Let the autoscaler run post-boot init over the UCloud-announced SSH command
    using `--init-package-spec /work/...whl`,
    `--init-authorized-key-file`, and `--init-ssh-private-key-file`.
-9. Wait for matching heartbeats before scheduling sandboxes to those nodes.
-10. Drain old/mismatched nodes, then scale them down only after they are idle.
+10. Wait for matching heartbeats before scheduling sandboxes to those nodes.
+11. Drain old/mismatched nodes, then scale them down only after they are idle.
 
 ## Credentials
 
@@ -96,7 +99,7 @@ an explicit operator action, not part of the autoscaler loop.
 The first public-gateway smoke test uses two UCloud VMs on the same private
 network:
 
-1. Control-plane VM:
+1. Public control-plane VM:
    - submitted with `submit-vm --role gateway`
    - submitted with private network `12345327`
    - submitted with public link `12345368` bound to the gateway API port
@@ -107,7 +110,7 @@ network:
      the public link resource is bound to the VM job
    - opened with `open-vm-web <job-id> --port 8092` after the relay service is
      listening for the same reason
-   - live job id: `12346251`
+   - live public gateway job id: `12346251`
    - install the wheel in `/work/ucloud-sandboxes/gateway-venv`
    - store the UCloud session secret outside the repo
    - store the gateway bearer token outside the repo
@@ -116,28 +119,114 @@ network:
      in-memory, while the route file keeps recovery state and pending demand for
      the autoscaler
    - pass `--gateway-bearer-token-file` before binding a public link
+   - pass `--registry-url http://sandbox-gateway-registry-mount-07011413:5000`
+     so `/v1/metrics` and the dashboard show the project-backed registry health
    - pass `--enable-image-builds --execute-image-builds` only on a
      build-capable control-plane machine with registry access
    - run `serve-model-relay --host 0.0.0.0 --port 8092` as
      `ucloud-sandbox-relay.service`
    - store separate relay sandbox and worker bearer tokens outside the repo
    - run `autoscaler-loop` with the same state dir and UCloud session file
-2. Sandbox-node VMs:
+   - initialize future builders and sandbox nodes with
+     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
+     `--init-host-alias ucloud-sandbox-registry=10.36.120.195`, where
+     `10.36.120.195` is the current private-network DNS address for the registry
+     VM
+2. Private registry VM:
+   - live registry job id: `12347774`
+   - submitted with private network `12345327`
+   - submitted with project storage mounted for registry persistence. The
+     validated DFM Pretraining deployment mounts the project `data` drive as
+     `--mount /998037`, which appears inside the VM as `/work/data`; registry
+     data then lives below that mount.
+   - run `ucloud-sandbox-registry.service` with `UCLOUD_REGISTRY_DATA_DIR`
+     below the mounted project path:
+     `/work/data/ucloud-sandbox-registry/docker-registry`
+   - enable `ucloud-sandbox-registry-gc.timer` and run
+     `ucloud-sandboxes registry-prune` for tag retention before GC
+   - do not attach a public link; builders, sandbox nodes, and the gateway reach
+     it over the private network as
+     `sandbox-gateway-registry-mount-07011413:5000`
+3. Sandbox-node VMs:
    - autoscaled from pending sandbox resource demand
    - initialized over the announced UCloud SSH proxy
+   - if using the control-plane HTTP registry, initialized with
+     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
+     `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
    - heartbeats back to the control-plane private-network URL with bearer auth
    - carry `ucloud-sandboxes/deployment=<deployment-id>`
-3. Verify:
+4. Builder-node VMs:
+   - autoscaled from pending image-build demand or `POST /v1/builders/prepare`
+     signals
+   - initialized over the announced UCloud SSH proxy
+   - if using the control-plane HTTP registry, initialized with
+     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
+     `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
+   - advertise `image-build` only, not `sandbox`
+   - advertise physical CPU, memory, and disk capacity only; sandbox overcommit
+     settings are ignored for builder nodes
+   - build and push registry tags; sandbox nodes later pull/cache those tags
+   - carry `ucloud-sandboxes/deployment=<deployment-id>`
+5. Verify:
    - public `GET /healthz` returns 200
    - unauthenticated public `GET /v1/sandboxes` returns 401
    - authenticated public sandbox create/exec/delete works through the gateway
    - route file is empty after cleanup
-   - autoscaler loop observes fresh heartbeats plus pending sandbox and image-build demand
+   - autoscaler loop observes fresh heartbeats plus pending sandbox, pending
+     image-build, prepared sandbox, and prepared builder demand
    - local `GET http://127.0.0.1:8092/healthz` returns 200 on the gateway VM
    - public `GET https://app-sandboxes-relay.cloud.sdu.dk/healthz` returns 200
    - unauthenticated public `GET /v1/relay/stats` on the relay returns 401
+   - gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
    - zero demand plus idle timeout produces safe labelled stop intents for sandbox
      and builder nodes
+
+The private registry can run either on the public control-plane VM or on a
+dedicated private-network VM. The current live deployment uses a dedicated
+registry VM so the public gateway could be moved to project-backed registry
+storage without moving public links. It is intentionally not exposed through a
+public link; builders and sandbox nodes reach it over the UCloud private
+network. Install Docker, the registry unit, and the GC timer:
+
+```bash
+sudo apt-get update
+sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+
+sudo install -d -m 0755 /etc/ucloud-sandboxes
+sudo tee /etc/ucloud-sandboxes/registry.env >/dev/null <<'EOF'
+UCLOUD_REGISTRY_BIND=0.0.0.0
+UCLOUD_REGISTRY_PORT=5000
+UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
+UCLOUD_REGISTRY_IMAGE=registry:2
+EOF
+
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry.service \
+  /etc/systemd/system/ucloud-sandbox-registry.service
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry-gc.service \
+  /etc/systemd/system/ucloud-sandbox-registry-gc.service
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry-gc.timer \
+  /etc/systemd/system/ucloud-sandbox-registry-gc.timer
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now ucloud-sandbox-registry.service
+sudo systemctl enable --now ucloud-sandbox-registry-gc.timer
+curl -fsS http://127.0.0.1:5000/v2/_catalog
+```
+
+Builder and sandbox node init must trust the registry if it is served as HTTP.
+Use a stable registry alias in image tags and map it to the gateway's current
+private-network address during init:
+
+```bash
+--init-docker-insecure-registry ucloud-sandbox-registry:5000 \
+--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>
+```
+
+Builds should use `push=true` and tags under
+`ucloud-sandbox-registry:5000`; sandbox create can then use either the registry
+tag or the recorded image id. If the gateway VM is replaced and receives a new
+private IP, keep the tags the same and update only the host alias value in the
+deployment.
 
 The relay service is deployed from the same wheel as the gateway. The checked-in
 unit template is `deploy/systemd/ucloud-sandbox-relay.service`; install it on

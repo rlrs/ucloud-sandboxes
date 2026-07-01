@@ -43,6 +43,15 @@ what that means for initializing sandbox VM nodes.
   or `runsc`. Reconfiguring Docker to `overlay2` on an XFS image mounted with
   `pquota` made the same `runsc` probe fail with `ENOSPC`, which is the desired
   behavior.
+- UCloud VM private-network interfaces can use an MTU below Docker's default
+  bridge MTU. On 2026-07-01 a builder VM had `enp4s0` MTU `1420` while
+  Docker's default bridge was `1500`; host PyPI downloads were fast, but
+  `docker build` traffic on the default bridge timed out during PyPI TLS
+  handshakes. Using host networking for the diagnostic build succeeded, which
+  confirmed the problem was container bridge networking rather than PyPI or
+  UCloud egress generally. The init script now detects the default-route
+  interface MTU and writes Docker's daemon `mtu` setting before starting node
+  services.
 - A real sandbox API smoke test succeeded on that initialized VM:
   `POST /v1/sandboxes` launched a `busybox` container with `--runtime runsc`,
   `POST /v1/sandboxes/vm-real-1/exec` returned stdout from inside the
@@ -98,11 +107,14 @@ for the observed `vm-ubuntu:24.04` app. The primary path should therefore be:
    SSH proxy command has been announced in a job update.
 4. Use that SSH command to run an idempotent init script that installs
    Docker, gVisor/runsc, the node agent, and systemd services.
-5. Store durable init state, caches, node identity, and Docker's quota-backed
+5. If the deployment uses the control-plane HTTP registry, configure Docker's
+   `insecure-registries` list during init so builders and sandbox nodes can
+   push and pull over the UCloud private network.
+6. Store durable init state, caches, node identity, and Docker's quota-backed
    `overlay2` data root under `/work`.
-6. Run `ucloud-sandboxes runtime-conformance --sudo --execute` on the VM and
+7. Run `ucloud-sandboxes runtime-conformance --sudo --execute` on the VM and
    store the JSON result under `/work/ucloud-sandboxes/state/`.
-7. Mark the node ready only after the node agent posts a heartbeat with expected
+8. Mark the node ready only after the node agent posts a heartbeat with expected
    capabilities, versions, and a private-network `node_url`. Hard disk capacity
    is only schedulable when that heartbeat includes `disk-quota`.
 
@@ -112,6 +124,9 @@ post-boot init layer:
 - Keep the init script small, versioned, idempotent, and fast.
 - Install Docker, gVisor, node-agent service files, and config from a release
   artifact or package.
+- Set up Docker and gVisor package repositories before a single container
+  runtime `apt-get update`, rather than refreshing apt metadata separately for
+  each runtime.
 - Put Docker's data root, image caches, build caches, and node state under
   `/work` when practical.
 - Maintain a small warm pool of already-initialized nodes when queue latency or
@@ -136,8 +151,13 @@ The post-boot init script should be safe to re-run:
 - Create a sparse XFS image under `/work`, mount it with `pquota`, and configure
   Docker to use that mount as an `overlay2` data root when hard writable-layer
   quotas are required.
+- Configure Docker's bridge MTU from the VM default-route interface so
+  containers and build steps inherit the UCloud network MTU instead of Docker's
+  default `1500`.
 - Install the `ucloud-sandboxes` package or sync a release artifact into a
   service-user-owned virtual environment.
+- Record a package fingerprint marker in node state so rerunning init with the
+  same staged wheel does not reinstall Python dependencies.
 - Write `/etc/systemd/system/ucloud-sandbox-node.service`.
 - Enable and restart the node service. Restart is required because rerunning
   init may change flags such as `--execute-runtime` while the old process is
@@ -147,6 +167,11 @@ The post-boot init script should be safe to re-run:
 - Persist runtime conformance JSON and pass it to both the node-agent service
   and heartbeat service so security capabilities are derived from probes rather
   than static labels.
+- Emit phase timing log lines for user/key setup, base packages, container
+  packages, Docker storage, Docker daemon config, Python package install,
+  runtime conformance, and systemd service startup. The autoscaler separately
+  records init attempt duration, package staging duration, and remote script
+  duration in `vm_init_attempt` metrics.
 - Run node-agent and heartbeat systemd units as the service user with Docker
   supplementary group access, not as root. The init script still uses sudo for
   OS package installation, Docker daemon setup, systemd writes, mounts, and the

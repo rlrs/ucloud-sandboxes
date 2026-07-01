@@ -36,7 +36,7 @@ class ReconcileTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.creates, 1)
-        self.assertIn("pending image build", decision.reasons[0])
+        self.assertIn("pending build(s)", decision.reasons[0])
 
     def test_builder_scale_stops_idle_builder_when_no_build_demand(self) -> None:
         now = utc_now()

@@ -71,6 +71,18 @@ class VmTimeAllocation:
 
 
 @dataclass(frozen=True)
+class VmFileMount:
+    path: str
+    read_only: bool = False
+
+    def to_resource(self) -> dict[str, Any]:
+        validate_required("file mount path", self.path)
+        if not self.path.startswith("/"):
+            raise ValueError("file mount path must be an absolute UCloud path.")
+        return file_mount_resource(self.path, read_only=self.read_only)
+
+
+@dataclass(frozen=True)
 class VmSubmissionOptions:
     name: str
     hostname: str
@@ -85,6 +97,7 @@ class VmSubmissionOptions:
     ssh_enabled: bool = False
     allow_duplicate_job: bool = False
     labels: dict[str, str] | None = None
+    file_mounts: tuple[VmFileMount, ...] = ()
 
     def job_item(self) -> dict[str, Any]:
         validate_vm_submission_options(self)
@@ -120,6 +133,7 @@ class VmSubmissionOptions:
                     port=self.public_link_port,
                 ),
             )
+        item["resources"].extend(mount.to_resource() for mount in self.file_mounts)
         return item
 
     def bulk_payload(self) -> dict[str, Any]:
@@ -158,6 +172,32 @@ def disk_size_parameter(disk_gb: int) -> dict[str, Any]:
     }
 
 
+def file_mount_resource(path: str, *, read_only: bool = False) -> dict[str, Any]:
+    validate_required("file mount path", path)
+    if not path.startswith("/"):
+        raise ValueError("file mount path must be an absolute UCloud path.")
+    return {
+        "type": "file",
+        "path": path,
+        "mountPath": "",
+        "readOnly": bool(read_only),
+        "value": None,
+        "hostname": "",
+        "jobId": "",
+        "id": "",
+        "specification": {
+            "applicationName": "",
+            "language": "",
+            "init": None,
+            "job": None,
+            "readme": None,
+            "inputs": None,
+        },
+        "modules": None,
+        "port": 0,
+    }
+
+
 def validate_vm_submission_options(options: VmSubmissionOptions) -> None:
     validate_required("job name", options.name)
     validate_hostname(options.hostname)
@@ -165,6 +205,12 @@ def validate_vm_submission_options(options: VmSubmissionOptions) -> None:
         raise ValueError("replicas must be positive.")
     if options.disk_gb <= 0:
         raise ValueError("disk size must be positive.")
+    seen_mounts: set[str] = set()
+    for mount in options.file_mounts:
+        if mount.path in seen_mounts:
+            raise ValueError(f"duplicate file mount path: {mount.path}")
+        seen_mounts.add(mount.path)
+        mount.to_resource()
     for key, value in (options.labels or {}).items():
         validate_required("label key", key)
         reject_newline("label key", key)

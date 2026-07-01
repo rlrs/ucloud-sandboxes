@@ -99,14 +99,17 @@ class VmInitTests(unittest.TestCase):
                 package_spec="git+https://example.invalid/ucloud-sandboxes.git",
                 total_resources=ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=500000),
                 cpu_overcommit=4.0,
+                docker_insecure_registries=("gateway:5000",),
+                host_aliases=("ucloud-sandbox-registry=10.36.125.67",),
                 enable_image_builds=True,
                 labels={"pool": "builder"},
             )
         )
 
-        self.assertIn("apt-get install -y docker-ce", script)
+        self.assertIn("CONTAINER_PACKAGES+=(docker-ce docker-ce-cli", script)
         self.assertIn("xfsprogs", script)
         self.assertIn("https://storage.googleapis.com/gvisor/releases", script)
+        self.assertIn("Init phase complete:", script)
         self.assertIn("UCLOUD_SERVICE_USER=ucloud", script)
         self.assertIn("UCLOUD_HEARTBEAT_BEARER_TOKEN=SECRET", script)
         self.assertIn("Installing heartbeat bearer token", script)
@@ -117,6 +120,13 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("run_as_service_user python3 -m venv \"$UCLOUD_VENV_DIR\"", script)
         self.assertNotIn("$SUDO python3 -m venv \"$UCLOUD_VENV_DIR\"", script)
         self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE_GB=200", script)
+        self.assertIn("UCLOUD_DOCKER_MTU=0", script)
+        self.assertIn(
+            "UCLOUD_HOST_ALIASES_JSON='[\"ucloud-sandbox-registry=10.36.125.67\"]'",
+            script,
+        )
+        self.assertIn("Installing host aliases", script)
+        self.assertIn("# ucloud-sandboxes host-alias ", script)
         self.assertIn(
             "UCLOUD_RUNTIME_CONFORMANCE_FILE=/work/ucloud-sandboxes/state/runtime-conformance.json",
             script,
@@ -125,9 +135,24 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("mkfs.xfs -f -m reflink=1", script)
         self.assertIn("mount -o loop,pquota", script)
         self.assertIn('"data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"]', script)
+        self.assertIn("cmp -s \"$DOCKER_DAEMON_JSON\" /etc/docker/daemon.json", script)
+        self.assertIn("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON='[\"gateway:5000\"]'", script)
+        self.assertIn(
+            "export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON",
+            script,
+        )
+        self.assertIn("detect_default_route_mtu()", script)
+        self.assertIn("ip -o route get 1.1.1.1", script)
+        self.assertIn("Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU", script)
+        self.assertIn('docker_mtu = int(os.environ.get("UCLOUD_DOCKER_MTU") or "0")', script)
+        self.assertIn('config["mtu"] = docker_mtu', script)
+        self.assertIn('ip link set docker0 mtu "$UCLOUD_DOCKER_MTU"', script)
+        self.assertIn("UCLOUD_DOCKER_MTU=$UCLOUD_DOCKER_MTU", script)
+        self.assertIn('config["insecure-registries"] = insecure_registries', script)
         self.assertIn('config["storage-driver"] = "overlay2"', script)
         self.assertIn('"containerd-snapshotter": False', script)
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
+        self.assertIn("--disable-pip-version-check --upgrade \"$UCLOUD_PACKAGE_SPEC\"", script)
         self.assertIn("--runtime-conformance-file ${UCLOUD_RUNTIME_CONFORMANCE_FILE}", script)
         self.assertIn("ucloud-sandbox-node.service", script)
         self.assertIn("User=$UCLOUD_SERVICE_USER", script)
@@ -151,6 +176,18 @@ class VmInitTests(unittest.TestCase):
         self.assertNotIn("--active 0", script)
         self.assertIn("--label pool=builder", script)
 
+    def test_rendered_host_alias_python_compiles(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="123",
+                heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                host_aliases=("ucloud-sandbox-registry=10.36.125.67",),
+            )
+        )
+        start = script.index("import json\nimport os\nimport sys\n\nhosts_path")
+        end = script.index("PY\n  $SUDO install -m 0644 \"$HOSTS_TMP\" /etc/hosts", start)
+        compile(script[start:end], "<host-alias-heredoc>", "exec")
+
     def test_can_disable_quota_backed_docker_storage(self) -> None:
         script = render_vm_init_script(
             VmInitOptions(
@@ -162,6 +199,18 @@ class VmInitTests(unittest.TestCase):
 
         self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE_GB=0", script)
         self.assertIn('if int(os.environ["UCLOUD_DOCKER_QUOTA_IMAGE_GB"]) > 0:', script)
+
+    def test_can_override_docker_mtu(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="123",
+                heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                docker_mtu=1400,
+            )
+        )
+
+        self.assertIn("UCLOUD_DOCKER_MTU=1400", script)
+        self.assertIn('if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then', script)
 
     def test_runtime_dry_run_omits_execute_runtime(self) -> None:
         script = render_vm_init_script(
@@ -239,7 +288,7 @@ class VmInitTests(unittest.TestCase):
                 "-o",
                 "BatchMode=yes",
                 "-o",
-                "ConnectTimeout=30",
+                "ConnectTimeout=10",
                 "-o",
                 "StrictHostKeyChecking=accept-new",
                 "-i",
@@ -273,6 +322,35 @@ class VmInitTests(unittest.TestCase):
                     job_id="123",
                     heartbeat_url="https://control.example/v1/nodes/heartbeat",
                     init_authorized_keys=("ssh-ed25519 AAAA\nssh-ed25519 BBBB",),
+                )
+            )
+
+    def test_rejects_invalid_host_alias(self) -> None:
+        with self.assertRaises(ValueError):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="123",
+                    heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                    host_aliases=("ucloud-sandbox-registry",),
+                )
+            )
+
+        with self.assertRaises(ValueError):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="123",
+                    heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                    host_aliases=("bad host=10.36.125.67",),
+                )
+            )
+
+    def test_rejects_negative_docker_mtu(self) -> None:
+        with self.assertRaises(ValueError):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="123",
+                    heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                    docker_mtu=-1,
                 )
             )
 

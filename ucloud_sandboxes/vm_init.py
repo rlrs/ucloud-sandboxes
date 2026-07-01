@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from pathlib import PurePosixPath
 import shlex
@@ -19,12 +20,13 @@ DEFAULT_SSH_PORT_END = 22999
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 20
 DEFAULT_PACKAGE_SPEC = "ucloud-sandboxes"
 DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
+DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
 DEFAULT_SSH_OPTIONS = (
     "-o",
     "BatchMode=yes",
     "-o",
-    "ConnectTimeout=30",
+    "ConnectTimeout=10",
     "-o",
     "StrictHostKeyChecking=accept-new",
 )
@@ -54,6 +56,9 @@ class VmInitOptions:
     memory_overcommit: float = 1.0
     disk_overcommit: float = 1.0
     docker_quota_image_gb: int = DEFAULT_DOCKER_QUOTA_IMAGE_GB
+    docker_mtu: int = DEFAULT_DOCKER_MTU
+    docker_insecure_registries: tuple[str, ...] = ()
+    host_aliases: tuple[str, ...] = ()
     enable_image_builds: bool = False
     runtime_dry_run: bool = False
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
@@ -221,8 +226,11 @@ UCLOUD_CPU_OVERCOMMIT={options.cpu_overcommit}
 UCLOUD_MEMORY_OVERCOMMIT={options.memory_overcommit}
 UCLOUD_DISK_OVERCOMMIT={options.disk_overcommit}
 UCLOUD_DOCKER_QUOTA_IMAGE_GB={options.docker_quota_image_gb}
+UCLOUD_DOCKER_MTU={options.docker_mtu}
 UCLOUD_DOCKER_QUOTA_IMAGE={shlex.quote(docker_quota_image)}
 UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
+UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(list(options.docker_insecure_registries)))}
+UCLOUD_HOST_ALIASES_JSON={shlex.quote(json.dumps(list(options.host_aliases)))}
 UCLOUD_RUNTIME_CONFORMANCE_FILE={shlex.quote(runtime_conformance_file)}
 UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
 {authorized_keys_blob}
@@ -230,6 +238,16 @@ UCLOUD_AUTHORIZED_KEYS
 )
 
 echo "Initializing UCloud sandbox node $UCLOUD_NODE_ID for job $UCLOUD_JOB_ID"
+UCLOUD_INIT_STARTED_EPOCH="$(date +%s)"
+UCLOUD_INIT_PHASE_EPOCH="$UCLOUD_INIT_STARTED_EPOCH"
+
+log_init_phase() {{
+  local phase="$1"
+  local now
+  now="$(date +%s)"
+  echo "Init phase complete: $phase phase=$((now - UCLOUD_INIT_PHASE_EPOCH))s total=$((now - UCLOUD_INIT_STARTED_EPOCH))s"
+  UCLOUD_INIT_PHASE_EPOCH="$now"
+}}
 
 if ! id "$UCLOUD_SERVICE_USER" >/dev/null 2>&1; then
   $SUDO useradd --create-home --shell /bin/bash "$UCLOUD_SERVICE_USER"
@@ -276,39 +294,96 @@ if [ -n "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_HEARTBEAT_BEARE
   $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE"
   $SUDO chmod 600 "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE"
 fi
+log_init_phase "users-and-secrets"
 
-echo "Installing base packages"
-$SUDO apt-get update
-$SUDO apt-get install -y ca-certificates curl gnupg apt-transport-https python3 python3-venv python3-pip xfsprogs
+BASE_PACKAGES=(ca-certificates curl gnupg apt-transport-https python3 python3-venv python3-pip xfsprogs)
+MISSING_BASE_PACKAGES=()
+for package in "${{BASE_PACKAGES[@]}}"; do
+  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+    MISSING_BASE_PACKAGES+=("$package")
+  fi
+done
+if [ "${{#MISSING_BASE_PACKAGES[@]}}" -gt 0 ]; then
+  echo "Installing base packages: ${{MISSING_BASE_PACKAGES[*]}}"
+  $SUDO apt-get update
+  $SUDO apt-get install -y "${{MISSING_BASE_PACKAGES[@]}}"
+else
+  echo "Base packages already installed"
+fi
+log_init_phase "base-packages"
+
+if [ "$UCLOUD_HOST_ALIASES_JSON" != "[]" ]; then
+  echo "Installing host aliases"
+  export UCLOUD_HOST_ALIASES_JSON
+  HOSTS_TMP="$(mktemp)"
+  $SUDO cp /etc/hosts "$HOSTS_TMP"
+  python3 - <<'PY' "$HOSTS_TMP"
+import json
+import os
+import sys
+
+hosts_path = sys.argv[1]
+aliases = json.loads(os.environ.get("UCLOUD_HOST_ALIASES_JSON") or "[]")
+marker_prefix = "# ucloud-sandboxes host-alias "
+with open(hosts_path, encoding="utf-8") as handle:
+    lines = [
+        line
+        for line in handle.readlines()
+        if marker_prefix not in line
+    ]
+for alias in aliases:
+    host, address = alias.split("=", 1)
+    lines.append(f"{{address}}\t{{host}}\t{{marker_prefix}}{{host}}\\n")
+with open(hosts_path, "w", encoding="utf-8") as handle:
+    handle.writelines(lines)
+PY
+  $SUDO install -m 0644 "$HOSTS_TMP" /etc/hosts
+  rm -f "$HOSTS_TMP"
+fi
+log_init_phase "host-aliases"
+
+NEED_CONTAINER_APT_UPDATE=0
+CONTAINER_PACKAGES=()
+$SUDO install -m 0755 -d /etc/apt/keyrings
+UBUNTU_CODENAME="$(. /etc/os-release && echo "${{UBUNTU_CODENAME:-$VERSION_CODENAME}}")"
+ARCHITECTURE="$(dpkg --print-architecture)"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "Installing Docker Engine"
-  $SUDO install -m 0755 -d /etc/apt/keyrings
-  $SUDO curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-  $SUDO chmod a+r /etc/apt/keyrings/docker.asc
-  $SUDO tee /etc/apt/sources.list.d/docker.sources >/dev/null <<'DOCKER_SOURCES'
+  echo "Preparing Docker Engine repository"
+  if [ ! -s /etc/apt/keyrings/docker.asc ]; then
+    $SUDO curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    $SUDO chmod a+r /etc/apt/keyrings/docker.asc
+  fi
+  $SUDO tee /etc/apt/sources.list.d/docker.sources >/dev/null <<DOCKER_SOURCES
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
-Suites: __UBUNTU_CODENAME__
+Suites: $UBUNTU_CODENAME
 Components: stable
-Architectures: __ARCHITECTURE__
+Architectures: $ARCHITECTURE
 Signed-By: /etc/apt/keyrings/docker.asc
 DOCKER_SOURCES
-  UBUNTU_CODENAME="$(. /etc/os-release && echo "${{UBUNTU_CODENAME:-$VERSION_CODENAME}}")"
-  ARCHITECTURE="$(dpkg --print-architecture)"
-  $SUDO sed -i "s/__UBUNTU_CODENAME__/$UBUNTU_CODENAME/g; s/__ARCHITECTURE__/$ARCHITECTURE/g" /etc/apt/sources.list.d/docker.sources
-  $SUDO apt-get update
-  $SUDO apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  NEED_CONTAINER_APT_UPDATE=1
+  CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
 fi
 
 if ! command -v runsc >/dev/null 2>&1; then
-  echo "Installing gVisor runsc"
-  $SUDO rm -f /usr/share/keyrings/gvisor-archive-keyring.gpg
-  curl -fsSL https://gvisor.dev/archive.key | $SUDO gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+  echo "Preparing gVisor runsc repository"
+  if [ ! -s /usr/share/keyrings/gvisor-archive-keyring.gpg ]; then
+    curl -fsSL https://gvisor.dev/archive.key | $SUDO gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
+  fi
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | $SUDO tee /etc/apt/sources.list.d/gvisor.list >/dev/null
-  $SUDO apt-get update
-  $SUDO apt-get install -y runsc
+  NEED_CONTAINER_APT_UPDATE=1
+  CONTAINER_PACKAGES+=(runsc)
 fi
+
+if [ "$NEED_CONTAINER_APT_UPDATE" -eq 1 ]; then
+  echo "Installing container runtime packages: ${{CONTAINER_PACKAGES[*]}}"
+  $SUDO apt-get update
+  $SUDO apt-get install -y "${{CONTAINER_PACKAGES[@]}}"
+else
+  echo "Container runtime packages already installed"
+fi
+log_init_phase "container-packages"
 
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"
@@ -327,12 +402,33 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   fi
   UCLOUD_DOCKER_DATA_ROOT="$UCLOUD_DOCKER_QUOTA_ROOT"
 fi
+log_init_phase "docker-storage"
 
 RUNSC_PATH="$(command -v runsc)"
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB
-echo "Configuring Docker daemon"
+
+detect_default_route_mtu() {{
+  local iface mtu
+  iface="$(ip -o route get 1.1.1.1 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
+  if [ -z "$iface" ]; then
+    iface="$(ip -o route show default 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
+  fi
+  if [ -n "$iface" ] && [ -r "/sys/class/net/$iface/mtu" ]; then
+    mtu="$(cat "/sys/class/net/$iface/mtu")"
+  fi
+  if ! [[ "${{mtu:-}}" =~ ^[0-9]+$ ]] || [ "$mtu" -lt 576 ]; then
+    mtu=1420
+  fi
+  printf '%s\\n' "$mtu"
+}}
+
+if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
+  UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
+fi
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
+echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
-python3 - <<'PY' | $SUDO tee /etc/docker/daemon.json >/dev/null
+DOCKER_DAEMON_JSON="$(mktemp)"
+python3 - <<'PY' > "$DOCKER_DAEMON_JSON"
 import json
 import os
 
@@ -340,22 +436,56 @@ config = {{
     "data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
     "runtimes": {{"runsc": {{"path": os.environ["RUNSC_PATH"]}}}},
 }}
+insecure_registries = json.loads(os.environ.get("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON") or "[]")
+if insecure_registries:
+    config["insecure-registries"] = insecure_registries
+docker_mtu = int(os.environ.get("UCLOUD_DOCKER_MTU") or "0")
+if docker_mtu > 0:
+    config["mtu"] = docker_mtu
 if int(os.environ["UCLOUD_DOCKER_QUOTA_IMAGE_GB"]) > 0:
     config["storage-driver"] = "overlay2"
     config["features"] = {{"containerd-snapshotter": False}}
 print(json.dumps(config, indent=2))
 PY
+if [ ! -f /etc/docker/daemon.json ] || ! cmp -s "$DOCKER_DAEMON_JSON" /etc/docker/daemon.json; then
+  $SUDO install -m 0644 "$DOCKER_DAEMON_JSON" /etc/docker/daemon.json
+  UCLOUD_DOCKER_RESTART_NEEDED=1
+else
+  UCLOUD_DOCKER_RESTART_NEEDED=0
+fi
+rm -f "$DOCKER_DAEMON_JSON"
 $SUDO systemctl enable docker
-$SUDO systemctl restart docker
+if [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ] || ! systemctl is-active --quiet docker; then
+  $SUDO systemctl restart docker
+else
+  echo "Docker daemon already configured and running"
+fi
+if [ "$UCLOUD_DOCKER_MTU" -gt 0 ] && ip link show docker0 >/dev/null 2>&1; then
+  $SUDO ip link set docker0 mtu "$UCLOUD_DOCKER_MTU" || true
+fi
 $SUDO usermod -aG docker "$UCLOUD_SERVICE_USER"
+log_init_phase "docker-daemon"
 
 echo "Installing ucloud-sandboxes package: $UCLOUD_PACKAGE_SPEC"
 if [ -d "$UCLOUD_VENV_DIR" ]; then
   $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
 fi
 run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
-run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --upgrade pip
-run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --upgrade "$UCLOUD_PACKAGE_SPEC"
+UCLOUD_PACKAGE_MARKER="$UCLOUD_STATE_DIR/installed-package.fingerprint"
+UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC"
+if [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
+  UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC $(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+fi
+if [ -x "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" ] \
+  && [ -f "$UCLOUD_PACKAGE_MARKER" ] \
+  && grep -Fx -- "$UCLOUD_PACKAGE_FINGERPRINT" "$UCLOUD_PACKAGE_MARKER" >/dev/null 2>&1; then
+  echo "ucloud-sandboxes package already installed for current fingerprint"
+else
+  run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "$UCLOUD_PACKAGE_SPEC"
+  printf '%s\n' "$UCLOUD_PACKAGE_FINGERPRINT" | $SUDO tee "$UCLOUD_PACKAGE_MARKER" >/dev/null
+  $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
+fi
+log_init_phase "python-package"
 
 echo "Running runtime conformance probe"
 set +e
@@ -366,6 +496,7 @@ if [ "$CONFORMANCE_STATUS" -ne 0 ]; then
   echo "Runtime conformance failed; node will not advertise conformance-derived capabilities"
 fi
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_RUNTIME_CONFORMANCE_FILE" 2>/dev/null || true
+log_init_phase "runtime-conformance"
 
 echo "Writing node environment"
 $SUDO tee {shlex.quote(env_file)} >/dev/null <<NODE_ENV
@@ -393,8 +524,11 @@ UCLOUD_MEMORY_OVERCOMMIT=$UCLOUD_MEMORY_OVERCOMMIT
 UCLOUD_DISK_OVERCOMMIT=$UCLOUD_DISK_OVERCOMMIT
 UCLOUD_DOCKER_DATA_ROOT=$UCLOUD_DOCKER_DATA_ROOT
 UCLOUD_DOCKER_QUOTA_IMAGE_GB=$UCLOUD_DOCKER_QUOTA_IMAGE_GB
+UCLOUD_DOCKER_MTU=$UCLOUD_DOCKER_MTU
 UCLOUD_DOCKER_QUOTA_IMAGE=$UCLOUD_DOCKER_QUOTA_IMAGE
 UCLOUD_DOCKER_QUOTA_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT
+UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON=$UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
+UCLOUD_HOST_ALIASES_JSON=$UCLOUD_HOST_ALIASES_JSON
 UCLOUD_RUNTIME_CONFORMANCE_FILE=$UCLOUD_RUNTIME_CONFORMANCE_FILE
 NODE_ENV
 
@@ -459,6 +593,7 @@ $SUDO systemctl enable --now ucloud-sandbox-heartbeat.timer
 $SUDO systemctl start ucloud-sandbox-heartbeat.service
 
 echo "UCloud sandbox node init complete. Waiting for heartbeat readiness in the control plane."
+log_init_phase "systemd-services"
 """
     return script
 
@@ -482,6 +617,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("heartbeat interval must be positive.")
     if options.docker_quota_image_gb < 0:
         raise ValueError("docker quota image size cannot be negative.")
+    if options.docker_mtu < 0:
+        raise ValueError("docker mtu cannot be negative.")
     _validate_service_user(options.service_user)
     for value_name, value in {
         "job id": options.job_id,
@@ -499,6 +636,21 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "package spec": options.package_spec,
     }.items():
         _reject_newline(value_name, value)
+    for registry in options.docker_insecure_registries:
+        if not registry.strip():
+            raise ValueError("docker insecure registry cannot be empty.")
+        _reject_newline("docker insecure registry", registry)
+    for alias in options.host_aliases:
+        if not alias.strip():
+            raise ValueError("host alias cannot be empty.")
+        _reject_newline("host alias", alias)
+        if alias.count("=") != 1:
+            raise ValueError("host alias must use HOST=ADDRESS.")
+        host, address = alias.split("=", 1)
+        if not host or not address:
+            raise ValueError("host alias must use HOST=ADDRESS.")
+        if any(ch.isspace() for ch in host + address):
+            raise ValueError("host alias cannot contain whitespace.")
     for key, value in (options.labels or {}).items():
         _reject_newline("label key", key)
         _reject_newline("label value", value)

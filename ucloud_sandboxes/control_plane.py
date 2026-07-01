@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -15,10 +16,12 @@ from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
     ImageManager,
+    ImageRecord,
     ImageStore,
     image_id_from_tag,
     uploaded_build_context,
 )
+from .managed_registry import RegistryClient, registry_summary
 from .metrics import (
     MetricsStore,
     build_metrics_snapshot,
@@ -34,6 +37,9 @@ from .sandbox import SandboxSpec
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
+IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 6 * 60 * 60
+DEFAULT_PROXY_TIMEOUT_SECONDS = 60
+REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 
 
 class ProxiedResponse:
@@ -57,7 +63,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     gateway_bearer_token: str | None
     heartbeat_ttl_seconds: int
     image_manager: ImageManager | None
+    local_image_builds_enabled: bool
     metrics_store: MetricsStore | None
+    registry_url: str | None
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
     def do_GET(self) -> None:
@@ -99,18 +107,37 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/metrics":
             routing_state = self.routing_store.load() if self.routing_store is not None else None
             events = (
-                self.metrics_store.load_events(max_events=1000)
+                self.metrics_store.load_events(max_events=10000)
                 if self.metrics_store is not None
                 else []
             )
-            self._write_json(
-                build_metrics_snapshot(
-                    self.store.load(),
-                    routing_state,
-                    events,
-                    heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-                )
+            snapshot = build_metrics_snapshot(
+                self.store.load(),
+                routing_state,
+                events,
+                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
             )
+            builds = self._image_build_records_across_nodes()
+            active_builds = [
+                build for build in builds
+                if build.get("status") not in {"succeeded", "failed"}
+            ]
+            failed_builds = [
+                build for build in builds
+                if build.get("status") == "failed"
+            ]
+            snapshot.setdefault("images", {}).update(
+                {
+                    "active_builds": len(active_builds),
+                    "failed_builds": len(failed_builds),
+                    "builds": builds,
+                }
+            )
+            snapshot["registry"] = self._registry_status()
+            self._write_json(snapshot)
+            return
+        if parsed.path == "/v1/registry":
+            self._write_json({"registry": self._registry_status()})
             return
         if self._route_to_nodes(parsed.path):
             return
@@ -244,8 +271,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if prepare_id is not None and self.command == "DELETE":
             self._delete_prepared_capacity(prepare_id)
             return True
+        if path == "/v1/builders/prepare" and self.command == "GET":
+            self._list_prepared_builders()
+            return True
+        if path == "/v1/builders/prepare" and self.command == "POST":
+            self._prepare_builder()
+            return True
+        builder_prepare_id = _builder_prepare_id_from_path(path)
+        if builder_prepare_id is not None and self.command == "DELETE":
+            self._delete_prepared_builder(builder_prepare_id)
+            return True
         if path == "/v1/images" and self.command == "GET":
             self._list_images_across_nodes()
+            return True
+        if path == "/v1/images/builds" and self.command == "GET":
+            self._list_image_builds_across_nodes()
+            return True
+        build_key = _image_build_key_from_path(path)
+        if build_key is not None and self.command == "GET":
+            self._get_image_build(build_key)
             return True
         if path == "/v1/images/build" and self.command == "POST":
             self._route_image_build()
@@ -265,11 +309,28 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _demand_payload(self) -> dict[str, Any]:
         demand = self.routing_store.pending_demand()
+        pending_image_builds = self.routing_store.pending_image_build_count()
+        prepared_builders = self.routing_store.prepared_builders()
+        prepared_builder_count = sum(item.count for item in prepared_builders)
         return {
             "pending_resources": demand.pending_resources.to_dict(),
             "prepared_resources": demand.prepared_resources.to_dict(),
             "desired_resources": demand.desired_resources.to_dict(),
             "oldest_pending_seconds": demand.oldest_pending_seconds,
+            "pending_image_builds": pending_image_builds,
+            "prepared_builder_count": prepared_builder_count,
+            "desired_builders": max(
+                1 if pending_image_builds > 0 else 0,
+                prepared_builder_count,
+            ),
+            "pending": [
+                item.to_dict()
+                for item in self.routing_store.pending_sandboxes()
+            ],
+            "prepared": [
+                item.to_dict() for item in self.routing_store.prepared_capacity()
+            ],
+            "prepared_builders": [item.to_dict() for item in prepared_builders],
         }
 
     def _list_prepared_capacity(self) -> None:
@@ -295,8 +356,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ).strip()
             if not prepare_id or "/" in prepare_id:
                 raise ValueError("prepare id must be non-empty and cannot contain '/'.")
-            count = int(raw.get("count") or raw.get("sandboxes") or 1)
-            ttl_seconds = int(raw.get("ttl_seconds") or raw.get("ttlSeconds") or 900)
+            count = int(_payload_value(raw, "count", "sandboxes", default=1))
+            ttl_seconds = int(
+                _payload_value(raw, "ttl_seconds", "ttlSeconds", default=900)
+            )
             resources = _prepared_resources_from_payload(raw)
             if count <= 0:
                 raise ValueError("count must be positive.")
@@ -323,6 +386,64 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _delete_prepared_capacity(self, prepare_id: str) -> None:
         deleted = self.routing_store.delete_prepared_capacity(prepare_id)
+        self._write_json(
+            {
+                "ok": True,
+                "deleted": deleted.to_dict() if deleted is not None else None,
+                "demand": self._demand_payload(),
+            }
+        )
+
+    def _list_prepared_builders(self) -> None:
+        self._write_json(
+            {
+                "prepared_builders": [
+                    item.to_dict() for item in self.routing_store.prepared_builders()
+                ],
+                "demand": self._demand_payload(),
+            }
+        )
+
+    def _prepare_builder(self) -> None:
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("builder prepare payload must be a JSON object")
+            prepare_id = str(
+                raw.get("id")
+                or raw.get("prepare_id")
+                or raw.get("prepareId")
+                or f"builder-prep-{uuid4().hex[:16]}"
+            ).strip()
+            if not prepare_id or "/" in prepare_id:
+                raise ValueError("prepare id must be non-empty and cannot contain '/'.")
+            count = int(_payload_value(raw, "count", "builders", default=1))
+            ttl_seconds = int(
+                _payload_value(raw, "ttl_seconds", "ttlSeconds", default=900)
+            )
+            if count <= 0:
+                raise ValueError("count must be positive.")
+            if ttl_seconds <= 0:
+                raise ValueError("ttl_seconds must be positive.")
+        except (TypeError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        item = self.routing_store.upsert_prepared_builder(
+            prepare_id,
+            count=count,
+            ttl_seconds=ttl_seconds,
+        )
+        self._write_json(
+            {
+                "prepare": item.to_dict(),
+                "demand": self._demand_payload(),
+            },
+            status=HTTPStatus.CREATED,
+        )
+
+    def _delete_prepared_builder(self, prepare_id: str) -> None:
+        deleted = self.routing_store.delete_prepared_builder(prepare_id)
         self._write_json(
             {
                 "ok": True,
@@ -360,6 +481,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self._write_json({"sandboxes": sandboxes})
 
     def _list_images_across_nodes(self) -> None:
+        self._write_json({"images": self._image_records_across_nodes()})
+
+    def _image_records_across_nodes(self) -> list[dict[str, Any]]:
         images: list[dict[str, Any]] = []
         if self.image_manager is not None:
             for record in sorted(self.image_manager.list(), key=lambda item: item.id):
@@ -383,7 +507,109 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     enriched = dict(record)
                     enriched["node"] = _node_metadata(heartbeat)
                     images.append(enriched)
-        self._write_json({"images": images})
+        return images
+
+    def _list_image_builds_across_nodes(self) -> None:
+        self._write_json({"builds": self._image_build_records_across_nodes()})
+
+    def _get_image_build(self, build_key: str) -> None:
+        matches = [
+            build
+            for build in self._image_build_records_across_nodes()
+            if build.get("build_id") == build_key or build.get("image_id") == build_key
+        ]
+        if not matches:
+            self._write_json(
+                {"error": "image build not found"},
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        selected = sorted(
+            matches,
+            key=lambda item: (
+                str(item.get("created_at") or ""),
+                str(item.get("build_id") or ""),
+            ),
+        )[-1]
+        self._record_successful_build_image(selected)
+        self._write_json({"build": selected})
+
+    def _image_build_records_across_nodes(self) -> list[dict[str, Any]]:
+        builds: list[dict[str, Any]] = []
+        if self.image_manager is not None:
+            for record in sorted(
+                self.image_manager.list_builds(),
+                key=lambda item: (item.created_at, item.build_id),
+            ):
+                enriched = record.to_dict()
+                enriched["location"] = "control-plane"
+                builds.append(enriched)
+        for heartbeat in self._ready_heartbeats():
+            response = self._proxy_request(
+                heartbeat.node_url or "",
+                "/v1/images/builds",
+                method="GET",
+            )
+            if response.status >= 400:
+                continue
+            raw_builds = response.json().get("builds")
+            if not isinstance(raw_builds, list):
+                continue
+            for record in raw_builds:
+                if isinstance(record, dict):
+                    enriched = dict(record)
+                    enriched["location"] = heartbeat.node_id
+                    enriched["node"] = _node_metadata(heartbeat)
+                    self._record_successful_build_image(enriched)
+                    builds.append(enriched)
+        return builds
+
+    def _registry_status(self) -> dict[str, Any]:
+        if not self.registry_url:
+            return {
+                "configured": False,
+                "ok": False,
+                "url": "",
+                "repository_count": 0,
+                "scanned_repository_count": 0,
+                "scanned_tag_count": 0,
+                "visible_tag_count": 0,
+                "catalog_truncated": False,
+                "repositories": [],
+            }
+        client = RegistryClient(
+            self.registry_url,
+            timeout_seconds=REGISTRY_METRICS_TIMEOUT_SECONDS,
+        )
+        try:
+            return registry_summary(client)
+        except Exception as exc:
+            return {
+                "configured": True,
+                "ok": False,
+                "url": self.registry_url,
+                "repository_count": 0,
+                "scanned_repository_count": 0,
+                "scanned_tag_count": 0,
+                "visible_tag_count": 0,
+                "catalog_truncated": False,
+                "repositories": [],
+                "error": str(exc),
+            }
+
+    def _record_successful_build_image(self, build: dict[str, Any]) -> None:
+        if self.image_manager is None or build.get("status") != "succeeded":
+            return
+        raw_image = build.get("image")
+        if (
+            not isinstance(raw_image, dict)
+            or not _image_record_available_to_sandboxes(raw_image)
+        ):
+            return
+        try:
+            self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
+        except ValueError:
+            pass
 
     def _create_sandbox_on_node(self) -> None:
         try:
@@ -393,6 +619,15 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("sandbox payload must be a JSON object")
             spec = SandboxSpec.from_dict(raw)
             spec.validate()
+            resolved_image, image_error = self._resolve_sandbox_image_reference(spec.image)
+            if image_error is not None:
+                self._write_json(image_error, status=HTTPStatus.BAD_REQUEST)
+                return
+            if resolved_image != spec.image:
+                spec = replace(spec, image=resolved_image)
+                raw = dict(raw)
+                raw["image"] = resolved_image
+                body = json.dumps(raw).encode("utf-8")
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -434,7 +669,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if image_response is not None and image_response.status >= 400:
             self._write_json(
                 {
-                    "error": "image is not available on selected sandbox node; pull failed",
+                    "error": (
+                        "image is not available on selected sandbox node; pull failed. "
+                        "For images built by the UCloud builder, build with push=true "
+                        "and a pullable registry tag before creating sandboxes."
+                    ),
                     "pull": image_response.json(),
                 },
                 status=HTTPStatus.BAD_GATEWAY,
@@ -524,7 +763,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             spec = ImageBuildSpec.from_dict(raw)
             spec.validate()
             push = bool(raw.get("push", False))
-            if self.image_manager is not None:
+            if self.local_image_builds_enabled and self.image_manager is not None:
                 with uploaded_build_context(raw) as context_path:
                     build_spec = spec
                     if context_path is not None:
@@ -538,6 +777,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         )
                     record, result = self.image_manager.build(build_spec)
                     push_result = self.image_manager.runtime.push(build_spec.tag) if push else None
+                    if push_result is not None:
+                        record = self.image_manager.mark_pushed(record.id)
                 if self.routing_store is not None:
                     self.routing_store.clear_pending_image_build(spec.id)
                 payload: dict[str, Any] = {
@@ -576,9 +817,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/v1/images/build",
                 method="POST",
                 body=body,
+                timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
             )
             if 200 <= response.status < 300 and self.routing_store is not None:
                 self.routing_store.clear_pending_image_build(spec.id)
+            if 200 <= response.status < 300 and self.image_manager is not None:
+                raw_image = response.json().get("image")
+                if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(raw_image):
+                    try:
+                        self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
+                    except ValueError:
+                        pass
             self._send_proxied_response(response)
             return
         except (json.JSONDecodeError, ValueError) as exc:
@@ -729,6 +978,45 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ),
         )[0]
 
+    def _resolve_sandbox_image_reference(
+        self,
+        image: str,
+    ) -> tuple[str, dict[str, Any] | None]:
+        if not _looks_like_image_id_reference(image):
+            return image, None
+        matches = [
+            record
+            for record in self._image_records_across_nodes()
+            if record.get("id") == image
+        ]
+        if not matches:
+            return image, None
+        available = [
+            record
+            for record in matches
+            if _image_record_available_to_sandboxes(record)
+            and isinstance(record.get("tag"), str)
+            and record.get("tag")
+        ]
+        if available:
+            selected = sorted(
+                available,
+                key=lambda record: (
+                    0 if record.get("location") == "control-plane" else 1,
+                    str(record.get("tag") or ""),
+                ),
+            )[0]
+            return str(selected["tag"]), None
+        return image, {
+            "error": (
+                "image id exists, but it is not available to sandbox nodes; "
+                "build with push=true and a pullable registry tag, then create "
+                "the sandbox with that image id or registry tag"
+            ),
+            "image_id": image,
+            "matches": [_image_record_summary(record) for record in matches],
+        }
+
     def _select_capable_node(self, capability: str) -> NodeHeartbeat | None:
         candidates = [
             heartbeat
@@ -873,6 +1161,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         *,
         method: str,
         body: bytes | None = None,
+        timeout_seconds: float = DEFAULT_PROXY_TIMEOUT_SECONDS,
     ) -> ProxiedResponse:
         headers = {
             key: value
@@ -886,7 +1175,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             headers=headers,
         )
         try:
-            with request.urlopen(proxied, timeout=60) as response:
+            with request.urlopen(proxied, timeout=timeout_seconds) as response:
                 return ProxiedResponse(response.status, response.headers, response.read())
         except error.HTTPError as exc:
             return ProxiedResponse(exc.code, exc.headers, exc.read())
@@ -941,7 +1230,9 @@ def build_server(
     heartbeat_ttl_seconds: int = 120,
     image_file: Path | None = None,
     image_runtime: DockerImageRuntime | None = None,
+    local_image_builds_enabled: bool | None = None,
     metrics_file: Path | None = None,
+    registry_url: str | None = None,
 ) -> ThreadingHTTPServer:
     store = HeartbeatStore(heartbeat_file)
     routing_store = RoutingStore(routing_file) if routing_file is not None else None
@@ -964,7 +1255,13 @@ def build_server(
     BoundHandler.gateway_bearer_token = gateway_bearer_token
     BoundHandler.heartbeat_ttl_seconds = heartbeat_ttl_seconds
     BoundHandler.image_manager = image_manager
+    BoundHandler.local_image_builds_enabled = (
+        image_runtime is not None
+        if local_image_builds_enabled is None
+        else local_image_builds_enabled
+    )
     BoundHandler.metrics_store = metrics_store
+    BoundHandler.registry_url = registry_url
     return ThreadingHTTPServer((host, port), BoundHandler)
 
 
@@ -980,6 +1277,16 @@ def _is_node_api_path(path: str) -> bool:
 
 def _sandbox_id_from_path(path: str) -> str | None:
     prefix = "/v1/sandboxes/"
+    if not path.startswith(prefix):
+        return None
+    rest = path[len(prefix):]
+    if not rest:
+        return None
+    return unquote(rest.split("/", 1)[0])
+
+
+def _image_build_key_from_path(path: str) -> str | None:
+    prefix = "/v1/images/builds/"
     if not path.startswith(prefix):
         return None
     rest = path[len(prefix):]
@@ -1006,6 +1313,23 @@ def _prepare_id_from_path(path: str) -> str | None:
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
+
+
+def _builder_prepare_id_from_path(path: str) -> str | None:
+    prefix = "/v1/builders/prepare/"
+    if not path.startswith(prefix):
+        return None
+    rest = path[len(prefix):]
+    if not rest:
+        return None
+    return unquote(rest.split("/", 1)[0])
+
+
+def _payload_value(raw: dict[str, Any], *keys: str, default: Any) -> Any:
+    for key in keys:
+        if raw.get(key) is not None:
+            return raw[key]
+    return default
 
 
 def _prepared_resources_from_payload(raw: dict[str, Any]) -> ResourceQuantity:
@@ -1124,6 +1448,37 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
             lock = RLock()
             _IMAGE_PULL_LOCKS[key] = lock
         return lock
+
+
+def _looks_like_image_id_reference(image: str) -> bool:
+    return bool(image.strip()) and "/" not in image and ":" not in image and "@" not in image
+
+
+def _image_record_available_to_sandboxes(record: dict[str, Any]) -> bool:
+    return bool(
+        record.get("available_to_sandboxes")
+        or record.get("pushed")
+        or record.get("source") == "registry"
+    )
+
+
+def _image_record_summary(record: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "id": record.get("id"),
+        "tag": record.get("tag"),
+        "source": record.get("source"),
+        "pushed": bool(record.get("pushed")),
+        "available_to_sandboxes": _image_record_available_to_sandboxes(record),
+    }
+    node = record.get("node")
+    if isinstance(node, dict):
+        summary["node"] = {
+            "node_id": node.get("node_id"),
+            "job_id": node.get("job_id"),
+        }
+    if record.get("location"):
+        summary["location"] = record.get("location")
+    return summary
 
 
 def _resource_slack(free: ResourceQuantity, requested: ResourceQuantity) -> tuple[float, int, int]:

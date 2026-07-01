@@ -317,37 +317,64 @@ class CommandResult:
     exit_code: int
     stdout: str = ""
     stderr: str = ""
+    stdout_bytes: bytes = b""
+    stderr_bytes: bytes = b""
 
 
 class CommandExecutor(Protocol):
-    def run(self, argv: tuple[str, ...]) -> CommandResult:
+    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
         ...
 
 
 class SubprocessExecutor:
-    def run(self, argv: tuple[str, ...]) -> CommandResult:
+    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
         completed = subprocess.run(
             list(argv),
+            input=input,
             check=False,
             capture_output=True,
-            text=True,
         )
+        stdout = completed.stdout or b""
+        stderr = completed.stderr or b""
         return CommandResult(
             argv=argv,
             exit_code=completed.returncode,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
+            stdout=stdout.decode("utf-8", errors="replace"),
+            stderr=stderr.decode("utf-8", errors="replace"),
+            stdout_bytes=stdout,
+            stderr_bytes=stderr,
         )
 
 
 class RecordingExecutor:
-    def __init__(self, exit_code: int = 0) -> None:
+    def __init__(
+        self,
+        exit_code: int = 0,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+        stdout_bytes: bytes | None = None,
+        stderr_bytes: bytes | None = None,
+    ) -> None:
         self.exit_code = exit_code
+        self.stdout = stdout
+        self.stderr = stderr
+        self.stdout_bytes = stdout_bytes if stdout_bytes is not None else stdout.encode()
+        self.stderr_bytes = stderr_bytes if stderr_bytes is not None else stderr.encode()
         self.commands: list[tuple[str, ...]] = []
+        self.inputs: list[bytes | None] = []
 
-    def run(self, argv: tuple[str, ...]) -> CommandResult:
+    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
         self.commands.append(argv)
-        return CommandResult(argv=argv, exit_code=self.exit_code)
+        self.inputs.append(input)
+        return CommandResult(
+            argv=argv,
+            exit_code=self.exit_code,
+            stdout=self.stdout,
+            stderr=self.stderr,
+            stdout_bytes=self.stdout_bytes,
+            stderr_bytes=self.stderr_bytes,
+        )
 
 
 class DockerGvisorRuntime:
@@ -441,6 +468,62 @@ class DockerGvisorRuntime:
             )
         )
 
+    def write_file_to_container(
+        self,
+        sandbox_id: str,
+        container_path: str,
+        content: bytes,
+        *,
+        owner: str | None = None,
+    ) -> CommandResult:
+        validate_container_file_path("container_path", container_path)
+        env = {"UCLOUD_SANDBOX_FILE": container_path}
+        if owner:
+            validate_security_value("file owner", owner)
+            env["UCLOUD_SANDBOX_OWNER"] = owner
+        return self._run(
+            self.exec_command(
+                sandbox_id,
+                (
+                    "sh",
+                    "-c",
+                    (
+                        "set -eu\n"
+                        'target="${UCLOUD_SANDBOX_FILE:?}"\n'
+                        'parent="${target%/*}"\n'
+                        'if [ -z "$parent" ] || [ "$parent" = "$target" ]; then parent=/; fi\n'
+                        'mkdir -p -- "$parent"\n'
+                        'cat > "$target"\n'
+                        'if [ -n "${UCLOUD_SANDBOX_OWNER:-}" ]; then '
+                        'chown "$UCLOUD_SANDBOX_OWNER" "$target" 2>/dev/null || true; '
+                        "fi\n"
+                        'chmod u+rw,go+r "$target" 2>/dev/null || true\n'
+                    ),
+                ),
+                env=env,
+                interactive=True,
+                user="0",
+            ),
+            input=content,
+        )
+
+    def read_file_from_container(
+        self,
+        sandbox_id: str,
+        container_path: str,
+    ) -> tuple[bytes, CommandResult]:
+        validate_container_file_path("container_path", container_path)
+        result = self._run(
+            self.exec_command(
+                sandbox_id,
+                ("sh", "-c", 'cat "${UCLOUD_SANDBOX_FILE:?}"'),
+                env={"UCLOUD_SANDBOX_FILE": container_path},
+                interactive=False,
+                user="0",
+            )
+        )
+        return result.stdout_bytes, result
+
     def exec_command(
         self,
         sandbox_id: str,
@@ -450,6 +533,7 @@ class DockerGvisorRuntime:
         working_dir: str | None = None,
         interactive: bool = True,
         tty: bool = False,
+        user: str | None = None,
     ) -> tuple[str, ...]:
         if not SANDBOX_ID_RE.match(sandbox_id):
             raise ValueError("invalid sandbox id.")
@@ -458,6 +542,8 @@ class DockerGvisorRuntime:
         for key in env or {}:
             if not ENV_KEY_RE.match(key):
                 raise ValueError(f"invalid environment variable name: {key!r}")
+        if user is not None:
+            validate_security_value("exec user", user)
         argv: list[str] = [self.docker_binary, "exec"]
         if interactive:
             argv.append("-i")
@@ -467,6 +553,8 @@ class DockerGvisorRuntime:
             argv.extend(["-w", working_dir])
         for key in sorted(env or {}):
             argv.extend(["-e", f"{key}={env[key]}"])
+        if user is not None:
+            argv.extend(["-u", user])
         argv.append(self.container_name(sandbox_id))
         argv.extend(command)
         return tuple(argv)
@@ -576,10 +664,10 @@ class DockerGvisorRuntime:
         argv.extend(spec.command)
         return tuple(argv)
 
-    def _run(self, argv: tuple[str, ...]) -> CommandResult:
+    def _run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
         if self.dry_run:
             return CommandResult(argv=argv, exit_code=0)
-        result = self.executor.run(argv)
+        result = self.executor.run(argv, input=input)
         if result.exit_code != 0:
             raise RuntimeError(
                 f"command failed with exit code {result.exit_code}: {' '.join(argv)}\n"
@@ -719,16 +807,14 @@ class SandboxManager:
         container_path: str,
         content: bytes,
     ) -> CommandResult:
-        self._require_sandbox(sandbox_id)
+        record = self._require_sandbox(sandbox_id)
         validate_container_file_path("container_path", container_path)
-        with TemporaryDirectory(prefix="ucloud-sandbox-upload-") as raw_dir:
-            host_path = Path(raw_dir) / (Path(container_path).name or "upload")
-            host_path.write_bytes(content)
-            return self.runtime.copy_to_container(
-                sandbox_id,
-                host_path,
-                container_path,
-            )
+        return self.runtime.write_file_to_container(
+            sandbox_id,
+            container_path,
+            content,
+            owner=record.spec.security.user,
+        )
 
     def download_file(
         self,
@@ -737,20 +823,7 @@ class SandboxManager:
     ) -> tuple[bytes, CommandResult]:
         self._require_sandbox(sandbox_id)
         validate_container_file_path("container_path", container_path)
-        with TemporaryDirectory(prefix="ucloud-sandbox-download-") as raw_dir:
-            host_path = Path(raw_dir) / "download"
-            result = self.runtime.copy_from_container(
-                sandbox_id,
-                container_path,
-                host_path,
-            )
-            if self.runtime.dry_run and not host_path.exists():
-                return b"", result
-            if host_path.is_dir():
-                raise RuntimeError("downloaded container path is a directory.")
-            if not host_path.exists():
-                raise RuntimeError("downloaded container file was not created.")
-            return host_path.read_bytes(), result
+        return self.runtime.read_file_from_container(sandbox_id, container_path)
 
     def _require_sandbox(self, sandbox_id: str) -> SandboxRecord:
         record = self.get(sandbox_id)

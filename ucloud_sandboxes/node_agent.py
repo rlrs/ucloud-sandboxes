@@ -15,7 +15,7 @@ from .images import (
     ImageManager,
     ImageStore,
     image_id_from_tag,
-    uploaded_build_context,
+    materialize_uploaded_build_context,
 )
 from .registry import heartbeat_to_dict
 from .models import NodeRuntimeMetrics, ResourceQuantity
@@ -67,6 +67,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             deployment_id=self.deployment_id,
                             init_version=self.init_version,
                             active_sandboxes=self.manager.active_count(),
+                            active_image_builds=(
+                                self.image_manager.active_build_count()
+                                if self.image_builds_enabled
+                                else 0
+                            ),
                             capabilities=self.capabilities,
                             total_resources=self.total_resources,
                             used_resources=self.manager.requested_resources(),
@@ -116,6 +121,30 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     ]
                 }
             )
+            return
+        if parsed.path == "/v1/images/builds":
+            self._write_json(
+                {
+                    "builds": [
+                        record.to_dict()
+                        for record in sorted(
+                            self.image_manager.list_builds(),
+                            key=lambda item: (item.created_at, item.build_id),
+                        )
+                    ]
+                }
+            )
+            return
+        build_key = _image_build_key_from_path(parsed.path)
+        if build_key is not None:
+            record = self.image_manager.get_build(build_key)
+            if record is None:
+                self._write_json(
+                    {"error": "image build not found"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            self._write_json({"build": record.to_dict()})
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -325,30 +354,60 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
             push = bool(raw.get("push", False))
-            with uploaded_build_context(raw) as context_path:
-                spec = ImageBuildSpec.from_dict(raw)
-                if context_path is not None:
-                    spec = ImageBuildSpec(
-                        id=spec.id,
-                        tag=spec.tag,
-                        context_path=str(context_path),
-                        dockerfile=spec.dockerfile,
-                        build_args=spec.build_args,
-                        labels=spec.labels,
-                    )
-                record, result = self.image_manager.build(spec)
-                push_result = self.image_manager.runtime.push(spec.tag) if push else None
+            wait = bool(raw.get("wait", True))
+            materialized_context = materialize_uploaded_build_context(raw)
+            spec = ImageBuildSpec.from_dict(raw)
+            if materialized_context is not None:
+                spec = ImageBuildSpec(
+                    id=spec.id,
+                    tag=spec.tag,
+                    context_path=str(materialized_context.path),
+                    dockerfile=spec.dockerfile,
+                    build_args=spec.build_args,
+                    labels=spec.labels,
+                )
+            build, started = self.image_manager.start_build(
+                spec,
+                push=push,
+                cleanup=(
+                    materialized_context.cleanup
+                    if materialized_context is not None
+                    else None
+                ),
+            )
+            if wait:
+                build = self.image_manager.wait_for_build(build.build_id) or build
         except (RuntimeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
+        if not wait:
+            self._write_json(
+                {
+                    "build": build.to_dict(),
+                    "started": started,
+                },
+                status=HTTPStatus.ACCEPTED,
+            )
+            return
+        if build.status != "succeeded":
+            self._write_json(
+                {
+                    "error": build.error or f"image build {build.status}",
+                    "build": build.to_dict(),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+        image_record = self.image_manager.get_image(build.image_id)
         payload: dict[str, Any] = {
-            "image": record.to_dict(),
-            "command": list(result.argv),
-            "exitCode": result.exit_code,
+            "build": build.to_dict(),
+            "image": image_record.to_dict() if image_record is not None else build.image,
+            "command": list(build.command),
+            "exitCode": build.exit_code,
         }
-        if push_result is not None:
-            payload["pushCommand"] = list(push_result.argv)
-            payload["pushExitCode"] = push_result.exit_code
+        if build.push_command:
+            payload["pushCommand"] = list(build.push_command)
+            payload["pushExitCode"] = build.push_exit_code
         self._write_json(payload, status=HTTPStatus.CREATED)
 
     def _pull_image(self) -> None:
@@ -561,6 +620,14 @@ def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:
     if suffix:
         return unquote(path[len(prefix):-len(suffix)])
     return unquote(path[len(prefix):])
+
+
+def _image_build_key_from_path(path: str) -> str | None:
+    prefix = "/v1/images/builds/"
+    if not path.startswith(prefix):
+        return None
+    key = unquote(path[len(prefix):])
+    return key or None
 
 
 def _file_path_from_query(parsed: Any) -> str | None:

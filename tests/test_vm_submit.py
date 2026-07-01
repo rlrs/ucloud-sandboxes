@@ -2,6 +2,7 @@ import unittest
 
 from ucloud_sandboxes.vm_submit import (
     VmApplicationRef,
+    VmFileMount,
     VmProductRef,
     VmSubmissionOptions,
     VmTimeAllocation,
@@ -82,6 +83,33 @@ class VmSubmitTests(unittest.TestCase):
                 {"type": "ingress", "id": "link-1", "port": 8090},
             ],
         )
+
+    def test_can_attach_project_file_mounts(self) -> None:
+        item = VmSubmissionOptions(
+            name="gateway",
+            hostname="sandbox-gateway-1",
+            private_network_id="net-1",
+            file_mounts=(
+                VmFileMount("/1234567/ucloud-sandbox-registry"),
+                VmFileMount("/1234567/read-only-data", read_only=True),
+            ),
+        ).job_item()
+
+        self.assertEqual(item["resources"][0], {"type": "private_network", "id": "net-1"})
+        self.assertEqual(item["resources"][1]["type"], "file")
+        self.assertEqual(item["resources"][1]["path"], "/1234567/ucloud-sandbox-registry")
+        self.assertFalse(item["resources"][1]["readOnly"])
+        self.assertEqual(item["resources"][2]["path"], "/1234567/read-only-data")
+        self.assertTrue(item["resources"][2]["readOnly"])
+
+    def test_rejects_relative_file_mount(self) -> None:
+        with self.assertRaisesRegex(ValueError, "absolute UCloud path"):
+            VmSubmissionOptions(
+                name="gateway",
+                hostname="sandbox-gateway-1",
+                private_network_id=None,
+                file_mounts=(VmFileMount("relative/path"),),
+            ).job_item()
 
     def test_bulk_submission_payload_supports_multiple_vm_items(self) -> None:
         payload = bulk_submission_payload(

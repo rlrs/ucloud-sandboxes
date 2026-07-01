@@ -11,6 +11,7 @@ from .routing import PendingSandboxDemand, RoutingState, SandboxRoute
 
 DEFAULT_RECENT_EVENT_LIMIT = 50
 DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
+DEFAULT_VM_LIFECYCLE_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -173,7 +174,118 @@ def record_autoscaler_cycle(
             "created_job_ids": result.get("createdJobIds", []),
             "stop_job_ids": result.get("stopJobIds", []),
             "pending_image_builds": result.get("pendingImageBuilds", 0),
+            "prepared_builder_count": result.get("preparedBuilderCount", 0),
             "builder_actions": builder_decision.get("actions", []),
+        },
+    )
+
+
+def record_vm_submitted(
+    store: MetricsStore | None,
+    *,
+    cycle: int,
+    job_id: str,
+    intent: Any,
+) -> None:
+    if store is None:
+        return
+    options = getattr(intent, "options", None)
+    labels = getattr(options, "labels", None) or {}
+    role = "builder" if labels.get("ucloud-sandboxes/builder") == "true" else "sandbox"
+    product = getattr(options, "product", None)
+    application = getattr(options, "application", None)
+    store.append(
+        "vm_submitted",
+        {
+            "cycle": cycle,
+            "job_id": job_id,
+            "role": role,
+            "node_id": getattr(intent, "node_id", ""),
+            "node_url": getattr(intent, "node_url", ""),
+            "name": getattr(options, "name", ""),
+            "hostname": getattr(options, "hostname", ""),
+            "product_id": getattr(product, "id", ""),
+            "product_category": getattr(product, "category", ""),
+            "application_name": getattr(application, "name", ""),
+            "application_version": getattr(application, "version", ""),
+            "disk_gb": getattr(options, "disk_gb", None),
+        },
+    )
+
+
+def record_vm_observed(
+    store: MetricsStore | None,
+    *,
+    cycle: int,
+    node: Any,
+) -> None:
+    if store is None:
+        return
+    job = getattr(node, "job", None)
+    if job is None:
+        return
+    store.append(
+        "vm_observed",
+        {
+            "cycle": cycle,
+            "job_id": getattr(job, "id", ""),
+            "role": _node_role(node),
+            "state": getattr(job, "state", ""),
+            "name": getattr(job, "name", ""),
+            "hostname": getattr(job, "hostname", "") or "",
+            "created_at": _iso_or_none(getattr(job, "created_at", None)),
+            "started_at": _iso_or_none(getattr(job, "started_at", None)),
+            "expires_at": _iso_or_none(getattr(job, "expires_at", None)),
+            "latest_note": getattr(job, "latest_note", "") or "",
+            "queue_status": getattr(job, "queue_status", "") or "",
+            "product_id": getattr(job, "product_id", ""),
+            "cpu": getattr(job, "cpu", None),
+            "memory_gb": getattr(job, "memory_gb", None),
+            "disk_gb": getattr(job, "disk_gb", None),
+            "ready": bool(getattr(node, "is_ready", False)),
+            "provisioning": bool(getattr(node, "is_provisioning", False)),
+            "heartbeat_fresh": bool(getattr(node, "heartbeat_fresh", False)),
+        },
+    )
+
+
+def record_vm_init_attempt(
+    store: MetricsStore | None,
+    *,
+    job_id: str,
+    node_id: str,
+    role: str,
+    status: str,
+    attempts: int,
+    started_at: str,
+    finished_at: str,
+    duration_ms: int,
+    stage_duration_ms: int | None = None,
+    run_duration_ms: int | None = None,
+    returncode: int | None = None,
+    error: str = "",
+    skipped: bool = False,
+    reason: str = "",
+) -> None:
+    if store is None:
+        return
+    store.append(
+        "vm_init_attempt",
+        {
+            "job_id": job_id,
+            "node_id": node_id,
+            "role": role,
+            "status": status,
+            "attempts": attempts,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "duration_ms": duration_ms,
+            "stage_duration_ms": stage_duration_ms,
+            "run_duration_ms": run_duration_ms,
+            "returncode": returncode,
+            "error": error,
+            "skipped": skipped,
+            "reason": reason,
         },
     )
 
@@ -235,10 +347,29 @@ def build_metrics_snapshot(
         heartbeat for heartbeat in fresh if "image-build" in heartbeat.capabilities
     ]
     routing_state = routing_state or RoutingState({}, {}, {}, {})
+    fresh_sandbox_nodes = {heartbeat.node_id: heartbeat for heartbeat in sandbox_nodes}
+    routes_on_fresh_nodes = sum(
+        1
+        for route in routing_state.sandboxes.values()
+        if route.node_id in fresh_sandbox_nodes
+    )
+    active_routes = len(routing_state.sandboxes)
+    fresh_resources = _aggregate_node_resources(fresh)
+    sandbox_resources = _aggregate_node_resources(sandbox_nodes)
+    builder_resources = _aggregate_node_resources(builder_nodes)
+    provisional_running = _routes_created_after_heartbeat_count(
+        routing_state.sandboxes.values(),
+        fresh_sandbox_nodes,
+    )
     pending_sandboxes = list(routing_state.pending.values())
     prepared_capacity = [
         item
         for item in routing_state.prepared.values()
+        if not item.is_expired(now)
+    ]
+    prepared_builders = [
+        item
+        for item in routing_state.prepared_builders.values()
         if not item.is_expired(now)
     ]
     pending_builds = list(routing_state.image_builds.values())
@@ -267,12 +398,16 @@ def build_metrics_snapshot(
             "recent_samples": [event.to_dict() for event in node_events],
         },
         "resources": {
-            "fresh": _aggregate_node_resources(fresh),
-            "sandbox": _aggregate_node_resources(sandbox_nodes),
-            "builder": _aggregate_node_resources(builder_nodes),
+            "fresh": fresh_resources,
+            "sandbox": sandbox_resources,
+            "builder": builder_resources,
         },
         "sandboxes": {
-            "active_routes": len(routing_state.sandboxes),
+            "running": sandbox_resources["active_sandboxes"] + provisional_running,
+            "active_routes": active_routes,
+            "routes_on_fresh_nodes": routes_on_fresh_nodes,
+            "provisional_running_routes": provisional_running,
+            "stale_routes": max(0, active_routes - routes_on_fresh_nodes),
             "pending": len(pending_sandboxes),
             "pending_resources": _sum_pending_resources(pending_sandboxes).to_dict(),
             "oldest_pending_seconds": _oldest_age_seconds(pending_sandboxes),
@@ -293,7 +428,15 @@ def build_metrics_snapshot(
             "pending_builds": len(pending_builds),
             "oldest_pending_build_seconds": _oldest_age_seconds(pending_builds),
         },
+        "builders": {
+            "prepared": len(prepared_builders),
+            "prepared_builders": sum(item.count for item in prepared_builders),
+            "oldest_prepared_seconds": _oldest_age_seconds(prepared_builders),
+            "next_expiration_seconds": _next_expiration_seconds(prepared_builders),
+            "items": [item.to_dict() for item in prepared_builders],
+        },
         "scale_up": _scale_up_summary(scale_values, scale_events),
+        "vm_lifecycle": _vm_lifecycle_summary(events),
         "events": {
             "recent": [event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]],
         },
@@ -314,6 +457,8 @@ def _node_metrics(
         "fresh": heartbeat.is_fresh(now, heartbeat_ttl_seconds),
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),
         "active_sandboxes": heartbeat.active_sandboxes,
+        "active_image_builds": heartbeat.active_image_builds,
+        "active_workloads": heartbeat.active_workloads,
         "draining": heartbeat.draining,
         "capabilities": list(heartbeat.capabilities),
         "agent_version": heartbeat.agent_version,
@@ -336,20 +481,39 @@ def _aggregate_node_resources(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]
     used = ResourceQuantity()
     free = ResourceQuantity()
     active_sandboxes = 0
+    active_image_builds = 0
     for heartbeat in heartbeats:
         effective = effective + heartbeat.effective_resources
         used = used + heartbeat.used_resources
         free = free + heartbeat.free_resources
         active_sandboxes += heartbeat.active_sandboxes
+        active_image_builds += heartbeat.active_image_builds
     return {
         "nodes": len(heartbeats),
         "active_sandboxes": active_sandboxes,
+        "active_image_builds": active_image_builds,
+        "active_workloads": active_sandboxes + active_image_builds,
         "effective": effective.to_dict(),
         "used": used.to_dict(),
         "free": free.to_dict(),
         "load": _resource_load(used, effective),
         "actual_usage": _aggregate_actual_usage(heartbeats),
     }
+
+
+def _routes_created_after_heartbeat_count(
+    routes: Any,
+    heartbeats_by_node_id: dict[str, NodeHeartbeat],
+) -> int:
+    count = 0
+    for route in routes:
+        heartbeat = heartbeats_by_node_id.get(route.node_id)
+        if heartbeat is None:
+            continue
+        route_created_at = parse_iso_datetime(route.created_at)
+        if route_created_at is not None and route_created_at > heartbeat.updated_at:
+            count += 1
+    return count
 
 
 def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
@@ -494,3 +658,172 @@ def _percentile(sorted_values: list[int], quantile: float) -> int:
         return 0
     index = int(round((len(sorted_values) - 1) * max(0.0, min(1.0, quantile))))
     return sorted_values[index]
+
+
+def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
+    records: dict[str, dict[str, Any]] = {}
+    lifecycle_events = [
+        event
+        for event in events
+        if event.kind
+        in {
+            "vm_submitted",
+            "vm_observed",
+            "vm_init_attempt",
+            "node_heartbeat",
+            "sandbox_scheduled",
+        }
+    ]
+    for event in lifecycle_events:
+        data = event.data
+        job_id = data.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            continue
+        record = records.setdefault(
+            job_id,
+            {
+                "job_id": job_id,
+                "role": "",
+                "state": "",
+                "node_id": "",
+                "submitted_at": None,
+                "ucloud_created_at": None,
+                "ucloud_started_at": None,
+                "first_heartbeat_at": None,
+                "last_heartbeat_at": None,
+                "first_sandbox_scheduled_at": None,
+                "last_sandbox_scheduled_at": None,
+                "last_activity_at": event.timestamp,
+                "init_attempts": [],
+            },
+        )
+        record["last_activity_at"] = max(
+            str(record.get("last_activity_at") or ""), event.timestamp
+        )
+        if event.kind == "vm_submitted":
+            record["submitted_at"] = record.get("submitted_at") or event.timestamp
+            _copy_first(record, data, "role")
+            _copy_first(record, data, "node_id")
+            _copy_first(record, data, "node_url")
+            _copy_first(record, data, "hostname")
+            _copy_first(record, data, "product_id")
+            _copy_first(record, data, "disk_gb")
+        elif event.kind == "vm_observed":
+            record["state"] = data.get("state") or record.get("state") or ""
+            _copy_first(record, data, "role")
+            _copy_first(record, data, "node_id")
+            _copy_first(record, data, "hostname")
+            _copy_first(record, data, "product_id")
+            _copy_first(record, data, "disk_gb")
+            record["ucloud_created_at"] = (
+                data.get("created_at") or record.get("ucloud_created_at")
+            )
+            record["ucloud_started_at"] = (
+                data.get("started_at") or record.get("ucloud_started_at")
+            )
+            record["latest_note"] = data.get("latest_note") or record.get("latest_note") or ""
+            record["ready"] = bool(data.get("ready"))
+            record["provisioning"] = bool(data.get("provisioning"))
+        elif event.kind == "vm_init_attempt":
+            _copy_first(record, data, "role")
+            _copy_first(record, data, "node_id")
+            attempts = record.setdefault("init_attempts", [])
+            if isinstance(attempts, list):
+                attempts.append(
+                    {
+                        "status": data.get("status"),
+                        "attempts": data.get("attempts"),
+                        "started_at": data.get("started_at"),
+                        "finished_at": data.get("finished_at"),
+                        "duration_ms": data.get("duration_ms"),
+                        "stage_duration_ms": data.get("stage_duration_ms"),
+                        "run_duration_ms": data.get("run_duration_ms"),
+                        "returncode": data.get("returncode"),
+                        "skipped": data.get("skipped"),
+                        "reason": data.get("reason") or "",
+                    }
+                )
+        elif event.kind == "node_heartbeat":
+            _copy_first(record, data, "node_id")
+            heartbeat_at = data.get("heartbeat_updated_at") or event.timestamp
+            if not record.get("first_heartbeat_at"):
+                record["first_heartbeat_at"] = heartbeat_at
+            record["last_heartbeat_at"] = heartbeat_at
+        elif event.kind == "sandbox_scheduled":
+            scheduled_at = event.timestamp
+            if not record.get("first_sandbox_scheduled_at"):
+                record["first_sandbox_scheduled_at"] = scheduled_at
+                record["first_sandbox_scale_up_wait_ms"] = data.get("scale_up_wait_ms")
+            record["last_sandbox_scheduled_at"] = scheduled_at
+
+    items = sorted(
+        records.values(),
+        key=lambda item: str(item.get("last_activity_at") or ""),
+        reverse=True,
+    )[:DEFAULT_VM_LIFECYCLE_LIMIT]
+    for item in items:
+        item["submit_to_running_ms"] = _duration_ms(
+            item.get("submitted_at"),
+            item.get("ucloud_started_at"),
+        )
+        item["ucloud_created_to_running_ms"] = _duration_ms(
+            item.get("ucloud_created_at"),
+            item.get("ucloud_started_at"),
+        )
+        item["running_to_first_heartbeat_ms"] = _duration_ms(
+            item.get("ucloud_started_at"),
+            item.get("first_heartbeat_at"),
+        )
+        item["submit_to_first_heartbeat_ms"] = _duration_ms(
+            item.get("submitted_at"),
+            item.get("first_heartbeat_at"),
+        )
+        item["first_heartbeat_to_first_sandbox_ms"] = _duration_ms(
+            item.get("first_heartbeat_at"),
+            item.get("first_sandbox_scheduled_at"),
+        )
+        attempts = item.get("init_attempts")
+        if isinstance(attempts, list):
+            item["init_attempts"] = attempts[-10:]
+            succeeded = [
+                attempt
+                for attempt in attempts
+                if attempt.get("status") == "succeeded"
+                and isinstance(attempt.get("duration_ms"), int)
+            ]
+            item["last_successful_init_duration_ms"] = (
+                succeeded[-1]["duration_ms"] if succeeded else None
+            )
+    return {
+        "samples": len(records),
+        "items": items,
+        "recent_events": [
+            event.to_dict()
+            for event in lifecycle_events[-DEFAULT_RECENT_EVENT_LIMIT:]
+        ],
+    }
+
+
+def _copy_first(target: dict[str, Any], source: dict[str, Any], key: str) -> None:
+    if target.get(key) in (None, "") and source.get(key) not in (None, ""):
+        target[key] = source.get(key)
+
+
+def _duration_ms(start: object, end: object) -> int | None:
+    start_dt = parse_iso_datetime(start)
+    end_dt = parse_iso_datetime(end)
+    if start_dt is None or end_dt is None:
+        return None
+    return max(0, int((end_dt - start_dt).total_seconds() * 1000))
+
+
+def _node_role(node: Any) -> str:
+    job = getattr(node, "job", None)
+    labels = getattr(job, "labels", {}) if job is not None else {}
+    if labels.get("ucloud-sandboxes/builder") == "true":
+        return "builder"
+    return "sandbox"
+
+
+def _iso_or_none(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None

@@ -76,11 +76,13 @@ Current smoke-test shape:
   a write-through recovery and pending-demand database shared with the
   autoscaler
 - gateway VM job `12346251` also runs `autoscaler-loop` as a systemd service
-  with create execution, label-gated stop execution, a 300-second sandbox idle
-  grace, and a 900-second builder idle grace enabled
+  with create execution, label-gated stop execution, a 5-second reconcile
+  interval, a 600-second sandbox idle grace, and a 900-second builder idle
+  grace enabled
 - the gateway requires `Authorization: Bearer <token>` for non-health routes
 - sandbox and builder pools are currently scaled to zero when there is no
-  pending demand
+  pending sandbox demand, pending image-build demand, or unconsumed prepared
+  capacity signal
 - `GET /healthz` works publicly without auth
 - authenticated `GET /v1/sandboxes` works publicly with the bearer token, while
   unauthenticated access returns `401`

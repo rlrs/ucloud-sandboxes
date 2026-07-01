@@ -1,6 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Thread
+from threading import Event, Thread
 import asyncio
 import json
 from urllib import request
@@ -8,9 +8,10 @@ from urllib.parse import quote
 import unittest
 
 from ucloud_sandboxes.gateway import NodeGatewayClient
+from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import build_node_agent_server
-from ucloud_sandboxes.sandbox import DockerGvisorRuntime
+from ucloud_sandboxes.sandbox import CommandResult, DockerGvisorRuntime
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
@@ -136,6 +137,63 @@ class NodeAgentTests(unittest.TestCase):
             self.assertEqual(snapshot["image"]["id"], "snap-1")
             self.assertIn("commit", snapshot["command"])
             self.assertEqual(len(images["images"]), 2)
+
+    def test_image_builds_are_tracked_and_deduplicated(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            sandbox_file = Path(raw_dir) / "sandboxes.json"
+            image_file = Path(raw_dir) / "images.json"
+            executor = BlockingExecutor()
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=sandbox_file,
+                image_file=image_file,
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(dry_run=True),
+                image_runtime=DockerImageRuntime(executor=executor),
+                image_builds_enabled=True,
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                payload = {
+                    "id": "python-base",
+                    "tag": "local/python-base:latest",
+                    "context_path": "/tmp/context",
+                    "wait": False,
+                }
+                first = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload=payload,
+                )
+                self.assertTrue(executor.started.wait(2))
+                duplicate = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload=payload,
+                )
+                active = self._json_request(f"{base}/v1/images/builds/python-base")
+                heartbeat = self._json_request(f"{base}/v1/heartbeat")
+                executor.release.set()
+                finished = self._wait_for_build(base, "python-base")
+                images = self._json_request(f"{base}/v1/images")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertTrue(first["started"])
+            self.assertFalse(duplicate["started"])
+            self.assertEqual(first["build"]["build_id"], duplicate["build"]["build_id"])
+            self.assertEqual(active["build"]["status"], "running")
+            self.assertEqual(heartbeat["heartbeat"]["active_image_builds"], 1)
+            self.assertEqual(finished["status"], "succeeded")
+            self.assertIn("building layer", finished["log_tail"])
+            self.assertEqual(executor.commands, [("docker", "build", "-f", "/tmp/context/Dockerfile", "-t", "local/python-base:latest", "--label", "ucloud-sandboxes.image=true", "--label", "ucloud-sandboxes.image-id=python-base", "/tmp/context")])
+            self.assertEqual(images["images"][0]["id"], "python-base")
 
     def test_regular_node_rejects_image_builds(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -448,31 +506,62 @@ class NodeAgentTests(unittest.TestCase):
                 }
             return {"body": raw, "headers": response.headers}
 
+    def _wait_for_build(self, base: str, image_id: str) -> dict:
+        for _ in range(40):
+            payload = self._json_request(f"{base}/v1/images/builds/{image_id}")
+            build = payload["build"]
+            if build["status"] in {"succeeded", "failed"}:
+                return build
+            asyncio.run(asyncio.sleep(0.05))
+        raise AssertionError("image build did not finish")
+
 
 class FileRuntime(DockerGvisorRuntime):
     def __init__(self) -> None:
         super().__init__(dry_run=True)
         self.files: dict[tuple[str, str], bytes] = {}
 
-    def copy_to_container(
+    def write_file_to_container(
         self,
         sandbox_id: str,
-        source_path: Path,
         container_path: str,
+        content: bytes,
+        *,
+        owner: str | None = None,
     ):
-        result = super().copy_to_container(sandbox_id, source_path, container_path)
-        self.files[(sandbox_id, container_path)] = source_path.read_bytes()
+        result = super().write_file_to_container(
+            sandbox_id,
+            container_path,
+            content,
+            owner=owner,
+        )
+        self.files[(sandbox_id, container_path)] = content
         return result
 
-    def copy_from_container(
+    def read_file_from_container(
         self,
         sandbox_id: str,
         container_path: str,
-        target_path: Path,
     ):
-        result = super().copy_from_container(sandbox_id, container_path, target_path)
-        target_path.write_bytes(self.files[(sandbox_id, container_path)])
-        return result
+        _, result = super().read_file_from_container(sandbox_id, container_path)
+        return self.files[(sandbox_id, container_path)], result
+
+
+class BlockingExecutor:
+    def __init__(self) -> None:
+        self.started = Event()
+        self.release = Event()
+        self.commands: list[tuple[str, ...]] = []
+
+    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
+        self.commands.append(argv)
+        self.started.set()
+        self.release.wait(5)
+        return CommandResult(
+            argv=argv,
+            exit_code=0,
+            stdout="building layer\n",
+        )
 
 
 if __name__ == "__main__":

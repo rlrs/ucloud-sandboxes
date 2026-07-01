@@ -114,6 +114,10 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         job_id=job_id,
         updated_at=updated_at,
         active_sandboxes=max(0, int(raw.get("active_sandboxes", 0))),
+        active_image_builds=max(
+            0,
+            int(raw.get("active_image_builds", raw.get("activeImageBuilds", 0))),
+        ),
         idle_since=parse_iso_datetime(raw.get("idle_since")),
         draining=bool(raw.get("draining", False)),
         node_url=string_or_none(raw.get("node_url")),
@@ -136,11 +140,11 @@ def normalize_idle_since(
     *,
     previous: NodeHeartbeat | None,
 ) -> NodeHeartbeat:
-    if heartbeat.active_sandboxes > 0:
+    if heartbeat.active_workloads > 0:
         return replace(heartbeat, idle_since=None)
     if heartbeat.idle_since is not None:
         return heartbeat
-    if previous is not None and previous.active_sandboxes == 0:
+    if previous is not None and previous.active_workloads == 0:
         return replace(
             heartbeat,
             idle_since=previous.idle_since or previous.updated_at,

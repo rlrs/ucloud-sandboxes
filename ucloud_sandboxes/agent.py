@@ -42,6 +42,7 @@ def build_heartbeat(
     job_id: str,
     node_id: str | None = None,
     active_sandboxes: int = 0,
+    active_image_builds: int = 0,
     draining: bool = False,
     node_url: str | None = None,
     agent_version: str | None = None,
@@ -62,6 +63,8 @@ def build_heartbeat(
         raise ValueError("job_id is required.")
     if active_sandboxes < 0:
         raise ValueError("active sandbox count cannot be negative.")
+    if active_image_builds < 0:
+        raise ValueError("active image build count cannot be negative.")
     cleaned_node_url = node_url.strip() if node_url else None
     if cleaned_node_url and ("\n" in cleaned_node_url or "\r" in cleaned_node_url):
         raise ValueError("node_url cannot contain newlines.")
@@ -70,6 +73,7 @@ def build_heartbeat(
         job_id=cleaned_job_id,
         updated_at=now or utc_now(),
         active_sandboxes=active_sandboxes,
+        active_image_builds=active_image_builds,
         draining=draining,
         node_url=cleaned_node_url,
         agent_version=(agent_version or package_version()).strip(),

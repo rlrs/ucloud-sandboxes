@@ -168,6 +168,7 @@ def evaluate_builder_scale(
     builder_nodes: list[SandboxNode],
     *,
     pending_builds: int,
+    prepared_builders: int = 0,
     policy: ScalePolicy,
     max_builder_nodes: int = 1,
     now: datetime | None = None,
@@ -180,24 +181,34 @@ def evaluate_builder_scale(
     total_nodes = len(relevant_nodes)
     max_builder_nodes = max(0, max_builder_nodes)
     pending_builds = max(0, pending_builds)
+    prepared_builders = max(0, prepared_builders)
+    desired_nodes = max(1 if pending_builds > 0 else 0, prepared_builders)
+    desired_nodes = min(desired_nodes, max_builder_nodes)
     actions: list[ScaleAction] = []
     reasons: list[str] = []
 
-    if pending_builds > 0:
-        if not ready_nodes and not provisioning_nodes and total_nodes < max_builder_nodes:
+    if desired_nodes > 0:
+        if total_nodes < desired_nodes:
             create_count = min(
-                1,
+                desired_nodes - total_nodes,
                 max(0, max_builder_nodes - total_nodes),
                 max(0, policy.max_create_per_cycle),
             )
             if create_count > 0:
-                reason = f"{pending_builds} pending image build(s) need builder capacity"
+                reason = (
+                    f"builder demand needs {desired_nodes} builder node(s) "
+                    f"({pending_builds} pending build(s), "
+                    f"{prepared_builders} prepared builder(s))"
+                )
                 actions.append(ScaleAction(kind="create", count=create_count, reason=reason))
                 reasons.append(reason)
-        elif total_nodes >= max_builder_nodes and not ready_nodes and not provisioning_nodes:
+        elif total_nodes >= max_builder_nodes and len(ready_nodes) + len(provisioning_nodes) < desired_nodes:
             reasons.append(f"max_builder_nodes={max_builder_nodes} reached")
         else:
-            reasons.append("builder capacity exists for pending image builds")
+            reasons.append(
+                f"builder capacity exists for demand ({pending_builds} pending build(s), "
+                f"{prepared_builders} prepared builder(s))"
+            )
     else:
         stop_candidates = [
             node

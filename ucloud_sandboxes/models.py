@@ -9,7 +9,7 @@ from .networking import private_network_ids_from_resources
 
 
 FINAL_JOB_STATES = {"SUCCESS", "FAILURE", "EXPIRED"}
-PROVISIONING_JOB_STATES = {"IN_QUEUE", "RUNNING"}
+PROVISIONING_JOB_STATES = {"IN_QUEUE", "SUSPENDED", "RUNNING"}
 CPU_PRODUCT_RE = re.compile(r"(?:^|[-_])(\d+)[-_]vcpu(?:$|[-_])", re.IGNORECASE)
 
 
@@ -241,6 +241,7 @@ class NodeHeartbeat:
     job_id: str
     updated_at: datetime
     active_sandboxes: int
+    active_image_builds: int = 0
     idle_since: datetime | None = None
     draining: bool = False
     node_url: str | None = None
@@ -277,6 +278,10 @@ class NodeHeartbeat:
             disk_mb=max(0, effective.disk_mb - self.used_resources.disk_mb),
         )
 
+    @property
+    def active_workloads(self) -> int:
+        return max(0, self.active_sandboxes) + max(0, self.active_image_builds)
+
 
 @dataclass(frozen=True)
 class SandboxNode:
@@ -299,13 +304,14 @@ class SandboxNode:
 
     @property
     def is_provisioning(self) -> bool:
-        return self.job.state in {"IN_QUEUE"} or (
+        return self.job.state in {"IN_QUEUE", "SUSPENDED"} or (
             self.job.state == "RUNNING" and not self.heartbeat_fresh
         )
 
     @property
     def is_idle(self) -> bool:
-        return self.is_ready and self.active_sandboxes == 0
+        heartbeat_workloads = self.heartbeat.active_workloads if self.heartbeat else 0
+        return self.is_ready and self.active_sandboxes == 0 and heartbeat_workloads == 0
 
 
 @dataclass(frozen=True)
@@ -329,8 +335,8 @@ class ScalePolicy:
     max_provisioning_nodes: int = 2
     provisioning_capacity_weight: float = 1.0
     stale_provisioning_after_seconds: int = 1800
-    stale_provisioning_capacity_weight: float = 0.25
-    scale_down_idle_seconds: int = 300
+    stale_provisioning_capacity_weight: float = 0.0
+    scale_down_idle_seconds: int = 600
     builder_scale_down_idle_seconds: int = 900
     heartbeat_ttl_seconds: int = 120
     default_node_resources: ResourceQuantity = ResourceQuantity(

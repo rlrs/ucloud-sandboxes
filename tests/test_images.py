@@ -71,9 +71,32 @@ class ImageTests(unittest.TestCase):
             )
 
             self.assertEqual(record.state, "planned")
+            self.assertFalse(record.pushed)
+            self.assertFalse(record.available_to_sandboxes)
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(executor.commands, [])
             self.assertEqual(len(manager.list()), 1)
+
+    def test_image_manager_marks_pushed_images_available_to_sandboxes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = ImageStore(Path(raw_dir) / "images.json")
+            runtime = DockerImageRuntime(dry_run=True)
+            manager = ImageManager(store, runtime)
+
+            manager.build(
+                ImageBuildSpec(
+                    id="base",
+                    tag="registry.example.org/base:latest",
+                    context_path="/tmp/context",
+                )
+            )
+            record = manager.mark_pushed("base")
+            reloaded = manager.list()[0]
+
+            self.assertTrue(record.pushed)
+            self.assertTrue(record.available_to_sandboxes)
+            self.assertTrue(reloaded.pushed)
+            self.assertTrue(reloaded.available_to_sandboxes)
 
 
 if __name__ == "__main__":

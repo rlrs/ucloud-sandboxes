@@ -4,6 +4,7 @@ import argparse
 from dataclasses import asdict
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -49,7 +50,20 @@ from .deployment import (
     package_version,
 )
 from .images import DockerImageRuntime
-from .metrics import MetricsStore, record_autoscaler_cycle
+from .managed_registry import (
+    RegistryClient,
+    execute_registry_prune,
+    list_registry_tags,
+    registry_prune_plan,
+    select_prune_candidates,
+)
+from .metrics import (
+    MetricsStore,
+    record_autoscaler_cycle,
+    record_vm_init_attempt,
+    record_vm_observed,
+    record_vm_submitted,
+)
 from .model_relay import create_model_relay_app
 from .models import (
     ResourceQuantity,
@@ -57,6 +71,7 @@ from .models import (
     SandboxNode,
     ScalePolicy,
     VmJob,
+    utc_now,
     vm_job_from_payload,
 )
 from .networking import (
@@ -105,6 +120,7 @@ from .vm_submit import (
     DEFAULT_VM_PRODUCT_ID,
     DEFAULT_VM_PRODUCT_PROVIDER,
     VmApplicationRef,
+    VmFileMount,
     VmProductRef,
     VmSubmissionOptions,
     VmTimeAllocation,
@@ -257,6 +273,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--metrics-file",
         type=Path,
         help="JSONL metrics event file. Defaults to <state_dir>/metrics.jsonl.",
+    )
+    serve.add_argument(
+        "--registry-url",
+        help=(
+            "Docker Distribution registry URL to include in gateway metrics. "
+            "Defaults to UCLOUD_SANDBOX_REGISTRY_URL or UCLOUD_REGISTRY_URL."
+        ),
     )
     serve.add_argument(
         "--docker-binary",
@@ -575,6 +598,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     public_link_attachment.set_defaults(func=cmd_vm_public_link_attachment)
 
+    registry_prune = subparsers.add_parser(
+        "registry-prune",
+        help="Plan or delete old tags from a Docker registry.",
+    )
+    registry_prune.add_argument(
+        "--registry-url",
+        default="http://127.0.0.1:5000",
+        help="Base URL for the registry API.",
+    )
+    registry_prune.add_argument(
+        "--keep-per-repository",
+        type=int,
+        default=5,
+        help="Number of newest tags to retain per repository.",
+    )
+    registry_prune.add_argument(
+        "--repository-prefix",
+        default="",
+        help="Only consider repositories with this prefix.",
+    )
+    registry_prune.add_argument(
+        "--execute",
+        action="store_true",
+        help="Delete selected manifests. Without this flag, only print the plan.",
+    )
+    registry_prune.set_defaults(func=cmd_registry_prune)
+
     submit_vm = subparsers.add_parser(
         "submit-vm",
         help="Render or submit one UCloud VM job, including gateway VMs.",
@@ -628,6 +678,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-public-link",
         action="store_true",
         help="Submit without public-link attachment even if config has one.",
+    )
+    submit_vm.add_argument(
+        "--mount",
+        action="append",
+        default=[],
+        help=(
+            "Attach a read-write UCloud project file/folder path. The VM app "
+            "mounts it under /work/<name>. Repeat for multiple mounts."
+        ),
+    )
+    submit_vm.add_argument(
+        "--mount-ro",
+        action="append",
+        default=[],
+        help=(
+            "Attach a read-only UCloud project file/folder path. The VM app "
+            "mounts it under /work/<name>. Repeat for multiple mounts."
+        ),
     )
     submit_vm.add_argument(
         "--app-name",
@@ -975,7 +1043,7 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument(
         "--interval-seconds",
         type=float,
-        default=30.0,
+        default=5.0,
         help="Delay between reconcile cycles.",
     )
     loop.add_argument(
@@ -1282,6 +1350,25 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Sparse XFS image size in GB for autoscaled VM Docker quotas.",
     )
     parser.add_argument(
+        "--init-docker-insecure-registry",
+        action="append",
+        default=[],
+        help=(
+            "Docker registry host[:port] trusted as HTTP/insecure on autoscaled "
+            "VMs. Repeat for multiple private registries."
+        ),
+    )
+    parser.add_argument(
+        "--init-host-alias",
+        action="append",
+        default=[],
+        metavar="HOST=ADDRESS",
+        help=(
+            "Add an /etc/hosts entry during autoscaled VM init. Use this for "
+            "stable private service names such as ucloud-sandbox-registry."
+        ),
+    )
+    parser.add_argument(
         "--init-cpu-overcommit",
         type=float,
         default=1.0,
@@ -1410,6 +1497,25 @@ def add_vm_init_args(
         help=(
             "Sparse XFS image size in GB for Docker overlay2 project quotas. "
             "Use 0 to disable quota-backed Docker storage."
+        ),
+    )
+    parser.add_argument(
+        "--docker-insecure-registry",
+        action="append",
+        default=[],
+        help=(
+            "Docker registry host[:port] trusted as HTTP/insecure on this VM. "
+            "Repeat for multiple private registries."
+        ),
+    )
+    parser.add_argument(
+        "--host-alias",
+        action="append",
+        default=[],
+        metavar="HOST=ADDRESS",
+        help=(
+            "Add an /etc/hosts entry during VM init. Use this for stable "
+            "private service names such as ucloud-sandbox-registry."
         ),
     )
     add_node_version_args(parser)
@@ -1587,6 +1693,11 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         ).strip()
         if not gateway_bearer_token:
             raise ValueError("gateway bearer token file is empty.")
+    registry_url = (
+        args.registry_url
+        or os.environ.get("UCLOUD_SANDBOX_REGISTRY_URL")
+        or os.environ.get("UCLOUD_REGISTRY_URL")
+    )
     server = build_server(
         args.host,
         args.port,
@@ -1599,7 +1710,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
             if args.heartbeat_ttl_seconds is not None
             else config.policy.heartbeat_ttl_seconds
         ),
-        image_file=(args.image_file or config.image_file()) if args.enable_image_builds else None,
+        image_file=args.image_file or config.image_file(),
         image_runtime=(
             DockerImageRuntime(
                 docker_binary=args.docker_binary,
@@ -1608,7 +1719,9 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
             if args.enable_image_builds
             else None
         ),
+        local_image_builds_enabled=args.enable_image_builds,
         metrics_file=metrics_file,
+        registry_url=registry_url,
     )
     host, port = server.server_address
     print(f"Serving heartbeat receiver on http://{host}:{port}")
@@ -1619,6 +1732,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print(f"Gateway upstream node: {args.gateway_upstream_node_url}")
     if gateway_bearer_token:
         print("Gateway auth: bearer token required")
+    if registry_url:
+        print(f"Registry metrics: {registry_url}")
     print(
         "Image builds: "
         + ("execute" if args.enable_image_builds and args.execute_image_builds else "dry-run")
@@ -1995,6 +2110,31 @@ def cmd_vm_public_link_attachment(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_registry_prune(args: argparse.Namespace) -> int:
+    if args.keep_per_repository < 0:
+        raise ValueError("keep-per-repository cannot be negative.")
+    client = RegistryClient(args.registry_url)
+    plan = registry_prune_plan(
+        client,
+        keep_per_repository=args.keep_per_repository,
+        repository_prefix=args.repository_prefix,
+    )
+    plan["execute"] = bool(args.execute)
+    if args.execute:
+        records = list_registry_tags(
+            client,
+            repository_prefix=args.repository_prefix,
+        )
+        candidates = select_prune_candidates(
+            records,
+            keep_per_repository=args.keep_per_repository,
+        )
+        deleted = execute_registry_prune(client, candidates)
+        plan["deleted"] = [item.to_dict() for item in deleted]
+    print_json(plan)
+    return 0
+
+
 def cmd_submit_vm(args: argparse.Namespace) -> int:
     config = load_config(args).with_project_id(args.project)
     if not config.project_id:
@@ -2015,6 +2155,10 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
         "publicLinkPort": (
             options.public_link_port if options.public_link_id else None
         ),
+        "fileMounts": [
+            {"path": mount.path, "readOnly": mount.read_only}
+            for mount in options.file_mounts
+        ],
         "payload": payload,
     }
 
@@ -2036,6 +2180,11 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
         print(f"Public link: {options.public_link_id or ''}")
         if options.public_link_id:
             print(f"Public link port: {options.public_link_port}")
+        if options.file_mounts:
+            print("File mounts:")
+            for mount in options.file_mounts:
+                mode = "ro" if mount.read_only else "rw"
+                print(f"- {mount.path} ({mode})")
         print(f"Application: {options.application.name}:{options.application.version}")
         print(
             "Product: "
@@ -2199,6 +2348,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     metrics_store = MetricsStore(metrics_file)
     interval = max(1.0, float(args.interval_seconds))
     cycle = 0
+    observed_vm_keys: dict[str, tuple[object, ...]] = {}
     while True:
         cycle += 1
         routing_store = RoutingStore(route_file)
@@ -2207,16 +2357,45 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             int(getattr(args, "pending_image_builds", 0) or 0),
             routing_store.pending_image_build_count(),
         )
+        prepared_builder_count = routing_store.prepared_builder_count()
         result = run_reconcile_cycle(
             config,
             args,
             demand=demand,
             pending_image_builds=pending_image_builds,
+            prepared_builder_count=prepared_builder_count,
+            metrics_store=metrics_store,
+        )
+        consumed_pending_demand = (
+            routing_store.consume_pending_demand() if args.execute else []
+        )
+        consumed_prepared_capacity = (
+            routing_store.consume_prepared_capacity() if args.execute else []
+        )
+        consumed_pending_image_builds = (
+            routing_store.consume_pending_image_builds() if args.execute else []
+        )
+        consumed_prepared_builders = (
+            routing_store.consume_prepared_builders() if args.execute else []
         )
         result["cycle"] = cycle
         result["routeFile"] = str(route_file)
         result["metricsFile"] = str(metrics_file)
+        result["consumedPendingDemand"] = [
+            item.to_dict() for item in consumed_pending_demand
+        ]
+        result["consumedPreparedCapacity"] = [
+            item.to_dict() for item in consumed_prepared_capacity
+        ]
+        result["consumedPendingImageBuilds"] = [
+            item.to_dict() for item in consumed_pending_image_builds
+        ]
+        result["consumedPreparedBuilders"] = [
+            item.to_dict() for item in consumed_prepared_builders
+        ]
         record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
+        record_submitted_vm_metrics(metrics_store, cycle, result)
+        record_observed_vm_metrics(metrics_store, cycle, result, observed_vm_keys)
         if args.output == "json":
             printable = dict(result)
             for key in (
@@ -2236,7 +2415,8 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             print(
                 f"Autoscaler cycle {cycle}: "
                 f"pending_resources={resource_summary(demand.pending_resources.to_dict())} "
-                f"prepared_resources={resource_summary(demand.prepared_resources.to_dict())}"
+                f"prepared_resources={resource_summary(demand.prepared_resources.to_dict())} "
+                f"prepared_builders={prepared_builder_count}"
             )
             print_reconcile(
                 config,
@@ -2259,6 +2439,8 @@ def run_reconcile_cycle(
     *,
     demand: SandboxDemand,
     pending_image_builds: int | None = None,
+    prepared_builder_count: int | None = None,
+    metrics_store: MetricsStore | None = None,
 ) -> dict[str, Any]:
     jobs = load_jobs_for_plan(config, args)
     heartbeat_file = args.heartbeats or config.heartbeat_file()
@@ -2275,10 +2457,15 @@ def run_reconcile_cycle(
             else getattr(args, "pending_image_builds", 0) or 0
         ),
     )
+    builder_prepared = max(
+        0,
+        int(prepared_builder_count if prepared_builder_count is not None else 0),
+    )
     decision = evaluate_scale(sandbox_nodes, demand, effective_policy)
     builder_decision = evaluate_builder_scale(
         builder_nodes,
         pending_builds=builder_pending,
+        prepared_builders=builder_prepared,
         policy=effective_policy,
         max_builder_nodes=getattr(args, "max_builder_nodes", 1),
     )
@@ -2377,6 +2564,7 @@ def run_reconcile_cycle(
         "decision": scale_decision_to_dict(decision),
         "builderDecision": scale_decision_to_dict(builder_decision),
         "pendingImageBuilds": builder_pending,
+        "preparedBuilderCount": builder_prepared,
         "createIntents": [intent.to_dict() for intent in create_intents],
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
         "builderCreateIntents": [intent.to_dict() for intent in builder_create_intents],
@@ -2432,23 +2620,37 @@ def run_reconcile_cycle(
                     }
                 )
                 continue
+            attempt_started_at = utc_now()
+            attempt_started_perf = time.perf_counter()
+            stage_duration_ms: int | None = None
+            run_duration_ms: int | None = None
             bootstrap_records = mark_bootstrap_attempt(bootstrap_records, intent)
             bootstrap_store.save(bootstrap_records)
+            attempt_record = bootstrap_records.get(intent.job_id)
+            attempt_count = (
+                attempt_record.attempts
+                if attempt_record is not None
+                else intent.previous_attempts + 1
+            )
             try:
                 effective_options = intent.options
+                stage_started_perf = time.perf_counter()
                 stage_result = stage_vm_init_package_over_ssh(
                     intent.plan.ssh_command,
                     intent.options,
                     timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
                     private_key_file=getattr(args, "init_ssh_private_key_file", None),
                 )
+                stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
                 stage_payload: dict[str, Any] | None = None
                 if stage_result is not None:
+                    stage_duration_ms = stage_elapsed_ms
                     stage_payload = {
                         "localPath": str(stage_result.local_path),
                         "remotePath": stage_result.remote_path,
                         "command": list(stage_result.command),
                         "returncode": stage_result.returncode,
+                        "durationMs": stage_duration_ms,
                     }
                     if stage_result.returncode != 0:
                         error = (
@@ -2469,19 +2671,34 @@ def run_reconcile_cycle(
                                 "status": "failed",
                                 "error": error,
                                 "packageStage": stage_payload,
+                                "durationMs": _elapsed_ms(attempt_started_perf),
                             }
+                        )
+                        record_vm_init_attempt_result(
+                            metrics_store,
+                            intent,
+                            status="failed",
+                            attempts=attempt_count,
+                            started_at=attempt_started_at,
+                            attempt_started_perf=attempt_started_perf,
+                            stage_duration_ms=stage_duration_ms,
+                            run_duration_ms=run_duration_ms,
+                            returncode=stage_result.returncode,
+                            error=error,
                         )
                         continue
                     effective_options = replace(
                         intent.options,
                         package_spec=stage_result.remote_path,
                     )
+                run_started_perf = time.perf_counter()
                 run_result = run_init_over_ssh(
                     intent.plan.ssh_command,
                     render_vm_init_script(effective_options),
                     timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
                     private_key_file=getattr(args, "init_ssh_private_key_file", None),
                 )
+                run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
                 if run_result.returncode == 0:
                     bootstrap_records = mark_bootstrap_success(bootstrap_records, intent)
                     bootstrap_results.append(
@@ -2492,7 +2709,20 @@ def run_reconcile_cycle(
                             "returncode": 0,
                             "status": "succeeded",
                             "packageStage": stage_payload,
+                            "durationMs": _elapsed_ms(attempt_started_perf),
+                            "runDurationMs": run_duration_ms,
                         }
+                    )
+                    record_vm_init_attempt_result(
+                        metrics_store,
+                        intent,
+                        status="succeeded",
+                        attempts=attempt_count,
+                        started_at=attempt_started_at,
+                        attempt_started_perf=attempt_started_perf,
+                        stage_duration_ms=stage_duration_ms,
+                        run_duration_ms=run_duration_ms,
+                        returncode=0,
                     )
                 else:
                     error = f"init command exited with status {run_result.returncode}"
@@ -2510,7 +2740,21 @@ def run_reconcile_cycle(
                             "status": "failed",
                             "error": error,
                             "packageStage": stage_payload,
+                            "durationMs": _elapsed_ms(attempt_started_perf),
+                            "runDurationMs": run_duration_ms,
                         }
+                    )
+                    record_vm_init_attempt_result(
+                        metrics_store,
+                        intent,
+                        status="failed",
+                        attempts=attempt_count,
+                        started_at=attempt_started_at,
+                        attempt_started_perf=attempt_started_perf,
+                        stage_duration_ms=stage_duration_ms,
+                        run_duration_ms=run_duration_ms,
+                        returncode=run_result.returncode,
+                        error=error,
                     )
             except Exception as exc:
                 error = str(exc)
@@ -2527,7 +2771,20 @@ def run_reconcile_cycle(
                         "returncode": None,
                         "status": "failed",
                         "error": error,
+                        "durationMs": _elapsed_ms(attempt_started_perf),
                     }
+                )
+                record_vm_init_attempt_result(
+                    metrics_store,
+                    intent,
+                    status="failed",
+                    attempts=attempt_count,
+                    started_at=attempt_started_at,
+                    attempt_started_perf=attempt_started_perf,
+                    stage_duration_ms=stage_duration_ms,
+                    run_duration_ms=run_duration_ms,
+                    returncode=None,
+                    error=error,
                 )
             finally:
                 bootstrap_store.save(bootstrap_records)
@@ -2551,6 +2808,83 @@ def metrics_path_from_args(
     if sibling_file is not None:
         return Path(sibling_file).expanduser().parent / "metrics.jsonl"
     return config.metrics_path()
+
+
+def record_submitted_vm_metrics(
+    metrics_store: MetricsStore,
+    cycle: int,
+    result: dict[str, Any],
+) -> None:
+    job_ids = list(result.get("createdJobIds") or [])
+    intents = list(result.get("rawCreateIntents") or [])
+    for job_id, intent in zip(job_ids, intents):
+        record_vm_submitted(metrics_store, cycle=cycle, job_id=str(job_id), intent=intent)
+
+
+def record_observed_vm_metrics(
+    metrics_store: MetricsStore,
+    cycle: int,
+    result: dict[str, Any],
+    observed_vm_keys: dict[str, tuple[object, ...]],
+) -> None:
+    nodes = [
+        *list(result.get("rawSandboxNodes") or []),
+        *list(result.get("rawBuilderNodes") or []),
+    ]
+    for node in nodes:
+        job = getattr(node, "job", None)
+        if job is None or not getattr(job, "id", ""):
+            continue
+        job_id = str(job.id)
+        if getattr(job, "is_final", False) and job_id not in observed_vm_keys:
+            continue
+        key = (
+            getattr(job, "state", ""),
+            getattr(job, "started_at", None),
+            getattr(job, "expires_at", None),
+            getattr(job, "latest_note", None),
+            bool(getattr(node, "heartbeat_fresh", False)),
+            bool(getattr(node, "is_ready", False)),
+        )
+        if observed_vm_keys.get(job_id) == key:
+            continue
+        observed_vm_keys[job_id] = key
+        record_vm_observed(metrics_store, cycle=cycle, node=node)
+
+
+def record_vm_init_attempt_result(
+    metrics_store: MetricsStore | None,
+    intent: VmBootstrapIntent,
+    *,
+    status: str,
+    attempts: int,
+    started_at: Any,
+    attempt_started_perf: float,
+    stage_duration_ms: int | None,
+    run_duration_ms: int | None,
+    returncode: int | None,
+    error: str = "",
+) -> None:
+    finished_at = utc_now()
+    record_vm_init_attempt(
+        metrics_store,
+        job_id=intent.job_id,
+        node_id=intent.node_id,
+        role=intent.role,
+        status=status,
+        attempts=attempts,
+        started_at=started_at.isoformat(),
+        finished_at=finished_at.isoformat(),
+        duration_ms=_elapsed_ms(attempt_started_perf),
+        stage_duration_ms=stage_duration_ms,
+        run_duration_ms=run_duration_ms,
+        returncode=returncode,
+        error=error,
+    )
+
+
+def _elapsed_ms(started_perf: float) -> int:
+    return max(0, int((time.perf_counter() - started_perf) * 1000))
 
 
 def load_jobs_for_plan(config: AutoscalerConfig, args: argparse.Namespace) -> list[VmJob]:
@@ -2665,6 +2999,13 @@ def vm_init_options_for_autoscaled_node(
             total_resources,
             disk_mb=min(total_resources.disk_mb, docker_quota_image_gb * 1024),
         )
+    cpu_overcommit = max(0.0, float(getattr(args, "init_cpu_overcommit", 1.0)))
+    memory_overcommit = max(0.0, float(getattr(args, "init_memory_overcommit", 1.0)))
+    disk_overcommit = max(0.0, float(getattr(args, "init_disk_overcommit", 1.0)))
+    if role == "builder":
+        cpu_overcommit = 1.0
+        memory_overcommit = 1.0
+        disk_overcommit = 1.0
     return VmInitOptions(
         job_id=node.job.id,
         heartbeat_url=str(getattr(args, "init_heartbeat_url", "") or ""),
@@ -2687,10 +3028,14 @@ def vm_init_options_for_autoscaled_node(
         ssh_port_start=int(getattr(args, "init_ssh_port_start", 22000)),
         ssh_port_end=int(getattr(args, "init_ssh_port_end", 22999)),
         total_resources=total_resources,
-        cpu_overcommit=max(0.0, float(getattr(args, "init_cpu_overcommit", 1.0))),
-        memory_overcommit=max(0.0, float(getattr(args, "init_memory_overcommit", 1.0))),
-        disk_overcommit=max(0.0, float(getattr(args, "init_disk_overcommit", 1.0))),
+        cpu_overcommit=cpu_overcommit,
+        memory_overcommit=memory_overcommit,
+        disk_overcommit=disk_overcommit,
         docker_quota_image_gb=docker_quota_image_gb,
+        docker_insecure_registries=tuple(
+            getattr(args, "init_docker_insecure_registry", []) or []
+        ),
+        host_aliases=tuple(getattr(args, "init_host_alias", []) or []),
         enable_image_builds=role == "builder",
         runtime_dry_run=bool(getattr(args, "init_runtime_dry_run", False)),
         heartbeat_interval_seconds=max(
@@ -3128,6 +3473,7 @@ def vm_submission_options_from_args(
     ssh_disabled = bool(getattr(args, "no_ssh", False))
     if ssh_requested and ssh_disabled:
         raise ValueError("--ssh and --no-ssh cannot be used together.")
+    file_mounts = tuple(file_mounts_from_args(args))
 
     return (
         VmSubmissionOptions(
@@ -3154,9 +3500,22 @@ def vm_submission_options_from_args(
             ssh_enabled=ssh_requested,
             allow_duplicate_job=args.allow_duplicate_job,
             labels=labels,
+            file_mounts=file_mounts,
         ),
         seed,
     )
+
+
+def file_mounts_from_args(args: argparse.Namespace) -> list[VmFileMount]:
+    mounts = [
+        VmFileMount(path=str(path), read_only=False)
+        for path in getattr(args, "mount", []) or []
+    ]
+    mounts.extend(
+        VmFileMount(path=str(path), read_only=True)
+        for path in getattr(args, "mount_ro", []) or []
+    )
+    return mounts
 
 
 def submitted_job_ids(response: dict[str, Any]) -> list[str]:
@@ -3250,6 +3609,13 @@ def find_ucloud_ssh_key(items: list[dict[str, Any]], public_key: str) -> dict[st
 
 
 def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOptions:
+    cpu_overcommit = args.cpu_overcommit
+    memory_overcommit = args.memory_overcommit
+    disk_overcommit = args.disk_overcommit
+    if args.enable_image_builds:
+        cpu_overcommit = 1.0
+        memory_overcommit = 1.0
+        disk_overcommit = 1.0
     return VmInitOptions(
         job_id=job_id,
         heartbeat_url=args.heartbeat_url,
@@ -3272,10 +3638,12 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         ssh_port_start=args.ssh_port_start,
         ssh_port_end=args.ssh_port_end,
         total_resources=resource_quantity_from_args(args),
-        cpu_overcommit=args.cpu_overcommit,
-        memory_overcommit=args.memory_overcommit,
-        disk_overcommit=args.disk_overcommit,
+        cpu_overcommit=cpu_overcommit,
+        memory_overcommit=memory_overcommit,
+        disk_overcommit=disk_overcommit,
         docker_quota_image_gb=args.docker_quota_image_gb,
+        docker_insecure_registries=tuple(args.docker_insecure_registry or []),
+        host_aliases=tuple(args.host_alias or []),
         enable_image_builds=args.enable_image_builds,
         runtime_dry_run=args.runtime_dry_run,
         heartbeat_interval_seconds=args.heartbeat_interval_seconds,
@@ -3306,6 +3674,8 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "memoryOvercommit": options.memory_overcommit,
         "diskOvercommit": options.disk_overcommit,
         "dockerQuotaImageGb": options.docker_quota_image_gb,
+        "dockerInsecureRegistries": list(options.docker_insecure_registries),
+        "hostAliases": list(options.host_aliases),
         "enableImageBuilds": options.enable_image_builds,
         "runtimeDryRun": options.runtime_dry_run,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,

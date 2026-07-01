@@ -15,6 +15,7 @@ from .models import ResourceQuantity, SandboxDemand, parse_iso_datetime, utc_now
 
 _ROUTE_LOCKS_GUARD = RLock()
 _ROUTE_LOCKS: dict[Path, RLock] = {}
+PENDING_DEMAND_TTL_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -115,13 +116,38 @@ class PendingSandboxDemand:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "sandbox_id": self.sandbox_id,
             "resources": self.resources.to_dict(),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "attempts": self.attempts,
         }
+        expires_at = self.expires_at()
+        if expires_at:
+            payload["expires_at"] = expires_at
+        return payload
+
+    def is_expired(
+        self,
+        now: datetime,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> bool:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        if reference is None:
+            return False
+        return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
+
+    def expires_at(
+        self,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> str:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        if reference is None:
+            return ""
+        return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
 
 
 @dataclass(frozen=True)
@@ -147,13 +173,38 @@ class PendingImageBuildDemand:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "image_id": self.image_id,
             "tag": self.tag,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "attempts": self.attempts,
         }
+        expires_at = self.expires_at()
+        if expires_at:
+            payload["expires_at"] = expires_at
+        return payload
+
+    def is_expired(
+        self,
+        now: datetime,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> bool:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        if reference is None:
+            return False
+        return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
+
+    def expires_at(
+        self,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> str:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        if reference is None:
+            return ""
+        return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
 
 
 @dataclass(frozen=True)
@@ -204,12 +255,48 @@ class PreparedCapacityDemand:
 
 
 @dataclass(frozen=True)
+class PreparedBuilderDemand:
+    prepare_id: str
+    count: int
+    created_at: str
+    updated_at: str
+    expires_at: str
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "PreparedBuilderDemand | None":
+        prepare_id = _string(raw.get("prepare_id") or raw.get("prepareId") or raw.get("id"))
+        if not prepare_id:
+            return None
+        return cls(
+            prepare_id=prepare_id,
+            count=max(1, int(raw.get("count") or 1)),
+            created_at=_string(raw.get("created_at") or raw.get("createdAt")) or "",
+            updated_at=_string(raw.get("updated_at") or raw.get("updatedAt")) or "",
+            expires_at=_string(raw.get("expires_at") or raw.get("expiresAt")) or "",
+        )
+
+    def is_expired(self, now: datetime) -> bool:
+        expires_at = parse_iso_datetime(self.expires_at)
+        return expires_at is not None and expires_at <= now
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prepare_id": self.prepare_id,
+            "count": self.count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "expires_at": self.expires_at,
+        }
+
+
+@dataclass(frozen=True)
 class RoutingState:
     sandboxes: dict[str, SandboxRoute]
     exec_sessions: dict[str, ExecRoute]
     pending: dict[str, PendingSandboxDemand]
     image_builds: dict[str, PendingImageBuildDemand]
     prepared: dict[str, PreparedCapacityDemand] = field(default_factory=dict)
+    prepared_builders: dict[str, PreparedBuilderDemand] = field(default_factory=dict)
 
 
 class RoutingStore:
@@ -223,6 +310,12 @@ class RoutingStore:
 
     def load(self) -> RoutingState:
         with self._lock:
+            self._refresh_unlocked()
+            now = utc_now()
+            self._active_pending_unlocked(now)
+            self._active_image_builds_unlocked(now)
+            self._active_prepared_unlocked(now)
+            self._active_prepared_builders_unlocked(now)
             return _copy_state(self._state)
 
     def save(self, state: RoutingState) -> None:
@@ -233,6 +326,7 @@ class RoutingStore:
                 conn.execute("DELETE FROM pending")
                 conn.execute("DELETE FROM image_builds")
                 conn.execute("DELETE FROM prepared_capacity")
+                conn.execute("DELETE FROM prepared_builders")
                 for route in state.sandboxes.values():
                     self._write_sandbox(conn, route)
                 for route in state.exec_sessions.values():
@@ -243,6 +337,8 @@ class RoutingStore:
                     self._write_image_build(conn, item)
                 for item in state.prepared.values():
                     self._write_prepared(conn, item)
+                for item in state.prepared_builders.values():
+                    self._write_prepared_builder(conn, item)
             self._state = _copy_state(state)
 
     def _save_unlocked(self, state: RoutingState) -> None:
@@ -252,6 +348,7 @@ class RoutingStore:
             conn.execute("DELETE FROM pending")
             conn.execute("DELETE FROM image_builds")
             conn.execute("DELETE FROM prepared_capacity")
+            conn.execute("DELETE FROM prepared_builders")
             for route in state.sandboxes.values():
                 self._write_sandbox(conn, route)
             for route in state.exec_sessions.values():
@@ -262,14 +359,18 @@ class RoutingStore:
                 self._write_image_build(conn, item)
             for item in state.prepared.values():
                 self._write_prepared(conn, item)
+            for item in state.prepared_builders.values():
+                self._write_prepared_builder(conn, item)
         self._state = _copy_state(state)
 
     def get_sandbox(self, sandbox_id: str) -> SandboxRoute | None:
         with self._lock:
+            self._refresh_unlocked()
             return self._state.sandboxes.get(sandbox_id)
 
     def upsert_sandbox(self, route: SandboxRoute) -> None:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.sandboxes.get(route.sandbox_id)
             now = utc_now().isoformat()
             stored = SandboxRoute(
@@ -294,10 +395,12 @@ class RoutingStore:
                 pending=pending,
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:
+            self._refresh_unlocked()
             with self._transaction() as conn:
                 conn.execute("DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,))
                 conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
@@ -317,14 +420,17 @@ class RoutingStore:
                 pending=pending,
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
+            self._refresh_unlocked()
             return self._state.exec_sessions.get(session_id)
 
     def upsert_exec(self, route: ExecRoute) -> None:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.exec_sessions.get(route.session_id)
             now = utc_now().isoformat()
             stored = ExecRoute(
@@ -346,10 +452,12 @@ class RoutingStore:
                 pending=dict(self._state.pending),
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
 
     def upsert_pending(self, sandbox_id: str, resources: ResourceQuantity) -> None:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.pending.get(sandbox_id)
             now = utc_now().isoformat()
             stored = PendingSandboxDemand(
@@ -369,10 +477,12 @@ class RoutingStore:
                 pending=pending,
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
 
     def clear_pending(self, sandbox_id: str) -> None:
         with self._lock:
+            self._refresh_unlocked()
             with self._transaction() as conn:
                 conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
             pending = dict(self._state.pending)
@@ -383,10 +493,37 @@ class RoutingStore:
                 pending=pending,
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
+
+    def consume_pending_demand(self) -> list[PendingSandboxDemand]:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            pending = self._active_pending_unlocked(now)
+            if not pending:
+                return []
+            with self._transaction() as conn:
+                conn.execute("DELETE FROM pending")
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending={},
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return list(pending.values())
+
+    def pending_sandboxes(self) -> list[PendingSandboxDemand]:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            return list(self._active_pending_unlocked(now).values())
 
     def upsert_pending_image_build(self, image_id: str, tag: str) -> None:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.image_builds.get(image_id)
             now = utc_now().isoformat()
             stored = PendingImageBuildDemand(
@@ -406,10 +543,12 @@ class RoutingStore:
                 pending=dict(self._state.pending),
                 image_builds=image_builds,
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
 
     def clear_pending_image_build(self, image_id: str) -> None:
         with self._lock:
+            self._refresh_unlocked()
             with self._transaction() as conn:
                 conn.execute("DELETE FROM image_builds WHERE image_id = ?", (image_id,))
             image_builds = dict(self._state.image_builds)
@@ -420,7 +559,27 @@ class RoutingStore:
                 pending=dict(self._state.pending),
                 image_builds=image_builds,
                 prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
             )
+
+    def consume_pending_image_builds(self) -> list[PendingImageBuildDemand]:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            image_builds = self._active_image_builds_unlocked(now)
+            if not image_builds:
+                return []
+            with self._transaction() as conn:
+                conn.execute("DELETE FROM image_builds")
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds={},
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return list(image_builds.values())
 
     def upsert_prepared_capacity(
         self,
@@ -431,6 +590,7 @@ class RoutingStore:
         ttl_seconds: int,
     ) -> PreparedCapacityDemand:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.prepared.get(prepare_id)
             now = utc_now()
             stored = PreparedCapacityDemand(
@@ -451,11 +611,13 @@ class RoutingStore:
                 pending=dict(self._state.pending),
                 image_builds=dict(self._state.image_builds),
                 prepared=prepared,
+                prepared_builders=dict(self._state.prepared_builders),
             )
             return stored
 
     def delete_prepared_capacity(self, prepare_id: str) -> PreparedCapacityDemand | None:
         with self._lock:
+            self._refresh_unlocked()
             existing = self._state.prepared.get(prepare_id)
             with self._transaction() as conn:
                 conn.execute(
@@ -470,30 +632,146 @@ class RoutingStore:
                 pending=dict(self._state.pending),
                 image_builds=dict(self._state.image_builds),
                 prepared=prepared,
+                prepared_builders=dict(self._state.prepared_builders),
             )
             return existing
 
     def prepared_capacity(self) -> list[PreparedCapacityDemand]:
         now = utc_now()
         with self._lock:
+            self._refresh_unlocked()
             prepared = self._active_prepared_unlocked(now)
             return list(prepared.values())
 
-    def pending_image_build_count(self) -> int:
+    def consume_prepared_capacity(self) -> list[PreparedCapacityDemand]:
+        now = utc_now()
         with self._lock:
-            return len(self._state.image_builds)
+            self._refresh_unlocked()
+            prepared = self._active_prepared_unlocked(now)
+            if not prepared:
+                return []
+            with self._transaction() as conn:
+                conn.execute("DELETE FROM prepared_capacity")
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared={},
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return list(prepared.values())
+
+    def upsert_prepared_builder(
+        self,
+        prepare_id: str,
+        *,
+        count: int,
+        ttl_seconds: int,
+    ) -> PreparedBuilderDemand:
+        with self._lock:
+            self._refresh_unlocked()
+            existing = self._state.prepared_builders.get(prepare_id)
+            now = utc_now()
+            stored = PreparedBuilderDemand(
+                prepare_id=prepare_id,
+                count=max(1, count),
+                created_at=existing.created_at if existing else now.isoformat(),
+                updated_at=now.isoformat(),
+                expires_at=(now + timedelta(seconds=max(1, ttl_seconds))).isoformat(),
+            )
+            with self._transaction() as conn:
+                self._write_prepared_builder(conn, stored)
+            prepared_builders = dict(self._state.prepared_builders)
+            prepared_builders[prepare_id] = stored
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=prepared_builders,
+            )
+            return stored
+
+    def delete_prepared_builder(self, prepare_id: str) -> PreparedBuilderDemand | None:
+        with self._lock:
+            self._refresh_unlocked()
+            existing = self._state.prepared_builders.get(prepare_id)
+            with self._transaction() as conn:
+                conn.execute(
+                    "DELETE FROM prepared_builders WHERE prepare_id = ?",
+                    (prepare_id,),
+                )
+            prepared_builders = dict(self._state.prepared_builders)
+            prepared_builders.pop(prepare_id, None)
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=prepared_builders,
+            )
+            return existing
+
+    def prepared_builders(self) -> list[PreparedBuilderDemand]:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            prepared_builders = self._active_prepared_builders_unlocked(now)
+            return list(prepared_builders.values())
+
+    def consume_prepared_builders(self) -> list[PreparedBuilderDemand]:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            prepared_builders = self._active_prepared_builders_unlocked(now)
+            if not prepared_builders:
+                return []
+            with self._transaction() as conn:
+                conn.execute("DELETE FROM prepared_builders")
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders={},
+            )
+            return list(prepared_builders.values())
+
+    def prepared_builder_count(self) -> int:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            return sum(
+                item.count
+                for item in self._active_prepared_builders_unlocked(now).values()
+            )
+
+    def pending_image_build_count(self) -> int:
+        now = utc_now()
+        with self._lock:
+            self._refresh_unlocked()
+            return len(self._active_image_builds_unlocked(now))
 
     def oldest_pending_image_build_seconds(self) -> int:
+        now = utc_now()
         with self._lock:
+            self._refresh_unlocked()
             timestamps = [
-                item.created_at for item in self._state.image_builds.values()
+                item.created_at
+                for item in self._active_image_builds_unlocked(now).values()
             ]
         return _oldest_seconds(timestamps)
 
     def pending_demand(self) -> SandboxDemand:
         with self._lock:
-            pending = list(self._state.pending.values())
-            prepared = list(self._active_prepared_unlocked(utc_now()).values())
+            self._refresh_unlocked()
+            now = utc_now()
+            pending = list(self._active_pending_unlocked(now).values())
+            prepared = list(self._active_prepared_unlocked(now).values())
         pending_total = ResourceQuantity()
         prepared_total = ResourceQuantity()
         oldest_pending_seconds = 0
@@ -519,6 +797,72 @@ class RoutingStore:
             prepared_resources=prepared_total,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
         )
+
+    def _active_pending_unlocked(
+        self,
+        now: datetime,
+    ) -> dict[str, PendingSandboxDemand]:
+        expired = [
+            sandbox_id
+            for sandbox_id, item in self._state.pending.items()
+            if item.is_expired(now)
+        ]
+        if not expired:
+            return dict(self._state.pending)
+        with self._transaction() as conn:
+            for sandbox_id in expired:
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id = ?",
+                    (sandbox_id,),
+                )
+        expired_ids = set(expired)
+        pending = {
+            sandbox_id: item
+            for sandbox_id, item in self._state.pending.items()
+            if sandbox_id not in expired_ids
+        }
+        self._state = RoutingState(
+            sandboxes=dict(self._state.sandboxes),
+            exec_sessions=dict(self._state.exec_sessions),
+            pending=pending,
+            image_builds=dict(self._state.image_builds),
+            prepared=dict(self._state.prepared),
+            prepared_builders=dict(self._state.prepared_builders),
+        )
+        return dict(pending)
+
+    def _active_image_builds_unlocked(
+        self,
+        now: datetime,
+    ) -> dict[str, PendingImageBuildDemand]:
+        expired = [
+            image_id
+            for image_id, item in self._state.image_builds.items()
+            if item.is_expired(now)
+        ]
+        if not expired:
+            return dict(self._state.image_builds)
+        with self._transaction() as conn:
+            for image_id in expired:
+                conn.execute(
+                    "DELETE FROM image_builds WHERE image_id = ?",
+                    (image_id,),
+                )
+        expired_ids = set(expired)
+        image_builds = {
+            image_id: item
+            for image_id, item in self._state.image_builds.items()
+            if image_id not in expired_ids
+        }
+        self._state = RoutingState(
+            sandboxes=dict(self._state.sandboxes),
+            exec_sessions=dict(self._state.exec_sessions),
+            pending=dict(self._state.pending),
+            image_builds=image_builds,
+            prepared=dict(self._state.prepared),
+            prepared_builders=dict(self._state.prepared_builders),
+        )
+        return dict(image_builds)
 
     def _active_prepared_unlocked(
         self,
@@ -549,8 +893,42 @@ class RoutingStore:
             pending=dict(self._state.pending),
             image_builds=dict(self._state.image_builds),
             prepared=prepared,
+            prepared_builders=dict(self._state.prepared_builders),
         )
         return dict(prepared)
+
+    def _active_prepared_builders_unlocked(
+        self,
+        now: datetime,
+    ) -> dict[str, PreparedBuilderDemand]:
+        expired = [
+            prepare_id
+            for prepare_id, item in self._state.prepared_builders.items()
+            if item.is_expired(now)
+        ]
+        if not expired:
+            return dict(self._state.prepared_builders)
+        with self._transaction() as conn:
+            for prepare_id in expired:
+                conn.execute(
+                    "DELETE FROM prepared_builders WHERE prepare_id = ?",
+                    (prepare_id,),
+                )
+        expired_ids = set(expired)
+        prepared_builders = {
+            prepare_id: item
+            for prepare_id, item in self._state.prepared_builders.items()
+            if prepare_id not in expired_ids
+        }
+        self._state = RoutingState(
+            sandboxes=dict(self._state.sandboxes),
+            exec_sessions=dict(self._state.exec_sessions),
+            pending=dict(self._state.pending),
+            image_builds=dict(self._state.image_builds),
+            prepared=dict(self._state.prepared),
+            prepared_builders=prepared_builders,
+        )
+        return dict(prepared_builders)
 
     def _ensure_db(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -613,6 +991,17 @@ class RoutingStore:
                 CREATE TABLE IF NOT EXISTS prepared_capacity (
                     prepare_id TEXT PRIMARY KEY,
                     resources_json TEXT NOT NULL,
+                    count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prepared_builders (
+                    prepare_id TEXT PRIMARY KEY,
                     count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -719,7 +1108,26 @@ class RoutingStore:
                 )
                 if item is not None
             },
+            prepared_builders={
+                item.prepare_id: item
+                for item in (
+                    _prepared_builder_from_row(row)
+                    for row in conn.execute(
+                        """
+                        SELECT prepare_id, count, created_at, updated_at,
+                               expires_at
+                        FROM prepared_builders
+                        ORDER BY prepare_id
+                        """
+                    )
+                )
+                if item is not None
+            },
         )
+
+    def _refresh_unlocked(self) -> None:
+        with self._connect() as conn:
+            self._state = self._load_unlocked(conn)
 
     def _get_sandbox_unlocked(
         self,
@@ -918,6 +1326,32 @@ class RoutingStore:
             ),
         )
 
+    def _write_prepared_builder(
+        self,
+        conn: sqlite3.Connection,
+        item: PreparedBuilderDemand,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO prepared_builders (
+                prepare_id, count, created_at, updated_at, expires_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(prepare_id) DO UPDATE SET
+                count = excluded.count,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at,
+                expires_at = excluded.expires_at
+            """,
+            (
+                item.prepare_id,
+                item.count,
+                item.created_at,
+                item.updated_at,
+                item.expires_at,
+            ),
+        )
+
 
 def _string(value: object) -> str | None:
     if not isinstance(value, str):
@@ -933,6 +1367,7 @@ def _copy_state(state: RoutingState) -> RoutingState:
         pending=dict(state.pending),
         image_builds=dict(state.image_builds),
         prepared=dict(state.prepared),
+        prepared_builders=dict(state.prepared_builders),
     )
 
 
@@ -1016,6 +1451,16 @@ def _prepared_from_row(row: sqlite3.Row) -> PreparedCapacityDemand:
     return PreparedCapacityDemand(
         prepare_id=str(row["prepare_id"]),
         resources=_resources_from_json(row["resources_json"]),
+        count=max(1, int(row["count"])),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        expires_at=str(row["expires_at"]),
+    )
+
+
+def _prepared_builder_from_row(row: sqlite3.Row) -> PreparedBuilderDemand:
+    return PreparedBuilderDemand(
+        prepare_id=str(row["prepare_id"]),
         count=max(1, int(row["count"])),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),

@@ -349,10 +349,10 @@ finally:
     sandbox.delete()
 ```
 
-If a benchmark runner knows it will soon need a burst of sandboxes, send an
-expiring prepared-capacity signal before starting the samples. This is not a
-reservation and does not create placeholder sandboxes; it only asks the
-autoscaler to make enough VM resources available soon:
+If a benchmark runner knows it will soon need a burst of sandboxes, send a
+prepared-capacity signal before starting the samples. This is not a reservation
+and does not create placeholder sandboxes; it is a one-shot autoscaler signal
+that asks for VM scale-up before the real create requests arrive:
 
 ```python
 prepare = client.prepare_capacity(
@@ -366,16 +366,30 @@ prepare = client.prepare_capacity(
 print(prepare["demand"]["prepared_resources"])
 ```
 
-The signal expires automatically. Cancel it early when the run is abandoned:
+The executing autoscaler consumes the signal after it reacts. The TTL is a
+cleanup bound for missed cycles or a stopped autoscaler. Cancel it early when
+the run is abandoned:
 
 ```python
 client.delete_prepared_capacity("mbpp-run")
 ```
 
+If the same run will need Docker builds before sandbox creation, prewarm builder
+capacity separately. This asks for build-capable VM capacity only; it does not
+reserve a builder or move images to sandbox nodes:
+
+```python
+client.prepare_builder(
+    prepare_id="mbpp-builds",
+    count=1,
+    ttl_seconds=900,
+)
+```
+
 Live note: `https://app-sandboxes.cloud.sdu.dk` is bound to gateway VM job
-`12346094`, which forwards to node job `12345813` over private network
-`12345327`. A public SDK smoke test created a `busybox` sandbox, ran an exec
-with stdin/stdout/stderr, and deleted it through this gateway.
+`12346251` on private network `12345327`. A public SDK smoke test created a
+`busybox` sandbox, ran an exec with stdin/stdout/stderr, and deleted it through
+this gateway.
 
 The async client mirrors the same methods:
 
@@ -399,15 +413,18 @@ async with AsyncSandboxClient(
         await sandbox.delete()
 ```
 
-Image cache operations are also exposed. Custom builds should use a registry
-tag and push from the build-capable gateway/control-plane machine; sandbox nodes
-pull that tag before creating the container:
+Image cache operations are also exposed. Custom builds run on the gateway when
+it has local image builds enabled, or on autoscaled builder-only VMs otherwise.
+Built images should be pushed to a registry tag; sandbox nodes pull and cache
+that tag before creating containers. The control plane can host a disk-backed
+private registry on the UCloud private network; see
+[docs/managed-registry.md](docs/managed-registry.md).
 
 ```python
 client.pull_image("python:3.12-slim", image_id="python-base")
 client.build_image(
     id="custom-base",
-    tag="registry.example.org/ucloud/custom-base:latest",
+    tag="ucloud-sandbox-registry:5000/ucloud/custom-base:latest",
     context_path="/work/ucloud-sandboxes/build-contexts/custom-base",
     push=True,
 )
@@ -588,8 +605,12 @@ and exposes a snapshot at `GET /v1/metrics`. The snapshot includes fresh node
 scheduler load, actual VM CPU/memory pressure sampled from `/proc`, aggregate
 vCPU/RAM/disk reservations, active/pending sandbox counts, prepared capacity
 signals, pending image builds, recent per-node heartbeat samples, recent
-autoscaler decisions, and measured scale-up wait time for requests that first
-entered pending demand before a node became available.
+autoscaler decisions, measured scale-up wait time for requests that first
+entered pending demand before a node became available, and VM lifecycle timing
+for recent autoscaled nodes. The lifecycle view separates UCloud submission,
+UCloud `RUNNING`, VM init attempts, first heartbeat, and first sandbox
+placement so slow scale-up can be attributed to provider startup versus our
+post-boot initialization.
 
 The gateway also serves a browser dashboard at `/dashboard`. The static
 dashboard shell is public so it can load in a normal browser, but live data still
@@ -610,11 +631,12 @@ uv run ucloud-sandboxes autoscaler-loop \
   --private-network-id 12345327 \
   --product-id cpu-amd-zen5-16-vcpu \
   --disk-gb 250 \
-  --scale-down-idle-seconds 300 \
+  --scale-down-idle-seconds 600 \
   --max-builder-nodes 1 \
   --builder-product-id cpu-amd-zen5-16-vcpu \
   --builder-disk-gb 250 \
   --builder-scale-down-idle-seconds 900 \
+  --interval-seconds 5 \
   --init-retry-seconds 30 \
   --init-cpu-overcommit 2 \
   --init-memory-overcommit 1.2 \
@@ -755,15 +777,15 @@ commands such as:
 docker run -d --name ucloud-sandbox-demo-1 --runtime runsc --network none ...
 ```
 
-Build a custom image on the gateway/control-plane build machine and push it to
-a registry:
+Build a custom image on the gateway/control-plane build machine or an autoscaled
+builder node and push it to a registry:
 
 ```bash
 curl -sS http://127.0.0.1:8090/v1/images/build \
   -H 'Content-Type: application/json' \
   -d '{
     "id": "python-base",
-    "tag": "registry.example.org/ucloud/python-base:latest",
+    "tag": "ucloud-sandbox-registry:5000/ucloud/python-base:latest",
     "context_path": "/srv/sandbox-images/python-base",
     "dockerfile": "Dockerfile",
     "push": true,
@@ -774,16 +796,18 @@ curl -sS http://127.0.0.1:8090/v1/images/build \
 ```
 
 The raw HTTP API expects `context_path` to exist on the gateway/control-plane
-machine. The Python SDK uploads local build contexts automatically. The gateway
-does not transfer node-local images between VMs; sandbox nodes pull registry
-tags before container creation.
+machine or builder node. The Python SDK uploads local build contexts
+automatically. The gateway does not transfer node-local images between VMs;
+sandbox nodes pull registry tags before container creation. If an image was
+built with `push: true`, the gateway records the pushed tag and sandbox create
+can use either the registry tag or the image id.
 
 Pull a shared image from a registry:
 
 ```bash
 curl -sS http://127.0.0.1:8090/v1/images/pull \
   -H 'Content-Type: application/json' \
-  -d '{"image": "registry.example.org/ucloud/python-base:latest"}'
+  -d '{"image": "ucloud-sandbox-registry:5000/ucloud/python-base:latest"}'
 ```
 
 Snapshot a sandbox container to a reusable image:
@@ -796,7 +820,8 @@ curl -sS http://127.0.0.1:8090/v1/sandboxes/demo-1/snapshot \
 
 Signal upcoming capacity through the gateway before launching a burst. This
 does not bind future sandbox ids to nodes and does not reserve capacity for a
-particular caller; it only adds expiring resource demand to the autoscaler:
+particular caller; it records a one-shot scale-up signal that the executing
+autoscaler consumes after it reacts:
 
 ```bash
 curl -sS http://127.0.0.1:8090/v1/capacity/prepare \
@@ -811,16 +836,39 @@ curl -sS http://127.0.0.1:8090/v1/capacity/prepare \
   }'
 ```
 
-List or cancel active signals:
+List or cancel active signals before the autoscaler consumes them:
 
 ```bash
 curl -sS http://127.0.0.1:8090/v1/capacity/prepare
 curl -sS -X DELETE http://127.0.0.1:8090/v1/capacity/prepare/mbpp-run
 ```
 
-`GET /v1/demand` reports pending sandbox resources, prepared resources, and
-their combined desired resources. The autoscaler reads that demand from the
-route database and scales normal sandbox VM nodes to satisfy it.
+`GET /v1/demand` reports pending sandbox resources, unconsumed prepare-signal
+resources, pending image builds, prepared builder count, and combined desired
+sandbox and builder demand. The autoscaler reads that demand from the route
+database, scales sandbox VM nodes and builder VM nodes separately, and then
+consumes the one-shot signals in executing mode.
+
+Signal upcoming builder capacity before launching known Docker build bursts.
+This does not reserve a builder for a caller and does not build anything by
+itself; it only asks the autoscaler to bring builder-only VMs online sooner:
+
+```bash
+curl -sS http://127.0.0.1:8090/v1/builders/prepare \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "swebench-builds",
+    "count": 1,
+    "ttl_seconds": 900
+  }'
+```
+
+List or cancel active builder signals before the autoscaler consumes them:
+
+```bash
+curl -sS http://127.0.0.1:8090/v1/builders/prepare
+curl -sS -X DELETE http://127.0.0.1:8090/v1/builders/prepare/swebench-builds
+```
 
 ## Heartbeat API
 
@@ -881,7 +929,22 @@ heartbeats, route state, and the rolling metrics event log:
     "prepared_sandboxes": 16,
     "prepared_resources": {"vcpu": 16, "memory_mb": 32768, "disk_mb": 163840}
   },
-  "scale_up": {"samples": 1, "last_ms": 391000, "p95_ms": 391000}
+  "images": {"pending_builds": 0},
+  "builders": {"prepared": 1, "prepared_builders": 1},
+  "scale_up": {"samples": 1, "last_ms": 391000, "p95_ms": 391000},
+  "vm_lifecycle": {
+    "items": [
+      {
+        "job_id": "12347064",
+        "role": "sandbox",
+        "state": "RUNNING",
+        "submit_to_running_ms": 27145,
+        "running_to_first_heartbeat_ms": 101714,
+        "first_heartbeat_to_first_sandbox_ms": 11601,
+        "last_successful_init_duration_ms": 66000
+      }
+    ]
+  }
 }
 ```
 
@@ -906,8 +969,16 @@ The VM-side node agent exposes:
 - `POST /v1/exec/<session-id>/close-stdin`
 - `POST /v1/sandboxes/<sandbox-id>/snapshot` (requires `--enable-image-builds`)
 
-The gateway/control plane additionally exposes `POST /v1/images/build` when
-started with `serve-control-plane --enable-image-builds`.
+The gateway/control plane additionally exposes:
+
+- `POST /v1/images/build` when started with
+  `serve-control-plane --enable-image-builds`
+- `GET /v1/capacity/prepare`
+- `POST /v1/capacity/prepare`
+- `DELETE /v1/capacity/prepare/<prepare-id>`
+- `GET /v1/builders/prepare`
+- `POST /v1/builders/prepare`
+- `DELETE /v1/builders/prepare/<prepare-id>`
 
 `POST /v1/sandboxes` accepts:
 
@@ -956,19 +1027,34 @@ WebSocket binary streaming and bounded per-session queues. See
 Image builds should not run on sandbox nodes. The intended model is:
 
 - control plane/gateway: scheduler, routing, and optionally Docker builds on a
-  sufficiently large machine
-- builder nodes: autoscaled, builder-only VMs for Docker builds and registry push
+  sufficiently large machine; can also host the private registry service
+- builder nodes: autoscaled, builder-only VMs for Docker builds and registry
+  push; they advertise physical capacity and do not use sandbox overcommit
 - sandbox nodes: run already-built images and pull/cache registry tags
-- registry: durable image cache for common building blocks and custom images
+- registry: durable image cache for common building blocks and custom images,
+  typically the control-plane-managed registry backed by a UCloud mount
 
 The gateway handles `POST /v1/images/build` locally when started with
 `--enable-image-builds`; otherwise it routes builds to ready builder-only nodes
 advertising `image-build`. If no builder is ready, it records pending image-build
-demand in the route file so the autoscaler can create a builder VM. Built tags
-should use `"push": true` and a registry tag; sandbox nodes pull registry tags
-before creating containers. Sandbox placement only considers nodes advertising
-the `sandbox` capability, and builder nodes scale back to zero when pending
-image-build demand is gone and the builder idle grace has elapsed.
+demand signal so the autoscaler can create a builder VM. The executing
+autoscaler consumes that signal after reacting; the image-build caller should
+retry the build request once a builder is ready. Runners that know builds are
+coming can also call `POST /v1/builders/prepare` to prewarm one or more builder
+VMs before the build requests arrive. Built tags should use `"push": true` and a
+registry tag; sandbox nodes do not receive builder-local Docker images and
+instead pull registry tags before creating containers. Sandbox placement only
+considers nodes advertising the `sandbox` capability, and builder nodes scale
+back to zero when pending image-build demand is gone, prepared builder signals
+have been consumed, and the builder idle grace has elapsed.
+
+For a control-plane-managed registry, run `ucloud-sandbox-registry.service` on
+the gateway VM, back `UCLOUD_REGISTRY_DATA_DIR` with persistent storage, and
+initialize builder and sandbox VMs with
+`--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
+`--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>` when using
+private HTTP. Use `ucloud-sandboxes registry-prune` plus the installed GC timer
+to keep registry storage bounded.
 
 Sandbox placement is resource-based. Each sandbox request can ask for its own
 `cpus`, `memory_mb`, and `disk_mb`. Nodes report physical

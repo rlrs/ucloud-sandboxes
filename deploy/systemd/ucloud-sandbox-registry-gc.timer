@@ -1,0 +1,11 @@
+[Unit]
+Description=Run UCloud sandbox private registry garbage collection daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=ucloud-sandbox-registry-gc.service
+
+[Install]
+WantedBy=timers.target

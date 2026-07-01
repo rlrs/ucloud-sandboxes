@@ -1,0 +1,22 @@
+[Unit]
+Description=UCloud sandbox private Docker registry
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Environment=UCLOUD_REGISTRY_IMAGE=registry:2
+Environment=UCLOUD_REGISTRY_BIND=0.0.0.0
+Environment=UCLOUD_REGISTRY_PORT=5000
+Environment=UCLOUD_REGISTRY_DATA_DIR=/work/ucloud-sandbox-registry/docker-registry
+EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
+ExecStartPre=/usr/bin/install -d -m 0755 ${UCLOUD_REGISTRY_DATA_DIR}
+ExecStartPre=-/usr/bin/docker rm -f ucloud-sandbox-registry
+ExecStart=/usr/bin/docker run --rm --name ucloud-sandbox-registry -p ${UCLOUD_REGISTRY_BIND}:${UCLOUD_REGISTRY_PORT}:5000 -v ${UCLOUD_REGISTRY_DATA_DIR}:/var/lib/registry -e REGISTRY_STORAGE_DELETE_ENABLED=true ${UCLOUD_REGISTRY_IMAGE}
+ExecStop=/usr/bin/docker stop ucloud-sandbox-registry
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

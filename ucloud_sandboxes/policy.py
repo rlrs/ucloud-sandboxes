@@ -24,11 +24,22 @@ def evaluate_scale(
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
-    relevant_nodes = [node for node in nodes if not node.job.is_final]
+    relevant_nodes = [
+        node for node in nodes if _counts_as_pool_node(node, policy, now, 0)
+    ]
     ready_nodes = [node for node in relevant_nodes if node.is_ready]
-    provisioning_nodes = [node for node in relevant_nodes if node.is_provisioning]
 
     oldest_pending_seconds = max(0, demand.oldest_pending_seconds)
+    provisioning_nodes = [
+        node
+        for node in relevant_nodes
+        if _counts_as_active_provisioning(
+            node,
+            policy,
+            now,
+            oldest_pending_seconds,
+        )
+    ]
     total_nodes = len(relevant_nodes)
 
     demand_resources = demand.desired_resources
@@ -94,16 +105,14 @@ def evaluate_scale(
                 )
 
     planned_creates = _planned_creates(actions)
-    if (
-        planned_creates == 0
-        and not _has_resource_demand(demand_resources)
-    ):
+    if planned_creates == 0 and not _has_resource_deficit(resource_deficit):
         excess_nodes = total_nodes - policy.min_nodes
         if excess_nodes > 0:
             stop_candidates = _stop_candidates(
                 ready_nodes,
                 policy,
                 now,
+                required_resources=desired_resources,
                 max_count=min(excess_nodes, policy.max_stop_per_cycle),
             )
             if stop_candidates:
@@ -111,7 +120,8 @@ def evaluate_scale(
                 reason = _stop_reason(
                     ready_nodes,
                     policy,
-                    job_ids,
+                    required_resources=desired_resources,
+                    job_ids=job_ids,
                 )
                 actions.append(
                     ScaleAction(
@@ -278,6 +288,31 @@ def _provisioning_weight(
     return weight
 
 
+def _counts_as_pool_node(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    now: datetime,
+    oldest_pending_seconds: int,
+) -> bool:
+    if node.job.is_final:
+        return False
+    if not node.is_provisioning:
+        return True
+    return _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
+
+
+def _counts_as_active_provisioning(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    now: datetime,
+    oldest_pending_seconds: int,
+) -> bool:
+    return (
+        node.is_provisioning
+        and _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
+    )
+
+
 def _provisioning_age_seconds(node: SandboxNode, now: datetime) -> float | None:
     reference = node.job.started_at if node.job.state == "RUNNING" else node.job.created_at
     if reference is None:
@@ -325,6 +360,7 @@ def _stop_candidates(
     policy: ScalePolicy,
     now: datetime,
     *,
+    required_resources: ResourceQuantity,
     max_count: int,
 ) -> list[SandboxNode]:
     if max_count <= 0:
@@ -340,7 +376,7 @@ def _stop_candidates(
             continue
         node_free_resources = _node_free_resources(node, policy)
         after_resources = _subtract_resources(remaining_free_resources, node_free_resources)
-        if not policy.warm_resources.fits_within(after_resources):
+        if not required_resources.fits_within(after_resources):
             continue
         candidates.append(node)
         remaining_free_resources = after_resources
@@ -350,17 +386,19 @@ def _stop_candidates(
 def _stop_reason(
     ready_nodes: list[SandboxNode],
     policy: ScalePolicy,
+    *,
+    required_resources: ResourceQuantity,
     job_ids: tuple[str, ...],
 ) -> str:
-    if _has_resource_demand(policy.warm_resources):
+    if _has_resource_demand(required_resources):
         remaining = _ready_free_resources(
             [node for node in ready_nodes if node.job_id not in set(job_ids)],
             policy,
         )
         return (
-            "idle resources remain above warm target after stopping "
+            "idle resources remain above desired demand after stopping "
             f"{', '.join(job_ids)}: remaining={_resource_label(remaining)}, "
-            f"warm={_resource_label(policy.warm_resources)}"
+            f"desired={_resource_label(required_resources)}"
         )
     return (
         "idle node exceeds min_nodes="

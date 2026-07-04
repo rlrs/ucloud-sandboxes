@@ -176,6 +176,36 @@ The gateway/control plane additionally exposes:
 
 At least one resource field (`cpus`, `memory_mb`, or `disk_mb`) is required.
 
+Sandbox creation is idempotent for a supplied `id` and matching normalized spec.
+If a client times out while the node is still creating the Docker container, a
+retry with the same `id` and spec returns the existing sandbox with status `200`
+instead of running a second container. Reusing the same `id` with a different
+image, resource request, command, environment, security profile, filesystem, or
+labels is a conflict.
+
+`GET /v1/sandboxes` returns records with stable top-level identity fields as
+well as the full nested spec:
+
+```json
+{
+  "sandboxes": [
+    {
+      "id": "demo-1",
+      "sandbox_id": "demo-1",
+      "name": "ucloud-sandbox-demo-1",
+      "image": "busybox",
+      "labels": {"tenant": "example"},
+      "spec": {"id": "demo-1", "image": "busybox"},
+      "state": "running"
+    }
+  ]
+}
+```
+
+When the gateway receives a non-JSON error response from an upstream node, such
+as an HTML `503 Job is unavailable` page, it returns structured JSON with the
+original status, `retryable`, upstream content type, and a short body preview.
+
 SSH-enabled sandboxes must use `"network": "bridge"`. The node agent binds SSH
 to localhost on the VM by default; external access should go through the
 gateway/tunnel layer rather than exposing container SSH ports publicly.

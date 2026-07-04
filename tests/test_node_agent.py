@@ -60,6 +60,22 @@ class NodeAgentTests(unittest.TestCase):
                     method="POST",
                     payload=create_payload,
                 )
+                retry = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=create_payload,
+                )
+                conflict = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "sbx-1",
+                        "image": "python:3.12-slim",
+                        "command": ["true"],
+                        "memory_mb": 128,
+                    },
+                    allow_error=True,
+                )
                 listed = self._json_request(f"{base}/v1/sandboxes")
                 healthz = self._json_request(f"{base}/healthz")
                 heartbeat = self._json_request(f"{base}/v1/heartbeat")
@@ -72,8 +88,15 @@ class NodeAgentTests(unittest.TestCase):
                 server.server_close()
 
             self.assertEqual(create["sandbox"]["spec"]["id"], "sbx-1")
+            self.assertFalse(create["timings"]["manager"]["idempotent"])
+            self.assertEqual(retry["sandbox"]["id"], "sbx-1")
+            self.assertTrue(retry["timings"]["manager"]["idempotent"])
+            self.assertEqual(conflict["status"], 409)
             self.assertEqual(create["sandbox"]["state"], "planned")
             self.assertEqual(listed["sandboxes"][0]["spec"]["id"], "sbx-1")
+            self.assertEqual(listed["sandboxes"][0]["id"], "sbx-1")
+            self.assertEqual(listed["sandboxes"][0]["sandbox_id"], "sbx-1")
+            self.assertEqual(listed["sandboxes"][0]["image"], "busybox")
             self.assertEqual(
                 healthz,
                 {

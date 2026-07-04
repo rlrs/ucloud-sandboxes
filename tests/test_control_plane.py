@@ -804,7 +804,7 @@ class ControlPlaneTests(unittest.TestCase):
 
             self.assertEqual(direct["sandbox"]["spec"]["id"], "dup-one")
             self.assertEqual(recovered["sandbox"]["spec"]["id"], "dup-one")
-            self.assertTrue(recovered["recovered"])
+            self.assertTrue(recovered["timings"]["manager"]["idempotent"])
             self.assertEqual(len(sandboxes["sandboxes"]), 1)
             route = RoutingStore(raw_path / "routes.json").get_sandbox("dup-one")
             self.assertIsNotNone(route)
@@ -885,8 +885,105 @@ class ControlPlaneTests(unittest.TestCase):
                 node.shutdown()
                 node.server_close()
 
-            self.assertEqual(conflict["status"], 400)
+            self.assertEqual(conflict["status"], 409)
             self.assertIn("already exists", conflict["body"]["error"])
+
+    def test_gateway_lists_incompatible_nodes_but_does_not_place_new_sandboxes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "node-sandboxes.json",
+                image_file=raw_path / "node-images.json",
+                job_id="job-old",
+                node_id="node-old",
+                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+            )
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                node_base = f"http://{node_host}:{node_port}"
+                self._json_request(
+                    f"{node_base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "old-one",
+                        "image": "busybox",
+                        "cpus": 1,
+                        "memory_mb": 512,
+                        "disk_mb": 1024,
+                    },
+                )
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.json",
+                    image_file=raw_path / "gateway-images.json",
+                    local_image_builds_enabled=False,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-old",
+                            node_id="node-old",
+                            node_url=node_base,
+                            agent_version="0.0.0-old",
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=4,
+                                memory_mb=8192,
+                                disk_mb=100_000,
+                            ),
+                        ),
+                    )
+                    listed = self._json_request(f"{base}/v1/sandboxes")
+                    create = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "new-one",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                            "disk_mb": 1024,
+                        },
+                        allow_error=True,
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+            self.assertEqual(listed["sandboxes"][0]["id"], "old-one")
+            self.assertEqual(listed["sandboxes"][0]["node"]["node_id"], "node-old")
+            self.assertEqual(create["status"], 503)
+            self.assertIn("no ready node", create["body"]["error"])
+
+    def test_structures_non_json_proxy_errors(self) -> None:
+        response = control_plane.ProxiedResponse(
+            503,
+            {"Content-Type": "text/html"},
+            b"<html><title>Job is unavailable | UCloud</title></html>",
+        )
+
+        structured = control_plane._structured_proxy_error(response)
+
+        self.assertIsNotNone(structured)
+        assert structured is not None
+        self.assertTrue(structured["retryable"])
+        self.assertEqual(structured["status"], 503)
+        self.assertIn("Job is unavailable", structured["upstream_body_preview"])
 
     def test_gateway_builds_images_locally_and_sandbox_nodes_pull_registry_tag(self) -> None:
         with TemporaryDirectory() as raw_dir:

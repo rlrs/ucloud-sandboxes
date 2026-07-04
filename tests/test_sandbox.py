@@ -4,13 +4,16 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from ucloud_sandboxes.sandbox import (
+    CommandResult,
     DockerGvisorRuntime,
     RecordingExecutor,
+    SandboxConflictError,
     SandboxFilesystemSpec,
     SandboxManager,
     SandboxSecuritySpec,
     SandboxSpec,
     SandboxStore,
+    sandbox_spec_fingerprint,
 )
 
 
@@ -160,6 +163,105 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(executor.commands, [])
             self.assertEqual(len(manager.list()), 1)
+
+    def test_manager_create_is_idempotent_for_same_spec(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            executor = RecordingExecutor()
+            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            manager = SandboxManager(store, runtime)
+            spec = SandboxSpec(
+                id="same",
+                image="busybox",
+                cpus=1.0,
+                memory_mb=128,
+                disk_mb=512,
+                labels={"sample": "one"},
+            )
+
+            first, _first_result = manager.create(spec)
+            second, second_result, timings = manager.create_with_timings(spec)
+
+            self.assertEqual(first.spec.id, second.spec.id)
+            self.assertEqual(second_result.argv, ())
+            self.assertTrue(timings["idempotent"])
+            self.assertEqual(timings["recovered"], "store")
+            self.assertEqual(len(executor.commands), 1)
+
+    def test_manager_create_conflicts_for_same_id_different_spec(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True)
+            manager = SandboxManager(store, runtime)
+            manager.create(
+                SandboxSpec(
+                    id="same",
+                    image="busybox",
+                    cpus=1.0,
+                    memory_mb=128,
+                    disk_mb=512,
+                )
+            )
+
+            with self.assertRaises(SandboxConflictError):
+                manager.create(
+                    SandboxSpec(
+                        id="same",
+                        image="python:3.12-slim",
+                        cpus=1.0,
+                        memory_mb=128,
+                        disk_mb=512,
+                    )
+                )
+
+    def test_manager_recovers_managed_container_after_conflict_without_store_record(self) -> None:
+        class ConflictExecutor:
+            def __init__(self, spec: SandboxSpec) -> None:
+                self.spec = spec
+                self.commands = []
+
+            def run(self, argv, *, input=None):
+                self.commands.append(argv)
+                if len(argv) > 1 and argv[1] == "run":
+                    return CommandResult(
+                        argv=argv,
+                        exit_code=1,
+                        stderr=(
+                            "Conflict. The container name "
+                            "\"/ucloud-sandbox-recovered\" is already in use"
+                        ),
+                    )
+                labels = {
+                    "ucloud-sandboxes.managed": "true",
+                    "ucloud-sandboxes.sandbox-id": self.spec.id,
+                    "ucloud-sandboxes.spec-sha256": sandbox_spec_fingerprint(self.spec),
+                }
+                return CommandResult(
+                    argv=argv,
+                    exit_code=0,
+                    stdout=__import__("json").dumps(labels),
+                )
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            spec = SandboxSpec(
+                id="recovered",
+                image="busybox",
+                cpus=1.0,
+                memory_mb=128,
+                disk_mb=512,
+            )
+            executor = ConflictExecutor(spec)
+            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            manager = SandboxManager(store, runtime)
+
+            record, result, timings = manager.create_with_timings(spec)
+
+            self.assertEqual(record.spec.id, "recovered")
+            self.assertEqual(result.argv, ())
+            self.assertTrue(timings["idempotent"])
+            self.assertEqual(timings["recovered"], "container")
+            self.assertEqual(store.load()["recovered"].spec.id, "recovered")
 
     def test_manager_sums_requested_resources(self) -> None:
         with TemporaryDirectory() as raw_dir:

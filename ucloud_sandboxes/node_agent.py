@@ -24,6 +24,7 @@ from .runtime_metrics import sample_node_runtime_metrics
 from .capabilities import merge_capabilities
 from .sandbox import (
     DockerGvisorRuntime,
+    SandboxConflictError,
     SandboxManager,
     SandboxRecord,
     SandboxSpec,
@@ -196,9 +197,17 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             phase = time.monotonic()
             record, result, manager_timings = self.manager.create_with_timings(spec)
             phases["manager_create_ms"] = _elapsed_ms(phase)
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
         except (RuntimeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
+        status = (
+            HTTPStatus.OK
+            if manager_timings.get("idempotent")
+            else HTTPStatus.CREATED
+        )
         self._write_json(
             {
                 "sandbox": record.to_dict(),
@@ -210,7 +219,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     "manager": manager_timings,
                 },
             },
-            status=HTTPStatus.CREATED,
+            status=status,
         )
 
     def _start_exec(self, path: str) -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -23,6 +24,12 @@ SECURITY_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:@/-]+$")
 CONTAINER_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
 _SANDBOX_LOCKS_GUARD = RLock()
 _SANDBOX_LOCKS: dict[Path, RLock] = {}
+_SANDBOX_CREATE_LOCKS_GUARD = RLock()
+_SANDBOX_CREATE_LOCKS: dict[tuple[Path, str], RLock] = {}
+
+
+class SandboxConflictError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -286,6 +293,11 @@ class SandboxRecord:
 
     def to_dict(self) -> dict[str, Any]:
         payload = {
+            "id": self.spec.id,
+            "sandbox_id": self.spec.id,
+            "name": self.container_name,
+            "image": self.spec.image,
+            "labels": dict(self.spec.labels),
             "spec": self.spec.to_dict(),
             "container_name": self.container_name,
             "state": self.state,
@@ -562,6 +574,7 @@ class DockerGvisorRuntime:
 
     def create_command(self, spec: SandboxSpec) -> tuple[str, ...]:
         spec.validate()
+        fingerprint = sandbox_spec_fingerprint(spec)
         argv: list[str] = [
             self.docker_binary,
             "run",
@@ -576,6 +589,8 @@ class DockerGvisorRuntime:
             "ucloud-sandboxes.managed=true",
             "--label",
             f"ucloud-sandboxes.sandbox-id={spec.id}",
+            "--label",
+            f"ucloud-sandboxes.spec-sha256={fingerprint}",
         ]
         if spec.memory_mb is not None:
             argv.extend(["--memory", f"{spec.memory_mb}m"])
@@ -676,6 +691,47 @@ class DockerGvisorRuntime:
             )
         return result
 
+    def is_container_name_conflict(self, error: BaseException) -> bool:
+        message = str(error).lower()
+        return (
+            "conflict" in message
+            and "container name" in message
+            and "already in use" in message
+        )
+
+    def managed_container_matches(self, spec: SandboxSpec) -> bool:
+        labels = self._container_labels(spec.id)
+        if labels.get("ucloud-sandboxes.managed") != "true":
+            return False
+        if labels.get("ucloud-sandboxes.sandbox-id") != spec.id:
+            return False
+        existing_fingerprint = labels.get("ucloud-sandboxes.spec-sha256")
+        if existing_fingerprint:
+            return existing_fingerprint == sandbox_spec_fingerprint(spec)
+        return True
+
+    def _container_labels(self, sandbox_id: str) -> dict[str, str]:
+        if not SANDBOX_ID_RE.match(sandbox_id):
+            raise ValueError("invalid sandbox id.")
+        result = self.executor.run(
+            (
+                self.docker_binary,
+                "inspect",
+                "--format",
+                "{{json .Config.Labels}}",
+                self.container_name(sandbox_id),
+            )
+        )
+        if result.exit_code != 0:
+            return {}
+        try:
+            raw = json.loads(result.stdout or "{}")
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(key): str(value) for key, value in raw.items()}
+
 
 class SandboxStore:
     def __init__(self, path: Path) -> None:
@@ -741,6 +797,16 @@ def _sandbox_lock(path: Path) -> RLock:
         return lock
 
 
+def _sandbox_create_lock(path: Path, sandbox_id: str) -> RLock:
+    key = (path.resolve(), sandbox_id)
+    with _SANDBOX_CREATE_LOCKS_GUARD:
+        lock = _SANDBOX_CREATE_LOCKS.get(key)
+        if lock is None:
+            lock = RLock()
+            _SANDBOX_CREATE_LOCKS[key] = lock
+        return lock
+
+
 class SandboxManager:
     def __init__(
         self,
@@ -771,38 +837,81 @@ class SandboxManager:
     ) -> tuple[SandboxRecord, CommandResult, dict[str, Any]]:
         started = time.monotonic()
         phases: dict[str, int] = {}
-        phase = time.monotonic()
-        self.cleanup_expired()
-        phases["cleanup_expired_ms"] = _elapsed_ms(phase)
-        phase = time.monotonic()
-        records = self.store.load()
-        phases["load_store_ms"] = _elapsed_ms(phase)
-        if spec.id in records:
-            raise ValueError(f"sandbox already exists: {spec.id}")
-        phase = time.monotonic()
-        spec = self._assign_ssh_port(spec, records)
-        phases["assign_ssh_port_ms"] = _elapsed_ms(phase)
-        phase = time.monotonic()
         spec.validate()
-        phases["validate_spec_ms"] = _elapsed_ms(phase)
-        phase = time.monotonic()
-        result = self.runtime.create(spec)
-        phases["docker_create_ms"] = _elapsed_ms(phase)
-        phase = time.monotonic()
-        now = utc_now()
-        record = SandboxRecord(
-            spec=spec,
-            container_name=self.runtime.container_name(spec.id),
-            state="planned" if self.runtime.dry_run else "running",
-            created_at=now,
-            updated_at=now,
-        )
-        self.store.upsert(record)
-        phases["store_record_ms"] = _elapsed_ms(phase)
-        return record, result, {
-            "total_ms": _elapsed_ms(started),
-            "phases": phases,
-        }
+        with _sandbox_create_lock(self.store.path, spec.id):
+            phase = time.monotonic()
+            self.cleanup_expired()
+            phases["cleanup_expired_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            records = self.store.load()
+            phases["load_store_ms"] = _elapsed_ms(phase)
+            existing = records.get(spec.id)
+            if existing is not None:
+                if not sandbox_specs_match(existing.spec, spec):
+                    raise SandboxConflictError(
+                        f"sandbox already exists with different spec: {spec.id}"
+                    )
+                phases["idempotency_check_ms"] = _elapsed_ms(phase)
+                return existing, CommandResult(argv=(), exit_code=0), {
+                    "total_ms": _elapsed_ms(started),
+                    "phases": phases,
+                    "idempotent": True,
+                    "recovered": "store",
+                }
+            phase = time.monotonic()
+            spec = self._assign_ssh_port(spec, records)
+            phases["assign_ssh_port_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            spec.validate()
+            phases["validate_spec_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            try:
+                result = self.runtime.create(spec)
+            except RuntimeError as exc:
+                phases["docker_create_ms"] = _elapsed_ms(phase)
+                if not self.runtime.is_container_name_conflict(exc):
+                    raise
+                inspect_phase = time.monotonic()
+                if not self.runtime.managed_container_matches(spec):
+                    phases["docker_conflict_inspect_ms"] = _elapsed_ms(inspect_phase)
+                    raise SandboxConflictError(
+                        f"sandbox already exists with different spec: {spec.id}"
+                    ) from exc
+                phases["docker_conflict_inspect_ms"] = _elapsed_ms(inspect_phase)
+                now = utc_now()
+                record = SandboxRecord(
+                    spec=spec,
+                    container_name=self.runtime.container_name(spec.id),
+                    state="running",
+                    created_at=now,
+                    updated_at=now,
+                )
+                store_phase = time.monotonic()
+                self.store.upsert(record)
+                phases["store_record_ms"] = _elapsed_ms(store_phase)
+                return record, CommandResult(argv=(), exit_code=0), {
+                    "total_ms": _elapsed_ms(started),
+                    "phases": phases,
+                    "idempotent": True,
+                    "recovered": "container",
+                }
+            phases["docker_create_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            now = utc_now()
+            record = SandboxRecord(
+                spec=spec,
+                container_name=self.runtime.container_name(spec.id),
+                state="planned" if self.runtime.dry_run else "running",
+                created_at=now,
+                updated_at=now,
+            )
+            self.store.upsert(record)
+            phases["store_record_ms"] = _elapsed_ms(phase)
+            return record, result, {
+                "total_ms": _elapsed_ms(started),
+                "phases": phases,
+                "idempotent": False,
+            }
 
     def delete(self, sandbox_id: str) -> tuple[SandboxRecord | None, CommandResult]:
         result = self.runtime.delete(sandbox_id)
@@ -902,6 +1011,26 @@ def _format_float(value: float) -> str:
 
 def _elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))
+
+
+def sandbox_spec_fingerprint(spec: SandboxSpec) -> str:
+    raw = json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def sandbox_specs_match(existing: SandboxSpec, requested: SandboxSpec) -> bool:
+    normalized_requested = requested
+    if (
+        existing.ssh.enabled
+        and requested.ssh.enabled
+        and requested.ssh.host_port is None
+        and existing.ssh.host_port is not None
+    ):
+        normalized_requested = replace(
+            requested,
+            ssh=replace(requested.ssh, host_port=existing.ssh.host_port),
+        )
+    return existing.to_dict() == normalized_requested.to_dict()
 
 
 def _valid_port(value: int) -> bool:

@@ -34,11 +34,13 @@ from .metrics import (
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
 from .routing import ExecRoute, PendingSandboxDemand, RoutingStore, SandboxRoute
-from .sandbox import SandboxSpec
+from .sandbox import SandboxSpec, sandbox_specs_match
 
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
+_GATEWAY_SANDBOX_CREATE_LOCKS_GUARD = RLock()
+_GATEWAY_SANDBOX_CREATE_LOCKS: dict[str, RLock] = {}
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
@@ -627,6 +629,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
+        with _gateway_sandbox_create_lock(spec.id):
+            self._create_sandbox_on_node_locked(body, raw, spec)
+        return
+
+    def _create_sandbox_on_node_locked(
+        self,
+        body: bytes,
+        raw: dict[str, Any],
+        spec: SandboxSpec,
+    ) -> None:
         trace_id = _request_trace_id(self, "sandbox-create", spec.id)
         with trace_span(
             self.metrics_store,
@@ -1105,7 +1117,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         candidates = [
             heartbeat
             for heartbeat in self._ready_sandbox_heartbeats()
-            if _node_can_fit(heartbeat, requested, routes)
+            if agent_version_is_compatible(heartbeat.agent_version)
+            and _node_can_fit(heartbeat, requested, routes)
         ]
         if not candidates:
             return None
@@ -1166,6 +1179,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             heartbeat
             for heartbeat in self._ready_heartbeats()
             if capability in heartbeat.capabilities
+            and agent_version_is_compatible(heartbeat.agent_version)
         ]
         if not candidates:
             return None
@@ -1185,6 +1199,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for heartbeat in self._ready_heartbeats()
             if "image-build" in heartbeat.capabilities
             and "sandbox" not in heartbeat.capabilities
+            and agent_version_is_compatible(heartbeat.agent_version)
         ]
         if not candidates:
             return None
@@ -1255,7 +1270,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if heartbeat.node_url
             and not heartbeat.draining
             and heartbeat.is_fresh(now, self.heartbeat_ttl_seconds)
-            and agent_version_is_compatible(heartbeat.agent_version)
         ]
 
     def _ready_sandbox_heartbeats(self) -> list[NodeHeartbeat]:
@@ -1336,6 +1350,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return ProxiedResponse(HTTPStatus.BAD_GATEWAY, {}, body)
 
     def _send_proxied_response(self, response: ProxiedResponse) -> None:
+        structured_error = _structured_proxy_error(response)
+        if structured_error is not None:
+            self._write_json(structured_error, status=response.status)
+            return
         self.send_response(response.status)
         self._copy_response_headers(response.headers, len(response.body))
         self.end_headers()
@@ -1556,19 +1574,7 @@ def _sandbox_record_matches_spec(record: dict[str, Any], requested: SandboxSpec)
         existing = SandboxSpec.from_dict(raw_spec)
     except (TypeError, ValueError):
         return False
-    return (
-        existing.id == requested.id
-        and existing.image == requested.image
-        and existing.command == requested.command
-        and existing.env == requested.env
-        and existing.working_dir == requested.working_dir
-        and existing.requested_resources() == requested.requested_resources()
-        and existing.network == requested.network
-        and existing.ssh == requested.ssh
-        and existing.security == requested.security
-        and existing.filesystem == requested.filesystem
-        and existing.labels == requested.labels
-    )
+    return sandbox_specs_match(existing, requested)
 
 
 def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, str]:
@@ -1614,6 +1620,44 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
             lock = RLock()
             _IMAGE_PULL_LOCKS[key] = lock
         return lock
+
+
+def _gateway_sandbox_create_lock(sandbox_id: str) -> RLock:
+    with _GATEWAY_SANDBOX_CREATE_LOCKS_GUARD:
+        lock = _GATEWAY_SANDBOX_CREATE_LOCKS.get(sandbox_id)
+        if lock is None:
+            lock = RLock()
+            _GATEWAY_SANDBOX_CREATE_LOCKS[sandbox_id] = lock
+        return lock
+
+
+def _structured_proxy_error(response: ProxiedResponse) -> dict[str, Any] | None:
+    if response.status < 400 or _response_looks_json(response):
+        return None
+    preview = response.body[:500].decode("utf-8", errors="replace").strip()
+    return {
+        "error": "upstream sandbox node returned a non-JSON error response",
+        "status": int(response.status),
+        "retryable": response.status in {408, 425, 429, 500, 502, 503, 504},
+        "upstream_content_type": _header_value(response.headers, "Content-Type"),
+        "upstream_body_preview": preview,
+    }
+
+
+def _response_looks_json(response: ProxiedResponse) -> bool:
+    content_type = _header_value(response.headers, "Content-Type").lower()
+    if "json" in content_type:
+        return True
+    stripped = response.body.lstrip()
+    return stripped.startswith(b"{") or stripped.startswith(b"[")
+
+
+def _header_value(headers: Any, key: str) -> str:
+    try:
+        value = headers.get(key, "")
+    except AttributeError:
+        value = ""
+    return str(value or "")
 
 
 def _looks_like_image_id_reference(image: str) -> bool:

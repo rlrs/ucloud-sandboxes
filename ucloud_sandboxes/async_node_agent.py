@@ -11,6 +11,7 @@ from .async_exec import (
     STDERR_STREAM_ID,
     STDOUT_STREAM_ID,
 )
+from .deployment import service_health
 from .images import DockerImageRuntime, ImageManager, ImageStore
 from .models import ResourceQuantity
 from .sandbox import DockerGvisorRuntime, SandboxManager, SandboxSpec, SandboxStore
@@ -228,7 +229,7 @@ async def sandbox_ssh_websocket(request: web.Request) -> web.WebSocketResponse:
 
 
 async def healthz(_request: web.Request) -> web.Response:
-    return web.json_response({"ok": True})
+    return web.json_response(service_health("async-node-agent"))
 
 
 def create_async_node_agent_app(

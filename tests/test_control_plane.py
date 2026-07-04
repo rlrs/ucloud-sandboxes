@@ -13,6 +13,7 @@ from unittest.mock import patch
 from ucloud_sandboxes.agent import build_heartbeat, post_heartbeat
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.control_plane import IMAGE_BUILD_PROXY_TIMEOUT_SECONDS, build_server
+from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.node_agent import build_node_agent_server
@@ -324,7 +325,14 @@ class ControlPlaneTests(unittest.TestCase):
                 node.shutdown()
                 node.server_close()
 
-            self.assertEqual(healthz, {"ok": True})
+            self.assertEqual(
+                healthz,
+                {
+                    "ok": True,
+                    "service": "control-plane",
+                    "version": package_version(),
+                },
+            )
             self.assertEqual(unauthorized["status"], 401)
             self.assertEqual(unauthorized["body"], {"error": "unauthorized"})
             self.assertEqual(authorized, {"sandboxes": []})

@@ -42,9 +42,11 @@ id: 12345368
 domain: app-sandboxes.cloud.sdu.dk
 product: ucloud/u1-publiclink/u1-publiclink
 state: READY
-bound job: 12346251
+bound job: 12349450
 bound port: 8090
 ```
+
+The same all-in-one VM also runs the relay, registry, and autoscaler.
 
 The target job resource fragment is:
 
@@ -69,13 +71,13 @@ the link as bound while the public endpoint returns `449`.
 
 Current smoke-test shape:
 
-- gateway VM job `12346251` runs `serve-control-plane --host 0.0.0.0 --port 8090`
+- gateway VM job `12349450` runs `serve-control-plane --host 0.0.0.0 --port 8090`
   with `/work/ucloud-sandboxes/state/heartbeats.json` and
   `/work/ucloud-sandboxes/state/routes.sqlite`
 - gateway route lookups are served from an in-memory index; `routes.sqlite` is
   a write-through recovery and pending-demand database shared with the
   autoscaler
-- gateway VM job `12346251` also runs `autoscaler-loop` as a systemd service
+- gateway VM job `12349450` also runs `autoscaler-loop` as a systemd service
   with create execution, label-gated stop execution, a 5-second reconcile
   interval, a 600-second sandbox idle grace, and a 900-second builder idle
   grace enabled
@@ -83,7 +85,8 @@ Current smoke-test shape:
 - sandbox and builder pools are currently scaled to zero when there is no
   pending sandbox demand, pending image-build demand, or unconsumed prepared
   capacity signal
-- `GET /healthz` works publicly without auth
+- `GET /healthz` works publicly without auth and returns `service` plus
+  package `version`
 - authenticated `GET /v1/sandboxes` works publicly with the bearer token, while
   unauthenticated access returns `401`
 

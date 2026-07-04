@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 from .dashboard import dashboard_asset
+from .deployment import service_health
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -73,7 +74,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if self.path == "/healthz":
-            self._write_json({"ok": True})
+            self._write_json(service_health("control-plane"))
             return
         asset = dashboard_asset(parsed.path)
         if asset is not None:

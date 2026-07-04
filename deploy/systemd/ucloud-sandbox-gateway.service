@@ -1,0 +1,24 @@
+[Unit]
+Description=UCloud Sandbox gateway/control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ucloud
+Group=ucloud
+WorkingDirectory=/work/ucloud-sandboxes
+Environment=UCLOUD_DEPLOYMENT_ID=live-20260629
+Environment=UCLOUD_STATE_DIR=/work/ucloud-sandboxes/state
+Environment=UCLOUD_SESSION_FILE=/work/ucloud-sandboxes/state/ucloud-session.json
+Environment=UCLOUD_GATEWAY_PORT=8090
+Environment=UCLOUD_HEARTBEAT_TTL_SECONDS=120
+Environment=UCLOUD_GATEWAY_TOKEN_FILE=/work/ucloud-sandboxes/state/gateway-token
+Environment=UCLOUD_REGISTRY_URL=http://127.0.0.1:5000
+EnvironmentFile=-/etc/ucloud-sandboxes/gateway.env
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-control-plane --deployment-id ${UCLOUD_DEPLOYMENT_ID} --state-dir ${UCLOUD_STATE_DIR} --session-file ${UCLOUD_SESSION_FILE} --host 0.0.0.0 --port ${UCLOUD_GATEWAY_PORT} --heartbeat-ttl-seconds ${UCLOUD_HEARTBEAT_TTL_SECONDS} --gateway-bearer-token-file ${UCLOUD_GATEWAY_TOKEN_FILE} --registry-url ${UCLOUD_REGISTRY_URL}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

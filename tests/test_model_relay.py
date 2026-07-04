@@ -5,10 +5,37 @@ import unittest
 
 from aiohttp import ClientSession, web
 
+from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.model_relay import create_model_relay_app
 
 
 class ModelRelayTests(unittest.TestCase):
+    def test_healthz_reports_service_version(self) -> None:
+        async def scenario() -> dict:
+            app = create_model_relay_app()
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "127.0.0.1", 0)
+            await site.start()
+            sockets = site._server.sockets if site._server else []
+            port = sockets[0].getsockname()[1]
+            try:
+                async with ClientSession() as client:
+                    async with client.get(f"http://127.0.0.1:{port}/healthz") as response:
+                        self.assertEqual(response.status, 200)
+                        return await response.json()
+            finally:
+                await runner.cleanup()
+
+        self.assertEqual(
+            asyncio.run(scenario()),
+            {
+                "ok": True,
+                "service": "model-relay",
+                "version": package_version(),
+            },
+        )
+
     def test_openai_chat_request_round_trips_through_worker_poll(self) -> None:
         async def scenario() -> tuple[dict, int, dict]:
             app = create_model_relay_app(

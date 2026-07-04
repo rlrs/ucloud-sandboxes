@@ -146,6 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ucloud-sandboxes",
         description="Autoscale gVisor sandbox nodes backed by UCloud VM jobs.",
     )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {package_version()}",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     sample = subparsers.add_parser("sample-config", help="Print a sample JSON config.")
@@ -3133,9 +3138,10 @@ def print_plan(
         f"projected_free={resource_summary(decision.projected_free_resources.to_dict())}, "
         f"deficit={resource_summary(decision.resource_deficit.to_dict())}"
     )
-    if not nodes:
+    visible_nodes = [node for node in nodes if not node.job.is_final]
+    if not visible_nodes:
         print("No pool nodes matched the configured selection.")
-    for node in nodes:
+    for node in visible_nodes:
         heartbeat = "fresh" if node.heartbeat_fresh else "missing/stale"
         resource_suffix = ""
         if node.heartbeat is not None:

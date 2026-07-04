@@ -38,13 +38,17 @@ bearer token for `/register_rollout`, `/worker/poll`, `/worker/respond`, and
 
 Live development relay:
 
-- URL: `https://app-sandboxes-relay.cloud.sdu.dk`
-- UCloud ingress id: `12346842`
-- gateway VM job id: `12346251`
+- URL: `https://app-sandboxes-relay-v2.cloud.sdu.dk`
+- UCloud ingress id: `12349454`
+- all-in-one gateway VM job id: `12349450`
 - VM-local port: `8092`
 - token files on the gateway VM:
   `/work/ucloud-sandboxes/state/relay-sandbox-token` and
   `/work/ucloud-sandboxes/state/relay-worker-token`
+
+The older relay URL `https://app-sandboxes-relay.cloud.sdu.dk` currently
+returns `449` because UCloud still reports its ingress as bound to stopped job
+`12346251`. Use the `relay-v2` URL until that stale binding is cleared.
 
 ## Sandbox Environment
 

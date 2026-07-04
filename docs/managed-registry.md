@@ -2,9 +2,9 @@
 
 The deployment can host a private Docker registry for builder output. This can
 run on the public control-plane VM or on a dedicated VM attached to the same
-private network. The live deployment currently uses a dedicated registry VM so
-registry storage can be mounted from UCloud project storage without moving the
-public gateway links:
+private network. The live deployment uses the all-in-one control-plane VM:
+gateway, relay, registry, registry GC, and autoscaler run on job `12349450`, and
+registry storage is backed by the mounted project drive:
 
 1. Builder nodes build and push
    `ucloud-sandbox-registry:5000/repo/name:tag`.
@@ -17,15 +17,16 @@ the project drive under `/work/<drive-title>`, so the registry data path should
 be below that mount, not on the VM root disk or an incidental `/work`
 directory.
 
-Submit or replace the registry-capable VM with the project drive attached. The
-validated DFM Pretraining deployment mounts drive `/998037`, whose title is
-`data`, so it appears inside the VM as `/work/data`:
+Submit or replace the registry-capable all-in-one VM with the project drive
+attached. The validated DFM Pretraining deployment mounts drive `/998037`,
+whose title is `data`, so it appears inside the VM as `/work/data`:
 
 ```bash
 ucloud-sandboxes submit-vm \
   --role gateway \
   --private-network-id 12345327 \
-  --no-public-link \
+  --public-link-id 12345368 \
+  --public-link-port 8090 \
   --mount /<drive-id> \
   ...
 ```
@@ -67,18 +68,15 @@ Do not bind the registry to a UCloud public link in the default deployment. The
 registry is an internal control-plane service for builders and sandbox nodes on
 the private network.
 
-Start the gateway with a registry URL that reaches the registry over the private
-network. If the registry runs on the same VM, use
-`--registry-url http://127.0.0.1:5000`. In the current live deployment, the
-public gateway uses
-`--registry-url http://sandbox-gateway-registry-mount-07011413:5000`. This
-enables the dashboard registry panel and the `/v1/registry` status endpoint
-without exposing the registry itself publicly.
+Start the gateway with a registry URL that reaches the registry locally:
+`--registry-url http://127.0.0.1:5000`. This enables the dashboard registry page
+and the `/v1/registry` status endpoint without exposing the registry itself
+publicly.
 
 The current registry service will survive container and service restarts as
 long as `UCLOUD_REGISTRY_DATA_DIR` points at the mounted project folder. A
-registry VM replacement must attach the same project drive before starting the
-registry, otherwise it will start with an empty registry.
+control-plane VM replacement must attach the same project drive before starting
+the registry, otherwise it will start with an empty registry.
 
 ## Node Init
 

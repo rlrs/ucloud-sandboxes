@@ -7,6 +7,7 @@ from urllib import request
 from urllib.parse import quote
 import unittest
 
+from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.gateway import NodeGatewayClient
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
@@ -60,6 +61,7 @@ class NodeAgentTests(unittest.TestCase):
                     payload=create_payload,
                 )
                 listed = self._json_request(f"{base}/v1/sandboxes")
+                healthz = self._json_request(f"{base}/healthz")
                 heartbeat = self._json_request(f"{base}/v1/heartbeat")
                 deleted = self._json_request(
                     f"{base}/v1/sandboxes/sbx-1",
@@ -72,6 +74,14 @@ class NodeAgentTests(unittest.TestCase):
             self.assertEqual(create["sandbox"]["spec"]["id"], "sbx-1")
             self.assertEqual(create["sandbox"]["state"], "planned")
             self.assertEqual(listed["sandboxes"][0]["spec"]["id"], "sbx-1")
+            self.assertEqual(
+                healthz,
+                {
+                    "ok": True,
+                    "service": "node-agent",
+                    "version": package_version(),
+                },
+            )
             self.assertEqual(heartbeat["heartbeat"]["node_url"], "http://node-1:8090")
             self.assertEqual(heartbeat["heartbeat"]["active_sandboxes"], 0)
             self.assertEqual(heartbeat["heartbeat"]["effective_resources"]["vcpu"], 8.0)

@@ -9,6 +9,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .agent import build_heartbeat
+from .deployment import service_health
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -53,7 +54,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/healthz":
-            self._write_json({"ok": True})
+            self._write_json(service_health("node-agent"))
             return
         if parsed.path == "/v1/heartbeat":
             self._write_json(

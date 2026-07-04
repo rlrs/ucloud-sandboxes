@@ -37,26 +37,32 @@ VM job submissions are also labelled with:
 The control plane should treat mismatched versions as not ready for new
 sandboxes. The intended rollout flow is:
 
-1. Build a wheel: `uv build`.
-2. Upload the wheel to a release location reachable from VM init, initially
+1. Choose a package version, update `pyproject.toml` and
+   `ucloud_sandboxes/__init__.py`, and tag the release, for example `v0.2.0`.
+2. Build a wheel: `uv build`.
+3. Upload the wheel to a release location reachable from VM init, initially
    `/work/ucloud-sandboxes/release/`.
-3. Start or update the control-plane VM with the new wheel and deployment id.
-4. Generate a dedicated gateway SSH keypair under gateway state and run
+4. Start or update the control-plane VM with the new wheel and deployment id.
+5. Verify the gateway and relay public health endpoints report the new package
+   version before allowing new nodes:
+   `curl -fsS https://app-sandboxes.cloud.sdu.dk/healthz` and
+   `curl -fsS https://app-sandboxes-relay-v2.cloud.sdu.dk/healthz`.
+6. Generate a dedicated gateway SSH keypair under gateway state and run
    `ensure-ucloud-ssh-key` with the public key so first-boot node SSH accepts
    the gateway key.
-5. Start the public gateway service, model relay service, and autoscaler service
+7. Start the public gateway service, model relay service, and autoscaler service
    from the same installed wheel.
-6. Start the private Docker registry service on the control-plane VM. Builder
+8. Start the private Docker registry service on the control-plane VM. Builder
    output must be pushed to a durable registry tag before sandbox nodes can pull
    it.
-7. Run the autoscaler with `--execute` and `--execute-init`.
-8. Let the autoscaler submit sandbox-node and builder VMs with matching
+9. Run the autoscaler with `--execute` and `--execute-init`.
+10. Let the autoscaler submit sandbox-node and builder VMs with matching
    deployment/version labels.
-9. Let the autoscaler run post-boot init over the UCloud-announced SSH command
+11. Let the autoscaler run post-boot init over the UCloud-announced SSH command
    using `--init-package-spec /work/...whl`,
    `--init-authorized-key-file`, and `--init-ssh-private-key-file`.
-10. Wait for matching heartbeats before scheduling sandboxes to those nodes.
-11. Drain old/mismatched nodes, then scale them down only after they are idle.
+12. Wait for matching heartbeats before scheduling sandboxes to those nodes.
+13. Drain old/mismatched nodes, then scale them down only after they are idle.
 
 ## Credentials
 
@@ -96,97 +102,63 @@ an explicit operator action, not part of the autoscaler loop.
 
 ## First production-shape test
 
-The first public-gateway smoke test uses two UCloud VMs on the same private
-network:
+The live production-shape deployment is intentionally one UCloud VM. It runs the
+public gateway, model relay, private registry, registry GC timer, and autoscaler
+on the same machine. Autoscaled sandbox and builder VMs are separate only when
+there is sandbox or image-build demand.
 
-1. Public control-plane VM:
-   - submitted with `submit-vm --role gateway`
-   - submitted with private network `12345327`
-   - submitted with public link `12345368` bound to the gateway API port
-   - live relay public link `12346842` is attached to the same VM and bound to
-     relay port `8092`
-   - opened with `open-vm-web <job-id> --port 8090` after the gateway service
-     is listening; without this UCloud's ingress can return `449` even though
-     the public link resource is bound to the VM job
-   - opened with `open-vm-web <job-id> --port 8092` after the relay service is
-     listening for the same reason
-   - live public gateway job id: `12346251`
-   - install the wheel in `/work/ucloud-sandboxes/gateway-venv`
-   - store the UCloud session secret outside the repo
-   - store the gateway bearer token outside the repo
-   - run `serve-control-plane --host 0.0.0.0 --port 8090`
-   - pass `--route-file` and `--heartbeat-file`; gateway route lookups are
-     in-memory, while the route file keeps recovery state and pending demand for
-     the autoscaler
-   - pass `--gateway-bearer-token-file` before binding a public link
-   - pass `--registry-url http://sandbox-gateway-registry-mount-07011413:5000`
-     so `/v1/metrics` and the dashboard show the project-backed registry health
-   - pass `--enable-image-builds --execute-image-builds` only on a
-     build-capable control-plane machine with registry access
-   - run `serve-model-relay --host 0.0.0.0 --port 8092` as
-     `ucloud-sandbox-relay.service`
-   - store separate relay sandbox and worker bearer tokens outside the repo
-   - run `autoscaler-loop` with the same state dir and UCloud session file
-   - initialize future builders and sandbox nodes with
-     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
-     `--init-host-alias ucloud-sandbox-registry=10.36.120.195`, where
-     `10.36.120.195` is the current private-network DNS address for the registry
-     VM
-2. Private registry VM:
-   - live registry job id: `12347774`
-   - submitted with private network `12345327`
-   - submitted with project storage mounted for registry persistence. The
-     validated DFM Pretraining deployment mounts the project `data` drive as
-     `--mount /998037`, which appears inside the VM as `/work/data`; registry
-     data then lives below that mount.
-   - run `ucloud-sandbox-registry.service` with `UCLOUD_REGISTRY_DATA_DIR`
-     below the mounted project path:
-     `/work/data/ucloud-sandbox-registry/docker-registry`
-   - enable `ucloud-sandbox-registry-gc.timer` and run
-     `ucloud-sandboxes registry-prune` for tag retention before GC
-   - do not attach a public link; builders, sandbox nodes, and the gateway reach
-     it over the private network as
-     `sandbox-gateway-registry-mount-07011413:5000`
-3. Sandbox-node VMs:
-   - autoscaled from pending sandbox resource demand
-   - initialized over the announced UCloud SSH proxy
-   - if using the control-plane HTTP registry, initialized with
-     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
-     `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
-   - heartbeats back to the control-plane private-network URL with bearer auth
-   - carry `ucloud-sandboxes/deployment=<deployment-id>`
-4. Builder-node VMs:
-   - autoscaled from pending image-build demand or `POST /v1/builders/prepare`
-     signals
-   - initialized over the announced UCloud SSH proxy
-   - if using the control-plane HTTP registry, initialized with
-     `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
-     `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
-   - advertise `image-build` only, not `sandbox`
-   - advertise physical CPU, memory, and disk capacity only; sandbox overcommit
-     settings are ignored for builder nodes
-   - build and push registry tags; sandbox nodes later pull/cache those tags
-   - carry `ucloud-sandboxes/deployment=<deployment-id>`
-5. Verify:
-   - public `GET /healthz` returns 200
-   - unauthenticated public `GET /v1/sandboxes` returns 401
-   - authenticated public sandbox create/exec/delete works through the gateway
-   - route file is empty after cleanup
-   - autoscaler loop observes fresh heartbeats plus pending sandbox, pending
-     image-build, prepared sandbox, and prepared builder demand
-   - local `GET http://127.0.0.1:8092/healthz` returns 200 on the gateway VM
-   - public `GET https://app-sandboxes-relay.cloud.sdu.dk/healthz` returns 200
-   - unauthenticated public `GET /v1/relay/stats` on the relay returns 401
-   - gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
-   - zero demand plus idle timeout produces safe labelled stop intents for sandbox
-     and builder nodes
+Current live all-in-one VM:
 
-The private registry can run either on the public control-plane VM or on a
-dedicated private-network VM. The current live deployment uses a dedicated
-registry VM so the public gateway could be moved to project-backed registry
-storage without moving public links. It is intentionally not exposed through a
-public link; builders and sandbox nodes reach it over the UCloud private
-network. Install Docker, the registry unit, and the GC timer:
+- job id: `12349450`
+- name: `ucloud-sandbox-gateway-allinone-20260704-v020`
+- deployment id: `live-20260629`
+- package version: `0.2.0`
+- private network: `12345327`
+- private service address: `10.40.34.183`
+- persistent project drive: `/998037`, mounted by UCloud as `/work/data`
+- SSH: resolve with `ucloud jobs ssh 12349450 --print-only`
+
+Public links:
+
+- gateway ingress `12345368`: `https://app-sandboxes.cloud.sdu.dk` -> VM port
+  `8090`
+- relay ingress `12349454`: `https://app-sandboxes-relay-v2.cloud.sdu.dk` -> VM
+  port `8092`
+- stale old relay ingress `12346842`: `https://app-sandboxes-relay.cloud.sdu.dk`
+  is still reported by UCloud as bound to stopped job `12346251`; do not use it
+  unless UCloud support clears that stale binding
+
+Services on the all-in-one VM:
+
+- `ucloud-sandbox-gateway.service`
+- `ucloud-sandbox-relay.service`
+- `ucloud-sandbox-registry.service`
+- `ucloud-sandbox-registry-gc.timer`
+- `ucloud-sandbox-autoscaler.service`
+
+The registry is intentionally local to the all-in-one VM and persistent on the
+project drive. The gateway reaches it as `http://127.0.0.1:5000`; autoscaled
+builder and sandbox nodes reach the same registry over the private network by
+using image tags under `ucloud-sandbox-registry:5000` plus a VM init host alias:
+
+```bash
+--init-docker-insecure-registry ucloud-sandbox-registry:5000 \
+--init-host-alias ucloud-sandbox-registry=10.40.34.183
+```
+
+Registry data lives at:
+
+```text
+/work/data/ucloud-sandbox-registry/docker-registry
+```
+
+The registry VM used during earlier tests did not leave a usable persistent
+catalog in that path, so images needed by the one-VM deployment should be
+rebuilt or pushed again under `ucloud-sandbox-registry:5000/...`.
+
+## All-in-One VM Setup
+
+Install Docker, the wheel, and the systemd units on the all-in-one VM:
 
 ```bash
 sudo apt-get update
@@ -213,24 +185,7 @@ sudo systemctl enable --now ucloud-sandbox-registry-gc.timer
 curl -fsS http://127.0.0.1:5000/v2/_catalog
 ```
 
-Builder and sandbox node init must trust the registry if it is served as HTTP.
-Use a stable registry alias in image tags and map it to the gateway's current
-private-network address during init:
-
-```bash
---init-docker-insecure-registry ucloud-sandbox-registry:5000 \
---init-host-alias ucloud-sandbox-registry=<gateway-private-ip>
-```
-
-Builds should use `push=true` and tags under
-`ucloud-sandbox-registry:5000`; sandbox create can then use either the registry
-tag or the recorded image id. If the gateway VM is replaced and receives a new
-private IP, keep the tags the same and update only the host alias value in the
-deployment.
-
-The relay service is deployed from the same wheel as the gateway. The checked-in
-unit template is `deploy/systemd/ucloud-sandbox-relay.service`; install it on
-the control-plane VM with:
+The relay service is deployed from the same wheel as the gateway:
 
 ```bash
 sudo install -m 0644 deploy/systemd/ucloud-sandbox-relay.service \
@@ -256,28 +211,76 @@ responses, and errors. For long inference calls, keep
 `--worker-lease-seconds` moderate, such as 600 seconds, and have workers renew
 leases every minute or two until local inference returns.
 
-UCloud public links are bound to one VM-local port. The live gateway VM has
+Install and start the gateway and autoscaler units from the same wheel. The
+gateway must point at the local registry:
+
+```bash
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-gateway.service \
+  /etc/systemd/system/ucloud-sandbox-gateway.service
+sudo install -m 0644 deploy/systemd/ucloud-sandbox-autoscaler.service \
+  /etc/systemd/system/ucloud-sandbox-autoscaler.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ucloud-sandbox-gateway.service
+sudo systemctl enable --now ucloud-sandbox-autoscaler.service
+```
+
+The live autoscaler runs every 5 seconds, uses a 600 second sandbox-node idle
+timeout, uses a 900 second builder-node idle timeout, and scales builders to
+zero when no builds or builder prepare signals remain.
+
+UCloud public links are bound to one VM-local port. The live all-in-one VM has
 public link `12345368` bound to port `8090` for the sandbox gateway and public
-link `12346842` bound to port `8092` for the model relay.
+link `12349454` bound to port `8092` for the model relay.
 
 To create and bind a relay ingress on a running VM:
 
 ```bash
 ucloud request POST /api/ingresses \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --json '{"type":"bulk","items":[{"domain":"app-sandboxes-relay.cloud.sdu.dk","product":{"id":"u1-publiclink","category":"u1-publiclink","provider":"ucloud"}}]}'
+  --json '{"type":"bulk","items":[{"domain":"app-sandboxes-relay-v2.cloud.sdu.dk","product":{"id":"u1-publiclink","category":"u1-publiclink","provider":"ucloud"}}]}'
 
 ucloud request POST /api/jobs/attachResource \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --json '{"jobId":"12346251","resource":{"type":"ingress","id":"12346842","port":8092}}'
+  --json '{"jobId":"12349450","resource":{"type":"ingress","id":"12349454","port":8092}}'
 
-uv run ucloud-sandboxes open-vm-web 12346251 \
+uv run ucloud-sandboxes open-vm-web 12349450 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --port 8092
 ```
 
 The live relay smoke path is
-`https://app-sandboxes-relay.cloud.sdu.dk/rollouts/<rollout-id>/v1/chat/completions`.
+`https://app-sandboxes-relay-v2.cloud.sdu.dk/rollouts/<rollout-id>/v1/chat/completions`.
+
+## Autoscaled Nodes
+
+Sandbox-node VMs:
+
+- autoscaled from pending sandbox resource demand or
+  `POST /v1/sandboxes/prepare` signals
+- initialized over the announced UCloud SSH proxy
+- initialized with the local registry alias:
+  `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
+  `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
+- heartbeat back to the all-in-one gateway private-network URL with bearer auth
+- carry `ucloud-sandboxes/deployment=<deployment-id>`
+
+Builder-node VMs:
+
+- autoscaled from pending image-build demand or `POST /v1/builders/prepare`
+  signals
+- initialized over the announced UCloud SSH proxy
+- initialized with the same local registry alias
+- advertise `image-build` only, not `sandbox`
+- advertise physical CPU, memory, and disk capacity only; sandbox overcommit
+  settings are ignored for builder nodes
+- build and push registry tags; sandbox nodes later pull/cache those tags
+- carry `ucloud-sandboxes/deployment=<deployment-id>`
+
+Builds should use `push=true` and tags under
+`ucloud-sandbox-registry:5000`; sandbox create can then use either the registry
+tag or the recorded image id. If the all-in-one VM is replaced and receives a
+new private IP, keep image tags the same and update only the host alias value in
+the deployment.
 
 The gateway VM cannot SSH into node VMs through `ssh.cloud.sdu.dk` unless it has
 an accepted private key. The bootstrap path is to generate a dedicated keypair
@@ -289,5 +292,31 @@ autoscaler records attempts in `<state_dir>/vm-bootstrap.json` and retries after
 `--init-retry-seconds` (30 seconds in the live setup); readiness still comes only
 from fresh node heartbeats.
 
-The live gateway key has been registered in UCloud as SSH key id `3195` with
-title `ucloud-sandboxes gateway init 2026-06-29`.
+The live all-in-one gateway key has been registered in UCloud as SSH key id
+`3212` with title `ucloud-sandboxes gateway init 2026-07-04 allinone`.
+
+## Verify
+
+Current live checks:
+
+```bash
+curl -fsS https://app-sandboxes.cloud.sdu.dk/healthz
+curl -fsS https://app-sandboxes-relay-v2.cloud.sdu.dk/healthz
+curl -i https://app-sandboxes.cloud.sdu.dk/v1/sandboxes
+ucloud jobs browse \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --filter-state RUNNING \
+  --no-include-application \
+  --output json
+```
+
+Expected current state:
+
+- gateway health reports `{"ok": true, "service": "control-plane", "version": "0.2.0"}`
+- relay health reports `{"ok": true, "service": "model-relay", "version": "0.2.0"}`
+- unauthenticated `GET /v1/sandboxes` returns `401`
+- running-job browse shows only all-in-one job `12349450` for this service when
+  there is no sandbox or builder demand
+- gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
+- zero demand plus idle timeout produces safe labelled stop intents for sandbox
+  and builder nodes

@@ -18,6 +18,7 @@ from ucloud_sandboxes.cli import (
     vm_submission_options_from_args,
 )
 from ucloud_sandboxes.config import AutoscalerConfig
+from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, ScalePolicy, VmJob, utc_now
 from ucloud_sandboxes.registry import HeartbeatStore
 from ucloud_sandboxes.routing import RoutingStore
@@ -44,6 +45,15 @@ class FailingProbe:
 
 
 class CliTests(unittest.TestCase):
+    def test_top_level_version_flag_reports_package_version(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            with self.assertRaises(SystemExit) as raised:
+                cli.main(["--version"])
+
+        self.assertEqual(raised.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), f"ucloud-sandboxes {package_version()}")
+
     def test_private_network_config_filters_auto_discovered_pool_nodes(self) -> None:
         config = AutoscalerConfig.default(project_id="project-1")
         config = AutoscalerConfig(
@@ -442,6 +452,78 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["consumedPendingDemand"], [])
         self.assertEqual(payload["consumedPreparedCapacity"], [])
+
+    def test_autoscaler_text_output_hides_final_pool_node_history(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "old-node",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-old",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-16-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                    "parameters": {"diskSize": {"value": 250}},
+                                },
+                                "status": {
+                                    "state": "SUCCESS",
+                                    "jobParametersJson": {
+                                        "request": {
+                                            "resolvedProduct": {
+                                                "cpu": 16,
+                                                "memoryInGigs": 32,
+                                            },
+                                        },
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "autoscaler-loop",
+                        "--project",
+                        "project-1",
+                        "--deployment-id",
+                        "prod-a",
+                        "--state-dir",
+                        raw_dir,
+                        "--jobs-file",
+                        str(jobs_file),
+                        "--no-private-network",
+                        "--once",
+                        "--output",
+                        "text",
+                    ]
+                )
+
+        self.assertEqual(result, 0)
+        text = output.getvalue()
+        self.assertIn("Nodes: 0 ready, 0 provisioning, 0 total", text)
+        self.assertIn("No pool nodes matched the configured selection.", text)
+        self.assertNotIn("job=old-node", text)
+        self.assertNotIn("state=SUCCESS", text)
 
     def test_executing_autoscaler_loop_consumes_pending_demand_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []

@@ -128,8 +128,9 @@ uv run ucloud-sandboxes submit-vm \
   --execute
 ```
 
-For a gateway/control-plane VM, bind the public link to the gateway service
-port while still joining the private network for node traffic:
+For the all-in-one gateway/control-plane VM, bind the public gateway link to
+the gateway service port while still joining the private network for node
+traffic and mounting the project storage drive used by the local registry:
 
 ```bash
 uv run ucloud-sandboxes submit-vm \
@@ -139,6 +140,7 @@ uv run ucloud-sandboxes submit-vm \
   --private-network-id 12345327 \
   --public-link-id 12345368 \
   --public-link-port 8090 \
+  --mount /998037 \
   --hostname-seed gateway-1 \
   --output json
 ```
@@ -147,14 +149,14 @@ After the VM is running and the gateway service is listening, activate UCloud's
 VM web forwarding for the public-link target port:
 
 ```bash
-uv run ucloud-sandboxes open-vm-web 12346251 \
+uv run ucloud-sandboxes open-vm-web 12349450 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --port 8090
 ```
 
-For a build/control-plane VM, keep it on the private network but give it a
-separate role so the sandbox autoscaler does not treat it as disposable sandbox
-pool capacity:
+Builder capacity is autoscaled separately. Manual builder VM tests should keep
+the VM on the private network and use the builder role so the sandbox
+autoscaler does not treat it as disposable sandbox pool capacity:
 
 ```bash
 uv run ucloud-sandboxes submit-vm \
@@ -235,7 +237,7 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --heartbeat-url https://app-sandboxes.cloud.sdu.dk/v1/nodes/heartbeat \
   --heartbeat-bearer-token-file /work/ucloud-sandboxes/state/gateway-token \
   --heartbeat-bearer-token-source-file /work/ucloud-sandboxes/state/gateway-token \
-  --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-0.1.0-py3-none-any.whl \
+  --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-0.2.0-py3-none-any.whl \
   --total-vcpu 2 \
   --total-memory-mb 6144 \
   --total-disk-mb 250000 \

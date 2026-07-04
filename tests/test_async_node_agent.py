@@ -7,11 +7,43 @@ from aiohttp import ClientSession, web
 
 from ucloud_sandboxes.async_gateway import AsyncNodeGatewayClient
 from ucloud_sandboxes.async_node_agent import create_async_node_agent_app
+from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.sandbox import DockerGvisorRuntime
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class AsyncNodeAgentTests(unittest.TestCase):
+    def test_healthz_reports_service_version(self) -> None:
+        async def scenario() -> dict:
+            with TemporaryDirectory() as raw_dir:
+                app = create_async_node_agent_app(
+                    sandbox_file=Path(raw_dir) / "sandboxes.json",
+                    image_file=Path(raw_dir) / "images.json",
+                    runtime=DockerGvisorRuntime(dry_run=True),
+                )
+                runner = web.AppRunner(app)
+                await runner.setup()
+                site = web.TCPSite(runner, "127.0.0.1", 0)
+                await site.start()
+                sockets = site._server.sockets if site._server else []
+                port = sockets[0].getsockname()[1]
+                try:
+                    async with ClientSession() as client:
+                        async with client.get(f"http://127.0.0.1:{port}/healthz") as response:
+                            self.assertEqual(response.status, 200)
+                            return await response.json()
+                finally:
+                    await runner.cleanup()
+
+        self.assertEqual(
+            asyncio.run(scenario()),
+            {
+                "ok": True,
+                "service": "async-node-agent",
+                "version": package_version(),
+            },
+        )
+
     def test_exec_websocket_streams_events(self) -> None:
         async def scenario() -> list[str]:
             with TemporaryDirectory() as raw_dir:

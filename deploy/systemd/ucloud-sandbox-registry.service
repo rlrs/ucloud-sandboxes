@@ -9,7 +9,7 @@ Type=simple
 Environment=UCLOUD_REGISTRY_IMAGE=registry:2
 Environment=UCLOUD_REGISTRY_BIND=0.0.0.0
 Environment=UCLOUD_REGISTRY_PORT=5000
-Environment=UCLOUD_REGISTRY_DATA_DIR=/work/ucloud-sandbox-registry/docker-registry
+Environment=UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
 EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
 ExecStartPre=/usr/bin/install -d -m 0755 ${UCLOUD_REGISTRY_DATA_DIR}
 ExecStartPre=-/usr/bin/docker rm -f ucloud-sandbox-registry

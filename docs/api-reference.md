@@ -99,6 +99,18 @@ The VM-side node agent exposes:
 - `POST /v1/exec/<session-id>/close-stdin`
 - `POST /v1/sandboxes/<sandbox-id>/snapshot` (requires `--enable-image-builds`)
 
+`GET /healthz` is public and returns the service identity and package version.
+The `service` value is `control-plane`, `node-agent`, `async-node-agent`, or
+`model-relay` depending on which process serves the endpoint:
+
+```json
+{
+  "ok": true,
+  "service": "control-plane",
+  "version": "0.2.0"
+}
+```
+
 The gateway/control plane additionally exposes:
 
 - `POST /v1/images/build` when started with

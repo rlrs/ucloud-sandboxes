@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from aiohttp import web
 
+from .deployment import service_health
+
 
 JsonObject = dict[str, Any]
 ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -550,7 +552,7 @@ def create_model_relay_app(
 
 
 async def healthz(_request: web.Request) -> web.Response:
-    return web.json_response({"ok": True})
+    return web.json_response(service_health("model-relay"))
 
 
 async def relay_stats(request: web.Request) -> web.Response:

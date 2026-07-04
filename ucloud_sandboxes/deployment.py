@@ -24,3 +24,11 @@ def package_version() -> str:
         from . import __version__
 
         return __version__
+
+
+def service_health(service: str) -> dict[str, object]:
+    return {
+        "ok": True,
+        "service": service,
+        "version": package_version(),
+    }

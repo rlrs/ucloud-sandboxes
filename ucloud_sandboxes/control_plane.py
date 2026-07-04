@@ -481,9 +481,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     self.routing_store.upsert_sandbox(
                         _sandbox_route_from_heartbeat(heartbeat, sandbox_id, spec)
                     )
-                    enriched = dict(record)
-                    enriched["node"] = _node_metadata(heartbeat)
-                    sandboxes.append(enriched)
+                    sandboxes.append(_enrich_sandbox_record(record, heartbeat))
         self._write_json({"sandboxes": sandboxes})
 
     def _list_images_across_nodes(self) -> None:
@@ -1575,6 +1573,36 @@ def _sandbox_record_matches_spec(record: dict[str, Any], requested: SandboxSpec)
     except (TypeError, ValueError):
         return False
     return sandbox_specs_match(existing, requested)
+
+
+def _enrich_sandbox_record(
+    record: dict[str, Any],
+    heartbeat: NodeHeartbeat,
+) -> dict[str, Any]:
+    enriched = dict(record)
+    spec = enriched.get("spec")
+    spec = spec if isinstance(spec, dict) else {}
+    sandbox_id = str(
+        enriched.get("id")
+        or enriched.get("sandbox_id")
+        or spec.get("id")
+        or ""
+    )
+    image = str(enriched.get("image") or spec.get("image") or "")
+    labels = enriched.get("labels")
+    if not isinstance(labels, dict):
+        raw_labels = spec.get("labels")
+        labels = dict(raw_labels) if isinstance(raw_labels, dict) else {}
+    if sandbox_id:
+        enriched["id"] = sandbox_id
+        enriched["sandbox_id"] = sandbox_id
+    if "name" not in enriched and enriched.get("container_name"):
+        enriched["name"] = enriched["container_name"]
+    if image:
+        enriched["image"] = image
+    enriched["labels"] = {str(key): str(value) for key, value in labels.items()}
+    enriched["node"] = _node_metadata(heartbeat)
+    return enriched
 
 
 def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, str]:

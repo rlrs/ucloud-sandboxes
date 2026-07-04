@@ -985,6 +985,33 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(structured["status"], 503)
         self.assertIn("Job is unavailable", structured["upstream_body_preview"])
 
+    def test_enriches_old_node_sandbox_records_with_top_level_identity(self) -> None:
+        heartbeat = build_heartbeat(
+            job_id="job-1",
+            node_id="node-1",
+            node_url="http://node-1:8090",
+        )
+
+        enriched = control_plane._enrich_sandbox_record(
+            {
+                "container_name": "ucloud-sandbox-old-one",
+                "spec": {
+                    "id": "old-one",
+                    "image": "busybox",
+                    "labels": {"sample": "old"},
+                },
+                "state": "running",
+            },
+            heartbeat,
+        )
+
+        self.assertEqual(enriched["id"], "old-one")
+        self.assertEqual(enriched["sandbox_id"], "old-one")
+        self.assertEqual(enriched["name"], "ucloud-sandbox-old-one")
+        self.assertEqual(enriched["image"], "busybox")
+        self.assertEqual(enriched["labels"], {"sample": "old"})
+        self.assertEqual(enriched["node"]["node_id"], "node-1")
+
     def test_gateway_builds_images_locally_and_sandbox_nodes_pull_registry_tag(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

@@ -37,7 +37,9 @@ from .sandbox import SandboxSpec
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
-IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 6 * 60 * 60
+# Build execution is asynchronous. This timeout only covers proxying the build
+# context and enqueueing the build on a builder node.
+IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 

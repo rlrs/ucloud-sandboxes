@@ -1219,7 +1219,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0)
 
-    def test_gateway_uses_long_proxy_timeout_for_builder_image_builds(self) -> None:
+    def test_gateway_uses_bounded_proxy_timeout_for_builder_image_builds(self) -> None:
         class FakeResponse:
             status = 201
             headers: dict[str, str] = {}
@@ -1301,6 +1301,7 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway.server_close()
 
         self.assertEqual(built["image"]["id"], "custom")
+        self.assertEqual(IMAGE_BUILD_PROXY_TIMEOUT_SECONDS, 30 * 60)
         self.assertEqual(captured_timeouts, [IMAGE_BUILD_PROXY_TIMEOUT_SECONDS])
 
     def test_gateway_records_pending_demand_when_no_node_can_fit(self) -> None:

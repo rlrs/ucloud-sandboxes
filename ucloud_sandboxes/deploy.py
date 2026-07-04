@@ -14,6 +14,7 @@ from .vm_init import ssh_init_command, ssh_remote_command
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_PROJECT_MOUNT_DIR = "/work/data"
 DEFAULT_REGISTRY_ALIAS = "ucloud-sandbox-registry"
+AUTO_REGISTRY_PRIVATE_IP_TOKEN = "__UCLOUD_REGISTRY_PRIVATE_IP__"
 SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-gateway.service",
     "ucloud-sandbox-relay.service",
@@ -130,9 +131,8 @@ class AllInOneDeployPlan:
 
     @property
     def docker_host_alias(self) -> str:
-        if not self.registry_private_ip:
-            raise ValueError("registry private IP is required.")
-        return f"{self.registry_alias}={self.registry_private_ip}"
+        registry_private_ip = self.registry_private_ip or AUTO_REGISTRY_PRIVATE_IP_TOKEN
+        return f"{self.registry_alias}={registry_private_ip}"
 
     def validate(self) -> None:
         for label, value in {
@@ -143,12 +143,12 @@ class AllInOneDeployPlan:
             "project mount dir": self.project_mount_dir,
             "service user": self.service_user,
             "gateway private host": self.gateway_private_host,
-            "registry private IP": self.registry_private_ip,
             "private network id": self.private_network_id,
         }.items():
             _reject_bad_text(label, value)
             if not value:
                 raise ValueError(f"{label} is required.")
+        _reject_bad_text("registry private IP", self.registry_private_ip)
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
         for label, value in {
@@ -350,8 +350,29 @@ def render_remote_deploy_script(
         f"SESSION_FILE={shlex.quote(plan.remote_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
         f"INIT_KEY_COMMENT={shlex.quote(plan.deployment_id + ' gateway init')}",
+        f"REGISTRY_PRIVATE_IP={shlex.quote(plan.registry_private_ip)}",
         "",
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
+        'detect_registry_private_ip() {',
+        '  ip -o -4 addr show scope global | awk \'',
+        "    {",
+        '      split($4, addr, "/")',
+        "      ip = addr[1]",
+        '      if (ip !~ /^127\\./ && ip !~ /^169\\.254\\./ && ip !~ /^172\\.17\\./) {',
+        "        print ip",
+        "        exit",
+        "      }",
+        "    }",
+        "  '",
+        "}",
+        'if [ -z "$REGISTRY_PRIVATE_IP" ]; then',
+        '  REGISTRY_PRIVATE_IP="$(detect_registry_private_ip)"',
+        "fi",
+        'if [ -z "$REGISTRY_PRIVATE_IP" ]; then',
+        '  echo "Could not detect registry private IPv4 address; pass --registry-private-ip." >&2',
+        "  exit 1",
+        "fi",
+        "",
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$INSTALL_ROOT"',
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"',
@@ -397,6 +418,14 @@ def render_remote_deploy_script(
     ]
     for path, content in env_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0640"))
+    script_parts.extend(
+        [
+            "sudo sed -i "
+            f"{shlex.quote('s|' + AUTO_REGISTRY_PRIVATE_IP_TOKEN + '|')}"
+            '"$REGISTRY_PRIVATE_IP"'
+            f"{shlex.quote('|g')} /etc/ucloud-sandboxes/autoscaler.env",
+        ]
+    )
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
     script_parts.extend(

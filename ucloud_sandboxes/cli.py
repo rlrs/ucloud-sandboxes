@@ -857,8 +857,9 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument(
         "--registry-private-ip",
         help=(
-            "Private-network IP for the all-in-one VM. Used in node init as "
-            "ucloud-sandbox-registry=<ip>."
+            "Optional private-network IP override for the all-in-one VM. If "
+            "omitted, the remote deployment detects the VM's private IPv4 and "
+            "uses it in node init as ucloud-sandbox-registry=<ip>."
         ),
     )
     deploy_all.add_argument(
@@ -2398,20 +2399,13 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         ssh_command = init_plan.ssh_command
 
     inferred_job: VmJob | None = None
-    if not args.gateway_private_host or not args.registry_private_ip:
+    if not args.gateway_private_host:
         inferred_job = vm_job_from_payload(get_payload())
     gateway_private_host = (
         args.gateway_private_host
         or (inferred_job.hostname if inferred_job is not None else "")
     )
-    registry_private_ip = (
-        args.registry_private_ip
-        or (
-            inferred_job.labels.get("ucloud.dk/serviceipaddress", "")
-            if inferred_job is not None
-            else ""
-        )
-    )
+    registry_private_ip = args.registry_private_ip or ""
 
     plan = AllInOneDeployPlan(
         job_id=args.job_id,

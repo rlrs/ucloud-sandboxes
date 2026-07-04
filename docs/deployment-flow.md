@@ -177,12 +177,16 @@ uv run ucloud-sandboxes deploy-all-in-one <job-id> \
   --output text
 ```
 
-If the plan cannot infer the private-network hostname or service IP from the
-UCloud job, pass them explicitly:
+If the plan cannot infer the private-network hostname from the UCloud job, pass
+it explicitly. The registry IP normally does not need to be passed; the remote
+deployment detects the all-in-one VM's private IPv4 from inside the VM and writes
+that value into the autoscaler environment. Do not use the
+`ucloud.dk/serviceipaddress` label for this alias, since that address is not
+necessarily reachable by builder and sandbox nodes.
 
 ```bash
   --gateway-private-host sandbox-gateway-allinone-20260704-v020 \
-  --registry-private-ip 10.40.34.183
+  --registry-private-ip <optional-gateway-private-ip-override>
 ```
 
 Execute the deployment:
@@ -208,9 +212,9 @@ Current live all-in-one VM:
 - job id: `12349450`
 - name: `ucloud-sandbox-gateway-allinone-20260704-v020`
 - deployment id: `live-20260629`
-- package version: `0.2.0`
+- package version: `0.3.0`
 - private network: `12345327`
-- private service address: `10.40.34.183`
+- private registry IPv4 observed on the VM: `10.36.121.173`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
 - SSH: resolve with `ucloud jobs ssh 12349450 --print-only`
 
@@ -238,7 +242,7 @@ using image tags under `ucloud-sandbox-registry:5000` plus a VM init host alias:
 
 ```bash
 --init-docker-insecure-registry ucloud-sandbox-registry:5000 \
---init-host-alias ucloud-sandbox-registry=10.40.34.183
+--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>
 ```
 
 Registry data lives at:

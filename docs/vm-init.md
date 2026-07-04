@@ -34,9 +34,12 @@ what that means for initializing sandbox VM nodes.
   to the VM address.
 - The post-boot init script was run successfully on job `12345813` using a
   wheel copied to `/work/ucloud-sandboxes/release/`. It installed Docker
-  29.6.1, gVisor `runsc` release `20260622.0`, configured Docker's data root
-  under `/work/ucloud-sandboxes/docker`, and started the node-agent and
-  heartbeat systemd units.
+  29.6.1, gVisor `runsc` release `20260622.0`, configured Docker's data root,
+  and started the node-agent and heartbeat systemd units.
+- Current init keeps Docker's quota-backed XFS data root on local VM disk under
+  `/var/lib/ucloud-sandboxes/docker-xfs`. Earlier live nodes put the sparse XFS
+  image under `/work`, but `/work` is a virtiofs project mount and is a poor fit
+  for high-churn Docker layer extraction and container writable-layer I/O.
 - Docker writable-layer quotas require Docker's supported storage path. The
   first Docker setup used the containerd snapshotter-backed `overlayfs` driver,
   where `--storage-opt size=16m` did not stop a 32 MB write under either `runc`

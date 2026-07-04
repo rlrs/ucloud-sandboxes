@@ -94,8 +94,10 @@ On UCloud VM job `12345813`, initialized on 2026-06-29:
 - Initial Docker `29.6.1` setup used storage driver `overlayfs`, containerd
   snapshotter driver type
 - `runsc release-20260622.0`, default platform `systrap`
-- Docker daemon root was moved to `/work/ucloud-sandboxes/docker-xfs`, a sparse
-  XFS image under `/work` mounted with `pquota`
+- Docker daemon root was originally moved to `/work/ucloud-sandboxes/docker-xfs`,
+  a sparse XFS image under `/work` mounted with `pquota`. Current node init uses
+  local VM disk under `/var/lib/ucloud-sandboxes/docker-xfs` for Docker layer
+  I/O, while the registry remains on persistent project storage.
 - `--runtime runsc` containers report `4.19.0-gvisor`
 - `--network none` blocks outbound network access
 - `--memory 128m` is visible through `/proc/meminfo`

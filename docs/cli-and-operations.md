@@ -269,14 +269,17 @@ uv run ucloud-sandboxes init-vm 12345318 \
 ```
 
 The init script installs Docker and gVisor/runsc, creates a sparse XFS
-project-quota image for Docker under `/work/ucloud-sandboxes/docker-xfs.img`,
-mounts it at `/work/ucloud-sandboxes/docker-xfs`, installs this package into a
-VM-local venv owned by `--service-user` (`ucloud` by default), and enables
+project-quota image for Docker under `/var/lib/ucloud-sandboxes/docker-xfs.img`,
+mounts it at `/var/lib/ucloud-sandboxes/docker-xfs`, installs this package into
+a VM-local venv owned by `--service-user` (`ucloud` by default), and enables
 systemd services for the node agent and heartbeat timer that run as that user
-with Docker group access. Use `--docker-quota-image-gb 0` to disable
-quota-backed Docker storage, or set a larger value for large sandbox nodes. For
-private network use, the generated node agent binds to `0.0.0.0` and advertises
-`http://<node-id>:8090` in heartbeats by default.
+with Docker group access. Docker storage is intentionally VM-local because
+sandbox and builder layer caches are high-churn and do not need to persist
+after scale-down; the registry is the persistent image store. Use
+`--docker-quota-image-gb 0` to disable quota-backed Docker storage, or set a
+larger value for large sandbox nodes. For private network use, the generated
+node agent binds to `0.0.0.0` and advertises `http://<node-id>:8090` in
+heartbeats by default.
 
 When the gateway initializes nodes, generate a dedicated gateway keypair on the
 gateway and pass only its public key with `--init-authorized-key-file`. The

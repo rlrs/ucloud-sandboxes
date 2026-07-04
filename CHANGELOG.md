@@ -2,6 +2,13 @@
 
 This project uses semantic versioning.
 
+## 0.3.6 - 2026-07-04
+
+- Moved autoscaled VM Docker storage defaults from the persistent `/work`
+  project mount to local VM disk under `/var/lib/ucloud-sandboxes`.
+- Kept quota-backed XFS Docker storage while avoiding high-churn Docker layer
+  I/O on the network-backed project mount.
+
 ## 0.3.0 - 2026-07-04
 
 - Added `deploy-all-in-one` to converge a running gateway VM into the standard

@@ -20,6 +20,7 @@ DEFAULT_SSH_PORT_END = 22999
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 20
 DEFAULT_PACKAGE_SPEC = "ucloud-sandboxes"
 DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
+DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
 DEFAULT_SSH_OPTIONS = (
@@ -165,9 +166,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     work_dir = _clean_posix_path(options.work_dir)
     venv_dir = str(PurePosixPath(work_dir) / "venv")
     agent_bin = str(PurePosixPath(venv_dir) / "bin" / "ucloud-sandboxes")
-    docker_data_root = str(PurePosixPath(work_dir) / "docker")
-    docker_quota_image = str(PurePosixPath(work_dir) / "docker-xfs.img")
-    docker_quota_root = str(PurePosixPath(work_dir) / "docker-xfs")
+    docker_storage_dir = _clean_posix_path(DEFAULT_DOCKER_STORAGE_DIR)
+    docker_data_root = str(PurePosixPath(docker_storage_dir) / "docker")
+    docker_quota_image = str(PurePosixPath(docker_storage_dir) / "docker-xfs.img")
+    docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     state_dir = str(PurePosixPath(work_dir) / "state")
     runtime_conformance_file = str(PurePosixPath(state_dir) / "runtime-conformance.json")
     env_file = "/etc/ucloud-sandboxes/node.env"
@@ -269,7 +271,7 @@ run_as_service_user() {{
   fi
 }}
 
-$SUDO mkdir -p "$UCLOUD_WORK_DIR" "$UCLOUD_STATE_DIR" /etc/ucloud-sandboxes
+$SUDO mkdir -p "$UCLOUD_WORK_DIR" "$UCLOUD_STATE_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/ucloud-sandboxes
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_WORK_DIR"
 $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
 $SUDO chmod 700 "$UCLOUD_STATE_DIR"

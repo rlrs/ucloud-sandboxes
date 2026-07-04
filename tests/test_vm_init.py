@@ -121,6 +121,10 @@ class VmInitTests(unittest.TestCase):
         self.assertNotIn("$SUDO python3 -m venv \"$UCLOUD_VENV_DIR\"", script)
         self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE_GB=200", script)
         self.assertIn("UCLOUD_DOCKER_MTU=0", script)
+        self.assertIn("UCLOUD_DOCKER_DATA_ROOT=/var/lib/ucloud-sandboxes/docker", script)
+        self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE=/var/lib/ucloud-sandboxes/docker-xfs.img", script)
+        self.assertIn("UCLOUD_DOCKER_QUOTA_ROOT=/var/lib/ucloud-sandboxes/docker-xfs", script)
+        self.assertNotIn("UCLOUD_DOCKER_QUOTA_IMAGE=/work/ucloud-sandboxes/docker-xfs.img", script)
         self.assertIn(
             "UCLOUD_HOST_ALIASES_JSON='[\"ucloud-sandbox-registry=10.36.125.67\"]'",
             script,

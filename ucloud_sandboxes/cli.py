@@ -49,6 +49,16 @@ from .deployment import (
     NODE_LABEL,
     package_version,
 )
+from .deploy import (
+    AllInOneDeployPlan,
+    DEFAULT_INSTALL_ROOT,
+    DEFAULT_PROJECT_MOUNT_DIR,
+    DEFAULT_REGISTRY_ALIAS,
+    read_remote_text_over_ssh,
+    render_remote_deploy_script,
+    run_remote_script_over_ssh,
+    stage_file_over_ssh,
+)
 from .images import DockerImageRuntime
 from .managed_registry import (
     RegistryClient,
@@ -808,6 +818,107 @@ def build_parser() -> argparse.ArgumentParser:
         "--output", choices=("text", "json"), default="text", help="Output format."
     )
     open_vm_web.set_defaults(func=cmd_open_vm_web)
+
+    deploy_all = subparsers.add_parser(
+        "deploy-all-in-one",
+        help=(
+            "Converge a running gateway VM into the all-in-one deployment: "
+            "gateway, relay, registry, and autoscaler."
+        ),
+    )
+    add_config_args(deploy_all)
+    deploy_all.add_argument("job_id", help="Running UCloud gateway VM job id.")
+    deploy_all.add_argument("--project", help="UCloud project id.")
+    deploy_all.add_argument(
+        "--wheel",
+        required=True,
+        type=Path,
+        help="Built ucloud-sandboxes wheel to install on the gateway VM.",
+    )
+    deploy_all.add_argument(
+        "--ssh-command",
+        help=(
+            "SSH command for the gateway VM. If omitted, the command is read from "
+            "UCloud job updates."
+        ),
+    )
+    deploy_all.add_argument(
+        "--ssh-private-key-file",
+        help="Private key file passed to ssh/scp operations.",
+    )
+    deploy_all.add_argument(
+        "--private-network-id",
+        help="Private network id used by autoscaled sandbox and builder nodes.",
+    )
+    deploy_all.add_argument(
+        "--gateway-private-host",
+        help="Private-network hostname used by autoscaled nodes to reach the gateway.",
+    )
+    deploy_all.add_argument(
+        "--registry-private-ip",
+        help=(
+            "Private-network IP for the all-in-one VM. Used in node init as "
+            "ucloud-sandbox-registry=<ip>."
+        ),
+    )
+    deploy_all.add_argument(
+        "--registry-alias",
+        default=DEFAULT_REGISTRY_ALIAS,
+        help="Stable hostname used in private registry tags.",
+    )
+    deploy_all.add_argument("--install-root", default=DEFAULT_INSTALL_ROOT)
+    deploy_all.add_argument("--project-mount-dir", default=DEFAULT_PROJECT_MOUNT_DIR)
+    deploy_all.add_argument("--service-user", default="ucloud")
+    deploy_all.add_argument("--gateway-port", type=int, default=8090)
+    deploy_all.add_argument("--relay-port", type=int, default=8092)
+    deploy_all.add_argument("--registry-port", type=int, default=5000)
+    deploy_all.add_argument("--sandbox-product-id", default="cpu-amd-zen5-16-vcpu")
+    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=250)
+    deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
+    deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)
+    deploy_all.add_argument("--builder-disk-gb", type=int, default=DEFAULT_BUILDER_DISK_GB)
+    deploy_all.add_argument("--builder-idle-seconds", type=int, default=900)
+    deploy_all.add_argument("--max-builder-nodes", type=int, default=1)
+    deploy_all.add_argument("--autoscaler-interval-seconds", type=float, default=5.0)
+    deploy_all.add_argument("--cpu-overcommit", type=float, default=2.0)
+    deploy_all.add_argument("--memory-overcommit", type=float, default=1.2)
+    deploy_all.add_argument("--disk-overcommit", type=float, default=1.0)
+    deploy_all.add_argument("--docker-quota-image-gb", type=int, default=200)
+    deploy_all.add_argument(
+        "--ssh-key-title",
+        help=(
+            "Title used when registering the generated gateway init public key "
+            "with UCloud."
+        ),
+    )
+    deploy_all.add_argument(
+        "--no-copy-session",
+        action="store_true",
+        help="Do not copy the local UCloud session file to the gateway VM.",
+    )
+    deploy_all.add_argument(
+        "--no-open-public-links",
+        action="store_true",
+        help="Skip UCloud VM web-session activation for gateway and relay ports.",
+    )
+    deploy_all.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=1800,
+        help="Timeout for each remote staging or install operation.",
+    )
+    deploy_all.add_argument(
+        "--execute",
+        action="store_true",
+        help="Stage files and run the remote deployment. Default is dry-run.",
+    )
+    deploy_all.add_argument(
+        "--output",
+        choices=("text", "json", "script"),
+        default="text",
+        help="Output format. script prints the remote install script.",
+    )
+    deploy_all.set_defaults(func=cmd_deploy_all_in_one)
 
     heartbeats = subparsers.add_parser(
         "heartbeats",
@@ -2236,7 +2347,7 @@ def cmd_open_vm_web(args: argparse.Namespace) -> int:
         args.job_id,
         session_type="WEB",
         rank=args.rank,
-        target=str(args.port),
+        port=args.port,
     )
     if args.output == "json":
         print_json(response)
@@ -2246,6 +2357,222 @@ def cmd_open_vm_web(args: argparse.Namespace) -> int:
             session = item.get("session") if isinstance(item, dict) else None
             if isinstance(session, dict) and session.get("redirectClientTo"):
                 print(f"URL: {session['redirectClientTo']}")
+    return 0
+
+
+def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
+    config = load_config(args).with_project_id(args.project)
+    if not config.project_id:
+        raise ValueError("project id is required via --project or config.project_id.")
+    if not config.deployment_id:
+        raise ValueError("deployment id is required via --deployment-id or config.")
+    private_network_id = args.private_network_id or config.private_network_id
+    if not private_network_id:
+        raise ValueError("private network id is required via --private-network-id or config.")
+
+    client: UCloudClient | None = None
+
+    def get_client() -> UCloudClient:
+        nonlocal client
+        if client is None:
+            client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
+        return client
+
+    payload: dict[str, Any] | None = None
+
+    def get_payload() -> dict[str, Any]:
+        nonlocal payload
+        if payload is None:
+            payload = get_client().retrieve_job(
+                config.project_id,
+                args.job_id,
+                include_updates=True,
+            )
+        return payload
+
+    ssh_command = args.ssh_command
+    if not ssh_command and args.execute:
+        init_plan = plan_vm_init(get_payload())
+        if not init_plan.runnable or not init_plan.ssh_command:
+            raise ValueError(init_plan.reason)
+        ssh_command = init_plan.ssh_command
+
+    inferred_job: VmJob | None = None
+    if not args.gateway_private_host or not args.registry_private_ip:
+        inferred_job = vm_job_from_payload(get_payload())
+    gateway_private_host = (
+        args.gateway_private_host
+        or (inferred_job.hostname if inferred_job is not None else "")
+    )
+    registry_private_ip = (
+        args.registry_private_ip
+        or (
+            inferred_job.labels.get("ucloud.dk/serviceipaddress", "")
+            if inferred_job is not None
+            else ""
+        )
+    )
+
+    plan = AllInOneDeployPlan(
+        job_id=args.job_id,
+        project_id=config.project_id,
+        deployment_id=config.deployment_id,
+        local_wheel=args.wheel.expanduser().resolve(),
+        install_root=args.install_root,
+        project_mount_dir=args.project_mount_dir,
+        service_user=args.service_user,
+        gateway_port=args.gateway_port,
+        relay_port=args.relay_port,
+        registry_port=args.registry_port,
+        registry_alias=args.registry_alias,
+        registry_private_ip=registry_private_ip,
+        gateway_private_host=gateway_private_host,
+        private_network_id=private_network_id,
+        sandbox_product_id=args.sandbox_product_id,
+        sandbox_disk_gb=args.sandbox_disk_gb,
+        sandbox_idle_seconds=args.sandbox_idle_seconds,
+        builder_product_id=args.builder_product_id,
+        builder_disk_gb=args.builder_disk_gb,
+        builder_idle_seconds=args.builder_idle_seconds,
+        max_builder_nodes=args.max_builder_nodes,
+        autoscaler_interval_seconds=args.autoscaler_interval_seconds,
+        cpu_overcommit=args.cpu_overcommit,
+        memory_overcommit=args.memory_overcommit,
+        disk_overcommit=args.disk_overcommit,
+        docker_quota_image_gb=args.docker_quota_image_gb,
+    )
+    script = render_remote_deploy_script(plan)
+
+    result: dict[str, Any] = {
+        "plan": plan.to_dict(),
+        "sshCommand": ssh_command,
+        "copySession": not args.no_copy_session,
+        "openPublicLinks": not args.no_open_public_links,
+        "execute": args.execute,
+        "stagedFiles": [],
+        "registeredSshKey": None,
+        "openWeb": [],
+    }
+
+    if args.output == "script":
+        print(script, end="" if script.endswith("\n") else "\n")
+        return 0
+
+    if args.execute:
+        if not ssh_command:
+            raise ValueError("--ssh-command is required when UCloud job updates do not expose SSH.")
+        timeout = max(1, int(args.timeout_seconds))
+        staged_wheel = stage_file_over_ssh(
+            ssh_command,
+            plan.local_wheel,
+            plan.remote_wheel_path,
+            timeout_seconds=timeout,
+            private_key_file=args.ssh_private_key_file,
+        )
+        result["stagedFiles"].append(
+            {
+                "localPath": str(plan.local_wheel),
+                "remotePath": plan.remote_wheel_path,
+                "result": staged_wheel.to_dict(),
+            }
+        )
+        if not args.no_copy_session:
+            local_session = Path(config.ucloud_session_file).expanduser()
+            staged_session = stage_file_over_ssh(
+                ssh_command,
+                local_session,
+                plan.remote_session_file,
+                mode="0600",
+                timeout_seconds=timeout,
+                private_key_file=args.ssh_private_key_file,
+            )
+            result["stagedFiles"].append(
+                {
+                    "localPath": str(local_session),
+                    "remotePath": plan.remote_session_file,
+                    "result": staged_session.to_dict(),
+                }
+            )
+        remote_run = run_remote_script_over_ssh(
+            ssh_command,
+            script,
+            timeout_seconds=timeout,
+            private_key_file=args.ssh_private_key_file,
+        )
+        result["remoteRun"] = remote_run.to_dict()
+
+        public_key = read_remote_text_over_ssh(
+            ssh_command,
+            plan.init_authorized_key_file,
+            timeout_seconds=timeout,
+            private_key_file=args.ssh_private_key_file,
+        ).strip()
+        existing = find_ucloud_ssh_key(get_client().browse_ssh_keys(), public_key)
+        response: dict[str, Any] | None = None
+        create_timeout = False
+        if existing is None:
+            try:
+                response = get_client().create_ssh_key(
+                    title=args.ssh_key_title
+                    or f"ucloud-sandboxes gateway init {config.deployment_id}",
+                    key=public_key,
+                )
+            except TimeoutError:
+                create_timeout = True
+            existing = find_ucloud_ssh_key(get_client().browse_ssh_keys(), public_key)
+            if existing is None and create_timeout:
+                raise UCloudError(
+                    "Timed out while creating the UCloud SSH key, and a follow-up "
+                    "browse did not find it."
+                )
+        result["registeredSshKey"] = {
+            "present": existing is not None,
+            "created": response is not None or create_timeout,
+            "timedOutAfterCreate": create_timeout,
+            "id": existing.get("id") if isinstance(existing, dict) else None,
+            "title": (
+                existing.get("specification", {}).get("title")
+                if isinstance(existing.get("specification"), dict)
+                else None
+            )
+            if isinstance(existing, dict)
+            else None,
+        }
+
+        if not args.no_open_public_links:
+            for port in (plan.gateway_port, plan.relay_port):
+                response = get_client().open_interactive_session(
+                    config.project_id,
+                    args.job_id,
+                    session_type="WEB",
+                    rank=0,
+                    port=port,
+                )
+                result["openWeb"].append({"port": port, "response": response})
+
+    if args.output == "json":
+        print_json(result)
+    else:
+        print(f"Project: {config.project_id}")
+        print(f"Job: {args.job_id}")
+        print(f"Deployment: {config.deployment_id}")
+        print(f"Version: {plan.package_version}")
+        print(f"Wheel: {plan.local_wheel}")
+        print(f"Remote wheel: {plan.remote_wheel_path}")
+        print(f"Private gateway host: {plan.gateway_private_host}")
+        print(f"Registry alias: {plan.docker_host_alias}")
+        print(f"Mode: {'execute' if args.execute else 'dry-run'}")
+        if args.execute:
+            print("Services converged: gateway, relay, registry, registry GC, autoscaler")
+            if result["registeredSshKey"]:
+                key = result["registeredSshKey"]
+                print(f"Gateway init SSH key: {key.get('id') or '(present)'}")
+            opened = [str(item["port"]) for item in result["openWeb"]]
+            if opened:
+                print(f"Opened VM web ports: {', '.join(opened)}")
+        else:
+            print("Dry-run only. Re-run with --execute to stage files and restart services.")
+            print("Use --output script to inspect the exact remote install script.")
     return 0
 
 

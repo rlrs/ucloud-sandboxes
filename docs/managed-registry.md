@@ -33,29 +33,22 @@ ucloud-sandboxes submit-vm \
 
 ## Gateway Service
 
-Install Docker and the checked-in units on the VM that will run the registry:
+The normal path is `deploy-all-in-one`; it installs Docker, writes
+`/etc/ucloud-sandboxes/registry.env`, installs the packaged registry and GC
+systemd units, and starts the registry:
 
 ```bash
-sudo apt-get update
-sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+uv run ucloud-sandboxes deploy-all-in-one <job-id> \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --private-network-id <private-network-id> \
+  --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --execute
+```
 
-sudo install -d -m 0755 /etc/ucloud-sandboxes
-sudo tee /etc/ucloud-sandboxes/registry.env >/dev/null <<'EOF'
-UCLOUD_REGISTRY_BIND=0.0.0.0
-UCLOUD_REGISTRY_PORT=5000
-UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
-UCLOUD_REGISTRY_IMAGE=registry:2
-EOF
+Verify on the VM:
 
-sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry.service \
-  /etc/systemd/system/ucloud-sandbox-registry.service
-sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry-gc.service \
-  /etc/systemd/system/ucloud-sandbox-registry-gc.service
-sudo install -m 0644 deploy/systemd/ucloud-sandbox-registry-gc.timer \
-  /etc/systemd/system/ucloud-sandbox-registry-gc.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now ucloud-sandbox-registry.service
-sudo systemctl enable --now ucloud-sandbox-registry-gc.timer
+```bash
 curl -fsS http://127.0.0.1:5000/v2/_catalog
 ```
 
@@ -68,9 +61,9 @@ Do not bind the registry to a UCloud public link in the default deployment. The
 registry is an internal control-plane service for builders and sandbox nodes on
 the private network.
 
-Start the gateway with a registry URL that reaches the registry locally:
-`--registry-url http://127.0.0.1:5000`. This enables the dashboard registry page
-and the `/v1/registry` status endpoint without exposing the registry itself
+The generated gateway env file sets
+`UCLOUD_REGISTRY_URL=http://127.0.0.1:5000`. This enables the dashboard registry
+page and the `/v1/registry` status endpoint without exposing the registry itself
 publicly.
 
 The current registry service will survive container and service restarts as

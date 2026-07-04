@@ -154,6 +154,25 @@ uv run ucloud-sandboxes open-vm-web 12349450 \
   --port 8090
 ```
 
+The normal deployment path is now to let the CLI converge the running VM:
+
+```bash
+uv build
+uv run ucloud-sandboxes deploy-all-in-one 12349450 \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --deployment-id live-20260629 \
+  --private-network-id 12345327 \
+  --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --execute
+```
+
+`deploy-all-in-one` writes the deployment-specific env files, installs the
+packaged systemd units, stages the wheel and UCloud session, generates missing
+tokens and the gateway init SSH key, registers that key with UCloud, restarts
+gateway/relay/registry/autoscaler, and opens the gateway and relay VM web
+ports. Use `--output script` for the exact remote script or omit `--execute` for
+a dry run.
+
 Builder capacity is autoscaled separately. Manual builder VM tests should keep
 the VM on the private network and use the builder role so the sandbox
 autoscaler does not treat it as disposable sandbox pool capacity:
@@ -237,7 +256,7 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --heartbeat-url https://app-sandboxes.cloud.sdu.dk/v1/nodes/heartbeat \
   --heartbeat-bearer-token-file /work/ucloud-sandboxes/state/gateway-token \
   --heartbeat-bearer-token-source-file /work/ucloud-sandboxes/state/gateway-token \
-  --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-0.2.0-py3-none-any.whl \
+  --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-<version>-py3-none-any.whl \
   --total-vcpu 2 \
   --total-memory-mb 6144 \
   --total-disk-mb 250000 \

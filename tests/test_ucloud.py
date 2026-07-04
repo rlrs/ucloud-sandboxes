@@ -21,7 +21,7 @@ class FakeUCloudClient(UCloudClient):
 
 
 class UCloudClientTests(unittest.TestCase):
-    def test_open_interactive_session_includes_vm_web_target(self) -> None:
+    def test_open_interactive_session_includes_vm_web_port(self) -> None:
         client = FakeUCloudClient()
 
         response = client.open_interactive_session(
@@ -29,7 +29,7 @@ class UCloudClientTests(unittest.TestCase):
             "job-1",
             session_type="WEB",
             rank=0,
-            target="8090",
+            port=8090,
         )
 
         self.assertEqual(response["responses"][0]["session"]["redirectClientTo"], "https://example.org")
@@ -47,7 +47,7 @@ class UCloudClientTests(unittest.TestCase):
                             "id": "job-1",
                             "rank": 0,
                             "sessionType": "WEB",
-                            "target": "8090",
+                            "port": 8090,
                         }
                     ],
                 },

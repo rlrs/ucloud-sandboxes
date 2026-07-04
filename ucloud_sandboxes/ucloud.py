@@ -179,6 +179,7 @@ class UCloudClient:
         *,
         session_type: str,
         rank: int = 0,
+        port: int | None = None,
         target: str | None = None,
     ) -> dict[str, Any]:
         item: dict[str, Any] = {
@@ -186,6 +187,8 @@ class UCloudClient:
             "rank": int(rank),
             "sessionType": session_type,
         }
+        if port is not None:
+            item["port"] = int(port)
         if target:
             item["target"] = str(target)
         response = self.request_json(

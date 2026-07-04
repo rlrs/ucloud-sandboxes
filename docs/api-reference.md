@@ -107,7 +107,7 @@ The `service` value is `control-plane`, `node-agent`, `async-node-agent`, or
 {
   "ok": true,
   "service": "control-plane",
-  "version": "0.2.0"
+  "version": "<package-version>"
 }
 ```
 

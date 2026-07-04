@@ -525,6 +525,43 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("job=old-node", text)
         self.assertNotIn("state=SUCCESS", text)
 
+    def test_deploy_all_in_one_dry_run_outputs_plan_without_ucloud_lookup(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+            wheel.write_bytes(b"wheel")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "deploy-all-in-one",
+                        "job-1",
+                        "--project",
+                        "project-1",
+                        "--deployment-id",
+                        "prod-a",
+                        "--private-network-id",
+                        "net-1",
+                        "--gateway-private-host",
+                        "sandbox-gateway-prod",
+                        "--registry-private-ip",
+                        "10.0.0.5",
+                        "--ssh-command",
+                        "ssh ucloud@example.org -p 2222",
+                        "--wheel",
+                        str(wheel),
+                        "--output",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(output.getvalue())
+
+        self.assertEqual(result, 0)
+        self.assertFalse(payload["execute"])
+        self.assertEqual(payload["plan"]["deploymentId"], "prod-a")
+        self.assertEqual(payload["plan"]["initHeartbeatUrl"], "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat")
+        self.assertEqual(payload["plan"]["dockerHostAlias"], "ucloud-sandbox-registry=10.0.0.5")
+
     def test_executing_autoscaler_loop_consumes_pending_demand_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []
 

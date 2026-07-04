@@ -1260,12 +1260,112 @@ class CliTests(unittest.TestCase):
                         )
                     ),
                 )
+                remaining_heartbeats = HeartbeatStore(heartbeat_file).load()
         finally:
             cli.UCloudClient = original_client
 
         self.assertEqual(terminated, [("project-1", ("owned",))])
         self.assertEqual(result["stopJobIds"], ["owned"])
         self.assertEqual(result["blockedStopJobIds"], ["foreign"])
+        self.assertEqual(result["removedStoppedHeartbeats"], ["owned"])
+        self.assertNotIn("owned", remaining_heartbeats)
+        self.assertIn("foreign", remaining_heartbeats)
+
+    def test_reconcile_prunes_heartbeats_for_final_jobs(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "finished-node",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-finished",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-16-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                        "ucloud-sandboxes/agent-version": package_version(),
+                                    },
+                                    "parameters": {"diskSize": {"value": 250}},
+                                },
+                                "status": {
+                                    "state": "SUCCESS",
+                                    "jobParametersJson": {
+                                        "request": {
+                                            "resolvedProduct": {
+                                                "cpu": 16,
+                                                "memoryInGigs": 32,
+                                            },
+                                        },
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "finished-node": NodeHeartbeat(
+                        node_id="node-finished",
+                        job_id="finished-node",
+                        updated_at=utc_now(),
+                        active_sandboxes=0,
+                        node_url="http://node-finished:8090",
+                        agent_version=package_version(),
+                        deployment_id="prod-a",
+                        capabilities=("sandbox", "image-cache"),
+                    )
+                }
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=False,
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+
+            result = cli.run_reconcile_cycle(
+                config,
+                args,
+                demand=cli.sandbox_demand_from_args(
+                    argparse.Namespace(
+                        pending_vcpu=0.0,
+                        pending_memory_mb=0,
+                        pending_disk_mb=0,
+                        oldest_pending_seconds=0,
+                    )
+                ),
+            )
+            remaining_heartbeats = HeartbeatStore(heartbeat_file).load()
+
+        self.assertEqual(result["prunedFinalHeartbeats"], ["finished-node"])
+        self.assertNotIn("finished-node", remaining_heartbeats)
 
     def test_runtime_conformance_json_failure_returns_nonzero(self) -> None:
         original = cli.DockerRuntimeProbe

@@ -2770,7 +2770,18 @@ def run_reconcile_cycle(
 ) -> dict[str, Any]:
     jobs = load_jobs_for_plan(config, args)
     heartbeat_file = args.heartbeats or config.heartbeat_file()
+    heartbeat_store = HeartbeatStore(Path(heartbeat_file))
     heartbeats = load_heartbeats(heartbeat_file)
+    final_heartbeat_job_ids = tuple(
+        sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
+    )
+    if final_heartbeat_job_ids:
+        heartbeat_store.remove(final_heartbeat_job_ids)
+        heartbeats = {
+            job_id: heartbeat
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in final_heartbeat_job_ids
+        }
     effective_policy = policy_with_cli_overrides(config.policy, args)
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
     sandbox_nodes = sandbox_pool_nodes(nodes, config)
@@ -2902,6 +2913,8 @@ def run_reconcile_cycle(
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
+        "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
+        "removedStoppedHeartbeats": [],
         "bootstrapIntents": [
             vm_bootstrap_intent_to_dict(intent) for intent in bootstrap_intents
         ],
@@ -2930,6 +2943,8 @@ def run_reconcile_cycle(
         result["createdJobIds"] = submitted_job_ids(create_response)
 
     if args.execute_stops and stop_job_ids:
+        removed_stop_heartbeats = heartbeat_store.remove(stop_job_ids)
+        result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
         result["stopResponse"] = get_client().terminate_jobs(config.project_id, stop_job_ids)
 
     if getattr(args, "execute_init", False) and bootstrap_intents:

@@ -122,6 +122,24 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(loaded["job-1"].runtime_metrics.cpu_percent, 10.0)
             self.assertEqual(loaded["job-1"].runtime_metrics.memory_used_mb, 1024)
 
+    def test_heartbeat_store_removes_jobs(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "heartbeats.json"
+            store = HeartbeatStore(path)
+            store.save(
+                {
+                    "job-1": build_heartbeat(job_id="job-1", node_id="node-1"),
+                    "job-2": build_heartbeat(job_id="job-2", node_id="node-2"),
+                }
+            )
+
+            removed = store.remove(("job-1", "missing"))
+            loaded = store.load()
+
+            self.assertEqual(tuple(removed), ("job-1",))
+            self.assertNotIn("job-1", loaded)
+            self.assertIn("job-2", loaded)
+
     def test_heartbeat_store_tracks_idle_since_transition(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "heartbeats.json"

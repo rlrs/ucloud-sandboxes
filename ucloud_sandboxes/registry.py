@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .deployment import AGENT_VERSION_LABEL, agent_version_is_compatible
 from .models import (
@@ -77,6 +77,20 @@ class HeartbeatStore:
         heartbeats[heartbeat.job_id] = heartbeat
         self.save(heartbeats)
         return heartbeats
+
+    def remove(self, job_ids: Iterable[str]) -> dict[str, NodeHeartbeat]:
+        target_ids = {str(job_id) for job_id in job_ids if str(job_id)}
+        if not target_ids:
+            return {}
+        heartbeats = self.load()
+        removed = {
+            job_id: heartbeats.pop(job_id)
+            for job_id in sorted(target_ids)
+            if job_id in heartbeats
+        }
+        if removed:
+            self.save(heartbeats)
+        return removed
 
     def save(self, heartbeats: dict[str, NodeHeartbeat]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

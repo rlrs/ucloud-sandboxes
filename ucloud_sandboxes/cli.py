@@ -277,7 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--gateway-bearer-token-file",
         type=Path,
-        help="Require Authorization: Bearer <token> for gateway/control-plane routes.",
+        help=(
+            "Require a gateway token for control-plane routes. The gateway accepts "
+            "X-UCloud-Sandbox-Token, plus Authorization: Bearer for private callers."
+        ),
     )
     serve.add_argument(
         "--image-file",

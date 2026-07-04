@@ -13,9 +13,11 @@ client flows work.
 ## Gateway Contract
 
 The SDK expects a deployed gateway URL and, for protected deployments, a gateway
-bearer token passed as `Authorization: Bearer <token>`. The live development
-URL is `https://app-sandboxes.cloud.sdu.dk`; token files are deployment state and
-must not be committed.
+token. Public UCloud links should send this as `X-UCloud-Sandbox-Token:
+<token>` because UCloud can consume standard `Authorization` headers before
+they reach the gateway. The live development URL is
+`https://app-sandboxes.cloud.sdu.dk`; token files are deployment state and must
+not be committed.
 
 The gateway is responsible for:
 

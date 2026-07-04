@@ -1750,7 +1750,7 @@ function scheduleNextRefresh() {
 
 async function refreshNow() {
   const token = sessionStorage.getItem("ucloud.dashboard.token") || els.tokenInput.value.trim();
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const headers = token ? { "X-UCloud-Sandbox-Token": token } : {};
   try {
     const response = await fetch("/v1/metrics", {
       headers,

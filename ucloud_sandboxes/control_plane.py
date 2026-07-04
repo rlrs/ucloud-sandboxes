@@ -1530,7 +1530,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if self.gateway_bearer_token is None:
             return True
         expected = f"Bearer {self.gateway_bearer_token}"
-        if self.headers.get("Authorization") == expected:
+        if (
+            self.headers.get("Authorization") == expected
+            or self.headers.get("X-UCloud-Sandbox-Token") == self.gateway_bearer_token
+        ):
             return True
         body = json.dumps({"error": "unauthorized"}, indent=2).encode("utf-8")
         self.send_response(HTTPStatus.UNAUTHORIZED)

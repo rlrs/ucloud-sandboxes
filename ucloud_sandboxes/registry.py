@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict, replace
+import fcntl
 import json
+import os
 from pathlib import Path
+from threading import RLock, get_ident
+import time
 from typing import Any, Iterable
 
 from .deployment import AGENT_VERSION_LABEL, agent_version_is_compatible
@@ -18,15 +23,32 @@ from .models import (
 )
 
 
+_HEARTBEAT_FILE_LOCKS_GUARD = RLock()
+_HEARTBEAT_FILE_LOCKS: dict[Path, RLock] = {}
+
+
 def load_heartbeats(path: Path | None) -> dict[str, NodeHeartbeat]:
     if path is None or not path.exists():
         return {}
-    raw = json.loads(path.read_text(encoding="utf-8"))
+    with _heartbeat_file_lock(path):
+        return _load_heartbeats_unlocked(path)
+
+
+def _load_heartbeats_unlocked(path: Path) -> dict[str, NodeHeartbeat]:
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        _quarantine_corrupt_heartbeat_file(path)
+        return {}
     if not isinstance(raw, dict):
-        raise ValueError("Heartbeat file must contain a JSON object.")
+        _quarantine_corrupt_heartbeat_file(path)
+        return {}
     nodes = raw.get("nodes", [])
     if not isinstance(nodes, list):
-        raise ValueError("Heartbeat file must contain a nodes list.")
+        _quarantine_corrupt_heartbeat_file(path)
+        return {}
 
     heartbeats: dict[str, NodeHeartbeat] = {}
     for item in nodes:
@@ -69,41 +91,94 @@ class HeartbeatStore:
         return load_heartbeats(self.path)
 
     def upsert(self, heartbeat: NodeHeartbeat) -> dict[str, NodeHeartbeat]:
-        heartbeats = self.load()
-        heartbeat = normalize_idle_since(
-            heartbeat,
-            previous=heartbeats.get(heartbeat.job_id),
-        )
-        heartbeats[heartbeat.job_id] = heartbeat
-        self.save(heartbeats)
-        return heartbeats
+        with _heartbeat_file_lock(self.path):
+            heartbeats = _load_heartbeats_unlocked(self.path)
+            heartbeat = normalize_idle_since(
+                heartbeat,
+                previous=heartbeats.get(heartbeat.job_id),
+            )
+            heartbeats[heartbeat.job_id] = heartbeat
+            _save_heartbeats_unlocked(self.path, heartbeats)
+            return heartbeats
 
     def remove(self, job_ids: Iterable[str]) -> dict[str, NodeHeartbeat]:
         target_ids = {str(job_id) for job_id in job_ids if str(job_id)}
         if not target_ids:
             return {}
-        heartbeats = self.load()
-        removed = {
-            job_id: heartbeats.pop(job_id)
-            for job_id in sorted(target_ids)
-            if job_id in heartbeats
-        }
-        if removed:
-            self.save(heartbeats)
-        return removed
+        with _heartbeat_file_lock(self.path):
+            heartbeats = _load_heartbeats_unlocked(self.path)
+            removed = {
+                job_id: heartbeats.pop(job_id)
+                for job_id in sorted(target_ids)
+                if job_id in heartbeats
+            }
+            if removed:
+                _save_heartbeats_unlocked(self.path, heartbeats)
+            return removed
 
     def save(self, heartbeats: dict[str, NodeHeartbeat]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        nodes = [
-            heartbeat_to_dict(heartbeats[job_id])
-            for job_id in sorted(heartbeats)
-        ]
+        with _heartbeat_file_lock(self.path):
+            _save_heartbeats_unlocked(self.path, heartbeats)
+
+
+@contextmanager
+def _heartbeat_file_lock(path: Path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    local_lock = _local_heartbeat_lock(path)
+    with local_lock:
+        lock_path = path.with_name(path.name + ".lock")
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _local_heartbeat_lock(path: Path) -> RLock:
+    resolved = path.resolve()
+    with _HEARTBEAT_FILE_LOCKS_GUARD:
+        lock = _HEARTBEAT_FILE_LOCKS.get(resolved)
+        if lock is None:
+            lock = RLock()
+            _HEARTBEAT_FILE_LOCKS[resolved] = lock
+        return lock
+
+
+def _save_heartbeats_unlocked(
+    path: Path,
+    heartbeats: dict[str, NodeHeartbeat],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(
+        f"{path.name}.tmp-{os.getpid()}-{get_ident()}-{time.monotonic_ns()}"
+    )
+    nodes = [
+        heartbeat_to_dict(heartbeats[job_id])
+        for job_id in sorted(heartbeats)
+    ]
+    try:
         tmp_path.write_text(
             json.dumps({"nodes": nodes}, indent=2, sort_keys=True),
             encoding="utf-8",
         )
-        tmp_path.replace(self.path)
+        tmp_path.replace(path)
+    finally:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _quarantine_corrupt_heartbeat_file(path: Path) -> None:
+    quarantine_path = path.with_name(
+        f"{path.name}.corrupt-{int(time.time())}-{os.getpid()}-{get_ident()}"
+    )
+    try:
+        path.replace(quarantine_path)
+    except OSError:
+        pass
 
 
 def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:

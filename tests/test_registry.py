@@ -140,6 +140,21 @@ class RegistryTests(unittest.TestCase):
             self.assertNotIn("job-1", loaded)
             self.assertIn("job-2", loaded)
 
+    def test_heartbeat_store_quarantines_corrupt_json(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "heartbeats.json"
+            path.write_text('{"nodes": []}\n{"nodes": []}\n', encoding="utf-8")
+            store = HeartbeatStore(path)
+
+            loaded = store.load()
+
+            self.assertEqual(loaded, {})
+            self.assertFalse(path.exists())
+            self.assertEqual(
+                len(list(Path(raw_dir).glob("heartbeats.json.corrupt-*"))),
+                1,
+            )
+
     def test_heartbeat_store_tracks_idle_since_transition(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "heartbeats.json"

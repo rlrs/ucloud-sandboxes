@@ -2,6 +2,16 @@
 
 This project uses semantic versioning.
 
+## 0.3.9 - 2026-07-04
+
+- Accepted gateway tokens through `X-UCloud-Sandbox-Token` so UCloud public
+  links do not intercept sandbox API authentication headers.
+- Updated the dashboard to use the public-link-safe gateway token header.
+- Serialized heartbeat file access across gateway/autoscaler processes with an
+  interprocess lock and unique atomic write files.
+- Quarantined corrupt heartbeat JSON and recovered with an empty heartbeat set
+  so nodes can repopulate state through normal heartbeats.
+
 ## 0.3.7 - 2026-07-04
 
 - Added cached image summaries to node heartbeats so the gateway can prefer

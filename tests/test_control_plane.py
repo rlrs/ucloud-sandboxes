@@ -318,6 +318,10 @@ class ControlPlaneTests(unittest.TestCase):
                         f"{base}/v1/sandboxes",
                         headers={"Authorization": "Bearer secret-token"},
                     )
+                    header_authorized = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        headers={"X-UCloud-Sandbox-Token": "secret-token"},
+                    )
                 finally:
                     gateway.shutdown()
                     gateway.server_close()
@@ -336,6 +340,7 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(unauthorized["status"], 401)
             self.assertEqual(unauthorized["body"], {"error": "unauthorized"})
             self.assertEqual(authorized, {"sandboxes": []})
+            self.assertEqual(header_authorized, {"sandboxes": []})
 
     def test_dashboard_assets_are_public_but_metrics_remain_protected(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -391,6 +396,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn(".registry-full-grid", css)
         self.assertIn("application/javascript", js_type or "")
         self.assertIn("/v1/metrics", js)
+        self.assertIn("X-UCloud-Sandbox-Token", js)
         self.assertIn("renderRegistryPage", js)
         self.assertIn("const REFRESH_INTERVAL_MS = 5000;", js)
         self.assertNotIn("refreshSelect", js)

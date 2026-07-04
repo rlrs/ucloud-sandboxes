@@ -81,14 +81,16 @@ Current smoke-test shape:
   with create execution, label-gated stop execution, a 5-second reconcile
   interval, a 600-second sandbox idle grace, and a 900-second builder idle
   grace enabled
-- the gateway requires `Authorization: Bearer <token>` for non-health routes
+- the gateway requires `X-UCloud-Sandbox-Token: <token>` for non-health routes
+  over UCloud public links; private/direct callers may also use
+  `Authorization: Bearer <token>`
 - sandbox and builder pools are currently scaled to zero when there is no
   pending sandbox demand, pending image-build demand, or unconsumed prepared
   capacity signal
 - `GET /healthz` works publicly without auth and returns `service` plus
   package `version`
-- authenticated `GET /v1/sandboxes` works publicly with the bearer token, while
-  unauthenticated access returns `401`
+- authenticated `GET /v1/sandboxes` works publicly with
+  `X-UCloud-Sandbox-Token`, while unauthenticated access returns `401`
 
 ## Performance shape
 

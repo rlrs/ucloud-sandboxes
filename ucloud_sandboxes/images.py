@@ -13,6 +13,7 @@ import subprocess
 import tarfile
 import tempfile
 from threading import Condition, RLock, Thread
+import time
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -132,6 +133,7 @@ class ImageBuildRecord:
     started_at: str = ""
     finished_at: str = ""
     image: dict[str, Any] = field(default_factory=dict)
+    timings: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
@@ -146,6 +148,7 @@ class ImageBuildRecord:
         command = raw.get("command") or ()
         push_command = raw.get("push_command") or raw.get("pushCommand") or ()
         image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
+        timings = raw.get("timings") if isinstance(raw.get("timings"), dict) else {}
         return cls(
             build_id=build_id,
             image_id=image_id,
@@ -165,6 +168,7 @@ class ImageBuildRecord:
             started_at=str(raw.get("started_at") or raw.get("startedAt") or ""),
             finished_at=str(raw.get("finished_at") or raw.get("finishedAt") or ""),
             image={str(key): value for key, value in image.items()},
+            timings={str(key): value for key, value in timings.items()},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -187,6 +191,7 @@ class ImageBuildRecord:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "image": dict(self.image),
+            "timings": dict(self.timings),
         }
 
     @property
@@ -518,6 +523,10 @@ class ImageManager:
                 push=push,
                 command=self.runtime.build_command(spec),
                 push_command=self.runtime.push_command(spec.tag) if push else (),
+                timings={
+                    "total_ms": None,
+                    "phases": {},
+                },
             )
             self.build_store.upsert(record)
             self._build_conditions[build_id] = Condition(self._build_lock)
@@ -606,24 +615,36 @@ class ImageManager:
     ) -> None:
         build_result: CommandResult | None = None
         push_result: CommandResult | None = None
+        started = time.monotonic()
+        phases: dict[str, int] = {}
         try:
-            build_result = self.runtime.build(
-                spec,
-                on_output=lambda stream, chunk: self._append_build_log(
-                    build_id,
-                    stream,
-                    chunk,
-                ),
-            )
-            if push:
-                push_result = self.runtime.push(
-                    spec.tag,
+            phase = time.monotonic()
+            try:
+                build_result = self.runtime.build(
+                    spec,
                     on_output=lambda stream, chunk: self._append_build_log(
                         build_id,
                         stream,
                         chunk,
                     ),
                 )
+            finally:
+                phases["docker_build_ms"] = _elapsed_ms(phase)
+                self._update_build_timings(build_id, phases, started)
+            if push:
+                phase = time.monotonic()
+                try:
+                    push_result = self.runtime.push(
+                        spec.tag,
+                        on_output=lambda stream, chunk: self._append_build_log(
+                            build_id,
+                            stream,
+                            chunk,
+                        ),
+                    )
+                finally:
+                    phases["docker_push_ms"] = _elapsed_ms(phase)
+                    self._update_build_timings(build_id, phases, started)
             now = utc_now()
             image_record = ImageRecord(
                 id=spec.id,
@@ -643,6 +664,7 @@ class ImageManager:
                 push_exit_code=push_result.exit_code if push_result is not None else None,
                 image=image_record.to_dict(),
                 finished_at=now.isoformat(),
+                timings=_build_timings(phases, started),
             )
         except Exception as exc:
             self._update_build(
@@ -652,10 +674,16 @@ class ImageManager:
                 exit_code=build_result.exit_code if build_result is not None else None,
                 push_exit_code=push_result.exit_code if push_result is not None else None,
                 finished_at=utc_now().isoformat(),
+                timings=_build_timings(phases, started),
             )
         finally:
             if cleanup is not None:
-                cleanup()
+                phase = time.monotonic()
+                try:
+                    cleanup()
+                finally:
+                    phases["cleanup_ms"] = _elapsed_ms(phase)
+                    self._update_build_timings(build_id, phases, started)
             with self._build_lock:
                 self._active_threads.pop(build_id, None)
                 condition = self._build_conditions.get(build_id)
@@ -692,12 +720,31 @@ class ImageManager:
                 condition.notify_all()
             return updated
 
+    def _update_build_timings(
+        self,
+        build_id: str,
+        phases: dict[str, int],
+        started: float,
+    ) -> None:
+        self._update_build(build_id, timings=_build_timings(phases, started))
+
 
 def image_id_from_tag(image: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", image).strip("-.")
     if not cleaned:
         return "image"
     return cleaned[:64]
+
+
+def _build_timings(phases: dict[str, int], started: float) -> dict[str, Any]:
+    return {
+        "total_ms": _elapsed_ms(started),
+        "phases": dict(phases),
+    }
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.monotonic() - started) * 1000))
 
 
 def _image_lock(path: Path) -> RLock:

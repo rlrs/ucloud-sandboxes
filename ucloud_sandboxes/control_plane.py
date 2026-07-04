@@ -29,6 +29,7 @@ from .metrics import (
     record_node_heartbeat,
     record_sandbox_pending_deleted,
     record_sandbox_scheduled,
+    trace_span,
 )
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
@@ -622,93 +623,175 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("sandbox payload must be a JSON object")
             spec = SandboxSpec.from_dict(raw)
             spec.validate()
-            resolved_image, image_error = self._resolve_sandbox_image_reference(spec.image)
-            if image_error is not None:
-                self._write_json(image_error, status=HTTPStatus.BAD_REQUEST)
-                return
-            if resolved_image != spec.image:
-                spec = replace(spec, image=resolved_image)
-                raw = dict(raw)
-                raw["image"] = resolved_image
-                body = json.dumps(raw).encode("utf-8")
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        existing = self.routing_store.get_sandbox(spec.id)
-        if existing is not None:
-            if self._send_existing_sandbox_response(
-                existing,
-                spec,
-                status=HTTPStatus.OK,
-            ):
-                return
-            self.routing_store.delete_sandbox(spec.id)
-            existing = None
-
-        if existing is not None:
-            self._write_json(
-                {"error": f"sandbox already exists: {spec.id}"},
-                status=HTTPStatus.CONFLICT,
-            )
-            return
-
-        heartbeat = self._select_node(spec.requested_resources(), image=spec.image)
-        if heartbeat is None:
-            self.routing_store.upsert_pending(spec.id, spec.requested_resources())
-            demand = self.routing_store.pending_demand()
-            self._write_json(
-                {
-                    "error": "no ready node has resources for sandbox request",
-                    "pending_resources": demand.pending_resources.to_dict(),
-                    "oldest_pending_seconds": demand.oldest_pending_seconds,
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
-
-        pending_before = self.routing_store.load().pending.get(spec.id)
-        image_response = self._ensure_image_on_node(heartbeat, spec.image)
-        if image_response is not None and image_response.status >= 400:
-            self._write_json(
-                {
-                    "error": (
-                        "image is not available on selected sandbox node; pull failed. "
-                        "For images built by the UCloud builder, build with push=true "
-                        "and a pullable registry tag before creating sandboxes."
-                    ),
-                    "pull": image_response.json(),
-                },
-                status=HTTPStatus.BAD_GATEWAY,
-            )
-            return
-
-        response = self._proxy_request(
-            heartbeat.node_url or "",
-            "/v1/sandboxes",
-            method="POST",
-            body=body,
-        )
-        if _is_duplicate_sandbox_response(response, spec.id):
-            route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
-            if self._send_existing_sandbox_response(
-                route,
-                spec,
-                status=HTTPStatus.CREATED,
-                pending=pending_before,
-            ):
-                return
-        if 200 <= response.status < 300:
-            route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
-            self.routing_store.upsert_sandbox(route)
-            record_sandbox_scheduled(
+        trace_id = _request_trace_id(self, "sandbox-create", spec.id)
+        with trace_span(
+            self.metrics_store,
+            trace_id,
+            "gateway.sandbox_create",
+            attributes={
+                "sandbox_id": spec.id,
+                "image": spec.image,
+                "resources": spec.requested_resources().to_dict(),
+            },
+        ) as root:
+            with trace_span(
                 self.metrics_store,
-                sandbox_id=spec.id,
-                route=route,
-                resources=spec.requested_resources(),
-                pending=pending_before,
-            )
-        self._send_proxied_response(response)
+                trace_id,
+                "gateway.sandbox_resolve_image",
+                parent_span_id=root.span_id,
+                attributes={"image": spec.image},
+            ) as span:
+                resolved_image, image_error = self._resolve_sandbox_image_reference(spec.image)
+                span.set_attribute("resolved_image", resolved_image)
+                if image_error is not None:
+                    span.status = "error"
+                    root.status = "error"
+                    root.set_attribute("outcome", "image_reference_unavailable")
+                    self._write_json(image_error, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if resolved_image != spec.image:
+                    spec = replace(spec, image=resolved_image)
+                    raw = dict(raw)
+                    raw["image"] = resolved_image
+                    body = json.dumps(raw).encode("utf-8")
+                    root.set_attribute("resolved_image", resolved_image)
+
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.sandbox_existing_route_check",
+                parent_span_id=root.span_id,
+            ) as span:
+                existing = self.routing_store.get_sandbox(spec.id)
+                span.set_attribute("existing_route", existing is not None)
+                if existing is not None:
+                    if self._send_existing_sandbox_response(
+                        existing,
+                        spec,
+                        status=HTTPStatus.OK,
+                    ):
+                        root.set_attribute("outcome", "recovered_existing")
+                        return
+                    self.routing_store.delete_sandbox(spec.id)
+                    existing = None
+                    span.set_attribute("deleted_stale_route", True)
+
+            if existing is not None:
+                root.status = "error"
+                root.set_attribute("outcome", "duplicate")
+                self._write_json(
+                    {"error": f"sandbox already exists: {spec.id}"},
+                    status=HTTPStatus.CONFLICT,
+                )
+                return
+
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.sandbox_select_node",
+                parent_span_id=root.span_id,
+                attributes={"image": spec.image},
+            ) as span:
+                heartbeat = self._select_node(spec.requested_resources(), image=spec.image)
+                span.set_attribute("selected_node_id", heartbeat.node_id if heartbeat else "")
+                span.set_attribute("selected_job_id", heartbeat.job_id if heartbeat else "")
+            if heartbeat is None:
+                self.routing_store.upsert_pending(spec.id, spec.requested_resources())
+                demand = self.routing_store.pending_demand()
+                root.status = "error"
+                root.set_attribute("outcome", "queued_no_ready_node")
+                root.set_attribute("pending_resources", demand.pending_resources.to_dict())
+                self._write_json(
+                    {
+                        "error": "no ready node has resources for sandbox request",
+                        "pending_resources": demand.pending_resources.to_dict(),
+                        "oldest_pending_seconds": demand.oldest_pending_seconds,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+
+            pending_before = self.routing_store.load().pending.get(spec.id)
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.sandbox_ensure_image",
+                parent_span_id=root.span_id,
+                attributes={
+                    "node_id": heartbeat.node_id,
+                    "image": spec.image,
+                },
+            ) as span:
+                image_response = self._ensure_image_on_node(heartbeat, spec.image)
+                span.set_attribute("cache_hit", image_response is None)
+                if image_response is not None:
+                    span.set_attribute("status_code", int(image_response.status))
+            if image_response is not None and image_response.status >= 400:
+                root.status = "error"
+                root.set_attribute("outcome", "image_pull_failed")
+                self._write_json(
+                    {
+                        "error": (
+                            "image is not available on selected sandbox node; pull failed. "
+                            "For images built by the UCloud builder, build with push=true "
+                            "and a pullable registry tag before creating sandboxes."
+                        ),
+                        "pull": image_response.json(),
+                    },
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.sandbox_proxy_create",
+                parent_span_id=root.span_id,
+                attributes={"node_id": heartbeat.node_id},
+            ) as span:
+                response = self._proxy_request(
+                    heartbeat.node_url or "",
+                    "/v1/sandboxes",
+                    method="POST",
+                    body=body,
+                )
+                span.set_attribute("status_code", int(response.status))
+                response_payload = response.json()
+                node_timings = response_payload.get("timings")
+                if isinstance(node_timings, dict):
+                    span.set_attribute("node_timings", node_timings)
+                    root.set_attribute("node_timings", node_timings)
+            if _is_duplicate_sandbox_response(response, spec.id):
+                route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
+                if self._send_existing_sandbox_response(
+                    route,
+                    spec,
+                    status=HTTPStatus.CREATED,
+                    pending=pending_before,
+                ):
+                    root.set_attribute("outcome", "recovered_duplicate")
+                    return
+            if 200 <= response.status < 300:
+                route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
+                self.routing_store.upsert_sandbox(route)
+                record_sandbox_scheduled(
+                    self.metrics_store,
+                    sandbox_id=spec.id,
+                    route=route,
+                    resources=spec.requested_resources(),
+                    pending=pending_before,
+                )
+                root.set_attribute("outcome", "scheduled")
+                root.set_attribute("node_id", heartbeat.node_id)
+            else:
+                root.status = "error"
+                root.set_attribute("outcome", "node_create_failed")
+                root.set_attribute("status_code", int(response.status))
+            self._send_proxied_response(response)
 
     def _send_existing_sandbox_response(
         self,
@@ -766,73 +849,131 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             spec = ImageBuildSpec.from_dict(raw)
             spec.validate()
             push = bool(raw.get("push", False))
-            if self.local_image_builds_enabled and self.image_manager is not None:
-                with uploaded_build_context(raw) as context_path:
-                    build_spec = spec
-                    if context_path is not None:
-                        build_spec = ImageBuildSpec(
-                            id=spec.id,
-                            tag=spec.tag,
-                            context_path=str(context_path),
-                            dockerfile=spec.dockerfile,
-                            build_args=spec.build_args,
-                            labels=spec.labels,
-                        )
-                    record, result = self.image_manager.build(build_spec)
-                    push_result = self.image_manager.runtime.push(build_spec.tag) if push else None
+            trace_id = _request_trace_id(self, "image-build", spec.id)
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.image_build",
+                attributes={
+                    "image_id": spec.id,
+                    "tag": spec.tag,
+                    "push": push,
+                    "local_build_enabled": self.local_image_builds_enabled,
+                },
+            ) as root:
+                if self.local_image_builds_enabled and self.image_manager is not None:
+                    with trace_span(
+                        self.metrics_store,
+                        trace_id,
+                        "gateway.image_build_local",
+                        parent_span_id=root.span_id,
+                    ) as span:
+                        with uploaded_build_context(raw) as context_path:
+                            build_spec = spec
+                            span.set_attribute("uploaded_context", context_path is not None)
+                            if context_path is not None:
+                                build_spec = ImageBuildSpec(
+                                    id=spec.id,
+                                    tag=spec.tag,
+                                    context_path=str(context_path),
+                                    dockerfile=spec.dockerfile,
+                                    build_args=spec.build_args,
+                                    labels=spec.labels,
+                                )
+                            record, result = self.image_manager.build(build_spec)
+                            push_result = self.image_manager.runtime.push(build_spec.tag) if push else None
+                            if push_result is not None:
+                                record = self.image_manager.mark_pushed(record.id)
+                    if self.routing_store is not None:
+                        self.routing_store.clear_pending_image_build(spec.id)
+                    root.set_attribute("outcome", "built_locally")
+                    payload: dict[str, Any] = {
+                        "image": record.to_dict(),
+                        "command": list(result.argv),
+                        "exitCode": result.exit_code,
+                        "location": "control-plane",
+                    }
                     if push_result is not None:
-                        record = self.image_manager.mark_pushed(record.id)
-                if self.routing_store is not None:
+                        payload["pushCommand"] = list(push_result.argv)
+                        payload["pushExitCode"] = push_result.exit_code
+                    self._write_json(
+                        payload,
+                        status=HTTPStatus.CREATED,
+                    )
+                    return
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.image_build_select_builder",
+                    parent_span_id=root.span_id,
+                ) as span:
+                    heartbeat = self._select_builder_node()
+                    span.set_attribute("selected_node_id", heartbeat.node_id if heartbeat else "")
+                    span.set_attribute("selected_job_id", heartbeat.job_id if heartbeat else "")
+                if heartbeat is None:
+                    if self.routing_store is not None:
+                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                        pending_builds = self.routing_store.pending_image_build_count()
+                    else:
+                        pending_builds = 0
+                    root.status = "error"
+                    root.set_attribute("outcome", "queued_no_builder")
+                    root.set_attribute("pending_image_builds", pending_builds)
+                    self._write_json(
+                        {
+                            "error": "no ready builder node is available",
+                            "pending_image_builds": pending_builds,
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                    return
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.image_build_enqueue",
+                    parent_span_id=root.span_id,
+                    attributes={"node_id": heartbeat.node_id},
+                ):
+                    if self.routing_store is not None:
+                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.image_build_proxy_builder",
+                    parent_span_id=root.span_id,
+                    attributes={"node_id": heartbeat.node_id},
+                ) as span:
+                    response = self._proxy_request(
+                        heartbeat.node_url or "",
+                        "/v1/images/build",
+                        method="POST",
+                        body=body,
+                        timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
+                    )
+                    span.set_attribute("status_code", int(response.status))
+                    response_payload = response.json()
+                    node_timings = response_payload.get("timings")
+                    if isinstance(node_timings, dict):
+                        span.set_attribute("node_timings", node_timings)
+                        root.set_attribute("node_timings", node_timings)
+                if 200 <= response.status < 300 and self.routing_store is not None:
                     self.routing_store.clear_pending_image_build(spec.id)
-                payload: dict[str, Any] = {
-                    "image": record.to_dict(),
-                    "command": list(result.argv),
-                    "exitCode": result.exit_code,
-                    "location": "control-plane",
-                }
-                if push_result is not None:
-                    payload["pushCommand"] = list(push_result.argv)
-                    payload["pushExitCode"] = push_result.exit_code
-                self._write_json(
-                    payload,
-                    status=HTTPStatus.CREATED,
-                )
-                return
-            heartbeat = self._select_builder_node()
-            if heartbeat is None:
-                if self.routing_store is not None:
-                    self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                    pending_builds = self.routing_store.pending_image_build_count()
+                if 200 <= response.status < 300 and self.image_manager is not None:
+                    raw_image = response_payload.get("image")
+                    if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(raw_image):
+                        try:
+                            self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
+                        except ValueError:
+                            pass
+                if 200 <= response.status < 300:
+                    root.set_attribute("outcome", "builder_completed")
+                    root.set_attribute("node_id", heartbeat.node_id)
                 else:
-                    pending_builds = 0
-                self._write_json(
-                    {
-                        "error": "no ready builder node is available",
-                        "pending_image_builds": pending_builds,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                )
+                    root.status = "error"
+                    root.set_attribute("outcome", "builder_failed")
+                    root.set_attribute("status_code", int(response.status))
+                self._send_proxied_response(response)
                 return
-            if self.routing_store is not None:
-                self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-            response = self._proxy_request(
-                heartbeat.node_url or "",
-                "/v1/images/build",
-                method="POST",
-                body=body,
-                timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
-            )
-            if 200 <= response.status < 300 and self.routing_store is not None:
-                self.routing_store.clear_pending_image_build(spec.id)
-            if 200 <= response.status < 300 and self.image_manager is not None:
-                raw_image = response.json().get("image")
-                if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(raw_image):
-                    try:
-                        self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
-                    except ValueError:
-                        pass
-            self._send_proxied_response(response)
-            return
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -1276,6 +1417,27 @@ def _is_node_api_path(path: str) -> bool:
             "/v1/images/",
         )
     )
+
+
+def _request_trace_id(
+    handler: ControlPlaneHandler,
+    operation: str,
+    object_id: str,
+) -> str:
+    header = str(handler.headers.get("X-Trace-Id") or "").strip()
+    if header and len(header) <= 128 and all(ch not in header for ch in "\r\n"):
+        return header
+    safe_operation = _safe_trace_component(operation)
+    safe_object = _safe_trace_component(object_id)[:48]
+    return f"{safe_operation}-{safe_object}-{uuid4().hex[:12]}"
+
+
+def _safe_trace_component(value: str) -> str:
+    cleaned = "".join(
+        ch if ch.isalnum() or ch in "._-" else "-"
+        for ch in value.strip()
+    ).strip("-")
+    return cleaned or "trace"
 
 
 def _sandbox_id_from_path(path: str) -> str | None:

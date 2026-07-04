@@ -435,6 +435,7 @@ class ControlPlaneTests(unittest.TestCase):
                     routing_file=raw_path / "routes.json",
                     image_file=raw_path / "gateway-images.json",
                     local_image_builds_enabled=False,
+                    metrics_file=raw_path / "metrics.jsonl",
                 )
                 gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
                 gateway_thread.start()
@@ -520,6 +521,7 @@ class ControlPlaneTests(unittest.TestCase):
                         f"{base}/v1/sandboxes/multi-two",
                         method="DELETE",
                     )
+                    metrics = self._json_request(f"{base}/v1/metrics")
                     with request.urlopen(
                         f"http://{node1_host}:{node1_port}/v1/sandboxes",
                         timeout=5,
@@ -555,6 +557,13 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(exec_read["session"]["id"], session_id)
             self.assertEqual(deleted["deleted"]["spec"]["id"], "multi-one")
             self.assertEqual(second_deleted["deleted"]["spec"]["id"], "multi-two")
+            self.assertGreaterEqual(metrics["traces"]["span_count"], 3)
+            self.assertTrue(
+                any(
+                    item["name"] == "gateway.sandbox_create"
+                    for item in metrics["traces"]["recent"]
+                )
+            )
             self.assertEqual(node1_payload, {"sandboxes": []})
             self.assertEqual(node2_payload, {"sandboxes": []})
 

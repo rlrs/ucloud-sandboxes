@@ -288,6 +288,29 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
     </section>
 
+    <section class="event-panel overview-section" aria-label="Recent request traces">
+      <div class="panel-header table-header">
+        <h2>Recent Traces</h2>
+        <span id="traceSummary">No traces loaded</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Status</th>
+              <th>Trace</th>
+              <th>Duration</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="traceRows">
+            <tr><td colspan="5" class="empty-cell">No traces loaded</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="event-panel overview-section" aria-label="Recent autoscaler events">
       <div class="panel-header table-header">
         <h2>Recent Events</h2>
@@ -1618,6 +1641,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryBuildRows",
     "buildSummary",
     "buildRows",
+    "traceSummary",
+    "traceRows",
     "eventSummary",
     "eventRows",
   ]) {
@@ -1767,6 +1792,7 @@ function renderSnapshot(snapshot) {
   renderMetrics(snapshot);
   renderRegistryPage(snapshot);
   renderBuilds(snapshot);
+  renderTraces(snapshot);
   renderEvents(snapshot);
   redrawCharts();
 }
@@ -2267,12 +2293,55 @@ function buildAge(build) {
 function buildDetails(build) {
   if (build.error) return build.error;
   const parts = [];
+  const timings = build.timings || {};
+  const phases = timings.phases || {};
+  if (Number.isFinite(Number(timings.total_ms))) parts.push(`total ${formatDurationMs(timings.total_ms)}`);
+  if (Number.isFinite(Number(phases.docker_build_ms))) parts.push(`build ${formatDurationMs(phases.docker_build_ms)}`);
+  if (Number.isFinite(Number(phases.docker_push_ms))) parts.push(`push ${formatDurationMs(phases.docker_push_ms)}`);
   if (build.push) parts.push("push enabled");
   if (build.exit_code !== null && build.exit_code !== undefined) parts.push(`build exit ${build.exit_code}`);
   if (build.push_exit_code !== null && build.push_exit_code !== undefined) parts.push(`push exit ${build.push_exit_code}`);
   const tail = String(build.log_tail || "").trim().split("\\n").filter(Boolean).slice(-1)[0];
   if (tail) parts.push(tail.slice(0, 160));
   return parts.join(", ") || "-";
+}
+
+function renderTraces(snapshot) {
+  const traces = snapshot.traces || {};
+  const items = Array.isArray(traces.recent) ? traces.recent.slice(-12).reverse() : [];
+  els.traceSummary.textContent = items.length
+    ? `${items.length} traces, ${formatInteger(traces.span_count)} spans`
+    : "No traces";
+  if (items.length === 0) {
+    els.traceRows.innerHTML = '<tr><td colspan="5" class="empty-cell">No traces loaded</td></tr>';
+    return;
+  }
+  els.traceRows.replaceChildren(...items.map(traceRow));
+}
+
+function traceRow(trace) {
+  const tr = document.createElement("tr");
+  appendCell(tr, formatTime(trace.started_at));
+  const statusCell = document.createElement("td");
+  const status = String(trace.status || "ok");
+  const badge = document.createElement("span");
+  badge.className = `build-status ${status === "ok" ? "succeeded" : "failed"}`;
+  badge.textContent = status;
+  statusCell.append(badge);
+  tr.append(statusCell);
+  appendCell(tr, trace.name || "-");
+  appendCell(tr, formatDurationMs(trace.duration_ms));
+  appendCell(tr, traceDetails(trace));
+  return tr;
+}
+
+function traceDetails(trace) {
+  const spans = Array.isArray(trace.spans) ? trace.spans.slice() : [];
+  spans.sort((a, b) => asNumber(b.duration_ms) - asNumber(a.duration_ms));
+  const slow = spans.slice(0, 3).map((span) => `${span.name || "span"} ${formatDurationMs(span.duration_ms)}`);
+  const attrs = (spans[0] && spans[0].attributes) || {};
+  const outcome = attrs.outcome ? `outcome ${attrs.outcome}` : "";
+  return [outcome, ...slow].filter(Boolean).join(", ") || `${formatInteger(trace.span_count)} spans`;
 }
 
 function eventRow(event) {

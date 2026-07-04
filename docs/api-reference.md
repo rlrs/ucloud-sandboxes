@@ -62,6 +62,18 @@ heartbeats, route state, and the rolling metrics event log:
   "images": {"pending_builds": 0},
   "builders": {"prepared": 1, "prepared_builders": 1},
   "scale_up": {"samples": 1, "last_ms": 391000, "p95_ms": 391000},
+  "traces": {
+    "span_count": 42,
+    "recent": [
+      {
+        "trace_id": "sandbox-create-demo-1-abc123",
+        "name": "gateway.sandbox_create",
+        "status": "ok",
+        "duration_ms": 812,
+        "span_count": 5
+      }
+    ]
+  },
   "vm_lifecycle": {
     "items": [
       {
@@ -77,6 +89,14 @@ heartbeats, route state, and the rolling metrics event log:
   }
 }
 ```
+
+Trace spans are written to the same metrics JSONL stream as autoscaler and
+heartbeat events. Sandbox create traces cover gateway image resolution,
+existing-route checks, node selection, image availability or pull, and node
+create proxying. Image build traces cover builder selection, pending-build
+enqueueing, builder proxying, and node-reported build timings. Node-agent
+responses include `timings` fields for sandbox creation and image builds; image
+build records also include Docker build/push phase durations.
 
 ## Node Agent API
 

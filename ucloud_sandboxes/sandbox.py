@@ -8,6 +8,7 @@ import re
 import subprocess
 from tempfile import TemporaryDirectory
 from threading import RLock
+import time
 from typing import Any, Protocol
 
 from .models import ResourceQuantity, parse_iso_datetime, utc_now
@@ -761,13 +762,33 @@ class SandboxManager:
         return self.store.load().get(sandbox_id)
 
     def create(self, spec: SandboxSpec) -> tuple[SandboxRecord, CommandResult]:
+        record, result, _timings = self.create_with_timings(spec)
+        return record, result
+
+    def create_with_timings(
+        self,
+        spec: SandboxSpec,
+    ) -> tuple[SandboxRecord, CommandResult, dict[str, Any]]:
+        started = time.monotonic()
+        phases: dict[str, int] = {}
+        phase = time.monotonic()
         self.cleanup_expired()
+        phases["cleanup_expired_ms"] = _elapsed_ms(phase)
+        phase = time.monotonic()
         records = self.store.load()
+        phases["load_store_ms"] = _elapsed_ms(phase)
         if spec.id in records:
             raise ValueError(f"sandbox already exists: {spec.id}")
+        phase = time.monotonic()
         spec = self._assign_ssh_port(spec, records)
+        phases["assign_ssh_port_ms"] = _elapsed_ms(phase)
+        phase = time.monotonic()
         spec.validate()
+        phases["validate_spec_ms"] = _elapsed_ms(phase)
+        phase = time.monotonic()
         result = self.runtime.create(spec)
+        phases["docker_create_ms"] = _elapsed_ms(phase)
+        phase = time.monotonic()
         now = utc_now()
         record = SandboxRecord(
             spec=spec,
@@ -777,7 +798,11 @@ class SandboxManager:
             updated_at=now,
         )
         self.store.upsert(record)
-        return record, result
+        phases["store_record_ms"] = _elapsed_ms(phase)
+        return record, result, {
+            "total_ms": _elapsed_ms(started),
+            "phases": phases,
+        }
 
     def delete(self, sandbox_id: str) -> tuple[SandboxRecord | None, CommandResult]:
         result = self.runtime.delete(sandbox_id)
@@ -873,6 +898,10 @@ def _format_float(value: float) -> str:
     if value.is_integer():
         return str(int(value))
     return str(value)
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.monotonic() - started) * 1000))
 
 
 def _valid_port(value: int) -> bool:

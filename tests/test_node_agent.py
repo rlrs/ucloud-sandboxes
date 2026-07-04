@@ -120,7 +120,7 @@ class NodeAgentTests(unittest.TestCase):
                     },
                 )
                 heartbeat = self._json_request(f"{base}/v1/heartbeat")
-                self._json_request(
+                created = self._json_request(
                     f"{base}/v1/sandboxes",
                     method="POST",
                     payload={"id": "sbx-1", "image": "busybox", "memory_mb": 128},
@@ -140,6 +140,12 @@ class NodeAgentTests(unittest.TestCase):
 
             self.assertEqual(built["image"]["id"], "python-base")
             self.assertIn("build", built["command"])
+            self.assertIn("timings", built)
+            self.assertIn("wait_for_build_ms", built["timings"]["phases"])
+            self.assertIn("docker_build_ms", built["build"]["timings"]["phases"])
+            self.assertIn("timings", created)
+            self.assertIn("manager_create_ms", created["timings"]["phases"])
+            self.assertIn("docker_create_ms", created["timings"]["manager"]["phases"])
             self.assertEqual(
                 heartbeat["heartbeat"]["capabilities"],
                 ["image-cache", "image-build", "snapshot"],

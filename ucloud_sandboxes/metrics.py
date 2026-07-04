@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from threading import RLock
+import time
 from typing import Any
+from uuid import uuid4
 
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .routing import PendingSandboxDemand, RoutingState, SandboxRoute
@@ -12,6 +16,10 @@ from .routing import PendingSandboxDemand, RoutingState, SandboxRoute
 DEFAULT_RECENT_EVENT_LIMIT = 50
 DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
+DEFAULT_TRACE_SPAN_LIMIT = 250
+DEFAULT_TRACE_LIMIT = 50
+_METRICS_LOCKS_GUARD = RLock()
+_METRICS_LOCKS: dict[Path, RLock] = {}
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,7 @@ class MetricEvent:
 class MetricsStore:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._lock = _metrics_lock(path)
 
     def append(
         self,
@@ -63,17 +72,20 @@ class MetricsStore:
             kind=kind,
             data=data or {},
         )
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event.to_dict(), sort_keys=True))
-            handle.write("\n")
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event.to_dict(), sort_keys=True))
+                handle.write("\n")
         return event
 
     def load_events(self, *, max_events: int = 1000) -> list[MetricEvent]:
-        if not self.path.exists():
-            return []
+        with self._lock:
+            if not self.path.exists():
+                return []
+            lines = self.path.read_text(encoding="utf-8").splitlines()
         events: list[MetricEvent] = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
+        for line in lines:
             if not line.strip():
                 continue
             try:
@@ -86,6 +98,97 @@ class MetricsStore:
         if max_events <= 0:
             return events
         return events[-max_events:]
+
+
+@dataclass
+class ActiveTraceSpan:
+    trace_id: str
+    span_id: str
+    parent_span_id: str
+    name: str
+    started_at: str
+    monotonic_started_at: float
+    attributes: dict[str, Any]
+    status: str = "ok"
+
+    def set_attribute(self, key: str, value: Any) -> None:
+        self.attributes[key] = value
+
+    def set_error(self, error: BaseException | str) -> None:
+        self.status = "error"
+        self.attributes["error"] = str(error)
+
+
+@contextmanager
+def trace_span(
+    store: MetricsStore | None,
+    trace_id: str,
+    name: str,
+    *,
+    parent_span_id: str = "",
+    attributes: dict[str, Any] | None = None,
+) -> Any:
+    span = ActiveTraceSpan(
+        trace_id=trace_id,
+        span_id=uuid4().hex[:16],
+        parent_span_id=parent_span_id,
+        name=name,
+        started_at=utc_now().isoformat(),
+        monotonic_started_at=time.monotonic(),
+        attributes=dict(attributes or {}),
+    )
+    try:
+        yield span
+    except Exception as exc:
+        span.set_error(exc)
+        raise
+    finally:
+        finished_at = utc_now().isoformat()
+        duration_ms = max(0, int((time.monotonic() - span.monotonic_started_at) * 1000))
+        record_trace_span(
+            store,
+            trace_id=span.trace_id,
+            span_id=span.span_id,
+            parent_span_id=span.parent_span_id,
+            name=span.name,
+            started_at=span.started_at,
+            finished_at=finished_at,
+            duration_ms=duration_ms,
+            status=span.status,
+            attributes=span.attributes,
+        )
+
+
+def record_trace_span(
+    store: MetricsStore | None,
+    *,
+    trace_id: str,
+    span_id: str,
+    parent_span_id: str = "",
+    name: str,
+    started_at: str,
+    finished_at: str,
+    duration_ms: int,
+    status: str = "ok",
+    attributes: dict[str, Any] | None = None,
+) -> None:
+    if store is None:
+        return
+    store.append(
+        "trace_span",
+        {
+            "trace_id": trace_id,
+            "span_id": span_id,
+            "parent_span_id": parent_span_id,
+            "name": name,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "duration_ms": duration_ms,
+            "status": status,
+            "attributes": attributes or {},
+        },
+        timestamp=finished_at,
+    )
 
 
 def record_sandbox_scheduled(
@@ -437,6 +540,7 @@ def build_metrics_snapshot(
         },
         "scale_up": _scale_up_summary(scale_values, scale_events),
         "vm_lifecycle": _vm_lifecycle_summary(events),
+        "traces": _trace_snapshot(events),
         "events": {
             "recent": [event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]],
         },
@@ -567,6 +671,100 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
         "load_average_5m": _avg(load_5m_values),
         "load_average_15m": _avg(load_15m_values),
     }
+
+
+def _trace_snapshot(events: list[MetricEvent]) -> dict[str, Any]:
+    spans = [event for event in events if event.kind == "trace_span"]
+    recent_spans = spans[-DEFAULT_TRACE_SPAN_LIMIT:]
+    grouped: dict[str, list[MetricEvent]] = {}
+    ordered_trace_ids: list[str] = []
+    for event in recent_spans:
+        trace_id = str(event.data.get("trace_id") or "")
+        if not trace_id:
+            continue
+        if trace_id not in grouped:
+            ordered_trace_ids.append(trace_id)
+            grouped[trace_id] = []
+        grouped[trace_id].append(event)
+    recent_traces = [
+        _trace_summary(trace_id, grouped[trace_id])
+        for trace_id in ordered_trace_ids[-DEFAULT_TRACE_LIMIT:]
+    ]
+    return {
+        "span_count": len(spans),
+        "recent_spans": [event.to_dict() for event in recent_spans],
+        "recent": recent_traces,
+    }
+
+
+def _trace_summary(trace_id: str, spans: list[MetricEvent]) -> dict[str, Any]:
+    sorted_spans = sorted(
+        spans,
+        key=lambda event: (
+            str(event.data.get("started_at") or event.timestamp),
+            str(event.data.get("span_id") or ""),
+        ),
+    )
+    root = next(
+        (
+            event
+            for event in sorted_spans
+            if not str(event.data.get("parent_span_id") or "")
+        ),
+        sorted_spans[0] if sorted_spans else None,
+    )
+    statuses = {str(event.data.get("status") or "ok") for event in sorted_spans}
+    total_duration = (
+        _optional_int(root.data.get("duration_ms")) if root is not None else None
+    )
+    if total_duration is None:
+        durations = [
+            value
+            for value in (
+                _optional_int(event.data.get("duration_ms")) for event in sorted_spans
+            )
+            if value is not None
+        ]
+        total_duration = max(durations) if durations else 0
+    return {
+        "trace_id": trace_id,
+        "name": str(root.data.get("name") or "") if root is not None else "",
+        "status": "error" if "error" in statuses else "ok",
+        "started_at": str(root.data.get("started_at") or root.timestamp) if root is not None else "",
+        "finished_at": str(root.data.get("finished_at") or root.timestamp) if root is not None else "",
+        "duration_ms": total_duration,
+        "span_count": len(sorted_spans),
+        "spans": [
+            {
+                "span_id": str(event.data.get("span_id") or ""),
+                "parent_span_id": str(event.data.get("parent_span_id") or ""),
+                "name": str(event.data.get("name") or ""),
+                "status": str(event.data.get("status") or "ok"),
+                "duration_ms": _optional_int(event.data.get("duration_ms")),
+                "attributes": event.data.get("attributes") or {},
+            }
+            for event in sorted_spans
+        ],
+    }
+
+
+def _optional_int(raw: object) -> int | None:
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _metrics_lock(path: Path) -> RLock:
+    key = path.resolve()
+    with _METRICS_LOCKS_GUARD:
+        lock = _METRICS_LOCKS.get(key)
+        if lock is None:
+            lock = RLock()
+            _METRICS_LOCKS[key] = lock
+        return lock
 
 
 def _resource_load(used: ResourceQuantity, total: ResourceQuantity) -> dict[str, float | None]:

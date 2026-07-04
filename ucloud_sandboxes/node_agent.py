@@ -182,12 +182,20 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
     def _create_sandbox(self) -> None:
+        started = time.monotonic()
+        phases: dict[str, int] = {}
         try:
+            phase = time.monotonic()
             raw = self._read_json_body()
+            phases["read_request_ms"] = _elapsed_ms(phase)
             if not isinstance(raw, dict):
                 raise ValueError("sandbox payload must be a JSON object")
+            phase = time.monotonic()
             spec = SandboxSpec.from_dict(raw)
-            record, result = self.manager.create(spec)
+            phases["parse_spec_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            record, result, manager_timings = self.manager.create_with_timings(spec)
+            phases["manager_create_ms"] = _elapsed_ms(phase)
         except (RuntimeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -196,6 +204,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 "sandbox": record.to_dict(),
                 "command": list(result.argv),
                 "exitCode": result.exit_code,
+                "timings": {
+                    "total_ms": _elapsed_ms(started),
+                    "phases": phases,
+                    "manager": manager_timings,
+                },
             },
             status=HTTPStatus.CREATED,
         )
@@ -350,13 +363,20 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 status=HTTPStatus.FORBIDDEN,
             )
             return
+        started = time.monotonic()
+        phases: dict[str, int] = {}
         try:
+            phase = time.monotonic()
             raw = self._read_json_body()
+            phases["read_request_ms"] = _elapsed_ms(phase)
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
             push = bool(raw.get("push", False))
             wait = bool(raw.get("wait", True))
+            phase = time.monotonic()
             materialized_context = materialize_uploaded_build_context(raw)
+            phases["materialize_context_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
             spec = ImageBuildSpec.from_dict(raw)
             if materialized_context is not None:
                 spec = ImageBuildSpec(
@@ -367,7 +387,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     build_args=spec.build_args,
                     labels=spec.labels,
                 )
-            build, started = self.image_manager.start_build(
+            phases["parse_spec_ms"] = _elapsed_ms(phase)
+            phase = time.monotonic()
+            build, build_started = self.image_manager.start_build(
                 spec,
                 push=push,
                 cleanup=(
@@ -376,16 +398,25 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     else None
                 ),
             )
+            phases["start_build_ms"] = _elapsed_ms(phase)
             if wait:
+                phase = time.monotonic()
                 build = self.image_manager.wait_for_build(build.build_id) or build
+                phases["wait_for_build_ms"] = _elapsed_ms(phase)
         except (RuntimeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
+        timings = {
+            "total_ms": _elapsed_ms(started),
+            "phases": phases,
+            "build": build.timings,
+        }
         if not wait:
             self._write_json(
                 {
                     "build": build.to_dict(),
-                    "started": started,
+                    "started": build_started,
+                    "timings": timings,
                 },
                 status=HTTPStatus.ACCEPTED,
             )
@@ -395,6 +426,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 {
                     "error": build.error or f"image build {build.status}",
                     "build": build.to_dict(),
+                    "timings": timings,
                 },
                 status=HTTPStatus.BAD_REQUEST,
             )
@@ -405,6 +437,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             "image": image_record.to_dict() if image_record is not None else build.image,
             "command": list(build.command),
             "exitCode": build.exit_code,
+            "timings": timings,
         }
         if build.push_command:
             payload["pushCommand"] = list(build.push_command)
@@ -614,6 +647,10 @@ def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:
         return int((query.get(key) or [str(default)])[0])
     except ValueError:
         return default
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.monotonic() - started) * 1000))
 
 
 def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:

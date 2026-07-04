@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat
-from ucloud_sandboxes.metrics import MetricsStore, build_metrics_snapshot
+from ucloud_sandboxes.metrics import MetricsStore, build_metrics_snapshot, record_trace_span
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import (
     ExecRoute,
@@ -309,6 +309,45 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(item["first_heartbeat_to_first_sandbox_ms"], 7_000)
         self.assertEqual(item["last_successful_init_duration_ms"], 60_000)
         self.assertEqual(item["first_sandbox_scale_up_wait_ms"], 112_000)
+
+    def test_builds_trace_summary_from_spans(self) -> None:
+        now = utc_now()
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            record_trace_span(
+                store,
+                trace_id="trace-1",
+                span_id="root",
+                name="gateway.sandbox_create",
+                started_at=(now - timedelta(seconds=2)).isoformat(),
+                finished_at=now.isoformat(),
+                duration_ms=2000,
+                attributes={"sandbox_id": "sandbox-1"},
+            )
+            record_trace_span(
+                store,
+                trace_id="trace-1",
+                span_id="node",
+                parent_span_id="root",
+                name="gateway.sandbox_proxy_create",
+                started_at=(now - timedelta(seconds=1)).isoformat(),
+                finished_at=now.isoformat(),
+                duration_ms=1000,
+                attributes={"node_timings": {"total_ms": 900}},
+            )
+
+            snapshot = build_metrics_snapshot(
+                {},
+                None,
+                store.load_events(),
+                heartbeat_ttl_seconds=120,
+            )
+
+        traces = snapshot["traces"]
+        self.assertEqual(traces["span_count"], 2)
+        self.assertEqual(traces["recent"][0]["trace_id"], "trace-1")
+        self.assertEqual(traces["recent"][0]["duration_ms"], 2000)
+        self.assertEqual(traces["recent"][0]["spans"][1]["name"], "gateway.sandbox_proxy_create")
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ The gateway is responsible for:
 - builder prepare signals for near-term image-build demand
 - image build/pull/snapshot endpoints and image-id to pushed-registry-tag
   resolution
+- image prewarm controls for prepared capacity and multi-node image pulls
 - authenticated dashboard and metrics data at `/v1/metrics`
 
 See [api-reference.md](api-reference.md) for endpoint details.

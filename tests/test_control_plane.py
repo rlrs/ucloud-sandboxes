@@ -1544,6 +1544,165 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(demand_after_delete["prepared_resources"]["vcpu"], 0.0)
         self.assertEqual(demand_after_delete["prepared"], [])
 
+    def test_gateway_prepares_capacity_with_image_prewarm(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            nodes = [
+                build_node_agent_server(
+                    "127.0.0.1",
+                    0,
+                    sandbox_file=raw_path / f"node-{index}-sandboxes.json",
+                    image_file=raw_path / f"node-{index}-images.json",
+                    job_id=f"job-{index}",
+                    node_id=f"node-{index}",
+                    total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                    runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+                )
+                for index in range(2)
+            ]
+            node_threads = [Thread(target=node.serve_forever, daemon=True) for node in nodes]
+            for thread in node_threads:
+                thread.start()
+            try:
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    for index, node in enumerate(nodes):
+                        node_host, node_port = node.server_address
+                        result = post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id=f"job-{index}",
+                                node_id=f"node-{index}",
+                                node_url=f"http://{node_host}:{node_port}",
+                                capabilities=("sandbox", "image-cache"),
+                                total_resources=ResourceQuantity(
+                                    vcpu=4,
+                                    memory_mb=8192,
+                                    disk_mb=100_000,
+                                ),
+                            ),
+                        )
+                        self.assertEqual(result.status, 200)
+                    prepared = self._json_request(
+                        f"{base}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "eval-soon",
+                            "count": 2,
+                            "cpus": 1,
+                            "memory_mb": 1024,
+                            "disk_mb": 2048,
+                            "image": "busybox:latest",
+                        },
+                    )
+                    node_images = [
+                        self._json_request(
+                            f"http://{node.server_address[0]}:{node.server_address[1]}/v1/images"
+                        )
+                        for node in nodes
+                    ]
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                for node in nodes:
+                    node.shutdown()
+                    node.server_close()
+
+        self.assertEqual(prepared["prepare"]["image"], "busybox:latest")
+        self.assertEqual(prepared["image_prewarm"]["requested"], 2)
+        self.assertEqual(prepared["image_prewarm"]["ready"], 2)
+        self.assertEqual(len(prepared["image_prewarm"]["pulled"]), 2)
+        self.assertEqual(
+            [
+                payload["images"][0]["tag"]
+                for payload in node_images
+            ],
+            ["busybox:latest", "busybox:latest"],
+        )
+
+    def test_gateway_image_pull_warms_multiple_sandbox_nodes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            nodes = [
+                build_node_agent_server(
+                    "127.0.0.1",
+                    0,
+                    sandbox_file=raw_path / f"pull-node-{index}-sandboxes.json",
+                    image_file=raw_path / f"pull-node-{index}-images.json",
+                    job_id=f"pull-job-{index}",
+                    node_id=f"pull-node-{index}",
+                    total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                    runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+                )
+                for index in range(2)
+            ]
+            for node in nodes:
+                Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    for index, node in enumerate(nodes):
+                        node_host, node_port = node.server_address
+                        post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id=f"pull-job-{index}",
+                                node_id=f"pull-node-{index}",
+                                node_url=f"http://{node_host}:{node_port}",
+                                capabilities=("sandbox", "image-cache"),
+                                total_resources=ResourceQuantity(
+                                    vcpu=4,
+                                    memory_mb=8192,
+                                    disk_mb=100_000,
+                                ),
+                            ),
+                        )
+                    pulled = self._json_request(
+                        f"{base}/v1/images/pull",
+                        method="POST",
+                        payload={
+                            "image": "busybox:latest",
+                            "id": "busybox",
+                            "count": 2,
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                for node in nodes:
+                    node.shutdown()
+                    node.server_close()
+
+        self.assertEqual(pulled["image"]["id"], "busybox")
+        self.assertEqual(pulled["requested"], 2)
+        self.assertEqual(pulled["ready"], 2)
+        self.assertEqual(
+            sorted(item["node"]["node_id"] for item in pulled["pulled"]),
+            ["pull-node-0", "pull-node-1"],
+        )
+
     def test_gateway_rejects_invalid_prepared_capacity_resources(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

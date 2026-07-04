@@ -55,6 +55,7 @@ def build_heartbeat(
     memory_overcommit: float = 1.0,
     disk_overcommit: float = 1.0,
     labels: dict[str, str] | None = None,
+    cached_images: tuple[str, ...] | None = None,
     runtime_metrics: NodeRuntimeMetrics | None = None,
     now: datetime | None = None,
 ) -> NodeHeartbeat:
@@ -86,6 +87,8 @@ def build_heartbeat(
         memory_overcommit=memory_overcommit,
         disk_overcommit=disk_overcommit,
         labels=labels or {},
+        cached_images=tuple(dict.fromkeys(cached_images or ())),
+        cached_images_known=cached_images is not None,
         runtime_metrics=runtime_metrics,
     )
 

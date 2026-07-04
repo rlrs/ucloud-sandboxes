@@ -47,6 +47,8 @@ def heartbeat_to_dict(heartbeat: NodeHeartbeat) -> dict[str, Any]:
         else None
     )
     raw["capabilities"] = list(heartbeat.capabilities)
+    raw["cached_images"] = list(heartbeat.cached_images)
+    raw["cached_images_known"] = heartbeat.cached_images_known
     raw["total_resources"] = heartbeat.total_resources.to_dict()
     raw["used_resources"] = heartbeat.used_resources.to_dict()
     raw["effective_resources"] = heartbeat.effective_resources.to_dict()
@@ -101,6 +103,7 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
     if updated_at is None:
         return None
     labels = raw.get("labels")
+    cached_images = raw.get("cached_images", raw.get("cachedImages"))
     capabilities = raw.get("capabilities", ())
     if isinstance(capabilities, str):
         capability_items = tuple(
@@ -132,6 +135,11 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         memory_overcommit=float(raw.get("memory_overcommit", 1.0)),
         disk_overcommit=float(raw.get("disk_overcommit", 1.0)),
         labels={str(k): str(v) for k, v in dict(labels or {}).items()},
+        cached_images=_string_tuple(cached_images),
+        cached_images_known=(
+            bool(raw.get("cached_images_known", raw.get("cachedImagesKnown", False)))
+            or cached_images is not None
+        ),
         runtime_metrics=NodeRuntimeMetrics.from_dict(raw.get("runtime_metrics")),
     )
 
@@ -158,6 +166,18 @@ def string_or_none(value: object) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        items = [item.strip() for item in value.split(",")]
+    elif isinstance(value, list):
+        items = [str(item).strip() for item in value]
+    else:
+        return ()
+    return tuple(dict.fromkeys(item for item in items if item))
 
 
 def merge_jobs_and_heartbeats(

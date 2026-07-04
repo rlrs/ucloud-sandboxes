@@ -298,6 +298,39 @@ class NodeAgentTests(unittest.TestCase):
                 ["sandbox", "image-cache", "disk-quota"],
             )
 
+    def test_node_heartbeat_includes_cached_images(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            sandbox_file = Path(raw_dir) / "sandboxes.json"
+            image_file = Path(raw_dir) / "images.json"
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=sandbox_file,
+                image_file=image_file,
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(dry_run=True),
+                image_runtime=DockerImageRuntime(dry_run=True),
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                self._json_request(
+                    f"{base}/v1/images/pull",
+                    method="POST",
+                    payload={"image": "busybox:latest", "id": "busybox"},
+                )
+                heartbeat = self._json_request(f"{base}/v1/heartbeat")
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertTrue(heartbeat["heartbeat"]["cached_images_known"])
+            self.assertIn("busybox", heartbeat["heartbeat"]["cached_images"])
+            self.assertIn("busybox:latest", heartbeat["heartbeat"]["cached_images"])
+
     def test_rejects_disk_request_without_validated_quota_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:
             sandbox_file = Path(raw_dir) / "sandboxes.json"

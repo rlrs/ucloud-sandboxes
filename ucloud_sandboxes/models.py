@@ -255,6 +255,8 @@ class NodeHeartbeat:
     memory_overcommit: float = 1.0
     disk_overcommit: float = 1.0
     labels: dict[str, str] = field(default_factory=dict)
+    cached_images: tuple[str, ...] = ()
+    cached_images_known: bool = False
     runtime_metrics: NodeRuntimeMetrics | None = None
 
     def is_fresh(self, now: datetime, ttl_seconds: int) -> bool:

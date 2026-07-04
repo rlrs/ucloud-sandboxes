@@ -215,6 +215,7 @@ class PreparedCapacityDemand:
     created_at: str
     updated_at: str
     expires_at: str
+    image: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PreparedCapacityDemand | None":
@@ -228,6 +229,7 @@ class PreparedCapacityDemand:
             created_at=_string(raw.get("created_at") or raw.get("createdAt")) or "",
             updated_at=_string(raw.get("updated_at") or raw.get("updatedAt")) or "",
             expires_at=_string(raw.get("expires_at") or raw.get("expiresAt")) or "",
+            image=_string(raw.get("image")) or "",
         )
 
     @property
@@ -251,6 +253,7 @@ class PreparedCapacityDemand:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "expires_at": self.expires_at,
+            "image": self.image,
         }
 
 
@@ -588,6 +591,7 @@ class RoutingStore:
         *,
         count: int,
         ttl_seconds: int,
+        image: str = "",
     ) -> PreparedCapacityDemand:
         with self._lock:
             self._refresh_unlocked()
@@ -600,6 +604,7 @@ class RoutingStore:
                 created_at=existing.created_at if existing else now.isoformat(),
                 updated_at=now.isoformat(),
                 expires_at=(now + timedelta(seconds=max(1, ttl_seconds))).isoformat(),
+                image=image.strip(),
             )
             with self._transaction() as conn:
                 self._write_prepared(conn, stored)
@@ -994,10 +999,12 @@ class RoutingStore:
                     count INTEGER NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL
+                    expires_at TEXT NOT NULL,
+                    image TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
+            self._ensure_column(conn, "prepared_capacity", "image", "TEXT NOT NULL DEFAULT ''")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS prepared_builders (
@@ -1009,6 +1016,20 @@ class RoutingStore:
                 )
                 """
             )
+
+    @staticmethod
+    def _ensure_column(
+        conn: sqlite3.Connection,
+        table: str,
+        column: str,
+        definition: str,
+    ) -> None:
+        existing = {
+            str(row["name"])
+            for row in conn.execute(f"PRAGMA table_info({table})")
+        }
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1100,7 +1121,7 @@ class RoutingStore:
                     for row in conn.execute(
                         """
                         SELECT prepare_id, resources_json, count, created_at,
-                               updated_at, expires_at
+                               updated_at, expires_at, image
                         FROM prepared_capacity
                         ORDER BY prepare_id
                         """
@@ -1306,15 +1327,16 @@ class RoutingStore:
             """
             INSERT INTO prepared_capacity (
                 prepare_id, resources_json, count, created_at, updated_at,
-                expires_at
+                expires_at, image
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(prepare_id) DO UPDATE SET
                 resources_json = excluded.resources_json,
                 count = excluded.count,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at,
-                expires_at = excluded.expires_at
+                expires_at = excluded.expires_at,
+                image = excluded.image
             """,
             (
                 item.prepare_id,
@@ -1323,6 +1345,7 @@ class RoutingStore:
                 item.created_at,
                 item.updated_at,
                 item.expires_at,
+                item.image,
             ),
         )
 
@@ -1455,6 +1478,7 @@ def _prepared_from_row(row: sqlite3.Row) -> PreparedCapacityDemand:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         expires_at=str(row["expires_at"]),
+        image=str(row["image"] or ""),
     )
 
 

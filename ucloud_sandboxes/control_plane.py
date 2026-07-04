@@ -367,6 +367,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 _payload_value(raw, "ttl_seconds", "ttlSeconds", default=900)
             )
             resources = _prepared_resources_from_payload(raw)
+            image = str(raw.get("image") or "").strip()
             if count <= 0:
                 raise ValueError("count must be positive.")
             if ttl_seconds <= 0:
@@ -381,12 +382,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             resources,
             count=count,
             ttl_seconds=ttl_seconds,
+            image=image,
         )
+        prewarm = (
+            self._warm_image_on_ready_nodes(
+                image,
+                count=count,
+                resources=resources,
+                sandbox_nodes_only=True,
+            )
+            if image
+            else None
+        )
+        payload = {
+            "prepare": item.to_dict(),
+            "demand": self._demand_payload(),
+        }
+        if prewarm is not None:
+            payload["image_prewarm"] = prewarm
         self._write_json(
-            {
-                "prepare": item.to_dict(),
-                "demand": self._demand_payload(),
-            },
+            payload,
             status=HTTPStatus.CREATED,
         )
 
@@ -1000,25 +1015,33 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             image = str(raw.get("image") or "")
             if not image.strip():
                 raise ValueError("image is required.")
+            count = int(raw.get("count") or 1)
+            resources = _prepared_resources_from_payload(raw)
+            sandbox_nodes_only = bool(raw.get("sandbox_nodes_only", raw.get("sandboxNodesOnly", True)))
+            if count <= 0:
+                raise ValueError("count must be positive.")
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        heartbeat = self._select_capable_node("image-cache")
-        if heartbeat is None:
+        result = self._warm_image_on_ready_nodes(
+            image,
+            count=count,
+            resources=resources,
+            sandbox_nodes_only=sandbox_nodes_only,
+            image_id=str(raw.get("id") or "").strip(),
+        )
+        if result["ready"] <= 0:
             self._write_json(
-                {"error": "no ready image-cache node is available"},
+                {
+                    "error": "no ready image-cache node is available",
+                    "image": image,
+                    "result": result,
+                },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
             )
             return
-
-        response = self._proxy_request(
-            heartbeat.node_url or "",
-            "/v1/images/pull",
-            method="POST",
-            body=body,
-        )
-        self._send_proxied_response(response)
+        self._write_json(result, status=HTTPStatus.OK)
 
     def _route_sandbox_request(self, sandbox_id: str, path: str) -> None:
         route = self.routing_store.get_sandbox(sandbox_id)
@@ -1191,6 +1214,40 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ),
         )[0]
 
+    def _image_cache_candidates(
+        self,
+        *,
+        resources: ResourceQuantity,
+        sandbox_nodes_only: bool,
+    ) -> list[NodeHeartbeat]:
+        routes = (
+            list(self.routing_store.load().sandboxes.values())
+            if self.routing_store is not None
+            else []
+        )
+        candidates = []
+        for heartbeat in self._ready_heartbeats():
+            if "image-cache" not in heartbeat.capabilities:
+                continue
+            if not agent_version_is_compatible(heartbeat.agent_version):
+                continue
+            if sandbox_nodes_only and "sandbox" not in heartbeat.capabilities:
+                continue
+            if _has_resource_values(resources) and "sandbox" in heartbeat.capabilities:
+                if not _node_can_fit(heartbeat, resources, routes):
+                    continue
+            candidates.append(heartbeat)
+        return sorted(
+            candidates,
+            key=lambda heartbeat: (
+                0 if "sandbox" in heartbeat.capabilities else 1,
+                -heartbeat.free_resources.disk_mb,
+                -heartbeat.free_resources.memory_mb,
+                -heartbeat.free_resources.vcpu,
+                heartbeat.node_id,
+            ),
+        )
+
     def _select_builder_node(self) -> NodeHeartbeat | None:
         candidates = [
             heartbeat
@@ -1215,12 +1272,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self,
         image: str,
         heartbeats: list[NodeHeartbeat],
+        *,
+        image_id: str = "",
+        use_heartbeat_cache: bool = True,
     ) -> set[str]:
-        if not image.strip():
+        if not image.strip() and not image_id.strip():
             return set()
-        image_keys = {image, image_id_from_tag(image)}
+        image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
         node_ids: set[str] = set()
         for heartbeat in heartbeats:
+            if use_heartbeat_cache and heartbeat.cached_images_known:
+                if image_keys.intersection(heartbeat.cached_images):
+                    node_ids.add(heartbeat.node_id)
+                continue
             response = self._proxy_request(
                 heartbeat.node_url or "",
                 "/v1/images",
@@ -1239,8 +1303,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     break
         return node_ids
 
-    def _node_has_image(self, heartbeat: NodeHeartbeat, image: str) -> bool:
-        return heartbeat.node_id in self._nodes_with_image(image, [heartbeat])
+    def _node_has_image(
+        self,
+        heartbeat: NodeHeartbeat,
+        image: str,
+        *,
+        image_id: str = "",
+        use_heartbeat_cache: bool = True,
+    ) -> bool:
+        if not image.strip() and not image_id.strip():
+            return False
+        image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
+        if use_heartbeat_cache and heartbeat.cached_images_known:
+            return bool(image_keys.intersection(heartbeat.cached_images))
+        return heartbeat.node_id in self._nodes_with_image(
+            image,
+            [heartbeat],
+            image_id=image_id,
+            use_heartbeat_cache=use_heartbeat_cache,
+        )
 
     def _ensure_image_on_node(
         self,
@@ -1251,7 +1332,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not image.strip() or self._node_has_image(heartbeat, image):
             return None
         with _image_pull_lock(node_url, image):
-            if self._node_has_image(heartbeat, image):
+            if self._node_has_image(heartbeat, image, use_heartbeat_cache=False):
                 return None
             return self._proxy_request(
                 node_url,
@@ -1259,6 +1340,87 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 method="POST",
                 body=json.dumps({"image": image}).encode("utf-8"),
             )
+
+    def _warm_image_on_ready_nodes(
+        self,
+        image: str,
+        *,
+        count: int,
+        resources: ResourceQuantity,
+        sandbox_nodes_only: bool,
+        image_id: str = "",
+    ) -> dict[str, Any]:
+        image = image.strip()
+        image_id = image_id.strip()
+        requested = max(1, count)
+        candidates = self._image_cache_candidates(
+            resources=resources,
+            sandbox_nodes_only=sandbox_nodes_only,
+        )
+        cache_hits: list[dict[str, Any]] = []
+        pulled: list[dict[str, Any]] = []
+        failed: list[dict[str, Any]] = []
+        selected_image: dict[str, Any] | None = None
+        for heartbeat in candidates:
+            if len(cache_hits) + len(pulled) >= requested:
+                break
+            if self._node_has_image(heartbeat, image, image_id=image_id):
+                hit = {
+                    "node": _node_metadata(heartbeat),
+                    "image": {
+                        "id": image_id or image_id_from_tag(image),
+                        "tag": image,
+                    },
+                }
+                cache_hits.append(hit)
+                selected_image = selected_image or hit["image"]
+                continue
+            response = self._pull_image_on_node(heartbeat, image, image_id=image_id)
+            payload = response.json()
+            raw_image = payload.get("image")
+            image_record = (
+                dict(raw_image)
+                if isinstance(raw_image, dict)
+                else {"id": image_id or image_id_from_tag(image), "tag": image}
+            )
+            item = {
+                "node": _node_metadata(heartbeat),
+                "status": int(response.status),
+                "image": image_record,
+            }
+            if 200 <= response.status < 300:
+                pulled.append(item)
+                selected_image = selected_image or image_record
+            else:
+                item["error"] = payload.get("error") or payload
+                failed.append(item)
+        ready = len(cache_hits) + len(pulled)
+        return {
+            "image": selected_image or {"id": image_id or image_id_from_tag(image), "tag": image},
+            "image_ref": image,
+            "requested": requested,
+            "ready": ready,
+            "cache_hits": cache_hits,
+            "pulled": pulled,
+            "failed": failed,
+        }
+
+    def _pull_image_on_node(
+        self,
+        heartbeat: NodeHeartbeat,
+        image: str,
+        *,
+        image_id: str = "",
+    ) -> ProxiedResponse:
+        payload: dict[str, Any] = {"image": image}
+        if image_id:
+            payload["id"] = image_id
+        return self._proxy_request(
+            heartbeat.node_url or "",
+            "/v1/images/pull",
+            method="POST",
+            body=json.dumps(payload).encode("utf-8"),
+        )
 
     def _ready_heartbeats(self) -> list[NodeHeartbeat]:
         now = utc_now()

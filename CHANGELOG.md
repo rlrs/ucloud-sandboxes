@@ -2,6 +2,14 @@
 
 This project uses semantic versioning.
 
+## 0.3.7 - 2026-07-04
+
+- Added cached image summaries to node heartbeats so the gateway can prefer
+  image-hot sandbox nodes without querying every node image list on each create.
+- Extended image pulls with multi-node sandbox prewarm controls.
+- Let capacity prepare requests include an image reference for opportunistic
+  prewarm on already-ready sandbox nodes.
+
 ## 0.3.6 - 2026-07-04
 
 - Moved autoscaled VM Docker storage defaults from the persistent `/work`

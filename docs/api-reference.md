@@ -142,6 +142,15 @@ The gateway/control plane additionally exposes:
 - `POST /v1/builders/prepare`
 - `DELETE /v1/builders/prepare/<prepare-id>`
 
+`POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
+and optional `image`. The image is not a reservation; the gateway uses it to
+opportunistically prewarm already-ready sandbox nodes.
+
+`POST /v1/images/pull` accepts `image`, optional `id`, `count`, resource
+fields, and `sandbox_nodes_only` (default `true`). It pulls the image to up to
+`count` ready image-cache nodes and returns per-node cache hits, pulls, and
+failures.
+
 `POST /v1/sandboxes` accepts:
 
 ```json

@@ -80,6 +80,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             cpu_overcommit=self.cpu_overcommit,
                             memory_overcommit=self.memory_overcommit,
                             disk_overcommit=self.disk_overcommit,
+                            cached_images=_cached_image_refs(self.image_manager),
                             runtime_metrics=self.runtime_metrics_provider(),
                         )
                     )
@@ -649,6 +650,15 @@ def build_node_agent_server(
 
 def sandbox_record_to_dict(record: SandboxRecord) -> dict[str, Any]:
     return record.to_dict()
+
+
+def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:
+    refs: list[str] = []
+    for record in image_manager.list():
+        refs.append(record.id)
+        if record.tag:
+            refs.append(record.tag)
+    return tuple(dict.fromkeys(refs))
 
 
 def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:

@@ -38,6 +38,51 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(decision.creates, 1)
         self.assertIn("pending build(s)", decision.reasons[0])
 
+    def test_builder_scale_stops_idle_incompatible_builder_immediately(self) -> None:
+        now = utc_now()
+        builder = SandboxNode(
+            job=VmJob(
+                id="builder-old",
+                project_id="project-1",
+                name="ucloud-sandbox-builder-old",
+                application_name="vm-ubuntu",
+                application_version="24.04",
+                product_id="cpu-amd-zen5-16-vcpu",
+                product_category="cpu-amd-zen5",
+                state="RUNNING",
+                started_at=now - timedelta(seconds=60),
+                labels={
+                    "ucloud-sandboxes/builder": "true",
+                    "ucloud-sandboxes/deployment": "prod-a",
+                },
+            ),
+            heartbeat=NodeHeartbeat(
+                node_id="builder-old",
+                job_id="builder-old",
+                updated_at=now,
+                active_sandboxes=0,
+                active_image_builds=0,
+                idle_since=now,
+                capabilities=("image-cache", "image-build", "snapshot"),
+            ),
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+            agent_version_compatible=False,
+        )
+
+        decision = evaluate_builder_scale(
+            [builder],
+            pending_builds=1,
+            policy=ScalePolicy(max_create_per_cycle=5, max_stop_per_cycle=5),
+            max_builder_nodes=1,
+            now=now,
+        )
+
+        self.assertEqual(decision.stops, ("builder-old",))
+        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.total_nodes, 0)
+        self.assertIn("incompatible agent version", decision.reasons[0])
+
     def test_builder_scale_stops_idle_builder_when_no_build_demand(self) -> None:
         now = utc_now()
         builder = SandboxNode(

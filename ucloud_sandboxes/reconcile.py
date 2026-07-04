@@ -175,8 +175,16 @@ def evaluate_builder_scale(
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
-    relevant_nodes = [node for node in builder_nodes if not node.job.is_final]
-    ready_nodes = [node for node in relevant_nodes if node.is_ready]
+    incompatible_stop_candidates = _incompatible_stop_candidates(
+        builder_nodes,
+        now=now,
+    )[: max(0, policy.max_stop_per_cycle)]
+    relevant_nodes = [
+        node
+        for node in builder_nodes
+        if not node.job.is_final and node.agent_version_compatible
+    ]
+    ready_nodes = [node for node in relevant_nodes if node.is_schedulable]
     provisioning_nodes = [node for node in relevant_nodes if node.is_provisioning]
     total_nodes = len(relevant_nodes)
     max_builder_nodes = max(0, max_builder_nodes)
@@ -186,6 +194,19 @@ def evaluate_builder_scale(
     desired_nodes = min(desired_nodes, max_builder_nodes)
     actions: list[ScaleAction] = []
     reasons: list[str] = []
+
+    if incompatible_stop_candidates:
+        job_ids = tuple(node.job_id for node in incompatible_stop_candidates)
+        reason = "idle builder node(s) have incompatible agent version"
+        actions.append(
+            ScaleAction(
+                kind="stop",
+                count=len(job_ids),
+                job_ids=job_ids,
+                reason=reason,
+            )
+        )
+        reasons.append(reason)
 
     if desired_nodes > 0:
         if total_nodes < desired_nodes:
@@ -210,6 +231,7 @@ def evaluate_builder_scale(
                 f"{prepared_builders} prepared builder(s))"
             )
     else:
+        stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
         stop_candidates = [
             node
             for node in ready_nodes
@@ -219,7 +241,7 @@ def evaluate_builder_scale(
                 idle_seconds=policy.builder_scale_down_idle_seconds,
                 now=now,
             )
-        ][: max(0, policy.max_stop_per_cycle)]
+        ][:stop_budget]
         if stop_candidates:
             job_ids = tuple(node.job_id for node in stop_candidates)
             reason = "idle builder node(s) exceed pending image build demand"
@@ -259,6 +281,10 @@ def stop_job_ids_from_decision(decision: ScaleDecision) -> tuple[str, ...]:
         if action.kind == "stop":
             job_ids.extend(action.job_ids)
     return tuple(job_ids)
+
+
+def _planned_stops(actions: list[ScaleAction]) -> int:
+    return sum(action.count for action in actions if action.kind == "stop")
 
 
 def partition_safe_stop_job_ids(
@@ -309,6 +335,29 @@ def _past_idle_grace(
     if reference is None:
         return False
     return (now - reference).total_seconds() >= idle_seconds
+
+
+def _incompatible_stop_candidates(
+    nodes: list[SandboxNode],
+    *,
+    now: datetime,
+) -> list[SandboxNode]:
+    candidates: list[SandboxNode] = []
+    for node in nodes:
+        if node.job.is_final or node.agent_version_compatible:
+            continue
+        if node.job.state in {"IN_QUEUE", "SUSPENDED"}:
+            candidates.append(node)
+            continue
+        if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:
+            candidates.append(node)
+    return sorted(
+        candidates,
+        key=lambda node: (
+            node.job.started_at or node.job.created_at or now,
+            node.job_id,
+        ),
+    )
 
 
 def bulk_payload_from_create_intents(

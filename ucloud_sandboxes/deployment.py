@@ -26,6 +26,11 @@ def package_version() -> str:
         return __version__
 
 
+def agent_version_is_compatible(agent_version: str, *, expected: str | None = None) -> bool:
+    expected_version = (expected or package_version()).strip()
+    return bool(agent_version.strip()) and agent_version.strip() == expected_version
+
+
 def service_health(service: str) -> dict[str, object]:
     return {
         "ok": True,

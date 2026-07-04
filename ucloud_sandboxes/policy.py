@@ -24,10 +24,17 @@ def evaluate_scale(
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
+    incompatible_stop_candidates = _incompatible_stop_candidates(
+        nodes,
+        now=now,
+    )[: max(0, policy.max_stop_per_cycle)]
     relevant_nodes = [
-        node for node in nodes if _counts_as_pool_node(node, policy, now, 0)
+        node
+        for node in nodes
+        if node.agent_version_compatible
+        and _counts_as_pool_node(node, policy, now, 0)
     ]
-    ready_nodes = [node for node in relevant_nodes if node.is_ready]
+    ready_nodes = [node for node in relevant_nodes if node.is_schedulable]
 
     oldest_pending_seconds = max(0, demand.oldest_pending_seconds)
     provisioning_nodes = [
@@ -56,6 +63,19 @@ def evaluate_scale(
     )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
+
+    if incompatible_stop_candidates:
+        job_ids = tuple(node.job_id for node in incompatible_stop_candidates)
+        reason = "idle sandbox node(s) have incompatible agent version"
+        actions.append(
+            ScaleAction(
+                kind="stop",
+                count=len(job_ids),
+                job_ids=job_ids,
+                reason=reason,
+            )
+        )
+        reasons.append(reason)
 
     if total_nodes < policy.min_nodes:
         missing_nodes = policy.min_nodes - total_nodes
@@ -107,13 +127,14 @@ def evaluate_scale(
     planned_creates = _planned_creates(actions)
     if planned_creates == 0 and not _has_resource_deficit(resource_deficit):
         excess_nodes = total_nodes - policy.min_nodes
-        if excess_nodes > 0:
+        stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
+        if excess_nodes > 0 and stop_budget > 0:
             stop_candidates = _stop_candidates(
                 ready_nodes,
                 policy,
                 now,
                 required_resources=desired_resources,
-                max_count=min(excess_nodes, policy.max_stop_per_cycle),
+                max_count=min(excess_nodes, stop_budget),
             )
             if stop_candidates:
                 job_ids = tuple(node.job_id for node in stop_candidates)
@@ -156,6 +177,10 @@ def _ceil_div(value: int, divisor: int) -> int:
 
 def _planned_creates(actions: list[ScaleAction]) -> int:
     return sum(action.count for action in actions if action.kind == "create")
+
+
+def _planned_stops(actions: list[ScaleAction]) -> int:
+    return sum(action.count for action in actions if action.kind == "stop")
 
 
 def _create_budget(
@@ -296,6 +321,8 @@ def _counts_as_pool_node(
 ) -> bool:
     if node.job.is_final:
         return False
+    if not node.agent_version_compatible:
+        return False
     if not node.is_provisioning:
         return True
     return _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
@@ -308,7 +335,8 @@ def _counts_as_active_provisioning(
     oldest_pending_seconds: int,
 ) -> bool:
     return (
-        node.is_provisioning
+        node.agent_version_compatible
+        and node.is_provisioning
         and _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
     )
 
@@ -381,6 +409,29 @@ def _stop_candidates(
         candidates.append(node)
         remaining_free_resources = after_resources
     return candidates
+
+
+def _incompatible_stop_candidates(
+    nodes: list[SandboxNode],
+    *,
+    now: datetime,
+) -> list[SandboxNode]:
+    candidates: list[SandboxNode] = []
+    for node in nodes:
+        if node.job.is_final or node.agent_version_compatible:
+            continue
+        if node.job.state in {"IN_QUEUE", "SUSPENDED"}:
+            candidates.append(node)
+            continue
+        if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:
+            candidates.append(node)
+    return sorted(
+        candidates,
+        key=lambda node: (
+            node.job.started_at or node.job.created_at or now,
+            node.job_id,
+        ),
+    )
 
 
 def _stop_reason(

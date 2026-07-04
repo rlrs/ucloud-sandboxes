@@ -289,6 +289,7 @@ class SandboxNode:
     heartbeat: NodeHeartbeat | None
     active_sandboxes: int
     heartbeat_fresh: bool
+    agent_version_compatible: bool = True
 
     @property
     def job_id(self) -> str:
@@ -303,7 +304,13 @@ class SandboxNode:
         return self.job.state == "RUNNING" and self.heartbeat_fresh
 
     @property
+    def is_schedulable(self) -> bool:
+        return self.is_ready and self.agent_version_compatible
+
+    @property
     def is_provisioning(self) -> bool:
+        if not self.agent_version_compatible:
+            return False
         return self.job.state in {"IN_QUEUE", "SUSPENDED"} or (
             self.job.state == "RUNNING" and not self.heartbeat_fresh
         )

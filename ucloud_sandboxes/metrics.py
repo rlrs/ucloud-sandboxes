@@ -9,6 +9,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from .deployment import agent_version_is_compatible
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .routing import PendingSandboxDemand, RoutingState, SandboxRoute
 
@@ -443,11 +444,22 @@ def build_metrics_snapshot(
         for heartbeat in heartbeat_items
         if heartbeat.is_fresh(now, heartbeat_ttl_seconds)
     ]
+    compatible = [
+        heartbeat
+        for heartbeat in fresh
+        if agent_version_is_compatible(heartbeat.agent_version)
+    ]
     sandbox_nodes = [
         heartbeat for heartbeat in fresh if "sandbox" in heartbeat.capabilities
     ]
     builder_nodes = [
         heartbeat for heartbeat in fresh if "image-build" in heartbeat.capabilities
+    ]
+    schedulable_sandbox_nodes = [
+        heartbeat for heartbeat in compatible if "sandbox" in heartbeat.capabilities
+    ]
+    schedulable_builder_nodes = [
+        heartbeat for heartbeat in compatible if "image-build" in heartbeat.capabilities
     ]
     routing_state = routing_state or RoutingState({}, {}, {}, {})
     fresh_sandbox_nodes = {heartbeat.node_id: heartbeat for heartbeat in sandbox_nodes}
@@ -494,6 +506,8 @@ def build_metrics_snapshot(
         "nodes": {
             "total": len(heartbeat_items),
             "fresh": len(fresh),
+            "compatible": len(compatible),
+            "incompatible": max(0, len(fresh) - len(compatible)),
             "sandbox": len(sandbox_nodes),
             "builder": len(builder_nodes),
             "items": [_node_metrics(heartbeat, now, heartbeat_ttl_seconds) for heartbeat in heartbeat_items],
@@ -504,6 +518,8 @@ def build_metrics_snapshot(
             "fresh": fresh_resources,
             "sandbox": sandbox_resources,
             "builder": builder_resources,
+            "schedulable_sandbox": _aggregate_node_resources(schedulable_sandbox_nodes),
+            "schedulable_builder": _aggregate_node_resources(schedulable_builder_nodes),
         },
         "sandboxes": {
             "running": sandbox_resources["active_sandboxes"] + provisional_running,
@@ -559,6 +575,7 @@ def _node_metrics(
         "job_id": heartbeat.job_id,
         "node_url": heartbeat.node_url or "",
         "fresh": heartbeat.is_fresh(now, heartbeat_ttl_seconds),
+        "agent_version_compatible": agent_version_is_compatible(heartbeat.agent_version),
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),
         "active_sandboxes": heartbeat.active_sandboxes,
         "active_image_builds": heartbeat.active_image_builds,

@@ -212,7 +212,7 @@ Current live all-in-one VM:
 - job id: `12349450`
 - name: `ucloud-sandbox-gateway-allinone-20260704-v020`
 - deployment id: `live-20260629`
-- package version: `0.3.2`
+- package version: `0.3.3`
 - private network: `12345327`
 - private registry IPv4 observed on the VM: `10.36.121.173`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
@@ -316,8 +316,8 @@ ucloud jobs browse \
 
 Expected current state:
 
-- gateway health reports `{"ok": true, "service": "control-plane", "version": "0.3.2"}`
-- relay health reports `{"ok": true, "service": "model-relay", "version": "0.3.2"}`
+- gateway health reports `{"ok": true, "service": "control-plane", "version": "0.3.3"}`
+- relay health reports `{"ok": true, "service": "model-relay", "version": "0.3.3"}`
 - unauthenticated `GET /v1/sandboxes` returns `401`
 - running-job browse shows only all-in-one job `12349450` for this service when
   there is no sandbox or builder demand

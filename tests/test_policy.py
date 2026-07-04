@@ -30,6 +30,7 @@ def node(
     capabilities: tuple[str, ...] = ("disk-quota",),
     idle_since=None,
     heartbeat_present: bool = True,
+    agent_version_compatible: bool = True,
 ) -> SandboxNode:
     heartbeat = None
     if heartbeat_present:
@@ -64,6 +65,7 @@ def node(
         heartbeat=heartbeat,
         active_sandboxes=active,
         heartbeat_fresh=fresh,
+        agent_version_compatible=agent_version_compatible,
     )
 
 
@@ -84,6 +86,40 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 1)
         self.assertEqual(decision.resource_deficit.vcpu, 3.0)
         self.assertEqual(decision.resource_deficit.memory_mb, 7000)
+
+    def test_stops_idle_incompatible_node_without_idle_grace(self) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "old-idle",
+                    agent_version_compatible=False,
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=600),
+        )
+
+        self.assertEqual(decision.stops, ("old-idle",))
+        self.assertEqual(decision.total_nodes, 0)
+        self.assertIn("incompatible agent version", decision.reasons[0])
+
+    def test_active_incompatible_node_is_not_stopped_or_counted_as_capacity(self) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "old-active",
+                    active=1,
+                    agent_version_compatible=False,
+                )
+            ],
+            SandboxDemand(pending_resources=ResourceQuantity(vcpu=1, memory_mb=512)),
+            ScalePolicy(max_nodes=5, max_create_per_cycle=5, max_stop_per_cycle=5),
+        )
+
+        self.assertEqual(decision.stops, ())
+        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.total_nodes, 0)
+        self.assertEqual(decision.projected_free_resources, ResourceQuantity())
 
     def test_respects_max_nodes_for_resource_deficit(self) -> None:
         decision = evaluate_scale(

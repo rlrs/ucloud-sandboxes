@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat
+from ucloud_sandboxes.deployment import AGENT_VERSION_LABEL, package_version
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ScalePolicy, VmJob, utc_now
 from ucloud_sandboxes.registry import HeartbeatStore, merge_jobs_and_heartbeats
 
@@ -20,6 +21,7 @@ class RegistryTests(unittest.TestCase):
             product_category="cpu-amd-zen5",
             state="IN_QUEUE",
             cpu=2,
+            labels={AGENT_VERSION_LABEL: package_version()},
         )
 
         nodes = merge_jobs_and_heartbeats(
@@ -42,6 +44,7 @@ class RegistryTests(unittest.TestCase):
             state="SUSPENDED",
             cpu=16,
             disk_gb=250,
+            labels={AGENT_VERSION_LABEL: package_version()},
         )
 
         nodes = merge_jobs_and_heartbeats(
@@ -51,6 +54,28 @@ class RegistryTests(unittest.TestCase):
         )
 
         self.assertTrue(nodes[0].is_provisioning)
+
+    def test_unversioned_provisioning_node_is_incompatible(self) -> None:
+        job = VmJob(
+            id="123",
+            project_id="project-1",
+            name="ucloud-sandbox-node-123",
+            application_name="vm-ubuntu",
+            application_version="24.04",
+            product_id="cpu-amd-zen5-2-vcpu",
+            product_category="cpu-amd-zen5",
+            state="IN_QUEUE",
+            cpu=2,
+        )
+
+        nodes = merge_jobs_and_heartbeats(
+            [job],
+            {},
+            ScalePolicy(),
+        )
+
+        self.assertFalse(nodes[0].agent_version_compatible)
+        self.assertFalse(nodes[0].is_provisioning)
 
     def test_heartbeat_store_roundtrip(self) -> None:
         with TemporaryDirectory() as raw_dir:

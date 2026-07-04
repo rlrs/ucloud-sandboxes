@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlparse
 from uuid import uuid4
 
 from .dashboard import dashboard_asset
-from .deployment import service_health
+from .deployment import agent_version_is_compatible, service_health
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -1255,6 +1255,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if heartbeat.node_url
             and not heartbeat.draining
             and heartbeat.is_fresh(now, self.heartbeat_ttl_seconds)
+            and agent_version_is_compatible(heartbeat.agent_version)
         ]
 
     def _ready_sandbox_heartbeats(self) -> list[NodeHeartbeat]:

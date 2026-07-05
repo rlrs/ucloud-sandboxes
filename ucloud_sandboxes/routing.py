@@ -397,6 +397,28 @@ class RoutingStore:
             )
             return route
 
+    def get_sandbox_readonly(self, sandbox_id: str) -> SandboxRoute | None:
+        with self._connect() as conn:
+            return self._get_sandbox_unlocked(conn, sandbox_id)
+
+    def sandbox_routes_readonly(self) -> list[SandboxRoute]:
+        with self._connect() as conn:
+            return [
+                route
+                for route in (
+                    _sandbox_route_from_row(row)
+                    for row in conn.execute(
+                        """
+                        SELECT sandbox_id, node_id, job_id, node_url,
+                               resources_json, created_at, updated_at
+                        FROM sandboxes
+                        ORDER BY sandbox_id
+                        """
+                    )
+                )
+                if route is not None
+            ]
+
     def upsert_sandbox(self, route: SandboxRoute) -> None:
         with self._lock:
             now = utc_now().isoformat()

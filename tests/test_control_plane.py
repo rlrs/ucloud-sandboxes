@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from time import sleep
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -701,6 +701,131 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             {state.sandboxes["burst-1"].job_id, state.sandboxes["burst-2"].job_id},
             {"job-1", "job-2"},
+        )
+
+    def test_gateway_create_backpressure_fails_fast(self) -> None:
+        class BlockingCreateRuntime(DockerGvisorRuntime):
+            def __init__(self) -> None:
+                super().__init__(dry_run=True, allow_storage_opt_quota=True)
+                self.started = Event()
+                self.release = Event()
+
+            def create(self, spec):
+                self.started.set()
+                self.release.wait(timeout=5)
+                return super().create(spec)
+
+        runtime = BlockingCreateRuntime()
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "limited-node-sandboxes.json",
+                image_file=raw_path / "limited-node-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(vcpu=4, memory_mb=4096, disk_mb=128),
+                runtime=runtime,
+            )
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    image_file=raw_path / "gateway-images.json",
+                    local_image_builds_enabled=False,
+                    metrics_file=raw_path / "metrics.jsonl",
+                    max_concurrent_sandbox_creates=1,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            active_sandboxes=0,
+                            node_url=f"http://{node_host}:{node_port}",
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=4,
+                                memory_mb=4096,
+                                disk_mb=128,
+                            ),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+
+                    def create_one() -> dict:
+                        return self._json_request(
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": "limited-one",
+                                "image": "busybox",
+                                "cpus": 1,
+                                "memory_mb": 128,
+                                "disk_mb": 64,
+                            },
+                        )
+
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(create_one)
+                        self.assertTrue(runtime.started.wait(timeout=5))
+                        busy_payload = json.dumps(
+                            {
+                                "id": "limited-two",
+                                "image": "busybox",
+                                "cpus": 1,
+                                "memory_mb": 128,
+                                "disk_mb": 64,
+                            }
+                        ).encode("utf-8")
+                        req = request.Request(
+                            f"{base}/v1/sandboxes",
+                            data=busy_payload,
+                            method="POST",
+                            headers={"Content-Type": "application/json"},
+                        )
+                        try:
+                            with request.urlopen(req, timeout=5):
+                                self.fail("expected busy create to fail")
+                        except error.HTTPError as exc:
+                            busy_status = exc.code
+                            retry_after = exc.headers.get("Retry-After")
+                            busy = json.loads(exc.read().decode("utf-8"))
+                        finally:
+                            runtime.release.set()
+                        created = future.result(timeout=5)
+                    metrics = self._json_request(f"{base}/v1/metrics")
+                finally:
+                    runtime.release.set()
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                runtime.release.set()
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(created["sandbox"]["spec"]["id"], "limited-one")
+        self.assertEqual(busy_status, 503)
+        self.assertEqual(retry_after, "2")
+        self.assertTrue(busy["retryable"])
+        self.assertEqual(busy["max_concurrent_sandbox_creates"], 1)
+        self.assertTrue(
+            any(
+                item["status"] == "error"
+                and item["spans"][0]["attributes"].get("outcome") == "gateway_busy"
+                for item in metrics["traces"]["recent"]
+            )
         )
 
     def test_gateway_routes_sandbox_file_upload_and_download(self) -> None:

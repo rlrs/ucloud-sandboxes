@@ -39,7 +39,7 @@ from .bootstrap import (
 )
 from .async_node_agent import create_async_node_agent_app
 from .config import AutoscalerConfig
-from .control_plane import build_server
+from .control_plane import DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES, build_server
 from .deployment import (
     AGENT_VERSION_LABEL,
     BUILDER_LABEL,
@@ -271,6 +271,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--heartbeat-ttl-seconds",
         type=int,
         help="Freshness window for schedulable node heartbeats.",
+    )
+    serve.add_argument(
+        "--max-concurrent-sandbox-creates",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
+        help=(
+            "Maximum concurrent sandbox create requests handled by the gateway. "
+            "Set 0 to disable gateway create backpressure."
+        ),
     )
     serve.add_argument(
         "--gateway-upstream-node-url",
@@ -1860,6 +1869,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         local_image_builds_enabled=args.enable_image_builds,
         metrics_file=metrics_file,
         registry_url=registry_url,
+        max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
     )
     host, port = server.server_address
     print(f"Serving heartbeat receiver on http://{host}:{port}")

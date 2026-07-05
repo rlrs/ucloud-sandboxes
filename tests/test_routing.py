@@ -240,6 +240,25 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertIn("keep-me", state.sandboxes)
         self.assertIn("exec-keep", state.exec_sessions)
 
+    def test_readonly_sandbox_queries_return_current_routes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = SandboxRoute(
+                sandbox_id="readonly-one",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+            )
+            store.upsert_sandbox(route)
+
+            fetched = store.get_sandbox_readonly("readonly-one")
+            routes = store.sandbox_routes_readonly()
+
+        self.assertIsNotNone(fetched)
+        self.assertEqual(fetched.sandbox_id, "readonly-one")
+        self.assertEqual([item.sandbox_id for item in routes], ["readonly-one"])
+
     def test_delete_stale_sandboxes_removes_missing_jobs_after_grace(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

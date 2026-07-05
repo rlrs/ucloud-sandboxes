@@ -6,7 +6,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
-from threading import RLock
+from threading import BoundedSemaphore, RLock
 from typing import Any
 from urllib import error, request
 from urllib.parse import unquote, urlparse
@@ -45,6 +45,8 @@ _GATEWAY_SANDBOX_CREATE_LOCKS: dict[str, RLock] = {}
 _GATEWAY_SCHEDULING_LOCK = RLock()
 _GATEWAY_IN_FLIGHT_ROUTES: dict[str, "_InFlightRoute"] = {}
 IN_FLIGHT_ROUTE_TTL_SECONDS = 15 * 60
+DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 64
+SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
@@ -82,6 +84,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     local_image_builds_enabled: bool
     metrics_store: MetricsStore | None
     registry_url: str | None
+    sandbox_create_limiter: BoundedSemaphore | None
+    max_concurrent_sandbox_creates: int
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
     def do_GET(self) -> None:
@@ -245,11 +249,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         payload: dict[str, Any],
         *,
         status: HTTPStatus = HTTPStatus.OK,
+        headers: dict[str, str] | None = None,
     ) -> None:
         body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -658,8 +665,45 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        with _gateway_sandbox_create_lock(spec.id):
-            self._create_sandbox_on_node_locked(body, raw, spec)
+        limiter = self.sandbox_create_limiter
+        if limiter is not None and not limiter.acquire(blocking=False):
+            trace_id = _request_trace_id(self, "sandbox-create", spec.id)
+            with trace_span(
+                self.metrics_store,
+                trace_id,
+                "gateway.sandbox_create",
+                attributes={
+                    "sandbox_id": spec.id,
+                    "image": spec.image,
+                    "resources": spec.requested_resources().to_dict(),
+                    "outcome": "gateway_busy",
+                    "max_concurrent_sandbox_creates": (
+                        self.max_concurrent_sandbox_creates
+                    ),
+                },
+            ) as root:
+                root.status = "error"
+            self._write_json(
+                {
+                    "error": "gateway is busy creating sandboxes; retry shortly",
+                    "retryable": True,
+                    "max_concurrent_sandbox_creates": (
+                        self.max_concurrent_sandbox_creates
+                    ),
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
+        try:
+            with _gateway_sandbox_create_lock(spec.id):
+                self._create_sandbox_on_node_locked(body, raw, spec)
+        finally:
+            if limiter is not None:
+                limiter.release()
         return
 
     def _create_sandbox_on_node_locked(
@@ -709,7 +753,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 "gateway.sandbox_existing_route_check",
                 parent_span_id=root.span_id,
             ) as span:
-                existing = self.routing_store.get_sandbox(spec.id)
+                existing = self.routing_store.get_sandbox_readonly(spec.id)
                 span.set_attribute("existing_route", existing is not None)
                 if existing is not None:
                     if self._send_existing_sandbox_response(
@@ -1202,7 +1246,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         image: str | None = None,
         extra_routes: list[SandboxRoute] | None = None,
     ) -> NodeHeartbeat | None:
-        routes = list(self.routing_store.load().sandboxes.values())
+        routes = list(self.routing_store.sandbox_routes_readonly())
         routes.extend(extra_routes or [])
         candidates = [
             heartbeat
@@ -1326,7 +1370,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         sandbox_nodes_only: bool,
     ) -> list[NodeHeartbeat]:
         routes = (
-            list(self.routing_store.load().sandboxes.values())
+            list(self.routing_store.sandbox_routes_readonly())
             if self.routing_store is not None
             else []
         )
@@ -1672,6 +1716,7 @@ def build_server(
     local_image_builds_enabled: bool | None = None,
     metrics_file: Path | None = None,
     registry_url: str | None = None,
+    max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
 ) -> ThreadingHTTPServer:
     store = HeartbeatStore(heartbeat_file)
     routing_store = RoutingStore(routing_file) if routing_file is not None else None
@@ -1701,6 +1746,15 @@ def build_server(
     )
     BoundHandler.metrics_store = metrics_store
     BoundHandler.registry_url = registry_url
+    BoundHandler.max_concurrent_sandbox_creates = max(
+        0,
+        int(max_concurrent_sandbox_creates),
+    )
+    BoundHandler.sandbox_create_limiter = (
+        BoundedSemaphore(BoundHandler.max_concurrent_sandbox_creates)
+        if BoundHandler.max_concurrent_sandbox_creates > 0
+        else None
+    )
     return ThreadingHTTPServer((host, port), BoundHandler)
 
 

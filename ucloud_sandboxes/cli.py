@@ -111,7 +111,7 @@ from .registry import (
     load_heartbeats,
     merge_jobs_and_heartbeats,
 )
-from .routing import RoutingStore
+from .routing import RoutingStore, sandbox_demand_from_routing_state
 from .runtime_probe import DockerRuntimeProbe
 from .sandbox import DockerGvisorRuntime
 from .ucloud import SessionStore, UCloudClient, UCloudError
@@ -2734,12 +2734,17 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     while True:
         cycle += 1
         routing_store = RoutingStore(route_file)
-        demand = routing_store.pending_demand()
+        routing_state = routing_store.load()
+        pending_snapshot = list(routing_state.pending.values())
+        prepared_snapshot = list(routing_state.prepared.values())
+        pending_image_build_snapshot = list(routing_state.image_builds.values())
+        prepared_builder_snapshot = list(routing_state.prepared_builders.values())
+        demand = sandbox_demand_from_routing_state(routing_state)
         pending_image_builds = max(
             int(getattr(args, "pending_image_builds", 0) or 0),
-            routing_store.pending_image_build_count(),
+            len(pending_image_build_snapshot),
         )
-        prepared_builder_count = routing_store.prepared_builder_count()
+        prepared_builder_count = sum(item.count for item in prepared_builder_snapshot)
         result = run_reconcile_cycle(
             config,
             args,
@@ -2774,16 +2779,24 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                 )
             )
         consumed_pending_demand = (
-            routing_store.consume_pending_demand() if args.execute else []
+            routing_store.consume_pending_demand(pending_snapshot)
+            if args.execute
+            else []
         )
         consumed_prepared_capacity = (
-            routing_store.consume_prepared_capacity() if args.execute else []
+            routing_store.consume_prepared_capacity(prepared_snapshot)
+            if args.execute
+            else []
         )
         consumed_pending_image_builds = (
-            routing_store.consume_pending_image_builds() if args.execute else []
+            routing_store.consume_pending_image_builds(pending_image_build_snapshot)
+            if args.execute
+            else []
         )
         consumed_prepared_builders = (
-            routing_store.consume_prepared_builders() if args.execute else []
+            routing_store.consume_prepared_builders(prepared_builder_snapshot)
+            if args.execute
+            else []
         )
         result["cycle"] = cycle
         result["routeFile"] = str(route_file)

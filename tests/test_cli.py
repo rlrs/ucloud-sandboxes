@@ -861,6 +861,70 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["consumedPreparedCapacity"], [])
         self.assertEqual(remaining_demand.pending_resources, ResourceQuantity())
 
+    def test_autoscaler_loop_preserves_pending_signal_created_during_cycle(
+        self,
+    ) -> None:
+        submitted: list[tuple[str, dict]] = []
+
+        original_client = cli.UCloudClient
+        try:
+            with TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                jobs_file = root / "jobs.json"
+                jobs_file.write_text('{"items": []}', encoding="utf-8")
+                route_file = root / "routes.json"
+                RoutingStore(route_file).upsert_pending(
+                    "pending-one",
+                    ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
+                )
+
+                class FakeUCloudClient:
+                    def __init__(self, _session_store) -> None:
+                        pass
+
+                    def submit_jobs(self, project_id: str, payload: dict) -> dict:
+                        submitted.append((project_id, payload))
+                        RoutingStore(route_file).upsert_pending(
+                            "pending-two",
+                            ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
+                        )
+                        return {"responses": [{"id": "created-node"}]}
+
+                cli.UCloudClient = FakeUCloudClient
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    result = cli.main(
+                        [
+                            "autoscaler-loop",
+                            "--project",
+                            "project-1",
+                            "--state-dir",
+                            raw_dir,
+                            "--route-file",
+                            str(route_file),
+                            "--jobs-file",
+                            str(jobs_file),
+                            "--no-private-network",
+                            "--once",
+                            "--execute",
+                            "--output",
+                            "json",
+                        ]
+                    )
+
+                payload = json.loads(output.getvalue())
+                remaining = RoutingStore(route_file).pending_sandboxes()
+        finally:
+            cli.UCloudClient = original_client
+
+        self.assertEqual(result, 0)
+        self.assertEqual(submitted[0][0], "project-1")
+        self.assertEqual(
+            [item["sandbox_id"] for item in payload["consumedPendingDemand"]],
+            ["pending-one"],
+        )
+        self.assertEqual([item.sandbox_id for item in remaining], ["pending-two"])
+
     def test_executing_autoscaler_loop_consumes_prepared_capacity_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []
 

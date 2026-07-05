@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 from threading import RLock
 import time
@@ -75,9 +76,19 @@ class MetricsStore:
         )
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(event.to_dict(), sort_keys=True))
-                handle.write("\n")
+            line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode(
+                "utf-8"
+            )
+            fd = os.open(self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+            try:
+                view = memoryview(line)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise OSError("failed to append metrics event")
+                    view = view[written:]
+            finally:
+                os.close(fd)
         return event
 
     def load_events(self, *, max_events: int = 1000) -> list[MetricEvent]:

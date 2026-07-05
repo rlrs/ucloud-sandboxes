@@ -667,8 +667,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        limiter = self.sandbox_create_limiter
-        if limiter is not None and not limiter.acquire(blocking=False):
+        sandbox_lock = _try_acquire_gateway_sandbox_create_lock(spec.id)
+        if sandbox_lock is None:
             trace_id = _request_trace_id(self, "sandbox-create", spec.id)
             with trace_span(
                 self.metrics_store,
@@ -678,34 +678,54 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "sandbox_id": spec.id,
                     "image": spec.image,
                     "resources": spec.requested_resources().to_dict(),
-                    "outcome": "gateway_busy",
-                    "max_concurrent_sandbox_creates": (
-                        self.max_concurrent_sandbox_creates
-                    ),
+                    "outcome": "create_in_progress",
                 },
             ) as root:
                 root.status = "error"
-            self._write_json(
-                {
-                    "error": "gateway is busy creating sandboxes; retry shortly",
-                    "retryable": True,
-                    "max_concurrent_sandbox_creates": (
-                        self.max_concurrent_sandbox_creates
-                    ),
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-                headers={
-                    "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
-                    "X-UCloud-Sandbox-Retryable": "true",
-                },
-            )
+            self._write_create_in_progress_response(spec.id)
             return
+
+        limiter = self.sandbox_create_limiter
+        limiter_acquired = False
         try:
-            with _gateway_sandbox_create_lock(spec.id):
-                self._create_sandbox_on_node_locked(body, raw, spec)
+            if limiter is not None and not limiter.acquire(blocking=False):
+                trace_id = _request_trace_id(self, "sandbox-create", spec.id)
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.sandbox_create",
+                    attributes={
+                        "sandbox_id": spec.id,
+                        "image": spec.image,
+                        "resources": spec.requested_resources().to_dict(),
+                        "outcome": "gateway_busy",
+                        "max_concurrent_sandbox_creates": (
+                            self.max_concurrent_sandbox_creates
+                        ),
+                    },
+                ) as root:
+                    root.status = "error"
+                self._write_json(
+                    {
+                        "error": "gateway is busy creating sandboxes; retry shortly",
+                        "retryable": True,
+                        "max_concurrent_sandbox_creates": (
+                            self.max_concurrent_sandbox_creates
+                        ),
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return
+            limiter_acquired = limiter is not None
+            self._create_sandbox_on_node_locked(body, raw, spec)
         finally:
-            if limiter is not None:
+            if limiter_acquired:
                 limiter.release()
+            _release_gateway_sandbox_create_lock(spec.id, sandbox_lock)
         return
 
     def _create_sandbox_on_node_locked(
@@ -955,6 +975,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self._write_json({"sandbox": record, "recovered": True}, status=status)
         return True
 
+    def _write_create_in_progress_response(self, sandbox_id: str) -> None:
+        self._write_json(
+            {
+                "error": "sandbox creation is already in progress",
+                "retryable": True,
+                "sandbox_id": sandbox_id,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+
     def _send_in_flight_sandbox_response(
         self,
         route: SandboxRoute,
@@ -974,18 +1008,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 status=HTTPStatus.OK,
             )
             return "recovered"
-        self._write_json(
-            {
-                "error": "sandbox creation is already in progress",
-                "retryable": True,
-                "sandbox_id": spec.id,
-            },
-            status=HTTPStatus.SERVICE_UNAVAILABLE,
-            headers={
-                "Retry-After": str(SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS),
-                "X-UCloud-Sandbox-Retryable": "true",
-            },
-        )
+        self._write_create_in_progress_response(spec.id)
         return "create_in_progress"
 
     def _sandbox_record_on_node(
@@ -2064,13 +2087,22 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
         return lock
 
 
-def _gateway_sandbox_create_lock(sandbox_id: str) -> RLock:
+def _try_acquire_gateway_sandbox_create_lock(sandbox_id: str) -> RLock | None:
     with _GATEWAY_SANDBOX_CREATE_LOCKS_GUARD:
         lock = _GATEWAY_SANDBOX_CREATE_LOCKS.get(sandbox_id)
         if lock is None:
             lock = RLock()
             _GATEWAY_SANDBOX_CREATE_LOCKS[sandbox_id] = lock
+        if not lock.acquire(blocking=False):
+            return None
         return lock
+
+
+def _release_gateway_sandbox_create_lock(sandbox_id: str, lock: RLock) -> None:
+    with _GATEWAY_SANDBOX_CREATE_LOCKS_GUARD:
+        lock.release()
+        if _GATEWAY_SANDBOX_CREATE_LOCKS.get(sandbox_id) is lock:
+            _GATEWAY_SANDBOX_CREATE_LOCKS.pop(sandbox_id, None)
 
 
 def _active_in_flight_routes_unlocked() -> list[SandboxRoute]:

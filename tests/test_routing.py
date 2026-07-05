@@ -643,6 +643,68 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0].attempts, 2)
 
+    def test_snapshot_consume_does_not_delete_refreshed_signals(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_pending(
+                "pending-one",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+            )
+            store.upsert_pending_image_build("image-one", "registry/image:old")
+            store.upsert_prepared_capacity(
+                "prep-one",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=1,
+                ttl_seconds=600,
+            )
+            store.upsert_prepared_builder(
+                "builder-one",
+                count=1,
+                ttl_seconds=600,
+            )
+            snapshot = store.load()
+
+            store.upsert_pending(
+                "pending-one",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+            )
+            store.upsert_pending_image_build("image-one", "registry/image:new")
+            store.upsert_prepared_capacity(
+                "prep-one",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=2,
+                ttl_seconds=600,
+            )
+            store.upsert_prepared_builder(
+                "builder-one",
+                count=2,
+                ttl_seconds=600,
+            )
+
+            consumed_pending = store.consume_pending_demand(
+                snapshot.pending.values()
+            )
+            consumed_images = store.consume_pending_image_builds(
+                snapshot.image_builds.values()
+            )
+            consumed_prepared = store.consume_prepared_capacity(
+                snapshot.prepared.values()
+            )
+            consumed_builders = store.consume_prepared_builders(
+                snapshot.prepared_builders.values()
+            )
+            remaining = store.load()
+
+        self.assertEqual(consumed_pending, [])
+        self.assertEqual(consumed_images, [])
+        self.assertEqual(consumed_prepared, [])
+        self.assertEqual(consumed_builders, [])
+        self.assertEqual(remaining.pending["pending-one"].attempts, 2)
+        self.assertEqual(remaining.image_builds["image-one"].attempts, 2)
+        self.assertEqual(remaining.image_builds["image-one"].tag, "registry/image:new")
+        self.assertEqual(remaining.prepared["prep-one"].count, 2)
+        self.assertEqual(remaining.prepared_builders["builder-one"].count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

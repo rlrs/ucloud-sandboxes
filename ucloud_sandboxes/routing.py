@@ -796,24 +796,53 @@ class RoutingStore:
                 prepared_builders=dict(self._state.prepared_builders),
             )
 
-    def consume_pending_demand(self) -> list[PendingSandboxDemand]:
+    def consume_pending_demand(
+        self,
+        items: Iterable[PendingSandboxDemand] | None = None,
+    ) -> list[PendingSandboxDemand]:
         now = utc_now()
         with self._lock:
             self._refresh_unlocked()
             pending = self._active_pending_unlocked(now)
             if not pending:
                 return []
+            targets = list(items) if items is not None else list(pending.values())
+            if not targets:
+                return []
+            consumed: list[PendingSandboxDemand] = []
             with self._transaction() as conn:
-                conn.execute("DELETE FROM pending")
+                for item in targets:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM pending
+                        WHERE sandbox_id = ?
+                          AND updated_at = ?
+                          AND attempts = ?
+                        """,
+                        (
+                            item.sandbox_id,
+                            item.updated_at,
+                            item.attempts,
+                        ),
+                    )
+                    if cursor.rowcount:
+                        consumed.append(item)
+            if not consumed:
+                return []
+            consumed_ids = {item.sandbox_id for item in consumed}
             self._state = RoutingState(
                 sandboxes=dict(self._state.sandboxes),
                 exec_sessions=dict(self._state.exec_sessions),
-                pending={},
+                pending={
+                    sandbox_id: item
+                    for sandbox_id, item in self._state.pending.items()
+                    if sandbox_id not in consumed_ids
+                },
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
                 prepared_builders=dict(self._state.prepared_builders),
             )
-            return list(pending.values())
+            return consumed
 
     def pending_sandboxes(self) -> list[PendingSandboxDemand]:
         now = utc_now()
@@ -862,24 +891,55 @@ class RoutingStore:
                 prepared_builders=dict(self._state.prepared_builders),
             )
 
-    def consume_pending_image_builds(self) -> list[PendingImageBuildDemand]:
+    def consume_pending_image_builds(
+        self,
+        items: Iterable[PendingImageBuildDemand] | None = None,
+    ) -> list[PendingImageBuildDemand]:
         now = utc_now()
         with self._lock:
             self._refresh_unlocked()
             image_builds = self._active_image_builds_unlocked(now)
             if not image_builds:
                 return []
+            targets = list(items) if items is not None else list(image_builds.values())
+            if not targets:
+                return []
+            consumed: list[PendingImageBuildDemand] = []
             with self._transaction() as conn:
-                conn.execute("DELETE FROM image_builds")
+                for item in targets:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM image_builds
+                        WHERE image_id = ?
+                          AND tag = ?
+                          AND updated_at = ?
+                          AND attempts = ?
+                        """,
+                        (
+                            item.image_id,
+                            item.tag,
+                            item.updated_at,
+                            item.attempts,
+                        ),
+                    )
+                    if cursor.rowcount:
+                        consumed.append(item)
+            if not consumed:
+                return []
+            consumed_ids = {item.image_id for item in consumed}
             self._state = RoutingState(
                 sandboxes=dict(self._state.sandboxes),
                 exec_sessions=dict(self._state.exec_sessions),
                 pending=dict(self._state.pending),
-                image_builds={},
+                image_builds={
+                    image_id: item
+                    for image_id, item in self._state.image_builds.items()
+                    if image_id not in consumed_ids
+                },
                 prepared=dict(self._state.prepared),
                 prepared_builders=dict(self._state.prepared_builders),
             )
-            return list(image_builds.values())
+            return consumed
 
     def upsert_prepared_capacity(
         self,
@@ -947,24 +1007,57 @@ class RoutingStore:
             prepared = self._active_prepared_unlocked(now)
             return list(prepared.values())
 
-    def consume_prepared_capacity(self) -> list[PreparedCapacityDemand]:
+    def consume_prepared_capacity(
+        self,
+        items: Iterable[PreparedCapacityDemand] | None = None,
+    ) -> list[PreparedCapacityDemand]:
         now = utc_now()
         with self._lock:
             self._refresh_unlocked()
             prepared = self._active_prepared_unlocked(now)
             if not prepared:
                 return []
+            targets = list(items) if items is not None else list(prepared.values())
+            if not targets:
+                return []
+            consumed: list[PreparedCapacityDemand] = []
             with self._transaction() as conn:
-                conn.execute("DELETE FROM prepared_capacity")
+                for item in targets:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM prepared_capacity
+                        WHERE prepare_id = ?
+                          AND count = ?
+                          AND updated_at = ?
+                          AND expires_at = ?
+                          AND image = ?
+                        """,
+                        (
+                            item.prepare_id,
+                            item.count,
+                            item.updated_at,
+                            item.expires_at,
+                            item.image,
+                        ),
+                    )
+                    if cursor.rowcount:
+                        consumed.append(item)
+            if not consumed:
+                return []
+            consumed_ids = {item.prepare_id for item in consumed}
             self._state = RoutingState(
                 sandboxes=dict(self._state.sandboxes),
                 exec_sessions=dict(self._state.exec_sessions),
                 pending=dict(self._state.pending),
                 image_builds=dict(self._state.image_builds),
-                prepared={},
+                prepared={
+                    prepare_id: item
+                    for prepare_id, item in self._state.prepared.items()
+                    if prepare_id not in consumed_ids
+                },
                 prepared_builders=dict(self._state.prepared_builders),
             )
-            return list(prepared.values())
+            return consumed
 
     def upsert_prepared_builder(
         self,
@@ -1026,24 +1119,57 @@ class RoutingStore:
             prepared_builders = self._active_prepared_builders_unlocked(now)
             return list(prepared_builders.values())
 
-    def consume_prepared_builders(self) -> list[PreparedBuilderDemand]:
+    def consume_prepared_builders(
+        self,
+        items: Iterable[PreparedBuilderDemand] | None = None,
+    ) -> list[PreparedBuilderDemand]:
         now = utc_now()
         with self._lock:
             self._refresh_unlocked()
             prepared_builders = self._active_prepared_builders_unlocked(now)
             if not prepared_builders:
                 return []
+            targets = (
+                list(items) if items is not None else list(prepared_builders.values())
+            )
+            if not targets:
+                return []
+            consumed: list[PreparedBuilderDemand] = []
             with self._transaction() as conn:
-                conn.execute("DELETE FROM prepared_builders")
+                for item in targets:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM prepared_builders
+                        WHERE prepare_id = ?
+                          AND count = ?
+                          AND updated_at = ?
+                          AND expires_at = ?
+                        """,
+                        (
+                            item.prepare_id,
+                            item.count,
+                            item.updated_at,
+                            item.expires_at,
+                        ),
+                    )
+                    if cursor.rowcount:
+                        consumed.append(item)
+            if not consumed:
+                return []
+            consumed_ids = {item.prepare_id for item in consumed}
             self._state = RoutingState(
                 sandboxes=dict(self._state.sandboxes),
                 exec_sessions=dict(self._state.exec_sessions),
                 pending=dict(self._state.pending),
                 image_builds=dict(self._state.image_builds),
                 prepared=dict(self._state.prepared),
-                prepared_builders={},
+                prepared_builders={
+                    prepare_id: item
+                    for prepare_id, item in self._state.prepared_builders.items()
+                    if prepare_id not in consumed_ids
+                },
             )
-            return list(prepared_builders.values())
+            return consumed
 
     def prepared_builder_count(self) -> int:
         now = utc_now()
@@ -1695,6 +1821,43 @@ def _copy_state(state: RoutingState) -> RoutingState:
         image_builds=dict(state.image_builds),
         prepared=dict(state.prepared),
         prepared_builders=dict(state.prepared_builders),
+    )
+
+
+def sandbox_demand_from_routing_state(
+    state: RoutingState,
+    *,
+    now: datetime | None = None,
+) -> SandboxDemand:
+    if now is None:
+        now = utc_now()
+    pending_total = ResourceQuantity()
+    prepared_total = ResourceQuantity()
+    oldest_pending_seconds = 0
+    for item in state.pending.values():
+        if item.is_expired(now):
+            continue
+        pending_total = pending_total + item.resources
+        created_at = parse_iso_datetime(item.created_at)
+        if created_at is not None:
+            oldest_pending_seconds = max(
+                oldest_pending_seconds,
+                int((now - created_at).total_seconds()),
+            )
+    for item in state.prepared.values():
+        if item.is_expired(now):
+            continue
+        prepared_total = prepared_total + item.total_resources
+        created_at = parse_iso_datetime(item.created_at)
+        if created_at is not None:
+            oldest_pending_seconds = max(
+                oldest_pending_seconds,
+                int((now - created_at).total_seconds()),
+            )
+    return SandboxDemand(
+        pending_resources=pending_total,
+        prepared_resources=prepared_total,
+        oldest_pending_seconds=max(0, oldest_pending_seconds),
     )
 
 

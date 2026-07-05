@@ -909,6 +909,28 @@ class ControlPlaneTests(unittest.TestCase):
                     with ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(create_one)
                         self.assertTrue(runtime.started.wait(timeout=5))
+                        same_payload = json.dumps(
+                            {
+                                "id": "limited-one",
+                                "image": "busybox",
+                                "cpus": 1,
+                                "memory_mb": 128,
+                                "disk_mb": 64,
+                            }
+                        ).encode("utf-8")
+                        same_req = request.Request(
+                            f"{base}/v1/sandboxes",
+                            data=same_payload,
+                            method="POST",
+                            headers={"Content-Type": "application/json"},
+                        )
+                        try:
+                            with request.urlopen(same_req, timeout=5):
+                                self.fail("expected duplicate create to fail")
+                        except error.HTTPError as exc:
+                            same_status = exc.code
+                            same_retry_after = exc.headers.get("Retry-After")
+                            same = json.loads(exc.read().decode("utf-8"))
                         busy_payload = json.dumps(
                             {
                                 "id": "limited-two",
@@ -945,10 +967,18 @@ class ControlPlaneTests(unittest.TestCase):
                 node.server_close()
 
         self.assertEqual(created["sandbox"]["spec"]["id"], "limited-one")
+        self.assertEqual(same_status, 503)
+        self.assertEqual(same_retry_after, "5")
+        self.assertTrue(same["retryable"])
+        self.assertEqual(same["sandbox_id"], "limited-one")
+        self.assertEqual(same["error"], "sandbox creation is already in progress")
         self.assertEqual(busy_status, 503)
         self.assertEqual(retry_after, "2")
         self.assertTrue(busy["retryable"])
         self.assertEqual(busy["max_concurrent_sandbox_creates"], 1)
+        with control_plane._GATEWAY_SANDBOX_CREATE_LOCKS_GUARD:
+            self.assertNotIn("limited-one", control_plane._GATEWAY_SANDBOX_CREATE_LOCKS)
+            self.assertNotIn("limited-two", control_plane._GATEWAY_SANDBOX_CREATE_LOCKS)
         self.assertTrue(
             any(
                 item["status"] == "error"

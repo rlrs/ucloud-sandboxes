@@ -32,7 +32,7 @@ from .metrics import (
     record_sandbox_scheduled,
     trace_span,
 )
-from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
+from .models import NodeHeartbeat, ResourceQuantity, utc_now
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
 from .routing import ExecRoute, PendingSandboxDemand, RoutingStore, SandboxRoute
 from .sandbox import SandboxSpec, sandbox_specs_match
@@ -1270,7 +1270,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         return sorted(
             candidates,
             key=lambda heartbeat: (
-                _resource_slack(heartbeat.free_resources, requested),
+                _resource_slack(
+                    _node_available_resources(heartbeat, routes), requested
+                ),
                 heartbeat.node_id,
             ),
         )[0]
@@ -1950,26 +1952,38 @@ def _node_can_fit(
 ) -> bool:
     if not _has_resource_values(requested):
         return False
-    recent_route_resources = ResourceQuantity()
-    for route in routes:
-        if route.node_url != heartbeat.node_url:
-            continue
-        route_created_at = parse_iso_datetime(route.created_at)
-        if route_created_at is not None and route_created_at <= heartbeat.updated_at:
-            continue
-        recent_route_resources = recent_route_resources + route.resources
+    return requested.fits_within(_node_available_resources(heartbeat, routes))
 
-    adjusted_free = ResourceQuantity(
-        vcpu=max(0.0, heartbeat.free_resources.vcpu - recent_route_resources.vcpu),
-        memory_mb=max(
-            0,
-            heartbeat.free_resources.memory_mb - recent_route_resources.memory_mb,
-        ),
-        disk_mb=max(
-            0, heartbeat.free_resources.disk_mb - recent_route_resources.disk_mb
-        ),
+
+def _node_available_resources(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+) -> ResourceQuantity:
+    reserved = _node_reserved_route_resources(heartbeat, routes)
+    effective = heartbeat.effective_resources
+    accounted_used = ResourceQuantity(
+        vcpu=max(heartbeat.used_resources.vcpu, reserved.vcpu),
+        memory_mb=max(heartbeat.used_resources.memory_mb, reserved.memory_mb),
+        disk_mb=max(heartbeat.used_resources.disk_mb, reserved.disk_mb),
     )
-    return requested.fits_within(adjusted_free)
+    return ResourceQuantity(
+        vcpu=max(0.0, effective.vcpu - accounted_used.vcpu),
+        memory_mb=max(0, effective.memory_mb - accounted_used.memory_mb),
+        disk_mb=max(0, effective.disk_mb - accounted_used.disk_mb),
+    )
+
+
+def _node_reserved_route_resources(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+) -> ResourceQuantity:
+    resources = ResourceQuantity()
+    node_url = heartbeat.node_url or ""
+    for route in routes:
+        if route.node_id != heartbeat.node_id and route.node_url != node_url:
+            continue
+        resources = resources + route.resources
+    return resources
 
 
 def _image_pull_lock(node_url: str, image: str) -> RLock:

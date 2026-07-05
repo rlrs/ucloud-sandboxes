@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
 from threading import Event, Lock, Thread
@@ -19,9 +20,9 @@ from ucloud_sandboxes.control_plane import (
 )
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import DockerImageRuntime
-from ucloud_sandboxes.models import ResourceQuantity
+from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import build_node_agent_server
-from ucloud_sandboxes.routing import RoutingStore
+from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
 from ucloud_sandboxes.sandbox import CommandResult, DockerGvisorRuntime
 
 
@@ -701,6 +702,38 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             {state.sandboxes["burst-1"].job_id, state.sandboxes["burst-2"].job_id},
             {"job-1", "job-2"},
+        )
+
+    def test_node_capacity_counts_routes_even_after_newer_heartbeat(self) -> None:
+        now = utc_now()
+        old = (now - timedelta(seconds=5)).isoformat()
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=now,
+            active_sandboxes=0,
+            node_url="http://node-1:8090",
+            total_resources=ResourceQuantity(vcpu=2, memory_mb=2048, disk_mb=4096),
+            used_resources=ResourceQuantity(),
+        )
+        routes = [
+            SandboxRoute(
+                sandbox_id="already-reserved",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=1024),
+                created_at=old,
+                updated_at=old,
+            )
+        ]
+
+        self.assertFalse(
+            control_plane._node_can_fit(
+                heartbeat,
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=512),
+                routes,
+            )
         )
 
     def test_gateway_create_backpressure_fails_fast(self) -> None:

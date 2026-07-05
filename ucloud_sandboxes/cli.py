@@ -166,7 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     sample = subparsers.add_parser("sample-config", help="Print a sample JSON config.")
     sample.set_defaults(func=cmd_sample_config)
 
-    inspect_job = subparsers.add_parser("inspect-job", help="Inspect one UCloud VM job.")
+    inspect_job = subparsers.add_parser(
+        "inspect-job", help="Inspect one UCloud VM job."
+    )
     add_config_args(inspect_job)
     inspect_job.add_argument("job_id")
     inspect_job.add_argument("--project", help="UCloud project id.")
@@ -181,7 +183,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_config_args(agent_heartbeat)
     agent_heartbeat.add_argument("--job-id", help="UCloud VM job id.")
-    agent_heartbeat.add_argument("--node-id", help="Stable node id. Defaults to hostname.")
+    agent_heartbeat.add_argument(
+        "--node-id", help="Stable node id. Defaults to hostname."
+    )
     agent_heartbeat.add_argument(
         "--node-url",
         help="URL the control plane can use to reach this node agent.",
@@ -543,7 +547,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Private key file passed to ssh when executing VM init.",
     )
     init_vm.add_argument(
-        "--output", choices=("text", "json", "script"), default="text", help="Output format."
+        "--output",
+        choices=("text", "json", "script"),
+        default="text",
+        help="Output format.",
     )
     init_vm.set_defaults(func=cmd_init_vm)
 
@@ -880,7 +887,9 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument("--sandbox-disk-gb", type=int, default=250)
     deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
     deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)
-    deploy_all.add_argument("--builder-disk-gb", type=int, default=DEFAULT_BUILDER_DISK_GB)
+    deploy_all.add_argument(
+        "--builder-disk-gb", type=int, default=DEFAULT_BUILDER_DISK_GB
+    )
     deploy_all.add_argument("--builder-idle-seconds", type=int, default=900)
     deploy_all.add_argument("--max-builder-nodes", type=int, default=1)
     deploy_all.add_argument("--autoscaler-interval-seconds", type=float, default=5.0)
@@ -939,7 +948,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     heartbeats.set_defaults(func=cmd_heartbeats)
 
-    plan = subparsers.add_parser("plan", help="Plan one autoscaler reconciliation cycle.")
+    plan = subparsers.add_parser(
+        "plan", help="Plan one autoscaler reconciliation cycle."
+    )
     add_config_args(plan)
     plan.add_argument("--project", help="UCloud project id.")
     plan.add_argument(
@@ -1292,9 +1303,15 @@ def add_node_version_args(parser: argparse.ArgumentParser) -> None:
 
 
 def add_resource_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--total-vcpu", type=float, default=0.0, help="Node physical vCPU.")
-    parser.add_argument("--total-memory-mb", type=int, default=0, help="Node physical RAM in MB.")
-    parser.add_argument("--total-disk-mb", type=int, default=0, help="Node usable sandbox disk in MB.")
+    parser.add_argument(
+        "--total-vcpu", type=float, default=0.0, help="Node physical vCPU."
+    )
+    parser.add_argument(
+        "--total-memory-mb", type=int, default=0, help="Node physical RAM in MB."
+    )
+    parser.add_argument(
+        "--total-disk-mb", type=int, default=0, help="Node usable sandbox disk in MB."
+    )
     parser.add_argument(
         "--cpu-overcommit",
         type=float,
@@ -1856,7 +1873,11 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print(f"Registry metrics: {registry_url}")
     print(
         "Image builds: "
-        + ("execute" if args.enable_image_builds and args.execute_image_builds else "dry-run")
+        + (
+            "execute"
+            if args.enable_image_builds and args.execute_image_builds
+            else "dry-run"
+        )
         if args.enable_image_builds
         else "Image builds: disabled"
     )
@@ -1878,7 +1899,9 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
     node_id = args.node_id or default_node_id(job_id)
     runtime_conformance_file = getattr(args, "runtime_conformance_file", None)
-    conformance_capabilities = conformance_capabilities_from_file(runtime_conformance_file)
+    conformance_capabilities = conformance_capabilities_from_file(
+        runtime_conformance_file
+    )
     conformance_results = conformance_results_from_file(runtime_conformance_file)
     runtime = DockerGvisorRuntime(
         docker_binary=args.docker_binary,
@@ -2069,7 +2092,9 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
             "returncode": run_result.returncode,
         }
         if run_result.returncode != 0:
-            raise ValueError(f"remote init failed with exit code {run_result.returncode}")
+            raise ValueError(
+                f"remote init failed with exit code {run_result.returncode}"
+            )
 
     if args.output == "json":
         print_json(result)
@@ -2088,7 +2113,9 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
         if args.execute and "run" in result:
             print(f"Remote init exit code: {result['run']['returncode']}")
         if not args.execute:
-            print("Dry-run only. Re-run with --execute to run the init script over SSH.")
+            print(
+                "Dry-run only. Re-run with --execute to run the init script over SSH."
+            )
     return 0
 
 
@@ -2130,7 +2157,9 @@ def cmd_ensure_ucloud_ssh_key(args: argparse.Namespace) -> int:
         print_json(result)
     else:
         status = "created" if result["created"] else "already present"
-        print(f"UCloud SSH key {status}: {result['id'] or ''} {result['title'] or ''}".rstrip())
+        print(
+            f"UCloud SSH key {status}: {result['id'] or ''} {result['title'] or ''}".rstrip()
+        )
         if create_timeout:
             print("Create request timed out, but follow-up browse found the key.")
     return 0
@@ -2171,7 +2200,9 @@ def cmd_vm_network_attachment(args: argparse.Namespace) -> int:
     config = load_config(args)
     private_network_id = args.private_network_id or config.private_network_id
     if not private_network_id:
-        raise ValueError("private network id is required via --private-network-id or config.")
+        raise ValueError(
+            "private network id is required via --private-network-id or config."
+        )
     hostname_prefix = args.hostname_prefix or config.node_hostname_prefix
     hostname = args.hostname
     if not hostname:
@@ -2315,7 +2346,9 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
         print(f"Mode: {'execute' if args.execute else 'dry-run'}")
         if args.execute:
             job_ids = result.get("jobIds", [])
-            print(f"Submitted job ids: {', '.join(job_ids) if job_ids else '(none returned)'}")
+            print(
+                f"Submitted job ids: {', '.join(job_ids) if job_ids else '(none returned)'}"
+            )
             if job_ids:
                 if options.ssh_enabled:
                     print(
@@ -2356,7 +2389,9 @@ def cmd_open_vm_web(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(response)
     else:
-        print(f"Opened VM web session for job {args.job_id} rank {args.rank} port {args.port}.")
+        print(
+            f"Opened VM web session for job {args.job_id} rank {args.rank} port {args.port}."
+        )
         for item in response.get("responses", []):
             session = item.get("session") if isinstance(item, dict) else None
             if isinstance(session, dict) and session.get("redirectClientTo"):
@@ -2372,7 +2407,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         raise ValueError("deployment id is required via --deployment-id or config.")
     private_network_id = args.private_network_id or config.private_network_id
     if not private_network_id:
-        raise ValueError("private network id is required via --private-network-id or config.")
+        raise ValueError(
+            "private network id is required via --private-network-id or config."
+        )
 
     client: UCloudClient | None = None
 
@@ -2404,9 +2441,8 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
     inferred_job: VmJob | None = None
     if not args.gateway_private_host:
         inferred_job = vm_job_from_payload(get_payload())
-    gateway_private_host = (
-        args.gateway_private_host
-        or (inferred_job.hostname if inferred_job is not None else "")
+    gateway_private_host = args.gateway_private_host or (
+        inferred_job.hostname if inferred_job is not None else ""
     )
     registry_private_ip = args.registry_private_ip or ""
 
@@ -2457,7 +2493,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
 
     if args.execute:
         if not ssh_command:
-            raise ValueError("--ssh-command is required when UCloud job updates do not expose SSH.")
+            raise ValueError(
+                "--ssh-command is required when UCloud job updates do not expose SSH."
+            )
         timeout = max(1, int(args.timeout_seconds))
         staged_wheel = stage_file_over_ssh(
             ssh_command,
@@ -2560,7 +2598,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         print(f"Registry alias: {plan.docker_host_alias}")
         print(f"Mode: {'execute' if args.execute else 'dry-run'}")
         if args.execute:
-            print("Services converged: gateway, relay, registry, registry GC, autoscaler")
+            print(
+                "Services converged: gateway, relay, registry, registry GC, autoscaler"
+            )
             if result["registeredSshKey"]:
                 key = result["registeredSshKey"]
                 print(f"Gateway init SSH key: {key.get('id') or '(present)'}")
@@ -2568,7 +2608,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             if opened:
                 print(f"Opened VM web ports: {', '.join(opened)}")
         else:
-            print("Dry-run only. Re-run with --execute to stage files and restart services.")
+            print(
+                "Dry-run only. Re-run with --execute to stage files and restart services."
+            )
             print("Use --output script to inspect the exact remote install script.")
     return 0
 
@@ -2695,6 +2737,10 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             prepared_builder_count=prepared_builder_count,
             metrics_store=metrics_store,
         )
+        route_cleanup_job_ids = set(result.get("prunedFinalHeartbeats", []))
+        if result.get("stopResponse") is not None:
+            route_cleanup_job_ids.update(str(job_id) for job_id in result["stopJobIds"])
+        removed_routes = routing_store.delete_sandboxes_for_jobs(route_cleanup_job_ids)
         consumed_pending_demand = (
             routing_store.consume_pending_demand() if args.execute else []
         )
@@ -2722,6 +2768,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
         result["consumedPreparedBuilders"] = [
             item.to_dict() for item in consumed_prepared_builders
         ]
+        result["removedRoutes"] = [route.to_dict() for route in removed_routes]
         record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
         record_submitted_vm_metrics(metrics_store, cycle, result)
         record_observed_vm_metrics(metrics_store, cycle, result, observed_vm_keys)
@@ -2842,14 +2889,26 @@ def run_reconcile_cycle(
         allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=BUILDER_LABEL,
     )
-    requested_stop_job_ids = (*requested_sandbox_stop_job_ids, *requested_builder_stop_job_ids)
+    requested_stop_job_ids = (
+        *requested_sandbox_stop_job_ids,
+        *requested_builder_stop_job_ids,
+    )
     stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
-    blocked_stop_job_ids = (*blocked_sandbox_stop_job_ids, *blocked_builder_stop_job_ids)
-    bootstrap_state_file = getattr(args, "init_state_file", None) or config.bootstrap_file()
+    blocked_stop_job_ids = (
+        *blocked_sandbox_stop_job_ids,
+        *blocked_builder_stop_job_ids,
+    )
+    bootstrap_state_file = (
+        getattr(args, "init_state_file", None) or config.bootstrap_file()
+    )
     bootstrap_store = VmBootstrapStore(Path(bootstrap_state_file))
     bootstrap_records = prune_bootstrap_records(
         bootstrap_store.load(),
-        {node.job_id for node in (*sandbox_nodes, *builder_nodes) if not node.job.is_final},
+        {
+            node.job_id
+            for node in (*sandbox_nodes, *builder_nodes)
+            if not node.job.is_final
+        },
     )
 
     client: UCloudClient | None = None
@@ -2871,7 +2930,9 @@ def run_reconcile_cycle(
             job_id = str(payload.get("id") or "")
             if job_id:
                 plan = plan_vm_init(
-                    get_client().retrieve_job(config.project_id, job_id, include_updates=True)
+                    get_client().retrieve_job(
+                        config.project_id, job_id, include_updates=True
+                    )
                 )
         return plan
 
@@ -2948,7 +3009,9 @@ def run_reconcile_cycle(
     if args.execute_stops and stop_job_ids:
         removed_stop_heartbeats = heartbeat_store.remove(stop_job_ids)
         result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
-        result["stopResponse"] = get_client().terminate_jobs(config.project_id, stop_job_ids)
+        result["stopResponse"] = get_client().terminate_jobs(
+            config.project_id, stop_job_ids
+        )
 
     if getattr(args, "execute_init", False) and bootstrap_intents:
         bootstrap_results: list[dict[str, Any]] = []
@@ -2982,10 +3045,14 @@ def run_reconcile_cycle(
                 stage_result = stage_vm_init_package_over_ssh(
                     intent.plan.ssh_command,
                     intent.options,
-                    timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
+                    timeout_seconds=max(
+                        1, int(getattr(args, "init_timeout_seconds", 1800))
+                    ),
                     private_key_file=getattr(args, "init_ssh_private_key_file", None),
                 )
-                stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
+                stage_elapsed_ms = int(
+                    (time.perf_counter() - stage_started_perf) * 1000
+                )
                 stage_payload: dict[str, Any] | None = None
                 if stage_result is not None:
                     stage_duration_ms = stage_elapsed_ms
@@ -3039,12 +3106,16 @@ def run_reconcile_cycle(
                 run_result = run_init_over_ssh(
                     intent.plan.ssh_command,
                     render_vm_init_script(effective_options),
-                    timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
+                    timeout_seconds=max(
+                        1, int(getattr(args, "init_timeout_seconds", 1800))
+                    ),
                     private_key_file=getattr(args, "init_ssh_private_key_file", None),
                 )
                 run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
                 if run_result.returncode == 0:
-                    bootstrap_records = mark_bootstrap_success(bootstrap_records, intent)
+                    bootstrap_records = mark_bootstrap_success(
+                        bootstrap_records, intent
+                    )
                     bootstrap_results.append(
                         {
                             "jobId": intent.job_id,
@@ -3162,7 +3233,9 @@ def record_submitted_vm_metrics(
     job_ids = list(result.get("createdJobIds") or [])
     intents = list(result.get("rawCreateIntents") or [])
     for job_id, intent in zip(job_ids, intents):
-        record_vm_submitted(metrics_store, cycle=cycle, job_id=str(job_id), intent=intent)
+        record_vm_submitted(
+            metrics_store, cycle=cycle, job_id=str(job_id), intent=intent
+        )
 
 
 def record_observed_vm_metrics(
@@ -3231,7 +3304,9 @@ def _elapsed_ms(started_perf: float) -> int:
     return max(0, int((time.perf_counter() - started_perf) * 1000))
 
 
-def load_jobs_for_plan(config: AutoscalerConfig, args: argparse.Namespace) -> list[VmJob]:
+def load_jobs_for_plan(
+    config: AutoscalerConfig, args: argparse.Namespace
+) -> list[VmJob]:
     if args.jobs_file:
         payload = json.loads(args.jobs_file.read_text(encoding="utf-8"))
         raw_items = payload.get("items") if isinstance(payload, dict) else payload
@@ -3281,7 +3356,10 @@ def should_include_job(
 ) -> bool:
     if job.id in include_ids:
         return True
-    if config.deployment_id and job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id:
+    if (
+        config.deployment_id
+        and job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
+    ):
         return False
     if not job_matches_private_network(job, config):
         return False
@@ -3336,8 +3414,12 @@ def vm_init_options_for_autoscaled_node(
     if config.deployment_id:
         labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
     token_file = str(getattr(args, "init_heartbeat_bearer_token_file", "") or "")
-    docker_quota_image_gb = max(0, int(getattr(args, "init_docker_quota_image_gb", 200)))
-    total_resources = resources_from_vm_job(node.job, config.policy.default_node_resources)
+    docker_quota_image_gb = max(
+        0, int(getattr(args, "init_docker_quota_image_gb", 200))
+    )
+    total_resources = resources_from_vm_job(
+        node.job, config.policy.default_node_resources
+    )
     if docker_quota_image_gb > 0 and total_resources.disk_mb > 0:
         total_resources = replace(
             total_resources,
@@ -3399,7 +3481,10 @@ def apply_bootstrap_cli_requirements(intent: VmBootstrapIntent) -> VmBootstrapIn
             runnable=False,
             reason="init heartbeat url is required via --init-heartbeat-url",
         )
-    if intent.options.heartbeat_bearer_token_file and not intent.options.heartbeat_bearer_token:
+    if (
+        intent.options.heartbeat_bearer_token_file
+        and not intent.options.heartbeat_bearer_token
+    ):
         return replace(
             intent,
             runnable=False,
@@ -3427,7 +3512,9 @@ def vm_bootstrap_intent_to_dict(intent: VmBootstrapIntent) -> dict[str, Any]:
 def resources_from_vm_job(job: VmJob, default: ResourceQuantity) -> ResourceQuantity:
     return ResourceQuantity(
         vcpu=float(job.cpu) if job.cpu is not None else default.vcpu,
-        memory_mb=(job.memory_gb * 1024) if job.memory_gb is not None else default.memory_mb,
+        memory_mb=(job.memory_gb * 1024)
+        if job.memory_gb is not None
+        else default.memory_mb,
         disk_mb=(job.disk_gb * 1024) if job.disk_gb is not None else default.disk_mb,
     )
 
@@ -3591,7 +3678,9 @@ def print_reconcile(
                     "or --allow-unlabeled-stops."
                 )
         else:
-            print("Stop dry-run only. Re-run with --execute-stops to terminate planned jobs.")
+            print(
+                "Stop dry-run only. Re-run with --execute-stops to terminate planned jobs."
+            )
 
 
 def vm_job_to_dict(job: VmJob) -> dict[str, Any]:
@@ -3940,12 +4029,16 @@ def read_public_ssh_key_file(path: Path) -> str:
         raise ValueError("public key file is empty.")
     if "\n" in public_key or "\r" in public_key:
         raise ValueError("public key file must contain exactly one public key.")
-    if not any(public_key.startswith(prefix + " ") for prefix in PUBLIC_SSH_KEY_PREFIXES):
+    if not any(
+        public_key.startswith(prefix + " ") for prefix in PUBLIC_SSH_KEY_PREFIXES
+    ):
         raise ValueError("public key file does not look like an OpenSSH public key.")
     return public_key
 
 
-def find_ucloud_ssh_key(items: list[dict[str, Any]], public_key: str) -> dict[str, Any] | None:
+def find_ucloud_ssh_key(
+    items: list[dict[str, Any]], public_key: str
+) -> dict[str, Any] | None:
     for item in items:
         specification = item.get("specification")
         if isinstance(specification, dict) and specification.get("key") == public_key:

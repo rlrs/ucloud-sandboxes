@@ -166,6 +166,80 @@ class RoutingStoreTests(unittest.TestCase):
 
         self.assertIn("new-after-list-started", state.sandboxes)
 
+    def test_delete_sandboxes_for_jobs_removes_routes_and_dependents(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            now = utc_now().isoformat()
+            store.save(
+                RoutingState(
+                    sandboxes={
+                        "remove-me": SandboxRoute(
+                            sandbox_id="remove-me",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=now,
+                            updated_at=now,
+                        ),
+                        "keep-me": SandboxRoute(
+                            sandbox_id="keep-me",
+                            node_id="node-2",
+                            job_id="job-2",
+                            node_url="http://node-2:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=now,
+                            updated_at=now,
+                        ),
+                    },
+                    exec_sessions={
+                        "exec-remove": ExecRoute(
+                            session_id="exec-remove",
+                            sandbox_id="remove-me",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            created_at=now,
+                            updated_at=now,
+                        ),
+                        "exec-keep": ExecRoute(
+                            session_id="exec-keep",
+                            sandbox_id="keep-me",
+                            node_id="node-2",
+                            job_id="job-2",
+                            node_url="http://node-2:8090",
+                            created_at=now,
+                            updated_at=now,
+                        ),
+                    },
+                    pending={
+                        "remove-me": PendingSandboxDemand(
+                            sandbox_id="remove-me",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    },
+                    image_builds={},
+                )
+            )
+
+            removed = store.delete_sandboxes_for_jobs(["job-1"])
+            state = store.load()
+
+        self.assertEqual([route.sandbox_id for route in removed], ["remove-me"])
+        self.assertNotIn("remove-me", state.sandboxes)
+        self.assertNotIn("remove-me", state.pending)
+        self.assertNotIn("exec-remove", state.exec_sessions)
+        self.assertIn("keep-me", state.sandboxes)
+        self.assertIn("exec-keep", state.exec_sessions)
+
     def test_legacy_json_file_is_moved_aside(self) -> None:
         with TemporaryDirectory() as raw_dir:
             route_file = Path(raw_dir) / "routes.json"

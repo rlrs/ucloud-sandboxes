@@ -19,9 +19,15 @@ from ucloud_sandboxes.cli import (
 )
 from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.deployment import package_version
-from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, ScalePolicy, VmJob, utc_now
+from ucloud_sandboxes.models import (
+    NodeHeartbeat,
+    ResourceQuantity,
+    ScalePolicy,
+    VmJob,
+    utc_now,
+)
 from ucloud_sandboxes.registry import HeartbeatStore
-from ucloud_sandboxes.routing import RoutingStore
+from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
 
 
 @dataclass(frozen=True)
@@ -52,7 +58,9 @@ class CliTests(unittest.TestCase):
                 cli.main(["--version"])
 
         self.assertEqual(raised.exception.code, 0)
-        self.assertEqual(output.getvalue().strip(), f"ucloud-sandboxes {package_version()}")
+        self.assertEqual(
+            output.getvalue().strip(), f"ucloud-sandboxes {package_version()}"
+        )
 
     def test_private_network_config_filters_auto_discovered_pool_nodes(self) -> None:
         config = AutoscalerConfig.default(project_id="project-1")
@@ -222,7 +230,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(options.hostname, "sandbox-gateway-gateway")
         self.assertEqual(options.name, "ucloud-sandbox-gateway-gateway")
         self.assertNotIn("ucloud-sandboxes/node", options.job_item()["labels"])
-        self.assertEqual(options.job_item()["labels"]["ucloud-sandboxes/gateway"], "true")
+        self.assertEqual(
+            options.job_item()["labels"]["ucloud-sandboxes/gateway"], "true"
+        )
         self.assertIn(
             {"type": "ingress", "id": "12345368", "port": 8090},
             options.job_item()["resources"],
@@ -268,7 +278,9 @@ class CliTests(unittest.TestCase):
         options, _seed = vm_submission_options_from_args(args, config)
         resources = options.job_item()["resources"]
 
-        self.assertEqual(options.file_mounts[0].path, "/1234567/ucloud-sandbox-registry")
+        self.assertEqual(
+            options.file_mounts[0].path, "/1234567/ucloud-sandbox-registry"
+        )
         self.assertFalse(options.file_mounts[0].read_only)
         self.assertEqual(resources[-2]["type"], "file")
         self.assertEqual(resources[-2]["path"], "/1234567/ucloud-sandbox-registry")
@@ -395,16 +407,29 @@ class CliTests(unittest.TestCase):
             key_file = Path(raw_dir) / "gateway-init.pub"
             key_file.write_text("ssh-ed25519 AAAA gateway\n", encoding="utf-8")
 
-            self.assertEqual(read_public_ssh_key_file(key_file), "ssh-ed25519 AAAA gateway")
+            self.assertEqual(
+                read_public_ssh_key_file(key_file), "ssh-ed25519 AAAA gateway"
+            )
 
-            key_file.write_text("ssh-ed25519 AAAA gateway\nssh-ed25519 BBBB other\n", encoding="utf-8")
+            key_file.write_text(
+                "ssh-ed25519 AAAA gateway\nssh-ed25519 BBBB other\n", encoding="utf-8"
+            )
             with self.assertRaises(ValueError):
                 read_public_ssh_key_file(key_file)
 
     def test_find_ucloud_ssh_key_matches_key_material(self) -> None:
         items = [
-            {"id": "1", "specification": {"title": "other", "key": "ssh-ed25519 AAAA other"}},
-            {"id": "2", "specification": {"title": "gateway", "key": "ssh-ed25519 BBBB gateway"}},
+            {
+                "id": "1",
+                "specification": {"title": "other", "key": "ssh-ed25519 AAAA other"},
+            },
+            {
+                "id": "2",
+                "specification": {
+                    "title": "gateway",
+                    "key": "ssh-ed25519 BBBB gateway",
+                },
+            },
         ]
 
         self.assertEqual(
@@ -525,6 +550,97 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("job=old-node", text)
         self.assertNotIn("state=SUCCESS", text)
 
+    def test_autoscaler_prunes_routes_for_final_jobs(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "old-node",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-old",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-16-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                    "parameters": {"diskSize": {"value": 250}},
+                                },
+                                "status": {"state": "SUCCESS"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "old-node": NodeHeartbeat(
+                        node_id="node-old",
+                        job_id="old-node",
+                        updated_at=utc_now(),
+                        active_sandboxes=1,
+                        node_url="http://node-old:8090",
+                    )
+                }
+            )
+            route_file = root / "routes.sqlite"
+            RoutingStore(route_file).upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="stale-sandbox",
+                    node_id="node-old",
+                    job_id="old-node",
+                    node_url="http://node-old:8090",
+                    resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                )
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "autoscaler-loop",
+                        "--project",
+                        "project-1",
+                        "--deployment-id",
+                        "prod-a",
+                        "--state-dir",
+                        raw_dir,
+                        "--route-file",
+                        str(route_file),
+                        "--heartbeats",
+                        str(heartbeat_file),
+                        "--jobs-file",
+                        str(jobs_file),
+                        "--no-private-network",
+                        "--once",
+                        "--output",
+                        "json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            routes = RoutingStore(route_file).load().sandboxes
+
+        self.assertEqual(result, 0)
+        self.assertEqual(payload["prunedFinalHeartbeats"], ["old-node"])
+        self.assertEqual(
+            [route["sandbox_id"] for route in payload["removedRoutes"]],
+            ["stale-sandbox"],
+        )
+        self.assertEqual(routes, {})
+
     def test_deploy_all_in_one_dry_run_outputs_plan_without_ucloud_lookup(self) -> None:
         with TemporaryDirectory() as raw_dir:
             wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
@@ -559,10 +675,17 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertFalse(payload["execute"])
         self.assertEqual(payload["plan"]["deploymentId"], "prod-a")
-        self.assertEqual(payload["plan"]["initHeartbeatUrl"], "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat")
-        self.assertEqual(payload["plan"]["dockerHostAlias"], "ucloud-sandbox-registry=10.0.0.5")
+        self.assertEqual(
+            payload["plan"]["initHeartbeatUrl"],
+            "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
+        )
+        self.assertEqual(
+            payload["plan"]["dockerHostAlias"], "ucloud-sandbox-registry=10.0.0.5"
+        )
 
-    def test_deploy_all_in_one_does_not_infer_registry_from_ucloud_job_label(self) -> None:
+    def test_deploy_all_in_one_does_not_infer_registry_from_ucloud_job_label(
+        self,
+    ) -> None:
         class FailingUCloudClient:
             def __init__(self, _session_store) -> None:
                 pass
@@ -771,7 +894,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", labels)
 
-    def test_executing_autoscaler_loop_consumes_pending_image_build_signal(self) -> None:
+    def test_executing_autoscaler_loop_consumes_pending_image_build_signal(
+        self,
+    ) -> None:
         submitted: list[tuple[str, dict]] = []
 
         class FakeUCloudClient:
@@ -881,7 +1006,9 @@ class CliTests(unittest.TestCase):
                     )
 
                 payload = json.loads(output.getvalue())
-                remaining_builder_count = RoutingStore(route_file).prepared_builder_count()
+                remaining_builder_count = RoutingStore(
+                    route_file
+                ).prepared_builder_count()
         finally:
             cli.UCloudClient = original_client
 
@@ -912,7 +1039,10 @@ class CliTests(unittest.TestCase):
                                 "specification": {
                                     "name": "ucloud-sandbox-node-one",
                                     "hostname": "sandbox-node-one",
-                                    "application": {"name": "vm-ubuntu", "version": "24.04"},
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
                                     "product": {
                                         "id": "cpu-amd-zen5-2-vcpu",
                                         "category": "cpu-amd-zen5",
@@ -1096,7 +1226,10 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["private_key_file"], "/work/ucloud-sandboxes/state/ssh/gateway-init")
+        self.assertEqual(
+            calls[0]["private_key_file"],
+            "/work/ucloud-sandboxes/state/ssh/gateway-init",
+        )
         self.assertIn(
             "UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON='[\"ucloud-sandbox-registry:5000\"]'",
             calls[0]["script"],

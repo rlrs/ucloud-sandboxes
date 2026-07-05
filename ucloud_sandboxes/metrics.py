@@ -84,7 +84,7 @@ class MetricsStore:
         with self._lock:
             if not self.path.exists():
                 return []
-            lines = self.path.read_text(encoding="utf-8").splitlines()
+            lines = _read_recent_lines(self.path, max_events)
         events: list[MetricEvent] = []
         for line in lines:
             if not line.strip():
@@ -99,6 +99,34 @@ class MetricsStore:
         if max_events <= 0:
             return events
         return events[-max_events:]
+
+
+def _read_recent_lines(
+    path: Path,
+    max_lines: int,
+    *,
+    chunk_size: int = 256 * 1024,
+) -> list[str]:
+    if max_lines <= 0:
+        return path.read_text(encoding="utf-8").splitlines()
+
+    chunks: list[bytes] = []
+    newline_count = 0
+    with path.open("rb") as handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        while position > 0 and newline_count <= max_lines:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+            chunks.append(chunk)
+            newline_count += chunk.count(b"\n")
+
+    if not chunks:
+        return []
+    data = b"".join(reversed(chunks))
+    return data.decode("utf-8", errors="replace").splitlines()[-max_lines:]
 
 
 @dataclass
@@ -256,7 +284,9 @@ def record_autoscaler_cycle(
 ) -> None:
     if store is None:
         return
-    decision = result.get("decision") if isinstance(result.get("decision"), dict) else {}
+    decision = (
+        result.get("decision") if isinstance(result.get("decision"), dict) else {}
+    )
     builder_decision = (
         result.get("builderDecision")
         if isinstance(result.get("builderDecision"), dict)
@@ -424,7 +454,9 @@ def record_node_heartbeat(
                 if heartbeat.runtime_metrics is not None
                 else None
             ),
-            "idle_since": heartbeat.idle_since.isoformat() if heartbeat.idle_since else None,
+            "idle_since": heartbeat.idle_since.isoformat()
+            if heartbeat.idle_since
+            else None,
             "heartbeat_updated_at": heartbeat.updated_at.isoformat(),
         },
     )
@@ -478,9 +510,7 @@ def build_metrics_snapshot(
     )
     pending_sandboxes = list(routing_state.pending.values())
     prepared_capacity = [
-        item
-        for item in routing_state.prepared.values()
-        if not item.is_expired(now)
+        item for item in routing_state.prepared.values() if not item.is_expired(now)
     ]
     prepared_builders = [
         item
@@ -494,11 +524,9 @@ def build_metrics_snapshot(
         if event.kind == "sandbox_scheduled"
         and isinstance(event.data.get("scale_up_wait_ms"), int)
     ][-DEFAULT_SCALE_UP_SAMPLE_LIMIT:]
-    node_events = [
-        event
-        for event in events
-        if event.kind == "node_heartbeat"
-    ][-DEFAULT_RECENT_EVENT_LIMIT:]
+    node_events = [event for event in events if event.kind == "node_heartbeat"][
+        -DEFAULT_RECENT_EVENT_LIMIT:
+    ]
     scale_values = [int(event.data["scale_up_wait_ms"]) for event in scale_events]
 
     return {
@@ -510,7 +538,10 @@ def build_metrics_snapshot(
             "incompatible": max(0, len(fresh) - len(compatible)),
             "sandbox": len(sandbox_nodes),
             "builder": len(builder_nodes),
-            "items": [_node_metrics(heartbeat, now, heartbeat_ttl_seconds) for heartbeat in heartbeat_items],
+            "items": [
+                _node_metrics(heartbeat, now, heartbeat_ttl_seconds)
+                for heartbeat in heartbeat_items
+            ],
             "samples": sum(1 for event in events if event.kind == "node_heartbeat"),
             "recent_samples": [event.to_dict() for event in node_events],
         },
@@ -558,7 +589,9 @@ def build_metrics_snapshot(
         "vm_lifecycle": _vm_lifecycle_summary(events),
         "traces": _trace_snapshot(events),
         "events": {
-            "recent": [event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]],
+            "recent": [
+                event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]
+            ],
         },
     }
 
@@ -575,7 +608,9 @@ def _node_metrics(
         "job_id": heartbeat.job_id,
         "node_url": heartbeat.node_url or "",
         "fresh": heartbeat.is_fresh(now, heartbeat_ttl_seconds),
-        "agent_version_compatible": agent_version_is_compatible(heartbeat.agent_version),
+        "agent_version_compatible": agent_version_is_compatible(
+            heartbeat.agent_version
+        ),
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),
         "active_sandboxes": heartbeat.active_sandboxes,
         "active_image_builds": heartbeat.active_image_builds,
@@ -656,9 +691,7 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
             "load_average_5m": None,
             "load_average_15m": None,
         }
-    cpu_vcpu_values = [
-        item.cpu_vcpu for item in metrics if item.cpu_vcpu is not None
-    ]
+    cpu_vcpu_values = [item.cpu_vcpu for item in metrics if item.cpu_vcpu is not None]
     cpu_percent_values = [
         item.cpu_percent for item in metrics if item.cpu_percent is not None
     ]
@@ -747,8 +780,12 @@ def _trace_summary(trace_id: str, spans: list[MetricEvent]) -> dict[str, Any]:
         "trace_id": trace_id,
         "name": str(root.data.get("name") or "") if root is not None else "",
         "status": "error" if "error" in statuses else "ok",
-        "started_at": str(root.data.get("started_at") or root.timestamp) if root is not None else "",
-        "finished_at": str(root.data.get("finished_at") or root.timestamp) if root is not None else "",
+        "started_at": str(root.data.get("started_at") or root.timestamp)
+        if root is not None
+        else "",
+        "finished_at": str(root.data.get("finished_at") or root.timestamp)
+        if root is not None
+        else "",
         "duration_ms": total_duration,
         "span_count": len(sorted_spans),
         "spans": [
@@ -784,7 +821,9 @@ def _metrics_lock(path: Path) -> RLock:
         return lock
 
 
-def _resource_load(used: ResourceQuantity, total: ResourceQuantity) -> dict[str, float | None]:
+def _resource_load(
+    used: ResourceQuantity, total: ResourceQuantity
+) -> dict[str, float | None]:
     return {
         "vcpu": _ratio(used.vcpu, total.vcpu),
         "memory": _ratio(used.memory_mb, total.memory_mb),
@@ -930,13 +969,15 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
             _copy_first(record, data, "hostname")
             _copy_first(record, data, "product_id")
             _copy_first(record, data, "disk_gb")
-            record["ucloud_created_at"] = (
-                data.get("created_at") or record.get("ucloud_created_at")
+            record["ucloud_created_at"] = data.get("created_at") or record.get(
+                "ucloud_created_at"
             )
-            record["ucloud_started_at"] = (
-                data.get("started_at") or record.get("ucloud_started_at")
+            record["ucloud_started_at"] = data.get("started_at") or record.get(
+                "ucloud_started_at"
             )
-            record["latest_note"] = data.get("latest_note") or record.get("latest_note") or ""
+            record["latest_note"] = (
+                data.get("latest_note") or record.get("latest_note") or ""
+            )
             record["ready"] = bool(data.get("ready"))
             record["provisioning"] = bool(data.get("provisioning"))
         elif event.kind == "vm_init_attempt":
@@ -1013,8 +1054,7 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
         "samples": len(records),
         "items": items,
         "recent_events": [
-            event.to_dict()
-            for event in lifecycle_events[-DEFAULT_RECENT_EVENT_LIMIT:]
+            event.to_dict() for event in lifecycle_events[-DEFAULT_RECENT_EVENT_LIMIT:]
         ],
     }
 

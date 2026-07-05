@@ -7,6 +7,7 @@ import unittest
 
 from ucloud_sandboxes.models import ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import (
+    ExecRoute,
     PENDING_DEMAND_TTL_SECONDS,
     PendingImageBuildDemand,
     PendingSandboxDemand,
@@ -35,7 +36,9 @@ class RoutingStoreTests(unittest.TestCase):
                         node_id="node-1",
                         job_id="job-1",
                         node_url="http://node-1:8090",
-                        resources=ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
+                        resources=ResourceQuantity(
+                            vcpu=1.0, memory_mb=1024, disk_mb=2048
+                        ),
                     )
                 )
 
@@ -50,6 +53,118 @@ class RoutingStoreTests(unittest.TestCase):
             state.pending["pending-0"].resources,
             ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
         )
+
+    def test_reconcile_sandboxes_for_node_removes_missing_node_routes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            now = utc_now()
+            old = (now - timedelta(seconds=60)).isoformat()
+            store.save(
+                RoutingState(
+                    sandboxes={
+                        "stale-one": SandboxRoute(
+                            sandbox_id="stale-one",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=old,
+                            updated_at=old,
+                        ),
+                        "other-node": SandboxRoute(
+                            sandbox_id="other-node",
+                            node_id="node-2",
+                            job_id="job-2",
+                            node_url="http://node-2:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=old,
+                            updated_at=old,
+                        ),
+                    },
+                    exec_sessions={
+                        "exec-stale": ExecRoute(
+                            session_id="exec-stale",
+                            sandbox_id="stale-one",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            created_at=old,
+                            updated_at=old,
+                        )
+                    },
+                    pending={
+                        "stale-one": PendingSandboxDemand(
+                            sandbox_id="stale-one",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=old,
+                            updated_at=old,
+                        )
+                    },
+                    image_builds={},
+                )
+            )
+
+            store.reconcile_sandboxes_for_node(
+                "http://node-1:8090",
+                [
+                    SandboxRoute(
+                        sandbox_id="active-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node-1:8090",
+                        resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                    )
+                ],
+                observed_at=now.isoformat(),
+            )
+            state = store.load()
+
+        self.assertNotIn("stale-one", state.sandboxes)
+        self.assertNotIn("stale-one", state.pending)
+        self.assertNotIn("exec-stale", state.exec_sessions)
+        self.assertIn("active-one", state.sandboxes)
+        self.assertIn("other-node", state.sandboxes)
+
+    def test_reconcile_sandboxes_for_node_keeps_newer_routes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            now = utc_now()
+            future = (now + timedelta(seconds=5)).isoformat()
+            store.save(
+                RoutingState(
+                    sandboxes={
+                        "new-after-list-started": SandboxRoute(
+                            sandbox_id="new-after-list-started",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1, memory_mb=512, disk_mb=1024
+                            ),
+                            created_at=future,
+                            updated_at=future,
+                        )
+                    },
+                    exec_sessions={},
+                    pending={},
+                    image_builds={},
+                )
+            )
+
+            store.reconcile_sandboxes_for_node(
+                "http://node-1:8090",
+                [],
+                observed_at=now.isoformat(),
+            )
+            state = store.load()
+
+        self.assertIn("new-after-list-started", state.sandboxes)
 
     def test_legacy_json_file_is_moved_aside(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -72,7 +187,9 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(state.pending, {})
         self.assertEqual(len(backups), 1)
 
-    def test_prepared_capacity_signal_contributes_until_consumed_or_deleted(self) -> None:
+    def test_prepared_capacity_signal_contributes_until_consumed_or_deleted(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
 
@@ -106,7 +223,9 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(deleted.prepare_id if deleted else None, "prep-2")
         self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
 
-    def test_prepared_builder_signal_contributes_until_consumed_or_deleted(self) -> None:
+    def test_prepared_builder_signal_contributes_until_consumed_or_deleted(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
 
@@ -135,7 +254,9 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(deleted.prepare_id if deleted else None, "builder-prep-2")
         self.assertEqual(count_after_delete, 0)
 
-    def test_pending_image_build_signal_contributes_until_consumed_or_deleted(self) -> None:
+    def test_pending_image_build_signal_contributes_until_consumed_or_deleted(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
 

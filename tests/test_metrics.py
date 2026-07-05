@@ -4,7 +4,11 @@ from pathlib import Path
 import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat
-from ucloud_sandboxes.metrics import MetricsStore, build_metrics_snapshot, record_trace_span
+from ucloud_sandboxes.metrics import (
+    MetricsStore,
+    build_metrics_snapshot,
+    record_trace_span,
+)
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.routing import (
     ExecRoute,
@@ -18,6 +22,18 @@ from ucloud_sandboxes.routing import (
 
 
 class MetricsTests(unittest.TestCase):
+    def test_load_events_returns_recent_tail(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            for index in range(20):
+                store.append("event", {"index": index})
+
+            events = store.load_events(max_events=5)
+
+        self.assertEqual(
+            [event.data["index"] for event in events], [15, 16, 17, 18, 19]
+        )
+
     def test_builds_dashboard_snapshot_from_heartbeats_routes_and_events(self) -> None:
         now = utc_now()
         heartbeat = build_heartbeat(
@@ -60,7 +76,7 @@ class MetricsTests(unittest.TestCase):
                     node_url="http://stale-node:8090",
                     resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
                     created_at=now.isoformat(),
-                )
+                ),
             },
             exec_sessions={
                 "exec-1": ExecRoute(
@@ -128,8 +144,12 @@ class MetricsTests(unittest.TestCase):
 
         self.assertEqual(snapshot["nodes"]["fresh"], 1)
         self.assertEqual(snapshot["nodes"]["samples"], 0)
-        self.assertEqual(snapshot["nodes"]["items"][0]["actual_usage"]["cpu_percent"], 20.0)
-        self.assertEqual(snapshot["resources"]["sandbox"]["actual_usage"]["cpu_vcpu"], 0.8)
+        self.assertEqual(
+            snapshot["nodes"]["items"][0]["actual_usage"]["cpu_percent"], 20.0
+        )
+        self.assertEqual(
+            snapshot["resources"]["sandbox"]["actual_usage"]["cpu_vcpu"], 0.8
+        )
         self.assertEqual(snapshot["resources"]["sandbox"]["load"]["vcpu"], 0.25)
         self.assertEqual(snapshot["sandboxes"]["running"], 1)
         self.assertEqual(snapshot["sandboxes"]["active_routes"], 2)
@@ -145,7 +165,9 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["exec"]["sessions"], 1)
         self.assertEqual(snapshot["images"]["pending_builds"], 1)
         self.assertEqual(snapshot["builders"]["prepared_builders"], 1)
-        self.assertEqual(snapshot["builders"]["items"][0]["prepare_id"], "builder-prep-1")
+        self.assertEqual(
+            snapshot["builders"]["items"][0]["prepare_id"], "builder-prep-1"
+        )
         self.assertEqual(snapshot["scale_up"]["samples"], 1)
         self.assertEqual(snapshot["scale_up"]["last_ms"], 12_000)
 
@@ -347,7 +369,9 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(traces["span_count"], 2)
         self.assertEqual(traces["recent"][0]["trace_id"], "trace-1")
         self.assertEqual(traces["recent"][0]["duration_ms"], 2000)
-        self.assertEqual(traces["recent"][0]["spans"][1]["name"], "gateway.sandbox_proxy_create")
+        self.assertEqual(
+            traces["recent"][0]["spans"][1]["name"], "gateway.sandbox_proxy_create"
+        )
 
 
 if __name__ == "__main__":

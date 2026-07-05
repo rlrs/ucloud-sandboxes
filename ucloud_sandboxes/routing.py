@@ -134,7 +134,9 @@ class PendingSandboxDemand:
         *,
         ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
     ) -> bool:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
         if reference is None:
             return False
         return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
@@ -144,7 +146,9 @@ class PendingSandboxDemand:
         *,
         ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
     ) -> str:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
         if reference is None:
             return ""
         return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
@@ -191,7 +195,9 @@ class PendingImageBuildDemand:
         *,
         ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
     ) -> bool:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
         if reference is None:
             return False
         return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
@@ -201,7 +207,9 @@ class PendingImageBuildDemand:
         *,
         ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
     ) -> str:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(self.created_at)
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
         if reference is None:
             return ""
         return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
@@ -219,7 +227,9 @@ class PreparedCapacityDemand:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PreparedCapacityDemand | None":
-        prepare_id = _string(raw.get("prepare_id") or raw.get("prepareId") or raw.get("id"))
+        prepare_id = _string(
+            raw.get("prepare_id") or raw.get("prepareId") or raw.get("id")
+        )
         if not prepare_id:
             return None
         return cls(
@@ -267,7 +277,9 @@ class PreparedBuilderDemand:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PreparedBuilderDemand | None":
-        prepare_id = _string(raw.get("prepare_id") or raw.get("prepareId") or raw.get("id"))
+        prepare_id = _string(
+            raw.get("prepare_id") or raw.get("prepareId") or raw.get("id")
+        )
         if not prepare_id:
             return None
         return cls(
@@ -368,26 +380,42 @@ class RoutingStore:
 
     def get_sandbox(self, sandbox_id: str) -> SandboxRoute | None:
         with self._lock:
-            self._refresh_unlocked()
-            return self._state.sandboxes.get(sandbox_id)
+            with self._connect() as conn:
+                route = self._get_sandbox_unlocked(conn, sandbox_id)
+            sandboxes = dict(self._state.sandboxes)
+            if route is None:
+                sandboxes.pop(sandbox_id, None)
+            else:
+                sandboxes[sandbox_id] = route
+            self._state = RoutingState(
+                sandboxes=sandboxes,
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return route
 
     def upsert_sandbox(self, route: SandboxRoute) -> None:
         with self._lock:
-            self._refresh_unlocked()
-            existing = self._state.sandboxes.get(route.sandbox_id)
             now = utc_now().isoformat()
-            stored = SandboxRoute(
-                sandbox_id=route.sandbox_id,
-                node_id=route.node_id,
-                job_id=route.job_id,
-                node_url=route.node_url,
-                resources=route.resources,
-                created_at=route.created_at or (existing.created_at if existing else now),
-                updated_at=now,
-            )
             with self._transaction() as conn:
+                existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                stored = SandboxRoute(
+                    sandbox_id=route.sandbox_id,
+                    node_id=route.node_id,
+                    job_id=route.job_id,
+                    node_url=route.node_url,
+                    resources=route.resources,
+                    created_at=route.created_at
+                    or (existing.created_at if existing else now),
+                    updated_at=now,
+                )
                 self._write_sandbox(conn, stored)
-                conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,))
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,)
+                )
             sandboxes = dict(self._state.sandboxes)
             pending = dict(self._state.pending)
             sandboxes[route.sandbox_id] = stored
@@ -401,13 +429,99 @@ class RoutingStore:
                 prepared_builders=dict(self._state.prepared_builders),
             )
 
-    def delete_sandbox(self, sandbox_id: str) -> None:
+    def reconcile_sandboxes_for_node(
+        self,
+        node_url: str,
+        routes: list[SandboxRoute],
+        *,
+        observed_at: str,
+    ) -> None:
+        node_url = node_url.strip()
+        if not node_url:
+            return
+        observed_ids = {route.sandbox_id for route in routes}
+        observed_at_dt = parse_iso_datetime(observed_at)
         with self._lock:
             self._refresh_unlocked()
+            stored_routes: list[SandboxRoute] = []
+            for route in routes:
+                existing = self._state.sandboxes.get(route.sandbox_id)
+                stored_routes.append(
+                    SandboxRoute(
+                        sandbox_id=route.sandbox_id,
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        node_url=route.node_url,
+                        resources=route.resources,
+                        created_at=route.created_at
+                        or (existing.created_at if existing else observed_at),
+                        updated_at=observed_at,
+                    )
+                )
+            stale_ids: list[str] = []
+            for sandbox_id, route in self._state.sandboxes.items():
+                if route.node_url != node_url or sandbox_id in observed_ids:
+                    continue
+                route_updated_at = parse_iso_datetime(
+                    route.updated_at
+                ) or parse_iso_datetime(route.created_at)
+                if (
+                    observed_at_dt is None
+                    or route_updated_at is None
+                    or route_updated_at <= observed_at_dt
+                ):
+                    stale_ids.append(sandbox_id)
             with self._transaction() as conn:
-                conn.execute("DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,))
+                for route in stored_routes:
+                    self._write_sandbox(conn, route)
+                    conn.execute(
+                        "DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,)
+                    )
+                for sandbox_id in stale_ids:
+                    conn.execute(
+                        "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
+                    )
+            sandboxes = dict(self._state.sandboxes)
+            pending = dict(self._state.pending)
+            exec_sessions = dict(self._state.exec_sessions)
+            for route in stored_routes:
+                sandboxes[route.sandbox_id] = route
+                pending.pop(route.sandbox_id, None)
+            for sandbox_id in stale_ids:
+                sandboxes.pop(sandbox_id, None)
+                pending.pop(sandbox_id, None)
+            if stale_ids:
+                stale_id_set = set(stale_ids)
+                exec_sessions = {
+                    session_id: route
+                    for session_id, route in exec_sessions.items()
+                    if route.sandbox_id not in stale_id_set
+                }
+            self._state = RoutingState(
+                sandboxes=sandboxes,
+                exec_sessions=exec_sessions,
+                pending=pending,
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+
+    def delete_sandbox(self, sandbox_id: str) -> None:
+        with self._lock:
+            with self._transaction() as conn:
+                conn.execute(
+                    "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
+                )
                 conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
-                conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,))
+                conn.execute(
+                    "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
+                )
             sandboxes = dict(self._state.sandboxes)
             pending = dict(self._state.pending)
             exec_sessions = {
@@ -428,24 +542,57 @@ class RoutingStore:
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
-            self._refresh_unlocked()
-            return self._state.exec_sessions.get(session_id)
+            with self._connect() as conn:
+                route = self._get_exec_unlocked(conn, session_id)
+            exec_sessions = dict(self._state.exec_sessions)
+            if route is None:
+                exec_sessions.pop(session_id, None)
+            else:
+                exec_sessions[session_id] = route
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=exec_sessions,
+                pending=dict(self._state.pending),
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return route
+
+    def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
+        with self._lock:
+            with self._connect() as conn:
+                pending = self._get_pending_unlocked(conn, sandbox_id)
+            pending_items = dict(self._state.pending)
+            if pending is None:
+                pending_items.pop(sandbox_id, None)
+            else:
+                pending_items[sandbox_id] = pending
+            self._state = RoutingState(
+                sandboxes=dict(self._state.sandboxes),
+                exec_sessions=dict(self._state.exec_sessions),
+                pending=pending_items,
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return pending
 
     def upsert_exec(self, route: ExecRoute) -> None:
         with self._lock:
-            self._refresh_unlocked()
-            existing = self._state.exec_sessions.get(route.session_id)
             now = utc_now().isoformat()
-            stored = ExecRoute(
-                session_id=route.session_id,
-                sandbox_id=route.sandbox_id,
-                node_id=route.node_id,
-                job_id=route.job_id,
-                node_url=route.node_url,
-                created_at=route.created_at or (existing.created_at if existing else now),
-                updated_at=now,
-            )
             with self._transaction() as conn:
+                existing = self._get_exec_unlocked(conn, route.session_id)
+                stored = ExecRoute(
+                    session_id=route.session_id,
+                    sandbox_id=route.sandbox_id,
+                    node_id=route.node_id,
+                    job_id=route.job_id,
+                    node_url=route.node_url,
+                    created_at=route.created_at
+                    or (existing.created_at if existing else now),
+                    updated_at=now,
+                )
                 self._write_exec(conn, stored)
             exec_sessions = dict(self._state.exec_sessions)
             exec_sessions[route.session_id] = stored
@@ -460,17 +607,16 @@ class RoutingStore:
 
     def upsert_pending(self, sandbox_id: str, resources: ResourceQuantity) -> None:
         with self._lock:
-            self._refresh_unlocked()
-            existing = self._state.pending.get(sandbox_id)
             now = utc_now().isoformat()
-            stored = PendingSandboxDemand(
-                sandbox_id=sandbox_id,
-                resources=resources,
-                created_at=existing.created_at if existing else now,
-                updated_at=now,
-                attempts=(existing.attempts + 1) if existing else 1,
-            )
             with self._transaction() as conn:
+                existing = self._get_pending_unlocked(conn, sandbox_id)
+                stored = PendingSandboxDemand(
+                    sandbox_id=sandbox_id,
+                    resources=resources,
+                    created_at=existing.created_at if existing else now,
+                    updated_at=now,
+                    attempts=(existing.attempts + 1) if existing else 1,
+                )
                 self._write_pending(conn, stored)
             pending = dict(self._state.pending)
             pending[sandbox_id] = stored
@@ -485,7 +631,6 @@ class RoutingStore:
 
     def clear_pending(self, sandbox_id: str) -> None:
         with self._lock:
-            self._refresh_unlocked()
             with self._transaction() as conn:
                 conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
             pending = dict(self._state.pending)
@@ -620,7 +765,9 @@ class RoutingStore:
             )
             return stored
 
-    def delete_prepared_capacity(self, prepare_id: str) -> PreparedCapacityDemand | None:
+    def delete_prepared_capacity(
+        self, prepare_id: str
+    ) -> PreparedCapacityDemand | None:
         with self._lock:
             self._refresh_unlocked()
             existing = self._state.prepared.get(prepare_id)
@@ -937,7 +1084,11 @@ class RoutingStore:
 
     def _ensure_db(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        if self.path.exists() and self.path.stat().st_size > 0 and not _is_sqlite_file(self.path):
+        if (
+            self.path.exists()
+            and self.path.stat().st_size > 0
+            and not _is_sqlite_file(self.path)
+        ):
             backup = self.path.with_name(f"{self.path.name}.legacy-{uuid4().hex}")
             self.path.replace(backup)
         with self._connect() as conn:
@@ -1004,7 +1155,9 @@ class RoutingStore:
                 )
                 """
             )
-            self._ensure_column(conn, "prepared_capacity", "image", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                conn, "prepared_capacity", "image", "TEXT NOT NULL DEFAULT ''"
+            )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS prepared_builders (
@@ -1025,8 +1178,7 @@ class RoutingStore:
         definition: str,
     ) -> None:
         existing = {
-            str(row["name"])
-            for row in conn.execute(f"PRAGMA table_info({table})")
+            str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})")
         }
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

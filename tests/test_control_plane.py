@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
 from threading import Lock, Thread
@@ -12,7 +13,10 @@ from unittest.mock import patch
 
 from ucloud_sandboxes.agent import build_heartbeat, post_heartbeat
 from ucloud_sandboxes import control_plane
-from ucloud_sandboxes.control_plane import IMAGE_BUILD_PROXY_TIMEOUT_SECONDS, build_server
+from ucloud_sandboxes.control_plane import (
+    IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
+    build_server,
+)
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import ResourceQuantity
@@ -91,7 +95,9 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
                 self.assertEqual(result.status, 200)
-                with request.urlopen(f"http://{host}:{port}/v1/nodes", timeout=5) as response:
+                with request.urlopen(
+                    f"http://{host}:{port}/v1/nodes", timeout=5
+                ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
             finally:
@@ -112,9 +118,7 @@ class ControlPlaneTests(unittest.TestCase):
             def do_GET(self) -> None:
                 path = self.path.split("?", 1)[0]
                 if path == "/v2/_catalog":
-                    self._write_json(
-                        {"repositories": ["prime/base", "prime/mini-swe"]}
-                    )
+                    self._write_json({"repositories": ["prime/base", "prime/mini-swe"]})
                     return
                 if path == "/v2/prime/base/tags/list":
                     self._write_json({"name": "prime/base", "tags": ["py311"]})
@@ -188,7 +192,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=node_image_file,
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(
                     dry_run=True,
                     allow_storage_opt_quota=True,
@@ -287,7 +293,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=Path(raw_dir) / "node-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(
                     dry_run=True,
                     allow_storage_opt_quota=True,
@@ -573,6 +581,128 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(node1_payload, {"sandboxes": []})
             self.assertEqual(node2_payload, {"sandboxes": []})
 
+    def test_concurrent_create_reserves_in_flight_node_capacity(self) -> None:
+        class SlowCreateRuntime(DockerGvisorRuntime):
+            def create(self, spec):
+                sleep(0.2)
+                return super().create(spec)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node1 = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "burst-node1-sandboxes.json",
+                image_file=raw_path / "burst-node1-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=128),
+                runtime=SlowCreateRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                ),
+            )
+            node2 = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "burst-node2-sandboxes.json",
+                image_file=raw_path / "burst-node2-images.json",
+                job_id="job-2",
+                node_id="node-2",
+                total_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=128),
+                runtime=SlowCreateRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                ),
+            )
+            node1_thread = Thread(target=node1.serve_forever, daemon=True)
+            node2_thread = Thread(target=node2.serve_forever, daemon=True)
+            node1_thread.start()
+            node2_thread.start()
+            try:
+                node1_host, node1_port = node1.server_address
+                node2_host, node2_port = node2.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    image_file=raw_path / "gateway-images.json",
+                    local_image_builds_enabled=False,
+                    metrics_file=raw_path / "metrics.jsonl",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    for heartbeat in (
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            active_sandboxes=0,
+                            node_url=f"http://{node1_host}:{node1_port}",
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=1,
+                                memory_mb=1024,
+                                disk_mb=128,
+                            ),
+                        ),
+                        build_heartbeat(
+                            job_id="job-2",
+                            node_id="node-2",
+                            active_sandboxes=0,
+                            node_url=f"http://{node2_host}:{node2_port}",
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=1,
+                                memory_mb=1024,
+                                disk_mb=128,
+                            ),
+                        ),
+                    ):
+                        result = post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            heartbeat,
+                        )
+                        self.assertEqual(result.status, 200)
+
+                    def create(index: int) -> dict:
+                        return self._json_request(
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": f"burst-{index}",
+                                "image": "busybox",
+                                "cpus": 1,
+                                "memory_mb": 128,
+                                "disk_mb": 64,
+                            },
+                        )
+
+                    with ThreadPoolExecutor(max_workers=2) as executor:
+                        created = list(executor.map(create, (1, 2)))
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node1.shutdown()
+                node1.server_close()
+                node2.shutdown()
+                node2.server_close()
+
+            state = RoutingStore(raw_path / "routes.sqlite").load()
+
+        self.assertEqual(
+            {item["sandbox"]["spec"]["id"] for item in created},
+            {"burst-1", "burst-2"},
+        )
+        self.assertEqual(
+            {state.sandboxes["burst-1"].job_id, state.sandboxes["burst-2"].job_id},
+            {"job-1", "job-2"},
+        )
+
     def test_gateway_routes_sandbox_file_upload_and_download(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
@@ -620,7 +750,11 @@ class ControlPlaneTests(unittest.TestCase):
                     created = self._json_request(
                         f"{base}/v1/sandboxes",
                         method="POST",
-                        payload={"id": "file-one", "image": "busybox", "memory_mb": 128},
+                        payload={
+                            "id": "file-one",
+                            "image": "busybox",
+                            "memory_mb": 128,
+                        },
                     )
                     uploaded = self._bytes_request(
                         f"{base}/v1/sandboxes/file-one/files?path={quote('/tmp/out.txt')}",
@@ -713,7 +847,9 @@ class ControlPlaneTests(unittest.TestCase):
                         except BaseException as exc:
                             errors.append(exc)
 
-                    threads = [Thread(target=create, args=(index,)) for index in range(8)]
+                    threads = [
+                        Thread(target=create, args=(index,)) for index in range(8)
+                    ]
                     for thread in threads:
                         thread.start()
                     for thread in threads:
@@ -746,7 +882,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "node-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
             )
             node_thread = Thread(target=node.serve_forever, daemon=True)
@@ -815,7 +953,9 @@ class ControlPlaneTests(unittest.TestCase):
             route = RoutingStore(raw_path / "routes.json").get_sandbox("dup-one")
             self.assertIsNotNone(route)
 
-    def test_gateway_preserves_duplicate_create_conflict_for_different_spec(self) -> None:
+    def test_gateway_preserves_duplicate_create_conflict_for_different_spec(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             node = build_node_agent_server(
@@ -825,7 +965,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "node-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
             )
             node_thread = Thread(target=node.serve_forever, daemon=True)
@@ -894,7 +1036,9 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(conflict["status"], 409)
             self.assertIn("already exists", conflict["body"]["error"])
 
-    def test_gateway_lists_incompatible_nodes_but_does_not_place_new_sandboxes(self) -> None:
+    def test_gateway_lists_incompatible_nodes_but_does_not_place_new_sandboxes(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             node = build_node_agent_server(
@@ -904,7 +1048,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "node-images.json",
                 job_id="job-old",
                 node_id="node-old",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
             )
             node_thread = Thread(target=node.serve_forever, daemon=True)
@@ -1018,7 +1164,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(enriched["labels"], {"sample": "old"})
         self.assertEqual(enriched["node"]["node_id"], "node-1")
 
-    def test_gateway_builds_images_locally_and_sandbox_nodes_pull_registry_tag(self) -> None:
+    def test_gateway_builds_images_locally_and_sandbox_nodes_pull_registry_tag(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             regular = build_node_agent_server(
@@ -1028,7 +1176,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "regular-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
             )
             regular_thread = Thread(target=regular.serve_forever, daemon=True)
@@ -1126,7 +1276,12 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(
                 [(image["id"], image["tag"]) for image in regular_images["images"]],
-                [("registry.example.org-custom-latest", "registry.example.org/custom:latest")],
+                [
+                    (
+                        "registry.example.org-custom-latest",
+                        "registry.example.org/custom:latest",
+                    )
+                ],
             )
 
     def test_gateway_resolves_pushed_image_id_to_registry_tag_on_create(self) -> None:
@@ -1140,7 +1295,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "regular-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
                 image_runtime=image_runtime,
             )
@@ -1209,7 +1366,9 @@ class ControlPlaneTests(unittest.TestCase):
                 created["sandbox"]["spec"]["image"],
                 "registry.example.org/custom:latest",
             )
-            self.assertEqual(image_runtime.pulls, ["registry.example.org/custom:latest"])
+            self.assertEqual(
+                image_runtime.pulls, ["registry.example.org/custom:latest"]
+            )
 
     def test_gateway_rejects_unpushed_image_id_on_create(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1285,7 +1444,9 @@ class ControlPlaneTests(unittest.TestCase):
 
             self.assertEqual(result["status"], 503)
             self.assertEqual(result["body"]["pending_image_builds"], 1)
-            self.assertEqual(RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1)
+            self.assertEqual(
+                RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
+            )
 
     def test_gateway_routes_image_build_to_builder_only_node(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1324,7 +1485,9 @@ class ControlPlaneTests(unittest.TestCase):
                             node_id="builder-1",
                             node_url=f"http://{builder_host}:{builder_port}",
                             capabilities=("image-cache", "image-build", "snapshot"),
-                            total_resources=ResourceQuantity(vcpu=16, memory_mb=49152, disk_mb=200000),
+                            total_resources=ResourceQuantity(
+                                vcpu=16, memory_mb=49152, disk_mb=200000
+                            ),
                         ),
                     )
                     self.assertEqual(result.status, 200)
@@ -1364,7 +1527,9 @@ class ControlPlaneTests(unittest.TestCase):
                     for image in images["images"]
                 ],
             )
-            self.assertEqual(RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0)
+            self.assertEqual(
+                RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
+            )
 
     def test_gateway_uses_bounded_proxy_timeout_for_builder_image_builds(self) -> None:
         class FakeResponse:
@@ -1561,12 +1726,18 @@ class ControlPlaneTests(unittest.TestCase):
                     image_file=raw_path / f"node-{index}-images.json",
                     job_id=f"job-{index}",
                     node_id=f"node-{index}",
-                    total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
-                    runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+                    total_resources=ResourceQuantity(
+                        vcpu=4, memory_mb=8192, disk_mb=100_000
+                    ),
+                    runtime=DockerGvisorRuntime(
+                        dry_run=True, allow_storage_opt_quota=True
+                    ),
                 )
                 for index in range(2)
             ]
-            node_threads = [Thread(target=node.serve_forever, daemon=True) for node in nodes]
+            node_threads = [
+                Thread(target=node.serve_forever, daemon=True) for node in nodes
+            ]
             for thread in node_threads:
                 thread.start()
             try:
@@ -1629,10 +1800,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(prepared["image_prewarm"]["ready"], 2)
         self.assertEqual(len(prepared["image_prewarm"]["pulled"]), 2)
         self.assertEqual(
-            [
-                payload["images"][0]["tag"]
-                for payload in node_images
-            ],
+            [payload["images"][0]["tag"] for payload in node_images],
             ["busybox:latest", "busybox:latest"],
         )
 
@@ -1647,8 +1815,12 @@ class ControlPlaneTests(unittest.TestCase):
                     image_file=raw_path / f"pull-node-{index}-images.json",
                     job_id=f"pull-job-{index}",
                     node_id=f"pull-node-{index}",
-                    total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
-                    runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+                    total_resources=ResourceQuantity(
+                        vcpu=4, memory_mb=8192, disk_mb=100_000
+                    ),
+                    runtime=DockerGvisorRuntime(
+                        dry_run=True, allow_storage_opt_quota=True
+                    ),
                 )
                 for index in range(2)
             ]
@@ -1819,7 +1991,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("count must be positive", rejected["body"]["error"])
         self.assertEqual(demand["prepared_builder_count"], 0)
 
-    def test_gateway_metrics_records_scaleup_wait_after_pending_sandbox_is_placed(self) -> None:
+    def test_gateway_metrics_records_scaleup_wait_after_pending_sandbox_is_placed(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             node = build_node_agent_server(
@@ -1829,7 +2003,9 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=raw_path / "node-images.json",
                 job_id="job-1",
                 node_id="node-1",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
             )
             node_thread = Thread(target=node.serve_forever, daemon=True)
@@ -1904,9 +2080,7 @@ class ControlPlaneTests(unittest.TestCase):
             metrics["scale_up"]["recent"][0]["data"]["sandbox_id"],
             "scale-one",
         )
-        self.assertTrue(
-            metrics["scale_up"]["recent"][0]["data"]["had_pending_demand"]
-        )
+        self.assertTrue(metrics["scale_up"]["recent"][0]["data"]["had_pending_demand"])
 
     def _json_request(
         self,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -41,11 +42,20 @@ _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _GATEWAY_SANDBOX_CREATE_LOCKS_GUARD = RLock()
 _GATEWAY_SANDBOX_CREATE_LOCKS: dict[str, RLock] = {}
+_GATEWAY_SCHEDULING_LOCK = RLock()
+_GATEWAY_IN_FLIGHT_ROUTES: dict[str, "_InFlightRoute"] = {}
+IN_FLIGHT_ROUTE_TTL_SECONDS = 15 * 60
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
+
+
+@dataclass(frozen=True)
+class _InFlightRoute:
+    route: SandboxRoute
+    expires_at: Any
 
 
 class ProxiedResponse:
@@ -102,8 +112,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/nodes":
             nodes = [
-                heartbeat_to_dict(heartbeat)
-                for heartbeat in self.store.load().values()
+                heartbeat_to_dict(heartbeat) for heartbeat in self.store.load().values()
             ]
             self._write_json({"nodes": nodes})
             return
@@ -111,7 +120,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json(self._demand_payload())
             return
         if parsed.path == "/v1/metrics":
-            routing_state = self.routing_store.load() if self.routing_store is not None else None
+            routing_state = (
+                self.routing_store.load() if self.routing_store is not None else None
+            )
             events = (
                 self.metrics_store.load_events(max_events=10000)
                 if self.metrics_store is not None
@@ -125,12 +136,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             builds = self._image_build_records_across_nodes()
             active_builds = [
-                build for build in builds
+                build
+                for build in builds
                 if build.get("status") not in {"succeeded", "failed"}
             ]
             failed_builds = [
-                build for build in builds
-                if build.get("status") == "failed"
+                build for build in builds if build.get("status") == "failed"
             ]
             snapshot.setdefault("images", {}).update(
                 {
@@ -330,8 +341,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 prepared_builder_count,
             ),
             "pending": [
-                item.to_dict()
-                for item in self.routing_store.pending_sandboxes()
+                item.to_dict() for item in self.routing_store.pending_sandboxes()
             ],
             "prepared": [
                 item.to_dict() for item in self.routing_store.prepared_capacity()
@@ -476,6 +486,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
         for heartbeat in self._ready_sandbox_heartbeats():
+            observed_at = utc_now().isoformat()
             response = self._proxy_request(
                 heartbeat.node_url or "",
                 "/v1/sandboxes",
@@ -487,16 +498,22 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raw_sandboxes = payload.get("sandboxes")
             if not isinstance(raw_sandboxes, list):
                 continue
+            routes: list[SandboxRoute] = []
             for record in raw_sandboxes:
                 if not isinstance(record, dict):
                     continue
                 spec = record.get("spec")
                 sandbox_id = spec.get("id") if isinstance(spec, dict) else None
                 if isinstance(sandbox_id, str) and sandbox_id:
-                    self.routing_store.upsert_sandbox(
+                    routes.append(
                         _sandbox_route_from_heartbeat(heartbeat, sandbox_id, spec)
                     )
                     sandboxes.append(_enrich_sandbox_record(record, heartbeat))
+            self.routing_store.reconcile_sandboxes_for_node(
+                heartbeat.node_url or "",
+                routes,
+                observed_at=observed_at,
+            )
         self._write_json({"sandboxes": sandboxes})
 
     def _list_images_across_nodes(self) -> None:
@@ -620,9 +637,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if self.image_manager is None or build.get("status") != "succeeded":
             return
         raw_image = build.get("image")
-        if (
-            not isinstance(raw_image, dict)
-            or not _image_record_available_to_sandboxes(raw_image)
+        if not isinstance(raw_image, dict) or not _image_record_available_to_sandboxes(
+            raw_image
         ):
             return
         try:
@@ -670,7 +686,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 parent_span_id=root.span_id,
                 attributes={"image": spec.image},
             ) as span:
-                resolved_image, image_error = self._resolve_sandbox_image_reference(spec.image)
+                resolved_image, image_error = self._resolve_sandbox_image_reference(
+                    spec.image
+                )
                 span.set_attribute("resolved_image", resolved_image)
                 if image_error is not None:
                     span.status = "error"
@@ -721,15 +739,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 parent_span_id=root.span_id,
                 attributes={"image": spec.image},
             ) as span:
-                heartbeat = self._select_node(spec.requested_resources(), image=spec.image)
-                span.set_attribute("selected_node_id", heartbeat.node_id if heartbeat else "")
-                span.set_attribute("selected_job_id", heartbeat.job_id if heartbeat else "")
+                heartbeat = self._select_and_reserve_node(
+                    spec.id,
+                    spec.requested_resources(),
+                    image=spec.image,
+                )
+                span.set_attribute(
+                    "selected_node_id", heartbeat.node_id if heartbeat else ""
+                )
+                span.set_attribute(
+                    "selected_job_id", heartbeat.job_id if heartbeat else ""
+                )
             if heartbeat is None:
                 self.routing_store.upsert_pending(spec.id, spec.requested_resources())
                 demand = self.routing_store.pending_demand()
                 root.status = "error"
                 root.set_attribute("outcome", "queued_no_ready_node")
-                root.set_attribute("pending_resources", demand.pending_resources.to_dict())
+                root.set_attribute(
+                    "pending_resources", demand.pending_resources.to_dict()
+                )
                 self._write_json(
                     {
                         "error": "no ready node has resources for sandbox request",
@@ -740,83 +768,90 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            pending_before = self.routing_store.load().pending.get(spec.id)
-            with trace_span(
-                self.metrics_store,
-                trace_id,
-                "gateway.sandbox_ensure_image",
-                parent_span_id=root.span_id,
-                attributes={
-                    "node_id": heartbeat.node_id,
-                    "image": spec.image,
-                },
-            ) as span:
-                image_response = self._ensure_image_on_node(heartbeat, spec.image)
-                span.set_attribute("cache_hit", image_response is None)
-                if image_response is not None:
-                    span.set_attribute("status_code", int(image_response.status))
-            if image_response is not None and image_response.status >= 400:
-                root.status = "error"
-                root.set_attribute("outcome", "image_pull_failed")
-                self._write_json(
-                    {
-                        "error": (
-                            "image is not available on selected sandbox node; pull failed. "
-                            "For images built by the UCloud builder, build with push=true "
-                            "and a pullable registry tag before creating sandboxes."
-                        ),
-                        "pull": image_response.json(),
-                    },
-                    status=HTTPStatus.BAD_GATEWAY,
-                )
-                return
-
-            with trace_span(
-                self.metrics_store,
-                trace_id,
-                "gateway.sandbox_proxy_create",
-                parent_span_id=root.span_id,
-                attributes={"node_id": heartbeat.node_id},
-            ) as span:
-                response = self._proxy_request(
-                    heartbeat.node_url or "",
-                    "/v1/sandboxes",
-                    method="POST",
-                    body=body,
-                )
-                span.set_attribute("status_code", int(response.status))
-                response_payload = response.json()
-                node_timings = response_payload.get("timings")
-                if isinstance(node_timings, dict):
-                    span.set_attribute("node_timings", node_timings)
-                    root.set_attribute("node_timings", node_timings)
-            if _is_duplicate_sandbox_response(response, spec.id):
-                route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
-                if self._send_existing_sandbox_response(
-                    route,
-                    spec,
-                    status=HTTPStatus.CREATED,
-                    pending=pending_before,
-                ):
-                    root.set_attribute("outcome", "recovered_duplicate")
-                    return
-            if 200 <= response.status < 300:
-                route = _sandbox_route_from_heartbeat(heartbeat, spec.id, spec.to_dict())
-                self.routing_store.upsert_sandbox(route)
-                record_sandbox_scheduled(
+            try:
+                pending_before = self.routing_store.get_pending(spec.id)
+                with trace_span(
                     self.metrics_store,
-                    sandbox_id=spec.id,
-                    route=route,
-                    resources=spec.requested_resources(),
-                    pending=pending_before,
-                )
-                root.set_attribute("outcome", "scheduled")
-                root.set_attribute("node_id", heartbeat.node_id)
-            else:
-                root.status = "error"
-                root.set_attribute("outcome", "node_create_failed")
-                root.set_attribute("status_code", int(response.status))
-            self._send_proxied_response(response)
+                    trace_id,
+                    "gateway.sandbox_ensure_image",
+                    parent_span_id=root.span_id,
+                    attributes={
+                        "node_id": heartbeat.node_id,
+                        "image": spec.image,
+                    },
+                ) as span:
+                    image_response = self._ensure_image_on_node(heartbeat, spec.image)
+                    span.set_attribute("cache_hit", image_response is None)
+                    if image_response is not None:
+                        span.set_attribute("status_code", int(image_response.status))
+                if image_response is not None and image_response.status >= 400:
+                    root.status = "error"
+                    root.set_attribute("outcome", "image_pull_failed")
+                    self._write_json(
+                        {
+                            "error": (
+                                "image is not available on selected sandbox node; pull failed. "
+                                "For images built by the UCloud builder, build with push=true "
+                                "and a pullable registry tag before creating sandboxes."
+                            ),
+                            "pull": image_response.json(),
+                        },
+                        status=HTTPStatus.BAD_GATEWAY,
+                    )
+                    return
+
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.sandbox_proxy_create",
+                    parent_span_id=root.span_id,
+                    attributes={"node_id": heartbeat.node_id},
+                ) as span:
+                    response = self._proxy_request(
+                        heartbeat.node_url or "",
+                        "/v1/sandboxes",
+                        method="POST",
+                        body=body,
+                    )
+                    span.set_attribute("status_code", int(response.status))
+                    response_payload = response.json()
+                    node_timings = response_payload.get("timings")
+                    if isinstance(node_timings, dict):
+                        span.set_attribute("node_timings", node_timings)
+                        root.set_attribute("node_timings", node_timings)
+                if _is_duplicate_sandbox_response(response, spec.id):
+                    route = _sandbox_route_from_heartbeat(
+                        heartbeat, spec.id, spec.to_dict()
+                    )
+                    if self._send_existing_sandbox_response(
+                        route,
+                        spec,
+                        status=HTTPStatus.CREATED,
+                        pending=pending_before,
+                    ):
+                        root.set_attribute("outcome", "recovered_duplicate")
+                        return
+                if 200 <= response.status < 300:
+                    route = _sandbox_route_from_heartbeat(
+                        heartbeat, spec.id, spec.to_dict()
+                    )
+                    self.routing_store.upsert_sandbox(route)
+                    record_sandbox_scheduled(
+                        self.metrics_store,
+                        sandbox_id=spec.id,
+                        route=route,
+                        resources=spec.requested_resources(),
+                        pending=pending_before,
+                    )
+                    root.set_attribute("outcome", "scheduled")
+                    root.set_attribute("node_id", heartbeat.node_id)
+                else:
+                    root.status = "error"
+                    root.set_attribute("outcome", "node_create_failed")
+                    root.set_attribute("status_code", int(response.status))
+                self._send_proxied_response(response)
+            finally:
+                _release_in_flight_route(spec.id)
 
     def _send_existing_sandbox_response(
         self,
@@ -895,7 +930,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     ) as span:
                         with uploaded_build_context(raw) as context_path:
                             build_spec = spec
-                            span.set_attribute("uploaded_context", context_path is not None)
+                            span.set_attribute(
+                                "uploaded_context", context_path is not None
+                            )
                             if context_path is not None:
                                 build_spec = ImageBuildSpec(
                                     id=spec.id,
@@ -906,7 +943,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                                     labels=spec.labels,
                                 )
                             record, result = self.image_manager.build(build_spec)
-                            push_result = self.image_manager.runtime.push(build_spec.tag) if push else None
+                            push_result = (
+                                self.image_manager.runtime.push(build_spec.tag)
+                                if push
+                                else None
+                            )
                             if push_result is not None:
                                 record = self.image_manager.mark_pushed(record.id)
                     if self.routing_store is not None:
@@ -933,8 +974,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     parent_span_id=root.span_id,
                 ) as span:
                     heartbeat = self._select_builder_node()
-                    span.set_attribute("selected_node_id", heartbeat.node_id if heartbeat else "")
-                    span.set_attribute("selected_job_id", heartbeat.job_id if heartbeat else "")
+                    span.set_attribute(
+                        "selected_node_id", heartbeat.node_id if heartbeat else ""
+                    )
+                    span.set_attribute(
+                        "selected_job_id", heartbeat.job_id if heartbeat else ""
+                    )
                 if heartbeat is None:
                     if self.routing_store is not None:
                         self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
@@ -985,9 +1030,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     self.routing_store.clear_pending_image_build(spec.id)
                 if 200 <= response.status < 300 and self.image_manager is not None:
                     raw_image = response_payload.get("image")
-                    if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(raw_image):
+                    if isinstance(
+                        raw_image, dict
+                    ) and _image_record_available_to_sandboxes(raw_image):
                         try:
-                            self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
+                            self.image_manager.store.upsert(
+                                ImageRecord.from_dict(raw_image)
+                            )
                         except ValueError:
                             pass
                 if 200 <= response.status < 300:
@@ -1017,7 +1066,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("image is required.")
             count = int(raw.get("count") or 1)
             resources = _prepared_resources_from_payload(raw)
-            sandbox_nodes_only = bool(raw.get("sandbox_nodes_only", raw.get("sandboxNodesOnly", True)))
+            sandbox_nodes_only = bool(
+                raw.get("sandbox_nodes_only", raw.get("sandboxNodesOnly", True))
+            )
             if count <= 0:
                 raise ValueError("count must be positive.")
         except (json.JSONDecodeError, ValueError) as exc:
@@ -1058,11 +1109,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 self._write_json({"ok": True, "deleted": False})
                 return
-            self._write_json({"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND)
+            self._write_json(
+                {"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND
+            )
             return
 
         try:
-            body = self._read_raw_body() if self.command in {"POST", "PUT", "PATCH"} else None
+            body = (
+                self._read_raw_body()
+                if self.command in {"POST", "PUT", "PATCH"}
+                else None
+            )
         except ValueError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -1073,7 +1130,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             method=self.command,
             body=body,
         )
-        if self.command == "POST" and path.endswith("/exec") and 200 <= response.status < 300:
+        if (
+            self.command == "POST"
+            and path.endswith("/exec")
+            and 200 <= response.status < 300
+        ):
             session = response.json().get("session")
             session_id = session.get("id") if isinstance(session, dict) else None
             if isinstance(session_id, str) and session_id:
@@ -1093,10 +1154,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _route_exec_request(self, session_id: str, path: str) -> None:
         route = self.routing_store.get_exec(session_id)
         if route is None:
-            self._write_json({"error": "exec route not found"}, status=HTTPStatus.NOT_FOUND)
+            self._write_json(
+                {"error": "exec route not found"}, status=HTTPStatus.NOT_FOUND
+            )
             return
         try:
-            body = self._read_raw_body() if self.command in {"POST", "PUT", "PATCH"} else None
+            body = (
+                self._read_raw_body()
+                if self.command in {"POST", "PUT", "PATCH"}
+                else None
+            )
         except ValueError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -1133,8 +1200,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         requested: ResourceQuantity,
         *,
         image: str | None = None,
+        extra_routes: list[SandboxRoute] | None = None,
     ) -> NodeHeartbeat | None:
         routes = list(self.routing_store.load().sandboxes.values())
+        routes.extend(extra_routes or [])
         candidates = [
             heartbeat
             for heartbeat in self._ready_sandbox_heartbeats()
@@ -1143,10 +1212,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         ]
         if not candidates:
             return None
-        image_node_ids = self._nodes_with_image(image or "", candidates)
+        image_node_ids = self._nodes_with_image(
+            image or "",
+            candidates,
+            probe_uncached=False,
+        )
         if image_node_ids:
             candidates = [
-                heartbeat for heartbeat in candidates if heartbeat.node_id in image_node_ids
+                heartbeat
+                for heartbeat in candidates
+                if heartbeat.node_id in image_node_ids
             ]
         return sorted(
             candidates,
@@ -1155,6 +1230,36 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 heartbeat.node_id,
             ),
         )[0]
+
+    def _select_and_reserve_node(
+        self,
+        sandbox_id: str,
+        requested: ResourceQuantity,
+        *,
+        image: str | None = None,
+    ) -> NodeHeartbeat | None:
+        with _GATEWAY_SCHEDULING_LOCK:
+            heartbeat = self._select_node(
+                requested,
+                image=image,
+                extra_routes=_active_in_flight_routes_unlocked(),
+            )
+            if heartbeat is None:
+                return None
+            now = utc_now()
+            _GATEWAY_IN_FLIGHT_ROUTES[sandbox_id] = _InFlightRoute(
+                route=SandboxRoute(
+                    sandbox_id=sandbox_id,
+                    node_id=heartbeat.node_id,
+                    job_id=heartbeat.job_id,
+                    node_url=heartbeat.node_url or "",
+                    resources=requested,
+                    created_at=now.isoformat(),
+                    updated_at=now.isoformat(),
+                ),
+                expires_at=now + timedelta(seconds=IN_FLIGHT_ROUTE_TTL_SECONDS),
+            )
+            return heartbeat
 
     def _resolve_sandbox_image_reference(
         self,
@@ -1275,15 +1380,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         *,
         image_id: str = "",
         use_heartbeat_cache: bool = True,
+        probe_uncached: bool = True,
     ) -> set[str]:
         if not image.strip() and not image_id.strip():
             return set()
-        image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
+        image_keys = {
+            item for item in (image, image_id, image_id_from_tag(image)) if item
+        }
         node_ids: set[str] = set()
         for heartbeat in heartbeats:
             if use_heartbeat_cache and heartbeat.cached_images_known:
                 if image_keys.intersection(heartbeat.cached_images):
                     node_ids.add(heartbeat.node_id)
+                continue
+            if not probe_uncached:
                 continue
             response = self._proxy_request(
                 heartbeat.node_url or "",
@@ -1313,7 +1423,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> bool:
         if not image.strip() and not image_id.strip():
             return False
-        image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
+        image_keys = {
+            item for item in (image, image_id, image_id_from_tag(image)) if item
+        }
         if use_heartbeat_cache and heartbeat.cached_images_known:
             return bool(image_keys.intersection(heartbeat.cached_images))
         return heartbeat.node_id in self._nodes_with_image(
@@ -1396,7 +1508,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 failed.append(item)
         ready = len(cache_hits) + len(pulled)
         return {
-            "image": selected_image or {"id": image_id or image_id_from_tag(image), "tag": image},
+            "image": selected_image
+            or {"id": image_id or image_id_from_tag(image), "tag": image},
             "image_ref": image,
             "requested": requested,
             "ready": ready,
@@ -1495,18 +1608,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         try:
             with request.urlopen(proxied, timeout=timeout_seconds) as response:
-                return ProxiedResponse(response.status, response.headers, response.read())
+                return ProxiedResponse(
+                    response.status, response.headers, response.read()
+                )
         except error.HTTPError as exc:
             return ProxiedResponse(exc.code, exc.headers, exc.read())
         except error.URLError as exc:
-            body = json.dumps(
-                {"error": f"node request failed: {exc.reason}"}
-            ).encode("utf-8")
+            body = json.dumps({"error": f"node request failed: {exc.reason}"}).encode(
+                "utf-8"
+            )
             return ProxiedResponse(HTTPStatus.BAD_GATEWAY, {}, body)
         except OSError as exc:
-            body = json.dumps(
-                {"error": f"node request failed: {exc}"}
-            ).encode("utf-8")
+            body = json.dumps({"error": f"node request failed: {exc}"}).encode("utf-8")
             return ProxiedResponse(HTTPStatus.BAD_GATEWAY, {}, body)
 
     def _send_proxied_response(self, response: ProxiedResponse) -> None:
@@ -1616,8 +1729,7 @@ def _request_trace_id(
 
 def _safe_trace_component(value: str) -> str:
     cleaned = "".join(
-        ch if ch.isalnum() or ch in "._-" else "-"
-        for ch in value.strip()
+        ch if ch.isalnum() or ch in "._-" else "-" for ch in value.strip()
     ).strip("-")
     return cleaned or "trace"
 
@@ -1626,7 +1738,7 @@ def _sandbox_id_from_path(path: str) -> str | None:
     prefix = "/v1/sandboxes/"
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
@@ -1636,7 +1748,7 @@ def _image_build_key_from_path(path: str) -> str | None:
     prefix = "/v1/images/builds/"
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
@@ -1646,7 +1758,7 @@ def _exec_session_id_from_path(path: str) -> str | None:
     prefix = "/v1/exec/"
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
@@ -1656,7 +1768,7 @@ def _prepare_id_from_path(path: str) -> str | None:
     prefix = "/v1/capacity/prepare/"
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
@@ -1666,7 +1778,7 @@ def _builder_prepare_id_from_path(path: str) -> str | None:
     prefix = "/v1/builders/prepare/"
     if not path.startswith(prefix):
         return None
-    rest = path[len(prefix):]
+    rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
@@ -1729,7 +1841,9 @@ def _is_duplicate_sandbox_response(response: ProxiedResponse, sandbox_id: str) -
     return "already exists" in error_message and sandbox_id.lower() in error_message
 
 
-def _sandbox_record_matches_spec(record: dict[str, Any], requested: SandboxSpec) -> bool:
+def _sandbox_record_matches_spec(
+    record: dict[str, Any], requested: SandboxSpec
+) -> bool:
     raw_spec = record.get("spec")
     if not isinstance(raw_spec, dict):
         return False
@@ -1748,10 +1862,7 @@ def _enrich_sandbox_record(
     spec = enriched.get("spec")
     spec = spec if isinstance(spec, dict) else {}
     sandbox_id = str(
-        enriched.get("id")
-        or enriched.get("sandbox_id")
-        or spec.get("id")
-        or ""
+        enriched.get("id") or enriched.get("sandbox_id") or spec.get("id") or ""
     )
     image = str(enriched.get("image") or spec.get("image") or "")
     labels = enriched.get("labels")
@@ -1800,7 +1911,9 @@ def _node_can_fit(
             0,
             heartbeat.free_resources.memory_mb - recent_route_resources.memory_mb,
         ),
-        disk_mb=max(0, heartbeat.free_resources.disk_mb - recent_route_resources.disk_mb),
+        disk_mb=max(
+            0, heartbeat.free_resources.disk_mb - recent_route_resources.disk_mb
+        ),
     )
     return requested.fits_within(adjusted_free)
 
@@ -1822,6 +1935,23 @@ def _gateway_sandbox_create_lock(sandbox_id: str) -> RLock:
             lock = RLock()
             _GATEWAY_SANDBOX_CREATE_LOCKS[sandbox_id] = lock
         return lock
+
+
+def _active_in_flight_routes_unlocked() -> list[SandboxRoute]:
+    now = utc_now()
+    expired = [
+        sandbox_id
+        for sandbox_id, reservation in _GATEWAY_IN_FLIGHT_ROUTES.items()
+        if reservation.expires_at <= now
+    ]
+    for sandbox_id in expired:
+        _GATEWAY_IN_FLIGHT_ROUTES.pop(sandbox_id, None)
+    return [reservation.route for reservation in _GATEWAY_IN_FLIGHT_ROUTES.values()]
+
+
+def _release_in_flight_route(sandbox_id: str) -> None:
+    with _GATEWAY_SCHEDULING_LOCK:
+        _GATEWAY_IN_FLIGHT_ROUTES.pop(sandbox_id, None)
 
 
 def _structured_proxy_error(response: ProxiedResponse) -> dict[str, Any] | None:
@@ -1854,7 +1984,12 @@ def _header_value(headers: Any, key: str) -> str:
 
 
 def _looks_like_image_id_reference(image: str) -> bool:
-    return bool(image.strip()) and "/" not in image and ":" not in image and "@" not in image
+    return (
+        bool(image.strip())
+        and "/" not in image
+        and ":" not in image
+        and "@" not in image
+    )
 
 
 def _image_record_available_to_sandboxes(record: dict[str, Any]) -> bool:
@@ -1884,7 +2019,9 @@ def _image_record_summary(record: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def _resource_slack(free: ResourceQuantity, requested: ResourceQuantity) -> tuple[float, int, int]:
+def _resource_slack(
+    free: ResourceQuantity, requested: ResourceQuantity
+) -> tuple[float, int, int]:
     return (
         max(0.0, free.vcpu - requested.vcpu),
         max(0, free.memory_mb - requested.memory_mb),

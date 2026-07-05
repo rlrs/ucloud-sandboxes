@@ -600,6 +600,76 @@ class RoutingStore:
             )
             return removed
 
+    def delete_stale_sandboxes(
+        self,
+        *,
+        active_job_ids: Iterable[str],
+        active_node_ids: Iterable[str] = (),
+        older_than: datetime,
+    ) -> list[SandboxRoute]:
+        keep_jobs = {str(job_id) for job_id in active_job_ids if str(job_id)}
+        keep_nodes = {str(node_id) for node_id in active_node_ids if str(node_id)}
+        with self._lock:
+            removed: list[SandboxRoute] = []
+            with self._transaction() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT sandbox_id, node_id, job_id, node_url,
+                           resources_json, created_at, updated_at
+                    FROM sandboxes
+                    ORDER BY sandbox_id
+                    """
+                ).fetchall()
+                for row in rows:
+                    route = _sandbox_route_from_row(row)
+                    if route is None:
+                        continue
+                    if route.job_id in keep_jobs or route.node_id in keep_nodes:
+                        continue
+                    reference = parse_iso_datetime(
+                        route.updated_at
+                    ) or parse_iso_datetime(route.created_at)
+                    if reference is None or reference > older_than:
+                        continue
+                    removed.append(route)
+                for route in removed:
+                    conn.execute(
+                        "DELETE FROM sandboxes WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM pending WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    )
+                    conn.execute(
+                        "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    )
+            if not removed:
+                return []
+            removed_ids = {route.sandbox_id for route in removed}
+            self._state = RoutingState(
+                sandboxes={
+                    sandbox_id: route
+                    for sandbox_id, route in self._state.sandboxes.items()
+                    if sandbox_id not in removed_ids
+                },
+                exec_sessions={
+                    session_id: route
+                    for session_id, route in self._state.exec_sessions.items()
+                    if route.sandbox_id not in removed_ids
+                },
+                pending={
+                    sandbox_id: item
+                    for sandbox_id, item in self._state.pending.items()
+                    if sandbox_id not in removed_ids
+                },
+                image_builds=dict(self._state.image_builds),
+                prepared=dict(self._state.prepared),
+                prepared_builders=dict(self._state.prepared_builders),
+            )
+            return removed
+
     def get_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
             with self._connect() as conn:

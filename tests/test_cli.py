@@ -1,6 +1,7 @@
 import argparse
 from contextlib import redirect_stdout
 from dataclasses import dataclass
+from datetime import timedelta
 import io
 import json
 from pathlib import Path
@@ -27,7 +28,7 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 from ucloud_sandboxes.registry import HeartbeatStore
-from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
+from ucloud_sandboxes.routing import RoutingState, RoutingStore, SandboxRoute
 
 
 @dataclass(frozen=True)
@@ -640,6 +641,74 @@ class CliTests(unittest.TestCase):
             ["stale-sandbox"],
         )
         self.assertEqual(routes, {})
+
+    def test_autoscaler_prunes_orphaned_stale_routes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text('{"items": []}', encoding="utf-8")
+            route_file = root / "routes.sqlite"
+            now = utc_now()
+            old = (now - timedelta(seconds=600)).isoformat()
+            recent = (now - timedelta(seconds=30)).isoformat()
+            RoutingStore(route_file).save(
+                RoutingState(
+                    sandboxes={
+                        "old-orphan": SandboxRoute(
+                            sandbox_id="old-orphan",
+                            node_id="old-node",
+                            job_id="old-job",
+                            node_url="http://old-node:8090",
+                            created_at=old,
+                            updated_at=old,
+                        ),
+                        "recent-orphan": SandboxRoute(
+                            sandbox_id="recent-orphan",
+                            node_id="recent-node",
+                            job_id="recent-job",
+                            node_url="http://recent-node:8090",
+                            created_at=recent,
+                            updated_at=recent,
+                        ),
+                    },
+                    exec_sessions={},
+                    pending={},
+                    image_builds={},
+                )
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "autoscaler-loop",
+                        "--project",
+                        "project-1",
+                        "--deployment-id",
+                        "prod-a",
+                        "--state-dir",
+                        raw_dir,
+                        "--route-file",
+                        str(route_file),
+                        "--jobs-file",
+                        str(jobs_file),
+                        "--no-private-network",
+                        "--execute",
+                        "--once",
+                        "--output",
+                        "json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            routes = RoutingStore(route_file).load().sandboxes
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            [route["sandbox_id"] for route in payload["removedRoutes"]],
+            ["old-orphan"],
+        )
+        self.assertNotIn("old-orphan", routes)
+        self.assertIn("recent-orphan", routes)
 
     def test_deploy_all_in_one_dry_run_outputs_plan_without_ucloud_lookup(self) -> None:
         with TemporaryDirectory() as raw_dir:

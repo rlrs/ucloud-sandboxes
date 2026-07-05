@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 from dataclasses import replace
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -2741,6 +2742,27 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
         if result.get("stopResponse") is not None:
             route_cleanup_job_ids.update(str(job_id) for job_id in result["stopJobIds"])
         removed_routes = routing_store.delete_sandboxes_for_jobs(route_cleanup_job_ids)
+        if args.execute:
+            effective_policy = policy_with_cli_overrides(config.policy, args)
+            stale_route_grace_seconds = max(
+                effective_policy.heartbeat_ttl_seconds * 3,
+                effective_policy.heartbeat_ttl_seconds + 60,
+            )
+            active_route_job_ids = {
+                node.job_id for node in result["rawNodes"] if not node.job.is_final
+            }
+            active_route_node_ids = {
+                node.heartbeat.node_id
+                for node in result["rawNodes"]
+                if node.heartbeat is not None and node.heartbeat_fresh
+            }
+            removed_routes.extend(
+                routing_store.delete_stale_sandboxes(
+                    active_job_ids=active_route_job_ids,
+                    active_node_ids=active_route_node_ids,
+                    older_than=utc_now() - timedelta(seconds=stale_route_grace_seconds),
+                )
+            )
         consumed_pending_demand = (
             routing_store.consume_pending_demand() if args.execute else []
         )

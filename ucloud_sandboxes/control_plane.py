@@ -47,6 +47,8 @@ _GATEWAY_IN_FLIGHT_ROUTES: dict[str, "_InFlightRoute"] = {}
 IN_FLIGHT_ROUTE_TTL_SECONDS = 15 * 60
 DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 64
 SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
+SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS = 5
+SANDBOX_CREATE_UNRESOLVED_ROUTE_TTL_SECONDS = 5 * 60
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
@@ -779,6 +781,28 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             with trace_span(
                 self.metrics_store,
                 trace_id,
+                "gateway.sandbox_in_flight_check",
+                parent_span_id=root.span_id,
+            ) as span:
+                in_flight = _in_flight_route_for_sandbox(spec.id)
+                span.set_attribute("in_flight", in_flight is not None)
+                if in_flight is not None:
+                    span.set_attribute("node_id", in_flight.node_id)
+                    span.set_attribute("job_id", in_flight.job_id)
+                    in_flight_outcome = self._send_in_flight_sandbox_response(
+                        in_flight, spec
+                    )
+                    if in_flight_outcome == "recovered":
+                        root.set_attribute("outcome", "recovered_in_flight")
+                        _release_in_flight_route(spec.id)
+                    else:
+                        root.status = "error"
+                        root.set_attribute("outcome", in_flight_outcome)
+                    return
+
+            with trace_span(
+                self.metrics_store,
+                trace_id,
                 "gateway.sandbox_select_node",
                 parent_span_id=root.span_id,
                 attributes={"image": spec.image},
@@ -812,6 +836,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            release_in_flight = True
             try:
                 pending_before = self.routing_store.get_pending(spec.id)
                 with trace_span(
@@ -893,9 +918,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     root.status = "error"
                     root.set_attribute("outcome", "node_create_failed")
                     root.set_attribute("status_code", int(response.status))
+                    if _node_create_may_still_be_running(response):
+                        release_in_flight = False
+                        _refresh_in_flight_route(
+                            spec.id,
+                            ttl_seconds=(
+                                SANDBOX_CREATE_UNRESOLVED_ROUTE_TTL_SECONDS
+                            ),
+                        )
+                        root.set_attribute("kept_in_flight_route", True)
                 self._send_proxied_response(response)
             finally:
-                _release_in_flight_route(spec.id)
+                if release_in_flight:
+                    _release_in_flight_route(spec.id)
 
     def _send_existing_sandbox_response(
         self,
@@ -919,6 +954,39 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
         self._write_json({"sandbox": record, "recovered": True}, status=status)
         return True
+
+    def _send_in_flight_sandbox_response(
+        self,
+        route: SandboxRoute,
+        spec: SandboxSpec,
+    ) -> str:
+        record = self._sandbox_record_on_node(route.node_url, spec.id)
+        if record is not None:
+            if not _sandbox_record_matches_spec(record, spec):
+                self._write_json(
+                    {"error": f"sandbox already exists with different spec: {spec.id}"},
+                    status=HTTPStatus.CONFLICT,
+                )
+                return "in_flight_conflict"
+            self.routing_store.upsert_sandbox(route)
+            self._write_json(
+                {"sandbox": record, "recovered": True},
+                status=HTTPStatus.OK,
+            )
+            return "recovered"
+        self._write_json(
+            {
+                "error": "sandbox creation is already in progress",
+                "retryable": True,
+                "sandbox_id": spec.id,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+        return "create_in_progress"
 
     def _sandbox_record_on_node(
         self,
@@ -2017,9 +2085,31 @@ def _active_in_flight_routes_unlocked() -> list[SandboxRoute]:
     return [reservation.route for reservation in _GATEWAY_IN_FLIGHT_ROUTES.values()]
 
 
+def _in_flight_route_for_sandbox(sandbox_id: str) -> SandboxRoute | None:
+    with _GATEWAY_SCHEDULING_LOCK:
+        _active_in_flight_routes_unlocked()
+        reservation = _GATEWAY_IN_FLIGHT_ROUTES.get(sandbox_id)
+        return reservation.route if reservation is not None else None
+
+
+def _refresh_in_flight_route(sandbox_id: str, *, ttl_seconds: int) -> None:
+    with _GATEWAY_SCHEDULING_LOCK:
+        reservation = _GATEWAY_IN_FLIGHT_ROUTES.get(sandbox_id)
+        if reservation is None:
+            return
+        _GATEWAY_IN_FLIGHT_ROUTES[sandbox_id] = _InFlightRoute(
+            route=reservation.route,
+            expires_at=utc_now() + timedelta(seconds=max(1, ttl_seconds)),
+        )
+
+
 def _release_in_flight_route(sandbox_id: str) -> None:
     with _GATEWAY_SCHEDULING_LOCK:
         _GATEWAY_IN_FLIGHT_ROUTES.pop(sandbox_id, None)
+
+
+def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
+    return response.status in {408, 425, 429, 500, 502, 503, 504}
 
 
 def _structured_proxy_error(response: ProxiedResponse) -> dict[str, Any] | None:

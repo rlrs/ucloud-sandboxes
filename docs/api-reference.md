@@ -187,10 +187,11 @@ At least one resource field (`cpus`, `memory_mb`, or `disk_mb`) is required.
 
 Sandbox creation is idempotent for a supplied `id` and matching normalized spec.
 If a client times out while the node is still creating the Docker container, a
-retry with the same `id` and spec returns the existing sandbox with status `200`
-instead of running a second container. Reusing the same `id` with a different
-image, resource request, command, environment, security profile, filesystem, or
-labels is a conflict.
+retry with the same `id` and spec either returns the existing sandbox with status
+`200` or returns a retryable `503` while the original create is still unresolved.
+The sandbox `id` is the idempotency key; there is no separate idempotency header
+or field. Reusing the same `id` with a different image, resource request,
+command, environment, security profile, filesystem, or labels is a conflict.
 
 `GET /v1/sandboxes` returns records with stable top-level identity fields as
 well as the full nested spec:

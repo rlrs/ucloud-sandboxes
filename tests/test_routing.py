@@ -627,6 +627,22 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual([item.sandbox_id for item in consumed], ["pending-one"])
         self.assertEqual(demand.pending_resources, ResourceQuantity())
 
+    def test_repeated_pending_signal_for_same_sandbox_does_not_multiply_demand(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+
+            store.upsert_pending("pending-one", resources)
+            store.upsert_pending("pending-one", resources)
+            demand = store.pending_demand()
+            pending = store.pending_sandboxes()
+
+        self.assertEqual(demand.pending_resources, resources)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].attempts, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

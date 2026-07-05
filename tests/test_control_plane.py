@@ -704,6 +704,102 @@ class ControlPlaneTests(unittest.TestCase):
             {"job-1", "job-2"},
         )
 
+    def test_retried_create_with_unresolved_reservation_returns_in_progress(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "node-sandboxes.json",
+                image_file=raw_path / "node-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+            )
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                node_base = f"http://{node_host}:{node_port}"
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                    image_file=raw_path / "gateway-images.json",
+                    local_image_builds_enabled=False,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url=node_base,
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=1,
+                                memory_mb=1024,
+                                disk_mb=2048,
+                            ),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+                    route = SandboxRoute(
+                        sandbox_id="retry-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url=node_base,
+                        resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=512),
+                        created_at=utc_now().isoformat(),
+                        updated_at=utc_now().isoformat(),
+                    )
+                    with control_plane._GATEWAY_SCHEDULING_LOCK:
+                        control_plane._GATEWAY_IN_FLIGHT_ROUTES["retry-one"] = (
+                            control_plane._InFlightRoute(
+                                route=route,
+                                expires_at=utc_now() + timedelta(seconds=60),
+                            )
+                        )
+                    retry = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "retry-one",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                            "disk_mb": 512,
+                        },
+                        allow_error=True,
+                    )
+                    node_sandboxes = self._json_request(f"{node_base}/v1/sandboxes")
+                    demand = RoutingStore(route_file).pending_demand()
+                finally:
+                    control_plane._release_in_flight_route("retry-one")
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(retry["status"], 503)
+        self.assertTrue(retry["body"]["retryable"])
+        self.assertEqual(
+            retry["body"]["error"],
+            "sandbox creation is already in progress",
+        )
+        self.assertEqual(node_sandboxes["sandboxes"], [])
+        self.assertEqual(demand.pending_resources, ResourceQuantity())
+
     def test_node_capacity_counts_routes_even_after_newer_heartbeat(self) -> None:
         now = utc_now()
         old = (now - timedelta(seconds=5)).isoformat()

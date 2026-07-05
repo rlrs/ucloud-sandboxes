@@ -79,6 +79,10 @@ loop consumes these pending signals after a reconciliation cycle, and unconsumed
 signals expire after a short TTL from the last failed create attempt. This keeps
 abandoned client attempts from holding VMs alive as phantom demand.
 
+If a create was already placed on a node but the gateway has not yet observed
+completion, retries with the same sandbox id return a retryable in-progress
+response instead of adding another scale-up signal or choosing a different node.
+
 Disk is only credited from node heartbeats that advertise `disk-quota`, which is
 derived from a passing runtime conformance probe. Nodes without that capability
 can still contribute CPU and memory, but their free disk is treated as zero for

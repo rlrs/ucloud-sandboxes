@@ -2,6 +2,14 @@
 
 This project uses semantic versioning.
 
+## 0.3.21 - 2026-07-06
+
+- Treated fresh zero-sandbox heartbeats as proof that older cached sandbox and
+  exec routes are stale, so gateway execs do not proxy to empty or unavailable
+  sandbox nodes.
+- Returned structured retryable JSON when the routing store is unavailable
+  instead of letting SQLite failures drop the request and surface as UCloud HTML.
+
 ## 0.3.20 - 2026-07-06
 
 - Added an opt-in `linux_host` sandbox profile for VM-like container startup,

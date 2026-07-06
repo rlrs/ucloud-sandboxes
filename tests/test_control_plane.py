@@ -7,6 +7,7 @@ from time import sleep
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import sqlite3
 from urllib import error, request
 from urllib.parse import quote
 import unittest
@@ -467,6 +468,7 @@ class ControlPlaneTests(unittest.TestCase):
                             job_id="job-1",
                             node_id="node-1",
                             node_url=node_url,
+                            active_sandboxes=1,
                             capabilities=("sandbox", "image-cache"),
                             total_resources=ResourceQuantity(
                                 vcpu=4,
@@ -495,6 +497,192 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(ListingNode.listed.is_set())
         self.assertFalse(refreshed["cached"])
         self.assertEqual(refreshed["sandboxes"][0]["spec"]["id"], "cached-one")
+
+    def test_gateway_marks_cached_route_unknown_when_node_reports_empty(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node_url = "http://127.0.0.1:9"
+            RoutingStore(route_file).upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="stale-one",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url=node_url,
+                    resources=ResourceQuantity(
+                        vcpu=1.0,
+                        memory_mb=512,
+                        disk_mb=1024,
+                    ),
+                    spec={
+                        "id": "stale-one",
+                        "image": "busybox",
+                        "memory_mb": 512,
+                        "disk_mb": 1024,
+                    },
+                    state="running",
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=route_file,
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                result = post_heartbeat(
+                    f"{base}/v1/nodes/heartbeat",
+                    build_heartbeat(
+                        job_id="job-1",
+                        node_id="node-1",
+                        node_url=node_url,
+                        active_sandboxes=0,
+                        capabilities=("sandbox",),
+                    ),
+                )
+                self.assertEqual(result.status, 200)
+                cached = self._json_request(f"{base}/v1/sandboxes")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        record = cached["sandboxes"][0]
+        self.assertTrue(cached["cached"])
+        self.assertEqual(record["id"], "stale-one")
+        self.assertEqual(record["cached_state"], "running")
+        self.assertEqual(record["state"], "unknown")
+        self.assertTrue(record["route_only"])
+        self.assertEqual(record["node"]["active_sandboxes"], 0)
+
+    def test_gateway_does_not_proxy_exec_to_proven_stale_route(self) -> None:
+        class ListingNode(BaseHTTPRequestHandler):
+            exec_called = Event()
+
+            def do_GET(self) -> None:
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
+                    self._write_json({"sandboxes": []})
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self) -> None:
+                if self.path.split("?", 1)[0].endswith("/exec"):
+                    self.exec_called.set()
+                self.send_response(500)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object]) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), ListingNode)
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                node_url = f"http://{node_host}:{node_port}"
+                RoutingStore(route_file).upsert_sandbox(
+                    SandboxRoute(
+                        sandbox_id="stale-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url=node_url,
+                        resources=ResourceQuantity(
+                            vcpu=1.0,
+                            memory_mb=512,
+                            disk_mb=1024,
+                        ),
+                        spec={"id": "stale-one", "image": "busybox"},
+                        state="running",
+                    )
+                )
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url=node_url,
+                            active_sandboxes=0,
+                            capabilities=("sandbox",),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+                    response = self._json_request(
+                        f"{base}/v1/sandboxes/stale-one/exec",
+                        method="POST",
+                        payload={"cmd": "true"},
+                        allow_error=True,
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(response["status"], 404)
+        self.assertEqual(response["body"]["error"], "sandbox route not found")
+        self.assertFalse(ListingNode.exec_called.is_set())
+
+    def test_gateway_returns_json_when_routing_store_unavailable_for_metrics(
+        self,
+    ) -> None:
+        class BrokenRoutingStore:
+            def load(self) -> object:
+                raise sqlite3.DatabaseError("database disk image is malformed")
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+            )
+            gateway.RequestHandlerClass.routing_store = BrokenRoutingStore()
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                response = self._json_request(
+                    f"http://{host}:{port}/v1/metrics",
+                    allow_error=True,
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response["status"], 503)
+        self.assertEqual(response["body"]["error"], "routing state unavailable")
+        self.assertTrue(response["body"]["retryable"])
+        self.assertIn("malformed", response["body"]["details"])
 
     def test_gateway_bearer_token_protects_proxied_api(self) -> None:
         with TemporaryDirectory() as raw_dir:

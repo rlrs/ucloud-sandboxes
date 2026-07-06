@@ -6,6 +6,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
+import sqlite3
 from threading import BoundedSemaphore, RLock
 import time
 from typing import Any
@@ -133,12 +134,23 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"nodes": nodes})
             return
         if parsed.path == "/v1/demand" and self.routing_store is not None:
-            self._write_json(self._demand_payload())
+            try:
+                demand_payload = self._demand_payload()
+            except sqlite3.DatabaseError as exc:
+                self._write_routing_store_unavailable(exc)
+                return
+            self._write_json(demand_payload)
             return
         if parsed.path == "/v1/metrics":
-            routing_state = (
-                self.routing_store.load() if self.routing_store is not None else None
-            )
+            try:
+                routing_state = (
+                    self.routing_store.load()
+                    if self.routing_store is not None
+                    else None
+                )
+            except sqlite3.DatabaseError as exc:
+                self._write_routing_store_unavailable(exc)
+                return
             full = _truthy_query_param(parsed, "full") or _truthy_query_param(
                 parsed, "detail"
             )
@@ -309,6 +321,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _route_to_nodes(self, path: str) -> bool:
         if self.routing_store is None:
             return False
+        try:
+            return self._route_to_nodes_unchecked(path)
+        except sqlite3.DatabaseError as exc:
+            self._write_routing_store_unavailable(exc)
+            return True
+
+    def _route_to_nodes_unchecked(self, path: str) -> bool:
         if path == "/v1/sandboxes" and self.command == "GET":
             if _truthy_query_param(urlparse(self.path), "refresh"):
                 self._list_sandboxes_across_nodes()
@@ -363,6 +382,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._route_exec_request(session_id, path)
             return True
         return False
+
+    def _write_routing_store_unavailable(self, exc: sqlite3.DatabaseError) -> None:
+        self._write_json(
+            {
+                "error": "routing state unavailable",
+                "retryable": True,
+                "details": str(exc),
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+        )
 
     def _demand_payload(self) -> dict[str, Any]:
         demand = self.routing_store.pending_demand()
@@ -1363,6 +1392,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         route = self.routing_store.get_sandbox(sandbox_id)
         if route is None:
             route = self._discover_sandbox_route(sandbox_id)
+        elif self._sandbox_route_is_proven_stale(route):
+            self.routing_store.delete_sandbox(sandbox_id)
+            route = self._discover_sandbox_route(sandbox_id)
         if route is None:
             if self.command == "DELETE":
                 pending_before = self.routing_store.load().pending.get(sandbox_id)
@@ -1423,6 +1455,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 {"error": "exec route not found"}, status=HTTPStatus.NOT_FOUND
             )
             return
+        if self._exec_route_is_proven_stale(route):
+            self.routing_store.delete_sandbox(route.sandbox_id)
+            self._write_json(
+                {
+                    "error": "exec route is stale",
+                    "sandbox_id": route.sandbox_id,
+                    "retryable": False,
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
         try:
             body = (
                 self._read_raw_body()
@@ -1463,6 +1506,52 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     )
                     self.routing_store.upsert_sandbox(route)
                     return route
+        return None
+
+    def _sandbox_route_is_proven_stale(self, route: SandboxRoute) -> bool:
+        if (route.state or "").lower() == "creating":
+            return False
+        heartbeat = self._heartbeat_for_route(
+            node_id=route.node_id,
+            job_id=route.job_id,
+            node_url=route.node_url,
+        )
+        return _heartbeat_proves_route_absent(
+            heartbeat,
+            route_created_at=route.created_at,
+            route_updated_at=route.updated_at,
+            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+        )
+
+    def _exec_route_is_proven_stale(self, route: ExecRoute) -> bool:
+        heartbeat = self._heartbeat_for_route(
+            node_id=route.node_id,
+            job_id=route.job_id,
+            node_url=route.node_url,
+        )
+        return _heartbeat_proves_route_absent(
+            heartbeat,
+            route_created_at=route.created_at,
+            route_updated_at=route.updated_at,
+            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+        )
+
+    def _heartbeat_for_route(
+        self,
+        *,
+        node_id: str,
+        job_id: str,
+        node_url: str,
+    ) -> NodeHeartbeat | None:
+        normalized_node_url = node_url.rstrip("/")
+        for heartbeat in self.store.load().values():
+            if heartbeat.node_id == node_id or heartbeat.job_id == job_id:
+                return heartbeat
+            if (
+                heartbeat.node_url
+                and heartbeat.node_url.rstrip("/") == normalized_node_url
+            ):
+                return heartbeat
         return None
 
     def _select_node(
@@ -2225,7 +2314,17 @@ def _route_only_sandbox_record(
         heartbeat is not None and heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds)
     )
     cached_state = route.state or "unknown"
-    visible_state = cached_state if node_fresh or cached_state == "creating" else "unknown"
+    route_absent = _heartbeat_proves_route_absent(
+        heartbeat,
+        route_created_at=route.created_at,
+        route_updated_at=route.updated_at,
+        heartbeat_ttl_seconds=heartbeat_ttl_seconds,
+    )
+    visible_state = (
+        cached_state
+        if cached_state == "creating" or (node_fresh and not route_absent)
+        else "unknown"
+    )
     record: dict[str, Any] = {
         "id": route.sandbox_id,
         "sandbox_id": route.sandbox_id,
@@ -2260,7 +2359,27 @@ def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, Any]:
         "node_id": heartbeat.node_id,
         "job_id": heartbeat.job_id,
         "node_url": heartbeat.node_url or "",
+        "active_sandboxes": heartbeat.active_sandboxes,
     }
+
+
+def _heartbeat_proves_route_absent(
+    heartbeat: NodeHeartbeat | None,
+    *,
+    route_created_at: str,
+    route_updated_at: str,
+    heartbeat_ttl_seconds: int,
+) -> bool:
+    if heartbeat is None:
+        return False
+    if not heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds):
+        return False
+    if heartbeat.active_sandboxes != 0:
+        return False
+    route_reference = parse_iso_datetime(route_updated_at) or parse_iso_datetime(
+        route_created_at
+    )
+    return route_reference is None or heartbeat.updated_at >= route_reference
 
 
 def _node_can_fit(

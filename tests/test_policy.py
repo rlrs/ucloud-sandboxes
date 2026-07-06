@@ -87,6 +87,35 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.resource_deficit.vcpu, 3.0)
         self.assertEqual(decision.resource_deficit.memory_mb, 7000)
 
+    def test_default_policy_bursts_large_backlog_without_waiting_for_one_node(
+        self,
+    ) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "ready",
+                    total_resources=ResourceQuantity(
+                        vcpu=16,
+                        memory_mb=32768,
+                        disk_mb=204800,
+                    ),
+                    cpu_overcommit=2.0,
+                    memory_overcommit=1.2,
+                )
+            ],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=256,
+                    memory_mb=262144,
+                    disk_mb=524288,
+                )
+            ),
+            ScalePolicy(),
+        )
+
+        self.assertEqual(decision.creates, 4)
+        self.assertEqual(decision.resource_deficit.vcpu, 224)
+
     def test_stops_idle_incompatible_node_without_idle_grace(self) -> None:
         decision = evaluate_scale(
             [
@@ -192,7 +221,7 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.resource_deficit.disk_mb, 20_000)
         self.assertEqual(decision.creates, 1)
 
-    def test_counts_queued_vm_estimated_resources(self) -> None:
+    def test_discounts_queued_vm_estimated_resources_by_default(self) -> None:
         decision = evaluate_scale(
             [node("queued", state="IN_QUEUE", fresh=False)],
             SandboxDemand(
@@ -205,9 +234,9 @@ class ScalePolicyTests(unittest.TestCase):
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
 
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.vcpu, 2)
-        self.assertEqual(decision.projected_free_resources.memory_mb, 6144)
+        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.projected_free_resources.vcpu, 1)
+        self.assertEqual(decision.projected_free_resources.memory_mb, 3072)
 
     def test_counts_recent_suspended_vm_as_provisioning_capacity(self) -> None:
         now = utc_now()
@@ -234,8 +263,8 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.provisioning_nodes, 1)
         self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.vcpu, 2)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 204800)
+        self.assertEqual(decision.projected_free_resources.vcpu, 1)
+        self.assertEqual(decision.projected_free_resources.disk_mb, 102400)
 
     def test_stale_suspended_vm_is_not_pool_capacity(self) -> None:
         now = utc_now()
@@ -284,7 +313,7 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 204800)
+        self.assertEqual(decision.projected_free_resources.disk_mb, 102400)
 
     def test_discounted_provisioning_resources_can_create_another_vm(self) -> None:
         decision = evaluate_scale(

@@ -19,6 +19,7 @@ from ucloud_sandboxes.control_plane import (
     build_server,
 )
 from ucloud_sandboxes.deployment import package_version
+from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import build_node_agent_server
@@ -71,6 +72,21 @@ class FileRuntime(DockerGvisorRuntime):
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_gateway_server_uses_high_listen_backlog(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_server(
+                "127.0.0.1",
+                0,
+                Path(raw_dir) / "heartbeats.json",
+            )
+            try:
+                self.assertGreaterEqual(
+                    server.request_queue_size,
+                    DEFAULT_HTTP_REQUEST_QUEUE_SIZE,
+                )
+            finally:
+                server.server_close()
+
     def test_accepts_heartbeat_and_lists_nodes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             heartbeat_file = Path(raw_dir) / "heartbeats.json"
@@ -181,6 +197,69 @@ class ControlPlaneTests(unittest.TestCase):
             direct["registry"]["repositories"][1]["repository"],
             "prime/mini-swe",
         )
+
+    def test_metrics_do_not_fan_out_to_node_build_endpoints(self) -> None:
+        class BuildProbeHandler(BaseHTTPRequestHandler):
+            called = Event()
+
+            def do_GET(self) -> None:
+                if self.path.split("?", 1)[0] == "/v1/images/builds":
+                    self.called.set()
+                    self._write_json({"builds": []})
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object]) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node = ThreadingHTTPServer(("127.0.0.1", 0), BuildProbeHandler)
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    metrics_file=raw_path / "metrics.jsonl",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    result = post_heartbeat(
+                        f"http://{host}:{port}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-builder",
+                            node_id="builder-1",
+                            node_url=f"http://{node_host}:{node_port}",
+                            active_image_builds=1,
+                            capabilities=("image-cache", "image-build", "snapshot"),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+                    metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertFalse(BuildProbeHandler.called.is_set())
+        self.assertEqual(metrics["images"]["active_builds"], 1)
 
     def test_gateway_mode_proxies_node_agent_json_api(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -986,6 +1065,210 @@ class ControlPlaneTests(unittest.TestCase):
                 for item in metrics["traces"]["recent"]
             )
         )
+
+    def test_gateway_persists_route_before_node_create_finishes(self) -> None:
+        class SlowCreateNode(BaseHTTPRequestHandler):
+            started = Event()
+            release = Event()
+
+            def do_POST(self) -> None:
+                if self.path != "/v1/sandboxes":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = json.loads(self.rfile.read(length).decode("utf-8"))
+                self.started.set()
+                self.release.wait(timeout=5)
+                self._write_json(
+                    {
+                        "sandbox": {"spec": raw},
+                        "command": ["docker", "run"],
+                        "exitCode": 0,
+                    },
+                    status=201,
+                )
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(
+                self, payload: dict[str, object], *, status: int = 200
+            ) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), SlowCreateNode)
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                    metrics_file=raw_path / "metrics.jsonl",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url=f"http://{node_host}:{node_port}",
+                            capabilities=("sandbox", "image-cache"),
+                            cached_images=("busybox",),
+                            total_resources=ResourceQuantity(
+                                vcpu=4,
+                                memory_mb=4096,
+                                disk_mb=8192,
+                            ),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            self._json_request,
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": "slow-one",
+                                "image": "busybox",
+                                "cpus": 1,
+                                "memory_mb": 512,
+                                "disk_mb": 1024,
+                            },
+                        )
+                        self.assertTrue(SlowCreateNode.started.wait(timeout=5))
+                        route = RoutingStore(route_file).get_sandbox("slow-one")
+                        SlowCreateNode.release.set()
+                        created = future.result(timeout=5)
+                finally:
+                    SlowCreateNode.release.set()
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                SlowCreateNode.release.set()
+                node.shutdown()
+                node.server_close()
+
+        self.assertIsNotNone(route)
+        self.assertEqual(created["sandbox"]["spec"]["id"], "slow-one")
+
+    def test_gateway_keeps_recent_unresolved_route_without_retrying_create(
+        self,
+    ) -> None:
+        class EmptyNode(BaseHTTPRequestHandler):
+            post_count = 0
+
+            def do_GET(self) -> None:
+                if self.path == "/v1/sandboxes":
+                    self._write_json({"sandboxes": []})
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self) -> None:
+                type(self).post_count += 1
+                self._write_json({"error": "unexpected create"}, status=500)
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(
+                self, payload: dict[str, object], *, status: int = 200
+            ) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), EmptyNode)
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                node_url = f"http://{node_host}:{node_port}"
+                RoutingStore(route_file).upsert_sandbox(
+                    SandboxRoute(
+                        sandbox_id="recovering-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url=node_url,
+                        resources=ResourceQuantity(
+                            vcpu=1,
+                            memory_mb=512,
+                            disk_mb=1024,
+                        ),
+                        created_at=utc_now().isoformat(),
+                        updated_at=utc_now().isoformat(),
+                    )
+                )
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                    metrics_file=raw_path / "metrics.jsonl",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url=node_url,
+                            capabilities=("sandbox", "image-cache"),
+                            cached_images=("busybox",),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+                    retry = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "recovering-one",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                            "disk_mb": 1024,
+                        },
+                        allow_error=True,
+                    )
+                    route = RoutingStore(route_file).get_sandbox("recovering-one")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(retry["status"], 503)
+        self.assertTrue(retry["body"]["retryable"])
+        self.assertEqual(EmptyNode.post_count, 0)
+        self.assertIsNotNone(route)
 
     def test_gateway_routes_sandbox_file_upload_and_download(self) -> None:
         with TemporaryDirectory() as raw_dir:

@@ -9,6 +9,7 @@ import unittest
 
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.gateway import NodeGatewayClient
+from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import build_node_agent_server
@@ -17,6 +18,24 @@ from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class NodeAgentTests(unittest.TestCase):
+    def test_node_agent_server_uses_high_listen_backlog(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+            )
+            try:
+                self.assertGreaterEqual(
+                    server.request_queue_size,
+                    DEFAULT_HTTP_REQUEST_QUEUE_SIZE,
+                )
+            finally:
+                server.server_close()
+
     def test_creates_lists_deletes_sandbox_over_http(self) -> None:
         with TemporaryDirectory() as raw_dir:
             sandbox_file = Path(raw_dir) / "sandboxes.json"

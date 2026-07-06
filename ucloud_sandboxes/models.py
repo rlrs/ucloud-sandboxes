@@ -339,11 +339,11 @@ class ScalePolicy:
     min_nodes: int = 0
     max_nodes: int = 10
     warm_resources: ResourceQuantity = ResourceQuantity()
-    max_create_per_cycle: int = 1
+    max_create_per_cycle: int = 4
     max_stop_per_cycle: int = 1
-    max_provisioning_nodes: int = 2
-    provisioning_capacity_weight: float = 1.0
-    stale_provisioning_after_seconds: int = 1800
+    max_provisioning_nodes: int = 8
+    provisioning_capacity_weight: float = 0.5
+    stale_provisioning_after_seconds: int = 300
     stale_provisioning_capacity_weight: float = 0.0
     scale_down_idle_seconds: int = 600
     builder_scale_down_idle_seconds: int = 900

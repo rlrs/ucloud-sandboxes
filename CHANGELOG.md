@@ -2,6 +2,24 @@
 
 This project uses semantic versioning.
 
+## 0.3.18 - 2026-07-06
+
+- Raised the gateway and stdlib node-agent HTTP listen backlog from Python's
+  default of 5 to 1024 so UCloud public-link bursts do not overflow the accept
+  queue and get reported as `503 Job is unavailable` HTML.
+
+## 0.3.17 - 2026-07-05
+
+- Made sandbox create reservations durable before node-agent create completes, so
+  retries do not lose routing state while a container is still starting.
+- Kept recent unresolved routes in retryable create-in-progress state instead of
+  deleting them and retrying duplicate Docker creates.
+- Stopped `/v1/metrics` from synchronously querying node build endpoints and
+  bounded node reconciliation calls used by list/recovery paths.
+- Increased default sandbox scale-up burst capacity to create up to four nodes
+  per cycle, allow eight provisioning nodes, and discount provisioning VM
+  capacity until it heartbeats.
+
 ## 0.3.9 - 2026-07-04
 
 - Accepted gateway tokens through `X-UCloud-Sandbox-Token` so UCloud public

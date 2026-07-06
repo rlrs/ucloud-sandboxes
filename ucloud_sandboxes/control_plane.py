@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import timedelta
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
 from threading import BoundedSemaphore, RLock
@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_compatible, service_health
+from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -32,7 +33,7 @@ from .metrics import (
     record_sandbox_scheduled,
     trace_span,
 )
-from .models import NodeHeartbeat, ResourceQuantity, utc_now
+from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
 from .routing import ExecRoute, PendingSandboxDemand, RoutingStore, SandboxRoute
 from .sandbox import SandboxSpec, sandbox_specs_match
@@ -53,6 +54,8 @@ SANDBOX_CREATE_UNRESOLVED_ROUTE_TTL_SECONDS = 5 * 60
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
+NODE_RECONCILE_PROXY_TIMEOUT_SECONDS = 5
+NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 
 
@@ -140,7 +143,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 events,
                 heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
             )
-            builds = self._image_build_records_across_nodes()
+            builds = self._cached_image_build_records()
             active_builds = [
                 build
                 for build in builds
@@ -149,9 +152,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             failed_builds = [
                 build for build in builds if build.get("status") == "failed"
             ]
+            active_build_count = max(
+                len(active_builds),
+                int(
+                    snapshot.get("resources", {})
+                    .get("fresh", {})
+                    .get("active_image_builds")
+                    or 0
+                ),
+            )
             snapshot.setdefault("images", {}).update(
                 {
-                    "active_builds": len(active_builds),
+                    "active_builds": active_build_count,
                     "failed_builds": len(failed_builds),
                     "builds": builds,
                 }
@@ -494,15 +506,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
-        for heartbeat in self._ready_sandbox_heartbeats():
+        observed_ids: set[str] = set()
+        reconciled_node_urls: set[str] = set()
+        heartbeats = self._ready_sandbox_heartbeats()
+        heartbeats_by_node_id = {heartbeat.node_id: heartbeat for heartbeat in heartbeats}
+        for heartbeat in heartbeats:
             observed_at = utc_now().isoformat()
             response = self._proxy_request(
                 heartbeat.node_url or "",
                 "/v1/sandboxes",
                 method="GET",
+                timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
             )
             if response.status >= 400:
                 continue
+            reconciled_node_urls.add((heartbeat.node_url or "").rstrip("/"))
             payload = response.json()
             raw_sandboxes = payload.get("sandboxes")
             if not isinstance(raw_sandboxes, list):
@@ -514,6 +532,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 spec = record.get("spec")
                 sandbox_id = spec.get("id") if isinstance(spec, dict) else None
                 if isinstance(sandbox_id, str) and sandbox_id:
+                    observed_ids.add(sandbox_id)
                     routes.append(
                         _sandbox_route_from_heartbeat(heartbeat, sandbox_id, spec)
                     )
@@ -523,6 +542,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 routes,
                 observed_at=observed_at,
             )
+        if self.routing_store is not None:
+            for route in self.routing_store.sandbox_routes_readonly():
+                if route.sandbox_id in observed_ids:
+                    continue
+                if route.node_url.rstrip("/") in reconciled_node_urls:
+                    continue
+                sandboxes.append(
+                    _route_only_sandbox_record(
+                        route,
+                        heartbeats_by_node_id.get(route.node_id),
+                    )
+                )
         self._write_json({"sandboxes": sandboxes})
 
     def _list_images_across_nodes(self) -> None:
@@ -580,20 +611,15 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self._write_json({"build": selected})
 
     def _image_build_records_across_nodes(self) -> list[dict[str, Any]]:
-        builds: list[dict[str, Any]] = []
-        if self.image_manager is not None:
-            for record in sorted(
-                self.image_manager.list_builds(),
-                key=lambda item: (item.created_at, item.build_id),
-            ):
-                enriched = record.to_dict()
-                enriched["location"] = "control-plane"
-                builds.append(enriched)
+        builds = self._cached_image_build_records()
         for heartbeat in self._ready_heartbeats():
+            if "image-build" not in heartbeat.capabilities:
+                continue
             response = self._proxy_request(
                 heartbeat.node_url or "",
                 "/v1/images/builds",
                 method="GET",
+                timeout_seconds=NODE_RECONCILE_PROXY_TIMEOUT_SECONDS,
             )
             if response.status >= 400:
                 continue
@@ -607,6 +633,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     enriched["node"] = _node_metadata(heartbeat)
                     self._record_successful_build_image(enriched)
                     builds.append(enriched)
+        return builds
+
+    def _cached_image_build_records(self) -> list[dict[str, Any]]:
+        builds: list[dict[str, Any]] = []
+        if self.image_manager is not None:
+            for record in sorted(
+                self.image_manager.list_builds(),
+                key=lambda item: (item.created_at, item.build_id),
+            ):
+                enriched = record.to_dict()
+                enriched["location"] = "control-plane"
+                builds.append(enriched)
         return builds
 
     def _registry_status(self) -> dict[str, Any]:
@@ -785,6 +823,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     ):
                         root.set_attribute("outcome", "recovered_existing")
                         return
+                    if _route_is_recent(
+                        existing,
+                        ttl_seconds=SANDBOX_CREATE_UNRESOLVED_ROUTE_TTL_SECONDS,
+                    ):
+                        root.status = "error"
+                        root.set_attribute("outcome", "route_pending")
+                        self._write_create_in_progress_response(spec.id)
+                        return
                     self.routing_store.delete_sandbox(spec.id)
                     existing = None
                     span.set_attribute("deleted_stale_route", True)
@@ -859,6 +905,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             release_in_flight = True
             try:
                 pending_before = self.routing_store.get_pending(spec.id)
+                route = _sandbox_route_from_heartbeat(
+                    heartbeat, spec.id, spec.to_dict()
+                )
+                self.routing_store.upsert_sandbox(route)
+                root.set_attribute("reserved_route", True)
                 with trace_span(
                     self.metrics_store,
                     trace_id,
@@ -874,6 +925,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     if image_response is not None:
                         span.set_attribute("status_code", int(image_response.status))
                 if image_response is not None and image_response.status >= 400:
+                    self.routing_store.delete_sandbox(spec.id)
                     root.status = "error"
                     root.set_attribute("outcome", "image_pull_failed")
                     self._write_json(
@@ -909,9 +961,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         span.set_attribute("node_timings", node_timings)
                         root.set_attribute("node_timings", node_timings)
                 if _is_duplicate_sandbox_response(response, spec.id):
-                    route = _sandbox_route_from_heartbeat(
-                        heartbeat, spec.id, spec.to_dict()
-                    )
                     if self._send_existing_sandbox_response(
                         route,
                         spec,
@@ -921,9 +970,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         root.set_attribute("outcome", "recovered_duplicate")
                         return
                 if 200 <= response.status < 300:
-                    route = _sandbox_route_from_heartbeat(
-                        heartbeat, spec.id, spec.to_dict()
-                    )
                     self.routing_store.upsert_sandbox(route)
                     record_sandbox_scheduled(
                         self.metrics_store,
@@ -947,6 +993,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                             ),
                         )
                         root.set_attribute("kept_in_flight_route", True)
+                    else:
+                        self.routing_store.delete_sandbox(spec.id)
                 self._send_proxied_response(response)
             finally:
                 if release_in_flight:
@@ -1020,6 +1068,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             node_url,
             "/v1/sandboxes",
             method="GET",
+            timeout_seconds=NODE_RECOVERY_PROXY_TIMEOUT_SECONDS,
         )
         if response.status >= 400:
             return None
@@ -1810,7 +1859,7 @@ def build_server(
     metrics_file: Path | None = None,
     registry_url: str | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
-) -> ThreadingHTTPServer:
+) -> HighBacklogThreadingHTTPServer:
     store = HeartbeatStore(heartbeat_file)
     routing_store = RoutingStore(routing_file) if routing_file is not None else None
     metrics_store = MetricsStore(metrics_file) if metrics_file is not None else None
@@ -1848,7 +1897,7 @@ def build_server(
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
-    return ThreadingHTTPServer((host, port), BoundHandler)
+    return HighBacklogThreadingHTTPServer((host, port), BoundHandler)
 
 
 def _is_node_api_path(path: str) -> bool:
@@ -2028,6 +2077,31 @@ def _enrich_sandbox_record(
     return enriched
 
 
+def _route_only_sandbox_record(
+    route: SandboxRoute,
+    heartbeat: NodeHeartbeat | None,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": route.sandbox_id,
+        "sandbox_id": route.sandbox_id,
+        "status": "route-only",
+        "route_only": True,
+        "spec": {
+            "id": route.sandbox_id,
+            "resources": route.resources.to_dict(),
+        },
+        "resources": route.resources.to_dict(),
+        "node": {
+            "node_id": route.node_id,
+            "job_id": route.job_id,
+            "node_url": route.node_url,
+        },
+    }
+    if heartbeat is not None:
+        record["node"] = _node_metadata(heartbeat)
+    return record
+
+
 def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, str]:
     return {
         "node_id": heartbeat.node_id,
@@ -2138,6 +2212,16 @@ def _refresh_in_flight_route(sandbox_id: str, *, ttl_seconds: int) -> None:
 def _release_in_flight_route(sandbox_id: str) -> None:
     with _GATEWAY_SCHEDULING_LOCK:
         _GATEWAY_IN_FLIGHT_ROUTES.pop(sandbox_id, None)
+
+
+def _route_is_recent(route: SandboxRoute, *, ttl_seconds: int) -> bool:
+    timestamp = parse_iso_datetime(route.updated_at) or parse_iso_datetime(
+        route.created_at
+    )
+    if timestamp is None:
+        return False
+    age_seconds = (utc_now() - timestamp).total_seconds()
+    return age_seconds <= max(0, ttl_seconds)
 
 
 def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:

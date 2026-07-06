@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
 import time
@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from .agent import build_heartbeat
 from .deployment import service_health
+from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -609,7 +610,7 @@ def build_node_agent_server(
     image_builds_enabled: bool = False,
     extra_capabilities: tuple[str, ...] = (),
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
-) -> ThreadingHTTPServer:
+) -> HighBacklogThreadingHTTPServer:
     manager = SandboxManager(
         SandboxStore(sandbox_file),
         runtime or DockerGvisorRuntime(dry_run=True),
@@ -645,7 +646,7 @@ def build_node_agent_server(
     BoundHandler.runtime_metrics_provider = staticmethod(
         runtime_metrics_provider or sample_node_runtime_metrics
     )
-    return ThreadingHTTPServer((host, port), BoundHandler)
+    return HighBacklogThreadingHTTPServer((host, port), BoundHandler)
 
 
 def sandbox_record_to_dict(record: SandboxRecord) -> dict[str, Any]:

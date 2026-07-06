@@ -162,6 +162,7 @@ failures.
 {
   "id": "demo-1",
   "image": "busybox",
+  "profile": "container",
   "command": ["sh", "-lc", "echo ok"],
   "env": {
     "REQUEST_ID": "req-1"
@@ -197,6 +198,36 @@ retry with the same `id` and spec either returns the existing sandbox with statu
 The sandbox `id` is the idempotency key; there is no separate idempotency header
 or field. Reusing the same `id` with a different image, resource request,
 command, environment, security profile, filesystem, or labels is a conflict.
+
+The default `profile` is `"container"`, which keeps the hardened gVisor
+container defaults. For benchmark images that assume a more VM-like Linux host,
+use the explicit `"linux_host"` profile:
+
+```json
+{
+  "id": "host-like-1",
+  "image": "ubuntu:24.04",
+  "profile": "linux_host",
+  "memory_mb": 1024,
+  "cpus": 1,
+  "disk_mb": 4096,
+  "network": "bridge",
+  "linux_host": {
+    "enable_cron": true,
+    "enable_sshd": false,
+    "keep_alive": true,
+    "writable_paths": ["/tests", "/logs/verifier", "/task", "/oracle"]
+  }
+}
+```
+
+`linux_host` starts the container through a shell bootstrap that prepares common
+host-like writable paths, installs a small `service` compatibility shim when the
+image does not provide one, optionally starts cron/sshd when those binaries
+exist in the image, and keeps the container alive when no command is supplied.
+If no explicit `security` object is supplied, this profile uses root-compatible
+defaults rather than the hardened non-root defaults. It still runs under gVisor;
+it is not equivalent to a real VM or full `systemd` boot.
 
 `GET /v1/sandboxes` is a cheap cached read of the gateway routing table. It
 returns records with stable top-level identity fields as well as the full nested

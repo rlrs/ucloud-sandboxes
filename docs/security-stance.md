@@ -87,6 +87,32 @@ This is less isolated and should be used sparingly. Prefer building images that
 run application code as a non-root user and expose SSH through a non-root-safe
 configuration where possible.
 
+## Linux Host Compatibility Profile
+
+For benchmark tasks that expect a VM-like Linux host rather than a minimal task
+container, the sandbox API supports an explicit `"linux_host"` profile. This
+profile is still a Docker + gVisor container, but it changes startup behavior to
+look more like a small Linux machine:
+
+- root-compatible defaults when `security` is omitted
+- larger `/tmp` and `/run` tmpfs mounts
+- a shell PID-1 bootstrap under `/bin/sh`
+- creation of common writable paths such as `/tests`, `/logs/verifier`,
+  `/task`, `/oracle`, `/var/spool/cron`, `/run/sshd`, and `/workspace`
+- a small `service` shim if the image has no `service` command
+- optional cron startup when `linux_host.enable_cron` is true and cron exists in
+  the image
+- optional sshd startup when `linux_host.enable_sshd` is true or sandbox SSH is
+  enabled and `sshd` exists in the image
+- keep-alive behavior when the caller does not supply a command
+
+This improves compatibility with TMax/Harbor-style setup scripts that touch
+root-owned paths, use cron conventions, or expect `service` to exist. It does
+not provide real `systemd`, kernel modules, nested container runtimes,
+Singularity hooks, privileged mounts, or a true VM boot sequence. Images still
+need to contain the packages they use at runtime, including `/bin/sh`, cron, or
+OpenSSH server when those features are requested.
+
 ## Live VM observations
 
 On UCloud VM job `12345813`, initialized on 2026-06-29:

@@ -1,6 +1,8 @@
 from pathlib import Path
 from datetime import timedelta
 from tempfile import TemporaryDirectory
+import hashlib
+import json
 import unittest
 
 from ucloud_sandboxes.sandbox import (
@@ -136,6 +138,96 @@ class SandboxRuntimeTests(unittest.TestCase):
         self.assertNotIn("--pids-limit", argv)
         self.assertNotIn("--init", argv)
 
+    def test_linux_host_profile_uses_vm_like_entrypoint_and_defaults(self) -> None:
+        runtime = DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True)
+        spec = SandboxSpec.from_dict(
+            {
+                "id": "linux-host",
+                "image": "ubuntu:24.04",
+                "memory_mb": 512,
+                "disk_mb": 2048,
+                "profile": "linux_host",
+                "network": "bridge",
+                "command": ["sleep", "infinity"],
+                "ssh": {
+                    "enabled": True,
+                    "host_port": 23000,
+                    "authorized_keys": ["ssh-ed25519 AAAA test"],
+                },
+                "linux_host": {"enable_cron": True},
+            }
+        )
+
+        argv = runtime.create_command(spec)
+
+        self.assertIsNone(spec.security.user)
+        self.assertEqual(spec.security.cap_drop, ())
+        self.assertFalse(spec.security.no_new_privileges)
+        self.assertIsNone(spec.security.pids_limit)
+        self.assertIn("--init", argv)
+        self.assertNotIn("--user", argv)
+        self.assertNotIn("--cap-drop", argv)
+        self.assertNotIn("--security-opt", argv)
+        self.assertNotIn("--pids-limit", argv)
+        self.assertIn("UCLOUD_SANDBOX_PROFILE=linux_host", argv)
+        self.assertIn("UCLOUD_SANDBOX_ENABLE_CRON=1", argv)
+        self.assertIn("UCLOUD_SANDBOX_ENABLE_SSHD=1", argv)
+        self.assertIn("UCLOUD_SANDBOX_SSH_PORT=22", argv)
+        paths_env = next(
+            item
+            for item in argv
+            if item.startswith("UCLOUD_SANDBOX_LINUX_HOST_PATHS=")
+        )
+        self.assertIn("/var/spool/cron", paths_env)
+        self.assertIn("--entrypoint", argv)
+        self.assertIn("/bin/sh", argv)
+        image_index = argv.index("ubuntu:24.04")
+        self.assertEqual(argv[image_index + 1], "-lc")
+        script = argv[image_index + 2]
+        self.assertIn("/usr/local/bin/service", script)
+        self.assertIn("ssh-keygen -A", script)
+        self.assertEqual(argv[-2:], ("sleep", "infinity"))
+
+    def test_linux_host_profile_round_trips_from_dict(self) -> None:
+        spec = SandboxSpec.from_dict(
+            {
+                "id": "linux-host",
+                "image": "ubuntu:24.04",
+                "memory_mb": 512,
+                "profile": "linux_host",
+                "linux_host": {
+                    "enable_cron": True,
+                    "enable_sshd": True,
+                    "keep_alive": False,
+                    "writable_paths": ["/tests", "/logs/verifier"],
+                },
+            }
+        )
+
+        raw = spec.to_dict()
+        round_tripped = SandboxSpec.from_dict(raw)
+
+        self.assertEqual(raw["profile"], "linux_host")
+        self.assertEqual(raw["linux_host"]["writable_paths"], ["/tests", "/logs/verifier"])
+        self.assertTrue(round_tripped.linux_host.enable_cron)
+        self.assertTrue(round_tripped.linux_host.enable_sshd)
+        self.assertFalse(round_tripped.linux_host.keep_alive)
+        self.assertEqual(
+            round_tripped.linux_host.writable_paths,
+            ("/tests", "/logs/verifier"),
+        )
+
+    def test_rejects_unknown_sandbox_profile(self) -> None:
+        spec = SandboxSpec(
+            id="bad-profile",
+            image="busybox",
+            profile="vm",
+            memory_mb=128,
+        )
+
+        with self.assertRaisesRegex(ValueError, "profile must be one of"):
+            spec.validate()
+
     def test_rejects_invalid_sandbox_id(self) -> None:
         with self.assertRaises(ValueError):
             SandboxSpec(id="../bad", image="busybox").validate()
@@ -262,6 +354,62 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertTrue(timings["idempotent"])
             self.assertEqual(timings["recovered"], "container")
             self.assertEqual(store.load()["recovered"].spec.id, "recovered")
+
+    def test_manager_recovers_container_with_legacy_default_profile_fingerprint(
+        self,
+    ) -> None:
+        class LegacyFingerprintConflictExecutor:
+            def __init__(self, spec: SandboxSpec) -> None:
+                raw = spec.to_dict()
+                raw.pop("profile", None)
+                raw.pop("linux_host", None)
+                self.legacy_fingerprint = hashlib.sha256(
+                    json.dumps(raw, sort_keys=True, separators=(",", ":")).encode(
+                        "utf-8"
+                    )
+                ).hexdigest()
+                self.commands = []
+
+            def run(self, argv, *, input=None):
+                self.commands.append(argv)
+                if len(argv) > 1 and argv[1] == "run":
+                    return CommandResult(
+                        argv=argv,
+                        exit_code=1,
+                        stderr=(
+                            "Conflict. The container name "
+                            "\"/ucloud-sandbox-legacy\" is already in use"
+                        ),
+                    )
+                labels = {
+                    "ucloud-sandboxes.managed": "true",
+                    "ucloud-sandboxes.sandbox-id": "legacy",
+                    "ucloud-sandboxes.spec-sha256": self.legacy_fingerprint,
+                }
+                return CommandResult(
+                    argv=argv,
+                    exit_code=0,
+                    stdout=json.dumps(labels),
+                )
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            spec = SandboxSpec(
+                id="legacy",
+                image="busybox",
+                cpus=1.0,
+                memory_mb=128,
+                disk_mb=512,
+            )
+            executor = LegacyFingerprintConflictExecutor(spec)
+            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            manager = SandboxManager(store, runtime)
+
+            record, _result, timings = manager.create_with_timings(spec)
+
+        self.assertEqual(record.spec.id, "legacy")
+        self.assertTrue(timings["idempotent"])
+        self.assertEqual(timings["recovered"], "container")
 
     def test_manager_sums_requested_resources(self) -> None:
         with TemporaryDirectory() as raw_dir:

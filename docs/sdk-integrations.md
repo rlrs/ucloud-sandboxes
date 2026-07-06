@@ -57,6 +57,8 @@ those workloads need:
 - prepare signals before large bursts when startup latency matters
 - pushed registry images for custom benchmark environments
 - raw byte file upload/download for prompts, logs, and artifacts
+- `profile="linux_host"` for tasks that need VM-like writable paths, cron
+  conventions, or optional sshd startup inside the container
 
 ## Model Relay
 

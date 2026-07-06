@@ -22,6 +22,26 @@ DEFAULT_SANDBOX_USER = "1000:1000"
 DEFAULT_PIDS_LIMIT = 256
 SECURITY_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:@/-]+$")
 CONTAINER_PATH_RE = re.compile(r"^/[A-Za-z0-9_./-]+$")
+SANDBOX_PROFILES = {"container", "linux_host"}
+DEFAULT_LINUX_HOST_WRITABLE_PATHS = (
+    "/run",
+    "/run/lock",
+    "/run/sshd",
+    "/tmp",
+    "/var/tmp",
+    "/var/run",
+    "/var/lock",
+    "/var/spool/cron",
+    "/var/spool/cron/crontabs",
+    "/etc/cron.d",
+    "/logs",
+    "/logs/agent",
+    "/logs/verifier",
+    "/tests",
+    "/task",
+    "/oracle",
+    "/workspace",
+)
 _SANDBOX_LOCKS_GUARD = RLock()
 _SANDBOX_LOCKS: dict[Path, RLock] = {}
 _SANDBOX_CREATE_LOCKS_GUARD = RLock()
@@ -120,6 +140,42 @@ class SandboxFilesystemSpec:
 
 
 @dataclass(frozen=True)
+class SandboxLinuxHostSpec:
+    enable_cron: bool = False
+    enable_sshd: bool = False
+    keep_alive: bool = True
+    writable_paths: tuple[str, ...] = DEFAULT_LINUX_HOST_WRITABLE_PATHS
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "SandboxLinuxHostSpec":
+        if raw is None:
+            return cls()
+        if not isinstance(raw, dict):
+            raise ValueError("linux_host must be a JSON object.")
+        return cls(
+            enable_cron=bool(raw.get("enable_cron", raw.get("cron", False))),
+            enable_sshd=bool(raw.get("enable_sshd", raw.get("sshd", False))),
+            keep_alive=bool(raw.get("keep_alive", True)),
+            writable_paths=_string_tuple(
+                raw.get("writable_paths"),
+                default=DEFAULT_LINUX_HOST_WRITABLE_PATHS,
+            ),
+        )
+
+    def validate(self) -> None:
+        for path in self.writable_paths:
+            validate_container_path("linux_host writable path", path)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enable_cron": self.enable_cron,
+            "enable_sshd": self.enable_sshd,
+            "keep_alive": self.keep_alive,
+            "writable_paths": list(self.writable_paths),
+        }
+
+
+@dataclass(frozen=True)
 class SandboxSshSpec:
     enabled: bool = False
     user: str = "root"
@@ -174,6 +230,7 @@ class SandboxSshSpec:
 class SandboxSpec:
     id: str
     image: str
+    profile: str = "container"
     command: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     working_dir: str | None = None
@@ -185,10 +242,12 @@ class SandboxSpec:
     ssh: SandboxSshSpec = SandboxSshSpec()
     security: SandboxSecuritySpec = SandboxSecuritySpec()
     filesystem: SandboxFilesystemSpec = SandboxFilesystemSpec()
+    linux_host: SandboxLinuxHostSpec = SandboxLinuxHostSpec()
     labels: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "SandboxSpec":
+        profile = str(raw.get("profile") or raw.get("runtime_profile") or "container")
         command = raw.get("command", ())
         if isinstance(command, str):
             command_items: tuple[str, ...] = (command,)
@@ -198,9 +257,17 @@ class SandboxSpec:
             command_items = ()
         env = raw.get("env") or {}
         labels = raw.get("labels") or {}
+        security = SandboxSecuritySpec.from_dict(raw.get("security"))
+        filesystem = SandboxFilesystemSpec.from_dict(raw.get("filesystem"))
+        if profile == "linux_host":
+            if raw.get("security") is None:
+                security = linux_host_default_security()
+            if raw.get("filesystem") is None:
+                filesystem = linux_host_default_filesystem()
         return cls(
             id=str(raw.get("id") or ""),
             image=str(raw.get("image") or ""),
+            profile=profile,
             command=command_items,
             env={str(k): str(v) for k, v in dict(env).items()},
             working_dir=str(raw["working_dir"]) if raw.get("working_dir") else None,
@@ -214,8 +281,9 @@ class SandboxSpec:
                 int(raw["ttl_seconds"]) if raw.get("ttl_seconds") is not None else None
             ),
             ssh=SandboxSshSpec.from_dict(raw.get("ssh", raw.get("ssh_enabled"))),
-            security=SandboxSecuritySpec.from_dict(raw.get("security")),
-            filesystem=SandboxFilesystemSpec.from_dict(raw.get("filesystem")),
+            security=security,
+            filesystem=filesystem,
+            linux_host=SandboxLinuxHostSpec.from_dict(raw.get("linux_host")),
             labels={str(k): str(v) for k, v in dict(labels).items()},
         )
 
@@ -240,11 +308,16 @@ class SandboxSpec:
             raise ValueError("sandbox resources are required.")
         if self.ttl_seconds is not None and self.ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive.")
+        if self.profile not in SANDBOX_PROFILES:
+            raise ValueError(
+                "profile must be one of: " + ", ".join(sorted(SANDBOX_PROFILES))
+            )
         if self.network not in {"none", "bridge"}:
             raise ValueError("network must be either 'none' or 'bridge'.")
         self.ssh.validate()
         self.security.validate()
         self.filesystem.validate()
+        self.linux_host.validate()
         if self.working_dir is not None:
             validate_container_path("working_dir", self.working_dir)
         if self.ssh.enabled and self.network != "bridge":
@@ -256,6 +329,7 @@ class SandboxSpec:
         raw["ssh"] = self.ssh.to_dict()
         raw["security"] = self.security.to_dict()
         raw["filesystem"] = self.filesystem.to_dict()
+        raw["linux_host"] = self.linux_host.to_dict()
         return raw
 
     def requested_resources(self) -> ResourceQuantity:
@@ -674,9 +748,42 @@ class DockerGvisorRuntime:
                     ),
                 ]
             )
+        if spec.profile == "linux_host":
+            argv.extend(
+                [
+                    "-e",
+                    "UCLOUD_SANDBOX_PROFILE=linux_host",
+                    "-e",
+                    "UCLOUD_SANDBOX_LINUX_HOST_PATHS="
+                    + ":".join(spec.linux_host.writable_paths),
+                    "-e",
+                    "UCLOUD_SANDBOX_ENABLE_CRON="
+                    + ("1" if spec.linux_host.enable_cron else "0"),
+                    "-e",
+                    "UCLOUD_SANDBOX_ENABLE_SSHD="
+                    + ("1" if spec.linux_host.enable_sshd or spec.ssh.enabled else "0"),
+                    "-e",
+                    f"UCLOUD_SANDBOX_SSH_USER={spec.ssh.user}",
+                    "-e",
+                    f"UCLOUD_SANDBOX_SSH_PORT={spec.ssh.container_port}",
+                    "-e",
+                    "UCLOUD_SANDBOX_KEEP_ALIVE="
+                    + ("1" if spec.linux_host.keep_alive else "0"),
+                    "--entrypoint",
+                    "/bin/sh",
+                ]
+            )
         for key in sorted(spec.labels):
             argv.extend(["--label", f"{key}={spec.labels[key]}"])
         argv.append(spec.image)
+        if spec.profile == "linux_host":
+            argv.extend(
+                [
+                    "-lc",
+                    linux_host_entrypoint_script(),
+                    "ucloud-linux-host",
+                ]
+            )
         argv.extend(spec.command)
         return tuple(argv)
 
@@ -707,7 +814,7 @@ class DockerGvisorRuntime:
             return False
         existing_fingerprint = labels.get("ucloud-sandboxes.spec-sha256")
         if existing_fingerprint:
-            return existing_fingerprint == sandbox_spec_fingerprint(spec)
+            return existing_fingerprint in sandbox_spec_fingerprints(spec)
         return True
 
     def _container_labels(self, sandbox_id: str) -> dict[str, str]:
@@ -1003,6 +1110,126 @@ class SandboxManager:
         return expired
 
 
+def linux_host_default_security() -> SandboxSecuritySpec:
+    return SandboxSecuritySpec(
+        user=None,
+        cap_drop=(),
+        cap_add=(),
+        no_new_privileges=False,
+        pids_limit=None,
+        read_only_rootfs=False,
+        init=True,
+    )
+
+
+def linux_host_default_filesystem() -> SandboxFilesystemSpec:
+    return SandboxFilesystemSpec(
+        enforce_disk_quota=False,
+        workspace_path="/workspace",
+        tmpfs_mb=256,
+        run_tmpfs_mb=64,
+    )
+
+
+def linux_host_entrypoint_script() -> str:
+    return r"""set -eu
+
+install_service_shim() {
+  if command -v service >/dev/null 2>&1; then
+    return 0
+  fi
+  mkdir -p /usr/local/bin 2>/dev/null || return 0
+  cat > /usr/local/bin/service <<'UCLOUD_SERVICE_SHIM'
+#!/bin/sh
+name="${1:-}"
+action="${2:-}"
+case "$name:$action" in
+  cron:start|crond:start)
+    if command -v cron >/dev/null 2>&1; then cron >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
+    if command -v crond >/dev/null 2>&1; then crond >/tmp/ucloud-cron.log 2>&1 || true; exit 0; fi
+    exit 0
+    ;;
+  ssh:start|sshd:start)
+    if command -v sshd >/dev/null 2>&1; then sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
+    if [ -x /usr/sbin/sshd ]; then /usr/sbin/sshd >/tmp/ucloud-sshd.log 2>&1 || true; exit 0; fi
+    exit 0
+    ;;
+esac
+exit 0
+UCLOUD_SERVICE_SHIM
+  chmod +x /usr/local/bin/service 2>/dev/null || true
+}
+
+prepare_paths() {
+  old_ifs="$IFS"
+  IFS=:
+  for path in ${UCLOUD_SANDBOX_LINUX_HOST_PATHS:-}; do
+    [ -n "$path" ] || continue
+    mkdir -p -- "$path" 2>/dev/null || true
+  done
+  IFS="$old_ifs"
+  chmod 1777 /tmp /var/tmp 2>/dev/null || true
+  chmod 0777 /tests /logs /logs/agent /logs/verifier /task /oracle /workspace 2>/dev/null || true
+}
+
+start_cron() {
+  [ "${UCLOUD_SANDBOX_ENABLE_CRON:-0}" = "1" ] || return 0
+  if command -v service >/dev/null 2>&1; then
+    service cron start >/tmp/ucloud-cron.log 2>&1 || service crond start >/tmp/ucloud-cron.log 2>&1 || true
+  fi
+  if command -v cron >/dev/null 2>&1; then
+    cron >/tmp/ucloud-cron.log 2>&1 || true
+    return 0
+  fi
+  if command -v crond >/dev/null 2>&1; then
+    crond >/tmp/ucloud-cron.log 2>&1 || true
+  fi
+}
+
+start_sshd() {
+  [ "${UCLOUD_SANDBOX_ENABLE_SSHD:-0}" = "1" ] || return 0
+  user="${UCLOUD_SANDBOX_SSH_USER:-root}"
+  home_dir="$(getent passwd "$user" 2>/dev/null | awk -F: '{print $6}' || true)"
+  [ -n "$home_dir" ] || home_dir=/root
+  mkdir -p "$home_dir/.ssh" /run/sshd 2>/dev/null || true
+  if [ -n "${UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS:-}" ]; then
+    printf '%s\n' "$UCLOUD_SANDBOX_SSH_AUTHORIZED_KEYS" > "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
+    chmod 700 "$home_dir/.ssh" 2>/dev/null || true
+    chmod 600 "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
+    chown -R "$user" "$home_dir/.ssh" 2>/dev/null || true
+  fi
+  if command -v ssh-keygen >/dev/null 2>&1; then
+    ssh-keygen -A >/tmp/ucloud-ssh-keygen.log 2>&1 || true
+  fi
+  sshd_path=
+  if command -v sshd >/dev/null 2>&1; then
+    sshd_path="$(command -v sshd)"
+  elif [ -x /usr/sbin/sshd ]; then
+    sshd_path=/usr/sbin/sshd
+  fi
+  if [ -n "$sshd_path" ]; then
+    "$sshd_path" -p "${UCLOUD_SANDBOX_SSH_PORT:-22}" >/tmp/ucloud-sshd.log 2>&1 || true
+  fi
+}
+
+install_service_shim
+prepare_paths
+start_cron
+start_sshd
+
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
+[ "${UCLOUD_SANDBOX_KEEP_ALIVE:-1}" = "1" ] || exit 0
+trap 'exit 0' INT TERM
+while :; do
+  sleep 3600 &
+  wait "$!" || true
+done
+"""
+
+
 def _format_float(value: float) -> str:
     if value.is_integer():
         return str(int(value))
@@ -1016,6 +1243,29 @@ def _elapsed_ms(started: float) -> int:
 def sandbox_spec_fingerprint(spec: SandboxSpec) -> str:
     raw = json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def sandbox_spec_fingerprints(spec: SandboxSpec) -> set[str]:
+    raw = spec.to_dict()
+    fingerprints = {
+        hashlib.sha256(
+            json.dumps(raw, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    }
+    if spec.profile == "container" and spec.linux_host == SandboxLinuxHostSpec():
+        legacy_raw = dict(raw)
+        legacy_raw.pop("profile", None)
+        legacy_raw.pop("linux_host", None)
+        fingerprints.add(
+            hashlib.sha256(
+                json.dumps(
+                    legacy_raw,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+        )
+    return fingerprints
 
 
 def sandbox_specs_match(existing: SandboxSpec, requested: SandboxSpec) -> bool:

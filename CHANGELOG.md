@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.20 - 2026-07-06
+
+- Added an opt-in `linux_host` sandbox profile for VM-like container startup,
+  including root-compatible defaults, writable benchmark harness paths, a
+  service shim, optional cron/sshd startup, and keep-alive behavior.
+
 ## 0.3.19 - 2026-07-06
 
 - Made `GET /v1/sandboxes` a cached routing-table read by default, with

@@ -148,4 +148,7 @@ heartbeat, and first sandbox placement. `GET /v1/metrics` exposes these under
 `vm_lifecycle`, including `submit_to_running_ms`,
 `running_to_first_heartbeat_ms`, and
 `first_heartbeat_to_first_sandbox_ms`. Those measurements should drive later
-tuning more than fixed guesses.
+tuning more than fixed guesses. The default metrics endpoint is optimized for
+dashboard polling with a bounded recent event window and cached registry status;
+use `?full=true` when doing offline performance analysis that needs the larger
+event window and fresh registry metadata.

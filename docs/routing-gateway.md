@@ -91,6 +91,9 @@ Current smoke-test shape:
   package `version`
 - authenticated `GET /v1/sandboxes` works publicly with
   `X-UCloud-Sandbox-Token`, while unauthenticated access returns `401`
+- `GET /v1/sandboxes` is intentionally served from cached gateway routing
+  state; use `GET /v1/sandboxes?refresh=true` only for explicit node
+  reconciliation because it fans out to sandbox nodes
 
 ## Performance shape
 

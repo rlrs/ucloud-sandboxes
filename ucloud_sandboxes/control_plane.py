@@ -7,9 +7,10 @@ from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
 from threading import BoundedSemaphore, RLock
+import time
 from typing import Any
 from urllib import error, request
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from .dashboard import dashboard_asset
@@ -57,6 +58,9 @@ DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 NODE_RECONCILE_PROXY_TIMEOUT_SECONDS = 5
 NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
+DEFAULT_METRICS_EVENT_LIMIT = 2000
+FULL_METRICS_EVENT_LIMIT = 10000
+REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -89,6 +93,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     local_image_builds_enabled: bool
     metrics_store: MetricsStore | None
     registry_url: str | None
+    registry_status_cache: dict[str, Any] | None
+    registry_status_cache_at: float
+    registry_status_lock: RLock
     sandbox_create_limiter: BoundedSemaphore | None
     max_concurrent_sandbox_creates: int
     server_version = "ucloud-sandboxes-control-plane/0.1"
@@ -132,8 +139,15 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             routing_state = (
                 self.routing_store.load() if self.routing_store is not None else None
             )
+            full = _truthy_query_param(parsed, "full") or _truthy_query_param(
+                parsed, "detail"
+            )
             events = (
-                self.metrics_store.load_events(max_events=10000)
+                self.metrics_store.load_events(
+                    max_events=FULL_METRICS_EVENT_LIMIT
+                    if full
+                    else DEFAULT_METRICS_EVENT_LIMIT
+                )
                 if self.metrics_store is not None
                 else []
             )
@@ -168,7 +182,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "builds": builds,
                 }
             )
-            snapshot["registry"] = self._registry_status()
+            snapshot["registry"] = self._registry_status_cached(
+                force_refresh=full or _truthy_query_param(parsed, "refresh_registry")
+            )
             self._write_json(snapshot)
             return
         if parsed.path == "/v1/registry":
@@ -294,7 +310,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if self.routing_store is None:
             return False
         if path == "/v1/sandboxes" and self.command == "GET":
-            self._list_sandboxes_across_nodes()
+            if _truthy_query_param(urlparse(self.path), "refresh"):
+                self._list_sandboxes_across_nodes()
+            else:
+                self._list_sandboxes_from_cache()
             return True
         if path == "/v1/sandboxes" and self.command == "POST":
             self._create_sandbox_on_node()
@@ -504,6 +523,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _list_sandboxes_from_cache(self) -> None:
+        heartbeats = self.store.load()
+        heartbeats_by_node_id = {
+            heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
+        }
+        sandboxes = [
+            _route_only_sandbox_record(
+                route,
+                heartbeats_by_node_id.get(route.node_id),
+                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+            )
+            for route in self.routing_store.sandbox_routes_readonly()
+        ]
+        self._write_json(
+            {
+                "sandboxes": sandboxes,
+                "cached": True,
+                "refresh_supported": True,
+            }
+        )
+
     def _list_sandboxes_across_nodes(self) -> None:
         sandboxes: list[dict[str, Any]] = []
         observed_ids: set[str] = set()
@@ -534,7 +574,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 if isinstance(sandbox_id, str) and sandbox_id:
                     observed_ids.add(sandbox_id)
                     routes.append(
-                        _sandbox_route_from_heartbeat(heartbeat, sandbox_id, spec)
+                        _sandbox_route_from_heartbeat(
+                            heartbeat,
+                            sandbox_id,
+                            spec,
+                            state=_sandbox_record_state(record, default="running"),
+                        )
                     )
                     sandboxes.append(_enrich_sandbox_record(record, heartbeat))
             self.routing_store.reconcile_sandboxes_for_node(
@@ -552,9 +597,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     _route_only_sandbox_record(
                         route,
                         heartbeats_by_node_id.get(route.node_id),
+                        heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
                     )
                 )
-        self._write_json({"sandboxes": sandboxes})
+        self._write_json({"sandboxes": sandboxes, "cached": False})
 
     def _list_images_across_nodes(self) -> None:
         self._write_json({"images": self._image_records_across_nodes()})
@@ -679,6 +725,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 "repositories": [],
                 "error": str(exc),
             }
+
+    def _registry_status_cached(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        now = time.monotonic()
+        handler_cls = type(self)
+        with handler_cls.registry_status_lock:
+            cached = handler_cls.registry_status_cache
+            if (
+                not force_refresh
+                and cached is not None
+                and now - handler_cls.registry_status_cache_at
+                <= REGISTRY_STATUS_CACHE_TTL_SECONDS
+            ):
+                result = dict(cached)
+                result["cached"] = True
+                return result
+            result = self._registry_status()
+            result["cached"] = False
+            handler_cls.registry_status_cache = dict(result)
+            handler_cls.registry_status_cache_at = now
+            return result
 
     def _record_successful_build_image(self, build: dict[str, Any]) -> None:
         if self.image_manager is None or build.get("status") != "succeeded":
@@ -906,7 +972,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             try:
                 pending_before = self.routing_store.get_pending(spec.id)
                 route = _sandbox_route_from_heartbeat(
-                    heartbeat, spec.id, spec.to_dict()
+                    heartbeat,
+                    spec.id,
+                    spec.to_dict(),
+                    state="creating",
                 )
                 self.routing_store.upsert_sandbox(route)
                 root.set_attribute("reserved_route", True)
@@ -970,6 +1039,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         root.set_attribute("outcome", "recovered_duplicate")
                         return
                 if 200 <= response.status < 300:
+                    record = response_payload.get("sandbox")
+                    if isinstance(record, dict):
+                        route = _route_with_sandbox_record(route, record)
+                    else:
+                        route = _sandbox_route_from_heartbeat(
+                            heartbeat,
+                            spec.id,
+                            spec.to_dict(),
+                            state="running",
+                        )
                     self.routing_store.upsert_sandbox(route)
                     record_sandbox_scheduled(
                         self.metrics_store,
@@ -1011,6 +1090,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         record = self._sandbox_record_on_node(route.node_url, spec.id)
         if record is None or not _sandbox_record_matches_spec(record, spec):
             return False
+        route = _route_with_sandbox_record(route, record)
         self.routing_store.upsert_sandbox(route)
         if pending is not None:
             record_sandbox_scheduled(
@@ -1050,6 +1130,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.CONFLICT,
                 )
                 return "in_flight_conflict"
+            route = _route_with_sandbox_record(route, record)
             self.routing_store.upsert_sandbox(route)
             self._write_json(
                 {"sandbox": record, "recovered": True},
@@ -1374,7 +1455,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for record in raw_sandboxes:
                 spec = record.get("spec") if isinstance(record, dict) else None
                 if isinstance(spec, dict) and spec.get("id") == sandbox_id:
-                    route = _sandbox_route_from_heartbeat(heartbeat, sandbox_id, spec)
+                    route = _sandbox_route_from_heartbeat(
+                        heartbeat,
+                        sandbox_id,
+                        spec,
+                        state=_sandbox_record_state(record, default="running"),
+                    )
                     self.routing_store.upsert_sandbox(route)
                     return route
         return None
@@ -1888,6 +1974,9 @@ def build_server(
     )
     BoundHandler.metrics_store = metrics_store
     BoundHandler.registry_url = registry_url
+    BoundHandler.registry_status_cache = None
+    BoundHandler.registry_status_cache_at = 0.0
+    BoundHandler.registry_status_lock = RLock()
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
         int(max_concurrent_sandbox_creates),
@@ -1980,6 +2069,13 @@ def _builder_prepare_id_from_path(path: str) -> str | None:
     return unquote(rest.split("/", 1)[0])
 
 
+def _truthy_query_param(parsed: Any, name: str) -> bool:
+    values = parse_qs(str(getattr(parsed, "query", ""))).get(name, [])
+    return any(
+        str(value).lower() in {"1", "true", "yes", "on", "full"} for value in values
+    )
+
+
 def _payload_value(raw: dict[str, Any], *keys: str, default: Any) -> Any:
     for key in keys:
         if raw.get(key) is not None:
@@ -2015,10 +2111,13 @@ def _sandbox_route_from_heartbeat(
     heartbeat: NodeHeartbeat,
     sandbox_id: str,
     spec: dict[str, Any] | None,
+    *,
+    state: str = "unknown",
 ) -> SandboxRoute:
+    stored_spec = dict(spec) if isinstance(spec, dict) else {}
     resources = (
-        SandboxSpec.from_dict(spec).requested_resources()
-        if isinstance(spec, dict)
+        SandboxSpec.from_dict(stored_spec).requested_resources()
+        if stored_spec
         else ResourceQuantity()
     )
     return SandboxRoute(
@@ -2027,7 +2126,36 @@ def _sandbox_route_from_heartbeat(
         job_id=heartbeat.job_id,
         node_url=heartbeat.node_url or "",
         resources=resources,
+        spec=stored_spec,
+        state=state,
     )
+
+
+def _route_with_sandbox_record(
+    route: SandboxRoute,
+    record: dict[str, Any],
+) -> SandboxRoute:
+    spec = record.get("spec")
+    spec = dict(spec) if isinstance(spec, dict) else dict(route.spec)
+    return SandboxRoute(
+        sandbox_id=route.sandbox_id,
+        node_id=route.node_id,
+        job_id=route.job_id,
+        node_url=route.node_url,
+        resources=route.resources,
+        spec=spec,
+        state=_sandbox_record_state(record, default="running"),
+        created_at=route.created_at,
+        updated_at=route.updated_at,
+    )
+
+
+def _sandbox_record_state(record: dict[str, Any], *, default: str) -> str:
+    for key in ("state", "status"):
+        raw = record.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return default
 
 
 def _is_duplicate_sandbox_response(response: ProxiedResponse, sandbox_id: str) -> bool:
@@ -2080,29 +2208,54 @@ def _enrich_sandbox_record(
 def _route_only_sandbox_record(
     route: SandboxRoute,
     heartbeat: NodeHeartbeat | None,
+    *,
+    heartbeat_ttl_seconds: int = 120,
 ) -> dict[str, Any]:
+    spec = dict(route.spec)
+    if not spec:
+        spec = {
+            "id": route.sandbox_id,
+            "resources": route.resources.to_dict(),
+        }
+    spec.setdefault("id", route.sandbox_id)
+    image = str(spec.get("image") or "")
+    labels = spec.get("labels")
+    labels = dict(labels) if isinstance(labels, dict) else {}
+    node_fresh = (
+        heartbeat is not None and heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds)
+    )
+    cached_state = route.state or "unknown"
+    visible_state = cached_state if node_fresh or cached_state == "creating" else "unknown"
     record: dict[str, Any] = {
         "id": route.sandbox_id,
         "sandbox_id": route.sandbox_id,
-        "status": "route-only",
-        "route_only": True,
-        "spec": {
-            "id": route.sandbox_id,
-            "resources": route.resources.to_dict(),
-        },
+        "state": visible_state,
+        "status": visible_state,
+        "cached_state": cached_state,
+        "cached": True,
+        "route_only": visible_state != "running",
+        "spec": spec,
         "resources": route.resources.to_dict(),
+        "labels": {str(key): str(value) for key, value in labels.items()},
         "node": {
             "node_id": route.node_id,
             "job_id": route.job_id,
             "node_url": route.node_url,
+            "fresh": node_fresh,
         },
+        "created_at": route.created_at,
+        "updated_at": route.updated_at,
     }
+    if image:
+        record["image"] = image
     if heartbeat is not None:
-        record["node"] = _node_metadata(heartbeat)
+        node = _node_metadata(heartbeat)
+        node["fresh"] = node_fresh
+        record["node"] = node
     return record
 
 
-def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, str]:
+def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, Any]:
     return {
         "node_id": heartbeat.node_id,
         "job_id": heartbeat.job_id,

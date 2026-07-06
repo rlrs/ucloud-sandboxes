@@ -54,6 +54,51 @@ class RoutingStoreTests(unittest.TestCase):
             ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
         )
 
+    def test_sandbox_routes_persist_cached_spec_and_state(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            spec = {
+                "id": "cached-one",
+                "image": "busybox",
+                "labels": {"run": "r1"},
+                "resources": {"vcpu": 1.0, "memory_mb": 512, "disk_mb": 1024},
+            }
+            store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="cached-one",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
+                    spec=spec,
+                    state="creating",
+                )
+            )
+
+            route = store.get_sandbox_readonly("cached-one")
+            routes = store.sandbox_routes_readonly()
+            store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="cached-one",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
+                )
+            )
+            preserved = store.get_sandbox_readonly("cached-one")
+
+        self.assertIsNotNone(route)
+        assert route is not None
+        self.assertEqual(route.spec, spec)
+        self.assertEqual(route.state, "creating")
+        self.assertEqual([item.sandbox_id for item in routes], ["cached-one"])
+        self.assertEqual(routes[0].spec["image"], "busybox")
+        self.assertIsNotNone(preserved)
+        assert preserved is not None
+        self.assertEqual(preserved.spec, spec)
+        self.assertEqual(preserved.state, "creating")
+
     def test_reconcile_sandboxes_for_node_removes_missing_node_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

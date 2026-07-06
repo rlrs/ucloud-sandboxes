@@ -132,8 +132,11 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):
+            calls: list[str] = []
+
             def do_GET(self) -> None:
                 path = self.path.split("?", 1)[0]
+                type(self).calls.append(path)
                 if path == "/v2/_catalog":
                     self._write_json({"repositories": ["prime/base", "prime/mini-swe"]})
                     return
@@ -177,6 +180,13 @@ class ControlPlaneTests(unittest.TestCase):
                 try:
                     host, port = gateway.server_address
                     metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
+                    cached_metrics = self._json_request(
+                        f"http://{host}:{port}/v1/metrics"
+                    )
+                    calls_after_cached_metrics = list(RegistryHandler.calls)
+                    refreshed_metrics = self._json_request(
+                        f"http://{host}:{port}/v1/metrics?refresh_registry=true"
+                    )
                     direct = self._json_request(f"http://{host}:{port}/v1/registry")
                 finally:
                     gateway.shutdown()
@@ -197,6 +207,12 @@ class ControlPlaneTests(unittest.TestCase):
             direct["registry"]["repositories"][1]["repository"],
             "prime/mini-swe",
         )
+        self.assertFalse(metrics["registry"]["cached"])
+        self.assertTrue(cached_metrics["registry"]["cached"])
+        self.assertFalse(refreshed_metrics["registry"]["cached"])
+        self.assertEqual(cached_metrics["registry"]["repository_count"], 2)
+        self.assertEqual(calls_after_cached_metrics.count("/v2/_catalog"), 1)
+        self.assertEqual(RegistryHandler.calls.count("/v2/_catalog"), 3)
 
     def test_metrics_do_not_fan_out_to_node_build_endpoints(self) -> None:
         class BuildProbeHandler(BaseHTTPRequestHandler):
@@ -363,6 +379,122 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertEqual(response["status"], 502)
         self.assertIn("node request failed", response["body"]["error"])
+
+    def test_gateway_lists_sandboxes_from_cache_unless_refresh_requested(
+        self,
+    ) -> None:
+        class ListingNode(BaseHTTPRequestHandler):
+            listed = Event()
+
+            def do_GET(self) -> None:
+                if self.path.split("?", 1)[0] == "/v1/sandboxes":
+                    self.listed.set()
+                    self._write_json(
+                        {
+                            "sandboxes": [
+                                {
+                                    "spec": {
+                                        "id": "cached-one",
+                                        "image": "busybox",
+                                        "labels": {"run": "r1"},
+                                        "memory_mb": 512,
+                                        "disk_mb": 1024,
+                                    },
+                                    "state": "running",
+                                }
+                            ]
+                        }
+                    )
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object]) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), ListingNode)
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                node_host, node_port = node.server_address
+                node_url = f"http://{node_host}:{node_port}"
+                RoutingStore(route_file).upsert_sandbox(
+                    SandboxRoute(
+                        sandbox_id="cached-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url=node_url,
+                        resources=ResourceQuantity(
+                            vcpu=1.0,
+                            memory_mb=512,
+                            disk_mb=1024,
+                        ),
+                        spec={
+                            "id": "cached-one",
+                            "image": "busybox",
+                            "labels": {"run": "r1"},
+                            "memory_mb": 512,
+                            "disk_mb": 1024,
+                        },
+                        state="running",
+                    )
+                )
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url=node_url,
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=4,
+                                memory_mb=4096,
+                                disk_mb=8192,
+                            ),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+                    cached = self._json_request(f"{base}/v1/sandboxes")
+                    self.assertFalse(ListingNode.listed.is_set())
+                    refreshed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertTrue(cached["cached"])
+        self.assertEqual(cached["sandboxes"][0]["id"], "cached-one")
+        self.assertEqual(cached["sandboxes"][0]["state"], "running")
+        self.assertEqual(cached["sandboxes"][0]["image"], "busybox")
+        self.assertEqual(cached["sandboxes"][0]["labels"], {"run": "r1"})
+        self.assertFalse(cached["sandboxes"][0]["route_only"])
+        self.assertTrue(ListingNode.listed.is_set())
+        self.assertFalse(refreshed["cached"])
+        self.assertEqual(refreshed["sandboxes"][0]["spec"]["id"], "cached-one")
 
     def test_gateway_bearer_token_protects_proxied_api(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -599,7 +731,7 @@ class ControlPlaneTests(unittest.TestCase):
                         },
                         allow_error=True,
                     )
-                    listed = self._json_request(f"{base}/v1/sandboxes")
+                    listed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
                     exec_started = self._json_request(
                         f"{base}/v1/sandboxes/multi-one/exec",
                         method="POST",
@@ -1664,7 +1796,7 @@ class ControlPlaneTests(unittest.TestCase):
                             ),
                         ),
                     )
-                    listed = self._json_request(f"{base}/v1/sandboxes")
+                    listed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
                     create = self._json_request(
                         f"{base}/v1/sandboxes",
                         method="POST",

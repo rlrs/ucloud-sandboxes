@@ -25,6 +25,8 @@ class SandboxRoute:
     job_id: str
     node_url: str
     resources: ResourceQuantity = ResourceQuantity()
+    spec: dict[str, Any] = field(default_factory=dict)
+    state: str = "unknown"
     created_at: str = ""
     updated_at: str = ""
 
@@ -40,6 +42,8 @@ class SandboxRoute:
             job_id=_string(raw.get("job_id") or raw.get("jobId")) or "",
             node_url=node_url,
             resources=ResourceQuantity.from_dict(raw.get("resources")),
+            spec=_object(raw.get("spec")),
+            state=_string(raw.get("state")) or "unknown",
             created_at=_string(raw.get("created_at") or raw.get("createdAt")) or "",
             updated_at=_string(raw.get("updated_at") or raw.get("updatedAt")) or "",
         )
@@ -51,6 +55,8 @@ class SandboxRoute:
             "job_id": self.job_id,
             "node_url": self.node_url,
             "resources": self.resources.to_dict(),
+            "spec": dict(self.spec),
+            "state": self.state,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -410,7 +416,7 @@ class RoutingStore:
                     for row in conn.execute(
                         """
                         SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, created_at, updated_at
+                               resources_json, spec_json, state, created_at, updated_at
                         FROM sandboxes
                         ORDER BY sandbox_id
                         """
@@ -430,6 +436,11 @@ class RoutingStore:
                     job_id=route.job_id,
                     node_url=route.node_url,
                     resources=route.resources,
+                    spec=dict(route.spec)
+                    or (dict(existing.spec) if existing is not None else {}),
+                    state=route.state
+                    if route.state != "unknown" or existing is None
+                    else existing.state,
                     created_at=route.created_at
                     or (existing.created_at if existing else now),
                     updated_at=now,
@@ -475,6 +486,11 @@ class RoutingStore:
                         job_id=route.job_id,
                         node_url=route.node_url,
                         resources=route.resources,
+                        spec=dict(route.spec)
+                        or (dict(existing.spec) if existing is not None else {}),
+                        state=route.state
+                        if route.state != "unknown" or existing is None
+                        else existing.state,
                         created_at=route.created_at
                         or (existing.created_at if existing else observed_at),
                         updated_at=observed_at,
@@ -573,7 +589,7 @@ class RoutingStore:
                     rows = conn.execute(
                         """
                         SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, created_at, updated_at
+                               resources_json, spec_json, state, created_at, updated_at
                         FROM sandboxes
                         WHERE job_id = ?
                         ORDER BY sandbox_id
@@ -637,7 +653,7 @@ class RoutingStore:
                 rows = conn.execute(
                     """
                     SELECT sandbox_id, node_id, job_id, node_url,
-                           resources_json, created_at, updated_at
+                           resources_json, spec_json, state, created_at, updated_at
                     FROM sandboxes
                     ORDER BY sandbox_id
                     """
@@ -1380,10 +1396,18 @@ class RoutingStore:
                     job_id TEXT NOT NULL,
                     node_url TEXT NOT NULL,
                     resources_json TEXT NOT NULL,
+                    spec_json TEXT NOT NULL DEFAULT '{}',
+                    state TEXT NOT NULL DEFAULT 'unknown',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
                 """
+            )
+            self._ensure_column(
+                conn, "sandboxes", "spec_json", "TEXT NOT NULL DEFAULT '{}'"
+            )
+            self._ensure_column(
+                conn, "sandboxes", "state", "TEXT NOT NULL DEFAULT 'unknown'"
             )
             conn.execute(
                 """
@@ -1492,7 +1516,7 @@ class RoutingStore:
                     for row in conn.execute(
                         """
                         SELECT sandbox_id, node_id, job_id, node_url,
-                               resources_json, created_at, updated_at
+                               resources_json, spec_json, state, created_at, updated_at
                         FROM sandboxes
                         ORDER BY sandbox_id
                         """
@@ -1587,7 +1611,7 @@ class RoutingStore:
     ) -> SandboxRoute | None:
         row = conn.execute(
             """
-            SELECT sandbox_id, node_id, job_id, node_url, resources_json,
+            SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                    created_at, updated_at
             FROM sandboxes
             WHERE sandbox_id = ?
@@ -1646,15 +1670,17 @@ class RoutingStore:
         conn.execute(
             """
             INSERT INTO sandboxes (
-                sandbox_id, node_id, job_id, node_url, resources_json,
+                sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                 created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(sandbox_id) DO UPDATE SET
                 node_id = excluded.node_id,
                 job_id = excluded.job_id,
                 node_url = excluded.node_url,
                 resources_json = excluded.resources_json,
+                spec_json = excluded.spec_json,
+                state = excluded.state,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at
             """,
@@ -1664,6 +1690,8 @@ class RoutingStore:
                 route.job_id,
                 route.node_url,
                 _resources_json(route.resources),
+                _object_json(route.spec),
+                route.state,
                 route.created_at,
                 route.updated_at,
             ),
@@ -1813,6 +1841,10 @@ def _string(value: object) -> str | None:
     return stripped or None
 
 
+def _object(value: object) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _copy_state(state: RoutingState) -> RoutingState:
     return RoutingState(
         sandboxes=dict(state.sandboxes),
@@ -1893,6 +1925,20 @@ def _resources_from_json(raw: object) -> ResourceQuantity:
         return ResourceQuantity()
 
 
+def _object_json(raw: dict[str, Any]) -> str:
+    return json.dumps(raw, sort_keys=True, separators=(",", ":"))
+
+
+def _object_from_json(raw: object) -> dict[str, Any]:
+    if not isinstance(raw, str):
+        return {}
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return dict(decoded) if isinstance(decoded, dict) else {}
+
+
 def _sandbox_route_from_row(row: sqlite3.Row) -> SandboxRoute:
     return SandboxRoute(
         sandbox_id=str(row["sandbox_id"]),
@@ -1900,6 +1946,8 @@ def _sandbox_route_from_row(row: sqlite3.Row) -> SandboxRoute:
         job_id=str(row["job_id"]),
         node_url=str(row["node_url"]),
         resources=_resources_from_json(row["resources_json"]),
+        spec=_object_from_json(row["spec_json"]),
+        state=str(row["state"] or "unknown"),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )

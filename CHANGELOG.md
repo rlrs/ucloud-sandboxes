@@ -2,6 +2,15 @@
 
 This project uses semantic versioning.
 
+## 0.3.19 - 2026-07-06
+
+- Made `GET /v1/sandboxes` a cached routing-table read by default, with
+  explicit `?refresh=true` node reconciliation for callers that need it.
+- Persisted sandbox specs and cached states in the routing store so cached list
+  responses retain stable ids, images, labels, resources, and node freshness.
+- Reduced default `/v1/metrics` work by bounding the event window and caching
+  registry summaries unless `?full=true` or `?refresh_registry=true` is used.
+
 ## 0.3.18 - 2026-07-06
 
 - Raised the gateway and stdlib node-agent HTTP listen backlog from Python's

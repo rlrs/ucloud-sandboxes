@@ -35,7 +35,12 @@
 `GET /v1/nodes` returns the stored heartbeat list.
 
 `GET /v1/metrics` returns a dashboard-oriented snapshot derived from
-heartbeats, route state, and the rolling metrics event log:
+heartbeats, route state, and the rolling metrics event log. The default response
+uses a bounded recent event window and a short-lived cached registry summary so
+dashboard polling stays cheap. Use `GET /v1/metrics?full=true` for the larger
+event window and a fresh registry scan, or
+`GET /v1/metrics?refresh_registry=true` when only the registry summary must be
+refreshed.
 
 ```json
 {
@@ -193,8 +198,9 @@ The sandbox `id` is the idempotency key; there is no separate idempotency header
 or field. Reusing the same `id` with a different image, resource request,
 command, environment, security profile, filesystem, or labels is a conflict.
 
-`GET /v1/sandboxes` returns records with stable top-level identity fields as
-well as the full nested spec:
+`GET /v1/sandboxes` is a cheap cached read of the gateway routing table. It
+returns records with stable top-level identity fields as well as the full nested
+spec captured at create/reconcile time:
 
 ```json
 {
@@ -211,6 +217,13 @@ well as the full nested spec:
   ]
 }
 ```
+
+The response includes `"cached": true` at the top level. Cached records expose
+`cached_state`, `route_only`, route timestamps, and node freshness metadata so
+clients can distinguish a fresh running route from a stale route that has not
+been reconciled. Use `GET /v1/sandboxes?refresh=true` only when a caller
+intentionally wants the gateway to fan out to sandbox nodes, reconcile node
+state, and return `"cached": false`.
 
 When the gateway receives a non-JSON error response from an upstream node, such
 as an HTML `503 Job is unavailable` page, it returns structured JSON with the

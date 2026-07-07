@@ -35,6 +35,23 @@ class RegistryTag:
         }
 
 
+class RegistryRequestError(ValueError):
+    def __init__(
+        self,
+        status_code: int,
+        method: str,
+        path: str,
+        body: str,
+    ) -> None:
+        super().__init__(
+            f"registry request failed ({status_code}) {method} {path}: {body}"
+        )
+        self.status_code = status_code
+        self.method = method
+        self.path = path
+        self.body = body
+
+
 class RegistryClient:
     def __init__(self, base_url: str, *, timeout_seconds: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -129,9 +146,7 @@ class RegistryClient:
             return request.urlopen(req, timeout=self.timeout_seconds)
         except error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise ValueError(
-                f"registry request failed ({exc.code}) {method} {path}: {body}"
-            ) from exc
+            raise RegistryRequestError(exc.code, method, path, body) from exc
 
 
 def registry_prune_plan(
@@ -168,7 +183,13 @@ def list_registry_tags(
     for repository in client.catalog():
         if repository_prefix and not repository.startswith(repository_prefix):
             continue
-        for tag in client.tags(repository):
+        try:
+            tags = client.tags(repository)
+        except RegistryRequestError as exc:
+            if _registry_repository_name_unknown(exc):
+                continue
+            raise
+        for tag in tags:
             record = client.tag_record(repository, tag)
             if record is not None:
                 records.append(record)
@@ -186,8 +207,27 @@ def registry_summary(
     records: list[dict[str, Any]] = []
     scanned_tag_count = 0
     visible_tag_count_total = 0
+    unavailable_records: list[dict[str, Any]] = []
     for repository in scanned:
-        tags = sorted(client.tags(repository))
+        try:
+            tags = sorted(client.tags(repository))
+        except RegistryRequestError as exc:
+            if not _registry_repository_name_unknown(exc):
+                raise
+            record = {
+                "repository": repository,
+                "namespace": repository.split("/", 1)[0] if "/" in repository else "",
+                "available": False,
+                "error": "repository listed in catalog but tags are unavailable",
+                "tag_count": 0,
+                "visible_tag_count": 0,
+                "tags_truncated": False,
+                "latest_tag": "",
+                "tags": [],
+            }
+            records.append(record)
+            unavailable_records.append(record)
+            continue
         visible_tag_limit = max(0, max_tags_per_repository)
         visible_tags = tags[-visible_tag_limit:] if visible_tag_limit else []
         scanned_tag_count += len(tags)
@@ -196,6 +236,7 @@ def registry_summary(
             {
                 "repository": repository,
                 "namespace": repository.split("/", 1)[0] if "/" in repository else "",
+                "available": True,
                 "tag_count": len(tags),
                 "visible_tag_count": len(visible_tags),
                 "tags_truncated": len(visible_tags) < len(tags),
@@ -211,6 +252,10 @@ def registry_summary(
         "scanned_repository_count": len(scanned),
         "scanned_tag_count": scanned_tag_count,
         "visible_tag_count": visible_tag_count_total,
+        "unavailable_repository_count": len(unavailable_records),
+        "unavailable_repositories": [
+            record["repository"] for record in unavailable_records
+        ],
         "catalog_truncated": len(scanned) < len(repositories),
         "repositories": records,
     }
@@ -240,6 +285,22 @@ def _tag_sort_key(record: RegistryTag) -> tuple[int, str, str]:
     if created_at is None:
         return (0, "", record.tag)
     return (1, created_at.isoformat(), record.tag)
+
+
+def _registry_repository_name_unknown(exc: RegistryRequestError) -> bool:
+    if exc.status_code != 404:
+        return False
+    try:
+        payload = json.loads(exc.body)
+    except json.JSONDecodeError:
+        return False
+    errors = payload.get("errors") if isinstance(payload, dict) else None
+    if not isinstance(errors, list):
+        return False
+    return any(
+        isinstance(item, dict) and item.get("code") == "NAME_UNKNOWN"
+        for item in errors
+    )
 
 
 def _quote_repository(repository: str) -> str:

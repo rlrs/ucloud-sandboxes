@@ -1,8 +1,10 @@
 import unittest
 
 from ucloud_sandboxes.managed_registry import (
+    RegistryRequestError,
     RegistryTag,
     _next_link_path,
+    list_registry_tags,
     registry_summary,
     select_prune_candidates,
 )
@@ -38,6 +40,61 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertTrue(repo["tags_truncated"])
         self.assertEqual(repo["latest_tag"], "v3")
         self.assertEqual(repo["tags"], ["v2", "v3"])
+
+    def test_registry_summary_tolerates_catalog_entry_with_missing_tags(self) -> None:
+        class FakeRegistryClient:
+            base_url = "http://registry"
+
+            def catalog(self) -> list[str]:
+                return ["repo/a", "repo/missing"]
+
+            def tags(self, repository: str) -> list[str]:
+                if repository == "repo/missing":
+                    raise RegistryRequestError(
+                        404,
+                        "GET",
+                        "/v2/repo/missing/tags/list",
+                        '{"errors":[{"code":"NAME_UNKNOWN"}]}',
+                    )
+                return ["v1"]
+
+        summary = registry_summary(FakeRegistryClient())  # type: ignore[arg-type]
+
+        self.assertTrue(summary["ok"])
+        self.assertEqual(summary["repository_count"], 2)
+        self.assertEqual(summary["scanned_repository_count"], 2)
+        self.assertEqual(summary["scanned_tag_count"], 1)
+        self.assertEqual(summary["unavailable_repository_count"], 1)
+        self.assertEqual(summary["unavailable_repositories"], ["repo/missing"])
+        missing = summary["repositories"][1]
+        self.assertEqual(missing["repository"], "repo/missing")
+        self.assertFalse(missing["available"])
+        self.assertEqual(missing["tag_count"], 0)
+
+    def test_list_registry_tags_skips_catalog_entries_with_missing_tags(self) -> None:
+        class FakeRegistryClient:
+            def catalog(self) -> list[str]:
+                return ["repo/a", "repo/missing"]
+
+            def tags(self, repository: str) -> list[str]:
+                if repository == "repo/missing":
+                    raise RegistryRequestError(
+                        404,
+                        "GET",
+                        "/v2/repo/missing/tags/list",
+                        '{"errors":[{"code":"NAME_UNKNOWN"}]}',
+                    )
+                return ["v1"]
+
+            def tag_record(self, repository: str, tag: str) -> RegistryTag | None:
+                return RegistryTag(repository, tag, "sha256:1")
+
+        records = list_registry_tags(FakeRegistryClient())  # type: ignore[arg-type]
+
+        self.assertEqual(
+            [(record.repository, record.tag) for record in records],
+            [("repo/a", "v1")],
+        )
 
     def test_select_prune_candidates_keeps_newest_per_repository(self) -> None:
         records = [

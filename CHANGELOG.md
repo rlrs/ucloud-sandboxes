@@ -2,6 +2,14 @@
 
 This project uses semantic versioning.
 
+## 0.3.22 - 2026-07-07
+
+- Kept registry dashboard status online when `_catalog` contains a repository
+  whose `tags/list` endpoint temporarily returns Docker Registry
+  `NAME_UNKNOWN`.
+- Marked those partial registry entries as missing tag lists instead of treating
+  them as a full registry outage.
+
 ## 0.3.21 - 2026-07-06
 
 - Treated fresh zero-sandbox heartbeats as proof that older cached sandbox and

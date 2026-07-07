@@ -1949,7 +1949,9 @@ function renderRegistry(registry) {
   }
   const repos = Array.isArray(registry.repositories) ? registry.repositories : [];
   const truncated = registry.catalog_truncated ? ", catalog truncated" : "";
-  setText("registryDetail", `${formatInteger(registry.scanned_repository_count)} repositories scanned${truncated}`);
+  const unavailable = asNumber(registry.unavailable_repository_count);
+  const partial = unavailable > 0 ? `, ${formatInteger(unavailable)} missing tag lists` : "";
+  setText("registryDetail", `${formatInteger(registry.scanned_repository_count)} repositories scanned${truncated}${partial}`);
   if (repos.length === 0) {
     els.registryRepos.innerHTML = '<span class="empty-inline">Registry is empty</span>';
     return;
@@ -2002,9 +2004,11 @@ function renderRegistryPage(snapshot) {
   }
 
   const truncated = registry.catalog_truncated ? ", catalog truncated" : "";
+  const unavailable = asNumber(registry.unavailable_repository_count);
+  const partial = unavailable > 0 ? `, ${formatInteger(unavailable)} missing tag lists` : "";
   setText(
     "registryPageHealthDetail",
-    `${formatInteger(scanned)} repositories scanned, ${formatInteger(registry.scanned_tag_count)} tags observed${truncated}`
+    `${formatInteger(scanned)} repositories scanned, ${formatInteger(registry.scanned_tag_count)} tags observed${truncated}${partial}`
   );
 
   const filteredRepos = repos.filter((repo) => registryRepoMatches(repo, buildByTag, filter, query));
@@ -2015,6 +2019,7 @@ function renderRegistryPage(snapshot) {
     `${formatInteger(flattenedTags.length)} visible tags`,
     `${formatInteger(registryBuilds.length)} pushed builds`,
   ];
+  if (unavailable > 0) summaryParts.push(`${formatInteger(unavailable)} missing tag lists`);
   if (query) summaryParts.push(`matching "${query}"`);
   setText("registryPageSummary", summaryParts.join(", "));
   setText("registryRepoSummary", `${formatInteger(filteredRepos.length)} shown`);
@@ -2080,10 +2085,14 @@ function registryRepoRow(repo, buildByTag) {
   const buildCount = tags.reduce((total, tag) => total + (buildByTag.get(`${repo.repository}:${tag}`)?.length || 0), 0);
   appendCell(tr, repo.repository || "-");
   appendCell(tr, formatInteger(repo.tag_count));
-  appendCell(tr, repo.latest_tag || "-");
+  appendCell(tr, repo.available === false ? "Unavailable" : (repo.latest_tag || "-"));
   appendCell(tr, formatInteger(buildCount));
   const tagCell = document.createElement("td");
-  appendTagChips(tagCell, tags, repo.tags_truncated, repo.tag_count);
+  if (repo.available === false) {
+    tagCell.textContent = repo.error || "Tags unavailable";
+  } else {
+    appendTagChips(tagCell, tags, repo.tags_truncated, repo.tag_count);
+  }
   tr.append(tagCell);
   return tr;
 }
@@ -2227,8 +2236,11 @@ function repoPill(repo) {
   item.className = "repo-pill";
   const tags = Array.isArray(repo.tags) ? repo.tags : [];
   const latest = tags.length ? `:${tags[tags.length - 1]}` : "";
-  item.textContent = `${repo.repository || "repository"}${latest} (${asNumber(repo.tag_count)})`;
-  item.title = tags.join(", ");
+  const unavailable = repo.available === false;
+  item.textContent = unavailable
+    ? `${repo.repository || "repository"} (tags unavailable)`
+    : `${repo.repository || "repository"}${latest} (${asNumber(repo.tag_count)})`;
+  item.title = unavailable ? (repo.error || "Tags unavailable") : tags.join(", ");
   return item;
 }
 

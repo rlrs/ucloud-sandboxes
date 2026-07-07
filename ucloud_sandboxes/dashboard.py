@@ -84,6 +84,7 @@ DASHBOARD_HTML = """<!doctype html>
 
     <nav class="page-tabs" aria-label="Dashboard pages">
       <button class="page-tab is-active" type="button" data-page-target="overview">Overview</button>
+      <button class="page-tab" type="button" data-page-target="sandboxes">Sandboxes</button>
       <button class="page-tab" type="button" data-page-target="registry">Registry</button>
     </nav>
 
@@ -331,6 +332,72 @@ DASHBOARD_HTML = """<!doctype html>
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section id="sandboxesPage" class="sandboxes-page" aria-label="Sandboxes" hidden>
+      <section class="sandbox-hero">
+        <div class="sandbox-hero-main">
+          <div class="panel-header">
+            <h2>Sandboxes</h2>
+            <span id="sandboxesPageStatusBadge" class="inline-badge badge-muted">Not loaded</span>
+          </div>
+          <p id="sandboxesPageDetail" class="registry-copy">Waiting for sandbox list</p>
+        </div>
+        <div class="sandbox-stat-grid">
+          <div class="stat-box">
+            <span>Listed</span>
+            <strong id="sandboxesPageRowsValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Terminable</span>
+            <strong id="sandboxesPageTerminableValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Pending</span>
+            <strong id="sandboxesPagePendingValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Routes</span>
+            <strong id="sandboxesPageRoutesValue">-</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="sandbox-toolbar" aria-label="Sandbox controls">
+        <label class="sandbox-search">
+          <span>Search sandboxes</span>
+          <input id="sandboxSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Sandbox id, image, node, label">
+        </label>
+        <button id="refreshSandboxesButton" class="table-action" type="button">Refresh</button>
+        <button id="terminateAllSandboxesButton" class="table-action danger" type="button" disabled>Terminate all</button>
+        <div id="sandboxesPageSummary" class="registry-copy">No sandboxes loaded</div>
+      </section>
+
+      <section class="event-panel sandbox-list-panel" aria-label="Latest sandboxes">
+        <div class="panel-header table-header">
+          <h2>Latest Sandboxes</h2>
+          <span id="sandboxListSummary">No sandboxes loaded</span>
+        </div>
+        <div class="table-wrap">
+          <table class="sandbox-table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Sandbox</th>
+                <th>Image</th>
+                <th>Node</th>
+                <th>Resources</th>
+                <th>Age</th>
+                <th>Labels</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="sandboxRows">
+              <tr><td colspan="8" class="empty-cell">No sandboxes loaded</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </section>
 
     <section id="registryPage" class="registry-page" aria-label="Registry" hidden>
@@ -864,6 +931,7 @@ h1 {
 }
 
 .overview-section[hidden],
+.sandboxes-page[hidden],
 .registry-page[hidden] {
   display: none;
 }
@@ -1217,27 +1285,32 @@ h2 {
   white-space: nowrap;
 }
 
-.registry-page {
+.registry-page,
+.sandboxes-page {
   display: grid;
   gap: 12px;
 }
 
 .registry-hero,
-.registry-toolbar {
+.registry-toolbar,
+.sandbox-hero,
+.sandbox-toolbar {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
 
-.registry-hero {
+.registry-hero,
+.sandbox-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(420px, 0.85fr);
   gap: 14px;
   padding: 14px;
 }
 
-.registry-hero-main {
+.registry-hero-main,
+.sandbox-hero-main {
   min-width: 0;
 }
 
@@ -1254,13 +1327,15 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.registry-stat-grid {
+.registry-stat-grid,
+.sandbox-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
-.registry-toolbar {
+.registry-toolbar,
+.sandbox-toolbar {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) 220px minmax(220px, auto);
   gap: 10px;
@@ -1268,21 +1343,28 @@ h2 {
   padding: 12px 14px;
 }
 
+.sandbox-toolbar {
+  grid-template-columns: minmax(280px, 1fr) auto auto minmax(220px, auto);
+}
+
 .registry-search,
-.registry-select {
+.registry-select,
+.sandbox-search {
   display: grid;
   gap: 5px;
 }
 
 .registry-search span,
-.registry-select span {
+.registry-select span,
+.sandbox-search span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 800;
 }
 
 .registry-search input,
-.registry-select select {
+.registry-select select,
+.sandbox-search input {
   height: 34px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1347,6 +1429,136 @@ h2 {
 .registry-builds-panel th:nth-child(6),
 .registry-builds-panel td:nth-child(6) {
   width: 220px;
+}
+
+.sandbox-list-panel {
+  min-width: 0;
+}
+
+.sandbox-table {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.sandbox-table th:nth-child(1),
+.sandbox-table td:nth-child(1) {
+  width: 105px;
+}
+
+.sandbox-table th:nth-child(2),
+.sandbox-table td:nth-child(2) {
+  width: 210px;
+}
+
+.sandbox-table th:nth-child(3),
+.sandbox-table td:nth-child(3) {
+  width: 260px;
+}
+
+.sandbox-table th:nth-child(4),
+.sandbox-table td:nth-child(4) {
+  width: 165px;
+}
+
+.sandbox-table th:nth-child(5),
+.sandbox-table td:nth-child(5) {
+  width: 150px;
+}
+
+.sandbox-table th:nth-child(6),
+.sandbox-table td:nth-child(6) {
+  width: 90px;
+}
+
+.sandbox-table th:nth-child(8),
+.sandbox-table td:nth-child(8) {
+  width: 130px;
+}
+
+.sandbox-id,
+.sandbox-image,
+.sandbox-node,
+.sandbox-resources {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.sandbox-id,
+.sandbox-image,
+.sandbox-labels {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sandbox-labels {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sandbox-status {
+  display: inline-flex;
+  min-width: 76px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sandbox-status.running {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sandbox-status.creating,
+.sandbox-status.pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.sandbox-status.unknown {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sandbox-status.failed,
+.sandbox-status.error {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.table-action {
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.table-action:hover:not(:disabled) {
+  background: var(--surface-soft);
+}
+
+.table-action.danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
+.table-action.danger:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.table-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .empty-inline {
@@ -1456,11 +1668,13 @@ td:last-child {
     grid-template-columns: 1fr;
   }
 
-  .registry-toolbar {
+  .registry-toolbar,
+  .sandbox-toolbar {
     grid-template-columns: 1fr 220px;
   }
 
-  .registry-toolbar .registry-copy {
+  .registry-toolbar .registry-copy,
+  .sandbox-toolbar .registry-copy {
     grid-column: 1 / -1;
   }
 }
@@ -1529,11 +1743,14 @@ td:last-child {
   }
 
   .registry-toolbar,
-  .registry-stat-grid {
+  .registry-stat-grid,
+  .sandbox-toolbar,
+  .sandbox-stat-grid {
     grid-template-columns: 1fr;
   }
 
-  .registry-hero {
+  .registry-hero,
+  .sandbox-hero {
     grid-template-columns: 1fr;
   }
 }
@@ -1565,6 +1782,10 @@ const state = {
   currentPage: "overview",
   history: [],
   lastSnapshot: null,
+  lastSandboxes: [],
+  sandboxFetchInFlight: false,
+  sandboxActionInFlight: false,
+  terminatingSandboxIds: new Set(),
 };
 
 const palette = {
@@ -1622,6 +1843,19 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryTagsValue",
     "registryDetail",
     "registryRepos",
+    "sandboxesPage",
+    "sandboxesPageStatusBadge",
+    "sandboxesPageDetail",
+    "sandboxesPageRowsValue",
+    "sandboxesPageTerminableValue",
+    "sandboxesPagePendingValue",
+    "sandboxesPageRoutesValue",
+    "sandboxSearchInput",
+    "refreshSandboxesButton",
+    "terminateAllSandboxesButton",
+    "sandboxesPageSummary",
+    "sandboxListSummary",
+    "sandboxRows",
     "registryPage",
     "registryPageStatusBadge",
     "registryPageUrl",
@@ -1665,6 +1899,9 @@ document.addEventListener("DOMContentLoaded", () => {
     button.addEventListener("click", () => setPage(button.dataset.pageTarget || "overview"));
   });
   window.addEventListener("hashchange", () => setPage(pageFromHash(), { updateHash: false }));
+  els.sandboxSearchInput.addEventListener("input", renderSandboxesPage);
+  els.refreshSandboxesButton.addEventListener("click", () => refreshSandboxes({ force: true }));
+  els.terminateAllSandboxesButton.addEventListener("click", terminateAllSandboxes);
   els.registrySearchInput.addEventListener("input", () => renderRegistryPage(state.lastSnapshot || {}));
   els.registryFilterSelect.addEventListener("change", () => renderRegistryPage(state.lastSnapshot || {}));
   window.addEventListener("resize", redrawCharts);
@@ -1709,15 +1946,19 @@ function togglePause() {
 }
 
 function pageFromHash() {
-  return window.location.hash === "#registry" ? "registry" : "overview";
+  const page = window.location.hash.replace(/^#/, "");
+  return ["overview", "sandboxes", "registry"].includes(page) ? page : "overview";
 }
 
 function setPage(page, options = {}) {
-  const next = page === "registry" ? "registry" : "overview";
+  const next = ["overview", "sandboxes", "registry"].includes(page) ? page : "overview";
   state.currentPage = next;
   document.querySelectorAll(".overview-section").forEach((section) => {
     section.hidden = next !== "overview";
   });
+  if (els.sandboxesPage) {
+    els.sandboxesPage.hidden = next !== "sandboxes";
+  }
   if (els.registryPage) {
     els.registryPage.hidden = next !== "registry";
   }
@@ -1725,15 +1966,18 @@ function setPage(page, options = {}) {
     button.classList.toggle("is-active", button.dataset.pageTarget === next);
   });
   if (options.updateHash !== false) {
-    const hash = next === "registry" ? "#registry" : "#overview";
+    const hash = `#${next}`;
     if (window.location.hash !== hash) {
       window.history.replaceState(null, "", hash);
     }
   }
   if (next === "overview") {
     redrawCharts();
-  } else {
+  } else if (next === "registry") {
     renderRegistryPage(state.lastSnapshot || {});
+  } else {
+    renderSandboxesPage();
+    refreshSandboxes({ force: true, quiet: true });
   }
 }
 
@@ -1772,11 +2016,58 @@ async function refreshNow() {
     setStatus("Live", "ok");
     syncAuthPanel(false);
     renderSnapshot(snapshot);
+    if (state.currentPage === "sandboxes") {
+      await refreshSandboxes({ quiet: true });
+    }
   } catch (error) {
     setStatus("Offline", "bad");
     els.lastUpdated.textContent = String(error && error.message ? error.message : error);
     redrawCharts();
   }
+}
+
+function dashboardAuthHeaders() {
+  const token = sessionStorage.getItem("ucloud.dashboard.token") || els.tokenInput.value.trim();
+  return token ? { "X-UCloud-Sandbox-Token": token } : {};
+}
+
+async function dashboardJsonRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      ...dashboardAuthHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+  const contentType = response.headers.get("Content-Type") || "";
+  let payload = {};
+  if (contentType.includes("application/json")) {
+    payload = await response.json();
+  } else {
+    payload = { error: summarizeResponseText(await response.text()) };
+  }
+  if (response.status === 401) {
+    syncAuthPanel(true);
+    throw new Error("Auth required");
+  }
+  if (!response.ok) {
+    const detail = payload && payload.error ? String(payload.error) : `HTTP ${response.status}`;
+    throw new Error(detail);
+  }
+  return payload;
+}
+
+function summarizeResponseText(text) {
+  const normalized = String(text || "").replace(/\\s+/g, " ").trim();
+  const titleMatch = normalized.match(/<title>(.*?)<\\/title>/i);
+  const selected = titleMatch ? titleMatch[1] : normalized;
+  if (!selected) return "non-JSON response";
+  return selected.length > 300 ? `${selected.slice(0, 300)}...` : selected;
+}
+
+function errorMessage(error) {
+  return String(error && error.message ? error.message : error);
 }
 
 function setStatus(text, mode) {
@@ -1957,6 +2248,269 @@ function renderRegistry(registry) {
     return;
   }
   els.registryRepos.replaceChildren(...repos.slice(0, 12).map(repoPill));
+}
+
+async function refreshSandboxes(options = {}) {
+  if (state.sandboxFetchInFlight) return;
+  state.sandboxFetchInFlight = true;
+  renderSandboxesPage();
+  if (!options.quiet) {
+    setSandboxPageStatus("Loading", "warn");
+  }
+  try {
+    const payload = await dashboardJsonRequest("/v1/sandboxes?refresh=true");
+    const rows = Array.isArray(payload.sandboxes) ? payload.sandboxes : [];
+    state.lastSandboxes = rows.map(normalizeSandboxRecord).sort(compareSandboxesNewestFirst);
+    setSandboxPageStatus(payload.cached ? "Cached" : "Live", "ok");
+    setText(
+      "sandboxesPageDetail",
+      state.lastSandboxes.length
+        ? `${formatInteger(state.lastSandboxes.length)} latest sandbox records loaded`
+        : "No sandboxes are currently listed"
+    );
+    renderSandboxesPage();
+  } catch (error) {
+    const message = errorMessage(error);
+    setSandboxPageStatus("Failed", "bad");
+    setText("sandboxesPageDetail", message);
+    setText("sandboxesPageSummary", message);
+  } finally {
+    state.sandboxFetchInFlight = false;
+    renderSandboxesPage();
+  }
+}
+
+function setSandboxPageStatus(text, mode) {
+  if (!els.sandboxesPageStatusBadge) return;
+  els.sandboxesPageStatusBadge.textContent = text;
+  els.sandboxesPageStatusBadge.className = `inline-badge ${mode === "ok" ? "badge-ok" : mode === "bad" ? "badge-bad" : "badge-warn"}`;
+}
+
+function renderSandboxesPage() {
+  if (!els.sandboxesPage) return;
+  const snapshot = state.lastSnapshot || {};
+  const metrics = snapshot.sandboxes || {};
+  const query = String(els.sandboxSearchInput.value || "").trim().toLowerCase();
+  const sandboxes = state.lastSandboxes || [];
+  const filtered = sandboxes.filter((sandbox) => sandboxMatchesSearch(sandbox, query));
+  const terminable = sandboxes.filter(canTerminateSandbox);
+  const activeRoutes = asNumber(metrics.active_routes);
+  const staleRoutes = asNumber(metrics.stale_routes);
+
+  setText("sandboxesPageRowsValue", formatInteger(sandboxes.length));
+  setText("sandboxesPageTerminableValue", formatInteger(terminable.length));
+  setText("sandboxesPagePendingValue", formatInteger(metrics.pending));
+  setText("sandboxesPageRoutesValue", staleRoutes > 0 ? `${formatInteger(activeRoutes)}/${formatInteger(staleRoutes)}` : formatInteger(activeRoutes));
+  setText(
+    "sandboxesPageSummary",
+    query
+      ? `${formatInteger(filtered.length)} shown from ${formatInteger(sandboxes.length)} loaded`
+      : `${formatInteger(sandboxes.length)} loaded, ${formatInteger(terminable.length)} terminable`
+  );
+  setText(
+    "sandboxListSummary",
+    filtered.length
+      ? `${formatInteger(filtered.length)} latest`
+      : (sandboxes.length ? "No matching sandboxes" : "No sandboxes loaded")
+  );
+
+  els.refreshSandboxesButton.disabled = state.sandboxFetchInFlight;
+  els.refreshSandboxesButton.textContent = state.sandboxFetchInFlight ? "Refreshing" : "Refresh";
+  els.terminateAllSandboxesButton.disabled =
+    state.sandboxFetchInFlight || state.sandboxActionInFlight || terminable.length === 0;
+
+  if (filtered.length === 0) {
+    renderEmptyRow(
+      els.sandboxRows,
+      8,
+      sandboxes.length ? "No sandboxes match the current search" : "No sandboxes loaded"
+    );
+    return;
+  }
+  els.sandboxRows.replaceChildren(...filtered.slice(0, 250).map(sandboxRow));
+}
+
+function normalizeSandboxRecord(record) {
+  const raw = plainObject(record);
+  const spec = plainObject(raw.spec);
+  const node = plainObject(raw.node);
+  const labels = plainObject(raw.labels);
+  const specLabels = plainObject(spec.labels);
+  const resources = plainObject(raw.resources);
+  return {
+    id: firstText(raw.id, raw.sandbox_id, spec.id),
+    state: firstText(raw.state, raw.status, raw.cached_state, "unknown"),
+    image: firstText(raw.image, spec.image, "-"),
+    profile: firstText(raw.profile, spec.profile, "-"),
+    node: firstText(node.node_id, node.job_id, raw.node_id, raw.job_id, "-"),
+    nodeFresh: node.fresh,
+    resources,
+    spec,
+    labels: Object.keys(labels).length ? labels : specLabels,
+    createdAt: firstText(raw.created_at, raw.createdAt),
+    updatedAt: firstText(raw.updated_at, raw.updatedAt),
+    routeOnly: Boolean(raw.route_only),
+    cached: Boolean(raw.cached),
+  };
+}
+
+function compareSandboxesNewestFirst(a, b) {
+  const aTime = Date.parse(a.createdAt || a.updatedAt || "") || 0;
+  const bTime = Date.parse(b.createdAt || b.updatedAt || "") || 0;
+  if (aTime !== bTime) return bTime - aTime;
+  return String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+function sandboxMatchesSearch(sandbox, query) {
+  if (!query) return true;
+  return [
+    sandbox.id,
+    sandbox.state,
+    sandbox.image,
+    sandbox.profile,
+    sandbox.node,
+    labelsText(sandbox.labels),
+  ].join(" ").toLowerCase().includes(query);
+}
+
+function canTerminateSandbox(sandbox) {
+  return Boolean(sandbox && sandbox.id);
+}
+
+function sandboxRow(sandbox) {
+  const tr = document.createElement("tr");
+  const statusCell = document.createElement("td");
+  const badge = document.createElement("span");
+  const status = String(sandbox.state || "unknown").toLowerCase();
+  badge.className = `sandbox-status ${sandboxStatusClass(status)}`;
+  badge.textContent = status || "unknown";
+  statusCell.append(badge);
+  tr.append(statusCell);
+
+  appendClassCell(tr, sandbox.id || "-", "sandbox-id", sandbox.id || "");
+  appendClassCell(tr, sandbox.image || "-", "sandbox-image", sandbox.image || "");
+  appendClassCell(tr, sandboxNodeText(sandbox), "sandbox-node", sandboxNodeTitle(sandbox));
+  appendClassCell(tr, sandboxResourcesText(sandbox), "sandbox-resources", sandboxResourcesText(sandbox));
+  appendCell(tr, sandboxAge(sandbox));
+  appendClassCell(tr, labelsText(sandbox.labels), "sandbox-labels", labelsTitle(sandbox.labels));
+
+  const actionCell = document.createElement("td");
+  const button = document.createElement("button");
+  const terminating = sandbox.id && state.terminatingSandboxIds.has(sandbox.id);
+  button.className = "table-action danger";
+  button.type = "button";
+  button.textContent = terminating ? "Terminating" : "Terminate";
+  button.disabled = !sandbox.id || state.sandboxActionInFlight || Boolean(terminating);
+  button.title = sandbox.id ? `Terminate ${sandbox.id}` : "No sandbox id available";
+  button.addEventListener("click", () => terminateSandbox(sandbox.id));
+  actionCell.append(button);
+  tr.append(actionCell);
+  return tr;
+}
+
+function sandboxStatusClass(status) {
+  if (status === "running") return "running";
+  if (status === "creating" || status === "pending") return status;
+  if (status === "failed" || status === "error") return "failed";
+  return "unknown";
+}
+
+function sandboxNodeText(sandbox) {
+  const suffix = sandbox.nodeFresh === false ? " stale" : "";
+  return `${sandbox.node || "-"}${suffix}`;
+}
+
+function sandboxNodeTitle(sandbox) {
+  const parts = [];
+  if (sandbox.node) parts.push(sandbox.node);
+  if (sandbox.cached) parts.push("cached route");
+  if (sandbox.routeOnly) parts.push("route only");
+  if (sandbox.nodeFresh === false) parts.push("stale heartbeat");
+  return parts.join(", ");
+}
+
+function sandboxResourcesText(sandbox) {
+  const resources = sandbox.resources || {};
+  const spec = sandbox.spec || {};
+  const cpu = firstNumber(resources.vcpu, resources.cpu, resources.cpus, spec.cpus);
+  const memory = firstNumber(resources.memory_mb, resources.memory, spec.memory_mb);
+  const disk = firstNumber(resources.disk_mb, resources.disk, spec.disk_mb);
+  const parts = [];
+  if (cpu !== null && cpu > 0) parts.push(`${formatNumber(cpu)} vCPU`);
+  if (memory !== null && memory > 0) parts.push(formatMemory(memory));
+  if (disk !== null && disk > 0) parts.push(`${formatMemory(disk)} disk`);
+  return parts.join(" ") || "-";
+}
+
+function sandboxAge(sandbox) {
+  const created = Date.parse(sandbox.createdAt || "");
+  if (!Number.isFinite(created)) return "-";
+  return formatAge((Date.now() - created) / 1000);
+}
+
+function labelsText(labels) {
+  const entries = Object.entries(plainObject(labels)).sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return "-";
+  return entries.slice(0, 4).map(([key, value]) => `${key}=${value}`).join(", ");
+}
+
+function labelsTitle(labels) {
+  const entries = Object.entries(plainObject(labels)).sort(([a], [b]) => a.localeCompare(b));
+  return entries.map(([key, value]) => `${key}=${value}`).join("\\n");
+}
+
+async function terminateSandbox(sandboxId) {
+  const id = String(sandboxId || "").trim();
+  if (!id) return;
+  if (!window.confirm(`Terminate sandbox ${id}?`)) return;
+  state.terminatingSandboxIds.add(id);
+  renderSandboxesPage();
+  try {
+    await deleteSandboxById(id);
+    setSandboxPageStatus("Terminated", "ok");
+    setText("sandboxesPageDetail", `${id} terminated`);
+  } catch (error) {
+    setSandboxPageStatus("Failed", "bad");
+    setText("sandboxesPageDetail", errorMessage(error));
+  } finally {
+    state.terminatingSandboxIds.delete(id);
+    await refreshSandboxes({ force: true, quiet: true });
+  }
+}
+
+async function terminateAllSandboxes() {
+  const candidates = (state.lastSandboxes || []).filter(canTerminateSandbox);
+  if (!candidates.length) return;
+  if (!window.confirm(`Terminate all ${candidates.length} listed sandboxes?`)) return;
+  state.sandboxActionInFlight = true;
+  renderSandboxesPage();
+  const failures = [];
+  for (const sandbox of candidates) {
+    state.terminatingSandboxIds.add(sandbox.id);
+    renderSandboxesPage();
+    try {
+      await deleteSandboxById(sandbox.id);
+    } catch (error) {
+      failures.push(`${sandbox.id}: ${errorMessage(error)}`);
+    } finally {
+      state.terminatingSandboxIds.delete(sandbox.id);
+    }
+  }
+  state.sandboxActionInFlight = false;
+  await refreshSandboxes({ force: true, quiet: true });
+  if (failures.length) {
+    setSandboxPageStatus("Partial", "bad");
+    setText("sandboxesPageDetail", `${failures.length} terminate request(s) failed: ${failures.slice(0, 3).join("; ")}`);
+  } else {
+    setSandboxPageStatus("Terminated", "ok");
+    setText("sandboxesPageDetail", `${candidates.length} sandbox terminate request(s) completed`);
+  }
+}
+
+async function deleteSandboxById(sandboxId) {
+  return dashboardJsonRequest(`/v1/sandboxes/${encodeURIComponent(sandboxId)}`, {
+    method: "DELETE",
+  });
 }
 
 function renderRegistryPage(snapshot) {
@@ -2377,6 +2931,14 @@ function appendCell(row, value) {
   row.append(td);
 }
 
+function appendClassCell(row, value, className, title = "") {
+  const td = document.createElement("td");
+  td.textContent = value;
+  if (className) td.className = className;
+  if (title) td.title = title;
+  row.append(td);
+}
+
 function severityForEvent(event) {
   const data = event.data || {};
   if (event.kind === "sandbox_pending_deleted") return "ALERT";
@@ -2676,6 +3238,19 @@ function resourceHasPositiveValue(value) {
 
 function setText(id, value) {
   els[id].textContent = value;
+}
+
+function plainObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return "";
 }
 
 function asNumber(value) {

@@ -129,6 +129,14 @@ startup is comparatively expensive. Builder nodes must carry
 `ucloud-sandboxes/builder=true` and must not carry
 `ucloud-sandboxes/node=true`.
 
+Pending, prepared, and active image-build work also acts as a transient sandbox
+warm-capacity signal. During those autoscaler cycles, the sandbox pool adds one
+default sandbox node worth of desired resources. This is not stored as prepared
+capacity and is not durable demand; it exists only while build activity is
+present or while the one-shot build signal is waiting to be consumed. The goal is
+to avoid scaling sandbox nodes to zero while a builder is preparing an image that
+will likely be launched shortly afterward.
+
 ## Initial operating stance
 
 Until we have measurements, prefer:

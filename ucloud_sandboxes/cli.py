@@ -2893,7 +2893,22 @@ def run_reconcile_cycle(
         0,
         int(prepared_builder_count if prepared_builder_count is not None else 0),
     )
-    decision = evaluate_scale(sandbox_nodes, demand, effective_policy)
+    active_image_builds = sum(
+        max(0, node.heartbeat.active_image_builds)
+        for node in builder_nodes
+        if node.heartbeat is not None and node.heartbeat_fresh
+    )
+    build_warm_resources = build_activity_sandbox_warm_resources(
+        active_image_builds=active_image_builds,
+        pending_image_builds=builder_pending,
+        prepared_builder_count=builder_prepared,
+        policy=effective_policy,
+    )
+    sandbox_demand = demand_with_build_warm_resources(
+        demand,
+        build_warm_resources,
+    )
+    decision = evaluate_scale(sandbox_nodes, sandbox_demand, effective_policy)
     builder_decision = evaluate_builder_scale(
         builder_nodes,
         pending_builds=builder_pending,
@@ -3010,7 +3025,9 @@ def run_reconcile_cycle(
         "decision": scale_decision_to_dict(decision),
         "builderDecision": scale_decision_to_dict(builder_decision),
         "pendingImageBuilds": builder_pending,
+        "activeImageBuilds": active_image_builds,
         "preparedBuilderCount": builder_prepared,
+        "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
         "builderCreateIntents": [intent.to_dict() for intent in builder_create_intents],
@@ -3390,6 +3407,38 @@ def policy_with_cli_overrides(
     return replace(
         effective,
         builder_scale_down_idle_seconds=max(0, int(builder_idle_seconds)),
+    )
+
+
+def build_activity_sandbox_warm_resources(
+    *,
+    active_image_builds: int,
+    pending_image_builds: int,
+    prepared_builder_count: int,
+    policy: ScalePolicy,
+) -> ResourceQuantity:
+    if (
+        max(0, active_image_builds) <= 0
+        and max(0, pending_image_builds) <= 0
+        and max(0, prepared_builder_count) <= 0
+    ):
+        return ResourceQuantity()
+    return policy.default_node_resources
+
+
+def demand_with_build_warm_resources(
+    demand: SandboxDemand,
+    build_warm_resources: ResourceQuantity,
+) -> SandboxDemand:
+    if (
+        build_warm_resources.vcpu <= 0
+        and build_warm_resources.memory_mb <= 0
+        and build_warm_resources.disk_mb <= 0
+    ):
+        return demand
+    return replace(
+        demand,
+        prepared_resources=demand.prepared_resources + build_warm_resources,
     )
 
 

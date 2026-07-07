@@ -2,6 +2,14 @@
 
 This project uses semantic versioning.
 
+## 0.3.23 - 2026-07-07
+
+- Treated pending, prepared, and active image-build work as a transient signal
+  to keep or create one default sandbox node, reducing sandbox-node churn while
+  images are being built for imminent execution.
+- Kept async image-build pending signals until an autoscaler cycle consumes
+  them instead of clearing them as soon as a builder accepts the build.
+
 ## 0.3.22 - 2026-07-07
 
 - Kept registry dashboard status online when `_catalog` contains a repository

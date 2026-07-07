@@ -2418,6 +2418,74 @@ class ControlPlaneTests(unittest.TestCase):
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
             )
 
+    def test_gateway_keeps_pending_signal_for_async_builder_image_build(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            builder = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "builder-sandboxes.json",
+                image_file=raw_path / "builder-images.json",
+                job_id="job-builder",
+                node_id="builder-1",
+                runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+                image_builds_enabled=True,
+            )
+            builder_thread = Thread(target=builder.serve_forever, daemon=True)
+            builder_thread.start()
+            try:
+                builder_host, builder_port = builder.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.json",
+                    image_file=raw_path / "gateway-images.json",
+                    local_image_builds_enabled=False,
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-builder",
+                            node_id="builder-1",
+                            node_url=f"http://{builder_host}:{builder_port}",
+                            capabilities=("image-cache", "image-build", "snapshot"),
+                            total_resources=ResourceQuantity(
+                                vcpu=16, memory_mb=49152, disk_mb=200000
+                            ),
+                        ),
+                    )
+                    self.assertEqual(result.status, 200)
+
+                    built = self._json_request(
+                        f"{base}/v1/images/build",
+                        method="POST",
+                        payload={
+                            "id": "custom",
+                            "tag": "registry.example.org/custom:latest",
+                            "context_path": "/tmp/context",
+                            "push": True,
+                            "wait": False,
+                        },
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                builder.shutdown()
+                builder.server_close()
+
+            self.assertEqual(built["build"]["image_id"], "custom")
+            self.assertEqual(built["build"]["status"], "running")
+            self.assertEqual(
+                RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
+            )
+
     def test_gateway_uses_bounded_proxy_timeout_for_builder_image_builds(self) -> None:
         class FakeResponse:
             status = 201

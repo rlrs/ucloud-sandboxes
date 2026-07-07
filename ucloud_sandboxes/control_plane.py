@@ -1320,7 +1320,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     if isinstance(node_timings, dict):
                         span.set_attribute("node_timings", node_timings)
                         root.set_attribute("node_timings", node_timings)
-                if 200 <= response.status < 300 and self.routing_store is not None:
+                if (
+                    200 <= response.status < 300
+                    and self.routing_store is not None
+                    and _image_build_response_terminal(response_payload)
+                ):
                     self.routing_store.clear_pending_image_build(spec.id)
                 if 200 <= response.status < 300 and self.image_manager is not None:
                     raw_image = response_payload.get("image")
@@ -2498,6 +2502,13 @@ def _route_is_recent(route: SandboxRoute, *, ttl_seconds: int) -> bool:
 
 def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
     return response.status in {408, 425, 429, 500, 502, 503, 504}
+
+
+def _image_build_response_terminal(payload: dict[str, Any]) -> bool:
+    build = payload.get("build")
+    if not isinstance(build, dict):
+        return "image" in payload
+    return str(build.get("status") or "").lower() in {"succeeded", "failed"}
 
 
 def _structured_proxy_error(response: ProxiedResponse) -> dict[str, Any] | None:

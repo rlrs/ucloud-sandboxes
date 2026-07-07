@@ -23,6 +23,7 @@ from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
+    SandboxDemand,
     ScalePolicy,
     VmJob,
     utc_now,
@@ -1022,7 +1023,15 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(payload["pendingImageBuilds"], 1)
+        self.assertEqual(payload["activeImageBuilds"], 0)
+        self.assertEqual(
+            payload["buildWarmSandboxResources"],
+            {"vcpu": 16.0, "memory_mb": 32768, "disk_mb": 204800},
+        )
+        self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
+        sandbox_labels = payload["sandboxCreateIntents"][0]["payloadItem"]["labels"]
+        self.assertEqual(sandbox_labels["ucloud-sandboxes/node"], "true")
         labels = payload["builderCreateIntents"][0]["payloadItem"]["labels"]
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", labels)
@@ -1038,7 +1047,12 @@ class CliTests(unittest.TestCase):
 
             def submit_jobs(self, project_id: str, payload: dict) -> dict:
                 submitted.append((project_id, payload))
-                return {"responses": [{"id": "created-builder"}]}
+                return {
+                    "responses": [
+                        {"id": f"created-{index}"}
+                        for index, _item in enumerate(payload.get("items", []), start=1)
+                    ]
+                }
 
         original_client = cli.UCloudClient
         cli.UCloudClient = FakeUCloudClient
@@ -1082,13 +1096,48 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(submitted[0][0], "project-1")
         self.assertEqual(payload["pendingImageBuilds"], 1)
-        self.assertEqual(payload["createdJobIds"], ["created-builder"])
+        self.assertEqual(payload["createdJobIds"], ["created-1", "created-2"])
         self.assertEqual(
             [item["image_id"] for item in payload["consumedPendingImageBuilds"]],
             ["custom"],
         )
+        self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
         self.assertEqual(remaining_builds, 0)
+
+    def test_build_activity_adds_transient_sandbox_warm_resources(self) -> None:
+        policy = ScalePolicy(
+            default_node_resources=ResourceQuantity(
+                vcpu=8,
+                memory_mb=16384,
+                disk_mb=102400,
+            )
+        )
+
+        resources = cli.build_activity_sandbox_warm_resources(
+            active_image_builds=1,
+            pending_image_builds=0,
+            prepared_builder_count=0,
+            policy=policy,
+        )
+        demand = cli.demand_with_build_warm_resources(SandboxDemand(), resources)
+
+        self.assertEqual(resources, policy.default_node_resources)
+        self.assertEqual(demand.prepared_resources, policy.default_node_resources)
+
+    def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
+        demand = SandboxDemand(
+            pending_resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        )
+        resources = cli.build_activity_sandbox_warm_resources(
+            active_image_builds=0,
+            pending_image_builds=0,
+            prepared_builder_count=0,
+            policy=ScalePolicy(),
+        )
+
+        self.assertEqual(resources, ResourceQuantity())
+        self.assertIs(cli.demand_with_build_warm_resources(demand, resources), demand)
 
     def test_executing_autoscaler_loop_consumes_prepared_builder_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []

@@ -319,7 +319,12 @@ def record_autoscaler_cycle(
             "created_job_ids": result.get("createdJobIds", []),
             "stop_job_ids": result.get("stopJobIds", []),
             "pending_image_builds": result.get("pendingImageBuilds", 0),
+            "active_image_builds": result.get("activeImageBuilds", 0),
             "prepared_builder_count": result.get("preparedBuilderCount", 0),
+            "build_warm_sandbox_resources": result.get(
+                "buildWarmSandboxResources",
+                {},
+            ),
             "builder_actions": builder_decision.get("actions", []),
         },
     )

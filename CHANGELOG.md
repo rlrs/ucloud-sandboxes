@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.24 - 2026-07-07
+
+- Included active image-build count and build-warm sandbox resources in
+  autoscaler cycle metrics so build-driven sandbox warm capacity is explicit in
+  dashboard/event data.
+
 ## 0.3.23 - 2026-07-07
 
 - Treated pending, prepared, and active image-build work as a transient signal

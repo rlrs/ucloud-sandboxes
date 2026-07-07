@@ -7,6 +7,7 @@ from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.metrics import (
     MetricsStore,
     build_metrics_snapshot,
+    record_autoscaler_cycle,
     record_trace_span,
 )
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
@@ -33,6 +34,33 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(
             [event.data["index"] for event in events], [15, 16, 17, 18, 19]
         )
+
+    def test_autoscaler_cycle_records_build_warm_fields(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            record_autoscaler_cycle(
+                store,
+                cycle=7,
+                result={
+                    "decision": {},
+                    "builderDecision": {},
+                    "pendingImageBuilds": 1,
+                    "activeImageBuilds": 2,
+                    "preparedBuilderCount": 0,
+                    "buildWarmSandboxResources": {
+                        "vcpu": 16.0,
+                        "memory_mb": 32768,
+                        "disk_mb": 204800,
+                    },
+                },
+            )
+
+            event = store.load_events()[0]
+
+        self.assertEqual(event.kind, "autoscaler_cycle")
+        self.assertEqual(event.data["pending_image_builds"], 1)
+        self.assertEqual(event.data["active_image_builds"], 2)
+        self.assertEqual(event.data["build_warm_sandbox_resources"]["vcpu"], 16.0)
 
     def test_builds_dashboard_snapshot_from_heartbeats_routes_and_events(self) -> None:
         now = utc_now()

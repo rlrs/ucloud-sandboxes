@@ -8,6 +8,7 @@ from ucloud_sandboxes.deploy import (
     autoscaler_env,
     gateway_env,
     packaged_systemd_units,
+    registry_env,
     render_env_file,
     render_remote_deploy_script,
 )
@@ -36,10 +37,13 @@ class DeployTests(unittest.TestCase):
 
             gateway = gateway_env(plan)
             autoscaler = autoscaler_env(plan)
+            registry = registry_env(plan)
             script = render_remote_deploy_script(plan)
 
         self.assertEqual(gateway["UCLOUD_DEPLOYMENT_ID"], "prod-a")
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
+        self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "3")
+        self.assertEqual(registry["UCLOUD_REGISTRY_KEEP_PER_REPOSITORY"], "0")
         self.assertEqual(
             autoscaler["UCLOUD_INIT_HEARTBEAT_URL"],
             "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
@@ -50,6 +54,8 @@ class DeployTests(unittest.TestCase):
         )
         self.assertIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertIn("ucloud-sandbox-autoscaler.service", script)
+        self.assertIn("ucloud-sandbox-registry-prune.timer", script)
+        self.assertIn("systemctl enable --now ucloud-sandbox-registry-prune.timer", script)
         self.assertIn("curl -fsS http://127.0.0.1:8090/healthz", script)
 
     def test_all_in_one_plan_auto_detects_registry_private_ip(self) -> None:
@@ -88,6 +94,9 @@ class DeployTests(unittest.TestCase):
 
         self.assertIn("ucloud-sandbox-gateway.service", units)
         self.assertIn("ucloud-sandbox-autoscaler.service", units)
+        self.assertIn("ucloud-sandbox-registry-prune.service", units)
+        self.assertIn("ucloud-sandbox-registry-prune.timer", units)
+        self.assertIn("--max-age-days", units["ucloud-sandbox-registry-prune.service"])
         self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
 
 

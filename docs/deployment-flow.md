@@ -232,6 +232,7 @@ Services on the all-in-one VM:
 - `ucloud-sandbox-gateway.service`
 - `ucloud-sandbox-relay.service`
 - `ucloud-sandbox-registry.service`
+- `ucloud-sandbox-registry-prune.timer`
 - `ucloud-sandbox-registry-gc.timer`
 - `ucloud-sandbox-autoscaler.service`
 

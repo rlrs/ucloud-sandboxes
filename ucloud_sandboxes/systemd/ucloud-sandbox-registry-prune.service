@@ -1,0 +1,14 @@
+[Unit]
+Description=Prune expired UCloud sandbox private Docker registry tags
+Requires=ucloud-sandbox-registry.service
+After=ucloud-sandbox-registry.service
+Conflicts=ucloud-sandbox-registry-gc.service
+
+[Service]
+Type=oneshot
+Environment=UCLOUD_REGISTRY_URL=http://127.0.0.1:5000
+Environment=UCLOUD_REGISTRY_RETENTION_DAYS=3
+Environment=UCLOUD_REGISTRY_KEEP_PER_REPOSITORY=0
+EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --registry-url ${UCLOUD_REGISTRY_URL} --max-age-days ${UCLOUD_REGISTRY_RETENTION_DAYS} --keep-per-repository ${UCLOUD_REGISTRY_KEEP_PER_REPOSITORY} --execute
+ExecStartPost=/usr/bin/systemctl start --no-block ucloud-sandbox-registry-gc.service

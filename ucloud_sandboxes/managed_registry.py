@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 import json
 from typing import Any
 from urllib import error, request
@@ -154,12 +155,20 @@ def registry_prune_plan(
     *,
     keep_per_repository: int,
     repository_prefix: str = "",
+    max_age_days: float | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any]:
     records = list_registry_tags(client, repository_prefix=repository_prefix)
-    candidates = select_prune_candidates(records, keep_per_repository=keep_per_repository)
+    candidates = select_prune_candidates(
+        records,
+        keep_per_repository=keep_per_repository,
+        max_age_days=max_age_days,
+        now=now,
+    )
     return {
         "keep_per_repository": keep_per_repository,
         "repository_prefix": repository_prefix,
+        "max_age_days": max_age_days,
         "tags": [record.to_dict() for record in records],
         "delete": [record.to_dict() for record in candidates],
     }
@@ -169,8 +178,13 @@ def execute_registry_prune(
     client: RegistryClient,
     records: list[RegistryTag],
 ) -> list[RegistryTag]:
+    deleted: set[tuple[str, str]] = set()
     for record in records:
+        key = (record.repository, record.digest)
+        if key in deleted:
+            continue
         client.delete_manifest(record.repository, record.digest)
+        deleted.add(key)
     return records
 
 
@@ -265,8 +279,11 @@ def select_prune_candidates(
     records: list[RegistryTag],
     *,
     keep_per_repository: int,
+    max_age_days: float | None = None,
+    now: datetime | None = None,
 ) -> list[RegistryTag]:
     keep = max(0, keep_per_repository)
+    cutoff = _age_cutoff(max_age_days, now=now)
     candidates: list[RegistryTag] = []
     by_repository: dict[str, list[RegistryTag]] = {}
     for record in records:
@@ -274,10 +291,35 @@ def select_prune_candidates(
     for repository_records in by_repository.values():
         ordered = sorted(repository_records, key=_tag_sort_key, reverse=True)
         protected_digests = {record.digest for record in ordered[:keep]}
-        candidates.extend(
-            record for record in ordered[keep:] if record.digest not in protected_digests
-        )
+        for record in ordered:
+            if record.digest in protected_digests:
+                continue
+            if cutoff is not None and not _tag_created_before(record, cutoff):
+                continue
+            candidates.append(record)
     return sorted(candidates, key=lambda item: (item.repository, item.tag))
+
+
+def _age_cutoff(
+    max_age_days: float | None,
+    *,
+    now: datetime | None,
+) -> datetime | None:
+    if max_age_days is None:
+        return None
+    reference = now or datetime.now(timezone.utc)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return reference.astimezone(timezone.utc) - timedelta(days=max_age_days)
+
+
+def _tag_created_before(record: RegistryTag, cutoff: datetime) -> bool:
+    created_at = parse_iso_datetime(record.created_at)
+    if created_at is None:
+        return False
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    return created_at.astimezone(timezone.utc) < cutoff
 
 
 def _tag_sort_key(record: RegistryTag) -> tuple[int, str, str]:

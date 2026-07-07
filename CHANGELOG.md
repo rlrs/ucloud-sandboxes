@@ -2,6 +2,19 @@
 
 This project uses semantic versioning.
 
+## 0.3.26 - 2026-07-07
+
+- Added scheduled registry retention pruning with a default three-day TTL and
+  zero per-repository keep floor so generated one-tag repositories can be
+  cleaned up.
+- Extended `registry-prune` with `--max-age-days` and wired the all-in-one
+  deployment to install and enable the registry prune timer.
+
+## 0.3.25 - 2026-07-07
+
+- Added a dashboard Sandboxes page with live sandbox listing, search,
+  per-sandbox termination, and guarded terminate-all controls.
+
 ## 0.3.24 - 2026-07-07
 
 - Included active image-build count and build-warm sandbox resources in

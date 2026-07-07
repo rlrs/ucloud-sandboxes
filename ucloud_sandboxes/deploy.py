@@ -19,6 +19,8 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-gateway.service",
     "ucloud-sandbox-relay.service",
     "ucloud-sandbox-registry.service",
+    "ucloud-sandbox-registry-prune.service",
+    "ucloud-sandbox-registry-prune.timer",
     "ucloud-sandbox-registry-gc.service",
     "ucloud-sandbox-registry-gc.timer",
     "ucloud-sandbox-autoscaler.service",
@@ -61,6 +63,8 @@ class AllInOneDeployPlan:
     request_timeout_seconds: int = 7200
     worker_lease_seconds: int = 600
     completed_request_retention_seconds: int = 3600
+    registry_retention_days: float = 3.0
+    registry_keep_per_repository: int = 0
 
     @property
     def state_dir(self) -> str:
@@ -164,9 +168,12 @@ class AllInOneDeployPlan:
             "init retry seconds": self.init_retry_seconds,
             "init timeout seconds": self.init_timeout_seconds,
             "docker quota image GB": self.docker_quota_image_gb,
+            "registry keep per repository": self.registry_keep_per_repository,
         }.items():
             if value < 0:
                 raise ValueError(f"{label} cannot be negative.")
+        if self.registry_retention_days <= 0:
+            raise ValueError("registry retention days must be positive.")
         for port_label, port in {
             "gateway port": self.gateway_port,
             "relay port": self.relay_port,
@@ -190,6 +197,8 @@ class AllInOneDeployPlan:
             "gatewayPort": self.gateway_port,
             "relayPort": self.relay_port,
             "registryPort": self.registry_port,
+            "registryRetentionDays": self.registry_retention_days,
+            "registryKeepPerRepository": self.registry_keep_per_repository,
             "gatewayPrivateHost": self.gateway_private_host,
             "registryAlias": self.registry_alias,
             "registryPrivateIp": self.registry_private_ip,
@@ -264,10 +273,15 @@ def relay_env(plan: AllInOneDeployPlan) -> dict[str, str]:
 
 def registry_env(plan: AllInOneDeployPlan) -> dict[str, str]:
     return {
+        "UCLOUD_REGISTRY_URL": plan.registry_url,
         "UCLOUD_REGISTRY_IMAGE": "registry:2",
         "UCLOUD_REGISTRY_BIND": "0.0.0.0",
         "UCLOUD_REGISTRY_PORT": str(plan.registry_port),
         "UCLOUD_REGISTRY_DATA_DIR": plan.registry_data_dir,
+        "UCLOUD_REGISTRY_RETENTION_DAYS": f"{plan.registry_retention_days:g}",
+        "UCLOUD_REGISTRY_KEEP_PER_REPOSITORY": str(
+            plan.registry_keep_per_repository
+        ),
     }
 
 
@@ -432,6 +446,7 @@ def render_remote_deploy_script(
         [
             "sudo systemctl daemon-reload",
             "sudo systemctl enable --now ucloud-sandbox-registry.service",
+            "sudo systemctl enable --now ucloud-sandbox-registry-prune.timer",
             "sudo systemctl enable --now ucloud-sandbox-registry-gc.timer",
             "sudo systemctl enable --now ucloud-sandbox-gateway.service",
             "sudo systemctl enable --now ucloud-sandbox-relay.service",

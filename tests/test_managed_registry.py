@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 import unittest
 
 from ucloud_sandboxes.managed_registry import (
     RegistryRequestError,
     RegistryTag,
     _next_link_path,
+    execute_registry_prune,
     list_registry_tags,
     registry_summary,
     select_prune_candidates,
@@ -124,6 +126,66 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(
             [(item.repository, item.tag) for item in candidates],
             [("repo/a", "v1"), ("repo/a", "v2")],
+        )
+
+    def test_select_prune_candidates_can_delete_old_single_tag_repositories(self) -> None:
+        records = [
+            RegistryTag("repo/old", "only", "sha256:1", "2026-06-01T00:00:00+00:00"),
+            RegistryTag("repo/new", "only", "sha256:2", "2026-06-06T00:00:00+00:00"),
+        ]
+
+        candidates = select_prune_candidates(
+            records,
+            keep_per_repository=0,
+            max_age_days=3,
+            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            [(item.repository, item.tag) for item in candidates],
+            [("repo/old", "only")],
+        )
+
+    def test_select_prune_candidates_keeps_unknown_age_when_ttl_is_set(self) -> None:
+        records = [
+            RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00"),
+            RegistryTag("repo/a", "unknown", "sha256:2"),
+        ]
+
+        candidates = select_prune_candidates(
+            records,
+            keep_per_repository=0,
+            max_age_days=3,
+            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            [(item.repository, item.tag) for item in candidates],
+            [("repo/a", "old")],
+        )
+
+    def test_execute_registry_prune_deletes_duplicate_digest_once(self) -> None:
+        class FakeRegistryClient:
+            def __init__(self) -> None:
+                self.deleted: list[tuple[str, str]] = []
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        client = FakeRegistryClient()
+
+        execute_registry_prune(
+            client,  # type: ignore[arg-type]
+            [
+                RegistryTag("repo/a", "v1", "sha256:1"),
+                RegistryTag("repo/a", "v2", "sha256:1"),
+                RegistryTag("repo/a", "v3", "sha256:2"),
+            ],
+        )
+
+        self.assertEqual(
+            client.deleted,
+            [("repo/a", "sha256:1"), ("repo/a", "sha256:2")],
         )
 
     def test_next_link_path_extracts_registry_pagination_target(self) -> None:

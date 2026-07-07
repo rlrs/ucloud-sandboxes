@@ -649,6 +649,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of newest tags to retain per repository.",
     )
     registry_prune.add_argument(
+        "--max-age-days",
+        type=float,
+        help=(
+            "Only delete tags older than this many days. Tags without a parsed "
+            "creation time are kept."
+        ),
+    )
+    registry_prune.add_argument(
         "--repository-prefix",
         default="",
         help="Only consider repositories with this prefix.",
@@ -893,6 +901,18 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument("--gateway-port", type=int, default=8090)
     deploy_all.add_argument("--relay-port", type=int, default=8092)
     deploy_all.add_argument("--registry-port", type=int, default=5000)
+    deploy_all.add_argument(
+        "--registry-retention-days",
+        type=float,
+        default=3.0,
+        help="Delete registry tags older than this many days during scheduled prune.",
+    )
+    deploy_all.add_argument(
+        "--registry-keep-per-repository",
+        type=int,
+        default=0,
+        help="Newest tags to protect per repository during scheduled prune.",
+    )
     deploy_all.add_argument("--sandbox-product-id", default="cpu-amd-zen5-16-vcpu")
     deploy_all.add_argument("--sandbox-disk-gb", type=int, default=250)
     deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
@@ -2275,11 +2295,14 @@ def cmd_vm_public_link_attachment(args: argparse.Namespace) -> int:
 def cmd_registry_prune(args: argparse.Namespace) -> int:
     if args.keep_per_repository < 0:
         raise ValueError("keep-per-repository cannot be negative.")
+    if args.max_age_days is not None and args.max_age_days <= 0:
+        raise ValueError("max-age-days must be positive.")
     client = RegistryClient(args.registry_url)
     plan = registry_prune_plan(
         client,
         keep_per_repository=args.keep_per_repository,
         repository_prefix=args.repository_prefix,
+        max_age_days=args.max_age_days,
     )
     plan["execute"] = bool(args.execute)
     if args.execute:
@@ -2290,6 +2313,7 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
         candidates = select_prune_candidates(
             records,
             keep_per_repository=args.keep_per_repository,
+            max_age_days=args.max_age_days,
         )
         deleted = execute_registry_prune(client, candidates)
         plan["deleted"] = [item.to_dict() for item in deleted]
@@ -2468,6 +2492,8 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         gateway_port=args.gateway_port,
         relay_port=args.relay_port,
         registry_port=args.registry_port,
+        registry_retention_days=args.registry_retention_days,
+        registry_keep_per_repository=args.registry_keep_per_repository,
         registry_alias=args.registry_alias,
         registry_private_ip=registry_private_ip,
         gateway_private_host=gateway_private_host,
@@ -2610,7 +2636,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         print(f"Mode: {'execute' if args.execute else 'dry-run'}")
         if args.execute:
             print(
-                "Services converged: gateway, relay, registry, registry GC, autoscaler"
+                "Services converged: gateway, relay, registry, registry prune, registry GC, autoscaler"
             )
             if result["registeredSshKey"]:
                 key = result["registeredSshKey"]

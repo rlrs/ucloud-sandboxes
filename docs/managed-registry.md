@@ -137,13 +137,34 @@ not durable and are not copied to sandbox nodes.
 
 ## Cleanup
 
-The registry prune command plans deletions by keeping the newest tags per
-repository:
+The all-in-one deployment installs `ucloud-sandbox-registry-prune.timer`.
+By default it runs daily, deletes tags older than three days, and keeps no
+per-repository floor. The zero keep floor is deliberate: many generated build
+repositories have only one tag, so a keep floor would prevent those images from
+ever becoming eligible for cleanup.
+
+After a successful prune, `ucloud-sandbox-registry-prune.service` starts
+`ucloud-sandbox-registry-gc.service`. The GC service stops the registry, runs
+Docker Distribution garbage collection with `--delete-untagged`, and starts the
+registry again so disk space is reclaimed from unreferenced blobs.
+
+Tune the scheduled policy with deployment flags:
+
+```bash
+ucloud-sandboxes deploy-all-in-one ... \
+  --registry-retention-days 3 \
+  --registry-keep-per-repository 0 \
+  --execute
+```
+
+For manual inspection, the registry prune command can plan deletions by age,
+repository keep floor, or both:
 
 ```bash
 ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
-  --keep-per-repository 5
+  --max-age-days 3 \
+  --keep-per-repository 0
 ```
 
 Add `--execute` to delete the selected manifest digests:
@@ -151,14 +172,12 @@ Add `--execute` to delete the selected manifest digests:
 ```bash
 ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
-  --keep-per-repository 5 \
+  --max-age-days 3 \
+  --keep-per-repository 0 \
   --execute
 ```
 
-After manifests are deleted, `ucloud-sandbox-registry-gc.timer` stops the
-registry daily, runs Docker Distribution garbage collection with
-`--delete-untagged`, and starts the registry again. Run the GC service manually
-after a large prune:
+Run GC manually after an out-of-band manifest deletion:
 
 ```bash
 sudo systemctl start ucloud-sandbox-registry-gc.service

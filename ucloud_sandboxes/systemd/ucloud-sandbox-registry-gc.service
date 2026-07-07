@@ -2,6 +2,7 @@
 Description=Garbage collect UCloud sandbox private Docker registry
 Requires=docker.service
 After=docker.service
+Conflicts=ucloud-sandbox-registry-prune.service
 
 [Service]
 Type=oneshot

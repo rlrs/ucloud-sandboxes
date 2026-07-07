@@ -1,0 +1,11 @@
+[Unit]
+Description=Run UCloud sandbox private registry retention pruning daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=20m
+Unit=ucloud-sandbox-registry-prune.service
+
+[Install]
+WantedBy=timers.target

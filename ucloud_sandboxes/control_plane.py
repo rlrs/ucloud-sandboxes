@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
 import sqlite3
-from threading import BoundedSemaphore, RLock
+from threading import BoundedSemaphore, RLock, Thread
 import time
 from typing import Any
 from urllib import error, request
@@ -44,12 +44,20 @@ from .metrics import (
 )
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
-from .routing import ExecRoute, PendingSandboxDemand, RoutingStore, SandboxRoute
+from .routing import (
+    ExecRoute,
+    PendingImageWarmup,
+    PendingSandboxDemand,
+    RoutingStore,
+    SandboxRoute,
+)
 from .sandbox import SandboxSpec, sandbox_specs_match
 
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
 _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
+_IMAGE_WARMUP_TASKS_GUARD = RLock()
+_IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
 _GATEWAY_SANDBOX_CREATE_LOCKS_GUARD = RLock()
 _GATEWAY_SANDBOX_CREATE_LOCKS: dict[str, RLock] = {}
 _GATEWAY_SCHEDULING_LOCK = RLock()
@@ -253,6 +261,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         heartbeats = self.store.upsert(heartbeat)
         stored_heartbeat = heartbeats.get(heartbeat.job_id, heartbeat)
         record_node_heartbeat(self.metrics_store, stored_heartbeat)
+        self._schedule_image_warmups()
         self._write_json({"ok": True, "node": heartbeat_to_dict(stored_heartbeat)})
 
     def do_PUT(self) -> None:
@@ -425,6 +434,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 item.to_dict() for item in self.routing_store.prepared_capacity()
             ],
             "prepared_builders": [item.to_dict() for item in prepared_builders],
+            "image_warmups": [
+                item.to_dict() for item in self.routing_store.image_warmups()
+            ],
         }
 
     def _list_prepared_capacity(self) -> None:
@@ -472,22 +484,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ttl_seconds=ttl_seconds,
             image=image,
         )
-        prewarm = (
-            self._warm_image_on_ready_nodes(
+        warmup = (
+            self.routing_store.upsert_image_warmup(
+                prepare_id,
                 image,
+                resources,
                 count=count,
-                resources=resources,
-                sandbox_nodes_only=True,
+                ttl_seconds=ttl_seconds,
             )
             if image
             else None
         )
+        warmup_summary = self._schedule_image_warmups() if warmup is not None else None
         payload = {
             "prepare": item.to_dict(),
             "demand": self._demand_payload(),
         }
-        if prewarm is not None:
-            payload["image_prewarm"] = prewarm
+        if warmup is not None:
+            payload["image_warmup"] = warmup.to_dict()
+        if warmup_summary is not None:
+            payload["image_prewarm"] = warmup_summary
         self._write_json(
             payload,
             status=HTTPStatus.CREATED,
@@ -1827,6 +1843,109 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     break
         return node_ids
 
+    def _schedule_image_warmups(self) -> dict[str, Any]:
+        if self.routing_store is None:
+            return {"scheduled": 0, "completed": 0, "warmups": []}
+        warmups = self.routing_store.image_warmups()
+        if not warmups:
+            return {"scheduled": 0, "completed": 0, "warmups": []}
+        heartbeats = self._ready_sandbox_heartbeats()
+        summaries: list[dict[str, Any]] = []
+        scheduled = 0
+        completed = 0
+        for warmup in warmups:
+            summary = self._schedule_image_warmup(warmup, heartbeats)
+            scheduled += int(summary.get("scheduled", 0))
+            completed += 1 if summary.get("completed") else 0
+            summaries.append(summary)
+        return {
+            "scheduled": scheduled,
+            "completed": completed,
+            "warmups": summaries,
+        }
+
+    def _schedule_image_warmup(
+        self,
+        warmup: PendingImageWarmup,
+        heartbeats: list[NodeHeartbeat],
+    ) -> dict[str, Any]:
+        ready_units = 0
+        projected_units = 0
+        scheduled = 0
+        scheduled_nodes: list[str] = []
+        warmed_node_ids = set(warmup.warmed_node_ids)
+        candidate_heartbeats = [
+            heartbeat
+            for heartbeat in heartbeats
+            if _warmup_node_units(heartbeat, warmup.resources) > 0
+            and agent_version_is_compatible(heartbeat.agent_version)
+        ]
+        for heartbeat in candidate_heartbeats:
+            if _heartbeat_has_image(heartbeat, warmup.image, warmup.image_id):
+                warmed_node_ids.add(heartbeat.node_id)
+                self.routing_store.mark_image_warmup_node(
+                    warmup.warmup_id,
+                    heartbeat.node_id,
+                )
+        for heartbeat in candidate_heartbeats:
+            if heartbeat.node_id in warmed_node_ids:
+                ready_units += _warmup_node_units(heartbeat, warmup.resources)
+        projected_units = ready_units
+        if ready_units >= warmup.count:
+            self.routing_store.delete_image_warmup(warmup.warmup_id)
+            return {
+                "warmup_id": warmup.warmup_id,
+                "image": warmup.image,
+                "requested": warmup.count,
+                "ready": ready_units,
+                "projected": projected_units,
+                "scheduled": 0,
+                "scheduled_nodes": [],
+                "completed": True,
+            }
+        for heartbeat in candidate_heartbeats:
+            if projected_units >= warmup.count:
+                break
+            if heartbeat.node_id in warmed_node_ids:
+                continue
+            if self._start_image_warmup_task(warmup, heartbeat):
+                node_units = _warmup_node_units(heartbeat, warmup.resources)
+                projected_units += node_units
+                scheduled += 1
+                scheduled_nodes.append(heartbeat.node_id)
+        return {
+            "warmup_id": warmup.warmup_id,
+            "image": warmup.image,
+            "requested": warmup.count,
+            "ready": ready_units,
+            "projected": projected_units,
+            "scheduled": scheduled,
+            "scheduled_nodes": scheduled_nodes,
+            "completed": False,
+        }
+
+    def _start_image_warmup_task(
+        self,
+        warmup: PendingImageWarmup,
+        heartbeat: NodeHeartbeat,
+    ) -> bool:
+        node_url = heartbeat.node_url or ""
+        if not node_url:
+            return False
+        key = (warmup.warmup_id, heartbeat.node_id)
+        with _IMAGE_WARMUP_TASKS_GUARD:
+            if key in _IMAGE_WARMUP_TASKS:
+                return False
+            _IMAGE_WARMUP_TASKS.add(key)
+        thread = Thread(
+            target=_run_image_warmup_task,
+            args=(self.routing_store, warmup, heartbeat, key),
+            daemon=True,
+            name=f"image-warmup-{warmup.warmup_id[:16]}-{heartbeat.node_id[:16]}",
+        )
+        thread.start()
+        return True
+
     def _node_has_image(
         self,
         heartbeat: NodeHeartbeat,
@@ -2493,6 +2612,83 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
             lock = RLock()
             _IMAGE_PULL_LOCKS[key] = lock
         return lock
+
+
+def _run_image_warmup_task(
+    routing_store: RoutingStore,
+    warmup: PendingImageWarmup,
+    heartbeat: NodeHeartbeat,
+    task_key: tuple[str, str],
+) -> None:
+    try:
+        node_url = heartbeat.node_url or ""
+        if not node_url:
+            return
+        payload: dict[str, Any] = {"image": warmup.image}
+        if warmup.image_id:
+            payload["id"] = warmup.image_id
+        with _image_pull_lock(node_url, warmup.image):
+            req = request.Request(
+                node_url.rstrip("/") + "/v1/images/pull",
+                data=json.dumps(payload).encode("utf-8"),
+                method="POST",
+                headers={"Content-Type": "application/json"},
+            )
+            try:
+                with request.urlopen(
+                    req,
+                    timeout=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
+                ) as response:
+                    status = int(response.status)
+                    response.read()
+            except error.HTTPError as exc:
+                status = int(exc.code)
+                exc.read()
+            except (error.URLError, OSError):
+                return
+        if 200 <= status < 300:
+            updated = routing_store.mark_image_warmup_node(
+                warmup.warmup_id,
+                heartbeat.node_id,
+                expected_image=warmup.image,
+                expected_image_id=warmup.image_id,
+            )
+            if (
+                updated is not None
+                and _warmup_node_units(heartbeat, updated.resources) >= updated.count
+            ):
+                routing_store.delete_image_warmup(updated.warmup_id)
+    finally:
+        with _IMAGE_WARMUP_TASKS_GUARD:
+            _IMAGE_WARMUP_TASKS.discard(task_key)
+
+
+def _heartbeat_has_image(
+    heartbeat: NodeHeartbeat,
+    image: str,
+    image_id: str = "",
+) -> bool:
+    if not heartbeat.cached_images_known:
+        return False
+    image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
+    return bool(image_keys.intersection(heartbeat.cached_images))
+
+
+def _warmup_node_units(
+    heartbeat: NodeHeartbeat,
+    resources: ResourceQuantity,
+) -> int:
+    free = heartbeat.free_resources
+    units: list[int] = []
+    if resources.vcpu > 0:
+        units.append(int(free.vcpu // resources.vcpu))
+    if resources.memory_mb > 0:
+        units.append(free.memory_mb // resources.memory_mb)
+    if resources.disk_mb > 0:
+        units.append(free.disk_mb // resources.disk_mb)
+    if not units:
+        return 0
+    return max(0, min(units))
 
 
 def _try_acquire_gateway_sandbox_create_lock(sandbox_id: str) -> RLock | None:

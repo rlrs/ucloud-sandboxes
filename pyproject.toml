@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ucloud-sandboxes"
-version = "0.3.29"
+version = "0.3.30"
 description = "Autoscaler for gVisor sandbox pools on UCloud VM jobs"
 readme = "README.md"
 requires-python = ">=3.10.13"

@@ -2803,12 +2803,23 @@ class ControlPlaneTests(unittest.TestCase):
                             "image": "busybox:latest",
                         },
                     )
-                    node_images = [
-                        self._json_request(
-                            f"http://{node.server_address[0]}:{node.server_address[1]}/v1/images"
-                        )
-                        for node in nodes
-                    ]
+                    deadline = utc_now() + timedelta(seconds=5)
+                    warmed_tags: list[str] = []
+                    while utc_now() < deadline:
+                        node_images = [
+                            self._json_request(
+                                f"http://{node.server_address[0]}:{node.server_address[1]}/v1/images"
+                            )
+                            for node in nodes
+                        ]
+                        warmed_tags = [
+                            image["tag"]
+                            for payload in node_images
+                            for image in payload["images"]
+                        ]
+                        if "busybox:latest" in warmed_tags:
+                            break
+                        sleep(0.05)
                 finally:
                     gateway.shutdown()
                     gateway.server_close()
@@ -2818,13 +2829,87 @@ class ControlPlaneTests(unittest.TestCase):
                     node.server_close()
 
         self.assertEqual(prepared["prepare"]["image"], "busybox:latest")
-        self.assertEqual(prepared["image_prewarm"]["requested"], 2)
-        self.assertEqual(prepared["image_prewarm"]["ready"], 2)
-        self.assertEqual(len(prepared["image_prewarm"]["pulled"]), 2)
-        self.assertEqual(
-            [payload["images"][0]["tag"] for payload in node_images],
-            ["busybox:latest", "busybox:latest"],
-        )
+        self.assertEqual(prepared["image_warmup"]["image"], "busybox:latest")
+        self.assertEqual(prepared["image_prewarm"]["scheduled"], 1)
+        self.assertIn("busybox:latest", warmed_tags)
+        self.assertEqual(warmed_tags.count("busybox:latest"), 1)
+
+    def test_gateway_prepare_image_warmup_runs_after_future_node_heartbeat(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "future-node-sandboxes.json",
+                image_file=raw_path / "future-node-images.json",
+                job_id="future-job",
+                node_id="future-node",
+                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                runtime=DockerGvisorRuntime(dry_run=True, allow_storage_opt_quota=True),
+            )
+            node_thread = Thread(target=node.serve_forever, daemon=True)
+            node_thread.start()
+            try:
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    prepared = self._json_request(
+                        f"{base}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "future-eval",
+                            "count": 2,
+                            "cpus": 1,
+                            "memory_mb": 1024,
+                            "disk_mb": 2048,
+                            "image": "busybox:latest",
+                        },
+                    )
+                    node_host, node_port = node.server_address
+                    heartbeat_result = post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="future-job",
+                            node_id="future-node",
+                            node_url=f"http://{node_host}:{node_port}",
+                            capabilities=("sandbox", "image-cache"),
+                            total_resources=ResourceQuantity(
+                                vcpu=4,
+                                memory_mb=8192,
+                                disk_mb=100_000,
+                            ),
+                        ),
+                    )
+                    deadline = utc_now() + timedelta(seconds=5)
+                    warmed_tags: list[str] = []
+                    while utc_now() < deadline:
+                        payload = self._json_request(
+                            f"http://{node_host}:{node_port}/v1/images"
+                        )
+                        warmed_tags = [image["tag"] for image in payload["images"]]
+                        if "busybox:latest" in warmed_tags:
+                            break
+                        sleep(0.05)
+                    demand = self._json_request(f"{base}/v1/demand")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(prepared["image_prewarm"]["scheduled"], 0)
+        self.assertEqual(heartbeat_result.status, 200)
+        self.assertIn("busybox:latest", warmed_tags)
+        self.assertEqual(demand["image_warmups"], [])
 
     def test_gateway_image_pull_warms_multiple_sandbox_nodes(self) -> None:
         with TemporaryDirectory() as raw_dir:

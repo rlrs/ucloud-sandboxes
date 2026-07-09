@@ -10,6 +10,7 @@ from ucloud_sandboxes.routing import (
     ExecRoute,
     PENDING_DEMAND_TTL_SECONDS,
     PendingImageBuildDemand,
+    PendingImageWarmup,
     PendingSandboxDemand,
     PreparedBuilderDemand,
     PreparedCapacityDemand,
@@ -441,6 +442,68 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(deleted.prepare_id if deleted else None, "prep-2")
         self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
 
+    def test_image_warmup_survives_prepared_capacity_consumption(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_prepared_capacity(
+                "prep-1",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=4,
+                ttl_seconds=600,
+                image="registry.example.org/image:latest",
+            )
+            warmup = store.upsert_image_warmup(
+                "prep-1",
+                "registry.example.org/image:latest",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=4,
+                ttl_seconds=600,
+            )
+            consumed = store.consume_prepared_capacity()
+            warmups_after_consume = store.image_warmups()
+            marked = store.mark_image_warmup_node("prep-1", "node-1")
+            deleted = store.delete_image_warmup("prep-1")
+            warmups_after_delete = store.image_warmups()
+
+        self.assertEqual(warmup.warmup_id, "prep-1")
+        self.assertEqual([item.prepare_id for item in consumed], ["prep-1"])
+        self.assertEqual([item.warmup_id for item in warmups_after_consume], ["prep-1"])
+        self.assertEqual(marked.warmed_node_ids, ("node-1",))
+        self.assertEqual(deleted.warmed_node_ids, ("node-1",))
+        self.assertEqual(warmups_after_delete, [])
+
+    def test_image_warmup_mark_ignores_stale_image_completion(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_image_warmup(
+                "prep-1",
+                "registry.example.org/old:latest",
+                ResourceQuantity(vcpu=1, memory_mb=512),
+                count=1,
+                ttl_seconds=600,
+            )
+            store.upsert_image_warmup(
+                "prep-1",
+                "registry.example.org/new:latest",
+                ResourceQuantity(vcpu=1, memory_mb=512),
+                count=1,
+                ttl_seconds=600,
+            )
+
+            stale_mark = store.mark_image_warmup_node(
+                "prep-1",
+                "node-1",
+                expected_image="registry.example.org/old:latest",
+            )
+            current_mark = store.mark_image_warmup_node(
+                "prep-1",
+                "node-1",
+                expected_image="registry.example.org/new:latest",
+            )
+
+        self.assertIsNone(stale_mark)
+        self.assertEqual(current_mark.warmed_node_ids, ("node-1",))
+
     def test_prepared_builder_signal_contributes_until_consumed_or_deleted(
         self,
     ) -> None:
@@ -657,6 +720,36 @@ class RoutingStoreTests(unittest.TestCase):
 
         self.assertEqual(count, 0)
         self.assertEqual(state.image_builds, {})
+
+    def test_expired_image_warmup_is_pruned(self) -> None:
+        now = utc_now()
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.save(
+                RoutingState(
+                    sandboxes={},
+                    exec_sessions={},
+                    pending={},
+                    image_builds={},
+                    image_warmups={
+                        "expired": PendingImageWarmup(
+                            warmup_id="expired",
+                            image="registry.example.org/expired:latest",
+                            resources=ResourceQuantity(vcpu=1, memory_mb=512),
+                            count=1,
+                            created_at=(now - timedelta(seconds=30)).isoformat(),
+                            updated_at=(now - timedelta(seconds=30)).isoformat(),
+                            expires_at=(now - timedelta(seconds=1)).isoformat(),
+                        )
+                    },
+                )
+            )
+
+            warmups = store.image_warmups()
+            state = store.load()
+
+        self.assertEqual(warmups, [])
+        self.assertEqual(state.image_warmups, {})
 
     def test_consuming_pending_demand_clears_active_pending_signals(self) -> None:
         with TemporaryDirectory() as raw_dir:

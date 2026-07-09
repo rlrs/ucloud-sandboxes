@@ -67,10 +67,13 @@ The signal is consumed after the autoscaler reacts. The TTL is only a cleanup
 bound for missed cycles or a stopped autoscaler, and the signal can be canceled
 with `DELETE /v1/capacity/prepare/<id>` before it is consumed.
 If the prepare payload includes `image`, the gateway also tries to pull that
-image onto already-ready sandbox nodes that can fit the requested resources.
-That image prewarm is opportunistic cache work, not persistent demand; if nodes
-are still booting, callers can repeat `POST /v1/images/pull` with `count` once
-capacity is ready.
+image onto enough ready sandbox-node capacity for the requested sandbox count.
+If no suitable node is ready yet, the gateway records a transient image warmup
+work item with the same prepare id and TTL. The capacity signal is still
+consumed after one autoscaler cycle; the image warmup is not capacity demand and
+does not reserve nodes. It is completed when heartbeating sandbox nodes with the
+image can fit the requested `count * resources`, or it expires with the prepare
+TTL.
 
 Failed sandbox creates are not durable queue entries. When `POST /v1/sandboxes`
 cannot fit on a ready node, the gateway records a short-lived pending scale-up

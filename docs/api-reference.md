@@ -148,8 +148,13 @@ The gateway/control plane additionally exposes:
 - `DELETE /v1/builders/prepare/<prepare-id>`
 
 `POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
-and optional `image`. The image is not a reservation; the gateway uses it to
-opportunistically prewarm already-ready sandbox nodes.
+and optional `image`. The capacity signal is consumed by the autoscaler after
+one reconciliation cycle. If `image` is supplied, the gateway also creates a
+transient image warmup work item with the same prepare id and TTL. Warmup runs
+in the background as sandbox nodes heartbeat, and completes once cached node
+capacity can fit the requested sandbox count. The response includes
+`image_warmup` when such work is registered and `image_prewarm` with scheduling
+summary fields.
 
 `POST /v1/images/pull` accepts `image`, optional `id`, `count`, resource
 fields, and `sandbox_nodes_only` (default `true`). It pulls the image to up to

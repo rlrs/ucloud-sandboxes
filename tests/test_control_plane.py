@@ -17,6 +17,7 @@ from ucloud_sandboxes.agent import build_heartbeat, post_heartbeat
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.control_plane import (
     IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
+    IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
     build_server,
 )
 from ucloud_sandboxes.deployment import package_version
@@ -2900,6 +2901,177 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             sorted(item["node"]["node_id"] for item in pulled["pulled"]),
             ["pull-node-0", "pull-node-1"],
+        )
+
+    def test_gateway_uses_bounded_proxy_timeout_for_image_pulls(self) -> None:
+        class FakeResponse:
+            status = 201
+            headers: dict[str, str] = {}
+
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "image": {
+                            "id": "large-image",
+                            "tag": "registry.example.org/large:latest",
+                            "state": "available",
+                            "pushed": True,
+                        },
+                        "command": ["docker", "pull"],
+                        "exitCode": 0,
+                    }
+                ).encode("utf-8")
+
+        captured_timeouts: list[object] = []
+
+        def fake_urlopen(req: object, timeout: object = None) -> FakeResponse:
+            del req
+            captured_timeouts.append(timeout)
+            return FakeResponse()
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                post_heartbeat(
+                    f"{base}/v1/nodes/heartbeat",
+                    build_heartbeat(
+                        job_id="pull-job",
+                        node_id="pull-node",
+                        node_url="http://pull-node.invalid:8090",
+                        capabilities=("sandbox", "image-cache"),
+                        cached_images=(),
+                        total_resources=ResourceQuantity(
+                            vcpu=4,
+                            memory_mb=8192,
+                            disk_mb=100_000,
+                        ),
+                    ),
+                )
+
+                with patch.object(control_plane.request, "urlopen", fake_urlopen):
+                    body = json.dumps(
+                        {
+                            "image": "registry.example.org/large:latest",
+                            "id": "large-image",
+                            "count": 1,
+                        }
+                    )
+                    conn = HTTPConnection(host, port, timeout=5)
+                    try:
+                        conn.request(
+                            "POST",
+                            "/v1/images/pull",
+                            body=body,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        response = conn.getresponse()
+                        pulled = json.loads(response.read().decode("utf-8"))
+                    finally:
+                        conn.close()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(pulled["ready"], 1)
+        self.assertEqual(IMAGE_PULL_PROXY_TIMEOUT_SECONDS, 30 * 60)
+        self.assertEqual(captured_timeouts, [IMAGE_PULL_PROXY_TIMEOUT_SECONDS])
+
+    def test_gateway_reports_image_pull_failure_when_ready_nodes_fail(self) -> None:
+        class FakeResponse:
+            status = 502
+            headers: dict[str, str] = {}
+
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps({"error": "node request failed: timed out"}).encode(
+                    "utf-8"
+                )
+
+        def fake_urlopen(req: object, timeout: object = None) -> FakeResponse:
+            del req, timeout
+            return FakeResponse()
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                post_heartbeat(
+                    f"{base}/v1/nodes/heartbeat",
+                    build_heartbeat(
+                        job_id="pull-job",
+                        node_id="pull-node",
+                        node_url="http://pull-node.invalid:8090",
+                        capabilities=("sandbox", "image-cache"),
+                        cached_images=(),
+                        total_resources=ResourceQuantity(
+                            vcpu=4,
+                            memory_mb=8192,
+                            disk_mb=100_000,
+                        ),
+                    ),
+                )
+
+                with patch.object(control_plane.request, "urlopen", fake_urlopen):
+                    body = json.dumps(
+                        {
+                            "image": "registry.example.org/large:latest",
+                            "id": "large-image",
+                            "count": 1,
+                        }
+                    )
+                    conn = HTTPConnection(host, port, timeout=5)
+                    try:
+                        conn.request(
+                            "POST",
+                            "/v1/images/pull",
+                            body=body,
+                            headers={"Content-Type": "application/json"},
+                        )
+                        response = conn.getresponse()
+                        failed = json.loads(response.read().decode("utf-8"))
+                    finally:
+                        conn.close()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response.status, 503)
+        self.assertEqual(failed["error"], "image pull failed on ready image-cache nodes")
+        self.assertEqual(failed["result"]["ready"], 0)
+        self.assertEqual(
+            failed["result"]["failed"][0]["error"],
+            "node request failed: timed out",
         )
 
     def test_gateway_rejects_invalid_prepared_capacity_resources(self) -> None:

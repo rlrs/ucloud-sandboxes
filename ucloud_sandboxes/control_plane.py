@@ -62,6 +62,7 @@ SANDBOX_CREATE_UNRESOLVED_ROUTE_TTL_SECONDS = 5 * 60
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
+IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 NODE_RECONCILE_PROXY_TIMEOUT_SECONDS = 5
 NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
@@ -1404,9 +1405,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             image_id=str(raw.get("id") or "").strip(),
         )
         if result["ready"] <= 0:
+            error_message = (
+                "image pull failed on ready image-cache nodes"
+                if result["failed"]
+                else "no ready image-cache node is available"
+            )
             self._write_json(
                 {
-                    "error": "no ready image-cache node is available",
+                    "error": error_message,
                     "image": image,
                     "result": result,
                 },
@@ -1859,6 +1865,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 "/v1/images/pull",
                 method="POST",
                 body=json.dumps({"image": image}).encode("utf-8"),
+                timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
             )
 
     def _warm_image_on_ready_nodes(
@@ -1941,6 +1948,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             "/v1/images/pull",
             method="POST",
             body=json.dumps(payload).encode("utf-8"),
+            timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
         )
 
     def _ready_heartbeats(self) -> list[NodeHeartbeat]:

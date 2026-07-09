@@ -7,8 +7,9 @@ Conflicts=ucloud-sandbox-registry-gc.service
 [Service]
 Type=oneshot
 Environment=UCLOUD_REGISTRY_URL=http://127.0.0.1:5000
-Environment=UCLOUD_REGISTRY_RETENTION_DAYS=3
+Environment=UCLOUD_REGISTRY_RETENTION_DAYS=30
 Environment=UCLOUD_REGISTRY_KEEP_PER_REPOSITORY=0
+Environment=UCLOUD_REGISTRY_USAGE_FILE=/work/ucloud-sandboxes/state/registry-usage.json
 EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
-ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --registry-url ${UCLOUD_REGISTRY_URL} --max-age-days ${UCLOUD_REGISTRY_RETENTION_DAYS} --keep-per-repository ${UCLOUD_REGISTRY_KEEP_PER_REPOSITORY} --execute
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --registry-url ${UCLOUD_REGISTRY_URL} --max-age-days ${UCLOUD_REGISTRY_RETENTION_DAYS} --keep-per-repository ${UCLOUD_REGISTRY_KEEP_PER_REPOSITORY} --usage-file ${UCLOUD_REGISTRY_USAGE_FILE} --execute
 ExecStartPost=/usr/bin/systemctl start --no-block ucloud-sandbox-registry-gc.service

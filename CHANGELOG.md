@@ -2,6 +2,13 @@
 
 This project uses semantic versioning.
 
+## 0.3.27 - 2026-07-09
+
+- Changed scheduled registry pruning to use persistent image last-used state
+  recorded by successful sandbox creation instead of image creation time.
+- Increased the default scheduled registry retention window from 3 days to 30
+  days and kept tags with no usage record out of age-based pruning.
+
 ## 0.3.26 - 2026-07-07
 
 - Added scheduled registry retention pruning with a default three-day TTL and

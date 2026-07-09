@@ -204,6 +204,9 @@ class AutoscalerConfig:
     def routing_file(self) -> Path:
         return Path(self.state_dir).expanduser() / "routes.sqlite"
 
+    def registry_usage_file(self) -> Path:
+        return Path(self.state_dir).expanduser() / "registry-usage.json"
+
     def bootstrap_file(self) -> Path:
         return Path(self.state_dir).expanduser() / "vm-bootstrap.json"
 

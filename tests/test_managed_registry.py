@@ -1,12 +1,16 @@
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
 from ucloud_sandboxes.managed_registry import (
     RegistryRequestError,
+    RegistryUsageStore,
     RegistryTag,
     _next_link_path,
     execute_registry_prune,
     list_registry_tags,
+    registry_repository_tag_from_image_ref,
     registry_summary,
     select_prune_candidates,
 )
@@ -146,6 +150,52 @@ class ManagedRegistryTests(unittest.TestCase):
             [("repo/old", "only")],
         )
 
+    def test_select_prune_candidates_uses_last_usage_for_ttl(self) -> None:
+        records = [
+            RegistryTag(
+                "repo/a",
+                "old-but-used",
+                "sha256:1",
+                "2026-06-01T00:00:00+00:00",
+                "2026-06-06T00:00:00+00:00",
+            ),
+            RegistryTag(
+                "repo/a",
+                "old-and-unused",
+                "sha256:2",
+                "2026-06-01T00:00:00+00:00",
+                "2026-06-02T00:00:00+00:00",
+            ),
+        ]
+
+        candidates = select_prune_candidates(
+            records,
+            keep_per_repository=0,
+            max_age_days=3,
+            use_last_used_at=True,
+            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(
+            [(item.repository, item.tag) for item in candidates],
+            [("repo/a", "old-and-unused")],
+        )
+
+    def test_select_prune_candidates_keeps_missing_usage_in_last_used_mode(self) -> None:
+        records = [
+            RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00")
+        ]
+
+        candidates = select_prune_candidates(
+            records,
+            keep_per_repository=0,
+            max_age_days=3,
+            use_last_used_at=True,
+            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(candidates, [])
+
     def test_select_prune_candidates_keeps_unknown_age_when_ttl_is_set(self) -> None:
         records = [
             RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00"),
@@ -162,6 +212,33 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(
             [(item.repository, item.tag) for item in candidates],
             [("repo/a", "old")],
+        )
+
+    def test_registry_usage_store_touches_private_registry_image(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+
+            record = store.touch_image(
+                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5",
+                when=datetime(2026, 6, 7, tzinfo=timezone.utc),
+            )
+
+            self.assertIsNotNone(record)
+            self.assertEqual(record.repository, "prime-rl/tmax-mini-base")
+            self.assertEqual(record.tag, "mswe-2.2.8-r5")
+            loaded = store.load()
+            self.assertIn(("prime-rl/tmax-mini-base", "mswe-2.2.8-r5"), loaded)
+
+    def test_registry_repository_tag_from_image_ref(self) -> None:
+        self.assertEqual(
+            registry_repository_tag_from_image_ref(
+                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5"
+            ),
+            ("prime-rl/tmax-mini-base", "mswe-2.2.8-r5"),
+        )
+        self.assertEqual(
+            registry_repository_tag_from_image_ref("localhost:5000/repo/image"),
+            ("repo/image", "latest"),
         )
 
     def test_execute_registry_prune_deletes_duplicate_digest_once(self) -> None:

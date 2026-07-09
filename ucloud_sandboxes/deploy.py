@@ -63,7 +63,7 @@ class AllInOneDeployPlan:
     request_timeout_seconds: int = 7200
     worker_lease_seconds: int = 600
     completed_request_retention_seconds: int = 3600
-    registry_retention_days: float = 3.0
+    registry_retention_days: float = 30.0
     registry_keep_per_repository: int = 0
 
     @property
@@ -109,6 +109,10 @@ class AllInOneDeployPlan:
     @property
     def init_authorized_key_file(self) -> str:
         return self.init_ssh_private_key_file + ".pub"
+
+    @property
+    def registry_usage_file(self) -> str:
+        return str(PurePosixPath(self.state_dir) / "registry-usage.json")
 
     @property
     def registry_data_dir(self) -> str:
@@ -199,6 +203,7 @@ class AllInOneDeployPlan:
             "registryPort": self.registry_port,
             "registryRetentionDays": self.registry_retention_days,
             "registryKeepPerRepository": self.registry_keep_per_repository,
+            "registryUsageFile": self.registry_usage_file,
             "gatewayPrivateHost": self.gateway_private_host,
             "registryAlias": self.registry_alias,
             "registryPrivateIp": self.registry_private_ip,
@@ -254,6 +259,7 @@ def gateway_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_HEARTBEAT_TTL_SECONDS": str(plan.heartbeat_ttl_seconds),
         "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
         "UCLOUD_REGISTRY_URL": plan.registry_url,
+        "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
     }
 
 
@@ -282,6 +288,7 @@ def registry_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_REGISTRY_KEEP_PER_REPOSITORY": str(
             plan.registry_keep_per_repository
         ),
+        "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
     }
 
 

@@ -42,8 +42,12 @@ class DeployTests(unittest.TestCase):
 
         self.assertEqual(gateway["UCLOUD_DEPLOYMENT_ID"], "prod-a")
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
-        self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "3")
+        self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "30")
         self.assertEqual(registry["UCLOUD_REGISTRY_KEEP_PER_REPOSITORY"], "0")
+        self.assertEqual(
+            registry["UCLOUD_REGISTRY_USAGE_FILE"],
+            "/work/ucloud-sandboxes/state/registry-usage.json",
+        )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_HEARTBEAT_URL"],
             "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
@@ -97,6 +101,7 @@ class DeployTests(unittest.TestCase):
         self.assertIn("ucloud-sandbox-registry-prune.service", units)
         self.assertIn("ucloud-sandbox-registry-prune.timer", units)
         self.assertIn("--max-age-days", units["ucloud-sandbox-registry-prune.service"])
+        self.assertIn("--usage-file", units["ucloud-sandbox-registry-prune.service"])
         self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
 
 

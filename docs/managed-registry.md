@@ -138,10 +138,15 @@ not durable and are not copied to sandbox nodes.
 ## Cleanup
 
 The all-in-one deployment installs `ucloud-sandbox-registry-prune.timer`.
-By default it runs daily, deletes tags older than three days, and keeps no
-per-repository floor. The zero keep floor is deliberate: many generated build
-repositories have only one tag, so a keep floor would prevent those images from
-ever becoming eligible for cleanup.
+By default it runs daily, deletes tags whose last recorded sandbox use is older
+than 30 days, and keeps no per-repository floor. The zero keep floor is
+deliberate: many generated build repositories have only one tag, so a keep
+floor would prevent those images from ever becoming eligible for cleanup.
+
+The gateway records successful sandbox creation and idempotent create recovery
+in `<state_dir>/registry-usage.json`. Scheduled pruning uses that file as the
+age source. Tags with no usage entry are kept, because deleting by image
+creation time can remove shared base images that are still actively used.
 
 After a successful prune, `ucloud-sandbox-registry-prune.service` starts
 `ucloud-sandbox-registry-gc.service`. The GC service stops the registry, runs
@@ -152,19 +157,20 @@ Tune the scheduled policy with deployment flags:
 
 ```bash
 ucloud-sandboxes deploy-all-in-one ... \
-  --registry-retention-days 3 \
+  --registry-retention-days 30 \
   --registry-keep-per-repository 0 \
   --execute
 ```
 
-For manual inspection, the registry prune command can plan deletions by age,
-repository keep floor, or both:
+For manual inspection, the registry prune command can plan deletions by
+last-used age, repository keep floor, or both:
 
 ```bash
 ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
-  --max-age-days 3 \
-  --keep-per-repository 0
+  --max-age-days 30 \
+  --keep-per-repository 0 \
+  --usage-file /work/ucloud-sandboxes/state/registry-usage.json
 ```
 
 Add `--execute` to delete the selected manifest digests:
@@ -172,8 +178,9 @@ Add `--execute` to delete the selected manifest digests:
 ```bash
 ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
-  --max-age-days 3 \
+  --max-age-days 30 \
   --keep-per-repository 0 \
+  --usage-file /work/ucloud-sandboxes/state/registry-usage.json \
   --execute
 ```
 

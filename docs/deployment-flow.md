@@ -241,6 +241,12 @@ project drive. The gateway reaches it as `http://127.0.0.1:5000`; autoscaled
 builder and sandbox nodes reach the same registry over the private network by
 using image tags under `ucloud-sandbox-registry:5000` plus a VM init host alias:
 
+Registry retention is driven by the gateway's persistent
+`/work/ucloud-sandboxes/state/registry-usage.json` file. The scheduled prune
+keeps tags with no usage record and deletes only tags whose last successful
+sandbox creation is older than the configured retention window, 30 days by
+default.
+
 ```bash
 --init-docker-insecure-registry ucloud-sandbox-registry:5000 \
 --init-host-alias ucloud-sandbox-registry=<gateway-private-ip>

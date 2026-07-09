@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
+from threading import RLock
 from typing import Any
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
@@ -26,6 +28,7 @@ class RegistryTag:
     tag: str
     digest: str
     created_at: str = ""
+    last_used_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -33,6 +36,40 @@ class RegistryTag:
             "tag": self.tag,
             "digest": self.digest,
             "created_at": self.created_at,
+            "last_used_at": self.last_used_at,
+        }
+
+
+@dataclass(frozen=True)
+class RegistryImageUsage:
+    image_ref: str
+    repository: str
+    tag: str
+    last_used_at: str
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "RegistryImageUsage | None":
+        if not isinstance(raw, dict):
+            return None
+        image_ref = str(raw.get("image_ref") or raw.get("imageRef") or "")
+        repository = str(raw.get("repository") or "")
+        tag = str(raw.get("tag") or "")
+        last_used_at = str(raw.get("last_used_at") or raw.get("lastUsedAt") or "")
+        if not image_ref or not repository or not tag or not last_used_at:
+            return None
+        return cls(
+            image_ref=image_ref,
+            repository=repository,
+            tag=tag,
+            last_used_at=last_used_at,
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "image_ref": self.image_ref,
+            "repository": self.repository,
+            "tag": self.tag,
+            "last_used_at": self.last_used_at,
         }
 
 
@@ -150,22 +187,92 @@ class RegistryClient:
             raise RegistryRequestError(exc.code, method, path, body) from exc
 
 
+class RegistryUsageStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._lock = RLock()
+
+    def load(self) -> dict[tuple[str, str], RegistryImageUsage]:
+        with self._lock:
+            if not self.path.exists():
+                return {}
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                raise ValueError("registry usage store must contain a JSON object.")
+            items = raw.get("images", [])
+            if not isinstance(items, list):
+                raise ValueError("registry usage store must contain an images list.")
+            records: dict[tuple[str, str], RegistryImageUsage] = {}
+            for item in items:
+                record = RegistryImageUsage.from_dict(item)
+                if record is None:
+                    continue
+                records[(record.repository, record.tag)] = record
+            return records
+
+    def save(self, records: dict[tuple[str, str], RegistryImageUsage]) -> None:
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+            payload = {
+                "images": [
+                    records[key].to_dict()
+                    for key in sorted(records, key=lambda item: (item[0], item[1]))
+                ]
+            }
+            tmp_path.write_text(
+                json.dumps(payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            tmp_path.replace(self.path)
+
+    def touch_image(
+        self,
+        image_ref: str,
+        *,
+        when: datetime | None = None,
+    ) -> RegistryImageUsage | None:
+        parsed = registry_repository_tag_from_image_ref(image_ref)
+        if parsed is None:
+            return None
+        repository, tag = parsed
+        timestamp = when or datetime.now(timezone.utc)
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        record = RegistryImageUsage(
+            image_ref=image_ref,
+            repository=repository,
+            tag=tag,
+            last_used_at=timestamp.astimezone(timezone.utc).isoformat(),
+        )
+        with self._lock:
+            records = self.load()
+            records[(repository, tag)] = record
+            self.save(records)
+        return record
+
+
 def registry_prune_plan(
     client: RegistryClient,
     *,
     keep_per_repository: int,
     repository_prefix: str = "",
     max_age_days: float | None = None,
+    usage_records: dict[tuple[str, str], RegistryImageUsage] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     records = list_registry_tags(client, repository_prefix=repository_prefix)
+    records = apply_registry_usage(records, usage_records)
+    use_last_used_at = usage_records is not None
     candidates = select_prune_candidates(
         records,
         keep_per_repository=keep_per_repository,
         max_age_days=max_age_days,
+        use_last_used_at=use_last_used_at,
         now=now,
     )
     return {
+        "age_basis": "last_used_at" if use_last_used_at else "created_at",
         "keep_per_repository": keep_per_repository,
         "repository_prefix": repository_prefix,
         "max_age_days": max_age_days,
@@ -280,6 +387,7 @@ def select_prune_candidates(
     *,
     keep_per_repository: int,
     max_age_days: float | None = None,
+    use_last_used_at: bool = False,
     now: datetime | None = None,
 ) -> list[RegistryTag]:
     keep = max(0, keep_per_repository)
@@ -289,15 +397,44 @@ def select_prune_candidates(
     for record in records:
         by_repository.setdefault(record.repository, []).append(record)
     for repository_records in by_repository.values():
-        ordered = sorted(repository_records, key=_tag_sort_key, reverse=True)
+        ordered = sorted(
+            repository_records,
+            key=lambda item: _tag_sort_key(item, use_last_used_at=use_last_used_at),
+            reverse=True,
+        )
         protected_digests = {record.digest for record in ordered[:keep]}
         for record in ordered:
             if record.digest in protected_digests:
                 continue
-            if cutoff is not None and not _tag_created_before(record, cutoff):
+            if cutoff is not None and not _tag_age_before(
+                record,
+                cutoff,
+                use_last_used_at=use_last_used_at,
+            ):
                 continue
             candidates.append(record)
     return sorted(candidates, key=lambda item: (item.repository, item.tag))
+
+
+def apply_registry_usage(
+    records: list[RegistryTag],
+    usage_records: dict[tuple[str, str], RegistryImageUsage] | None,
+) -> list[RegistryTag]:
+    if usage_records is None:
+        return records
+    annotated: list[RegistryTag] = []
+    for record in records:
+        usage = usage_records.get((record.repository, record.tag))
+        annotated.append(
+            RegistryTag(
+                repository=record.repository,
+                tag=record.tag,
+                digest=record.digest,
+                created_at=record.created_at,
+                last_used_at=usage.last_used_at if usage is not None else "",
+            )
+        )
+    return annotated
 
 
 def _age_cutoff(
@@ -313,20 +450,61 @@ def _age_cutoff(
     return reference.astimezone(timezone.utc) - timedelta(days=max_age_days)
 
 
-def _tag_created_before(record: RegistryTag, cutoff: datetime) -> bool:
-    created_at = parse_iso_datetime(record.created_at)
-    if created_at is None:
+def _tag_age_before(
+    record: RegistryTag,
+    cutoff: datetime,
+    *,
+    use_last_used_at: bool,
+) -> bool:
+    raw_timestamp = record.last_used_at if use_last_used_at else record.created_at
+    timestamp = parse_iso_datetime(raw_timestamp)
+    if timestamp is None:
         return False
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    return created_at.astimezone(timezone.utc) < cutoff
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    return timestamp.astimezone(timezone.utc) < cutoff
 
 
-def _tag_sort_key(record: RegistryTag) -> tuple[int, str, str]:
-    created_at = parse_iso_datetime(record.created_at)
-    if created_at is None:
+def _tag_sort_key(
+    record: RegistryTag,
+    *,
+    use_last_used_at: bool = False,
+) -> tuple[int, str, str]:
+    raw_timestamp = record.last_used_at if use_last_used_at else record.created_at
+    timestamp = parse_iso_datetime(raw_timestamp)
+    if timestamp is None and use_last_used_at:
+        timestamp = parse_iso_datetime(record.created_at)
+    if timestamp is None:
         return (0, "", record.tag)
-    return (1, created_at.isoformat(), record.tag)
+    return (1, timestamp.isoformat(), record.tag)
+
+
+def registry_repository_tag_from_image_ref(image_ref: str) -> tuple[str, str] | None:
+    image = image_ref.strip()
+    if not image or "://" in image:
+        return None
+    image = image.split("@", 1)[0]
+    if not image:
+        return None
+    components = image.split("/")
+    if len(components) > 1 and (
+        "." in components[0] or ":" in components[0] or components[0] == "localhost"
+    ):
+        components = components[1:]
+    if not components:
+        return None
+    last = components[-1]
+    if ":" in last:
+        name, tag = last.rsplit(":", 1)
+        if not name or not tag:
+            return None
+        components[-1] = name
+    else:
+        tag = "latest"
+    repository = "/".join(part for part in components if part)
+    if not repository:
+        return None
+    return repository, tag
 
 
 def _registry_repository_name_unknown(exc: RegistryRequestError) -> bool:

@@ -63,6 +63,8 @@ from .deploy import (
 from .images import DockerImageRuntime
 from .managed_registry import (
     RegistryClient,
+    RegistryUsageStore,
+    apply_registry_usage,
     execute_registry_prune,
     list_registry_tags,
     registry_prune_plan,
@@ -311,6 +313,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Docker Distribution registry URL to include in gateway metrics. "
             "Defaults to UCLOUD_SANDBOX_REGISTRY_URL or UCLOUD_REGISTRY_URL."
+        ),
+    )
+    serve.add_argument(
+        "--registry-usage-file",
+        type=Path,
+        help=(
+            "Persistent image usage state used by registry retention pruning. "
+            "Defaults to <state_dir>/registry-usage.json."
         ),
     )
     serve.add_argument(
@@ -662,6 +672,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only consider repositories with this prefix.",
     )
     registry_prune.add_argument(
+        "--usage-file",
+        type=Path,
+        help=(
+            "Use registry image last-used timestamps from this state file. "
+            "Tags with no usage entry are kept when --max-age-days is set."
+        ),
+    )
+    registry_prune.add_argument(
         "--execute",
         action="store_true",
         help="Delete selected manifests. Without this flag, only print the plan.",
@@ -904,7 +922,7 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument(
         "--registry-retention-days",
         type=float,
-        default=3.0,
+        default=30.0,
         help="Delete registry tags older than this many days during scheduled prune.",
     )
     deploy_all.add_argument(
@@ -1889,6 +1907,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         local_image_builds_enabled=args.enable_image_builds,
         metrics_file=metrics_file,
         registry_url=registry_url,
+        registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
         max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
     )
     host, port = server.server_address
@@ -1902,6 +1921,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print("Gateway auth: bearer token required")
     if registry_url:
         print(f"Registry metrics: {registry_url}")
+    print(f"Registry usage file: {args.registry_usage_file or config.registry_usage_file()}")
     print(
         "Image builds: "
         + (
@@ -2298,22 +2318,27 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
     if args.max_age_days is not None and args.max_age_days <= 0:
         raise ValueError("max-age-days must be positive.")
     client = RegistryClient(args.registry_url)
+    usage_records = RegistryUsageStore(args.usage_file).load() if args.usage_file else None
     plan = registry_prune_plan(
         client,
         keep_per_repository=args.keep_per_repository,
         repository_prefix=args.repository_prefix,
         max_age_days=args.max_age_days,
+        usage_records=usage_records,
     )
     plan["execute"] = bool(args.execute)
+    plan["usage_file"] = str(args.usage_file) if args.usage_file else ""
     if args.execute:
         records = list_registry_tags(
             client,
             repository_prefix=args.repository_prefix,
         )
+        records = apply_registry_usage(records, usage_records)
         candidates = select_prune_candidates(
             records,
             keep_per_repository=args.keep_per_repository,
             max_age_days=args.max_age_days,
+            use_last_used_at=usage_records is not None,
         )
         deleted = execute_registry_prune(client, candidates)
         plan["deleted"] = [item.to_dict() for item in deleted]

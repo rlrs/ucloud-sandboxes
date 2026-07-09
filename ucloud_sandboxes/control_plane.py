@@ -26,7 +26,7 @@ from .images import (
     image_id_from_tag,
     uploaded_build_context,
 )
-from .managed_registry import RegistryClient, registry_summary
+from .managed_registry import RegistryClient, RegistryUsageStore, registry_summary
 from .metrics import (
     MetricsStore,
     build_metrics_snapshot,
@@ -97,6 +97,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     registry_status_cache: dict[str, Any] | None
     registry_status_cache_at: float
     registry_status_lock: RLock
+    registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
     max_concurrent_sandbox_creates: int
     server_version = "ucloud-sandboxes-control-plane/0.1"
@@ -1086,6 +1087,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         resources=spec.requested_resources(),
                         pending=pending_before,
                     )
+                    self._record_registry_image_used(spec.image)
                     root.set_attribute("outcome", "scheduled")
                     root.set_attribute("node_id", heartbeat.node_id)
                 else:
@@ -1129,8 +1131,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 resources=spec.requested_resources(),
                 pending=pending,
             )
+        self._record_registry_image_used(spec.image)
         self._write_json({"sandbox": record, "recovered": True}, status=status)
         return True
+
+    def _record_registry_image_used(self, image_ref: str) -> None:
+        if self.registry_usage_store is None:
+            return
+        try:
+            self.registry_usage_store.touch_image(image_ref)
+        except (OSError, ValueError):
+            return
 
     def _write_create_in_progress_response(self, sandbox_id: str) -> None:
         self._write_json(
@@ -2037,11 +2048,17 @@ def build_server(
     local_image_builds_enabled: bool | None = None,
     metrics_file: Path | None = None,
     registry_url: str | None = None,
+    registry_usage_file: Path | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
 ) -> HighBacklogThreadingHTTPServer:
     store = HeartbeatStore(heartbeat_file)
     routing_store = RoutingStore(routing_file) if routing_file is not None else None
     metrics_store = MetricsStore(metrics_file) if metrics_file is not None else None
+    registry_usage_store = (
+        RegistryUsageStore(registry_usage_file)
+        if registry_usage_file is not None
+        else None
+    )
     image_manager = (
         ImageManager(
             ImageStore(image_file),
@@ -2070,6 +2087,7 @@ def build_server(
     BoundHandler.registry_status_cache = None
     BoundHandler.registry_status_cache_at = 0.0
     BoundHandler.registry_status_lock = RLock()
+    BoundHandler.registry_usage_store = registry_usage_store
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
         int(max_concurrent_sandbox_creates),

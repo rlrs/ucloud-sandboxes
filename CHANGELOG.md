@@ -2,6 +2,13 @@
 
 This project uses semantic versioning.
 
+## 0.3.28 - 2026-07-09
+
+- Reconciled registry pruning with the gateway image metadata cache so deleted
+  private-registry tags are also removed from `images.json`.
+- Hid stale pushed build records from `/v1/images` when the private registry
+  reports that the backing manifest is missing.
+
 ## 0.3.27 - 2026-07-09
 
 - Changed scheduled registry pruning to use persistent image last-used state

@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 import time
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 from .agent import (
@@ -60,13 +61,16 @@ from .deploy import (
     run_remote_script_over_ssh,
     stage_file_over_ssh,
 )
-from .images import DockerImageRuntime
+from .images import DockerImageRuntime, ImageRecord, ImageStore
 from .managed_registry import (
     RegistryClient,
+    RegistryRequestError,
     RegistryUsageStore,
     apply_registry_usage,
     execute_registry_prune,
     list_registry_tags,
+    registry_host_from_image_ref,
+    registry_repository_tag_from_image_ref,
     registry_prune_plan,
     select_prune_candidates,
 )
@@ -677,6 +681,21 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Use registry image last-used timestamps from this state file. "
             "Tags with no usage entry are kept when --max-age-days is set."
+        ),
+    )
+    registry_prune.add_argument(
+        "--image-file",
+        type=Path,
+        help=(
+            "Gateway image metadata file to update when registry tags are deleted."
+        ),
+    )
+    registry_prune.add_argument(
+        "--prune-stale-image-records",
+        action="store_true",
+        help=(
+            "When --image-file is set, also remove pushed build image records "
+            "whose registry manifest is already missing."
         ),
     )
     registry_prune.add_argument(
@@ -2328,6 +2347,7 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
     )
     plan["execute"] = bool(args.execute)
     plan["usage_file"] = str(args.usage_file) if args.usage_file else ""
+    plan["image_file"] = str(args.image_file) if args.image_file else ""
     if args.execute:
         records = list_registry_tags(
             client,
@@ -2342,8 +2362,97 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
         )
         deleted = execute_registry_prune(client, candidates)
         plan["deleted"] = [item.to_dict() for item in deleted]
+        if args.image_file:
+            removed = _remove_image_records_for_registry_tags(
+                args.image_file,
+                {
+                    (record.repository, record.tag)
+                    for record in deleted
+                },
+            )
+            if args.prune_stale_image_records:
+                removed.extend(
+                    _remove_stale_private_build_image_records(
+                        args.image_file,
+                        client,
+                    )
+                )
+            plan["removed_image_records"] = [
+                item.to_dict() for item in _dedupe_image_records(removed)
+            ]
     print_json(plan)
     return 0
+
+
+def _remove_image_records_for_registry_tags(
+    image_file: Path,
+    registry_tags: set[tuple[str, str]],
+) -> list[ImageRecord]:
+    if not registry_tags:
+        return []
+    store = ImageStore(image_file)
+    records = store.load()
+    tags_to_remove = [
+        record.tag
+        for record in records.values()
+        if registry_repository_tag_from_image_ref(record.tag) in registry_tags
+    ]
+    return store.delete_by_tags(tags_to_remove)
+
+
+def _remove_stale_private_build_image_records(
+    image_file: Path,
+    client: RegistryClient,
+) -> list[ImageRecord]:
+    store = ImageStore(image_file)
+    records = store.load()
+    tags_to_remove: list[str] = []
+    for record in records.values():
+        if not _image_record_is_pushed_private_build(record, client.base_url):
+            continue
+        parsed = registry_repository_tag_from_image_ref(record.tag)
+        if parsed is None:
+            continue
+        try:
+            exists = client.tag_exists(*parsed)
+        except (OSError, ValueError, RegistryRequestError):
+            continue
+        if not exists:
+            tags_to_remove.append(record.tag)
+    return store.delete_by_tags(tags_to_remove)
+
+
+def _image_record_is_pushed_private_build(
+    record: ImageRecord,
+    registry_url: str,
+) -> bool:
+    return bool(
+        record.pushed
+        and record.source.startswith("build:")
+        and _image_ref_uses_private_registry(record.tag, registry_url)
+    )
+
+
+def _image_ref_uses_private_registry(image_ref: str, registry_url: str) -> bool:
+    host = registry_host_from_image_ref(image_ref)
+    if not host:
+        return False
+    registry_host = urlparse(registry_url).netloc
+    allowed = {
+        "ucloud-sandbox-registry:5000",
+        "localhost:5000",
+        "127.0.0.1:5000",
+    }
+    if registry_host:
+        allowed.add(registry_host)
+    return host in allowed
+
+
+def _dedupe_image_records(records: list[ImageRecord]) -> list[ImageRecord]:
+    deduped: dict[str, ImageRecord] = {}
+    for record in records:
+        deduped[record.id] = record
+    return [deduped[key] for key in sorted(deduped)]
 
 
 def cmd_submit_vm(args: argparse.Namespace) -> int:

@@ -20,6 +20,7 @@ from ucloud_sandboxes.cli import (
 )
 from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.deployment import package_version
+from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
@@ -63,6 +64,84 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             output.getvalue().strip(), f"ucloud-sandboxes {package_version()}"
         )
+
+    def test_remove_image_records_for_registry_tags_matches_full_image_refs(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            image_file = Path(raw_dir) / "images.json"
+            now = utc_now()
+            store = ImageStore(image_file)
+            store.upsert(
+                ImageRecord(
+                    id="keep",
+                    tag="ucloud-sandbox-registry:5000/prime-rl/keep:latest",
+                    source="build:/tmp/keep",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                )
+            )
+            store.upsert(
+                ImageRecord(
+                    id="delete",
+                    tag="ucloud-sandbox-registry:5000/prime-rl/delete:latest",
+                    source="build:/tmp/delete",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                )
+            )
+
+            removed = cli._remove_image_records_for_registry_tags(
+                image_file,
+                {("prime-rl/delete", "latest")},
+            )
+
+            self.assertEqual([record.id for record in removed], ["delete"])
+            self.assertEqual(list(store.load()), ["keep"])
+
+    def test_remove_stale_private_build_image_records_keeps_external_tags(self) -> None:
+        class FakeRegistryClient:
+            base_url = "http://127.0.0.1:5000"
+
+            def tag_exists(self, repository: str, tag: str) -> bool:
+                return (repository, tag) != ("prime-rl/missing", "latest")
+
+        with TemporaryDirectory() as raw_dir:
+            image_file = Path(raw_dir) / "images.json"
+            now = utc_now()
+            store = ImageStore(image_file)
+            store.upsert(
+                ImageRecord(
+                    id="missing",
+                    tag="ucloud-sandbox-registry:5000/prime-rl/missing:latest",
+                    source="build:/tmp/missing",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                )
+            )
+            store.upsert(
+                ImageRecord(
+                    id="external",
+                    tag="ghcr.io/prime-rl/missing:latest",
+                    source="build:/tmp/external",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                )
+            )
+
+            removed = cli._remove_stale_private_build_image_records(
+                image_file,
+                FakeRegistryClient(),  # type: ignore[arg-type]
+            )
+
+            self.assertEqual([record.id for record in removed], ["missing"])
+            self.assertEqual(list(store.load()), ["external"])
 
     def test_private_network_config_filters_auto_discovered_pool_nodes(self) -> None:
         config = AutoscalerConfig.default(project_id="project-1")

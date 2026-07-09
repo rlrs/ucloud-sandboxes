@@ -148,6 +148,13 @@ in `<state_dir>/registry-usage.json`. Scheduled pruning uses that file as the
 age source. Tags with no usage entry are kept, because deleting by image
 creation time can remove shared base images that are still actively used.
 
+The prune service also receives `<state_dir>/images.json`. When it deletes a
+private-registry manifest, it removes matching pushed build records from that
+image metadata cache. It also prunes stale pushed build records whose manifests
+are already missing. This matters for SDK clients because `list_images()` is
+used as the build cache signal; stale metadata must not make a deleted image
+look reusable.
+
 After a successful prune, `ucloud-sandbox-registry-prune.service` starts
 `ucloud-sandbox-registry-gc.service`. The GC service stops the registry, runs
 Docker Distribution garbage collection with `--delete-untagged`, and starts the
@@ -170,7 +177,9 @@ ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
   --max-age-days 30 \
   --keep-per-repository 0 \
-  --usage-file /work/ucloud-sandboxes/state/registry-usage.json
+  --usage-file /work/ucloud-sandboxes/state/registry-usage.json \
+  --image-file /work/ucloud-sandboxes/state/images.json \
+  --prune-stale-image-records
 ```
 
 Add `--execute` to delete the selected manifest digests:
@@ -181,6 +190,8 @@ ucloud-sandboxes registry-prune \
   --max-age-days 30 \
   --keep-per-repository 0 \
   --usage-file /work/ucloud-sandboxes/state/registry-usage.json \
+  --image-file /work/ucloud-sandboxes/state/images.json \
+  --prune-stale-image-records \
   --execute
 ```
 

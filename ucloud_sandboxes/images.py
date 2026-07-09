@@ -14,7 +14,7 @@ import tarfile
 import tempfile
 from threading import Condition, RLock, Thread
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from uuid import uuid4
 
 from .models import parse_iso_datetime, utc_now
@@ -362,6 +362,25 @@ class ImageStore:
             records[record.id] = record
             self.save(records)
             return records
+
+    def delete_by_tags(self, tags: Iterable[str]) -> list[ImageRecord]:
+        tag_set = {tag for tag in tags if tag}
+        if not tag_set:
+            return []
+        with self._lock:
+            records = self.load()
+            removed = [
+                record for record in records.values() if record.tag in tag_set
+            ]
+            if removed:
+                self.save(
+                    {
+                        image_id: record
+                        for image_id, record in records.items()
+                        if record.tag not in tag_set
+                    }
+                )
+            return removed
 
 
 class ImageBuildStore:

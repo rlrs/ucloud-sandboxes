@@ -122,6 +122,14 @@ class RegistryClient:
             created_at=self.created_at(repository, tag),
         )
 
+    def tag_exists(self, repository: str, tag: str) -> bool:
+        try:
+            return bool(self.manifest_digest(repository, tag))
+        except RegistryRequestError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+
     def manifest_digest(self, repository: str, tag: str) -> str:
         path = f"/v2/{_quote_repository(repository)}/manifests/{quote(tag, safe='')}"
         response = self._request(path, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
@@ -505,6 +513,18 @@ def registry_repository_tag_from_image_ref(image_ref: str) -> tuple[str, str] | 
     if not repository:
         return None
     return repository, tag
+
+
+def registry_host_from_image_ref(image_ref: str) -> str:
+    image = image_ref.strip()
+    if not image or "://" in image:
+        return ""
+    if "/" not in image:
+        return ""
+    first = image.split("/", 1)[0]
+    if "." in first or ":" in first or first == "localhost":
+        return first
+    return ""
 
 
 def _registry_repository_name_unknown(exc: RegistryRequestError) -> bool:

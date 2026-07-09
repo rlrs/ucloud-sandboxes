@@ -21,7 +21,7 @@ from ucloud_sandboxes.control_plane import (
 )
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
-from ucloud_sandboxes.images import DockerImageRuntime
+from ucloud_sandboxes.images import DockerImageRuntime, ImageRecord, ImageStore
 from ucloud_sandboxes.models import NodeHeartbeat, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import build_node_agent_server
 from ucloud_sandboxes.routing import RoutingStore, SandboxRoute
@@ -214,6 +214,67 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(cached_metrics["registry"]["repository_count"], 2)
         self.assertEqual(calls_after_cached_metrics.count("/v2/_catalog"), 1)
         self.assertEqual(RegistryHandler.calls.count("/v2/_catalog"), 3)
+
+    def test_gateway_hides_stale_private_registry_image_records(self) -> None:
+        class MissingManifestRegistryHandler(BaseHTTPRequestHandler):
+            def do_HEAD(self) -> None:
+                if self.path.startswith("/v2/prime-rl/missing/manifests/latest"):
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Docker-Content-Digest", "sha256:ok")
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            image_file = raw_path / "images.json"
+            now = utc_now()
+            ImageStore(image_file).upsert(
+                ImageRecord(
+                    id="missing",
+                    tag="ucloud-sandbox-registry:5000/prime-rl/missing:latest",
+                    source="build:/tmp/missing",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                )
+            )
+            registry = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                MissingManifestRegistryHandler,
+            )
+            registry_thread = Thread(target=registry.serve_forever, daemon=True)
+            registry_thread.start()
+            try:
+                registry_host, registry_port = registry.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    image_file=image_file,
+                    image_runtime=DockerImageRuntime(dry_run=True),
+                    registry_url=f"http://{registry_host}:{registry_port}",
+                )
+                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+                gateway_thread.start()
+                try:
+                    host, port = gateway.server_address
+                    images = self._json_request(f"http://{host}:{port}/v1/images")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                registry.shutdown()
+                registry.server_close()
+
+            self.assertEqual(images["images"], [])
+            self.assertEqual(ImageStore(image_file).load(), {})
 
     def test_metrics_do_not_fan_out_to_node_build_endpoints(self) -> None:
         class BuildProbeHandler(BaseHTTPRequestHandler):

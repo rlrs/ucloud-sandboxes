@@ -115,6 +115,10 @@ class AllInOneDeployPlan:
         return str(PurePosixPath(self.state_dir) / "registry-usage.json")
 
     @property
+    def image_file(self) -> str:
+        return str(PurePosixPath(self.state_dir) / "images.json")
+
+    @property
     def registry_data_dir(self) -> str:
         return str(
             PurePosixPath(self.project_mount_dir)
@@ -204,6 +208,7 @@ class AllInOneDeployPlan:
             "registryRetentionDays": self.registry_retention_days,
             "registryKeepPerRepository": self.registry_keep_per_repository,
             "registryUsageFile": self.registry_usage_file,
+            "imageFile": self.image_file,
             "gatewayPrivateHost": self.gateway_private_host,
             "registryAlias": self.registry_alias,
             "registryPrivateIp": self.registry_private_ip,
@@ -289,6 +294,7 @@ def registry_env(plan: AllInOneDeployPlan) -> dict[str, str]:
             plan.registry_keep_per_repository
         ),
         "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
+        "UCLOUD_IMAGE_FILE": plan.image_file,
     }
 
 

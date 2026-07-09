@@ -26,7 +26,14 @@ from .images import (
     image_id_from_tag,
     uploaded_build_context,
 )
-from .managed_registry import RegistryClient, RegistryUsageStore, registry_summary
+from .managed_registry import (
+    RegistryClient,
+    RegistryRequestError,
+    RegistryUsageStore,
+    registry_host_from_image_ref,
+    registry_repository_tag_from_image_ref,
+    registry_summary,
+)
 from .metrics import (
     MetricsStore,
     build_metrics_snapshot,
@@ -641,6 +648,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for record in sorted(self.image_manager.list(), key=lambda item: item.id):
                 enriched = record.to_dict()
                 enriched["location"] = "control-plane"
+                if self._image_record_missing_registry_manifest(enriched):
+                    self.image_manager.store.delete_by_tags([record.tag])
+                    continue
                 images.append(enriched)
         for heartbeat in self._ready_heartbeats():
             response = self._proxy_request(
@@ -658,6 +668,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 if isinstance(record, dict):
                     enriched = dict(record)
                     enriched["node"] = _node_metadata(heartbeat)
+                    if self._image_record_missing_registry_manifest(enriched):
+                        continue
                     images.append(enriched)
         return images
 
@@ -1656,6 +1668,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if _image_record_available_to_sandboxes(record)
             and isinstance(record.get("tag"), str)
             and record.get("tag")
+            and not self._image_record_missing_registry_manifest(record)
         ]
         if available:
             selected = sorted(
@@ -1675,6 +1688,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             "image_id": image,
             "matches": [_image_record_summary(record) for record in matches],
         }
+
+    def _image_record_missing_registry_manifest(self, record: dict[str, Any]) -> bool:
+        tag = str(record.get("tag") or "")
+        if not self.registry_url or not _image_record_requires_registry_manifest(
+            record,
+            self.registry_url,
+        ):
+            return False
+        parsed = registry_repository_tag_from_image_ref(tag)
+        if parsed is None:
+            return False
+        repository, image_tag = parsed
+        try:
+            return not RegistryClient(self.registry_url).tag_exists(
+                repository,
+                image_tag,
+            )
+        except (OSError, ValueError, RegistryRequestError):
+            return False
 
     def _select_capable_node(self, capability: str) -> NodeHeartbeat | None:
         candidates = [
@@ -2573,6 +2605,29 @@ def _image_record_available_to_sandboxes(record: dict[str, Any]) -> bool:
         or record.get("pushed")
         or record.get("source") == "registry"
     )
+
+
+def _image_record_requires_registry_manifest(
+    record: dict[str, Any],
+    registry_url: str,
+) -> bool:
+    if not _image_record_available_to_sandboxes(record):
+        return False
+    source = str(record.get("source") or "")
+    if not source.startswith("build:"):
+        return False
+    host = registry_host_from_image_ref(str(record.get("tag") or ""))
+    if not host:
+        return False
+    allowed = {
+        "ucloud-sandbox-registry:5000",
+        "localhost:5000",
+        "127.0.0.1:5000",
+    }
+    configured = urlparse(registry_url).netloc
+    if configured:
+        allowed.add(configured)
+    return host in allowed
 
 
 def _image_record_summary(record: dict[str, Any]) -> dict[str, Any]:

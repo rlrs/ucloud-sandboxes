@@ -98,6 +98,34 @@ class ImageTests(unittest.TestCase):
             self.assertTrue(reloaded.pushed)
             self.assertTrue(reloaded.available_to_sandboxes)
 
+    def test_image_store_deletes_records_by_tag(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = ImageStore(Path(raw_dir) / "images.json")
+            runtime = DockerImageRuntime(dry_run=True)
+            manager = ImageManager(store, runtime)
+            manager.build(
+                ImageBuildSpec(
+                    id="keep",
+                    tag="registry.example.org/keep:latest",
+                    context_path="/tmp/context",
+                )
+            )
+            manager.build(
+                ImageBuildSpec(
+                    id="delete",
+                    tag="registry.example.org/delete:latest",
+                    context_path="/tmp/context",
+                )
+            )
+
+            removed = store.delete_by_tags(["registry.example.org/delete:latest"])
+
+            self.assertEqual([record.id for record in removed], ["delete"])
+            self.assertEqual(
+                [(record.id, record.tag) for record in manager.list()],
+                [("keep", "registry.example.org/keep:latest")],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

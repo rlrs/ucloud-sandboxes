@@ -49,6 +49,10 @@ class DeployTests(unittest.TestCase):
             "/work/ucloud-sandboxes/state/registry-usage.json",
         )
         self.assertEqual(
+            registry["UCLOUD_IMAGE_FILE"],
+            "/work/ucloud-sandboxes/state/images.json",
+        )
+        self.assertEqual(
             autoscaler["UCLOUD_INIT_HEARTBEAT_URL"],
             "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
         )
@@ -102,6 +106,11 @@ class DeployTests(unittest.TestCase):
         self.assertIn("ucloud-sandbox-registry-prune.timer", units)
         self.assertIn("--max-age-days", units["ucloud-sandbox-registry-prune.service"])
         self.assertIn("--usage-file", units["ucloud-sandbox-registry-prune.service"])
+        self.assertIn("--image-file", units["ucloud-sandbox-registry-prune.service"])
+        self.assertIn(
+            "--prune-stale-image-records",
+            units["ucloud-sandbox-registry-prune.service"],
+        )
         self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
 
 

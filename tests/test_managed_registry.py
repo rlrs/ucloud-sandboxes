@@ -11,6 +11,7 @@ from ucloud_sandboxes.managed_registry import (
     execute_registry_prune,
     list_registry_tags,
     registry_repository_tag_from_image_ref,
+    registry_host_from_image_ref,
     registry_summary,
     select_prune_candidates,
 )
@@ -240,6 +241,13 @@ class ManagedRegistryTests(unittest.TestCase):
             registry_repository_tag_from_image_ref("localhost:5000/repo/image"),
             ("repo/image", "latest"),
         )
+        self.assertEqual(
+            registry_host_from_image_ref(
+                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5"
+            ),
+            "ucloud-sandbox-registry:5000",
+        )
+        self.assertEqual(registry_host_from_image_ref("ubuntu:latest"), "")
 
     def test_execute_registry_prune_deletes_duplicate_digest_once(self) -> None:
         class FakeRegistryClient:

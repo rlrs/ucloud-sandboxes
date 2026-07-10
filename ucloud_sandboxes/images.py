@@ -239,18 +239,28 @@ class DockerImageRuntime:
         executor: CommandExecutor | None = None,
         docker_binary: str = "docker",
         dry_run: bool = False,
+        buildx_direct_push: bool = False,
+        buildx_cache_ref: str | None = None,
     ) -> None:
+        normalized_cache_ref = (buildx_cache_ref or "").strip()
+        if normalized_cache_ref and not buildx_direct_push:
+            raise ValueError(
+                "buildx_cache_ref requires buildx_direct_push to be enabled."
+            )
         self.executor = executor or SubprocessExecutor()
         self.docker_binary = docker_binary
         self.dry_run = dry_run
+        self.buildx_direct_push = buildx_direct_push
+        self.buildx_cache_ref = normalized_cache_ref
 
     def build(
         self,
         spec: ImageBuildSpec,
         *,
+        push: bool = False,
         on_output: Callable[[str, str], None] | None = None,
     ) -> CommandResult:
-        return self._run(self.build_command(spec), on_output=on_output)
+        return self._run(self.build_command(spec, push=push), on_output=on_output)
 
     def pull(self, image: str) -> CommandResult:
         if not image.strip():
@@ -272,27 +282,45 @@ class DockerImageRuntime:
             raise ValueError("source and target image are required.")
         return self._run((self.docker_binary, "tag", source, target))
 
-    def build_command(self, spec: ImageBuildSpec) -> tuple[str, ...]:
+    def build_command(
+        self,
+        spec: ImageBuildSpec,
+        *,
+        push: bool = False,
+    ) -> tuple[str, ...]:
         spec.validate()
         dockerfile = _dockerfile_path(spec.context_path, spec.dockerfile)
-        argv: list[str] = [
-            self.docker_binary,
-            "build",
-            "-f",
-            dockerfile,
-            "-t",
-            spec.tag,
-            "--label",
-            "ucloud-sandboxes.image=true",
-            "--label",
-            f"ucloud-sandboxes.image-id={spec.id}",
-        ]
+        direct_push = push and self.buildx_direct_push
+        argv = [self.docker_binary]
+        argv.extend(("buildx", "build") if direct_push else ("build",))
+        argv.extend(
+            [
+                "-f",
+                dockerfile,
+                "-t",
+                spec.tag,
+                "--label",
+                "ucloud-sandboxes.image=true",
+                "--label",
+                f"ucloud-sandboxes.image-id={spec.id}",
+            ]
+        )
         for key in sorted(spec.build_args):
             argv.extend(["--build-arg", f"{key}={spec.build_args[key]}"])
         for key in sorted(spec.labels):
             argv.extend(["--label", f"{key}={spec.labels[key]}"])
+        if direct_push:
+            argv.append("--push")
+            if self.buildx_cache_ref:
+                cache = f"type=registry,ref={self.buildx_cache_ref}"
+                argv.extend(["--cache-from", cache])
+                argv.extend(["--cache-to", f"{cache},mode=max"])
         argv.append(spec.context_path)
         return tuple(argv)
+
+    def uses_direct_push(self, *, push: bool) -> bool:
+        """Return whether the requested push is part of the Buildx command."""
+        return push and self.buildx_direct_push
 
     def push_command(self, image: str) -> tuple[str, ...]:
         if not image.strip():
@@ -724,6 +752,12 @@ class ImageManager:
                     )
             now = utc_now().isoformat()
             build_id = str(uuid4())
+            direct_push = self.runtime.uses_direct_push(push=push)
+            build_command = (
+                self.runtime.build_command(spec, push=True)
+                if direct_push
+                else self.runtime.build_command(spec)
+            )
             record = ImageBuildRecord(
                 build_id=build_id,
                 image_id=spec.id,
@@ -735,8 +769,12 @@ class ImageManager:
                 context_path=spec.context_path,
                 dockerfile=spec.dockerfile,
                 push=push,
-                command=self.runtime.build_command(spec),
-                push_command=self.runtime.push_command(spec.tag) if push else (),
+                command=build_command,
+                push_command=(
+                    self.runtime.push_command(spec.tag)
+                    if push and not direct_push
+                    else ()
+                ),
                 timings={
                     "total_ms": None,
                     "phases": {},
@@ -761,7 +799,7 @@ class ImageManager:
             self._build_log_last_flush[build_id] = time.monotonic()
             thread = Thread(
                 target=self._run_tracked_build,
-                args=(build_id, spec, push, cleanup),
+                args=(build_id, spec, push, direct_push, cleanup),
                 daemon=True,
             )
             self._active_threads[build_id] = thread
@@ -840,27 +878,40 @@ class ImageManager:
         build_id: str,
         spec: ImageBuildSpec,
         push: bool,
+        direct_push: bool,
         cleanup: Callable[[], None] | None,
     ) -> None:
         build_result: CommandResult | None = None
         push_result: CommandResult | None = None
         started = time.monotonic()
         phases: dict[str, int] = {}
+
+        def append_output(stream: str, chunk: str) -> None:
+            self._append_build_log(build_id, stream, chunk)
+
         try:
             phase = time.monotonic()
             try:
-                build_result = self.runtime.build(
-                    spec,
-                    on_output=lambda stream, chunk: self._append_build_log(
-                        build_id,
-                        stream,
-                        chunk,
-                    ),
-                )
+                if direct_push:
+                    build_result = self.runtime.build(
+                        spec,
+                        push=True,
+                        on_output=append_output,
+                    )
+                else:
+                    # Preserve compatibility with runtime subclasses that
+                    # implemented build() before integrated push was available.
+                    build_result = self.runtime.build(
+                        spec,
+                        on_output=append_output,
+                    )
             finally:
-                phases["docker_build_ms"] = _elapsed_ms(phase)
+                phase_name = (
+                    "docker_build_and_push_ms" if direct_push else "docker_build_ms"
+                )
+                phases[phase_name] = _elapsed_ms(phase)
                 self._update_build_timings(build_id, phases, started)
-            if push:
+            if push and not direct_push:
                 phase = time.monotonic()
                 try:
                     push_result = self.runtime.push(

@@ -423,6 +423,120 @@ class ImageTests(unittest.TestCase):
 
         self.assertEqual(argv[:6], ("docker", "build", "-f", "/tmp/Dockerfile", "-t", "local/base:latest"))
 
+    def test_buildx_direct_push_command_uses_registry_cache(self) -> None:
+        runtime = DockerImageRuntime(
+            dry_run=True,
+            buildx_direct_push=True,
+            buildx_cache_ref="registry.example.org/cache/base:buildcache",
+        )
+        spec = ImageBuildSpec(
+            id="base",
+            tag="registry.example.org/images/base:latest",
+            context_path="/tmp/context",
+        )
+
+        argv = runtime.build_command(spec, push=True)
+
+        self.assertEqual(argv[:3], ("docker", "buildx", "build"))
+        self.assertIn("--push", argv)
+        self.assertIn("--cache-from", argv)
+        self.assertIn(
+            "type=registry,ref=registry.example.org/cache/base:buildcache",
+            argv,
+        )
+        self.assertIn("--cache-to", argv)
+        self.assertIn(
+            "type=registry,ref=registry.example.org/cache/base:buildcache,mode=max",
+            argv,
+        )
+
+    def test_buildx_mode_is_opt_in_and_cache_requires_it(self) -> None:
+        spec = ImageBuildSpec(
+            id="base",
+            tag="registry.example.org/images/base:latest",
+            context_path="/tmp/context",
+        )
+
+        argv = DockerImageRuntime(dry_run=True).build_command(spec, push=True)
+
+        self.assertEqual(argv[:2], ("docker", "build"))
+        self.assertNotIn("--push", argv)
+        with self.assertRaisesRegex(ValueError, "requires buildx_direct_push"):
+            DockerImageRuntime(
+                dry_run=True,
+                buildx_cache_ref="registry.example.org/cache/base:buildcache",
+            )
+
+    def test_manager_records_integrated_buildx_push_as_one_command(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            executor = RecordingExecutor()
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(
+                    executor=executor,
+                    buildx_direct_push=True,
+                    buildx_cache_ref="registry.example.org/cache/base:buildcache",
+                ),
+            )
+            spec = ImageBuildSpec(
+                id="base",
+                tag="registry.example.org/images/base:latest",
+                context_path="/tmp/context",
+            )
+
+            started_record, started = manager.start_build(spec, push=True)
+            finished = manager.wait_for_build(
+                started_record.build_id,
+                timeout_seconds=2,
+            )
+
+            self.assertTrue(started)
+            self.assertIsNotNone(finished)
+            assert finished is not None
+            self.assertEqual(finished.status, "succeeded")
+            self.assertEqual(finished.command[:3], ("docker", "buildx", "build"))
+            self.assertEqual(finished.push_command, ())
+            self.assertIsNone(finished.push_exit_code)
+            self.assertEqual(executor.commands, [finished.command])
+            self.assertIn(
+                "docker_build_and_push_ms",
+                finished.timings["phases"],
+            )
+            self.assertNotIn("docker_push_ms", finished.timings["phases"])
+            self.assertTrue(finished.image["pushed"])
+
+    def test_manager_preserves_separate_push_by_default(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            executor = RecordingExecutor()
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(executor=executor),
+            )
+            spec = ImageBuildSpec(
+                id="base",
+                tag="registry.example.org/images/base:latest",
+                context_path="/tmp/context",
+            )
+
+            started_record, _started = manager.start_build(spec, push=True)
+            finished = manager.wait_for_build(
+                started_record.build_id,
+                timeout_seconds=2,
+            )
+
+            assert finished is not None
+            self.assertEqual(finished.command[:2], ("docker", "build"))
+            self.assertEqual(
+                finished.push_command,
+                ("docker", "push", "registry.example.org/images/base:latest"),
+            )
+            self.assertEqual(
+                executor.commands,
+                [finished.command, finished.push_command],
+            )
+            self.assertIn("docker_build_ms", finished.timings["phases"])
+            self.assertIn("docker_push_ms", finished.timings["phases"])
+
     def test_image_manager_records_planned_build(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = ImageStore(Path(raw_dir) / "images.json")

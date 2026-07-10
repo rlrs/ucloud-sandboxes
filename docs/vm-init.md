@@ -113,8 +113,8 @@ for the observed `vm-ubuntu:24.04` app. The primary path should therefore be:
 5. If the deployment uses the control-plane HTTP registry, configure Docker's
    `insecure-registries` list during init so builders and sandbox nodes can
    push and pull over the UCloud private network.
-6. Store durable init state, caches, node identity, and Docker's quota-backed
-   `overlay2` data root under `/work`.
+6. Store durable init state and node identity under `/work`, but keep Docker's
+   quota-backed `overlay2` data root on local VM disk.
 7. Run `ucloud-sandboxes runtime-conformance --sudo --execute` on the VM and
    store the JSON result under `/work/ucloud-sandboxes/state/`.
 8. Mark the node ready only after the node agent posts a heartbeat with expected
@@ -126,19 +126,25 @@ post-boot init layer:
 
 - Keep the init script small, versioned, idempotent, and fast.
 - Build a deterministic node package bundle during gateway deployment. It
-  contains the service wheel and all platform-specific Python dependency wheels,
-  so autoscaled VMs install the node agent with `--no-index` instead of reaching
-  PyPI during cold scale-up.
+  contains the service wheel and a preassembled, platform-specific Python
+  runtime. Compatible autoscaled VMs activate that runtime directly without
+  creating a virtual environment or running pip. Wheels remain in the bundle
+  only as the compatibility fallback.
 - Extend that artifact with the complete apt dependency closure for bootstrap
   packages, Docker Engine, Buildx/Compose, containerd, and gVisor. Deployment
   downloads the closure into a private empty-status apt cache, so bundle
   contents do not depend on packages or archive-cache entries already present
   on the gateway.
 - Record the gateway Ubuntu id, version, codename, and dpkg architecture plus
-  every `.deb` size and SHA-256 in the bundle. A node uses the runtime payload
-  only on an exact platform match and after verifying the complete file set.
-  The compatible happy path installs with `apt-get --no-download` and performs
-  no `apt-get update`; repository setup is an explicit compatibility fallback.
+  every `.deb` size and SHA-256 in the bundle. The gateway also writes a digest
+  sidecar for the complete artifact. A node uses the runtime payload only on an
+  exact platform match and after verifying that single staged digest; it does
+  not reread every large package solely to hash it again. The compatible happy
+  path installs support libraries and XFS tools with `apt-get --no-download`,
+  then extracts the bundle-verified Docker, containerd, Buildx, and gVisor payloads
+  directly. This avoids package-database fsync, maintainer scripts, and starting
+  Docker twice on every ephemeral VM. Repository installation remains the
+  compatibility fallback.
 - Pull and save the `busybox` image used by runtime conformance into the same
   platform-specific artifact when Docker Hub is reachable during deployment.
   Nodes verify the image archive checksum, load it after Docker is configured,
@@ -150,9 +156,16 @@ post-boot init layer:
   repositories are unavailable while producing it, deployment still emits the
   Python bundle and cold nodes use the older repository path with a warning.
   Produce separate sandbox and builder artifacts so Buildx is not transferred
-  to ordinary sandbox nodes. Keep `python3-pip`, compiler headers/toolchains,
-  and Docker Compose out of both artifacts; `python3-venv` plus the bundled
-  wheels is sufficient.
+  to ordinary sandbox nodes. Keep `python3-venv`, `python3-pip`, compiler
+  headers/toolchains, and Docker Compose out of both artifacts. Strip the
+  containerd shim and metric-server binaries from the bundled gVisor package;
+  Docker's configured OCI runtime needs only `runsc`.
+- Stage bundles atomically and retain their digest marker on the VM. If SSH
+  disconnects after a successful transfer, the next bootstrap attempt reuses
+  the verified file instead of transferring hundreds of megabytes again.
+- Emit millisecond timings for every init phase and include them in the
+  `vm_init_attempt` metric so cold-boot work is optimized from measurements,
+  not aggregate SSH duration.
 - Keep Docker's high-churn data and caches on the quota-backed local XFS volume;
   keep service state and release artifacts under `/work` where persistence is
   useful.

@@ -499,6 +499,8 @@ def record_vm_init_attempt(
     skipped: bool = False,
     reason: str = "",
     retry_delay_seconds: int | None = None,
+    init_phases_ms: dict[str, int] | None = None,
+    init_total_ms: int | None = None,
 ) -> None:
     if store is None:
         return
@@ -520,6 +522,8 @@ def record_vm_init_attempt(
             "skipped": skipped,
             "reason": reason,
             "retry_delay_seconds": retry_delay_seconds,
+            "init_phases_ms": init_phases_ms or {},
+            "init_total_ms": init_total_ms,
         },
     )
 

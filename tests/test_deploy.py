@@ -100,7 +100,10 @@ class DeployTests(unittest.TestCase):
         self.assertIn("compresslevel=1", script)
         self.assertIn('Dir::State::status="$status_file"', script)
         self.assertIn('Dir::Cache::archives="$archive_dir"', script)
-        self.assertIn("download_runtime_packages runtime python3 python3-venv", script)
+        self.assertIn("download_runtime_packages runtime xfsprogs", script)
+        self.assertIn("NODE_AGENT_RUNTIME_ARCHIVE", script)
+        self.assertIn("prune_runsc_package", script)
+        self.assertIn("runsc-metric-server", script)
         self.assertNotIn("python3-pip", script)
         self.assertNotIn("docker-compose-plugin", script)
         self.assertIn("docker pull busybox", script)
@@ -200,6 +203,8 @@ class DeployTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            agent_runtime_archive = root / "node-agent-runtime.tar"
+            agent_runtime_archive.write_bytes(b"preassembled-agent")
             plan = AllInOneDeployPlan(
                 job_id="job-1",
                 project_id="project-1",
@@ -233,7 +238,8 @@ class DeployTests(unittest.TestCase):
                         "noble",
                         "amd64",
                         "sandbox",
-                        "python3 python3-venv xfsprogs docker-ce docker-ce-cli containerd.io runsc",
+                        "xfsprogs docker-ce docker-ce-cli containerd.io runsc",
+                        str(agent_runtime_archive),
                     ]
                     exec(code, {"__name__": "__main__"})
             finally:

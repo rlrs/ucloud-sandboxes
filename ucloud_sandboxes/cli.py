@@ -2333,12 +2333,17 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
                 "remotePath": stage_result.remote_path,
                 "command": list(stage_result.command),
                 "returncode": stage_result.returncode,
+                "reused": stage_result.reused,
             }
             if stage_result.returncode != 0:
                 raise ValueError(
                     f"remote package staging failed with exit code {stage_result.returncode}"
                 )
-            effective_options = replace(options, package_spec=stage_result.remote_path)
+            effective_options = replace(
+                options,
+                package_spec=stage_result.remote_path,
+                package_sha256=stage_result.package_sha256,
+            )
         run_result = run_init_over_ssh(
             plan.ssh_command,
             render_vm_init_script(effective_options),
@@ -2348,6 +2353,8 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
         result["run"] = {
             "command": list(run_result.command),
             "returncode": run_result.returncode,
+            "initPhasesMs": dict(run_result.phase_durations_ms),
+            "initTotalMs": run_result.total_duration_ms,
         }
         if run_result.returncode != 0:
             raise ValueError(
@@ -4440,6 +4447,8 @@ def run_reconcile_cycle(
                         returncode=attempt_result.returncode,
                         error=attempt_result.error,
                         retry_delay_seconds=attempt_result.retry_delay_seconds,
+                        init_phases_ms=attempt_result.init_phases_ms,
+                        init_total_ms=attempt_result.init_total_ms,
                     )
 
         bootstrap_results: list[dict[str, Any]] = []
@@ -4552,6 +4561,8 @@ class _VmBootstrapAttemptResult:
     stage_duration_ms: int | None = None
     run_duration_ms: int | None = None
     retry_delay_seconds: int | None = None
+    init_phases_ms: dict[str, int] | None = None
+    init_total_ms: int | None = None
 
 
 def _execute_vm_bootstrap_attempt(
@@ -4586,6 +4597,7 @@ def _execute_vm_bootstrap_attempt(
                 "command": list(stage_result.command),
                 "returncode": stage_result.returncode,
                 "durationMs": stage_duration_ms,
+                "reused": stage_result.reused,
             }
             if stage_result.returncode != 0:
                 error = (
@@ -4620,6 +4632,7 @@ def _execute_vm_bootstrap_attempt(
             effective_options = replace(
                 intent.options,
                 package_spec=stage_result.remote_path,
+                package_sha256=stage_result.package_sha256,
             )
 
         assert_provider_fence()
@@ -4633,6 +4646,8 @@ def _execute_vm_bootstrap_attempt(
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
         )
         run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
+        init_phases_ms = dict(getattr(run_result, "phase_durations_ms", ()))
+        init_total_ms = getattr(run_result, "total_duration_ms", None)
         if run_result.returncode == 0:
             return _VmBootstrapAttemptResult(
                 result={
@@ -4644,11 +4659,15 @@ def _execute_vm_bootstrap_attempt(
                     "packageStage": stage_payload,
                     "durationMs": _elapsed_ms(attempt_started_perf),
                     "runDurationMs": run_duration_ms,
+                    "initPhasesMs": init_phases_ms,
+                    "initTotalMs": init_total_ms,
                 },
                 status="succeeded",
                 returncode=0,
                 stage_duration_ms=stage_duration_ms,
                 run_duration_ms=run_duration_ms,
+                init_phases_ms=init_phases_ms,
+                init_total_ms=init_total_ms,
             )
 
         error = f"init command exited with status {run_result.returncode}"
@@ -4669,6 +4688,8 @@ def _execute_vm_bootstrap_attempt(
                 "durationMs": _elapsed_ms(attempt_started_perf),
                 "runDurationMs": run_duration_ms,
                 "retryDelaySeconds": retry_delay_seconds,
+                "initPhasesMs": init_phases_ms,
+                "initTotalMs": init_total_ms,
             },
             status="failed",
             returncode=run_result.returncode,
@@ -4676,6 +4697,8 @@ def _execute_vm_bootstrap_attempt(
             stage_duration_ms=stage_duration_ms,
             run_duration_ms=run_duration_ms,
             retry_delay_seconds=retry_delay_seconds,
+            init_phases_ms=init_phases_ms,
+            init_total_ms=init_total_ms,
         )
     except Exception as exc:
         return _failed_vm_bootstrap_attempt(
@@ -4741,6 +4764,8 @@ def record_vm_init_attempt_result(
     returncode: int | None,
     error: str = "",
     retry_delay_seconds: int | None = None,
+    init_phases_ms: dict[str, int] | None = None,
+    init_total_ms: int | None = None,
 ) -> None:
     finished_at = utc_now()
     record_vm_init_attempt(
@@ -4758,6 +4783,8 @@ def record_vm_init_attempt_result(
         returncode=returncode,
         error=error,
         retry_delay_seconds=retry_delay_seconds,
+        init_phases_ms=init_phases_ms,
+        init_total_ms=init_total_ms,
     )
 
 
@@ -5648,6 +5675,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "initAuthorizedKeys": list(options.init_authorized_keys),
         "workDir": options.work_dir,
         "packageSpec": options.package_spec,
+        "packageSha256": options.package_sha256,
         "nodeAgentHost": options.node_agent_host,
         "nodeAgentPort": options.node_agent_port,
         "nodeUrl": options.advertised_node_url(),

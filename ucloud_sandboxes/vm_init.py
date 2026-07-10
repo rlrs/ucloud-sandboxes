@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+import hashlib
 import json
 from pathlib import Path
 from pathlib import PurePosixPath
+import re
 import shlex
 import subprocess
+import sys
 from typing import Any
 
 from .deployment import DEFAULT_INIT_VERSION, package_version
@@ -24,8 +28,6 @@ DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
 SANDBOX_RUNTIME_PACKAGES = (
-    "python3",
-    "python3-venv",
     "xfsprogs",
     "docker-ce",
     "docker-ce-cli",
@@ -60,6 +62,7 @@ class VmInitOptions:
     node_id: str = ""
     work_dir: str = DEFAULT_WORK_DIR
     package_spec: str = DEFAULT_PACKAGE_SPEC
+    package_sha256: str = ""
     node_agent_host: str = DEFAULT_NODE_AGENT_HOST
     node_agent_port: int = DEFAULT_NODE_AGENT_PORT
     node_url: str = ""
@@ -107,6 +110,8 @@ class VmInitPlan:
 class VmInitRunResult:
     command: tuple[str, ...]
     returncode: int
+    phase_durations_ms: tuple[tuple[str, int], ...] = ()
+    total_duration_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,8 @@ class VmInitPackageStageResult:
     remote_path: str
     command: tuple[str, ...]
     returncode: int
+    package_sha256: str = ""
+    reused: bool = False
 
 
 def plan_vm_init(payload: dict[str, Any]) -> VmInitPlan:
@@ -183,7 +190,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     validate_vm_init_options(options)
     work_dir = _clean_posix_path(options.work_dir)
     venv_dir = str(PurePosixPath(work_dir) / "venv")
-    agent_bin = str(PurePosixPath(venv_dir) / "bin" / "ucloud-sandboxes")
+    agent_bin = str(PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes")
     docker_storage_dir = _clean_posix_path(DEFAULT_DOCKER_STORAGE_DIR)
     docker_data_root = str(PurePosixPath(docker_storage_dir) / "docker")
     docker_quota_image = str(PurePosixPath(docker_storage_dir) / "docker-xfs.img")
@@ -202,7 +209,6 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         else SANDBOX_RUNTIME_PACKAGES
     )
     runtime_packages_python = repr(list(runtime_packages))
-    runtime_packages_shell = " ".join(runtime_packages)
     label_args = " ".join(
         f"--label {shlex.quote(key + '=' + value)}"
         for key, value in sorted((options.labels or {}).items())
@@ -247,9 +253,11 @@ UCLOUD_NODE_CONTROL_BEARER_TOKEN={shlex.quote(options.node_control_bearer_token)
 UCLOUD_SERVICE_USER={shlex.quote(options.service_user)}
 UCLOUD_WORK_DIR={shlex.quote(work_dir)}
 UCLOUD_VENV_DIR={shlex.quote(venv_dir)}
+UCLOUD_AGENT_BIN={shlex.quote(agent_bin)}
 UCLOUD_STATE_DIR={shlex.quote(state_dir)}
 UCLOUD_DOCKER_DATA_ROOT={shlex.quote(docker_data_root)}
 UCLOUD_PACKAGE_SPEC={shlex.quote(options.package_spec)}
+UCLOUD_PACKAGE_EXPECTED_SHA256={shlex.quote(options.package_sha256)}
 UCLOUD_NODE_AGENT_HOST={shlex.quote(options.node_agent_host)}
 UCLOUD_NODE_AGENT_PORT={options.node_agent_port}
 UCLOUD_NODE_URL={shlex.quote(options.advertised_node_url())}
@@ -277,15 +285,18 @@ UCLOUD_AUTHORIZED_KEYS
 )
 
 echo "Initializing UCloud sandbox node $UCLOUD_NODE_ID for job $UCLOUD_JOB_ID"
-UCLOUD_INIT_STARTED_EPOCH="$(date +%s)"
-UCLOUD_INIT_PHASE_EPOCH="$UCLOUD_INIT_STARTED_EPOCH"
+UCLOUD_INIT_STARTED_MS="$(date +%s%3N)"
+UCLOUD_INIT_PHASE_MS="$UCLOUD_INIT_STARTED_MS"
 
 log_init_phase() {{
   local phase="$1"
-  local now
-  now="$(date +%s)"
-  echo "Init phase complete: $phase phase=$((now - UCLOUD_INIT_PHASE_EPOCH))s total=$((now - UCLOUD_INIT_STARTED_EPOCH))s"
-  UCLOUD_INIT_PHASE_EPOCH="$now"
+  local now duration total
+  now="$(date +%s%3N)"
+  duration=$((now - UCLOUD_INIT_PHASE_MS))
+  total=$((now - UCLOUD_INIT_STARTED_MS))
+  echo "Init phase complete: $phase duration_ms=${{duration}} total_ms=${{total}}"
+  echo "UCLOUD_INIT_PHASE name=$phase duration_ms=${{duration}} total_ms=${{total}}"
+  UCLOUD_INIT_PHASE_MS="$now"
 }}
 
 if ! id "$UCLOUD_SERVICE_USER" >/dev/null 2>&1; then
@@ -349,12 +360,20 @@ UCLOUD_ARCHITECTURE="$(dpkg --print-architecture)"
 UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_SPEC"
 UCLOUD_PACKAGE_INSTALL_ARGS=()
 UCLOUD_PACKAGE_BUNDLE_DIR=""
+UCLOUD_PACKAGE_BUNDLE_SHA256=""
 UCLOUD_OFFLINE_RUNTIME_AVAILABLE=0
 UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
 UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
+UCLOUD_PREBUILT_AGENT_ARCHIVE=""
+UCLOUD_PREBUILT_AGENT_SHA256=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+  if [ -n "$UCLOUD_PACKAGE_EXPECTED_SHA256" ] \
+    && [ "$UCLOUD_PACKAGE_BUNDLE_SHA256" != "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+    echo "Node package bundle checksum does not match the staged artifact" >&2
+    exit 1
+  fi
   UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
   if [ ! -f "$UCLOUD_PACKAGE_BUNDLE_DIR/.complete" ]; then
     UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
@@ -388,7 +407,7 @@ PY
       "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
       "$UCLOUD_PACKAGE_BUNDLE_DIR" \
       "$UCLOUD_OS_ID" "$UCLOUD_OS_VERSION_ID" "$UCLOUD_OS_CODENAME" \
-      "$UCLOUD_ARCHITECTURE" <<'PY'
+      "$UCLOUD_ARCHITECTURE" "$UCLOUD_PACKAGE_EXPECTED_SHA256" <<'PY'
 import hashlib
 import json
 from pathlib import Path
@@ -402,6 +421,7 @@ expected_platform = {{
     "codename": sys.argv[5],
     "architecture": sys.argv[6],
 }}
+archive_digest_verified = bool(sys.argv[7])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 runtime = manifest.get("runtime")
 if not isinstance(runtime, dict) or runtime.get("platform") != expected_platform:
@@ -427,18 +447,46 @@ for item in files:
     path = package_dir / filename
     if not path.is_file() or path.stat().st_size != item.get("size"):
         raise SystemExit(f"offline runtime file size mismatch: {{filename}}")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    if digest.hexdigest() != item.get("sha256"):
-        raise SystemExit(f"offline runtime file checksum mismatch: {{filename}}")
+    if not archive_digest_verified:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != item.get("sha256"):
+            raise SystemExit(f"offline runtime file checksum mismatch: {{filename}}")
 if actual_files != declared_files:
     raise SystemExit("offline runtime file set mismatch")
+agent = runtime.get("agent")
+if not isinstance(agent, dict):
+    raise SystemExit("preassembled node-agent runtime metadata is absent")
+if agent.get("file") != "runtime/agent/node-agent-runtime.tar":
+    raise SystemExit("invalid preassembled node-agent runtime filename")
+if agent.get("python") != f"{{sys.version_info.major}}.{{sys.version_info.minor}}":
+    raise SystemExit("preassembled node-agent Python version does not match this VM")
+agent_archive = bundle_dir / agent["file"]
+if not agent_archive.is_file() or agent_archive.stat().st_size != agent.get("size"):
+    raise SystemExit("preassembled node-agent runtime size mismatch")
+agent_digest = hashlib.sha256()
+with agent_archive.open("rb") as handle:
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        agent_digest.update(chunk)
+if agent_digest.hexdigest() != agent.get("sha256"):
+    raise SystemExit("preassembled node-agent runtime checksum mismatch")
 PY
     then
       UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
       echo "Verified offline Docker/gVisor packages for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
+      UCLOUD_AGENT_RUNTIME_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+agent = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]["agent"]
+print(f"{{agent['sha256']}}\\t{{agent['size']}}")
+PY
+)"
+      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+      UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
       UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
       if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
         if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
@@ -494,8 +542,10 @@ log_init_phase "package-bundle"
 
 install_offline_runtime() {{
   local package_dir="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/debs"
-  local package_file package_name candidate_version installed_version
+  local package_file package_name candidate_version installed_version install_status
+  local policy_rc_d_created=0
   local -a local_packages=()
+  local -a portable_packages=()
   shopt -s nullglob
   local package_files=("$package_dir"/*.deb)
   shopt -u nullglob
@@ -509,12 +559,51 @@ install_offline_runtime() {{
     if [ -n "$installed_version" ] && dpkg --compare-versions "$installed_version" ge "$candidate_version"; then
       continue
     fi
-    local_packages+=("$package_file")
+    case "$package_name" in
+      docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|runsc)
+        portable_packages+=("$package_file")
+        ;;
+      *)
+        local_packages+=("$package_file")
+        ;;
+    esac
   done
-  if [ "${{#local_packages[@]}}" -eq 0 ]; then
-    return 0
+  install_status=0
+  if [ "${{#local_packages[@]}}" -gt 0 ]; then
+    # Docker and containerd are configured and started once below. Prevent
+    # support-package scripts from starting services with vendor defaults.
+    if [ ! -e /usr/sbin/policy-rc.d ]; then
+      printf '#!/bin/sh\nexit 101\n' | $SUDO tee /usr/sbin/policy-rc.d >/dev/null
+      $SUDO chmod 0755 /usr/sbin/policy-rc.d
+      policy_rc_d_created=1
+    fi
+    if $SUDO apt-get install --no-download --no-install-recommends -y \
+      -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 "${{local_packages[@]}}"; then
+      install_status=0
+    else
+      install_status=$?
+    fi
   fi
-  $SUDO apt-get install --no-download --no-install-recommends -y "${{local_packages[@]}}"
+  if [ "$policy_rc_d_created" -eq 1 ]; then
+    $SUDO rm -f /usr/sbin/policy-rc.d
+  fi
+  if [ "$install_status" -ne 0 ]; then
+    return "$install_status"
+  fi
+  # These vendor packages contain self-contained Go binaries and systemd
+  # units. Extracting their bundle-verified payloads avoids dpkg database/fsync and
+  # maintainer-script overhead on every ephemeral VM. The normal repository
+  # path below remains the fallback if any command is unusable afterwards.
+  for package_file in "${{portable_packages[@]}}"; do
+    if ! dpkg-deb --fsys-tarfile "$package_file" \
+      | $SUDO tar --extract --file=- --directory=/; then
+      return 1
+    fi
+  done
+  if ! getent group docker >/dev/null 2>&1; then
+    $SUDO groupadd --system docker
+  fi
+  return "$install_status"
 }}
 
 required_packages_installed() {{
@@ -526,7 +615,7 @@ required_packages_installed() {{
   done
 }}
 
-OFFLINE_REQUIRED_PACKAGES=({runtime_packages_shell})
+OFFLINE_REQUIRED_PACKAGES=(xfsprogs)
 NEED_DOCKER_REPOSITORY=0
 NEED_GVISOR_REPOSITORY=0
 command -v docker >/dev/null 2>&1 || NEED_DOCKER_REPOSITORY=1
@@ -730,6 +819,7 @@ else
   UCLOUD_DOCKER_RESTART_NEEDED=0
 fi
 rm -f "$DOCKER_DAEMON_JSON"
+$SUDO systemctl daemon-reload
 $SUDO systemctl enable docker
 if [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ] || ! systemctl is-active --quiet docker; then
   $SUDO systemctl restart docker
@@ -743,23 +833,49 @@ $SUDO usermod -aG docker "$UCLOUD_SERVICE_USER"
 log_init_phase "docker-daemon"
 
 echo "Installing ucloud-sandboxes package: $UCLOUD_PACKAGE_SPEC"
-if [ -d "$UCLOUD_VENV_DIR" ]; then
-  $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
-fi
-run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
 UCLOUD_PACKAGE_MARKER="$UCLOUD_STATE_DIR/installed-package.fingerprint"
 UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC"
-if [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
+if [ -n "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
+  UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC $UCLOUD_PACKAGE_BUNDLE_SHA256"
+elif [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
   UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC $(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
 fi
-if [ -x "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" ] \
-  && [ -f "$UCLOUD_PACKAGE_MARKER" ] \
-  && grep -Fx -- "$UCLOUD_PACKAGE_FINGERPRINT" "$UCLOUD_PACKAGE_MARKER" >/dev/null 2>&1; then
-  echo "ucloud-sandboxes package already installed for current fingerprint"
+if [ -n "$UCLOUD_PREBUILT_AGENT_ARCHIVE" ]; then
+  echo "Activating preassembled ucloud-sandboxes runtime"
+  UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_STATE_DIR/agent-runtimes/$UCLOUD_PREBUILT_AGENT_SHA256"
+  if [ ! -f "$UCLOUD_AGENT_RUNTIME_DIR/.complete" ]; then
+    UCLOUD_AGENT_RUNTIME_TMP="$UCLOUD_AGENT_RUNTIME_DIR.tmp.$$"
+    rm -rf "$UCLOUD_AGENT_RUNTIME_TMP"
+    mkdir -p "$UCLOUD_AGENT_RUNTIME_TMP"
+    tar --no-same-owner --no-same-permissions -xf "$UCLOUD_PREBUILT_AGENT_ARCHIVE" -C "$UCLOUD_AGENT_RUNTIME_TMP"
+    test -d "$UCLOUD_AGENT_RUNTIME_TMP/site-packages/ucloud_sandboxes"
+    touch "$UCLOUD_AGENT_RUNTIME_TMP/.complete"
+    rm -rf "$UCLOUD_AGENT_RUNTIME_DIR"
+    mv "$UCLOUD_AGENT_RUNTIME_TMP" "$UCLOUD_AGENT_RUNTIME_DIR"
+  fi
+  $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
+  UCLOUD_AGENT_LAUNCHER="$(mktemp)"
+  printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.cli "$@"\n' \
+    "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_AGENT_LAUNCHER"
+  $SUDO install -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_AGENT_LAUNCHER" "$UCLOUD_AGENT_BIN"
+  rm -f "$UCLOUD_AGENT_LAUNCHER"
 else
-  run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "${{UCLOUD_PACKAGE_INSTALL_ARGS[@]}}" "$UCLOUD_PACKAGE_INSTALL_SPEC"
-  printf '%s\n' "$UCLOUD_PACKAGE_FINGERPRINT" | $SUDO tee "$UCLOUD_PACKAGE_MARKER" >/dev/null
-  $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
+  echo "Preassembled runtime unavailable; installing ucloud-sandboxes into a virtual environment"
+  if [ -d "$UCLOUD_VENV_DIR" ]; then
+    $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
+  fi
+  run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
+  if [ -x "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" ] \
+    && [ -f "$UCLOUD_PACKAGE_MARKER" ] \
+    && grep -Fx -- "$UCLOUD_PACKAGE_FINGERPRINT" "$UCLOUD_PACKAGE_MARKER" >/dev/null 2>&1; then
+    echo "ucloud-sandboxes package already installed for current fingerprint"
+  else
+    run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "${{UCLOUD_PACKAGE_INSTALL_ARGS[@]}}" "$UCLOUD_PACKAGE_INSTALL_SPEC"
+    printf '%s\n' "$UCLOUD_PACKAGE_FINGERPRINT" | $SUDO tee "$UCLOUD_PACKAGE_MARKER" >/dev/null
+    $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
+  fi
+  $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
+  $SUDO ln -sfn "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" "$UCLOUD_AGENT_BIN"
 fi
 log_init_phase "python-package"
 
@@ -939,8 +1055,14 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "init version": options.init_version,
         "work dir": options.work_dir,
         "package spec": options.package_spec,
+        "package sha256": options.package_sha256,
     }.items():
         _reject_newline(value_name, value)
+    if options.package_sha256 and (
+        len(options.package_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in options.package_sha256)
+    ):
+        raise ValueError("package sha256 must be a lowercase SHA-256 digest.")
     if (
         options.node_control_bearer_token_file
         and not options.node_control_bearer_token
@@ -1025,10 +1147,38 @@ def run_init_over_ssh(
         command,
         input=script,
         text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         check=False,
         timeout=timeout_seconds,
     )
-    return VmInitRunResult(command=command, returncode=completed.returncode)
+    output = completed.stdout or ""
+    if output:
+        print(output, end="" if output.endswith("\n") else "\n", file=sys.stderr)
+    phases, total_duration_ms = parse_vm_init_phases(output)
+    return VmInitRunResult(
+        command=command,
+        returncode=completed.returncode,
+        phase_durations_ms=tuple(phases.items()),
+        total_duration_ms=total_duration_ms,
+    )
+
+
+_INIT_PHASE_PATTERN = re.compile(
+    r"^UCLOUD_INIT_PHASE name=([a-z0-9-]+) duration_ms=([0-9]+) total_ms=([0-9]+)$"
+)
+
+
+def parse_vm_init_phases(output: str) -> tuple[dict[str, int], int | None]:
+    phases: dict[str, int] = {}
+    total_duration_ms: int | None = None
+    for line in output.splitlines():
+        match = _INIT_PHASE_PATTERN.fullmatch(line.strip())
+        if match is None:
+            continue
+        phases[match.group(1)] = int(match.group(2))
+        total_duration_ms = int(match.group(3))
+    return phases, total_duration_ms
 
 
 def local_package_spec_path(package_spec: str) -> Path | None:
@@ -1040,6 +1190,32 @@ def local_package_spec_path(package_spec: str) -> Path | None:
     if not path.is_file():
         return None
     return path
+
+
+def local_package_sha256(path: Path) -> str:
+    sidecar = Path(f"{path}.sha256")
+    if (
+        sidecar.is_file()
+        and sidecar.stat().st_size <= 256
+        and sidecar.stat().st_mtime_ns >= path.stat().st_mtime_ns
+    ):
+        candidate = sidecar.read_text(encoding="ascii").strip().split()[0]
+        if len(candidate) == 64 and all(
+            character in "0123456789abcdef" for character in candidate
+        ):
+            return candidate
+    stat = path.stat()
+    return _cached_file_sha256(str(path.resolve()), stat.st_size, stat.st_mtime_ns)
+
+
+@lru_cache(maxsize=16)
+def _cached_file_sha256(path: str, size: int, mtime_ns: int) -> str:
+    del size, mtime_ns
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def remote_package_spec_for_local_path(
@@ -1076,13 +1252,62 @@ def stage_vm_init_package_over_ssh(
         remote_package_dir=remote_package_dir,
     )
     remote_parent = str(PurePosixPath(remote_path).parent)
+    remote_marker = f"{remote_path}.sha256"
+    remote_temporary = f"{remote_path}.tmp"
     quoted_parent = shlex.quote(remote_parent)
     quoted_path = shlex.quote(remote_path)
+    quoted_marker = shlex.quote(remote_marker)
+    quoted_temporary = shlex.quote(remote_temporary)
+    package_size = local_path.stat().st_size
+    package_sha256 = local_package_sha256(local_path)
+    probe_command = (
+        f"test -f {quoted_path} && "
+        f"test \"$(stat -c %s {quoted_path})\" = {package_size} && "
+        f"test \"$(cat {quoted_marker} 2>/dev/null)\" = {package_sha256}"
+    )
+    probe = subprocess.run(
+        ssh_remote_command(
+            ssh_command,
+            probe_command,
+            private_key_file=private_key_file,
+        ),
+        check=False,
+        timeout=timeout_seconds,
+    )
+    if probe.returncode == 0:
+        return VmInitPackageStageResult(
+            local_path=local_path,
+            remote_path=remote_path,
+            command=ssh_remote_command(
+                ssh_command,
+                probe_command,
+                private_key_file=private_key_file,
+            ),
+            returncode=0,
+            package_sha256=package_sha256,
+            reused=True,
+        )
+    if probe.returncode == 255:
+        return VmInitPackageStageResult(
+            local_path=local_path,
+            remote_path=remote_path,
+            command=ssh_remote_command(
+                ssh_command,
+                probe_command,
+                private_key_file=private_key_file,
+            ),
+            returncode=255,
+            package_sha256=package_sha256,
+        )
     remote_command = (
         f"mkdir -p {quoted_parent} && "
         f"chmod 755 {quoted_parent} && "
-        f"cat > {quoted_path} && "
-        f"chmod 644 {quoted_path}"
+        f"rm -f {quoted_temporary} && "
+        f"cat > {quoted_temporary} && "
+        f"test \"$(stat -c %s {quoted_temporary})\" = {package_size} && "
+        f"chmod 644 {quoted_temporary} && "
+        f"mv {quoted_temporary} {quoted_path} && "
+        f"printf '%s\\n' {package_sha256} > {quoted_marker}"
     )
     command = ssh_remote_command(
         ssh_command,
@@ -1103,6 +1328,7 @@ def stage_vm_init_package_over_ssh(
         remote_path=remote_path,
         command=command,
         returncode=completed.returncode,
+        package_sha256=package_sha256,
     )
 
 

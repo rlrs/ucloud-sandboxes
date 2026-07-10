@@ -11,6 +11,7 @@ from ucloud_sandboxes.vm_init import (
     VmInitOptions,
     extract_ssh_command,
     extract_ssh_command_from_text,
+    parse_vm_init_phases,
     plan_vm_init,
     render_vm_init_script,
     stage_vm_init_package_over_ssh,
@@ -19,6 +20,19 @@ from ucloud_sandboxes.vm_init import (
 
 
 class VmInitTests(unittest.TestCase):
+    def test_parses_machine_readable_init_phase_timings(self) -> None:
+        phases, total = parse_vm_init_phases(
+            "noise\n"
+            "UCLOUD_INIT_PHASE name=offline-runtime duration_ms=17321 total_ms=19002\n"
+            "UCLOUD_INIT_PHASE name=docker-daemon duration_ms=823 total_ms=24100\n"
+        )
+
+        self.assertEqual(
+            phases,
+            {"offline-runtime": 17321, "docker-daemon": 823},
+        )
+        self.assertEqual(total, 24100)
+
     def test_extracts_ssh_access_update(self) -> None:
         payload = {
             "updates": [
@@ -195,9 +209,13 @@ class VmInitTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            'apt-get install --no-download --no-install-recommends -y "${local_packages[@]}"',
+            "apt-get install --no-download --no-install-recommends -y",
             script,
         )
+        self.assertIn("Activating preassembled ucloud-sandboxes runtime", script)
+        self.assertIn("Dpkg::Use-Pty=0", script)
+        self.assertIn("dpkg-deb --fsys-tarfile", script)
+        self.assertIn("systemctl daemon-reload", script)
         self.assertIn(
             'required_packages_installed "${OFFLINE_REQUIRED_PACKAGES[@]}"',
             script,
@@ -266,8 +284,6 @@ class VmInitTests(unittest.TestCase):
         end = script.index("\nPY\n    then", start)
         code = compile(script[start:end], "<offline-runtime-validator>", "exec")
         packages = [
-            "python3",
-            "python3-venv",
             "xfsprogs",
             "docker-ce",
             "docker-ce-cli",
@@ -279,6 +295,10 @@ class VmInitTests(unittest.TestCase):
             root = Path(raw_dir)
             package_dir = root / "runtime" / "debs"
             package_dir.mkdir(parents=True)
+            agent_dir = root / "runtime" / "agent"
+            agent_dir.mkdir(parents=True)
+            agent_archive = agent_dir / "node-agent-runtime.tar"
+            agent_archive.write_bytes(b"agent-runtime")
             files = []
             for name in ("docker-ce", "runsc"):
                 package = package_dir / f"{name}_1.0_amd64.deb"
@@ -306,6 +326,14 @@ class VmInitTests(unittest.TestCase):
                             },
                             "packages": packages,
                             "files": files,
+                            "agent": {
+                                "file": "runtime/agent/node-agent-runtime.tar",
+                                "python": f"{sys.version_info.major}.{sys.version_info.minor}",
+                                "size": agent_archive.stat().st_size,
+                                "sha256": hashlib.sha256(
+                                    agent_archive.read_bytes()
+                                ).hexdigest(),
+                            },
                         },
                     }
                 ),
@@ -321,9 +349,10 @@ class VmInitTests(unittest.TestCase):
                     "24.04",
                     "noble",
                     "amd64",
+                    "",
                 ]
                 exec(code, {"__name__": "__main__"})
-                sys.argv[-1] = "arm64"
+                sys.argv[-2] = "arm64"
                 with self.assertRaisesRegex(SystemExit, "platform does not match"):
                     exec(code, {"__name__": "__main__"})
             finally:
@@ -380,7 +409,8 @@ class VmInitTests(unittest.TestCase):
         calls: list[dict] = []
 
         class Completed:
-            returncode = 0
+            def __init__(self, returncode: int) -> None:
+                self.returncode = returncode
 
         def fake_run(
             command,
@@ -397,7 +427,7 @@ class VmInitTests(unittest.TestCase):
                     "timeout": timeout,
                 }
             )
-            return Completed()
+            return Completed(1 if stdin is None else 0)
 
         original = vm_init.subprocess.run
         vm_init.subprocess.run = fake_run
@@ -425,10 +455,51 @@ class VmInitTests(unittest.TestCase):
             result.remote_path,
             "/tmp/ucloud-sandboxes-init-packages/job-1/ucloud_sandboxes-0.1.0-py3-none-any.whl",
         )
-        self.assertEqual(calls[0]["input"], b"wheel-bytes")
-        self.assertEqual(calls[0]["timeout"], 10)
-        self.assertIn("-i", calls[0]["command"])
-        self.assertIn("cat > /tmp/ucloud-sandboxes-init-packages/job-1/", calls[0]["command"][-1])
+        self.assertEqual(len(calls), 2)
+        self.assertIsNone(calls[0]["input"])
+        self.assertEqual(calls[1]["input"], b"wheel-bytes")
+        self.assertEqual(calls[1]["timeout"], 10)
+        self.assertIn("-i", calls[1]["command"])
+        self.assertIn("cat > /tmp/ucloud-sandboxes-init-packages/job-1/", calls[1]["command"][-1])
+        self.assertEqual(
+            result.package_sha256,
+            hashlib.sha256(b"wheel-bytes").hexdigest(),
+        )
+        self.assertFalse(result.reused)
+
+    def test_reuses_a_matching_staged_package(self) -> None:
+        calls: list[tuple] = []
+
+        class Completed:
+            returncode = 0
+
+        def fake_run(command, *, check=None, timeout=None):
+            calls.append(tuple(command))
+            return Completed()
+
+        original = vm_init.subprocess.run
+        vm_init.subprocess.run = fake_run
+        try:
+            with TemporaryDirectory() as raw_dir:
+                package = Path(raw_dir) / "node-package.tar.gz"
+                package.write_bytes(b"bundle")
+                result = stage_vm_init_package_over_ssh(
+                    "ssh ucloud@ssh.cloud.sdu.dk -p 41231",
+                    VmInitOptions(
+                        job_id="job-1",
+                        heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                        package_spec=str(package),
+                    ),
+                    timeout_seconds=10,
+                )
+        finally:
+            vm_init.subprocess.run = original
+
+        assert result is not None
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(result.reused)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(".sha256", calls[0][-1])
 
     def test_builds_ssh_init_command(self) -> None:
         self.assertEqual(

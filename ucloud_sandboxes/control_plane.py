@@ -193,6 +193,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if not self._check_authorized():
             return
+        context_digest = _build_context_digest_from_path(parsed.path)
+        if context_digest is not None:
+            try:
+                size = self.build_context_store.size(context_digest)
+            except (FileNotFoundError, ValueError):
+                self._write_json(
+                    {"error": "build context not found"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            self._write_json(
+                {"digest": context_digest, "size": size, "deduplicated": True}
+            )
+            return
         if parsed.path == "/v1/nodes":
             nodes = [
                 heartbeat_to_dict(heartbeat) for heartbeat in self.store.load().values()

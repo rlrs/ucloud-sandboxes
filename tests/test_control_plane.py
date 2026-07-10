@@ -3683,6 +3683,10 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 stored = upload(digest)
                 duplicate = upload(digest)
+                exists = self._json_request(
+                    f"{base}/v1/image-contexts/{digest}",
+                    headers={"Authorization": "Bearer gateway-secret"},
+                )
 
                 build_payload = {
                     "id": "content-addressed",
@@ -3791,6 +3795,10 @@ class ControlPlaneTests(unittest.TestCase):
                     200,
                     {"deduplicated": True, "digest": digest, "size": len(archive)},
                 ),
+            )
+            self.assertEqual(
+                exists,
+                {"deduplicated": True, "digest": digest, "size": len(archive)},
             )
             self.assertEqual(queued["status"], 503)
             self.assertEqual(heartbeat.status, 200)

@@ -125,8 +125,13 @@ The long-term optimization path is not a baked VM image. Instead, optimize the
 post-boot init layer:
 
 - Keep the init script small, versioned, idempotent, and fast.
+- Build a deterministic node package bundle during gateway deployment. It
+  contains the service wheel and all platform-specific Python dependency wheels,
+  so autoscaled VMs install the node agent with `--no-index` instead of reaching
+  PyPI during cold scale-up.
 - Install Docker, gVisor, node-agent service files, and config from a release
-  artifact or package.
+  artifact or package. Docker/gVisor are still obtained from their package
+  repositories today; a complete offline runtime bundle remains follow-up work.
 - Set up Docker and gVisor package repositories before a single container
   runtime `apt-get update`, rather than refreshing apt metadata separately for
   each runtime.

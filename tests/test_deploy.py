@@ -75,10 +75,20 @@ class DeployTests(unittest.TestCase):
             "/work/ucloud-sandboxes/state/node-control-token",
         )
         self.assertEqual(
+            autoscaler["UCLOUD_INIT_PACKAGE_SPEC"],
+            "/work/ucloud-sandboxes/release/"
+            "ucloud_sandboxes-0.2.0-py3-none-any-node-package.tar.gz",
+        )
+        self.assertEqual(autoscaler["UCLOUD_MAX_INIT_PER_CYCLE"], "4")
+        self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             "ucloud-sandbox-registry=10.0.0.5",
         )
         self.assertIn("/etc/ucloud-sandboxes/gateway.env", script)
+        self.assertIn("NODE_PACKAGE_BUNDLE=", script)
+        self.assertIn("pip\" download --disable-pip-version-check", script)
+        self.assertIn("package-bundle.json", script)
+        self.assertIn("gzip.GzipFile", script)
         self.assertIn("ucloud-sandbox-autoscaler.service", script)
         self.assertIn("ucloud-sandbox-registry-prune.timer", script)
         self.assertIn("systemctl enable --now ucloud-sandbox-registry-prune.timer", script)

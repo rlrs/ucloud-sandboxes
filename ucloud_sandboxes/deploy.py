@@ -52,7 +52,7 @@ class AllInOneDeployPlan:
     builder_disk_gb: int = 250
     builder_idle_seconds: int = 900
     max_builder_nodes: int = 1
-    max_init_per_cycle: int = 1
+    max_init_per_cycle: int = 4
     init_retry_seconds: int = 30
     init_timeout_seconds: int = 1800
     autoscaler_interval_seconds: float = 5.0
@@ -81,6 +81,13 @@ class AllInOneDeployPlan:
     @property
     def remote_wheel_path(self) -> str:
         return str(PurePosixPath(self.release_dir) / self.local_wheel.name)
+
+    @property
+    def node_package_bundle_path(self) -> str:
+        return str(
+            PurePosixPath(self.release_dir)
+            / f"{self.local_wheel.stem}-node-package.tar.gz"
+        )
 
     @property
     def remote_session_file(self) -> str:
@@ -202,6 +209,7 @@ class AllInOneDeployPlan:
             "packageVersion": self.package_version,
             "localWheel": str(self.local_wheel),
             "remoteWheelPath": self.remote_wheel_path,
+            "nodePackageBundlePath": self.node_package_bundle_path,
             "installRoot": self.install_root,
             "stateDir": self.state_dir,
             "projectMountDir": self.project_mount_dir,
@@ -332,7 +340,7 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
         "UCLOUD_INIT_AUTHORIZED_KEY_FILE": plan.init_authorized_key_file,
         "UCLOUD_INIT_SSH_PRIVATE_KEY_FILE": plan.init_ssh_private_key_file,
-        "UCLOUD_INIT_PACKAGE_SPEC": plan.remote_wheel_path,
+        "UCLOUD_INIT_PACKAGE_SPEC": plan.node_package_bundle_path,
         "UCLOUD_DOCKER_INSECURE_REGISTRY": plan.docker_insecure_registry,
         "UCLOUD_DOCKER_HOST_ALIAS": plan.docker_host_alias,
         "UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB": str(plan.docker_quota_image_gb),
@@ -384,6 +392,7 @@ def render_remote_deploy_script(
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
+        f"NODE_PACKAGE_BUNDLE={shlex.quote(plan.node_package_bundle_path)}",
         f"SERVICE_USER={shlex.quote(plan.service_user)}",
         f"SESSION_FILE={shlex.quote(plan.remote_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
@@ -429,6 +438,53 @@ def render_remote_deploy_script(
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$VENV_DIR"',
         '"$VENV_DIR/bin/pip" install --upgrade pip',
         '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
+        'NODE_PACKAGE_WORK="$(mktemp -d)"',
+        'trap \'rm -rf "$NODE_PACKAGE_WORK"\' EXIT',
+        'mkdir -p "$NODE_PACKAGE_WORK/wheels"',
+        '"$VENV_DIR/bin/pip" download --disable-pip-version-check '
+        '--only-binary=:all: --dest "$NODE_PACKAGE_WORK/wheels" "$REMOTE_WHEEL"',
+        'python3 - "$REMOTE_WHEEL" "$NODE_PACKAGE_WORK/wheels" "$NODE_PACKAGE_BUNDLE" <<\'PY\'',
+        "import gzip",
+        "import io",
+        "import json",
+        "import os",
+        "from pathlib import Path",
+        "import tarfile",
+        "import sys",
+        "",
+        "wheel = Path(sys.argv[1])",
+        "wheel_dir = Path(sys.argv[2])",
+        "target = Path(sys.argv[3])",
+        "package_file = wheel_dir / wheel.name",
+        "if not package_file.is_file():",
+        "    raise SystemExit(f'pip download did not retain {wheel.name}')",
+        "manifest = json.dumps(",
+        "    {'version': 1, 'package_file': wheel.name},",
+        "    sort_keys=True,",
+        "    separators=(',', ':'),",
+        ").encode('utf-8') + b'\\n'",
+        "buffer = io.BytesIO()",
+        "with tarfile.open(fileobj=buffer, mode='w') as archive:",
+        "    info = tarfile.TarInfo('package-bundle.json')",
+        "    info.size = len(manifest)",
+        "    info.mode = 0o644",
+        "    info.mtime = 0",
+        "    archive.addfile(info, io.BytesIO(manifest))",
+        "    for path in sorted(wheel_dir.iterdir(), key=lambda item: item.name):",
+        "        info = archive.gettarinfo(str(path), arcname=f'wheels/{path.name}')",
+        "        info.uid = info.gid = 0",
+        "        info.uname = info.gname = ''",
+        "        info.mtime = 0",
+        "        with path.open('rb') as handle:",
+        "            archive.addfile(info, handle)",
+        "temporary = target.with_suffix(target.suffix + '.tmp')",
+        "with temporary.open('wb') as raw:",
+        "    with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as compressed:",
+        "        compressed.write(buffer.getvalue())",
+        "os.replace(temporary, target)",
+        "PY",
+        'rm -rf "$NODE_PACKAGE_WORK"',
+        "trap - EXIT",
         "",
         "create_secret() {",
         '  path="$1"',

@@ -493,6 +493,40 @@ if [ -d "$UCLOUD_VENV_DIR" ]; then
   $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
 fi
 run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
+UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_SPEC"
+UCLOUD_PACKAGE_INSTALL_ARGS=()
+if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
+  && tar -tzf "$UCLOUD_PACKAGE_SPEC" 2>/dev/null | grep -qx 'package-bundle.json'; then
+  UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+  UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
+  if [ ! -f "$UCLOUD_PACKAGE_BUNDLE_DIR/.complete" ]; then
+    UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
+    rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    tar -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    touch "$UCLOUD_PACKAGE_BUNDLE_TMP/.complete"
+    rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
+    mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
+  fi
+  UCLOUD_PACKAGE_BUNDLE_FILE="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if manifest.get("version") != 1:
+    raise SystemExit("unsupported node package bundle version")
+package_file = str(manifest.get("package_file") or "")
+if not package_file or Path(package_file).name != package_file or not package_file.endswith(".whl"):
+    raise SystemExit("invalid package_file in node package bundle")
+print(package_file)
+PY
+)"
+  UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_BUNDLE_DIR/wheels/$UCLOUD_PACKAGE_BUNDLE_FILE"
+  test -f "$UCLOUD_PACKAGE_INSTALL_SPEC"
+  UCLOUD_PACKAGE_INSTALL_ARGS=(--no-index --find-links "$UCLOUD_PACKAGE_BUNDLE_DIR/wheels")
+  echo "Using offline node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
+fi
 UCLOUD_PACKAGE_MARKER="$UCLOUD_STATE_DIR/installed-package.fingerprint"
 UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC"
 if [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
@@ -503,7 +537,7 @@ if [ -x "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" ] \
   && grep -Fx -- "$UCLOUD_PACKAGE_FINGERPRINT" "$UCLOUD_PACKAGE_MARKER" >/dev/null 2>&1; then
   echo "ucloud-sandboxes package already installed for current fingerprint"
 else
-  run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "$UCLOUD_PACKAGE_SPEC"
+  run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "${{UCLOUD_PACKAGE_INSTALL_ARGS[@]}}" "$UCLOUD_PACKAGE_INSTALL_SPEC"
   printf '%s\n' "$UCLOUD_PACKAGE_FINGERPRINT" | $SUDO tee "$UCLOUD_PACKAGE_MARKER" >/dev/null
   $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
 fi

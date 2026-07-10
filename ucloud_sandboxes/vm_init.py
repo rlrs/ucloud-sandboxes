@@ -63,6 +63,8 @@ class VmInitOptions:
     docker_insecure_registries: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
     enable_image_builds: bool = False
+    buildx_direct_push: bool = False
+    buildx_cache_ref: str = ""
     runtime_dry_run: bool = False
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
@@ -184,6 +186,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         for key, value in sorted((options.labels or {}).items())
     )
     build_flag = " --enable-image-builds" if options.enable_image_builds else ""
+    if options.enable_image_builds and options.buildx_direct_push:
+        build_flag += " --buildx-direct-push"
+    if options.enable_image_builds and options.buildx_cache_ref:
+        build_flag += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
     runtime_flag = "" if options.runtime_dry_run else " --execute-runtime"
     deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}" if options.deployment_id else ""
     heartbeat_auth_flag = (
@@ -722,6 +728,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         _reject_newline("label value", value)
         if "=" in key:
             raise ValueError("label keys cannot contain '='.")
+    _reject_newline("buildx cache ref", options.buildx_cache_ref)
+    if options.buildx_cache_ref and not options.buildx_direct_push:
+        raise ValueError("buildx_cache_ref requires buildx_direct_push.")
     for key in options.init_authorized_keys:
         if not key.strip():
             raise ValueError("init authorized keys cannot contain empty keys.")

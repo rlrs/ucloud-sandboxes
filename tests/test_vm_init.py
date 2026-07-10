@@ -104,6 +104,8 @@ class VmInitTests(unittest.TestCase):
                 docker_insecure_registries=("gateway:5000",),
                 host_aliases=("ucloud-sandbox-registry=10.36.125.67",),
                 enable_image_builds=True,
+                buildx_direct_push=True,
+                buildx_cache_ref="gateway:5000/cache/buildkit",
                 labels={"pool": "builder"},
             )
         )
@@ -184,7 +186,11 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("UCLOUD_NODE_URL=http://node-123:8090", script)
         self.assertIn("--host ${UCLOUD_NODE_AGENT_HOST}", script)
         self.assertIn("--node-url ${UCLOUD_NODE_URL}", script)
-        self.assertIn("--enable-image-builds --execute-runtime", script)
+        self.assertIn(
+            "--enable-image-builds --buildx-direct-push "
+            "--buildx-cache-ref gateway:5000/cache/buildkit --execute-runtime",
+            script,
+        )
         self.assertIn(
             "agent-heartbeat --from-node-agent-url http://127.0.0.1:${UCLOUD_NODE_AGENT_PORT}",
             script,

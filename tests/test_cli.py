@@ -2479,6 +2479,8 @@ class CliTests(unittest.TestCase):
                 docker_insecure_registry=[],
                 host_alias=[],
                 enable_image_builds=True,
+                buildx_direct_push=True,
+                buildx_cache_ref="gateway:5000/cache/buildkit",
                 runtime_dry_run=False,
                 heartbeat_interval_seconds=20,
                 label=[],
@@ -2489,6 +2491,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(options.cpu_overcommit, 1.0)
         self.assertEqual(options.memory_overcommit, 1.0)
         self.assertEqual(options.disk_overcommit, 1.0)
+        self.assertTrue(options.buildx_direct_push)
+        self.assertEqual(options.buildx_cache_ref, "gateway:5000/cache/buildkit")
 
     def test_unfenced_execute_stops_fails_closed(self) -> None:
         terminated: list[tuple[str, tuple[str, ...]]] = []

@@ -446,6 +446,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     node_agent.add_argument(
+        "--buildx-direct-push",
+        action="store_true",
+        help="Build and push in one Docker Buildx registry-export operation.",
+    )
+    node_agent.add_argument(
+        "--buildx-cache-ref",
+        help="Optional external Buildx registry cache reference.",
+    )
+    node_agent.add_argument(
         "--runtime-conformance-file",
         type=Path,
         help="Runtime conformance JSON used to derive security capabilities.",
@@ -1686,6 +1695,16 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Initialize node-agent without --execute-runtime.",
     )
     parser.add_argument(
+        "--init-buildx-direct-push",
+        action="store_true",
+        help="Configure autoscaled builder VMs to push directly with Docker Buildx.",
+    )
+    parser.add_argument(
+        "--init-buildx-cache-ref",
+        default="",
+        help="Optional external registry cache reference for autoscaled builders.",
+    )
+    parser.add_argument(
         "--init-ssh-private-key-file",
         help="Private key file passed to ssh for autoscaled VM init.",
     )
@@ -1839,6 +1858,16 @@ def add_vm_init_args(
         "--runtime-dry-run",
         action="store_true",
         help="Start node-agent without --execute-runtime.",
+    )
+    parser.add_argument(
+        "--buildx-direct-push",
+        action="store_true",
+        help="Configure this builder VM to push directly with Docker Buildx.",
+    )
+    parser.add_argument(
+        "--buildx-cache-ref",
+        default="",
+        help="Optional external registry cache reference for this builder VM.",
     )
     parser.add_argument(
         "--label",
@@ -2116,6 +2145,8 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
     image_runtime = DockerImageRuntime(
         docker_binary=args.docker_binary,
         dry_run=not args.execute_runtime,
+        buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
+        buildx_cache_ref=getattr(args, "buildx_cache_ref", None),
     )
     server = build_node_agent_server(
         args.host,
@@ -4896,6 +4927,15 @@ def vm_init_options_for_autoscaled_node(
         ),
         host_aliases=tuple(getattr(args, "init_host_alias", []) or []),
         enable_image_builds=role == "builder",
+        buildx_direct_push=(
+            role == "builder"
+            and bool(getattr(args, "init_buildx_direct_push", False))
+        ),
+        buildx_cache_ref=(
+            str(getattr(args, "init_buildx_cache_ref", "") or "")
+            if role == "builder"
+            else ""
+        ),
         runtime_dry_run=bool(getattr(args, "init_runtime_dry_run", False)),
         heartbeat_interval_seconds=max(
             1,
@@ -5537,6 +5577,8 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         docker_insecure_registries=tuple(args.docker_insecure_registry or []),
         host_aliases=tuple(args.host_alias or []),
         enable_image_builds=args.enable_image_builds,
+        buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
+        buildx_cache_ref=str(getattr(args, "buildx_cache_ref", "") or ""),
         runtime_dry_run=args.runtime_dry_run,
         heartbeat_interval_seconds=args.heartbeat_interval_seconds,
         labels=parse_labels(args.label),

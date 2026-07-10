@@ -197,6 +197,10 @@ class DeployTests(unittest.TestCase):
             "--init-node-control-bearer-token-source-file ${UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE}",
             units["ucloud-sandbox-autoscaler.service"],
         )
+        self.assertIn(
+            "--init-buildx-direct-push",
+            units["ucloud-sandbox-autoscaler.service"],
+        )
         self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
 
 

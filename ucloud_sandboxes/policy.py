@@ -28,18 +28,17 @@ def evaluate_scale(
         nodes,
         now=now,
     )[: max(0, policy.max_stop_per_cycle)]
-    relevant_nodes = [
-        node
-        for node in nodes
-        if node.agent_version_compatible
-        and _counts_as_pool_node(node, policy, now, 0)
-    ]
-    ready_nodes = [node for node in relevant_nodes if node.is_schedulable]
+    pool_nodes = [node for node in nodes if _counts_as_pool_node(node, policy, now, 0)]
+    # Incompatible nodes consume real provider slots but contribute no usable
+    # capacity. Keeping those sets separate prevents version drift from opening
+    # the hard limits and causing a replacement stampede.
+    capacity_nodes = [node for node in pool_nodes if node.agent_version_compatible]
+    ready_nodes = [node for node in capacity_nodes if node.is_schedulable]
 
     oldest_pending_seconds = max(0, demand.oldest_pending_seconds)
     provisioning_nodes = [
         node
-        for node in relevant_nodes
+        for node in pool_nodes
         if _counts_as_active_provisioning(
             node,
             policy,
@@ -47,12 +46,12 @@ def evaluate_scale(
             oldest_pending_seconds,
         )
     ]
-    total_nodes = len(relevant_nodes)
+    total_nodes = len(pool_nodes)
 
     demand_resources = demand.desired_resources
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
     projected_free_resources = _projected_free_resources(
-        relevant_nodes,
+        capacity_nodes,
         policy,
         now,
         oldest_pending_seconds,
@@ -85,7 +84,9 @@ def evaluate_scale(
         )
         if create_count > 0:
             reason = f"below min_nodes={policy.min_nodes}"
-            actions.append(ScaleAction(kind="create", count=create_count, reason=reason))
+            actions.append(
+                ScaleAction(kind="create", count=create_count, reason=reason)
+            )
             reasons.append(reason)
         else:
             reason = _create_limit_reason(
@@ -97,7 +98,9 @@ def evaluate_scale(
             if reason:
                 reasons.append(f"cannot satisfy min_nodes={policy.min_nodes}: {reason}")
 
-    if _has_resource_demand(desired_resources) and _has_resource_deficit(resource_deficit):
+    if _has_resource_demand(desired_resources) and _has_resource_deficit(
+        resource_deficit
+    ):
         needed_nodes = _nodes_for_resource_deficit(resource_deficit, policy)
         create_count = min(
             needed_nodes,
@@ -109,7 +112,9 @@ def evaluate_scale(
                 f"{_resource_label(projected_free_resources)} below desired "
                 f"{_resource_label(desired_resources)}"
             )
-            actions.append(ScaleAction(kind="create", count=create_count, reason=reason))
+            actions.append(
+                ScaleAction(kind="create", count=create_count, reason=reason)
+            )
             reasons.append(reason)
         else:
             reason = _create_limit_reason(
@@ -195,7 +200,9 @@ def _create_budget(
         max(0, policy.max_create_per_cycle - planned),
     ]
     if policy.max_provisioning_nodes > 0:
-        limits.append(max(0, policy.max_provisioning_nodes - provisioning_nodes - planned))
+        limits.append(
+            max(0, policy.max_provisioning_nodes - provisioning_nodes - planned)
+        )
     return min(limits)
 
 
@@ -229,7 +236,7 @@ def _projected_free_resources(
         if node.job.is_final:
             continue
         if node.heartbeat is not None:
-            if node.is_ready:
+            if node.is_schedulable:
                 total = total + _security_adjusted_resources(
                     node,
                     node.heartbeat.free_resources,
@@ -319,13 +326,13 @@ def _counts_as_pool_node(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> bool:
+    del policy, now, oldest_pending_seconds
     if node.job.is_final:
         return False
-    if not node.agent_version_compatible:
-        return False
-    if not node.is_provisioning:
-        return True
-    return _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
+    # Capacity weighting and hard provider limits are separate concerns. A stale
+    # provisioning job may contribute no projected resources, but it is still a
+    # live VM and must count against max_nodes until UCloud reports it final.
+    return True
 
 
 def _counts_as_active_provisioning(
@@ -334,15 +341,18 @@ def _counts_as_active_provisioning(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> bool:
-    return (
-        node.agent_version_compatible
-        and node.is_provisioning
-        and _provisioning_weight(node, policy, now, oldest_pending_seconds) > 0
+    del policy, now, oldest_pending_seconds
+    # max_provisioning_nodes is a hard in-flight job limit, not a measure of the
+    # capacity currently credited to that job.
+    return node.job.state in {"IN_QUEUE", "SUSPENDED"} or (
+        node.job.state == "RUNNING" and not node.heartbeat_fresh
     )
 
 
 def _provisioning_age_seconds(node: SandboxNode, now: datetime) -> float | None:
-    reference = node.job.started_at if node.job.state == "RUNNING" else node.job.created_at
+    reference = (
+        node.job.started_at if node.job.state == "RUNNING" else node.job.created_at
+    )
     if reference is None:
         return None
     return max(0.0, (now - reference).total_seconds())
@@ -403,7 +413,9 @@ def _stop_candidates(
         if not _past_idle_grace(node, policy, now):
             continue
         node_free_resources = _node_free_resources(node, policy)
-        after_resources = _subtract_resources(remaining_free_resources, node_free_resources)
+        after_resources = _subtract_resources(
+            remaining_free_resources, node_free_resources
+        )
         if not required_resources.fits_within(after_resources):
             continue
         candidates.append(node)
@@ -472,7 +484,9 @@ def _node_free_resources(
     policy: ScalePolicy,
 ) -> ResourceQuantity:
     if node.heartbeat is None:
-        return _security_adjusted_resources(node, _estimated_node_resources(node, policy))
+        return _security_adjusted_resources(
+            node, _estimated_node_resources(node, policy)
+        )
     free = node.heartbeat.free_resources
     if _has_resource_demand(free):
         return _security_adjusted_resources(node, free)

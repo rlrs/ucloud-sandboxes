@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from .autoscaler_state import PROVIDER_OPERATION_LABEL
 from .config import AutoscalerConfig
 from .deployment import (
     AGENT_VERSION_LABEL,
@@ -19,7 +20,14 @@ from .deployment import (
     package_version,
 )
 from .networking import stable_hostname
-from .models import ResourceQuantity, SandboxNode, ScaleAction, ScaleDecision, ScalePolicy, utc_now
+from .models import (
+    ResourceQuantity,
+    SandboxNode,
+    ScaleAction,
+    ScaleDecision,
+    ScalePolicy,
+    utc_now,
+)
 from .vm_submit import (
     DEFAULT_VM_DISK_GB,
     VmApplicationRef,
@@ -63,6 +71,34 @@ class VmCreateIntent:
             ),
             "payloadItem": self.options.job_item(),
         }
+
+
+def with_provider_operation_label(
+    intent: VmCreateIntent,
+    operation_id: str,
+    *,
+    deployment_id: str | None = None,
+) -> VmCreateIntent:
+    operation_id = str(operation_id).strip()
+    if not operation_id:
+        raise ValueError("operation_id is required")
+    labels = dict(intent.options.labels or {})
+    existing = labels.get(PROVIDER_OPERATION_LABEL)
+    if existing and existing != operation_id:
+        raise ValueError("intent already has a different provider operation label")
+    labels[PROVIDER_OPERATION_LABEL] = operation_id
+    if deployment_id is not None:
+        deployment_id = str(deployment_id).strip()
+        if not deployment_id:
+            raise ValueError("deployment_id is required when supplied")
+        existing_deployment = labels.get(DEPLOYMENT_LABEL)
+        if existing_deployment and existing_deployment != deployment_id:
+            raise ValueError("intent already has a different deployment label")
+        labels[DEPLOYMENT_LABEL] = deployment_id
+    return replace(
+        intent,
+        options=replace(intent.options, labels=labels),
+    )
 
 
 def build_vm_create_intents(
@@ -221,9 +257,14 @@ def evaluate_builder_scale(
                     f"({pending_builds} pending build(s), "
                     f"{prepared_builders} prepared builder(s))"
                 )
-                actions.append(ScaleAction(kind="create", count=create_count, reason=reason))
+                actions.append(
+                    ScaleAction(kind="create", count=create_count, reason=reason)
+                )
                 reasons.append(reason)
-        elif total_nodes >= max_builder_nodes and len(ready_nodes) + len(provisioning_nodes) < desired_nodes:
+        elif (
+            total_nodes >= max_builder_nodes
+            and len(ready_nodes) + len(provisioning_nodes) < desired_nodes
+        ):
             reasons.append(f"max_builder_nodes={max_builder_nodes} reached")
         else:
             reasons.append(
@@ -281,6 +322,38 @@ def stop_job_ids_from_decision(decision: ScaleDecision) -> tuple[str, ...]:
         if action.kind == "stop":
             job_ids.extend(action.job_ids)
     return tuple(job_ids)
+
+
+def node_drain_ready(node: SandboxNode, token: str) -> bool:
+    """Return whether a heartbeat proves that one drain incarnation is empty.
+
+    This is intentionally stricter than :attr:`SandboxNode.is_idle`.  A stop
+    decision is only safe after node admission is durably closed and one fresh,
+    complete inventory snapshot acknowledges the same activity revision.
+    """
+
+    token = str(token).strip()
+    heartbeat = node.heartbeat
+    if not token or heartbeat is None or not node.heartbeat_fresh:
+        return False
+    if (
+        not heartbeat.draining
+        or heartbeat.admission_open
+        or heartbeat.drain_token != token
+        or not heartbeat.inventory_complete
+        or heartbeat.drain_activity_epoch != heartbeat.activity_epoch
+    ):
+        return False
+    if heartbeat.inventory or heartbeat.active_workloads != 0:
+        return False
+    return all(
+        quantity == ResourceQuantity()
+        for quantity in (
+            heartbeat.used_resources,
+            heartbeat.reserved_resources,
+            heartbeat.build_reserved_resources,
+        )
+    )
 
 
 def _planned_stops(actions: list[ScaleAction]) -> int:

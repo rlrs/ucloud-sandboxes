@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import timedelta
 import unittest
 
@@ -5,6 +6,7 @@ from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
+    SandboxInventoryEntry,
     SandboxDemand,
     SandboxNode,
     ScaleAction,
@@ -20,6 +22,7 @@ from ucloud_sandboxes.reconcile import (
     build_vm_create_intents,
     bulk_payload_from_create_intents,
     evaluate_builder_scale,
+    node_drain_ready,
     partition_safe_stop_job_ids,
     stop_job_ids_from_decision,
 )
@@ -27,6 +30,63 @@ from ucloud_sandboxes.vm_submit import VmProductRef
 
 
 class ReconcileTests(unittest.TestCase):
+    def test_drain_ready_requires_matching_complete_zero_work_epoch(self) -> None:
+        now = utc_now()
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=now,
+            active_sandboxes=0,
+            active_image_builds=0,
+            draining=True,
+            inventory_complete=True,
+            activity_epoch=7,
+            drain_token="drain-1",
+            drain_activity_epoch=7,
+            admission_open=False,
+        )
+        node = SandboxNode(
+            job=VmJob(
+                id="job-1",
+                project_id="project-1",
+                name="node-1",
+                application_name="vm-ubuntu",
+                application_version="24.04",
+                product_id="cpu",
+                product_category="cpu",
+                state="RUNNING",
+            ),
+            heartbeat=heartbeat,
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+        )
+
+        self.assertTrue(node_drain_ready(node, "drain-1"))
+        self.assertFalse(node_drain_ready(node, "other"))
+        self.assertFalse(
+            node_drain_ready(replace(node, heartbeat_fresh=False), "drain-1")
+        )
+        for changed in (
+            replace(heartbeat, inventory_complete=False),
+            replace(heartbeat, admission_open=True),
+            replace(heartbeat, drain_activity_epoch=6),
+            replace(heartbeat, reserved_resources=ResourceQuantity(vcpu=1)),
+            replace(heartbeat, build_reserved_resources=ResourceQuantity(memory_mb=1)),
+            replace(heartbeat, used_resources=ResourceQuantity(disk_mb=1)),
+            replace(
+                heartbeat,
+                inventory=(
+                    SandboxInventoryEntry(
+                        sandbox_id="sandbox-1",
+                        generation=1,
+                    ),
+                ),
+            ),
+        ):
+            self.assertFalse(
+                node_drain_ready(replace(node, heartbeat=changed), "drain-1")
+            )
+
     def test_builder_scale_creates_for_pending_image_build(self) -> None:
         decision = evaluate_builder_scale(
             [],

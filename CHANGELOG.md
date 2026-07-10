@@ -2,6 +2,61 @@
 
 This project uses semantic versioning.
 
+## 0.3.30 - 2026-07-10
+
+- Rejected expired model-relay leases at response time, bounded relay admission,
+  and cleaned canceled requests from the pending queue.
+- Added registry usage generations and cross-process maintenance fencing, plus
+  persistent route/build references and finite transient-operation leases that
+  fence digest aliases during prune.
+  Offline registry GC now restarts the registry even when collection fails.
+- Acquired image-use protection before sandbox create/pull dispatch and released
+  persistent route references only after a successful matching deletion.
+- Added strict autoscaler configuration validation, bounded rotating metrics,
+  additive distributed heartbeat persistence, and an independently generated,
+  channel-scoped heartbeat credential in generated deployments.
+- Added crash-safe cross-process node state files, coherent complete inventory
+  heartbeats, a process-lifetime local autoscaler lock, and a compact SQLite
+  provider-operation journal.
+- Persisted never-reused sandbox route generations, stable create/delete
+  operation identities, spec hashes, node/activity epochs, and node tombstones;
+  retries now remain bound to the original route incarnation.
+- Wired the recurring autoscaler to the durable provider journal, settled
+  create visibility guards after exhaustive inventory observation, and retried
+  ambiguous immutable-job stops only with fresh same-cycle drain proof.
+- Added durable node drain intents, atomic sandbox/build admission closure, and
+  token/activity-epoch/zero-work heartbeat acknowledgement before scale-down.
+- Added counterfactual drain replanning and a durable cancel/undrain state so
+  rising demand cannot execute an obsolete stop; ambiguous undrains remain
+  fenced, and autoscaler SQLite/WAL files are owner-readable only.
+- Made `reconcile` read-only; `autoscaler-loop --once` is the sole mutating
+  one-shot and uses the recurring controller's lock, journal and drain workflow.
+- Added node-side aggregate capacity admission and persisted planned create
+  intents before runtime mutation so both crash windows remain visible and
+  replayable.
+- Added bounded in-memory relay admission and request deadlines without
+  persisting prompt/response bodies that cannot be reattached to callers after
+  a relay process restart.
+- Added rollout-incarnation tokens to fence delayed unregister and worker
+  operations after a rollout id is reused, and bounded retained relay
+  worker diagnostics and completed request/response payloads.
+- Added a separate generated node-control credential, constant-time auth on all
+  non-health sync/async node routes, authenticated internal clients, and public
+  credential stripping at the gateway proxy boundary.
+- Made route reconciliation cross-process atomic with exact incarnation
+  predicates, strict complete-inventory ingestion, and safe node-epoch adoption.
+- Persisted node delete intent before Docker removal and retained
+  incarnation-specific pending demand across pre-dispatch/image-pull failures.
+- Added persistent managed-registry build/push references acquired before side
+  effects and released only on known terminal completion; ambiguous crashes leak
+  protection safely until explicit reconciliation.
+- Bounded request worker threads and slow client sockets, admitted creates before
+  reading their 16 MiB JSON bodies, bounded node file downloads and build/exec
+  histories, and avoided redundant node discovery.
+- Made registry/UCloud pagination cursor-safe and response-bounded, rejected
+  mutating autoscaler fixture inventories, and made sensitive local state
+  owner-only with durable atomic writes where applicable.
+
 ## 0.3.28 - 2026-07-09
 
 - Reconciled registry pruning with the gateway image metadata cache so deleted

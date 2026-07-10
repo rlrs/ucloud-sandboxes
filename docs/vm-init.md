@@ -146,9 +146,15 @@ The post-boot init script should be safe to re-run:
 - Create or select a non-root service user, `ucloud` by default.
 - Install any gateway bootstrap public keys into the service user's
   `authorized_keys`.
-- If heartbeat bearer auth is enabled, install the gateway-provided token into
-  the node-local heartbeat token file with service-user ownership and `0600`
-  permissions.
+- If heartbeat bearer auth is enabled, install only the heartbeat-channel token
+  into the node-local heartbeat token file with service-user ownership and
+  `0600` permissions. Never install the public gateway credential under its
+  gateway-token name on a node.
+- Install the distinct node-control token at the configured node-local path with
+  service-user ownership and `0600` permissions. Pass that file to both
+  `serve-node-agent` and the local `agent-heartbeat` fetch. A configured path
+  without non-empty source content fails init generation rather than starting
+  an unprotected service.
 - Install or verify Docker.
 - Install or verify gVisor/runsc.
 - Create a sparse XFS image under `/work`, mount it with `pquota`, and configure
@@ -183,6 +189,8 @@ The post-boot init script should be safe to re-run:
   expected to be reachable through a UCloud private network.
 - Advertise `http://<private-network-hostname>:<node-agent-port>` in heartbeats
   so the control plane and gateway can call the node agent without public links.
+- The generated all-in-one flow installs a deployment-wide node-control token;
+  per-node credentials are not yet provisioned.
 
 The control plane should not assume init succeeded just because the command
 exited. Readiness should come from the node heartbeat.

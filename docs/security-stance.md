@@ -171,10 +171,31 @@ from that file. The scheduler only credits node disk capacity when `disk-quota`
 is present, and the node runtime rejects `disk_mb` when Docker storage quota
 support has not been validated.
 
+## Node control authentication
+
+Production deployments use a third, private credential for control-plane to
+node-agent calls. It is not the public gateway token and not the heartbeat-post
+token. When configured, sync and async node agents require
+`Authorization: Bearer <node-control-token>` on every route except `/healthz`.
+The gateway removes client `Authorization`, `Proxy-Authorization`, and
+`X-UCloud-Sandbox-Token` headers before proxying and installs only this private
+credential. Periodic local heartbeat reads, image pulls/warmups, and autoscaler
+drain requests use the same protected channel. Empty configured token files are
+fatal at service startup.
+Both `NodeGatewayClient` and `AsyncNodeGatewayClient` accept the same optional
+node-control token for direct internal client use; authenticated node requests
+reject redirects so the credential is not forwarded to another origin.
+
+The current generated deployment uses one deployment-wide node-control token.
+It prevents a bridge-network sandbox that learns the node address from invoking
+privileged node APIs, but compromise of one node exposes the credential for all
+nodes in that deployment. Per-node credentials or workload identity remain a
+future isolation boundary.
+
 ## Remaining hardening
 
-- Keep node agents private-network-only; public access must go through the
-  authenticated gateway.
+- Keep node agents private-network-only and enable the node-control credential;
+  public access must go through the authenticated gateway.
 - Treat Docker image builds as a separate trust boundary. `docker build` is not
   launched under gVisor by this codebase.
 - Make conformance freshness part of node readiness, not just init-time state.

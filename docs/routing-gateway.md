@@ -84,6 +84,10 @@ Current smoke-test shape:
 - the gateway requires `X-UCloud-Sandbox-Token: <token>` for non-health routes
   over UCloud public links; private/direct callers may also use
   `Authorization: Bearer <token>`
+- `POST /v1/nodes/heartbeat` uses a separate heartbeat token and accepts it only
+  through `Authorization: Bearer`; neither credential authorizes the other
+  channel. Omitting a dedicated heartbeat token when starting the server is an
+  explicit legacy mode that falls back to the gateway token.
 - sandbox and builder pools are currently scaled to zero when there is no
   pending sandbox demand, pending image-build demand, or unconsumed prepared
   capacity signal
@@ -194,8 +198,11 @@ File transfer is separate from exec:
 
 Uploads and downloads use raw HTTP request/response bodies with
 `application/octet-stream`. The node agent validates absolute container file
-paths and uses Docker copy operations on the VM. This avoids base64 encoding and
-keeps file transfer out of the exec event stream.
+paths and enforces `--max-file-body-bytes` in both directions. Downloads use a
+bounded Docker exec stream and return HTTP `413` as soon as the file exceeds the
+limit; stdout retains at most limit-plus-one bytes and diagnostics are drained
+with bounded retention. This avoids base64 encoding and keeps file transfer out
+of the exec event stream.
 
 ## SSH contract
 

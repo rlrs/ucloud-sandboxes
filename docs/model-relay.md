@@ -109,13 +109,22 @@ curl -sS -X POST https://relay.example.org/register_rollout \
   -d '{"rollout_id":"run-001"}'
 ```
 
+The registration response contains a new, random `registration_token`. Save it
+with the rollout worker state. Registering the same rollout id again creates a
+new incarnation, cancels work from the previous incarnation, and fences every
+delayed request carrying its old token. The examples below assume:
+
+```bash
+export REGISTRATION_TOKEN="<registration_token returned above>"
+```
+
 Workers may heartbeat separately for observability:
 
 ```bash
 curl -sS -X POST https://relay.example.org/worker/heartbeat \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"rollout_id":"run-001","worker_id":"lumi-worker-1","metadata":{"host":"lumi"}}'
+  -d "{\"rollout_id\":\"run-001\",\"registration_token\":\"$REGISTRATION_TOKEN\",\"worker_id\":\"lumi-worker-1\",\"metadata\":{\"host\":\"lumi\"}}"
 ```
 
 Long-poll for work. `limit` batches requests; `lease_seconds` reserves returned
@@ -124,7 +133,7 @@ stats and request envelopes. For long inference, use a lease long enough for
 normal scheduler jitter, then renew while the model call is running:
 
 ```bash
-curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&worker_id=lumi-worker-1&timeout_seconds=30&limit=8&lease_seconds=600" \
+curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&registration_token=$REGISTRATION_TOKEN&worker_id=lumi-worker-1&timeout_seconds=30&limit=8&lease_seconds=600" \
   -H "Authorization: Bearer $WORKER_TOKEN"
 ```
 
@@ -138,6 +147,7 @@ The response contains `requests`; `request` is the first item for convenience:
   "request": {
     "request_id": "7fd...",
     "rollout_id": "run-001",
+    "registration_token": "a91...",
     "lease_id": "c4b...",
     "lease_expires_at": 1780000000.0,
     "leased_by": "lumi-worker-1",
@@ -159,9 +169,10 @@ The response contains `requests`; `request` is the first item for convenience:
 }
 ```
 
-Workers must echo `request_id` and `lease_id` when responding. If a worker misses
-the lease window, the request can be delivered to another worker and the stale
-response is rejected with `409`.
+Workers must echo `registration_token`, `request_id`, and `lease_id` when
+renewing, responding, or reporting an error. If a worker misses the lease
+window, the request can be delivered to another worker and the stale response
+is rejected with `409`.
 
 Workers can renew a lease before it expires:
 
@@ -169,7 +180,7 @@ Workers can renew a lease before it expires:
 curl -sS -X POST https://relay.example.org/worker/renew \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"7fd...","lease_id":"c4b...","worker_id":"lumi-worker-1","lease_seconds":600}'
+  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"worker_id\":\"lumi-worker-1\",\"lease_seconds\":600}"
 ```
 
 For long inference, poll with a lease such as 10 minutes and renew every minute
@@ -183,7 +194,7 @@ After calling local inference, post the OpenAI-compatible response body:
 curl -sS -X POST https://relay.example.org/worker/respond \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"7fd...","lease_id":"c4b...","response":{"choices":[]}}'
+  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"response\":{\"choices\":[]}}"
 ```
 
 Duplicate responses for already-completed requests are accepted and reported as
@@ -196,7 +207,7 @@ Post worker failures with:
 curl -sS -X POST https://relay.example.org/worker/error \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"7fd...","lease_id":"c4b...","error":"local model failed"}'
+  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"error\":\"local model failed\"}"
 ```
 
 Relay stats are available to workers:
@@ -220,7 +231,7 @@ When a rollout finishes:
 curl -sS -X POST https://relay.example.org/unregister_rollout \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"rollout_id":"run-001"}'
+  -d "{\"rollout_id\":\"run-001\",\"registration_token\":\"$REGISTRATION_TOKEN\"}"
 ```
 
 Unregistering a rollout fails any pending model calls for that rollout with an
@@ -228,16 +239,33 @@ OpenAI-shaped error response.
 
 ## Reliability Model
 
-The in-memory relay now uses explicit request leases:
+The relay uses explicit request leases:
 
 - pending requests are assigned to a worker for `lease_seconds`
 - active workers renew leases during long inference
 - expired leases are retried and can be delivered again
 - stale responses with old leases are rejected
-- completed request ids are retained temporarily for idempotent worker retries
+- rollout registration tokens fence unregister, poll, heartbeat, renew,
+  response, and error calls from older incarnations of a reused rollout id
+- responses are rejected when the matching lease has already expired, even if
+  no intervening worker poll has requeued the request
+- completed request IDs and worker heartbeat diagnostics are bounded by both
+  retention time and hard record-count limits
 - workers can long-poll batches with `limit=N`
+- global, per-rollout, and queued-byte admission limits bound relay work;
+  exhausted admission returns `429` with `Retry-After`
+- canceled or disconnected callers remove their pending request
 
-This is still single-process state. If the relay process restarts, in-flight
-requests are lost. The lease/idempotency contract is the API shape a durable
-Redis/Postgres/NATS backend should preserve when we need multi-process or
-restart-safe relay state.
+Relay state is deliberately process-local. Run one relay process per endpoint;
+all admission, claim, cancellation, and response transitions are serialized by
+that process. A restart drops registrations and active requests along with the
+client TCP connections they served, so workers must register again and callers
+must retry. Deployments that require multi-process or multi-host HA need a
+transactional server-backed broker plus a caller idempotency/re-attachment
+contract; a local queue cannot preserve an already-open HTTP request.
+
+Worker execution remains at-least-once: after a lease expires, a replacement
+worker may start the request while the original computation is still running.
+Lease IDs prevent both results from committing, but cannot undo duplicate model
+compute. Workers should renew before expiry and treat the response POST as the
+commit point.

@@ -1,5 +1,8 @@
 # Architecture
 
+The crash-safe generation, operation-id, inventory, and drain invariants are
+specified in [Distributed sandbox state protocol](distributed-state-protocol.md).
+
 - UCloud VM jobs are pool nodes.
 - The control plane and VM nodes should be attached to the same UCloud private
   network. VM jobs get a stable private-network hostname, and node heartbeats

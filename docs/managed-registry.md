@@ -148,6 +148,55 @@ in `<state_dir>/registry-usage.json`. Scheduled pruning uses that file as the
 age source. Tags with no usage entry are kept, because deleting by image
 creation time can remove shared base images that are still actively used.
 
+The same backward-compatible file persists both durable image references and
+finite transient leases. Both are keyed by repository, tag, and owner. Durable
+references have no expiry; transient pull and warmup leases retain an expiry.
+Old usage files without a `generation` or `leases` field continue to load as
+generation zero with no active protection.
+
+Sandbox routes acquire a durable reference before image pull/create dispatch.
+The owner is deterministic across restart and includes the persisted route
+generation and deployment, sandbox, node/job, creation-time, and image
+identities. A matching successful node delete releases it. Timeout, non-2xx
+delete, ambiguous create, or control-plane outage retains it. This deliberately
+prefers a safe leaked reference over an expired live reference; an explicit
+reconciliation command may later remove references whose route/runtime absence
+has been proven.
+
+Pushed builds acquire a distinct durable reference before local Docker
+build/push or remote builder dispatch. Synchronous terminal completion releases
+the exact reference. An ambiguous or asynchronous accepted build retains it;
+after a gateway crash this can leak until explicit terminal reconciliation, but
+it cannot expire underneath an active build. There is no renewal thread or
+separate build-lease SQLite database.
+
+Explicit pull and warmup operations remain transient and use finite leases:
+
+```python
+reference = usage_store.acquire_reference(repository, tag, owner)
+lease = usage_store.acquire_lease(
+    repository,
+    tag,
+    transient_owner,
+    ttl_seconds=180,
+)
+usage_store.release_lease(repository, tag, owner)
+```
+
+Prune planning protects the complete digest when any tag alias has either a
+persistent reference or an unexpired transient lease. Execution revalidates the
+protection immediately before each digest deletion and holds the usage-file
+lock through that bounded registry `DELETE`. Callers must persist protection
+before dispatch and still verify that the subsequent pull/push succeeds; the
+local store cannot fence registry clients that bypass it.
+
+The prune command now takes one `usage_store.snapshot()`, passes
+`snapshot.records`, `snapshot.leases`, and `snapshot.generation` into planning,
+retains the complete registry tag list, then calls `execute_registry_prune` with
+`usage_store`, `all_records`, and `expected_usage_generation`. A generation
+change aborts that stale execution and rebuilds the plan, with a bounded retry
+limit, rather than continuing to delete from the old snapshot.
+
 The prune service also receives `<state_dir>/images.json`. When it deletes a
 private-registry manifest, it removes matching pushed build records from that
 image metadata cache. It also prunes stale pushed build records whose manifests
@@ -155,10 +204,12 @@ are already missing. This matters for SDK clients because `list_images()` is
 used as the build cache signal; stale metadata must not make a deleted image
 look reusable.
 
-After a successful prune, `ucloud-sandbox-registry-prune.service` starts
-`ucloud-sandbox-registry-gc.service`. The GC service stops the registry, runs
-Docker Distribution garbage collection with `--delete-untagged`, and starts the
-registry again so disk space is reclaimed from unreferenced blobs.
+Prune and offline garbage collection run on independent timers and share a
+non-blocking maintenance fence, so they cannot mutate the registry at the same
+time. The GC helper holds that fence while it stops the registry, runs Docker
+Distribution garbage collection with `--delete-untagged`, and starts the
+registry again in a failure-safe cleanup path. GC and the live registry use the
+same `UCLOUD_REGISTRY_DATA_DIR` on the persistent project mount.
 
 Tune the scheduled policy with deployment flags:
 

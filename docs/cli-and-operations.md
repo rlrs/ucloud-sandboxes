@@ -56,22 +56,22 @@ uv run ucloud-sandboxes reconcile \
   --output json
 ```
 
-Create execution and stop execution are separate flags. Stop execution calls
-UCloud job termination, so it should only be enabled when the stop intents look
-right:
+`reconcile` is deliberately read-only. To run one mutating production cycle,
+use `autoscaler-loop --once`; it reads pending demand from the routing state and
+uses the same local process lock and provider journal as the recurring service.
+Create, stop, and VM initialization execution remain separate flags:
 
 ```bash
-uv run ucloud-sandboxes reconcile \
+uv run ucloud-sandboxes autoscaler-loop --once \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --private-network-id 12345327 \
-  --pending-vcpu 2 \
-  --pending-memory-mb 4096 \
-  --pending-disk-mb 10240 \
+  --route-file /work/ucloud-sandboxes/state/routes.sqlite \
   --execute
 
-uv run ucloud-sandboxes reconcile \
+uv run ucloud-sandboxes autoscaler-loop --once \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --private-network-id 12345327 \
+  --route-file /work/ucloud-sandboxes/state/routes.sqlite \
   --execute-stops
 ```
 
@@ -254,8 +254,8 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --node-id sandbox-node-12345318 \
   --heartbeat-url https://app-sandboxes.cloud.sdu.dk/v1/nodes/heartbeat \
-  --heartbeat-bearer-token-file /work/ucloud-sandboxes/state/gateway-token \
-  --heartbeat-bearer-token-source-file /work/ucloud-sandboxes/state/gateway-token \
+  --heartbeat-bearer-token-file /work/ucloud-sandboxes/state/heartbeat-token \
+  --heartbeat-bearer-token-source-file /work/ucloud-sandboxes/state/heartbeat-token \
   --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-<version>-py3-none-any.whl \
   --total-vcpu 2 \
   --total-memory-mb 6144 \
@@ -267,6 +267,21 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --ssh-private-key-file /work/ucloud-sandboxes/state/ssh/gateway-init \
   --execute
 ```
+
+The heartbeat credential has its own file and is the only bearer credential
+copied to nodes. It is generated independently from `gateway-token`: the
+heartbeat token authorizes only `POST /v1/nodes/heartbeat`, while the gateway
+token authorizes public/control routes and cannot post a heartbeat. The
+heartbeat endpoint accepts only `Authorization: Bearer`; the public-link
+`X-UCloud-Sandbox-Token` header is not valid on that channel.
+
+Rotate the two files independently. Gateway-token rotation requires updating
+public clients and restarting the gateway. Heartbeat-token rotation requires a
+coordinated maintenance window: pause node initialization, install the new
+heartbeat token on existing nodes, atomically replace the gateway copy, restart
+the gateway and heartbeat timers, then resume initialization. Until overlapping
+heartbeat credentials are supported, an uncoordinated rotation causes expected
+temporary `401` responses rather than falling back to the gateway token.
 
 The init script installs Docker and gVisor/runsc, creates a sparse XFS
 project-quota image for Docker under `/var/lib/ucloud-sandboxes/docker-xfs.img`,

@@ -114,7 +114,9 @@ There are two phases:
 
 The second phase is the deterministic one. It stages the wheel and session file,
 writes `/etc/ucloud-sandboxes/*.env`, installs the packaged systemd units,
-creates missing service tokens, creates the gateway init SSH key, registers that
+creates independent gateway, heartbeat, node-control, relay-sandbox, and
+relay-worker tokens,
+creates the gateway init SSH key, registers that
 public key with UCloud, starts/restarts services, and opens the gateway and
 relay VM web ports.
 
@@ -212,7 +214,8 @@ Current live all-in-one VM:
 - job id: `12349450`
 - name: `ucloud-sandbox-gateway-allinone-20260704-v020`
 - deployment id: `live-20260629`
-- package version: `0.3.5`
+- package version: read from the deployed wheel; it must match the `version`
+  returned by both service health endpoints
 - private network: `12345327`
 - private registry IPv4 observed on the VM: `10.36.121.173`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
@@ -272,7 +275,12 @@ Sandbox-node VMs:
 - initialized with the local registry alias:
   `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
   `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
-- heartbeat back to the all-in-one gateway private-network URL with bearer auth
+- heartbeat back to the all-in-one gateway private-network URL with the
+  dedicated heartbeat bearer token; the public gateway token is not copied to
+  nodes
+- require the separately generated node-control token for every non-health
+  node-agent request; gateway proxying, image warmup, local heartbeat reads, and
+  autoscaler drain calls authenticate with it
 - carry `ucloud-sandboxes/deployment=<deployment-id>`
 
 Builder-node VMs:
@@ -323,8 +331,8 @@ ucloud jobs browse \
 
 Expected current state:
 
-- gateway health reports `{"ok": true, "service": "control-plane", "version": "0.3.5"}`
-- relay health reports `{"ok": true, "service": "model-relay", "version": "0.3.5"}`
+- gateway health reports `{"ok": true, "service": "control-plane", "version": "<installed-version>"}`
+- relay health reports `{"ok": true, "service": "model-relay", "version": "<installed-version>"}`
 - unauthenticated `GET /v1/sandboxes` returns `401`
 - running-job browse shows only all-in-one job `12349450` for this service when
   there is no sandbox or builder demand

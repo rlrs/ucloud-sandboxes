@@ -115,6 +115,69 @@ reports zero active sandboxes and counts the grace from that idle transition,
 not from VM boot time. Keep this short when cost matters. It delays scale-down;
 it does not require a warm pool.
 
+## Fenced provider operations and drain-before-stop
+
+The supported topology has one control host. Every mutating autoscaler process
+therefore contends on one process-lifetime POSIX lock beside
+`<state_dir>/autoscaler-state.sqlite`. The kernel releases the lock if the
+process exits; there is no renewable wall-clock leader lease or renewal thread.
+The SQLite file retains the provider-operation ambiguity journal and durable
+drain desired state. `autoscaler-loop` is the only mutating entry point, and
+`autoscaler-loop --once` runs one operational cycle. `reconcile` is always
+read-only and rejects its legacy mutation flags.
+
+No executing autoscaler sends a provider terminate request directly from a
+scale-down decision. While holding the local controller lock it first writes a durable
+drain intent for the deployment and immutable UCloud job ID. The intent contains
+a random incarnation token. Restarts, replacement leaders, and later one-shot
+invocations adopt the same intent and token; they do not generate a new token
+for each attempt.
+
+Every cycle counterfactually evaluates active drains with their admission
+reopened. If current demand and policy still select the same node, the leader
+posts `{"token":"...","draining":true}` to the `/v1/drain` endpoint at the node
+URL from its heartbeat. If the node's capacity is now needed, it first persists
+the intent as `canceling`, then posts the exact token with `"draining":false`.
+An ambiguous undrain remains `canceling`, can never authorize a stop, and is
+retried after restart or leader handoff; the intent retires only after the node
+returns an exact admission-open acknowledgement. A later scale-down allocates a
+new token and stop-journal incarnation. Provider stop calls that have already
+started are irreversible and are not canceled.
+
+A failed or ambiguous drain request leaves the intent active and does not create
+a stop operation. A successful HTTP response is not an acknowledgement that the
+VM is safe to stop. The autoscaler waits for a
+fresh, gateway-receipt-stamped heartbeat that proves all of the following:
+
+- the node is draining, admission is closed, and the drain token matches;
+- the runtime inventory is complete and empty;
+- the drain activity epoch equals the current activity epoch;
+- active sandbox and build counts are zero; and
+- used, sandbox-reserved, and build-reserved resources are all zero.
+
+Only then is a provider stop written to the operation journal, and that journal
+is the only autoscaler terminate path. Consequently, two
+`autoscaler-loop --once --execute-stops` cycles are normally required: the first
+persists and posts the drain, while the later cycle observes the fresh heartbeat
+acknowledgement and performs the journaled terminate. Draining or
+admission-closed nodes remain in the provider pool count but contribute no ready
+or projected free placement capacity. Final UCloud jobs retire their drain
+intents.
+
+The journal moves an operation from `prepared` to `uncertain` before making the
+provider call. A crash or timeout leaves that same operation uncertain. A
+subsequent exhaustive inventory marks
+the operation recovered when every target is explicitly final; otherwise the
+idempotent terminate call is retried. Absence from inventory is never treated as
+proof that a job is final.
+
+Create operations similarly remain a visibility guard only until one exhaustive
+inventory has observed their target job IDs. They are then settled durably, so a
+completed job that later ages out of provider history cannot block new capacity
+forever. If the same deterministic planning slot is needed again, it receives a
+new journal incarnation. Settled and definitely failed audit rows are compacted
+to a bounded recent history; a small slot table retains the next incarnation.
+
 Builder VMs are scaled separately from sandbox resources. Pending image builds
 record count-based, one-shot scale-up signals in the gateway route file.
 Executing autoscaler cycles consume these signals after reacting; image-build

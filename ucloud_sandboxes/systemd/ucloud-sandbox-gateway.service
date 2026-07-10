@@ -14,10 +14,12 @@ Environment=UCLOUD_SESSION_FILE=/work/ucloud-sandboxes/state/ucloud-session.json
 Environment=UCLOUD_GATEWAY_PORT=8090
 Environment=UCLOUD_HEARTBEAT_TTL_SECONDS=120
 Environment=UCLOUD_GATEWAY_TOKEN_FILE=/work/ucloud-sandboxes/state/gateway-token
+Environment=UCLOUD_HEARTBEAT_TOKEN_FILE=/work/ucloud-sandboxes/state/heartbeat-token
+Environment=UCLOUD_NODE_CONTROL_TOKEN_FILE=/work/ucloud-sandboxes/state/node-control-token
 Environment=UCLOUD_REGISTRY_URL=http://127.0.0.1:5000
 Environment=UCLOUD_REGISTRY_USAGE_FILE=/work/ucloud-sandboxes/state/registry-usage.json
 EnvironmentFile=/etc/ucloud-sandboxes/gateway.env
-ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-control-plane --deployment-id ${UCLOUD_DEPLOYMENT_ID} --state-dir ${UCLOUD_STATE_DIR} --session-file ${UCLOUD_SESSION_FILE} --host 0.0.0.0 --port ${UCLOUD_GATEWAY_PORT} --heartbeat-ttl-seconds ${UCLOUD_HEARTBEAT_TTL_SECONDS} --gateway-bearer-token-file ${UCLOUD_GATEWAY_TOKEN_FILE} --registry-url ${UCLOUD_REGISTRY_URL} --registry-usage-file ${UCLOUD_REGISTRY_USAGE_FILE}
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes serve-control-plane --deployment-id ${UCLOUD_DEPLOYMENT_ID} --state-dir ${UCLOUD_STATE_DIR} --session-file ${UCLOUD_SESSION_FILE} --host 0.0.0.0 --port ${UCLOUD_GATEWAY_PORT} --heartbeat-ttl-seconds ${UCLOUD_HEARTBEAT_TTL_SECONDS} --gateway-bearer-token-file ${UCLOUD_GATEWAY_TOKEN_FILE} --heartbeat-bearer-token-file ${UCLOUD_HEARTBEAT_TOKEN_FILE} --node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_TOKEN_FILE} --registry-url ${UCLOUD_REGISTRY_URL} --registry-usage-file ${UCLOUD_REGISTRY_USAGE_FILE}
 Restart=always
 RestartSec=2
 

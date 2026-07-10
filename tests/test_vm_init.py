@@ -91,8 +91,10 @@ class VmInitTests(unittest.TestCase):
             VmInitOptions(
                 job_id="123",
                 heartbeat_url="https://control.example/v1/nodes/heartbeat",
-                heartbeat_bearer_token_file="/work/ucloud-sandboxes/state/gateway-token",
+                heartbeat_bearer_token_file="/work/ucloud-sandboxes/state/heartbeat-token",
                 heartbeat_bearer_token="SECRET",
+                node_control_bearer_token_file="/work/ucloud-sandboxes/state/node-control-token",
+                node_control_bearer_token="NODE-SECRET",
                 init_authorized_keys=("ssh-ed25519 AAAA gateway",),
                 node_id="node-123",
                 node_url="http://node-123:8090",
@@ -113,6 +115,8 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("UCLOUD_SERVICE_USER=ucloud", script)
         self.assertIn("UCLOUD_HEARTBEAT_BEARER_TOKEN=SECRET", script)
         self.assertIn("Installing heartbeat bearer token", script)
+        self.assertIn("Installing node-control bearer token", script)
+        self.assertIn("UCLOUD_NODE_CONTROL_BEARER_TOKEN=NODE-SECRET", script)
         self.assertIn("ssh-ed25519 AAAA gateway", script)
         self.assertIn("$UCLOUD_SERVICE_HOME/.ssh/authorized_keys", script)
         self.assertIn("$SUDO usermod -aG docker \"$UCLOUD_SERVICE_USER\"", script)
@@ -171,6 +175,10 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("--enable-image-builds --execute-runtime", script)
         self.assertIn(
             "agent-heartbeat --from-node-agent-url http://127.0.0.1:${UCLOUD_NODE_AGENT_PORT}",
+            script,
+        )
+        self.assertIn(
+            "--node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE}",
             script,
         )
         self.assertIn(

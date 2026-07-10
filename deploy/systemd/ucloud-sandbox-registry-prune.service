@@ -11,6 +11,6 @@ Environment=UCLOUD_REGISTRY_RETENTION_DAYS=30
 Environment=UCLOUD_REGISTRY_KEEP_PER_REPOSITORY=0
 Environment=UCLOUD_REGISTRY_USAGE_FILE=/work/ucloud-sandboxes/state/registry-usage.json
 Environment=UCLOUD_IMAGE_FILE=/work/ucloud-sandboxes/state/images.json
+Environment=UCLOUD_REGISTRY_MAINTENANCE_LOCK=/run/lock/ucloud-sandbox-registry-maintenance
 EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
-ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --registry-url ${UCLOUD_REGISTRY_URL} --max-age-days ${UCLOUD_REGISTRY_RETENTION_DAYS} --keep-per-repository ${UCLOUD_REGISTRY_KEEP_PER_REPOSITORY} --usage-file ${UCLOUD_REGISTRY_USAGE_FILE} --image-file ${UCLOUD_IMAGE_FILE} --prune-stale-image-records --execute
-ExecStartPost=/usr/bin/systemctl start --no-block ucloud-sandbox-registry-gc.service
+ExecStart=/usr/bin/flock --exclusive --nonblock ${UCLOUD_REGISTRY_MAINTENANCE_LOCK}.lock /work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes registry-prune --registry-url ${UCLOUD_REGISTRY_URL} --max-age-days ${UCLOUD_REGISTRY_RETENTION_DAYS} --keep-per-repository ${UCLOUD_REGISTRY_KEEP_PER_REPOSITORY} --usage-file ${UCLOUD_REGISTRY_USAGE_FILE} --image-file ${UCLOUD_IMAGE_FILE} --prune-stale-image-records --execute

@@ -37,6 +37,48 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.gateway_public_link_port, 8090)
         self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.jsonl")
 
+    def test_rejects_invalid_policy_numbers_and_impossible_ranges(self) -> None:
+        invalid_configs = {
+            "negative minimum": {"policy": {"min_nodes": -1}},
+            "minimum exceeds maximum": {
+                "policy": {"min_nodes": 3, "max_nodes": 2}
+            },
+            "nan capacity weight": {
+                "policy": {"provisioning_capacity_weight": "nan"}
+            },
+            "infinite capacity weight": {
+                "policy": {"stale_provisioning_capacity_weight": "inf"}
+            },
+            "weight above one": {
+                "policy": {"provisioning_capacity_weight": 1.1}
+            },
+            "zero heartbeat ttl": {"policy": {"heartbeat_ttl_seconds": 0}},
+            "negative warm resources": {
+                "policy": {"warm_resources": {"vcpu": -1}}
+            },
+            "nonintegral memory": {
+                "policy": {"warm_resources": {"memory_mb": 1.5}}
+            },
+            "zero default resources": {
+                "policy": {
+                    "default_node_resources": {
+                        "vcpu": 1,
+                        "memory_mb": 1024,
+                        "disk_mb": 0,
+                    }
+                }
+            },
+            "invalid public link port": {"gateway_public_link_port": 70000},
+        }
+
+        for label, raw in invalid_configs.items():
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                AutoscalerConfig.from_dict(raw)
+
+    def test_rejects_boolean_for_integer_policy_field(self) -> None:
+        with self.assertRaises(ValueError):
+            AutoscalerConfig.from_dict({"policy": {"max_nodes": True}})
+
 
 if __name__ == "__main__":
     unittest.main()

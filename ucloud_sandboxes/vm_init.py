@@ -39,6 +39,8 @@ class VmInitOptions:
     heartbeat_url: str
     heartbeat_bearer_token_file: str = ""
     heartbeat_bearer_token: str = ""
+    node_control_bearer_token_file: str = ""
+    node_control_bearer_token: str = ""
     service_user: str = "ucloud"
     init_authorized_keys: tuple[str, ...] = ()
     node_id: str = ""
@@ -189,6 +191,11 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         if options.heartbeat_bearer_token_file
         else ""
     )
+    node_control_auth_flag = (
+        " --node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE}"
+        if options.node_control_bearer_token_file
+        else ""
+    )
     version_flags = " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
 
     script = f"""#!/usr/bin/env bash
@@ -207,6 +214,8 @@ UCLOUD_NODE_ID={shlex.quote(options.normalized_node_id())}
 UCLOUD_HEARTBEAT_URL={shlex.quote(options.heartbeat_url)}
 UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE={shlex.quote(options.heartbeat_bearer_token_file)}
 UCLOUD_HEARTBEAT_BEARER_TOKEN={shlex.quote(options.heartbeat_bearer_token)}
+UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE={shlex.quote(options.node_control_bearer_token_file)}
+UCLOUD_NODE_CONTROL_BEARER_TOKEN={shlex.quote(options.node_control_bearer_token)}
 UCLOUD_SERVICE_USER={shlex.quote(options.service_user)}
 UCLOUD_WORK_DIR={shlex.quote(work_dir)}
 UCLOUD_VENV_DIR={shlex.quote(venv_dir)}
@@ -295,6 +304,13 @@ if [ -n "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_HEARTBEAT_BEARE
   printf '%s' "$UCLOUD_HEARTBEAT_BEARER_TOKEN" | $SUDO tee "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE" >/dev/null
   $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE"
   $SUDO chmod 600 "$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE"
+fi
+if [ -n "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_NODE_CONTROL_BEARER_TOKEN" ]; then
+  echo "Installing node-control bearer token"
+  $SUDO install -d -m 700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE")"
+  printf '%s' "$UCLOUD_NODE_CONTROL_BEARER_TOKEN" | $SUDO tee "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE" >/dev/null
+  $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE"
+  $SUDO chmod 600 "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE"
 fi
 log_init_phase "users-and-secrets"
 
@@ -506,6 +522,7 @@ UCLOUD_JOB_ID=$UCLOUD_JOB_ID
 UCLOUD_NODE_ID=$UCLOUD_NODE_ID
 UCLOUD_HEARTBEAT_URL=$UCLOUD_HEARTBEAT_URL
 UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE=$UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE
+UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE=$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE
 UCLOUD_SERVICE_USER=$UCLOUD_SERVICE_USER
 UCLOUD_SERVICE_GROUP=$UCLOUD_SERVICE_GROUP
 UCLOUD_WORK_DIR=$UCLOUD_WORK_DIR
@@ -549,7 +566,7 @@ Group=$UCLOUD_SERVICE_GROUP
 SupplementaryGroups=docker
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart={agent_bin} serve-node-agent --job-id ${{UCLOUD_JOB_ID}} --node-id ${{UCLOUD_NODE_ID}} --node-url ${{UCLOUD_NODE_URL}} --host ${{UCLOUD_NODE_AGENT_HOST}} --port ${{UCLOUD_NODE_AGENT_PORT}}{deployment_flag}{version_flags} --sandbox-file ${{UCLOUD_STATE_DIR}}/sandboxes.json --image-file ${{UCLOUD_STATE_DIR}}/images.json --ssh-port-start ${{UCLOUD_SSH_PORT_START}} --ssh-port-end ${{UCLOUD_SSH_PORT_END}} --total-vcpu ${{UCLOUD_TOTAL_VCPU}} --total-memory-mb ${{UCLOUD_TOTAL_MEMORY_MB}} --total-disk-mb ${{UCLOUD_TOTAL_DISK_MB}} --cpu-overcommit ${{UCLOUD_CPU_OVERCOMMIT}} --memory-overcommit ${{UCLOUD_MEMORY_OVERCOMMIT}} --disk-overcommit ${{UCLOUD_DISK_OVERCOMMIT}} --runtime-conformance-file ${{UCLOUD_RUNTIME_CONFORMANCE_FILE}}{build_flag}{runtime_flag}
+ExecStart={agent_bin} serve-node-agent --job-id ${{UCLOUD_JOB_ID}} --node-id ${{UCLOUD_NODE_ID}} --node-url ${{UCLOUD_NODE_URL}} --host ${{UCLOUD_NODE_AGENT_HOST}} --port ${{UCLOUD_NODE_AGENT_PORT}}{deployment_flag}{version_flags} --sandbox-file ${{UCLOUD_STATE_DIR}}/sandboxes.json --image-file ${{UCLOUD_STATE_DIR}}/images.json --ssh-port-start ${{UCLOUD_SSH_PORT_START}} --ssh-port-end ${{UCLOUD_SSH_PORT_END}} --total-vcpu ${{UCLOUD_TOTAL_VCPU}} --total-memory-mb ${{UCLOUD_TOTAL_MEMORY_MB}} --total-disk-mb ${{UCLOUD_TOTAL_DISK_MB}} --cpu-overcommit ${{UCLOUD_CPU_OVERCOMMIT}} --memory-overcommit ${{UCLOUD_MEMORY_OVERCOMMIT}} --disk-overcommit ${{UCLOUD_DISK_OVERCOMMIT}} --runtime-conformance-file ${{UCLOUD_RUNTIME_CONFORMANCE_FILE}}{build_flag}{runtime_flag}{node_control_auth_flag}
 Restart=always
 RestartSec=5
 
@@ -570,7 +587,7 @@ Group=$UCLOUD_SERVICE_GROUP
 SupplementaryGroups=docker
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart={agent_bin} agent-heartbeat --from-node-agent-url http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}} --post-url ${{UCLOUD_HEARTBEAT_URL}}{deployment_flag} {heartbeat_auth_flag} {label_args}
+ExecStart={agent_bin} agent-heartbeat --from-node-agent-url http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}} --post-url ${{UCLOUD_HEARTBEAT_URL}}{deployment_flag}{node_control_auth_flag} {heartbeat_auth_flag} {label_args}
 HEARTBEAT_SERVICE
 
 $SUDO tee {shlex.quote(heartbeat_timer)} >/dev/null <<HEARTBEAT_TIMER
@@ -627,6 +644,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "heartbeat url": options.heartbeat_url,
         "heartbeat bearer token file": options.heartbeat_bearer_token_file,
         "heartbeat bearer token": options.heartbeat_bearer_token,
+        "node control bearer token file": options.node_control_bearer_token_file,
+        "node control bearer token": options.node_control_bearer_token,
         "service user": options.service_user,
         "node id": options.node_id,
         "node agent host": options.node_agent_host,
@@ -638,6 +657,13 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "package spec": options.package_spec,
     }.items():
         _reject_newline(value_name, value)
+    if (
+        options.node_control_bearer_token_file
+        and not options.node_control_bearer_token
+    ):
+        raise ValueError(
+            "node control bearer token is required when its file is configured."
+        )
     for registry in options.docker_insecure_registries:
         if not registry.strip():
             raise ValueError("docker insecure registry cannot be empty.")

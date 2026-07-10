@@ -1,14 +1,17 @@
 import argparse
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from datetime import timedelta
+from functools import wraps
 import io
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes import cli
+from ucloud_sandboxes.autoscaler_state import AutoscalerStateStore
 from ucloud_sandboxes.cli import (
     find_ucloud_ssh_key,
     metrics_path_from_args,
@@ -21,6 +24,7 @@ from ucloud_sandboxes.cli import (
 from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import ImageRecord, ImageStore
+from ucloud_sandboxes.managed_registry import RegistryTag, RegistryUsageStore
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
@@ -31,6 +35,18 @@ from ucloud_sandboxes.models import (
 )
 from ucloud_sandboxes.registry import HeartbeatStore
 from ucloud_sandboxes.routing import RoutingState, RoutingStore, SandboxRoute
+from ucloud_sandboxes.ucloud import UCloudError, UCloudHttpError
+
+
+def allow_fixture_mutations(test):
+    """Keep legacy provider-journal unit cases on deterministic fixtures."""
+
+    @wraps(test)
+    def wrapped(*args, **kwargs):
+        with patch.object(cli, "reject_mutating_jobs_fixture", return_value=None):
+            return test(*args, **kwargs)
+
+    return wrapped
 
 
 @dataclass(frozen=True)
@@ -54,6 +70,246 @@ class FailingProbe:
 
 
 class CliTests(unittest.TestCase):
+    def test_mutating_reconcile_commands_reject_jobs_fixture_before_provider_calls(
+        self,
+    ) -> None:
+        class ForbiddenClient:
+            def __init__(self, *_args, **_kwargs) -> None:
+                raise AssertionError("provider client must not be constructed")
+
+        with TemporaryDirectory() as raw_dir:
+            jobs_file = Path(raw_dir) / "jobs.json"
+            jobs_file.write_text('{"items": []}', encoding="utf-8")
+            for command in ("reconcile", "autoscaler-loop"):
+                for mutation_flag in ("--execute", "--execute-stops", "--execute-init"):
+                    with self.subTest(command=command, mutation_flag=mutation_flag):
+                        argv = [
+                            command,
+                            "--project",
+                            "project-1",
+                            "--state-dir",
+                            raw_dir,
+                            "--jobs-file",
+                            str(jobs_file),
+                            mutation_flag,
+                        ]
+                        if command == "autoscaler-loop":
+                            argv.append("--once")
+                        stderr = io.StringIO()
+                        with patch.object(cli, "UCloudClient", ForbiddenClient):
+                            with redirect_stderr(stderr):
+                                result = cli.main(argv)
+                        self.assertEqual(result, 1)
+                        expected = (
+                            "reconcile is read-only"
+                            if command == "reconcile"
+                            else "--jobs-file is dry-run only"
+                        )
+                        self.assertIn(expected, stderr.getvalue())
+
+    def test_autoscaler_provider_state_is_deployment_scoped_not_route_scoped(self) -> None:
+        config = AutoscalerConfig(
+            project_id="project-1",
+            deployment_id="prod-a",
+            state_dir="/var/lib/ucloud-sandboxes",
+        )
+
+        self.assertEqual(
+            cli._autoscaler_state_path(config),
+            Path("/var/lib/ucloud-sandboxes/autoscaler-state.sqlite"),
+        )
+
+    def test_registry_prune_cli_honors_active_image_lease(self) -> None:
+        class FakeRegistryClient:
+            deleted: list[tuple[str, str]] = []
+
+            def __init__(self, _url: str) -> None:
+                self.base_url = "http://registry.invalid"
+
+            def catalog(self) -> list[str]:
+                return ["repo/a"]
+
+            def tags(self, _repository: str) -> list[str]:
+                return ["v1"]
+
+            def tag_record(self, repository: str, tag: str) -> RegistryTag:
+                return RegistryTag(repository, tag, "sha256:one")
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        with TemporaryDirectory() as raw_dir:
+            usage_file = Path(raw_dir) / "registry-usage.json"
+            RegistryUsageStore(usage_file).acquire_lease(
+                "repo/a",
+                "v1",
+                "sandbox:1:generation:2",
+                ttl_seconds=60,
+            )
+            output = io.StringIO()
+            FakeRegistryClient.deleted = []
+            with patch.object(cli, "RegistryClient", FakeRegistryClient):
+                with redirect_stdout(output):
+                    result = cli.main(
+                        [
+                            "registry-prune",
+                            "--registry-url",
+                            "http://registry.invalid",
+                            "--keep-per-repository",
+                            "0",
+                            "--usage-file",
+                            str(usage_file),
+                            "--execute",
+                        ]
+                    )
+            payload = json.loads(output.getvalue())
+
+        self.assertEqual(result, 0)
+        self.assertEqual(FakeRegistryClient.deleted, [])
+        self.assertEqual(payload["deleted"], [])
+        self.assertEqual(payload["active_lease_count"], 1)
+
+    def test_partial_scale_up_does_not_satisfy_larger_resource_deficit(self) -> None:
+        results = [
+            {
+                "kind": "create",
+                "role": "sandbox",
+                "state": "applied",
+                "jobIds": [f"job-{index}"],
+            }
+            for index in range(4)
+        ]
+
+        self.assertFalse(
+            cli._sandbox_capacity_operation_succeeded(
+                results,
+                ResourceQuantity(vcpu=128, memory_mb=262144, disk_mb=524288),
+                ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=204800),
+            )
+        )
+
+    def test_provider_http_rejection_and_ambiguity_are_journaled_differently(
+        self,
+    ) -> None:
+        class RejectingClient:
+            def __init__(self, status: int) -> None:
+                self.status = status
+
+            def terminate_jobs(self, *_args, **_kwargs) -> dict:
+                raise UCloudHttpError("POST", "/api/jobs/terminate", self.status, {})
+
+        with TemporaryDirectory() as raw_dir:
+            state = AutoscalerStateStore(Path(raw_dir) / "autoscaler-state.sqlite")
+            definite_drain = state.prepare_drain_intent(
+                deployment_id="prod-a",
+                job_id="definite",
+                role="sandbox",
+            )
+            definite = state.prepare_operation(
+                intent_key="sandbox:definite",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={
+                    "type": "bulk",
+                    "items": [{"id": "definite"}],
+                    "drainToken": definite_drain.token,
+                    "drainReady": True,
+                },
+                target_job_ids=("definite",),
+            )
+            definite_result = cli.apply_prepared_provider_operations(
+                state,
+                RejectingClient(400),
+                "project-1",
+                source="test",
+                allowed_kinds={"stop"},
+                allowed_stop_operation_ids={definite.operation_id},
+            )
+            ambiguous_drain = state.prepare_drain_intent(
+                deployment_id="prod-a",
+                job_id="ambiguous",
+                role="sandbox",
+            )
+            ambiguous = state.prepare_operation(
+                intent_key="sandbox:ambiguous",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={
+                    "type": "bulk",
+                    "items": [{"id": "ambiguous"}],
+                    "drainToken": ambiguous_drain.token,
+                    "drainReady": True,
+                },
+                target_job_ids=("ambiguous",),
+            )
+            ambiguous_result = cli.apply_prepared_provider_operations(
+                state,
+                RejectingClient(503),
+                "project-1",
+                source="test",
+                allowed_kinds={"stop"},
+                allowed_stop_operation_ids={ambiguous.operation_id},
+            )
+            definite_state = state.get_operation(definite.operation_id).state
+            ambiguous_state = state.get_operation(ambiguous.operation_id).state
+
+        self.assertEqual(definite_result[0]["state"], "failed")
+        self.assertEqual(definite_state, "failed")
+        self.assertEqual(ambiguous_result[0]["state"], "uncertain")
+        self.assertEqual(ambiguous_state, "uncertain")
+
+    def test_control_plane_parser_accepts_distinct_heartbeat_token_file(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "serve-control-plane",
+                "--heartbeat-bearer-token-file",
+                "/tmp/heartbeat-token",
+            ]
+        )
+
+        self.assertEqual(
+            args.heartbeat_bearer_token_file,
+            Path("/tmp/heartbeat-token"),
+        )
+
+    def test_model_relay_cli_wires_admission_limits(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "serve-model-relay",
+                "--max-inflight-requests",
+                "123",
+                "--max-inflight-requests-per-rollout",
+                "45",
+                "--max-inflight-bytes",
+                "6789",
+            ]
+        )
+
+        with (
+            patch.object(cli, "create_model_relay_app", return_value=object()) as create,
+            patch("aiohttp.web.run_app") as run_app,
+            redirect_stdout(io.StringIO()),
+        ):
+            result = cli.cmd_serve_model_relay(args)
+
+        self.assertEqual(result, 0)
+        self.assertEqual(create.call_args.kwargs["max_inflight_requests"], 123)
+        self.assertEqual(
+            create.call_args.kwargs["max_inflight_requests_per_rollout"], 45
+        )
+        self.assertEqual(create.call_args.kwargs["max_inflight_bytes"], 6789)
+        run_app.assert_called_once()
+
+    def test_model_relay_cli_rejects_nonpositive_admission_limit(self) -> None:
+        args = cli.build_parser().parse_args(
+            ["serve-model-relay", "--max-inflight-requests", "0"]
+        )
+
+        with self.assertRaisesRegex(ValueError, "max-inflight-requests must be positive"):
+            cli.cmd_serve_model_relay(args)
+
     def test_top_level_version_flag_reports_package_version(self) -> None:
         output = io.StringIO()
         with redirect_stdout(output):
@@ -65,7 +321,9 @@ class CliTests(unittest.TestCase):
             output.getvalue().strip(), f"ucloud-sandboxes {package_version()}"
         )
 
-    def test_remove_image_records_for_registry_tags_matches_full_image_refs(self) -> None:
+    def test_remove_image_records_for_registry_tags_matches_full_image_refs(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             image_file = Path(raw_dir) / "images.json"
             now = utc_now()
@@ -583,6 +841,7 @@ class CliTests(unittest.TestCase):
                                     "labels": {
                                         "ucloud-sandboxes/node": "true",
                                         "ucloud-sandboxes/deployment": "prod-a",
+                                        "ucloud-sandboxes/agent-version": package_version(),
                                     },
                                     "parameters": {"diskSize": {"value": 250}},
                                 },
@@ -722,6 +981,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(routes, {})
 
+    @allow_fixture_mutations
     def test_autoscaler_prunes_orphaned_stale_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -881,6 +1141,7 @@ class CliTests(unittest.TestCase):
             "ucloud-sandbox-registry=__UCLOUD_REGISTRY_PRIVATE_IP__",
         )
 
+    @allow_fixture_mutations
     def test_executing_autoscaler_loop_consumes_pending_demand_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []
 
@@ -941,6 +1202,327 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["consumedPreparedCapacity"], [])
         self.assertEqual(remaining_demand.pending_resources, ResourceQuantity())
 
+    @allow_fixture_mutations
+    def test_one_shot_autoscaler_refuses_competing_process_lock(self) -> None:
+        class FailingUCloudClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def submit_jobs(self, *_args, **_kwargs) -> dict:
+                raise AssertionError("follower autoscaler must not submit")
+
+        original_client = cli.UCloudClient
+        cli.UCloudClient = FailingUCloudClient
+        try:
+            with TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                jobs_file = root / "jobs.json"
+                jobs_file.write_text('{"items": []}', encoding="utf-8")
+                route_file = root / "routes.sqlite"
+                RoutingStore(route_file).upsert_pending(
+                    "pending-one",
+                    ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                )
+                state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+                held = state.process_lock()
+                self.assertTrue(held.acquire())
+
+                output = io.StringIO()
+                stderr = io.StringIO()
+                try:
+                    with redirect_stdout(output), redirect_stderr(stderr):
+                        result = cli.main(
+                            [
+                                "autoscaler-loop",
+                                "--project",
+                                "project-1",
+                                "--state-dir",
+                                raw_dir,
+                                "--route-file",
+                                str(route_file),
+                                "--jobs-file",
+                                str(jobs_file),
+                                "--no-private-network",
+                                "--once",
+                                "--execute",
+                                "--output",
+                                "json",
+                            ]
+                        )
+                finally:
+                    held.release()
+                remaining = RoutingStore(route_file).pending_demand()
+        finally:
+            cli.UCloudClient = original_client
+
+        self.assertEqual(result, 1)
+        self.assertIn("controller lock", stderr.getvalue())
+        self.assertEqual(remaining.pending_resources.vcpu, 1)
+
+    @allow_fixture_mutations
+    def test_reconcile_rejects_provider_mutation_flags(self) -> None:
+        class FailingUCloudClient:
+            def __init__(self, _session_store) -> None:
+                raise AssertionError("read-only reconcile must not construct a provider client")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text('{"items": []}', encoding="utf-8")
+            stderr = io.StringIO()
+            with patch.object(cli, "UCloudClient", FailingUCloudClient):
+                with redirect_stderr(stderr):
+                    result = cli.main(
+                        [
+                            "reconcile",
+                            "--project",
+                            "project-1",
+                            "--deployment-id",
+                            "prod-a",
+                            "--state-dir",
+                            raw_dir,
+                            "--jobs-file",
+                            str(jobs_file),
+                            "--pending-vcpu",
+                            "1",
+                            "--no-private-network",
+                            "--execute",
+                            "--output",
+                            "json",
+                        ]
+                    )
+        self.assertEqual(result, 1)
+        self.assertIn("reconcile is read-only", stderr.getvalue())
+
+    @allow_fixture_mutations
+    def test_autoscaler_once_recovers_journaled_uncertain_create(self) -> None:
+        submitted: list[dict] = []
+
+        class AmbiguousCreateClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def submit_jobs(self, _project_id: str, payload: dict) -> dict:
+                submitted.append(payload)
+                if len(submitted) > 1:
+                    raise AssertionError("ambiguous create must not be resubmitted")
+                raise UCloudError("connection dropped after submit")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text('{"items": []}', encoding="utf-8")
+            RoutingStore(root / "routes.sqlite").upsert_pending(
+                "pending-one",
+                ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+            )
+            command = [
+                "autoscaler-loop",
+                "--project",
+                "project-1",
+                "--deployment-id",
+                "prod-a",
+                "--state-dir",
+                raw_dir,
+                "--jobs-file",
+                str(jobs_file),
+                "--seed-prefix",
+                "one-shot",
+                "--no-private-network",
+                "--execute",
+                "--once",
+                "--output",
+                "json",
+            ]
+            with patch.object(cli, "UCloudClient", AmbiguousCreateClient):
+                first_output = io.StringIO()
+                with redirect_stdout(first_output):
+                    first_result = cli.main(command)
+                first = json.loads(first_output.getvalue())
+
+                jobs_file.write_text(
+                    json.dumps(
+                        {
+                            "items": [
+                                {
+                                    "id": "recovered-job",
+                                    "owner": {"project": "project-1"},
+                                    "specification": submitted[0]["items"][0],
+                                    "status": {"state": "IN_QUEUE"},
+                                }
+                            ]
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                second_output = io.StringIO()
+                with redirect_stdout(second_output):
+                    second_result = cli.main(command)
+                second = json.loads(second_output.getvalue())
+
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+            operations = state.list_operations(kind="create")
+
+        self.assertEqual(first_result, 0)
+        self.assertEqual(first["providerOperationResults"][0]["state"], "uncertain")
+        self.assertEqual(second_result, 0)
+        self.assertEqual(len(submitted), 1)
+        self.assertEqual(second["createRecoveryResults"][0]["state"], "recovered")
+        self.assertEqual(second["createRecoveryResults"][0]["jobIds"], ["recovered-job"])
+        self.assertEqual(len(operations), 1)
+        self.assertEqual(operations[0].state, "settled")
+        self.assertTrue(first["autoscalerStateFile"].endswith("autoscaler-state.sqlite"))
+        self.assertTrue(first["controllerLockHeld"])
+
+    @allow_fixture_mutations
+    def test_autoscaler_once_stop_requires_second_drain_invocation(self) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+        drain_tokens: list[str] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        def post_drain(_node_url: str, token: str) -> dict:
+            drain_tokens.append(token)
+            return {"draining": True, "token": token}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                        "ucloud-sandboxes/agent-version": package_version(),
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "owned": NodeHeartbeat(
+                        node_id="node-owned",
+                        job_id="owned",
+                        updated_at=utc_now(),
+                        active_sandboxes=0,
+                        idle_since=utc_now() - timedelta(minutes=10),
+                        node_url="http://node-owned:8090",
+                        agent_version=package_version(),
+                        deployment_id="prod-a",
+                        capabilities=("disk-quota",),
+                        total_resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=6144,
+                            disk_mb=51200,
+                        ),
+                    )
+                }
+            )
+            command = [
+                "autoscaler-loop",
+                "--project",
+                "project-1",
+                "--deployment-id",
+                "prod-a",
+                "--state-dir",
+                raw_dir,
+                "--jobs-file",
+                str(jobs_file),
+                "--heartbeats",
+                str(heartbeat_file),
+                "--scale-down-idle-seconds",
+                "0",
+                "--max-builder-nodes",
+                "0",
+                "--execute-stops",
+                "--once",
+                "--output",
+                "json",
+            ]
+            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
+                cli, "_post_node_drain", side_effect=post_drain
+            ):
+                first_output = io.StringIO()
+                with redirect_stdout(first_output):
+                    first_result = cli.main(command)
+                first = json.loads(first_output.getvalue())
+                state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+                intent = state.list_drain_intents(state="active")[0]
+
+                HeartbeatStore(heartbeat_file).save(
+                    {
+                        "owned": NodeHeartbeat(
+                            node_id="node-owned",
+                            job_id="owned",
+                            updated_at=utc_now(),
+                            active_sandboxes=0,
+                            idle_since=utc_now() - timedelta(minutes=10),
+                            node_url="http://node-owned:8090",
+                            agent_version=package_version(),
+                            deployment_id="prod-a",
+                            capabilities=("disk-quota",),
+                            total_resources=ResourceQuantity(
+                                vcpu=2,
+                                memory_mb=6144,
+                                disk_mb=51200,
+                            ),
+                            draining=True,
+                            admission_open=False,
+                            drain_token=intent.token,
+                            inventory_complete=True,
+                            activity_epoch=7,
+                            drain_activity_epoch=7,
+                        )
+                    }
+                )
+                second_output = io.StringIO()
+                with redirect_stdout(second_output):
+                    second_result = cli.main(command)
+                second = json.loads(second_output.getvalue())
+
+            stop_operations = state.list_operations(kind="stop")
+
+        self.assertEqual(first_result, 0)
+        self.assertEqual(first["definitelyTerminatedJobIds"], [])
+        self.assertEqual(first["drainReadyStopJobIds"], [])
+        self.assertEqual(terminate_calls, [("owned",)])
+        self.assertEqual(second_result, 0)
+        self.assertEqual(second["drainReadyStopJobIds"], ["owned"])
+        self.assertEqual(second["definitelyTerminatedJobIds"], ["owned"])
+        self.assertEqual(len(set(drain_tokens)), 1)
+        self.assertEqual(len(stop_operations), 1)
+        self.assertEqual(stop_operations[0].state, "accepted")
+
+    @allow_fixture_mutations
     def test_autoscaler_loop_preserves_pending_signal_created_during_cycle(
         self,
     ) -> None:
@@ -1005,6 +1587,203 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual([item.sandbox_id for item in remaining], ["pending-two"])
 
+    @allow_fixture_mutations
+    def test_ambiguous_create_recovers_before_planning_and_then_consumes_demand(
+        self,
+    ) -> None:
+        submitted: list[dict] = []
+
+        class AmbiguousUCloudClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def submit_jobs(self, _project_id: str, payload: dict) -> dict:
+                submitted.append(payload)
+                raise UCloudError("connection dropped after submit")
+
+        original_client = cli.UCloudClient
+        cli.UCloudClient = AmbiguousUCloudClient
+        try:
+            with TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                jobs_file = root / "jobs.json"
+                jobs_file.write_text('{"items": []}', encoding="utf-8")
+                route_file = root / "routes.sqlite"
+                RoutingStore(route_file).upsert_pending(
+                    "pending-one",
+                    ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                )
+                command = [
+                    "autoscaler-loop",
+                    "--project",
+                    "project-1",
+                    "--state-dir",
+                    raw_dir,
+                    "--route-file",
+                    str(route_file),
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--no-private-network",
+                    "--once",
+                    "--execute",
+                    "--output",
+                    "json",
+                ]
+                first_output = io.StringIO()
+                with redirect_stdout(first_output):
+                    first_result = cli.main(command)
+                first = json.loads(first_output.getvalue())
+                demand_after_ambiguity = RoutingStore(route_file).pending_demand()
+
+                submitted_item = submitted[0]["items"][0]
+                jobs_file.write_text(
+                    json.dumps(
+                        {
+                            "items": [
+                                {
+                                    "id": "recovered-job",
+                                    "owner": {"project": "project-1"},
+                                    "specification": submitted_item,
+                                    "status": {"state": "IN_QUEUE"},
+                                }
+                            ]
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                second_output = io.StringIO()
+                with redirect_stdout(second_output):
+                    second_result = cli.main(command)
+                second = json.loads(second_output.getvalue())
+                demand_after_recovery = RoutingStore(route_file).pending_demand()
+        finally:
+            cli.UCloudClient = original_client
+
+        self.assertEqual(first_result, 0)
+        self.assertEqual(first["providerOperationResults"][0]["state"], "uncertain")
+        self.assertEqual(first["consumedPendingDemand"], [])
+        self.assertEqual(demand_after_ambiguity.pending_resources.vcpu, 1)
+        self.assertEqual(second_result, 0)
+        self.assertEqual(len(submitted), 1)
+        self.assertEqual(second["createRecoveryResults"][0]["state"], "recovered")
+        self.assertEqual(
+            [item["sandbox_id"] for item in second["consumedPendingDemand"]],
+            ["pending-one"],
+        )
+        self.assertEqual(demand_after_recovery.pending_resources, ResourceQuantity())
+
+    @allow_fixture_mutations
+    def test_applied_create_blocks_replacement_until_job_is_visible(self) -> None:
+        submitted: list[dict] = []
+
+        class SuccessfulUCloudClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def submit_jobs(self, _project_id: str, payload: dict) -> dict:
+                submitted.append(payload)
+                if len(submitted) > 2:
+                    raise AssertionError(
+                        "settled create should allocate only one replacement"
+                    )
+                return {
+                    "responses": [
+                        {
+                            "id": (
+                                "delayed-job"
+                                if len(submitted) == 1
+                                else "replacement-job"
+                            )
+                        }
+                    ]
+                }
+
+        original_client = cli.UCloudClient
+        cli.UCloudClient = SuccessfulUCloudClient
+        try:
+            with TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                jobs_file = root / "jobs.json"
+                jobs_file.write_text('{"items": []}', encoding="utf-8")
+                route_file = root / "routes.sqlite"
+                RoutingStore(route_file).upsert_pending(
+                    "pending-one",
+                    ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                )
+                command = [
+                    "autoscaler-loop",
+                    "--project",
+                    "project-1",
+                    "--state-dir",
+                    raw_dir,
+                    "--route-file",
+                    str(route_file),
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--no-private-network",
+                    "--once",
+                    "--execute",
+                    "--output",
+                    "json",
+                ]
+                with redirect_stdout(io.StringIO()):
+                    first_result = cli.main(command)
+                RoutingStore(route_file).upsert_pending(
+                    "pending-two",
+                    ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                )
+                second_output = io.StringIO()
+                with redirect_stdout(second_output):
+                    second_result = cli.main(command)
+                second = json.loads(second_output.getvalue())
+
+                jobs_file.write_text(
+                    json.dumps(
+                        {
+                            "items": [
+                                {
+                                    "id": "delayed-job",
+                                    "owner": {"project": "project-1"},
+                                    "specification": submitted[0]["items"][0],
+                                    "status": {"state": "IN_QUEUE"},
+                                }
+                            ]
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                third_output = io.StringIO()
+                with redirect_stdout(third_output):
+                    third_result = cli.main(command)
+                third = json.loads(third_output.getvalue())
+
+                # Provider history may later omit the completed/aged-out job.
+                # Its already-observed operation must not block this slot forever.
+                jobs_file.write_text('{"items": []}', encoding="utf-8")
+                fourth_output = io.StringIO()
+                with redirect_stdout(fourth_output):
+                    fourth_result = cli.main(command)
+                fourth = json.loads(fourth_output.getvalue())
+                remaining = RoutingStore(route_file).pending_sandboxes()
+        finally:
+            cli.UCloudClient = original_client
+
+        self.assertEqual(first_result, 0)
+        self.assertEqual(second_result, 0)
+        self.assertEqual(third_result, 0)
+        self.assertEqual(fourth_result, 0)
+        self.assertEqual(len(submitted), 2)
+        self.assertEqual(second["blockedCreateRoles"], ["sandbox"])
+        self.assertEqual(
+            second["createVisibilityGuards"][0]["missingJobIds"],
+            ["delayed-job"],
+        )
+        self.assertEqual(third["blockedCreateRoles"], [])
+        self.assertEqual(fourth["blockedCreateRoles"], [])
+        self.assertEqual(fourth["createdJobIds"], ["replacement-job"])
+        self.assertEqual(remaining, [])
+
+    @allow_fixture_mutations
     def test_executing_autoscaler_loop_consumes_prepared_capacity_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []
 
@@ -1115,23 +1894,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", labels)
 
+    @allow_fixture_mutations
     def test_executing_autoscaler_loop_consumes_pending_image_build_signal(
         self,
     ) -> None:
         submitted: list[tuple[str, dict]] = []
+        submitted_count = 0
 
         class FakeUCloudClient:
             def __init__(self, _session_store) -> None:
                 pass
 
             def submit_jobs(self, project_id: str, payload: dict) -> dict:
+                nonlocal submitted_count
                 submitted.append((project_id, payload))
-                return {
-                    "responses": [
-                        {"id": f"created-{index}"}
-                        for index, _item in enumerate(payload.get("items", []), start=1)
-                    ]
-                }
+                submitted_count += 1
+                return {"responses": [{"id": f"created-{submitted_count}"}]}
 
         original_client = cli.UCloudClient
         cli.UCloudClient = FakeUCloudClient
@@ -1176,6 +1954,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(submitted[0][0], "project-1")
         self.assertEqual(payload["pendingImageBuilds"], 1)
         self.assertEqual(payload["createdJobIds"], ["created-1", "created-2"])
+        self.assertEqual(len(submitted), 2)
+        self.assertTrue(all(len(call[1]["items"]) == 1 for call in submitted))
+        self.assertTrue(
+            all(
+                "ucloud-sandboxes/provider-operation" in call[1]["items"][0]["labels"]
+                for call in submitted
+            )
+        )
         self.assertEqual(
             [item["image_id"] for item in payload["consumedPendingImageBuilds"]],
             ["custom"],
@@ -1218,16 +2004,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(resources, ResourceQuantity())
         self.assertIs(cli.demand_with_build_warm_resources(demand, resources), demand)
 
+    @allow_fixture_mutations
     def test_executing_autoscaler_loop_consumes_prepared_builder_signal(self) -> None:
         submitted: list[tuple[str, dict]] = []
+        submitted_count = 0
 
         class FakeUCloudClient:
             def __init__(self, _session_store) -> None:
                 pass
 
             def submit_jobs(self, project_id: str, payload: dict) -> dict:
+                nonlocal submitted_count
                 submitted.append((project_id, payload))
-                return {"responses": [{"id": "created-builder"}]}
+                submitted_count += 1
+                return {"responses": [{"id": f"created-{submitted_count}"}]}
 
         original_client = cli.UCloudClient
         cli.UCloudClient = FakeUCloudClient
@@ -1275,7 +2065,12 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         self.assertEqual(submitted[0][0], "project-1")
-        self.assertEqual(payload["createdJobIds"], ["created-builder"])
+        self.assertEqual(
+            payload["createdJobIds"],
+            ["created-1", "created-2", "created-3"],
+        )
+        self.assertEqual(len(submitted), 3)
+        self.assertTrue(all(len(call[1]["items"]) == 1 for call in submitted))
         self.assertEqual(payload["preparedBuilderCount"], 2)
         self.assertEqual(
             [item["prepare_id"] for item in payload["consumedPreparedBuilders"]],
@@ -1372,6 +2167,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(intent["options"]["totalResources"]["vcpu"], 2.0)
         self.assertEqual(intent["options"]["totalResources"]["memory_mb"], 6144)
 
+    @allow_fixture_mutations
     def test_execute_init_runs_bootstrap_and_records_state(self) -> None:
         calls: list[dict] = []
 
@@ -1447,7 +2243,7 @@ class CliTests(unittest.TestCase):
                 with redirect_stdout(output):
                     result = cli.main(
                         [
-                            "reconcile",
+                            "autoscaler-loop",
                             "--project",
                             "project-1",
                             "--deployment-id",
@@ -1460,6 +2256,7 @@ class CliTests(unittest.TestCase):
                             "--init-state-file",
                             str(state_file),
                             "--execute-init",
+                            "--once",
                             "--init-heartbeat-url",
                             "http://sandbox-gateway:8090/v1/nodes/heartbeat",
                             "--init-heartbeat-bearer-token-file",
@@ -1549,7 +2346,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(options.memory_overcommit, 1.0)
         self.assertEqual(options.disk_overcommit, 1.0)
 
-    def test_execute_stops_skips_blocked_jobs_without_failing(self) -> None:
+    def test_unfenced_execute_stops_fails_closed(self) -> None:
         terminated: list[tuple[str, tuple[str, ...]]] = []
 
         class FakeUCloudClient:
@@ -1642,28 +2439,540 @@ class CliTests(unittest.TestCase):
                     seed_prefix="test",
                 )
 
-                result = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=cli.sandbox_demand_from_args(
-                        argparse.Namespace(
-                            pending_vcpu=0.0,
-                            pending_memory_mb=0,
-                            pending_disk_mb=0,
-                            oldest_pending_seconds=0,
-                        )
-                    ),
-                )
+                with self.assertRaisesRegex(
+                    cli.AutoscalerStateError,
+                    "require the local autoscaler controller lock",
+                ):
+                    cli.run_reconcile_cycle(
+                        config,
+                        args,
+                        demand=cli.sandbox_demand_from_args(
+                            argparse.Namespace(
+                                pending_vcpu=0.0,
+                                pending_memory_mb=0,
+                                pending_disk_mb=0,
+                                oldest_pending_seconds=0,
+                            )
+                        ),
+                    )
                 remaining_heartbeats = HeartbeatStore(heartbeat_file).load()
         finally:
             cli.UCloudClient = original_client
 
-        self.assertEqual(terminated, [("project-1", ("owned",))])
-        self.assertEqual(result["stopJobIds"], ["owned"])
-        self.assertEqual(result["blockedStopJobIds"], ["foreign"])
-        self.assertEqual(result["removedStoppedHeartbeats"], ["owned"])
-        self.assertNotIn("owned", remaining_heartbeats)
+        self.assertEqual(terminated, [])
+        self.assertIn("owned", remaining_heartbeats)
         self.assertIn("foreign", remaining_heartbeats)
+
+    def test_fenced_stop_waits_for_matching_empty_gateway_heartbeat(self) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+        drain_tokens: list[str] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+
+            def save_heartbeat(
+                *,
+                token: str = "",
+                updated_at=None,
+                reserved: ResourceQuantity = ResourceQuantity(),
+            ) -> None:
+                HeartbeatStore(heartbeat_file).save(
+                    {
+                        "owned": NodeHeartbeat(
+                            node_id="node-owned",
+                            job_id="owned",
+                            updated_at=updated_at or utc_now(),
+                            active_sandboxes=0,
+                            idle_since=utc_now() - timedelta(minutes=10),
+                            node_url="http://node-owned:8090",
+                            agent_version=package_version(),
+                            capabilities=("disk-quota",),
+                            draining=bool(token),
+                            admission_open=not bool(token),
+                            drain_token=token,
+                            activity_epoch=7,
+                            drain_activity_epoch=7 if token else 0,
+                            inventory_complete=bool(token),
+                            reserved_resources=reserved,
+                        )
+                    }
+                )
+
+            save_heartbeat()
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=True,
+                execute_init=False,
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            def post_drain(_url: str, token: str) -> dict:
+                drain_tokens.append(token)
+                if len(drain_tokens) == 1:
+                    raise TimeoutError("drain request timed out")
+                return {"draining": True}
+
+            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
+                cli, "_post_node_drain", side_effect=post_drain
+            ):
+                failed_request = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                intent = state.list_drain_intents(state="active")[0]
+
+                save_heartbeat(
+                    token=intent.token,
+                    updated_at=utc_now() - timedelta(hours=1),
+                )
+                stale = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                save_heartbeat(token="wrong-token")
+                mismatch = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                save_heartbeat(
+                    token=intent.token,
+                    reserved=ResourceQuantity(vcpu=1),
+                )
+                reserved = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                save_heartbeat(token=intent.token)
+                acknowledged = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+
+        self.assertEqual(terminate_calls, [("owned",)])
+        self.assertEqual(len(set(drain_tokens)), 1)
+        for blocked in (failed_request, stale, mismatch, reserved):
+            self.assertEqual(blocked["definitelyTerminatedJobIds"], [])
+        self.assertEqual(acknowledged["drainReadyStopJobIds"], ["owned"])
+        self.assertEqual(acknowledged["definitelyTerminatedJobIds"], ["owned"])
+        self.assertEqual(mismatch["stopJobIds"], ["owned"])
+        self.assertEqual(mismatch["drainingJobIds"], ["owned"])
+
+    def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+        drain_actions: list[tuple[str, bool]] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "owned": NodeHeartbeat(
+                        node_id="node-owned",
+                        job_id="owned",
+                        updated_at=utc_now(),
+                        active_sandboxes=0,
+                        idle_since=utc_now() - timedelta(minutes=10),
+                        node_url="http://node-owned:8090",
+                        agent_version=package_version(),
+                        capabilities=("disk-quota",),
+                        total_resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=6144,
+                            disk_mb=51200,
+                        ),
+                    )
+                }
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=True,
+                execute_init=False,
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            cancel_attempts = 0
+
+            def post_drain(
+                _url: str,
+                token: str,
+                *,
+                draining: bool = True,
+                bearer_token: str | None = None,
+            ) -> dict:
+                del bearer_token
+                nonlocal cancel_attempts
+                drain_actions.append((token, draining))
+                if not draining:
+                    cancel_attempts += 1
+                    if cancel_attempts == 1:
+                        raise TimeoutError("undrain response lost")
+                return {
+                    "drain": {
+                        "token": token,
+                        "draining": draining,
+                        "admission_open": not draining,
+                    }
+                }
+
+            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
+                cli, "_post_node_drain", side_effect=post_drain
+            ):
+                initial = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                rising = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(
+                        pending_resources=ResourceQuantity(vcpu=1)
+                    ),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                acknowledged = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(
+                        pending_resources=ResourceQuantity(vcpu=1)
+                    ),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+            intent = state.get_drain_intent("prod-a", "owned")
+
+        self.assertEqual(initial["drainingJobIds"], ["owned"])
+        self.assertEqual(rising["drainingJobIds"], [])
+        self.assertEqual(rising["cancelingDrainJobIds"], ["owned"])
+        self.assertEqual(rising["drainReadyStopJobIds"], [])
+        self.assertEqual(rising["definitelyTerminatedJobIds"], [])
+        self.assertEqual(acknowledged["cancelingDrainJobIds"], [])
+        self.assertEqual(acknowledged["canceledDrainJobIds"], ["owned"])
+        self.assertEqual(terminate_calls, [])
+        self.assertEqual(
+            [draining for _token, draining in drain_actions],
+            [True, False, False],
+        )
+        self.assertIsNone(intent)
+
+    def test_ambiguous_stop_retries_same_journal_and_preserves_heartbeat(self) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+
+        class AmbiguousStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                raise UCloudError("connection dropped during terminate")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                        "ucloud-sandboxes/agent-version": package_version(),
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "owned": NodeHeartbeat(
+                        node_id="node-owned",
+                        job_id="owned",
+                        updated_at=utc_now(),
+                        active_sandboxes=0,
+                        idle_since=utc_now() - timedelta(minutes=10),
+                        node_url="http://node-owned:8090",
+                        agent_version=package_version(),
+                        capabilities=("disk-quota",),
+                    )
+                }
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=True,
+                execute_init=False,
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+            original_client = cli.UCloudClient
+            cli.UCloudClient = AmbiguousStopClient
+            try:
+                with patch.object(cli, "_post_node_drain", return_value={}):
+                    first = cli.run_reconcile_cycle(
+                        config,
+                        args,
+                        demand=SandboxDemand(),
+                        provider_state=state,
+                        provider_mutations_allowed=True,
+                    )
+                    intent = state.list_drain_intents(state="active")[0]
+                    HeartbeatStore(heartbeat_file).save(
+                        {
+                            "owned": NodeHeartbeat(
+                                node_id="node-owned",
+                                job_id="owned",
+                                updated_at=utc_now(),
+                                active_sandboxes=0,
+                                idle_since=utc_now() - timedelta(minutes=10),
+                                node_url="http://node-owned:8090",
+                                agent_version=package_version(),
+                                capabilities=("disk-quota",),
+                                draining=True,
+                                admission_open=False,
+                                drain_token=intent.token,
+                                inventory_complete=True,
+                                activity_epoch=4,
+                                drain_activity_epoch=4,
+                            )
+                        }
+                    )
+                    second = cli.run_reconcile_cycle(
+                        config,
+                        args,
+                        demand=SandboxDemand(),
+                        provider_state=state,
+                        provider_mutations_allowed=True,
+                    )
+                    HeartbeatStore(heartbeat_file).save(
+                        {
+                            "owned": NodeHeartbeat(
+                                node_id="node-owned",
+                                job_id="owned",
+                                updated_at=utc_now(),
+                                active_sandboxes=0,
+                                node_url="http://node-owned:8090",
+                                agent_version=package_version(),
+                                capabilities=("disk-quota",),
+                                draining=True,
+                                admission_open=False,
+                                drain_token=intent.token,
+                                inventory_complete=True,
+                                activity_epoch=5,
+                                drain_activity_epoch=5,
+                                reserved_resources=ResourceQuantity(vcpu=1),
+                            )
+                        }
+                    )
+                    third = cli.run_reconcile_cycle(
+                        config,
+                        args,
+                        demand=SandboxDemand(),
+                        provider_state=state,
+                        provider_mutations_allowed=True,
+                    )
+                    HeartbeatStore(heartbeat_file).save(
+                        {
+                            "owned": NodeHeartbeat(
+                                node_id="node-owned",
+                                job_id="owned",
+                                updated_at=utc_now(),
+                                active_sandboxes=0,
+                                node_url="http://node-owned:8090",
+                                agent_version=package_version(),
+                                capabilities=("disk-quota",),
+                                draining=True,
+                                admission_open=False,
+                                drain_token=intent.token,
+                                inventory_complete=True,
+                                activity_epoch=6,
+                                drain_activity_epoch=6,
+                            )
+                        }
+                    )
+                    fourth = cli.run_reconcile_cycle(
+                        config,
+                        args,
+                        demand=SandboxDemand(),
+                        provider_state=state,
+                        provider_mutations_allowed=True,
+                    )
+            finally:
+                cli.UCloudClient = original_client
+            remaining = HeartbeatStore(heartbeat_file).load()
+
+        self.assertEqual(terminate_calls, [("owned",), ("owned",)])
+        self.assertEqual(first["providerOperationResults"], [])
+        self.assertEqual(first["definitelyTerminatedJobIds"], [])
+        self.assertEqual(second["providerOperationResults"][-1]["state"], "uncertain")
+        self.assertEqual(second["definitelyTerminatedJobIds"], [])
+        self.assertEqual(third["stopRecoveryResults"][0]["state"], "retry")
+        self.assertEqual(third["definitelyTerminatedJobIds"], [])
+        self.assertFalse(third["drainResults"][0]["heartbeatReady"])
+        self.assertEqual(fourth["providerOperationResults"][-1]["state"], "uncertain")
+        self.assertEqual(fourth["definitelyTerminatedJobIds"], [])
+        self.assertIn("owned", remaining)
 
     def test_reconcile_prunes_heartbeats_for_final_jobs(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1759,7 +3068,7 @@ class CliTests(unittest.TestCase):
             remaining_heartbeats = HeartbeatStore(heartbeat_file).load()
 
         self.assertEqual(result["prunedFinalHeartbeats"], ["finished-node"])
-        self.assertNotIn("finished-node", remaining_heartbeats)
+        self.assertIn("finished-node", remaining_heartbeats)
 
     def test_runtime_conformance_json_failure_returns_nonzero(self) -> None:
         original = cli.DockerRuntimeProbe

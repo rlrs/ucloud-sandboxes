@@ -8,6 +8,7 @@ from ucloud_sandboxes.deploy import (
     autoscaler_env,
     gateway_env,
     packaged_systemd_units,
+    relay_env,
     registry_env,
     render_env_file,
     render_remote_deploy_script,
@@ -36,11 +37,20 @@ class DeployTests(unittest.TestCase):
             )
 
             gateway = gateway_env(plan)
+            relay = relay_env(plan)
             autoscaler = autoscaler_env(plan)
             registry = registry_env(plan)
             script = render_remote_deploy_script(plan)
 
         self.assertEqual(gateway["UCLOUD_DEPLOYMENT_ID"], "prod-a")
+        self.assertEqual(
+            gateway["UCLOUD_HEARTBEAT_TOKEN_FILE"],
+            "/work/ucloud-sandboxes/state/heartbeat-token",
+        )
+        self.assertEqual(
+            gateway["UCLOUD_NODE_CONTROL_TOKEN_FILE"],
+            "/work/ucloud-sandboxes/state/node-control-token",
+        )
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
         self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "30")
         self.assertEqual(registry["UCLOUD_REGISTRY_KEEP_PER_REPOSITORY"], "0")
@@ -57,6 +67,14 @@ class DeployTests(unittest.TestCase):
             "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
         )
         self.assertEqual(
+            autoscaler["UCLOUD_INIT_HEARTBEAT_TOKEN_SOURCE_FILE"],
+            "/work/ucloud-sandboxes/state/heartbeat-token",
+        )
+        self.assertEqual(
+            autoscaler["UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE"],
+            "/work/ucloud-sandboxes/state/node-control-token",
+        )
+        self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             "ucloud-sandbox-registry=10.0.0.5",
         )
@@ -65,6 +83,32 @@ class DeployTests(unittest.TestCase):
         self.assertIn("ucloud-sandbox-registry-prune.timer", script)
         self.assertIn("systemctl enable --now ucloud-sandbox-registry-prune.timer", script)
         self.assertIn("curl -fsS http://127.0.0.1:8090/healthz", script)
+        self.assertIn(
+            "create_secret /work/ucloud-sandboxes/state/gateway-token",
+            script,
+        )
+        self.assertIn(
+            "create_secret /work/ucloud-sandboxes/state/heartbeat-token",
+            script,
+        )
+        self.assertIn(
+            "create_secret /work/ucloud-sandboxes/state/node-control-token",
+            script,
+        )
+        self.assertEqual(
+            len(
+                {
+                    plan.gateway_token_file,
+                    plan.heartbeat_token_file,
+                    plan.node_control_token_file,
+                }
+            ),
+            3,
+        )
+        self.assertNotIn(
+            "gateway-token /work/ucloud-sandboxes/state/heartbeat-token",
+            script,
+        )
 
     def test_all_in_one_plan_auto_detects_registry_private_ip(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -110,6 +154,38 @@ class DeployTests(unittest.TestCase):
         self.assertIn(
             "--prune-stale-image-records",
             units["ucloud-sandbox-registry-prune.service"],
+        )
+        self.assertIn(
+            "flock --exclusive --nonblock",
+            units["ucloud-sandbox-registry-prune.service"],
+        )
+        self.assertNotIn(
+            "ExecStartPost",
+            units["ucloud-sandbox-registry-prune.service"],
+        )
+        self.assertIn(
+            "/work/data/ucloud-sandbox-registry/docker-registry",
+            units["ucloud-sandbox-registry-gc.service"],
+        )
+        self.assertIn(
+            "-m ucloud_sandboxes.systemd registry-gc",
+            units["ucloud-sandbox-registry-gc.service"],
+        )
+        self.assertIn(
+            "--init-heartbeat-bearer-token-source-file ${UCLOUD_INIT_HEARTBEAT_TOKEN_SOURCE_FILE}",
+            units["ucloud-sandbox-autoscaler.service"],
+        )
+        self.assertIn(
+            "--heartbeat-bearer-token-file ${UCLOUD_HEARTBEAT_TOKEN_FILE}",
+            units["ucloud-sandbox-gateway.service"],
+        )
+        self.assertIn(
+            "--node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_TOKEN_FILE}",
+            units["ucloud-sandbox-gateway.service"],
+        )
+        self.assertIn(
+            "--init-node-control-bearer-token-source-file ${UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE}",
+            units["ucloud-sandbox-autoscaler.service"],
         )
         self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
 

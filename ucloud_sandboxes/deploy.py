@@ -95,6 +95,10 @@ class AllInOneDeployPlan:
         return str(PurePosixPath(self.state_dir) / "heartbeat-token")
 
     @property
+    def node_control_token_file(self) -> str:
+        return str(PurePosixPath(self.state_dir) / "node-control-token")
+
+    @property
     def relay_sandbox_token_file(self) -> str:
         return str(PurePosixPath(self.state_dir) / "relay-sandbox-token")
 
@@ -219,6 +223,7 @@ class AllInOneDeployPlan:
             "remoteSessionFile": self.remote_session_file,
             "gatewayTokenFile": self.gateway_token_file,
             "heartbeatTokenFile": self.heartbeat_token_file,
+            "nodeControlTokenFile": self.node_control_token_file,
             "relaySandboxTokenFile": self.relay_sandbox_token_file,
             "relayWorkerTokenFile": self.relay_worker_token_file,
             "initSshPrivateKeyFile": self.init_ssh_private_key_file,
@@ -263,6 +268,8 @@ def gateway_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_GATEWAY_PORT": str(plan.gateway_port),
         "UCLOUD_HEARTBEAT_TTL_SECONDS": str(plan.heartbeat_ttl_seconds),
         "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
+        "UCLOUD_HEARTBEAT_TOKEN_FILE": plan.heartbeat_token_file,
+        "UCLOUD_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
         "UCLOUD_REGISTRY_URL": plan.registry_url,
         "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
     }
@@ -318,6 +325,10 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_INIT_TIMEOUT_SECONDS": str(plan.init_timeout_seconds),
         "UCLOUD_INIT_HEARTBEAT_URL": plan.init_heartbeat_url,
         "UCLOUD_INIT_HEARTBEAT_TOKEN_FILE": plan.heartbeat_token_file,
+        "UCLOUD_INIT_HEARTBEAT_TOKEN_SOURCE_FILE": plan.heartbeat_token_file,
+        "UCLOUD_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
+        "UCLOUD_INIT_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
+        "UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE": plan.node_control_token_file,
         "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
         "UCLOUD_INIT_AUTHORIZED_KEY_FILE": plan.init_authorized_key_file,
         "UCLOUD_INIT_SSH_PRIVATE_KEY_FILE": plan.init_ssh_private_key_file,
@@ -408,7 +419,6 @@ def render_remote_deploy_script(
         'test -s "$SESSION_FILE"',
         'chmod 600 "$SESSION_FILE"',
         'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$SESSION_FILE"',
-        "",
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
         "curl docker.io openssh-client openssl python3-venv",
@@ -431,6 +441,7 @@ def render_remote_deploy_script(
         "}",
         f"create_secret {shlex.quote(plan.gateway_token_file)}",
         f"create_secret {shlex.quote(plan.heartbeat_token_file)}",
+        f"create_secret {shlex.quote(plan.node_control_token_file)}",
         f"create_secret {shlex.quote(plan.relay_sandbox_token_file)}",
         f"create_secret {shlex.quote(plan.relay_worker_token_file)}",
         "",

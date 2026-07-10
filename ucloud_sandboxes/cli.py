@@ -10,7 +10,9 @@ from pathlib import Path
 import sys
 import time
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from uuid import uuid4
 
 from .agent import (
@@ -20,6 +22,15 @@ from .agent import (
     fetch_node_agent_heartbeat,
     post_heartbeat,
     post_heartbeat_with_headers,
+)
+from .autoscaler_state import (
+    RECOVERABLE_CREATE_STATES,
+    AutoscalerStateError,
+    AutoscalerProcessLock,
+    AutoscalerStateStore,
+    DrainIntent,
+    ProviderOperation,
+    stable_provider_operation_id,
 )
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
@@ -65,6 +76,7 @@ from .images import DockerImageRuntime, ImageRecord, ImageStore
 from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
+    RegistryUsageGenerationChanged,
     RegistryUsageStore,
     apply_registry_usage,
     execute_registry_prune,
@@ -81,7 +93,12 @@ from .metrics import (
     record_vm_observed,
     record_vm_submitted,
 )
-from .model_relay import create_model_relay_app
+from .model_relay import (
+    DEFAULT_MAX_INFLIGHT_BYTES,
+    DEFAULT_MAX_INFLIGHT_REQUESTS,
+    DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
+    create_model_relay_app,
+)
 from .models import (
     ResourceQuantity,
     SandboxDemand,
@@ -108,8 +125,10 @@ from .reconcile import (
     build_vm_create_intents,
     bulk_payload_from_create_intents,
     evaluate_builder_scale,
+    node_drain_ready,
     partition_safe_stop_job_ids,
     stop_job_ids_from_decision,
+    with_provider_operation_label,
 )
 from .registry import (
     HeartbeatStore,
@@ -120,7 +139,12 @@ from .registry import (
 from .routing import RoutingStore, sandbox_demand_from_routing_state
 from .runtime_probe import DockerRuntimeProbe
 from .sandbox import DockerGvisorRuntime
-from .ucloud import SessionStore, UCloudClient, UCloudError
+from .ucloud import (
+    SessionStore,
+    UCloudClient,
+    UCloudError,
+    UCloudHttpError,
+)
 from .vm_init import (
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
     VmInitOptions,
@@ -153,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, ValueError, UCloudError) as exc:
+    except (OSError, ValueError, UCloudError, AutoscalerStateError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -244,6 +268,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     agent_heartbeat.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+        help="Authenticate the local node-agent heartbeat fetch with this token.",
+    )
+    agent_heartbeat.add_argument(
         "--heartbeat-file",
         type=Path,
         help="Local heartbeat file to upsert into. Defaults to config state only when supplied.",
@@ -300,6 +329,23 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Require a gateway token for control-plane routes. The gateway accepts "
             "X-UCloud-Sandbox-Token, plus Authorization: Bearer for private callers."
+        ),
+    )
+    serve.add_argument(
+        "--heartbeat-bearer-token-file",
+        type=Path,
+        help=(
+            "Require this distinct bearer token for node heartbeat POSTs. "
+            "If omitted, heartbeat auth uses the gateway token for legacy "
+            "deployments."
+        ),
+    )
+    serve.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+        help=(
+            "Private credential used by the gateway for every node-agent call. "
+            "It is distinct from gateway and heartbeat credentials."
         ),
     )
     serve.add_argument(
@@ -409,6 +455,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Actually execute Docker commands. Default is dry-run.",
     )
+    node_agent.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+        help="Require this private bearer credential on non-health node routes.",
+    )
     node_agent.set_defaults(func=cmd_serve_node_agent)
 
     async_node_agent = subparsers.add_parser(
@@ -455,6 +506,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Actually execute Docker commands. Default is dry-run.",
     )
+    async_node_agent.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+        help="Require this private bearer credential on non-health node routes.",
+    )
     async_node_agent.set_defaults(func=cmd_serve_async_node_agent)
 
     model_relay = subparsers.add_parser(
@@ -475,6 +531,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--worker-bearer-token-file",
         type=Path,
         help="Require this bearer token for worker register/poll/respond routes.",
+    )
+    model_relay.add_argument(
+        "--max-inflight-requests",
+        type=int,
+        default=DEFAULT_MAX_INFLIGHT_REQUESTS,
+        help="Global active relay-request admission limit.",
+    )
+    model_relay.add_argument(
+        "--max-inflight-requests-per-rollout",
+        type=int,
+        default=DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
+        help="Per-rollout active relay-request admission limit.",
+    )
+    model_relay.add_argument(
+        "--max-inflight-bytes",
+        type=int,
+        default=DEFAULT_MAX_INFLIGHT_BYTES,
+        help="Global serialized active request-envelope byte limit.",
     )
     model_relay.add_argument(
         "--request-timeout-seconds",
@@ -686,9 +760,7 @@ def build_parser() -> argparse.ArgumentParser:
     registry_prune.add_argument(
         "--image-file",
         type=Path,
-        help=(
-            "Gateway image metadata file to update when registry tags are deleted."
-        ),
+        help=("Gateway image metadata file to update when registry tags are deleted."),
     )
     registry_prune.add_argument(
         "--prune-stale-image-records",
@@ -1491,6 +1563,21 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+        help="Gateway-local node-control token used for drain requests.",
+    )
+    parser.add_argument(
+        "--init-node-control-bearer-token-file",
+        default="",
+        help="Node-local path where the node-control token is installed.",
+    )
+    parser.add_argument(
+        "--init-node-control-bearer-token-source-file",
+        type=Path,
+        help="Gateway-local source containing the node-control token to install.",
+    )
+    parser.add_argument(
         "--init-service-user",
         default="ucloud",
         help="Linux user that owns autoscaled node services.",
@@ -1624,6 +1711,19 @@ def add_vm_init_args(
         help=(
             "Local token file whose contents are installed on the VM at "
             "--heartbeat-bearer-token-file."
+        ),
+    )
+    parser.add_argument(
+        "--node-control-bearer-token-file",
+        default="",
+        help="Token file on the VM used to authenticate node-agent calls.",
+    )
+    parser.add_argument(
+        "--node-control-bearer-token-source-file",
+        type=Path,
+        help=(
+            "Local token file whose contents are installed on the VM at "
+            "--node-control-bearer-token-file."
         ),
     )
     parser.add_argument(
@@ -1809,7 +1909,14 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
     config = load_config(args)
     labels = parse_labels(args.label)
     if args.from_node_agent_url:
-        heartbeat = fetch_node_agent_heartbeat(args.from_node_agent_url)
+        node_control_token = read_required_token_file(
+            getattr(args, "node_control_bearer_token_file", None),
+            "node control bearer token",
+        )
+        heartbeat = fetch_node_agent_heartbeat(
+            args.from_node_agent_url,
+            bearer_token=node_control_token,
+        )
         if config.deployment_id and not heartbeat.deployment_id:
             heartbeat = replace(heartbeat, deployment_id=config.deployment_id)
         if labels:
@@ -1897,6 +2004,17 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         ).strip()
         if not gateway_bearer_token:
             raise ValueError("gateway bearer token file is empty.")
+    heartbeat_bearer_token = None
+    if args.heartbeat_bearer_token_file:
+        heartbeat_bearer_token = args.heartbeat_bearer_token_file.read_text(
+            encoding="utf-8"
+        ).strip()
+        if not heartbeat_bearer_token:
+            raise ValueError("heartbeat bearer token file is empty.")
+    node_control_bearer_token = read_required_token_file(
+        getattr(args, "node_control_bearer_token_file", None),
+        "node control bearer token",
+    )
     registry_url = (
         args.registry_url
         or os.environ.get("UCLOUD_SANDBOX_REGISTRY_URL")
@@ -1909,6 +2027,9 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         routing_file=route_file,
         upstream_node_url=args.gateway_upstream_node_url,
         gateway_bearer_token=gateway_bearer_token,
+        heartbeat_bearer_token=heartbeat_bearer_token,
+        node_control_bearer_token=node_control_bearer_token,
+        deployment_id=config.deployment_id,
         heartbeat_ttl_seconds=(
             args.heartbeat_ttl_seconds
             if args.heartbeat_ttl_seconds is not None
@@ -1938,9 +2059,15 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print(f"Gateway upstream node: {args.gateway_upstream_node_url}")
     if gateway_bearer_token:
         print("Gateway auth: bearer token required")
+    if heartbeat_bearer_token:
+        print("Heartbeat auth: distinct bearer token required")
+    if node_control_bearer_token:
+        print("Node control auth: distinct bearer token required")
     if registry_url:
         print(f"Registry metrics: {registry_url}")
-    print(f"Registry usage file: {args.registry_usage_file or config.registry_usage_file()}")
+    print(
+        f"Registry usage file: {args.registry_usage_file or config.registry_usage_file()}"
+    )
     print(
         "Image builds: "
         + (
@@ -2007,6 +2134,10 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
         image_runtime=image_runtime,
         ssh_port_range=(args.ssh_port_start, args.ssh_port_end),
         image_builds_enabled=args.enable_image_builds,
+        node_control_bearer_token=read_required_token_file(
+            getattr(args, "node_control_bearer_token_file", None),
+            "node control bearer token",
+        ),
     )
     host, port = server.server_address
     mode = "execute" if args.execute_runtime else "dry-run"
@@ -2052,6 +2183,10 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
         image_file=image_file,
         runtime=runtime,
         ssh_port_range=(args.ssh_port_start, args.ssh_port_end),
+        node_control_bearer_token=read_required_token_file(
+            getattr(args, "node_control_bearer_token_file", None),
+            "node control bearer token",
+        ),
     )
     mode = "execute" if args.execute_runtime else "dry-run"
     print(f"Serving async node agent on http://{args.host}:{args.port}")
@@ -2074,6 +2209,13 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         args.worker_bearer_token_file,
         "worker bearer token",
     )
+    for name in (
+        "max_inflight_requests",
+        "max_inflight_requests_per_rollout",
+        "max_inflight_bytes",
+    ):
+        if int(getattr(args, name)) < 1:
+            raise ValueError(f"{name.replace('_', '-')} must be positive")
     app = create_model_relay_app(
         sandbox_bearer_token=sandbox_bearer_token,
         worker_bearer_token=worker_bearer_token,
@@ -2084,6 +2226,11 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
             1.0,
             args.completed_request_retention_seconds,
         ),
+        max_inflight_requests=args.max_inflight_requests,
+        max_inflight_requests_per_rollout=(
+            args.max_inflight_requests_per_rollout
+        ),
+        max_inflight_bytes=args.max_inflight_bytes,
     )
     print(f"Serving model relay on http://{args.host}:{args.port}")
     print(f"Sandbox auth: {'required' if sandbox_bearer_token else 'disabled'}")
@@ -2337,38 +2484,71 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
     if args.max_age_days is not None and args.max_age_days <= 0:
         raise ValueError("max-age-days must be positive.")
     client = RegistryClient(args.registry_url)
-    usage_records = RegistryUsageStore(args.usage_file).load() if args.usage_file else None
+    usage_store = RegistryUsageStore(args.usage_file) if args.usage_file else None
+    usage_snapshot = usage_store.snapshot() if usage_store is not None else None
+    usage_records = usage_snapshot.records if usage_snapshot is not None else None
     plan = registry_prune_plan(
         client,
         keep_per_repository=args.keep_per_repository,
         repository_prefix=args.repository_prefix,
         max_age_days=args.max_age_days,
         usage_records=usage_records,
+        active_leases=(usage_snapshot.leases if usage_snapshot is not None else None),
+        usage_generation=(
+            usage_snapshot.generation if usage_snapshot is not None else None
+        ),
     )
     plan["execute"] = bool(args.execute)
     plan["usage_file"] = str(args.usage_file) if args.usage_file else ""
     plan["image_file"] = str(args.image_file) if args.image_file else ""
     if args.execute:
-        records = list_registry_tags(
-            client,
-            repository_prefix=args.repository_prefix,
-        )
-        records = apply_registry_usage(records, usage_records)
-        candidates = select_prune_candidates(
-            records,
-            keep_per_repository=args.keep_per_repository,
-            max_age_days=args.max_age_days,
-            use_last_used_at=usage_records is not None,
-        )
-        deleted = execute_registry_prune(client, candidates)
+        deleted = []
+        for attempt in range(3):
+            usage_snapshot = (
+                usage_store.snapshot() if usage_store is not None else None
+            )
+            usage_records = (
+                usage_snapshot.records if usage_snapshot is not None else None
+            )
+            records = list_registry_tags(
+                client,
+                repository_prefix=args.repository_prefix,
+            )
+            records = apply_registry_usage(records, usage_records)
+            candidates = select_prune_candidates(
+                records,
+                keep_per_repository=args.keep_per_repository,
+                max_age_days=args.max_age_days,
+                use_last_used_at=usage_records is not None,
+                active_leases=(
+                    usage_snapshot.leases if usage_snapshot is not None else None
+                ),
+            )
+            try:
+                deleted = execute_registry_prune(
+                    client,
+                    candidates,
+                    usage_store=usage_store,
+                    expected_usage_generation=(
+                        usage_snapshot.generation
+                        if usage_snapshot is not None
+                        else None
+                    ),
+                    all_records=records if usage_store is not None else None,
+                )
+                break
+            except RegistryUsageGenerationChanged:
+                if attempt == 2:
+                    raise
+                continue
         plan["deleted"] = [item.to_dict() for item in deleted]
+        if usage_snapshot is not None:
+            plan["usage_generation"] = usage_snapshot.generation
+            plan["active_lease_count"] = len(usage_snapshot.leases)
         if args.image_file:
             removed = _remove_image_records_for_registry_tags(
                 args.image_file,
-                {
-                    (record.repository, record.tag)
-                    for record in deleted
-                },
+                {(record.repository, record.tag) for record in deleted},
             )
             if args.prune_stale_image_records:
                 removed.extend(
@@ -2842,15 +3022,35 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def reject_mutating_jobs_fixture(
+    args: argparse.Namespace,
+    *,
+    execution_requested: bool,
+) -> None:
+    if execution_requested and getattr(args, "jobs_file", None) is not None:
+        raise ValueError(
+            "--jobs-file is dry-run only and cannot be combined with "
+            "--execute, --execute-stops, or --execute-init"
+        )
+
+
 def cmd_reconcile(args: argparse.Namespace) -> int:
     config = load_config(args).with_project_id(args.project)
     if not config.project_id:
         raise ValueError("project id is required via --project or config.project_id.")
-
+    execution_requested = bool(
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+    )
+    if execution_requested:
+        raise ValueError(
+            "reconcile is read-only; use autoscaler-loop --once for a single "
+            "mutating controller cycle"
+        )
     result = run_reconcile_cycle(
         config,
         args,
         demand=sandbox_demand_from_args(args),
+        provider_mutations_allowed=False,
     )
 
     if args.output == "json":
@@ -2891,127 +3091,474 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     interval = max(1.0, float(args.interval_seconds))
     cycle = 0
     observed_vm_keys: dict[str, tuple[object, ...]] = {}
-    while True:
-        cycle += 1
-        routing_store = RoutingStore(route_file)
-        routing_state = routing_store.load()
-        pending_snapshot = list(routing_state.pending.values())
-        prepared_snapshot = list(routing_state.prepared.values())
-        pending_image_build_snapshot = list(routing_state.image_builds.values())
-        prepared_builder_snapshot = list(routing_state.prepared_builders.values())
-        demand = sandbox_demand_from_routing_state(routing_state)
-        pending_image_builds = max(
-            int(getattr(args, "pending_image_builds", 0) or 0),
-            len(pending_image_build_snapshot),
-        )
-        prepared_builder_count = sum(item.count for item in prepared_builder_snapshot)
-        result = run_reconcile_cycle(
-            config,
-            args,
-            demand=demand,
-            pending_image_builds=pending_image_builds,
-            prepared_builder_count=prepared_builder_count,
-            metrics_store=metrics_store,
-        )
-        route_cleanup_job_ids = set(result.get("prunedFinalHeartbeats", []))
-        if result.get("stopResponse") is not None:
-            route_cleanup_job_ids.update(str(job_id) for job_id in result["stopJobIds"])
-        removed_routes = routing_store.delete_sandboxes_for_jobs(route_cleanup_job_ids)
-        if args.execute:
-            effective_policy = policy_with_cli_overrides(config.policy, args)
-            stale_route_grace_seconds = max(
-                effective_policy.heartbeat_ttl_seconds * 3,
-                effective_policy.heartbeat_ttl_seconds + 60,
-            )
-            active_route_job_ids = {
-                node.job_id for node in result["rawNodes"] if not node.job.is_final
-            }
-            active_route_node_ids = {
-                node.heartbeat.node_id
-                for node in result["rawNodes"]
-                if node.heartbeat is not None and node.heartbeat_fresh
-            }
-            removed_routes.extend(
-                routing_store.delete_stale_sandboxes(
-                    active_job_ids=active_route_job_ids,
-                    active_node_ids=active_route_node_ids,
-                    older_than=utc_now() - timedelta(seconds=stale_route_grace_seconds),
-                )
-            )
-        consumed_pending_demand = (
-            routing_store.consume_pending_demand(pending_snapshot)
-            if args.execute
-            else []
-        )
-        consumed_prepared_capacity = (
-            routing_store.consume_prepared_capacity(prepared_snapshot)
-            if args.execute
-            else []
-        )
-        consumed_pending_image_builds = (
-            routing_store.consume_pending_image_builds(pending_image_build_snapshot)
-            if args.execute
-            else []
-        )
-        consumed_prepared_builders = (
-            routing_store.consume_prepared_builders(prepared_builder_snapshot)
-            if args.execute
-            else []
-        )
-        result["cycle"] = cycle
-        result["routeFile"] = str(route_file)
-        result["metricsFile"] = str(metrics_file)
-        result["consumedPendingDemand"] = [
-            item.to_dict() for item in consumed_pending_demand
-        ]
-        result["consumedPreparedCapacity"] = [
-            item.to_dict() for item in consumed_prepared_capacity
-        ]
-        result["consumedPendingImageBuilds"] = [
-            item.to_dict() for item in consumed_pending_image_builds
-        ]
-        result["consumedPreparedBuilders"] = [
-            item.to_dict() for item in consumed_prepared_builders
-        ]
-        result["removedRoutes"] = [route.to_dict() for route in removed_routes]
-        record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
-        record_submitted_vm_metrics(metrics_store, cycle, result)
-        record_observed_vm_metrics(metrics_store, cycle, result, observed_vm_keys)
-        if args.output == "json":
-            printable = dict(result)
-            for key in (
-                "rawNodes",
-                "rawSandboxNodes",
-                "rawBuilderNodes",
-                "rawDecision",
-                "rawBuilderDecision",
-                "rawCreateIntents",
-                "rawSandboxCreateIntents",
-                "rawBuilderCreateIntents",
-                "rawBootstrapIntents",
+    execution_requested = bool(
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+    )
+    reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
+    provider_state = (
+        AutoscalerStateStore(_autoscaler_state_path(config))
+        if execution_requested
+        else None
+    )
+    process_lock: AutoscalerProcessLock | None = (
+        provider_state.process_lock() if provider_state is not None else None
+    )
+    try:
+        while True:
+            cycle += 1
+            if process_lock is not None and not process_lock.held:
+                process_lock.acquire(blocking=False)
+            if (
+                args.once
+                and execution_requested
+                and process_lock is not None
+                and not process_lock.held
             ):
-                printable.pop(key, None)
-            print_json(printable)
-        else:
-            print(
-                f"Autoscaler cycle {cycle}: "
-                f"pending_resources={resource_summary(demand.pending_resources.to_dict())} "
-                f"prepared_resources={resource_summary(demand.prepared_resources.to_dict())} "
-                f"prepared_builders={prepared_builder_count}"
+                raise AutoscalerStateError(
+                    "another local autoscaler process holds the controller lock"
+                )
+            controller_active = bool(process_lock is not None and process_lock.held)
+            routing_store = RoutingStore(route_file)
+            routing_state = routing_store.load()
+            pending_snapshot = list(routing_state.pending.values())
+            prepared_snapshot = list(routing_state.prepared.values())
+            pending_image_build_snapshot = list(routing_state.image_builds.values())
+            prepared_builder_snapshot = list(routing_state.prepared_builders.values())
+            demand = sandbox_demand_from_routing_state(routing_state)
+            pending_image_builds = max(
+                int(getattr(args, "pending_image_builds", 0) or 0),
+                len(pending_image_build_snapshot),
             )
-            print_reconcile(
+            prepared_builder_count = sum(
+                item.count for item in prepared_builder_snapshot
+            )
+            result = run_reconcile_cycle(
                 config,
-                result["rawSandboxNodes"],
-                result["rawDecision"],
-                Path(result["heartbeatFile"]),
-                result["rawCreateIntents"],
-                tuple(result["stopJobIds"]),
-                result,
+                args,
+                demand=demand,
+                pending_image_builds=pending_image_builds,
+                prepared_builder_count=prepared_builder_count,
+                metrics_store=metrics_store,
+                provider_state=provider_state,
+                provider_mutations_allowed=controller_active,
             )
-        sys.stdout.flush()
-        if args.once:
-            return 0
-        time.sleep(interval)
+            removed_routes = []
+            consumed_pending_demand = []
+            consumed_prepared_capacity = []
+            consumed_pending_image_builds = []
+            consumed_prepared_builders = []
+            if controller_active or not execution_requested:
+                route_cleanup_job_ids = set(result.get("prunedFinalHeartbeats", []))
+                route_cleanup_job_ids.update(
+                    str(job_id)
+                    for job_id in result.get("definitelyTerminatedJobIds", [])
+                )
+                removed_routes = routing_store.delete_sandboxes_for_jobs(
+                    route_cleanup_job_ids
+                )
+                if args.execute:
+                    effective_policy = policy_with_cli_overrides(config.policy, args)
+                    stale_route_grace_seconds = max(
+                        effective_policy.heartbeat_ttl_seconds * 3,
+                        effective_policy.heartbeat_ttl_seconds + 60,
+                    )
+                    active_route_job_ids = {
+                        node.job_id
+                        for node in result["rawNodes"]
+                        if not node.job.is_final
+                    }
+                    active_route_node_ids = {
+                        node.heartbeat.node_id
+                        for node in result["rawNodes"]
+                        if node.heartbeat is not None and node.heartbeat_fresh
+                    }
+                    removed_routes.extend(
+                        routing_store.delete_stale_sandboxes(
+                            active_job_ids=active_route_job_ids,
+                            active_node_ids=active_route_node_ids,
+                            older_than=utc_now()
+                            - timedelta(seconds=stale_route_grace_seconds),
+                        )
+                    )
+                if controller_active and result.get(
+                    "sandboxCapacityOperationSucceeded"
+                ):
+                    consumed_pending_demand = routing_store.consume_pending_demand(
+                        pending_snapshot
+                    )
+                    consumed_prepared_capacity = (
+                        routing_store.consume_prepared_capacity(prepared_snapshot)
+                    )
+                if controller_active and result.get(
+                    "builderCapacityOperationSucceeded"
+                ):
+                    consumed_pending_image_builds = (
+                        routing_store.consume_pending_image_builds(
+                            pending_image_build_snapshot
+                        )
+                    )
+                    consumed_prepared_builders = (
+                        routing_store.consume_prepared_builders(
+                            prepared_builder_snapshot
+                        )
+                    )
+            result["cycle"] = cycle
+            result["routeFile"] = str(route_file)
+            result["metricsFile"] = str(metrics_file)
+            result["autoscalerStateFile"] = (
+                str(provider_state.path) if provider_state is not None else ""
+            )
+            result["controllerLockHeld"] = controller_active
+            result["consumedPendingDemand"] = [
+                item.to_dict() for item in consumed_pending_demand
+            ]
+            result["consumedPreparedCapacity"] = [
+                item.to_dict() for item in consumed_prepared_capacity
+            ]
+            result["consumedPendingImageBuilds"] = [
+                item.to_dict() for item in consumed_pending_image_builds
+            ]
+            result["consumedPreparedBuilders"] = [
+                item.to_dict() for item in consumed_prepared_builders
+            ]
+            result["removedRoutes"] = [route.to_dict() for route in removed_routes]
+            record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
+            record_submitted_vm_metrics(metrics_store, cycle, result)
+            record_observed_vm_metrics(metrics_store, cycle, result, observed_vm_keys)
+            if args.output == "json":
+                printable = dict(result)
+                for key in (
+                    "rawNodes",
+                    "rawSandboxNodes",
+                    "rawBuilderNodes",
+                    "rawDecision",
+                    "rawBuilderDecision",
+                    "rawCreateIntents",
+                    "rawSandboxCreateIntents",
+                    "rawBuilderCreateIntents",
+                    "rawBootstrapIntents",
+                ):
+                    printable.pop(key, None)
+                print_json(printable)
+            else:
+                print(
+                    f"Autoscaler cycle {cycle}: "
+                    f"pending_resources={resource_summary(demand.pending_resources.to_dict())} "
+                    f"prepared_resources={resource_summary(demand.prepared_resources.to_dict())} "
+                    f"prepared_builders={prepared_builder_count}"
+                )
+                print_reconcile(
+                    config,
+                    result["rawSandboxNodes"],
+                    result["rawDecision"],
+                    Path(result["heartbeatFile"]),
+                    result["rawCreateIntents"],
+                    tuple(result["stopJobIds"]),
+                    result,
+                )
+            sys.stdout.flush()
+            if args.once:
+                return 0
+            time.sleep(interval)
+    finally:
+        if process_lock is not None:
+            process_lock.release()
+
+
+def _post_node_drain(
+    node_url: str,
+    token: str,
+    *,
+    draining: bool = True,
+    bearer_token: str | None = None,
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any]:
+    parsed = urlparse(str(node_url).strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("node heartbeat has an invalid node URL")
+    url = f"{str(node_url).rstrip('/')}/v1/drain"
+    if bearer_token is not None and not bearer_token.strip():
+        raise ValueError("node control bearer token cannot be empty")
+    request_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if bearer_token is not None:
+        request_headers["Authorization"] = f"Bearer {bearer_token}"
+    request = Request(
+        url,
+        data=json.dumps({"token": token, "draining": draining}).encode("utf-8"),
+        headers=request_headers,
+        method="POST",
+    )
+    class RejectNodeRedirects(HTTPRedirectHandler):
+        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    with build_opener(RejectNodeRedirects()).open(
+        request,
+        timeout=timeout_seconds,
+    ) as response:
+        body = response.read(1024 * 1024 + 1)
+        if len(body) > 1024 * 1024:
+            raise ValueError("node drain response exceeds 1 MiB")
+        if not body:
+            return {}
+        decoded = json.loads(body.decode("utf-8"))
+        if not isinstance(decoded, dict):
+            raise ValueError("node drain response must be a JSON object")
+        return decoded
+
+
+def _drain_response_acknowledges(
+    response: dict[str, Any],
+    *,
+    token: str,
+    draining: bool,
+) -> bool:
+    drain = response.get("drain")
+    return bool(
+        isinstance(drain, dict)
+        and str(drain.get("token") or "").strip() == str(token).strip()
+        and drain.get("draining") is draining
+        and drain.get("admission_open") is (not draining)
+    )
+
+
+def _nodes_with_drain_admission_reopened(
+    nodes: list[SandboxNode],
+    job_ids: set[str],
+) -> list[SandboxNode]:
+    """Return a planning-only view where selected drain intents are canceled."""
+
+    reopened: list[SandboxNode] = []
+    for node in nodes:
+        heartbeat = node.heartbeat
+        if node.job_id not in job_ids or heartbeat is None:
+            reopened.append(node)
+            continue
+        reopened.append(
+            replace(
+                node,
+                heartbeat=replace(
+                    heartbeat,
+                    draining=False,
+                    admission_open=True,
+                ),
+            )
+        )
+    return reopened
+
+
+def _drain_intent_to_dict(intent: DrainIntent) -> dict[str, Any]:
+    return {
+        "deploymentId": intent.deployment_id,
+        "jobId": intent.job_id,
+        "role": intent.role,
+        "token": intent.token,
+        "state": intent.state,
+        "updatedAt": intent.updated_at.isoformat(),
+    }
+
+
+def _stop_operation_has_drain_proof(
+    provider_state: AutoscalerStateStore,
+    operation: ProviderOperation,
+) -> bool:
+    if operation.kind != "stop" or len(operation.target_job_ids) != 1:
+        return operation.kind != "stop"
+    token = str(operation.request.get("drainToken") or "").strip()
+    if not token or operation.request.get("drainReady") is not True:
+        return False
+    intent = provider_state.get_drain_intent(
+        operation.deployment_id,
+        operation.target_job_ids[0],
+    )
+    return bool(
+        intent is not None
+        and intent.state == "active"
+        and intent.token == token
+        and intent.role == operation.role
+    )
+
+
+def apply_prepared_provider_operations(
+    provider_state: AutoscalerStateStore,
+    client: UCloudClient,
+    project_id: str,
+    *,
+    source: str,
+    allowed_kinds: set[str],
+    allowed_stop_operation_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for prepared in provider_state.submittable_operations():
+        if prepared.kind not in allowed_kinds:
+            continue
+        if prepared.kind == "stop" and prepared.operation_id not in (
+            allowed_stop_operation_ids or set()
+        ):
+            continue
+        # Recurring autoscaler stops must never execute from a legacy or
+        # partially-written journal record that predates the drain handshake.
+        if prepared.kind == "stop" and not _stop_operation_has_drain_proof(
+            provider_state, prepared
+        ):
+            continue
+        submitting = provider_state.begin_provider_call(prepared.operation_id)
+        try:
+            if submitting.kind == "create":
+                response = client.submit_jobs(project_id, submitting.request)
+            else:
+                response = client.terminate_jobs(
+                    project_id,
+                    submitting.target_job_ids,
+                )
+        except UCloudHttpError as exc:
+            if _provider_http_error_is_definite_rejection(exc):
+                operation = provider_state.mark_operation_failed(
+                    submitting.operation_id,
+                    error=str(exc),
+                    response=_provider_error_payload(exc),
+                )
+            else:
+                operation = provider_state.mark_operation_uncertain(
+                    submitting.operation_id,
+                    error=str(exc),
+                )
+        except Exception as exc:
+            # A transport failure, process interruption, or unknown client error
+            # cannot prove whether UCloud applied the request.
+            operation = provider_state.mark_operation_uncertain(
+                submitting.operation_id,
+                error=str(exc),
+            )
+        else:
+            response_job_ids = tuple(submitted_job_ids(response))
+            if _provider_response_is_definite_success(
+                submitting,
+                response_job_ids,
+            ):
+                operation = provider_state.mark_operation_accepted(
+                    submitting.operation_id,
+                    response=response,
+                    target_job_ids=(
+                        response_job_ids
+                        if submitting.kind == "create"
+                        else submitting.target_job_ids
+                    ),
+                )
+            elif _provider_response_is_definite_rejection(response):
+                operation = provider_state.mark_operation_failed(
+                    submitting.operation_id,
+                    error="UCloud explicitly rejected the provider operation",
+                    response=response,
+                )
+            else:
+                operation = provider_state.mark_operation_uncertain(
+                    submitting.operation_id,
+                    error="UCloud response did not prove whether the operation applied",
+                )
+        results.append(_provider_operation_result(operation, source=source))
+    return results
+
+
+def _provider_http_error_is_definite_rejection(exc: UCloudHttpError) -> bool:
+    return 400 <= exc.status < 500 and exc.status not in {408, 425, 429}
+
+
+def _provider_error_payload(exc: UCloudHttpError) -> dict[str, Any]:
+    return {
+        "status": exc.status,
+        "payload": exc.payload,
+    }
+
+
+def _provider_response_is_definite_success(
+    operation: ProviderOperation,
+    response_job_ids: tuple[str, ...],
+) -> bool:
+    if operation.kind == "create":
+        return len(response_job_ids) == 1
+    return bool(operation.target_job_ids) and set(operation.target_job_ids).issubset(
+        response_job_ids
+    )
+
+
+def _provider_response_is_definite_rejection(response: dict[str, Any]) -> bool:
+    responses = response.get("responses")
+    if not isinstance(responses, list) or not responses:
+        return False
+    return all(
+        isinstance(item, dict)
+        and not item.get("id")
+        and any(item.get(key) not in (None, "") for key in ("error", "why", "message"))
+        for item in responses
+    )
+
+
+def _provider_operation_result(
+    operation: ProviderOperation,
+    *,
+    source: str,
+) -> dict[str, Any]:
+    return {
+        "operationId": operation.operation_id,
+        "kind": operation.kind,
+        "role": operation.role,
+        "state": operation.state,
+        "jobIds": list(operation.target_job_ids),
+        "source": source,
+        "error": operation.last_error,
+    }
+
+
+def _successful_create_operation_count(
+    operation_results: list[dict[str, Any]],
+    role: str,
+) -> int:
+    relevant = [
+        item
+        for item in operation_results
+        if item.get("kind") == "create" and item.get("role") in {"", role}
+    ]
+    job_ids = [str(job_id) for item in relevant for job_id in item.get("jobIds", [])]
+    if (
+        not relevant
+        or not all(
+            item.get("state") in {"accepted", "recovered"} for item in relevant
+        )
+        or len(job_ids) != len(relevant)
+        or len(set(job_ids)) != len(job_ids)
+    ):
+        return 0
+    return len(job_ids)
+
+
+def _sandbox_capacity_operation_succeeded(
+    operation_results: list[dict[str, Any]],
+    resource_deficit: ResourceQuantity,
+    default_node_resources: ResourceQuantity,
+) -> bool:
+    count = _successful_create_operation_count(operation_results, "sandbox")
+    if count <= 0:
+        return False
+    created = ResourceQuantity(
+        vcpu=default_node_resources.vcpu * count,
+        memory_mb=default_node_resources.memory_mb * count,
+        disk_mb=default_node_resources.disk_mb * count,
+    )
+    return resource_deficit.fits_within(created)
+
+
+def _builder_capacity_operation_succeeded(
+    operation_results: list[dict[str, Any]],
+    *,
+    existing_builders: int,
+    desired_builders: int,
+) -> bool:
+    count = _successful_create_operation_count(operation_results, "builder")
+    return count > 0 and existing_builders + count >= desired_builders
 
 
 def run_reconcile_cycle(
@@ -3022,15 +3569,133 @@ def run_reconcile_cycle(
     pending_image_builds: int | None = None,
     prepared_builder_count: int | None = None,
     metrics_store: MetricsStore | None = None,
+    provider_state: AutoscalerStateStore | None = None,
+    provider_mutations_allowed: bool = False,
 ) -> dict[str, Any]:
+    execution_requested = bool(
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+    )
+    if execution_requested and not provider_mutations_allowed and provider_state is None:
+        raise AutoscalerStateError(
+            "provider mutations require the local autoscaler controller lock"
+        )
+    if execution_requested and provider_mutations_allowed and provider_state is None:
+        raise AutoscalerStateError(
+            "provider mutations require the autoscaler operation journal"
+        )
+    execution_authorized = bool(provider_mutations_allowed)
+
+    def assert_provider_fence() -> None:
+        if not provider_mutations_allowed:
+            raise AutoscalerStateError("autoscaler controller lock is not held")
+
+    client: UCloudClient | None = None
+
+    def get_client() -> UCloudClient:
+        nonlocal client
+        if client is None:
+            client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
+        return client
+
     jobs = load_jobs_for_plan(config, args)
+    operation_deployment_id = config.deployment_id or config.project_id
+    provider_operation_results: list[dict[str, Any]] = []
+    create_recovery_results: list[dict[str, Any]] = []
+    stop_recovery_results: list[dict[str, Any]] = []
+    create_visibility_guards: list[dict[str, Any]] = []
+    blocked_create_roles: set[str] = set()
+    if execution_authorized and provider_state is not None:
+        recoveries = provider_state.recover_uncertain_creates(
+            [job.raw for job in jobs]
+        )
+        for recovery in recoveries:
+            operation = provider_state.get_operation(recovery.operation_id)
+            role = operation.role if operation is not None else ""
+            item = {
+                "operationId": recovery.operation_id,
+                "kind": "create",
+                "role": role,
+                "state": recovery.status,
+                "jobIds": list(recovery.job_ids),
+                "source": "inventory-recovery",
+                "error": "",
+            }
+            create_recovery_results.append(item)
+            provider_operation_results.append(item)
+        observed_job_ids = {job.id for job in jobs if job.id}
+        provider_state.confirm_visible_creates(observed_job_ids)
+        final_provider_job_ids = tuple(
+            job.id for job in jobs if job.id and job.is_final
+        )
+        for recovery in provider_state.recover_uncertain_stops(
+            final_provider_job_ids,
+        ):
+            operation = provider_state.get_operation(recovery.operation_id)
+            item = {
+                "operationId": recovery.operation_id,
+                "kind": "stop",
+                "role": operation.role if operation is not None else "",
+                "state": recovery.status,
+                "jobIds": list(recovery.job_ids),
+                "source": "inventory-recovery",
+                "error": "",
+            }
+            stop_recovery_results.append(item)
+            provider_operation_results.append(item)
+        provider_state.confirm_final_stops(final_provider_job_ids)
+        allowed_kinds: set[str] = set()
+        if args.execute:
+            allowed_kinds.add("create")
+        # Stops are replayed only after this cycle has refreshed every active
+        # node drain intent below.
+        replay_results = apply_prepared_provider_operations(
+            provider_state,
+            get_client(),
+            config.project_id,
+            source="prepared-replay",
+            allowed_kinds=allowed_kinds,
+            allowed_stop_operation_ids=set(),
+        )
+        provider_operation_results.extend(replay_results)
+        for operation in provider_state.list_operations(
+            kind="create",
+            states=RECOVERABLE_CREATE_STATES,
+        ):
+            blocked_create_roles.add(operation.role or "sandbox")
+            if not operation.role:
+                blocked_create_roles.add("builder")
+        # A replayed create is absent from the inventory used for this plan.
+        # Suppress another create for that role until the next exhaustive browse.
+        for item in replay_results:
+            if item["kind"] == "create" and item["state"] == "accepted":
+                blocked_create_roles.add(str(item.get("role") or "sandbox"))
+        for operation in provider_state.list_operations(
+            kind="create",
+            states={"accepted"},
+        ):
+            missing_job_ids = sorted(set(operation.target_job_ids) - observed_job_ids)
+            if not missing_job_ids:
+                continue
+            role = operation.role or "sandbox"
+            blocked_create_roles.add(role)
+            if not operation.role:
+                blocked_create_roles.add("builder")
+            create_visibility_guards.append(
+                {
+                    "operationId": operation.operation_id,
+                    "role": operation.role,
+                    "state": operation.state,
+                    "missingJobIds": missing_job_ids,
+                }
+            )
+
     heartbeat_file = args.heartbeats or config.heartbeat_file()
     heartbeat_store = HeartbeatStore(Path(heartbeat_file))
     heartbeats = load_heartbeats(heartbeat_file)
     final_heartbeat_job_ids = tuple(
         sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
     )
-    if final_heartbeat_job_ids:
+    if final_heartbeat_job_ids and execution_authorized:
         heartbeat_store.remove(final_heartbeat_job_ids)
         heartbeats = {
             job_id: heartbeat
@@ -3076,6 +3741,78 @@ def run_reconcile_cycle(
         policy=effective_policy,
         max_builder_nodes=getattr(args, "max_builder_nodes", 1),
     )
+    drain_workflow_enabled = bool(
+        args.execute_stops and execution_authorized and provider_state is not None
+    )
+    pending_drain_intents: list[DrainIntent] = []
+    irreversible_stop_job_ids: set[str] = set()
+    if drain_workflow_enabled:
+        # Adopt both directions of the durable handshake before planning.  An
+        # active drain is evaluated counterfactually as admission-open so a
+        # demand increase can cancel it, while an already-started provider
+        # termination is irreversible and must never reopen the node.
+        pending_drain_intents = provider_state.pending_drain_intents(
+            deployment_id=operation_deployment_id,
+        )
+        final_job_ids = {job.id for job in jobs if job.id and job.is_final}
+        for intent in pending_drain_intents:
+            if intent.job_id in final_job_ids:
+                provider_state.retire_drain_intent(
+                    deployment_id=intent.deployment_id,
+                    job_id=intent.job_id,
+                    reason="job-final",
+                )
+        pending_drain_intents = provider_state.pending_drain_intents(
+            deployment_id=operation_deployment_id,
+        )
+        for operation in provider_state.list_operations(
+            kind="stop",
+        ):
+            provider_call_started = operation.state in {
+                "uncertain",
+                "accepted",
+            } or (
+                operation.state == "prepared"
+                and (
+                    operation.response.get("providerCallStarted") is True
+                    or operation.updated_at > operation.created_at
+                    or bool(operation.last_error)
+                )
+            )
+            if provider_call_started:
+                irreversible_stop_job_ids.update(operation.target_job_ids)
+
+        nodes_by_job_id = {node.job_id: node for node in nodes}
+        reopen_job_ids = {
+            intent.job_id
+            for intent in pending_drain_intents
+            if intent.state == "active"
+            and intent.job_id not in irreversible_stop_job_ids
+            and (node := nodes_by_job_id.get(intent.job_id)) is not None
+            and node.heartbeat is not None
+            and node.heartbeat_fresh
+        }
+        if reopen_job_ids:
+            counterfactual_sandbox_nodes = _nodes_with_drain_admission_reopened(
+                sandbox_nodes,
+                reopen_job_ids,
+            )
+            counterfactual_builder_nodes = _nodes_with_drain_admission_reopened(
+                builder_nodes,
+                reopen_job_ids,
+            )
+            decision = evaluate_scale(
+                counterfactual_sandbox_nodes,
+                sandbox_demand,
+                effective_policy,
+            )
+            builder_decision = evaluate_builder_scale(
+                counterfactual_builder_nodes,
+                pending_builds=builder_pending,
+                prepared_builders=builder_prepared,
+                policy=effective_policy,
+                max_builder_nodes=getattr(args, "max_builder_nodes", 1),
+            )
     sandbox_create_intents: list[VmCreateIntent] = []
     if decision.creates > 0:
         sandbox_create_intents = build_vm_create_intents(
@@ -3092,6 +3829,10 @@ def run_reconcile_cycle(
             vm_builder_submission_defaults_from_args(args, config),
             seed_prefix=args.seed_prefix,
         )
+    if "sandbox" in blocked_create_roles:
+        sandbox_create_intents = []
+    if "builder" in blocked_create_roles:
+        builder_create_intents = []
     create_intents = [*sandbox_create_intents, *builder_create_intents]
     requested_sandbox_stop_job_ids = stop_job_ids_from_decision(decision)
     requested_builder_stop_job_ids = stop_job_ids_from_decision(builder_decision)
@@ -3118,6 +3859,146 @@ def run_reconcile_cycle(
         *blocked_sandbox_stop_job_ids,
         *blocked_builder_stop_job_ids,
     )
+    if drain_workflow_enabled:
+        canceling_job_ids = {
+            intent.job_id
+            for intent in pending_drain_intents
+            if intent.state == "canceling"
+        }
+        if canceling_job_ids:
+            blocked_canceling = tuple(
+                job_id for job_id in stop_job_ids if job_id in canceling_job_ids
+            )
+            sandbox_stop_job_ids = tuple(
+                job_id
+                for job_id in sandbox_stop_job_ids
+                if job_id not in canceling_job_ids
+            )
+            builder_stop_job_ids = tuple(
+                job_id
+                for job_id in builder_stop_job_ids
+                if job_id not in canceling_job_ids
+            )
+            stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
+            blocked_stop_job_ids = (*blocked_stop_job_ids, *blocked_canceling)
+    active_drain_intents: list[DrainIntent] = []
+    drain_results: list[dict[str, Any]] = []
+    drain_ready_stop_job_ids: list[str] = []
+    canceled_drain_job_ids: list[str] = []
+    node_control_bearer_token = read_required_token_file(
+        getattr(args, "node_control_bearer_token_file", None),
+        "node control bearer token",
+    )
+    if drain_workflow_enabled:
+        nodes_by_job_id = {node.job_id: node for node in nodes}
+        desired_stop_job_ids = set(stop_job_ids)
+        for intent in pending_drain_intents:
+            node = nodes_by_job_id.get(intent.job_id)
+            if (
+                intent.state == "active"
+                and intent.job_id not in desired_stop_job_ids
+                and intent.job_id not in irreversible_stop_job_ids
+                and node is not None
+                and node.heartbeat is not None
+                and node.heartbeat_fresh
+            ):
+                provider_state.begin_drain_cancellation(
+                    deployment_id=intent.deployment_id,
+                    job_id=intent.job_id,
+                )
+
+        sandbox_stop_set = set(sandbox_stop_job_ids)
+        for job_id in stop_job_ids:
+            provider_state.prepare_drain_intent(
+                deployment_id=operation_deployment_id,
+                job_id=job_id,
+                role="sandbox" if job_id in sandbox_stop_set else "builder",
+            )
+
+        pending_drain_intents = provider_state.pending_drain_intents(
+            deployment_id=operation_deployment_id,
+        )
+        for intent in pending_drain_intents:
+            node = nodes_by_job_id.get(intent.job_id)
+            heartbeat = node.heartbeat if node is not None else None
+            node_url = str(heartbeat.node_url or "").strip() if heartbeat else ""
+            response: dict[str, Any] = {}
+            error = ""
+            if not node_url:
+                error = "fresh node heartbeat has no node URL"
+            else:
+                try:
+                    if intent.state == "canceling":
+                        response = _post_node_drain(
+                            node_url,
+                            intent.token,
+                            draining=False,
+                            bearer_token=node_control_bearer_token,
+                        )
+                    elif node_control_bearer_token is None:
+                        response = _post_node_drain(node_url, intent.token)
+                    else:
+                        response = _post_node_drain(
+                            node_url,
+                            intent.token,
+                            bearer_token=node_control_bearer_token,
+                        )
+                except Exception as exc:
+                    # A timeout or malformed response is ambiguous. The stable
+                    # intent remains in its current direction and a canceling
+                    # intent can never authorize a provider stop.
+                    error = str(exc)
+            cancellation_acknowledged = False
+            ready = False
+            if intent.state == "canceling":
+                cancellation_acknowledged = bool(
+                    not error
+                    and _drain_response_acknowledges(
+                        response,
+                        token=intent.token,
+                        draining=False,
+                    )
+                )
+                if cancellation_acknowledged:
+                    provider_state.retire_drain_intent(
+                        deployment_id=intent.deployment_id,
+                        job_id=intent.job_id,
+                        reason="canceled",
+                    )
+                    canceled_drain_job_ids.append(intent.job_id)
+            else:
+                ready = not error and node is not None and node_drain_ready(
+                    node, intent.token
+                )
+                if ready:
+                    drain_ready_stop_job_ids.append(intent.job_id)
+            drain_results.append(
+                {
+                    "jobId": intent.job_id,
+                    "role": intent.role,
+                    "action": (
+                        "undrain" if intent.state == "canceling" else "drain"
+                    ),
+                    "nodeUrl": node_url,
+                    "requestSucceeded": not error,
+                    "heartbeatReady": ready,
+                    "cancellationAcknowledged": cancellation_acknowledged,
+                    "error": error,
+                }
+            )
+        pending_drain_intents = provider_state.pending_drain_intents(
+            deployment_id=operation_deployment_id,
+        )
+        active_drain_intents = [
+            intent for intent in pending_drain_intents if intent.state == "active"
+        ]
+    active_drain_job_ids = {intent.job_id for intent in active_drain_intents}
+    canceling_drain_job_ids = {
+        intent.job_id
+        for intent in pending_drain_intents
+        if intent.state == "canceling"
+    }
+    pending_drain_job_ids = active_drain_job_ids | canceling_drain_job_ids
     bootstrap_state_file = (
         getattr(args, "init_state_file", None) or config.bootstrap_file()
     )
@@ -3130,14 +4011,6 @@ def run_reconcile_cycle(
             if not node.job.is_final
         },
     )
-
-    client: UCloudClient | None = None
-
-    def get_client() -> UCloudClient:
-        nonlocal client
-        if client is None:
-            client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-        return client
 
     def plan_bootstrap_from_payload(payload: dict[str, Any]) -> Any:
         plan = plan_vm_init(payload)
@@ -3172,8 +4045,87 @@ def run_reconcile_cycle(
     bootstrap_intents = [
         apply_bootstrap_cli_requirements(intent)
         for intent in bootstrap_intents
-        if intent.job_id not in stop_job_ids
+        if intent.job_id not in set(stop_job_ids) | pending_drain_job_ids
     ]
+    journaled_create_operations: list[ProviderOperation] = []
+    journaled_stop_operations: list[ProviderOperation] = []
+    if execution_authorized and provider_state is not None:
+        if args.execute:
+            labeled_sandbox_intents: list[VmCreateIntent] = []
+            labeled_builder_intents: list[VmCreateIntent] = []
+            for role, intents, destination in (
+                ("sandbox", sandbox_create_intents, labeled_sandbox_intents),
+                ("builder", builder_create_intents, labeled_builder_intents),
+            ):
+                for intent in intents:
+                    intent_key = provider_state.allocate_operation_intent_key(
+                        deployment_id=operation_deployment_id,
+                        kind="create",
+                        base_key=f"{role}:{intent.seed}",
+                    )
+                    operation_id = stable_provider_operation_id(
+                        operation_deployment_id,
+                        "create",
+                        intent_key,
+                    )
+                    labeled = with_provider_operation_label(
+                        intent,
+                        operation_id,
+                        deployment_id=operation_deployment_id,
+                    )
+                    operation = provider_state.prepare_operation(
+                        intent_key=intent_key,
+                        kind="create",
+                        deployment_id=operation_deployment_id,
+                        role=role,
+                        request=bulk_payload_from_create_intents([labeled]),
+                    )
+                    journaled_create_operations.append(operation)
+                    destination.append(labeled)
+            sandbox_create_intents = labeled_sandbox_intents
+            builder_create_intents = labeled_builder_intents
+            create_intents = [*sandbox_create_intents, *builder_create_intents]
+        if args.execute_stops:
+            stop_ids_to_journal = tuple(drain_ready_stop_job_ids)
+            sandbox_stop_set = set(sandbox_stop_job_ids)
+            drain_intents_by_job = {
+                intent.job_id: intent for intent in active_drain_intents
+            }
+            for job_id in stop_ids_to_journal:
+                drain_intent = drain_intents_by_job.get(job_id)
+                role = (
+                    drain_intent.role
+                    if drain_intent is not None
+                    else ("sandbox" if job_id in sandbox_stop_set else "builder")
+                )
+                request: dict[str, Any] = {
+                    "type": "bulk",
+                    "items": [{"id": job_id}],
+                }
+                if drain_intent is None:
+                    raise AutoscalerStateError(
+                        f"drain-ready job has no durable intent: {job_id}"
+                    )
+                request.update(
+                    {
+                        "drainToken": drain_intent.token,
+                        "drainReady": True,
+                    }
+                )
+                journaled_stop_operations.append(
+                    provider_state.prepare_operation(
+                        intent_key=(
+                            f"{role}:{job_id}:{drain_intent.token}"
+                            if drain_intent is not None
+                            else f"{role}:{job_id}"
+                        ),
+                        kind="stop",
+                        deployment_id=operation_deployment_id,
+                        role=role,
+                        request=request,
+                        target_job_ids=(job_id,),
+                    )
+                )
     result: dict[str, Any] = {
         "projectId": config.project_id,
         "jobNamePrefix": config.job_name_prefix,
@@ -3199,15 +4151,35 @@ def run_reconcile_cycle(
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
+        "drainingJobIds": sorted(active_drain_job_ids),
+        "cancelingDrainJobIds": sorted(canceling_drain_job_ids),
+        "canceledDrainJobIds": sorted(canceled_drain_job_ids),
+        "drainReadyStopJobIds": list(drain_ready_stop_job_ids),
+        "drainIntents": [
+            _drain_intent_to_dict(intent) for intent in pending_drain_intents
+        ],
+        "drainResults": drain_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "removedStoppedHeartbeats": [],
         "bootstrapIntents": [
             vm_bootstrap_intent_to_dict(intent) for intent in bootstrap_intents
         ],
         "bootstrapResults": [],
-        "executeCreates": args.execute,
-        "executeStops": args.execute_stops,
-        "executeInit": getattr(args, "execute_init", False),
+        "executeCreates": bool(args.execute and execution_authorized),
+        "executeStops": bool(args.execute_stops and execution_authorized),
+        "executeInit": bool(
+            getattr(args, "execute_init", False) and execution_authorized
+        ),
+        "executionRequested": execution_requested,
+        "controllerLockHeld": provider_mutations_allowed,
+        "blockedCreateRoles": sorted(blocked_create_roles),
+        "createRecoveryResults": create_recovery_results,
+        "stopRecoveryResults": stop_recovery_results,
+        "createVisibilityGuards": create_visibility_guards,
+        "providerOperationResults": provider_operation_results,
+        "sandboxCapacityOperationSucceeded": False,
+        "builderCapacityOperationSucceeded": False,
+        "definitelyTerminatedJobIds": [],
         "allowUnlabeledStops": args.allow_unlabeled_stops,
         "rawNodes": nodes,
         "rawSandboxNodes": sandbox_nodes,
@@ -3220,22 +4192,99 @@ def run_reconcile_cycle(
         "rawBootstrapIntents": bootstrap_intents,
     }
 
-    if args.execute and create_intents:
-        create_response = get_client().submit_jobs(
+    if (
+        execution_authorized
+        and provider_state is not None
+        and (
+            journaled_create_operations
+            or journaled_stop_operations
+            or any(
+                operation.kind == "stop"
+                for operation in provider_state.submittable_operations()
+            )
+        )
+    ):
+        planned_results = apply_prepared_provider_operations(
+            provider_state,
+            get_client(),
             config.project_id,
-            bulk_payload_from_create_intents(create_intents),
+            source="planned",
+            allowed_kinds={"create", "stop"},
+            allowed_stop_operation_ids={
+                operation.operation_id for operation in journaled_stop_operations
+            },
         )
-        result["createResponse"] = create_response
-        result["createdJobIds"] = submitted_job_ids(create_response)
-
-    if args.execute_stops and stop_job_ids:
-        removed_stop_heartbeats = heartbeat_store.remove(stop_job_ids)
-        result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
-        result["stopResponse"] = get_client().terminate_jobs(
-            config.project_id, stop_job_ids
+        provider_operation_results.extend(planned_results)
+        # An already-applied stop can be encountered again before the next job
+        # inventory observes it final; it remains definite and is never replayed.
+        for operation in journaled_stop_operations:
+            current = provider_state.get_operation(operation.operation_id)
+            if (
+                current is not None
+                and current.state == "accepted"
+                and not any(
+                    item.get("operationId") == current.operation_id
+                    for item in provider_operation_results
+                )
+            ):
+                provider_operation_results.append(
+                    _provider_operation_result(current, source="journal")
+                )
+        result["providerOperationResults"] = provider_operation_results
+        result["createdJobIds"] = [
+            str(job_id)
+            for item in planned_results
+            if item.get("kind") == "create" and item.get("state") == "accepted"
+            for job_id in item.get("jobIds", [])
+        ]
+        result["createResponse"] = {
+            "operations": [
+                item for item in planned_results if item.get("kind") == "create"
+            ]
+        }
+        result["stopResponse"] = {
+            "operations": [
+                item
+                for item in provider_operation_results
+                if item.get("kind") == "stop"
+            ]
+        }
+        definitely_terminated = sorted(
+            {
+                str(job_id)
+                for item in provider_operation_results
+                if item.get("kind") == "stop"
+                and (
+                    item.get("state") == "accepted"
+                    or item.get("state") == "recovered"
+                )
+                for job_id in item.get("jobIds", [])
+            }
         )
+        result["definitelyTerminatedJobIds"] = definitely_terminated
+        if definitely_terminated:
+            removed_stop_heartbeats = heartbeat_store.remove(definitely_terminated)
+            result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
+    result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
+        provider_operation_results,
+        decision.resource_deficit,
+        effective_policy.default_node_resources,
+    )
+    desired_builders = min(
+        max(1 if builder_pending > 0 else 0, builder_prepared),
+        max(0, int(getattr(args, "max_builder_nodes", 1))),
+    )
+    result["builderCapacityOperationSucceeded"] = _builder_capacity_operation_succeeded(
+        provider_operation_results,
+        existing_builders=builder_decision.total_nodes,
+        desired_builders=desired_builders,
+    )
 
-    if getattr(args, "execute_init", False) and bootstrap_intents:
+    if (
+        getattr(args, "execute_init", False)
+        and execution_authorized
+        and bootstrap_intents
+    ):
         bootstrap_results: list[dict[str, Any]] = []
         for intent in bootstrap_intents:
             if not intent.runnable or not intent.plan.ssh_command:
@@ -3249,6 +4298,7 @@ def run_reconcile_cycle(
                     }
                 )
                 continue
+            assert_provider_fence()
             attempt_started_at = utc_now()
             attempt_started_perf = time.perf_counter()
             stage_duration_ms: int | None = None
@@ -3262,6 +4312,7 @@ def run_reconcile_cycle(
                 else intent.previous_attempts + 1
             )
             try:
+                assert_provider_fence()
                 effective_options = intent.options
                 stage_started_perf = time.perf_counter()
                 stage_result = stage_vm_init_package_over_ssh(
@@ -3324,6 +4375,7 @@ def run_reconcile_cycle(
                         intent.options,
                         package_spec=stage_result.remote_path,
                     )
+                assert_provider_fence()
                 run_started_perf = time.perf_counter()
                 run_result = run_init_over_ssh(
                     intent.plan.ssh_command,
@@ -3426,8 +4478,12 @@ def run_reconcile_cycle(
             finally:
                 bootstrap_store.save(bootstrap_records)
         result["bootstrapResults"] = bootstrap_results
-    elif getattr(args, "execute_init", False):
+    elif getattr(args, "execute_init", False) and execution_authorized:
         bootstrap_store.save(bootstrap_records)
+    if execution_authorized and provider_state is not None:
+        result["compactedProviderOperations"] = provider_state.compact_terminal_history(
+            keep=1000
+        )
     return result
 
 
@@ -3445,6 +4501,16 @@ def metrics_path_from_args(
     if sibling_file is not None:
         return Path(sibling_file).expanduser().parent / "metrics.jsonl"
     return config.metrics_path()
+
+
+def _autoscaler_state_path(config: AutoscalerConfig) -> Path:
+    """Return the deployment-wide local controller journal location.
+
+    This must not follow an optional route-file override: all local mutating
+    controller processes must contend on the same process lock.
+    """
+
+    return Path(config.state_dir).expanduser() / "autoscaler-state.sqlite"
 
 
 def record_submitted_vm_metrics(
@@ -3534,7 +4600,10 @@ def load_jobs_for_plan(
         raw_items = payload.get("items") if isinstance(payload, dict) else payload
     else:
         client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-        raw_items = client.browse_jobs(config.project_id, include_application=False)
+        raw_items = client.browse_all_jobs(
+            config.project_id,
+            include_application=False,
+        )
 
     if not isinstance(raw_items, list):
         raise ValueError("Jobs payload must be a list or an object with an items list.")
@@ -3694,6 +4763,19 @@ def vm_init_options_for_autoscaled_node(
             token_file=token_file,
             source_file=getattr(args, "init_heartbeat_bearer_token_source_file", None),
         ),
+        node_control_bearer_token_file=str(
+            getattr(args, "init_node_control_bearer_token_file", "") or ""
+        ),
+        node_control_bearer_token=read_bearer_token_source(
+            token_file=str(
+                getattr(args, "init_node_control_bearer_token_file", "") or ""
+            ),
+            source_file=getattr(
+                args,
+                "init_node_control_bearer_token_source_file",
+                None,
+            ),
+        ),
         service_user=str(getattr(args, "init_service_user", "ucloud")),
         init_authorized_keys=read_prefixed_init_authorized_keys(args),
         node_id=node_id,
@@ -3745,6 +4827,18 @@ def apply_bootstrap_cli_requirements(intent: VmBootstrapIntent) -> VmBootstrapIn
             reason=(
                 "heartbeat bearer token source is required via "
                 "--init-heartbeat-bearer-token-source-file"
+            ),
+        )
+    if (
+        intent.options.node_control_bearer_token_file
+        and not intent.options.node_control_bearer_token
+    ):
+        return replace(
+            intent,
+            runnable=False,
+            reason=(
+                "node control bearer token source is required via "
+                "--init-node-control-bearer-token-source-file"
             ),
         )
     return intent
@@ -4316,6 +5410,15 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
             token_file=args.heartbeat_bearer_token_file,
             source_file=getattr(args, "heartbeat_bearer_token_source_file", None),
         ),
+        node_control_bearer_token_file=str(
+            getattr(args, "node_control_bearer_token_file", "") or ""
+        ),
+        node_control_bearer_token=read_bearer_token_source(
+            token_file=str(
+                getattr(args, "node_control_bearer_token_file", "") or ""
+            ),
+            source_file=getattr(args, "node_control_bearer_token_source_file", None),
+        ),
         service_user=args.service_user,
         init_authorized_keys=read_init_authorized_keys(args),
         node_id=args.node_id or "",
@@ -4349,6 +5452,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "nodeId": options.normalized_node_id(),
         "heartbeatUrl": options.heartbeat_url,
         "heartbeatBearerTokenFile": options.heartbeat_bearer_token_file,
+        "nodeControlBearerTokenFile": options.node_control_bearer_token_file,
         "serviceUser": options.service_user,
         "initAuthorizedKeys": list(options.init_authorized_keys),
         "workDir": options.work_dir,

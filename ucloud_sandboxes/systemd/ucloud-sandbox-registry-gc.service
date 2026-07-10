@@ -7,8 +7,7 @@ Conflicts=ucloud-sandbox-registry-prune.service
 [Service]
 Type=oneshot
 Environment=UCLOUD_REGISTRY_IMAGE=registry:2
-Environment=UCLOUD_REGISTRY_DATA_DIR=/work/ucloud-sandbox-registry/docker-registry
+Environment=UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
+Environment=UCLOUD_REGISTRY_MAINTENANCE_LOCK=/run/lock/ucloud-sandbox-registry-maintenance
 EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
-ExecStartPre=/usr/bin/systemctl stop ucloud-sandbox-registry.service
-ExecStart=/usr/bin/docker run --rm -v ${UCLOUD_REGISTRY_DATA_DIR}:/var/lib/registry ${UCLOUD_REGISTRY_IMAGE} garbage-collect --delete-untagged /etc/docker/registry/config.yml
-ExecStartPost=/usr/bin/systemctl start ucloud-sandbox-registry.service
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-gc --data-dir ${UCLOUD_REGISTRY_DATA_DIR} --registry-image ${UCLOUD_REGISTRY_IMAGE} --lock-file ${UCLOUD_REGISTRY_MAINTENANCE_LOCK}

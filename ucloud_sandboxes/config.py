@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -65,67 +66,129 @@ class AutoscalerConfig:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "AutoscalerConfig":
+        if not isinstance(raw, dict):
+            raise ValueError("Config must be a JSON object.")
         policy_raw = raw.get("policy") or {}
         if not isinstance(policy_raw, dict):
             raise ValueError("Config policy must be a JSON object.")
         defaults = cls.default()
         policy_defaults = ScalePolicy()
+        warm_resources_raw = policy_raw.get(
+            "warm_resources",
+            policy_defaults.warm_resources.to_dict(),
+        )
+        default_node_resources_raw = policy_raw.get(
+            "default_node_resources",
+            policy_defaults.default_node_resources.to_dict(),
+        )
+        _validate_resource_quantity("policy.warm_resources", warm_resources_raw)
+        _validate_resource_quantity(
+            "policy.default_node_resources",
+            default_node_resources_raw,
+        )
         policy = ScalePolicy(
-            min_nodes=int(policy_raw.get("min_nodes", policy_defaults.min_nodes)),
-            max_nodes=int(policy_raw.get("max_nodes", policy_defaults.max_nodes)),
-            warm_resources=ResourceQuantity.from_dict(
-                policy_raw.get("warm_resources")
-                or policy_defaults.warm_resources.to_dict()
+            min_nodes=_config_int(
+                "policy.min_nodes",
+                policy_raw.get("min_nodes", policy_defaults.min_nodes),
+                minimum=0,
             ),
-            max_create_per_cycle=int(
-                policy_raw.get("max_create_per_cycle", policy_defaults.max_create_per_cycle)
+            max_nodes=_config_int(
+                "policy.max_nodes",
+                policy_raw.get("max_nodes", policy_defaults.max_nodes),
+                minimum=0,
             ),
-            max_stop_per_cycle=int(
-                policy_raw.get("max_stop_per_cycle", policy_defaults.max_stop_per_cycle)
+            warm_resources=ResourceQuantity.from_dict(warm_resources_raw),
+            max_create_per_cycle=_config_int(
+                "policy.max_create_per_cycle",
+                policy_raw.get(
+                    "max_create_per_cycle",
+                    policy_defaults.max_create_per_cycle,
+                ),
+                minimum=0,
             ),
-            max_provisioning_nodes=int(
+            max_stop_per_cycle=_config_int(
+                "policy.max_stop_per_cycle",
+                policy_raw.get(
+                    "max_stop_per_cycle",
+                    policy_defaults.max_stop_per_cycle,
+                ),
+                minimum=0,
+            ),
+            max_provisioning_nodes=_config_int(
+                "policy.max_provisioning_nodes",
                 policy_raw.get(
                     "max_provisioning_nodes",
                     policy_defaults.max_provisioning_nodes,
-                )
+                ),
+                minimum=0,
             ),
-            provisioning_capacity_weight=float(
+            provisioning_capacity_weight=_config_float(
+                "policy.provisioning_capacity_weight",
                 policy_raw.get(
                     "provisioning_capacity_weight",
                     policy_defaults.provisioning_capacity_weight,
-                )
+                ),
+                minimum=0.0,
+                maximum=1.0,
             ),
-            stale_provisioning_after_seconds=int(
+            stale_provisioning_after_seconds=_config_int(
+                "policy.stale_provisioning_after_seconds",
                 policy_raw.get(
                     "stale_provisioning_after_seconds",
                     policy_defaults.stale_provisioning_after_seconds,
-                )
+                ),
+                minimum=0,
             ),
-            stale_provisioning_capacity_weight=float(
+            stale_provisioning_capacity_weight=_config_float(
+                "policy.stale_provisioning_capacity_weight",
                 policy_raw.get(
                     "stale_provisioning_capacity_weight",
                     policy_defaults.stale_provisioning_capacity_weight,
-                )
+                ),
+                minimum=0.0,
+                maximum=1.0,
             ),
-            scale_down_idle_seconds=int(
+            scale_down_idle_seconds=_config_int(
+                "policy.scale_down_idle_seconds",
                 policy_raw.get(
                     "scale_down_idle_seconds",
                     policy_defaults.scale_down_idle_seconds,
-                )
+                ),
+                minimum=0,
             ),
-            builder_scale_down_idle_seconds=int(
+            builder_scale_down_idle_seconds=_config_int(
+                "policy.builder_scale_down_idle_seconds",
                 policy_raw.get(
                     "builder_scale_down_idle_seconds",
                     policy_defaults.builder_scale_down_idle_seconds,
-                )
+                ),
+                minimum=0,
             ),
-            heartbeat_ttl_seconds=int(
-                policy_raw.get("heartbeat_ttl_seconds", policy_defaults.heartbeat_ttl_seconds)
+            heartbeat_ttl_seconds=_config_int(
+                "policy.heartbeat_ttl_seconds",
+                policy_raw.get(
+                    "heartbeat_ttl_seconds",
+                    policy_defaults.heartbeat_ttl_seconds,
+                ),
+                minimum=1,
             ),
-            default_node_resources=ResourceQuantity.from_dict(
-                policy_raw.get("default_node_resources")
-                or policy_defaults.default_node_resources.to_dict()
-            ),
+            default_node_resources=ResourceQuantity.from_dict(default_node_resources_raw),
+        )
+        if policy.min_nodes > policy.max_nodes:
+            raise ValueError("policy.min_nodes cannot exceed policy.max_nodes.")
+        if (
+            policy.default_node_resources.vcpu <= 0
+            or policy.default_node_resources.memory_mb <= 0
+            or policy.default_node_resources.disk_mb <= 0
+        ):
+            raise ValueError(
+                "policy.default_node_resources values must all be positive."
+            )
+        gateway_public_link_port = _config_int(
+            "gateway_public_link_port",
+            raw.get("gateway_public_link_port", defaults.gateway_public_link_port),
+            minimum=1,
+            maximum=65535,
         )
         return cls(
             project_id=str(raw.get("project_id", defaults.project_id)),
@@ -142,9 +205,7 @@ class AutoscalerConfig:
                 if raw.get("gateway_public_link_id")
                 else None
             ),
-            gateway_public_link_port=int(
-                raw.get("gateway_public_link_port", defaults.gateway_public_link_port)
-            ),
+            gateway_public_link_port=gateway_public_link_port,
             node_hostname_prefix=str(
                 raw.get("node_hostname_prefix") or defaults.node_hostname_prefix
             ),
@@ -219,3 +280,67 @@ class AutoscalerConfig:
         raw = asdict(self)
         raw["policy"] = asdict(self.policy)
         return raw
+
+
+def _config_int(
+    label: str,
+    value: object,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be an integer.")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{label} must be an integer.") from exc
+    if isinstance(value, float) and not value.is_integer():
+        raise ValueError(f"{label} must be an integer.")
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{label} must be at least {minimum}.")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{label} must be at most {maximum}.")
+    return parsed
+
+
+def _config_float(
+    label: str,
+    value: object,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a finite number.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{label} must be a finite number.") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{label} must be a finite number.")
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{label} must be at least {minimum}.")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{label} must be at most {maximum}.")
+    return parsed
+
+
+def _validate_resource_quantity(label: str, value: object) -> None:
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object.")
+    aliases = {
+        "vcpu": ("vcpu", "cpu"),
+        "memory_mb": ("memory_mb", "memoryMb"),
+        "disk_mb": ("disk_mb", "diskMb"),
+    }
+    for field, keys in aliases.items():
+        raw_value: object = 0
+        for key in keys:
+            if key in value:
+                raw_value = value[key]
+                break
+        if field == "vcpu":
+            _config_float(f"{label}.{field}", raw_value, minimum=0.0)
+        else:
+            _config_int(f"{label}.{field}", raw_value, minimum=0)

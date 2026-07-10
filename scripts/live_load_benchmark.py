@@ -136,6 +136,35 @@ def main() -> int:
                 run_id=run_id,
                 registry_prefix=args.registry_prefix,
             )
+            image_counts = split_counts(args.sandboxes, len(images))
+            capacity_started = time.monotonic()
+            for index, count in enumerate(image_counts):
+                prepare_id = f"bench-capacity-{run_id}-{index}"
+                capacity_ids.append(prepare_id)
+                response = client.prepare_capacity(
+                    prepare_id=prepare_id,
+                    count=count,
+                    cpus=args.cpus,
+                    memory_mb=args.memory_mb,
+                    disk_mb=args.disk_mb,
+                    ttl_seconds=args.prepare_ttl_seconds,
+                )
+                summary["capacity"].append(
+                    {
+                        "prepare_id": prepare_id,
+                        "count": count,
+                        "image": "",
+                        "boot_response": response,
+                    }
+                )
+                emit(
+                    "sandbox_capacity_requested",
+                    prepare_id=prepare_id,
+                    count=count,
+                    image="",
+                    phase="boot",
+                )
+
             build_results = run_parallel(
                 images,
                 lambda image: build_one(
@@ -155,13 +184,10 @@ def main() -> int:
             ]
             summary["metrics"]["after_builds"] = metrics_snapshot(client)
 
-            image_counts = split_counts(args.sandboxes, len(registry_images))
-            capacity_started = time.monotonic()
             for index, (image, count) in enumerate(
                 zip(registry_images, image_counts, strict=True)
             ):
-                prepare_id = f"bench-capacity-{run_id}-{index}"
-                capacity_ids.append(prepare_id)
+                prepare_id = capacity_ids[index]
                 response = client.prepare_capacity(
                     prepare_id=prepare_id,
                     count=count,
@@ -171,19 +197,16 @@ def main() -> int:
                     image=image,
                     ttl_seconds=args.prepare_ttl_seconds,
                 )
-                summary["capacity"].append(
-                    {
-                        "prepare_id": prepare_id,
-                        "count": count,
-                        "image": image.reference,
-                        "response": response,
-                    }
+                summary["capacity"][index].update(
+                    image=image.reference,
+                    warmup_response=response,
                 )
                 emit(
-                    "sandbox_capacity_requested",
+                    "sandbox_image_warmup_requested",
                     prepare_id=prepare_id,
                     count=count,
                     image=image.reference,
+                    phase="warmup",
                 )
 
             wait_with_metrics(

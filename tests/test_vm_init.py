@@ -385,14 +385,14 @@ class VmInitTests(unittest.TestCase):
         def fake_run(
             command,
             *,
-            input=None,
+            stdin=None,
             check=None,
             timeout=None,
         ):
             calls.append(
                 {
                     "command": command,
-                    "input": input,
+                    "input": stdin.read() if stdin is not None else None,
                     "check": check,
                     "timeout": timeout,
                 }

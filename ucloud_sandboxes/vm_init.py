@@ -1043,12 +1043,15 @@ def stage_vm_init_package_over_ssh(
         remote_command,
         private_key_file=private_key_file,
     )
-    completed = subprocess.run(
-        command,
-        input=local_path.read_bytes(),
-        check=False,
-        timeout=timeout_seconds,
-    )
+    # Runtime bundles are large enough that concurrent bootstrap workers must
+    # not each retain a complete copy in controller memory.
+    with local_path.open("rb") as source:
+        completed = subprocess.run(
+            command,
+            stdin=source,
+            check=False,
+            timeout=timeout_seconds,
+        )
     return VmInitPackageStageResult(
         local_path=local_path,
         remote_path=remote_path,

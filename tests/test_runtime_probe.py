@@ -1,3 +1,5 @@
+from threading import Lock
+import time
 import unittest
 
 from ucloud_sandboxes.runtime_probe import DockerRuntimeProbe
@@ -58,6 +60,34 @@ class FakeExecutor:
 
 
 class RuntimeProbeTests(unittest.TestCase):
+    def test_independent_runtime_probes_run_concurrently_after_first_pull(self) -> None:
+        class SlowExecutor(FakeExecutor):
+            def __init__(self) -> None:
+                super().__init__()
+                self._lock = Lock()
+                self.active = 0
+                self.max_active = 0
+
+            def run(self, argv: tuple[str, ...]) -> CommandResult:
+                if "uname -a" in " ".join(argv):
+                    return super().run(argv)
+                with self._lock:
+                    self.active += 1
+                    self.max_active = max(self.max_active, self.active)
+                try:
+                    time.sleep(0.02)
+                    return super().run(argv)
+                finally:
+                    with self._lock:
+                        self.active -= 1
+
+        executor = SlowExecutor()
+
+        report = DockerRuntimeProbe(executor=executor, execute=True).run()
+
+        self.assertTrue(report.ok)
+        self.assertGreater(executor.max_active, 1)
+
     def test_probe_reports_workspace_quota_success(self) -> None:
         report = DockerRuntimeProbe(executor=FakeExecutor(), execute=True).run()
 

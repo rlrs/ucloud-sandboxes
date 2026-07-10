@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import re
 from typing import Any
@@ -66,6 +67,7 @@ class DockerRuntimeProbe:
         image: str = "busybox",
         use_sudo: bool = False,
         execute: bool = False,
+        max_parallel_probes: int = 6,
     ) -> None:
         self.executor = executor or SubprocessExecutor()
         self.docker_binary = docker_binary
@@ -73,17 +75,31 @@ class DockerRuntimeProbe:
         self.image = image
         self.use_sudo = use_sudo
         self.execute = execute
+        self.max_parallel_probes = max(1, int(max_parallel_probes))
 
     def run(self) -> RuntimeConformanceReport:
-        results = (
-            self._probe_gvisor_kernel(),
-            self._probe_network_none_blocks(),
-            self._probe_memory_limit_visible(),
-            self._probe_mount_blocked(),
-            self._probe_non_root_supported(),
-            self._probe_storage_opt_quota_enforced(),
-            self._probe_tmpfs_quota_enforced(),
+        # Run one container first. On a new VM this also performs Docker's
+        # implicit pull of the small probe image, avoiding a thundering herd of
+        # concurrent first-pull requests. Once the image and runsc runtime have
+        # been proven, the independent conformance checks can run concurrently.
+        first = self._probe_gvisor_kernel()
+        remaining_probes = (
+            self._probe_network_none_blocks,
+            self._probe_memory_limit_visible,
+            self._probe_mount_blocked,
+            self._probe_non_root_supported,
+            self._probe_storage_opt_quota_enforced,
+            self._probe_tmpfs_quota_enforced,
         )
+        if self.execute and self.max_parallel_probes > 1:
+            with ThreadPoolExecutor(
+                max_workers=min(self.max_parallel_probes, len(remaining_probes)),
+                thread_name_prefix="runtime-conformance",
+            ) as pool:
+                remaining = tuple(pool.map(lambda probe: probe(), remaining_probes))
+        else:
+            remaining = tuple(probe() for probe in remaining_probes)
+        results = (first, *remaining)
         return RuntimeConformanceReport(
             docker_binary=self.docker_binary,
             runtime_name=self.runtime_name,

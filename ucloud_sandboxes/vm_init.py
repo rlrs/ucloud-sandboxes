@@ -314,21 +314,26 @@ if [ -n "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_NODE_CONTROL
 fi
 log_init_phase "users-and-secrets"
 
-BASE_PACKAGES=(ca-certificates curl gnupg apt-transport-https python3 python3-venv python3-pip xfsprogs)
+APT_REPOSITORY_PACKAGES=(ca-certificates curl gnupg)
+MISSING_APT_REPOSITORY_PACKAGES=()
+for package in "${{APT_REPOSITORY_PACKAGES[@]}}"; do
+  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+    MISSING_APT_REPOSITORY_PACKAGES+=("$package")
+  fi
+done
+if [ "${{#MISSING_APT_REPOSITORY_PACKAGES[@]}}" -gt 0 ]; then
+  echo "Installing package-repository prerequisites: ${{MISSING_APT_REPOSITORY_PACKAGES[*]}}"
+  $SUDO apt-get update
+  $SUDO apt-get install -y "${{MISSING_APT_REPOSITORY_PACKAGES[@]}}"
+fi
+
+BASE_PACKAGES=(apt-transport-https python3 python3-venv python3-pip xfsprogs)
 MISSING_BASE_PACKAGES=()
 for package in "${{BASE_PACKAGES[@]}}"; do
   if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
     MISSING_BASE_PACKAGES+=("$package")
   fi
 done
-if [ "${{#MISSING_BASE_PACKAGES[@]}}" -gt 0 ]; then
-  echo "Installing base packages: ${{MISSING_BASE_PACKAGES[*]}}"
-  $SUDO apt-get update
-  $SUDO apt-get install -y "${{MISSING_BASE_PACKAGES[@]}}"
-else
-  echo "Base packages already installed"
-fi
-log_init_phase "base-packages"
 
 if [ "$UCLOUD_HOST_ALIASES_JSON" != "[]" ]; then
   echo "Installing host aliases"
@@ -360,7 +365,6 @@ PY
 fi
 log_init_phase "host-aliases"
 
-NEED_CONTAINER_APT_UPDATE=0
 CONTAINER_PACKAGES=()
 $SUDO install -m 0755 -d /etc/apt/keyrings
 UBUNTU_CODENAME="$(. /etc/os-release && echo "${{UBUNTU_CODENAME:-$VERSION_CODENAME}}")"
@@ -380,7 +384,6 @@ Components: stable
 Architectures: $ARCHITECTURE
 Signed-By: /etc/apt/keyrings/docker.asc
 DOCKER_SOURCES
-  NEED_CONTAINER_APT_UPDATE=1
   CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
 fi
 
@@ -390,17 +393,18 @@ if ! command -v runsc >/dev/null 2>&1; then
     curl -fsSL https://gvisor.dev/archive.key | $SUDO gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
   fi
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | $SUDO tee /etc/apt/sources.list.d/gvisor.list >/dev/null
-  NEED_CONTAINER_APT_UPDATE=1
   CONTAINER_PACKAGES+=(runsc)
 fi
 
-if [ "$NEED_CONTAINER_APT_UPDATE" -eq 1 ]; then
-  echo "Installing container runtime packages: ${{CONTAINER_PACKAGES[*]}}"
+PACKAGES_TO_INSTALL=("${{MISSING_BASE_PACKAGES[@]}}" "${{CONTAINER_PACKAGES[@]}}")
+if [ "${{#PACKAGES_TO_INSTALL[@]}}" -gt 0 ]; then
+  echo "Installing base and container packages: ${{PACKAGES_TO_INSTALL[*]}}"
   $SUDO apt-get update
-  $SUDO apt-get install -y "${{CONTAINER_PACKAGES[@]}}"
+  $SUDO apt-get install -y "${{PACKAGES_TO_INSTALL[@]}}"
 else
-  echo "Container runtime packages already installed"
+  echo "Base and container packages already installed"
 fi
+log_init_phase "base-packages"
 log_init_phase "container-packages"
 
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then

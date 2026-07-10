@@ -109,6 +109,14 @@ class VmInitTests(unittest.TestCase):
         )
 
         self.assertIn("CONTAINER_PACKAGES+=(docker-ce docker-ce-cli", script)
+        self.assertIn(
+            'PACKAGES_TO_INSTALL=("${MISSING_BASE_PACKAGES[@]}" "${CONTAINER_PACKAGES[@]}")',
+            script,
+        )
+        self.assertLess(
+            script.index("Preparing Docker Engine repository"),
+            script.index("Installing base and container packages"),
+        )
         self.assertIn("xfsprogs", script)
         self.assertIn("https://storage.googleapis.com/gvisor/releases", script)
         self.assertIn("Init phase complete:", script)

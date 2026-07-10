@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+import fcntl
 import json
+import math
+import os
 from pathlib import Path
-from threading import RLock
-from typing import Any
+from threading import RLock, get_ident
+import time
+from typing import Any, Callable, Iterator, Mapping
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
 
@@ -20,6 +25,12 @@ MANIFEST_ACCEPT = ", ".join(
         "application/vnd.docker.distribution.manifest.v2+json",
     )
 )
+_REGISTRY_FILE_LOCKS_GUARD = RLock()
+_REGISTRY_FILE_LOCKS: dict[Path, RLock] = {}
+MAX_REGISTRY_LEASE_TTL_SECONDS = 24 * 60 * 60
+MAX_REGISTRY_PAGINATION_PAGES = 10_000
+MAX_REGISTRY_JSON_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_REGISTRY_ERROR_PREVIEW_BYTES = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,97 @@ class RegistryImageUsage:
         }
 
 
+@dataclass(frozen=True)
+class RegistryImageLease:
+    repository: str
+    tag: str
+    owner: str
+    acquired_at: str
+    renewed_at: str
+    expires_at: str
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "RegistryImageLease | None":
+        if not isinstance(raw, dict):
+            return None
+        repository = str(raw.get("repository") or "").strip()
+        tag = str(raw.get("tag") or "").strip()
+        owner = str(raw.get("owner") or "").strip()
+        acquired_at = str(raw.get("acquired_at") or raw.get("acquiredAt") or "")
+        renewed_at = str(raw.get("renewed_at") or raw.get("renewedAt") or "")
+        expires_at = str(raw.get("expires_at") or raw.get("expiresAt") or "")
+        persistent = raw.get("persistent", False)
+        if not repository or not tag or not owner:
+            return None
+        if (
+            parse_iso_datetime(acquired_at) is None
+            or parse_iso_datetime(renewed_at) is None
+            or (
+                not (persistent is True and not expires_at)
+                and parse_iso_datetime(expires_at) is None
+            )
+        ):
+            return None
+        return cls(
+            repository=repository,
+            tag=tag,
+            owner=owner,
+            acquired_at=acquired_at,
+            renewed_at=renewed_at,
+            expires_at=expires_at,
+        )
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        return (self.repository, self.tag, self.owner)
+
+    def is_active(self, now: datetime) -> bool:
+        if not self.expires_at:
+            return True
+        expires_at = parse_iso_datetime(self.expires_at)
+        return expires_at is not None and expires_at > _as_utc(now)
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "repository": self.repository,
+            "tag": self.tag,
+            "owner": self.owner,
+            "acquired_at": self.acquired_at,
+            "renewed_at": self.renewed_at,
+            "expires_at": self.expires_at,
+            "persistent": not self.expires_at,
+        }
+
+
+@dataclass(frozen=True)
+class RegistryUsageSnapshot:
+    generation: int
+    records: dict[tuple[str, str], RegistryImageUsage]
+    leases: dict[tuple[str, str, str], RegistryImageLease] = field(
+        default_factory=dict
+    )
+
+    def active_lease_tags(self, *, now: datetime | None = None) -> set[tuple[str, str]]:
+        reference = _as_utc(now or datetime.now(timezone.utc))
+        return {
+            (lease.repository, lease.tag)
+            for lease in self.leases.values()
+            if lease.is_active(reference)
+        }
+
+
+class RegistryUsageGenerationChanged(RuntimeError):
+    pass
+
+
+class RegistryImageLeaseNotFound(KeyError):
+    pass
+
+
+class RegistryMaintenanceBusy(RuntimeError):
+    pass
+
+
 class RegistryRequestError(ValueError):
     def __init__(
         self,
@@ -98,18 +200,38 @@ class RegistryClient:
     def catalog(self) -> list[str]:
         found: list[str] = []
         path = "/v2/_catalog?" + urlencode({"n": 1000})
+        visited: set[str] = set()
         while path:
+            if path in visited:
+                raise ValueError("registry catalog returned a repeated pagination link")
+            if len(visited) >= MAX_REGISTRY_PAGINATION_PAGES:
+                raise ValueError("registry catalog exceeded the pagination page limit")
+            visited.add(path)
             payload, headers = self._json_request(path)
             repositories = payload.get("repositories")
             if isinstance(repositories, list):
                 found.extend(item for item in repositories if isinstance(item, str))
             path = _next_link_path(headers.get("Link"))
-        return found
+        return list(dict.fromkeys(found))
 
     def tags(self, repository: str) -> list[str]:
-        payload, _headers = self._json_request(f"/v2/{_quote_repository(repository)}/tags/list")
-        tags = payload.get("tags")
-        return [item for item in tags if isinstance(item, str)] if isinstance(tags, list) else []
+        found: list[str] = []
+        path = f"/v2/{_quote_repository(repository)}/tags/list?" + urlencode(
+            {"n": 1000}
+        )
+        visited: set[str] = set()
+        while path:
+            if path in visited:
+                raise ValueError("registry tags returned a repeated pagination link")
+            if len(visited) >= MAX_REGISTRY_PAGINATION_PAGES:
+                raise ValueError("registry tags exceeded the pagination page limit")
+            visited.add(path)
+            payload, headers = self._json_request(path)
+            tags = payload.get("tags")
+            if isinstance(tags, list):
+                found.extend(item for item in tags if isinstance(item, str))
+            path = _next_link_path(headers.get("Link"))
+        return list(dict.fromkeys(found))
 
     def tag_record(self, repository: str, tag: str) -> RegistryTag | None:
         digest = self.manifest_digest(repository, tag)
@@ -133,7 +255,10 @@ class RegistryClient:
     def manifest_digest(self, repository: str, tag: str) -> str:
         path = f"/v2/{_quote_repository(repository)}/manifests/{quote(tag, safe='')}"
         response = self._request(path, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
-        digest = response.headers.get("Docker-Content-Digest")
+        try:
+            digest = response.headers.get("Docker-Content-Digest")
+        finally:
+            response.close()
         if digest:
             return digest
         _body, headers = self._json_request(path, headers={"Accept": MANIFEST_ACCEPT})
@@ -158,10 +283,11 @@ class RegistryClient:
             return ""
 
     def delete_manifest(self, repository: str, digest: str) -> None:
-        self._request(
+        response = self._request(
             f"/v2/{_quote_repository(repository)}/manifests/{quote(digest, safe=':')}",
             method="DELETE",
         )
+        response.close()
 
     def _json_request(
         self,
@@ -170,11 +296,17 @@ class RegistryClient:
         headers: dict[str, str] | None = None,
     ) -> tuple[dict[str, Any], Any]:
         response = self._request(path, headers=headers)
-        body = response.read()
+        try:
+            body = response.read(MAX_REGISTRY_JSON_RESPONSE_BYTES + 1)
+            response_headers = dict(response.headers.items())
+        finally:
+            response.close()
+        if len(body) > MAX_REGISTRY_JSON_RESPONSE_BYTES:
+            raise ValueError(f"registry response is too large for {path}")
         payload = json.loads(body.decode("utf-8")) if body else {}
         if not isinstance(payload, dict):
             raise ValueError(f"registry returned non-object JSON for {path}")
-        return payload, response.headers
+        return payload, response_headers
 
     def _request(
         self,
@@ -191,48 +323,62 @@ class RegistryClient:
         try:
             return request.urlopen(req, timeout=self.timeout_seconds)
         except error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
+            try:
+                raw = exc.read(MAX_REGISTRY_ERROR_PREVIEW_BYTES + 1)
+            finally:
+                exc.close()
+            if len(raw) > MAX_REGISTRY_ERROR_PREVIEW_BYTES:
+                raw = raw[:MAX_REGISTRY_ERROR_PREVIEW_BYTES] + b"...<truncated>"
+            body = raw.decode("utf-8", errors="replace")
             raise RegistryRequestError(exc.code, method, path, body) from exc
 
 
 class RegistryUsageStore:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._lock = RLock()
 
     def load(self) -> dict[tuple[str, str], RegistryImageUsage]:
-        with self._lock:
-            if not self.path.exists():
-                return {}
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict):
-                raise ValueError("registry usage store must contain a JSON object.")
-            items = raw.get("images", [])
-            if not isinstance(items, list):
-                raise ValueError("registry usage store must contain an images list.")
-            records: dict[tuple[str, str], RegistryImageUsage] = {}
-            for item in items:
-                record = RegistryImageUsage.from_dict(item)
-                if record is None:
-                    continue
-                records[(record.repository, record.tag)] = record
-            return records
+        return self.snapshot().records
 
-    def save(self, records: dict[tuple[str, str], RegistryImageUsage]) -> None:
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-            payload = {
-                "images": [
-                    records[key].to_dict()
-                    for key in sorted(records, key=lambda item: (item[0], item[1]))
-                ]
-            }
-            tmp_path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True),
-                encoding="utf-8",
+    def snapshot(self, *, now: datetime | None = None) -> RegistryUsageSnapshot:
+        with _registry_file_lock(self.path):
+            return self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=_as_utc(now or datetime.now(timezone.utc)),
             )
-            tmp_path.replace(self.path)
+
+    def save(
+        self,
+        records: dict[tuple[str, str], RegistryImageUsage],
+        *,
+        expected_generation: int | None = None,
+    ) -> int:
+        with _registry_file_lock(self.path):
+            current = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=datetime.now(timezone.utc),
+            )
+            if (
+                expected_generation is not None
+                and current.generation != expected_generation
+            ):
+                raise RegistryUsageGenerationChanged(
+                    "registry usage changed while maintenance was planned"
+                )
+            generation = current.generation + 1
+            self._save_unlocked(
+                records,
+                current.leases,
+                generation=generation,
+            )
+            return generation
+
+    def assert_generation(self, expected_generation: int) -> None:
+        actual = self.snapshot().generation
+        if actual != expected_generation:
+            raise RegistryUsageGenerationChanged(
+                f"registry usage generation changed from {expected_generation} to {actual}"
+            )
 
     def touch_image(
         self,
@@ -253,11 +399,315 @@ class RegistryUsageStore:
             tag=tag,
             last_used_at=timestamp.astimezone(timezone.utc).isoformat(),
         )
-        with self._lock:
-            records = self.load()
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            records = dict(snapshot.records)
             records[(repository, tag)] = record
-            self.save(records)
+            self._save_unlocked(
+                records,
+                snapshot.leases,
+                generation=snapshot.generation + 1,
+            )
         return record
+
+    def acquire_lease(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        *,
+        ttl_seconds: float,
+        now: datetime | None = None,
+    ) -> RegistryImageLease:
+        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        ttl = _validate_lease_ttl(ttl_seconds)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            key = (repository, tag, owner)
+            previous = snapshot.leases.get(key)
+            lease = RegistryImageLease(
+                repository=repository,
+                tag=tag,
+                owner=owner,
+                acquired_at=(
+                    previous.acquired_at if previous is not None else timestamp.isoformat()
+                ),
+                renewed_at=timestamp.isoformat(),
+                expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
+            )
+            leases = dict(snapshot.leases)
+            leases[key] = lease
+            self._save_unlocked(
+                snapshot.records,
+                leases,
+                generation=snapshot.generation + 1,
+            )
+            return lease
+
+    def acquire_reference(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        *,
+        now: datetime | None = None,
+    ) -> RegistryImageLease:
+        """Persist a non-expiring reference to an actively used image tag.
+
+        Routes and accepted builds are durable facts rather than liveness
+        leases. A leaked reference is conservative and may be reconciled
+        explicitly; it must never disappear merely because a controller was
+        unavailable for a renewal interval.
+        """
+
+        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            key = (repository, tag, owner)
+            previous = snapshot.leases.get(key)
+            reference = RegistryImageLease(
+                repository=repository,
+                tag=tag,
+                owner=owner,
+                acquired_at=(
+                    previous.acquired_at
+                    if previous is not None
+                    else timestamp.isoformat()
+                ),
+                renewed_at=timestamp.isoformat(),
+                expires_at="",
+            )
+            leases = dict(snapshot.leases)
+            leases[key] = reference
+            self._save_unlocked(
+                snapshot.records,
+                leases,
+                generation=snapshot.generation + 1,
+            )
+            return reference
+
+    def renew_lease(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        *,
+        ttl_seconds: float,
+        now: datetime | None = None,
+    ) -> RegistryImageLease:
+        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        ttl = _validate_lease_ttl(ttl_seconds)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            key = (repository, tag, owner)
+            previous = snapshot.leases.get(key)
+            if previous is None:
+                raise RegistryImageLeaseNotFound(key)
+            lease = RegistryImageLease(
+                repository=repository,
+                tag=tag,
+                owner=owner,
+                acquired_at=previous.acquired_at,
+                renewed_at=timestamp.isoformat(),
+                expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
+            )
+            leases = dict(snapshot.leases)
+            leases[key] = lease
+            self._save_unlocked(
+                snapshot.records,
+                leases,
+                generation=snapshot.generation + 1,
+            )
+            return lease
+
+    def release_lease(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            key = (repository, tag, owner)
+            if key not in snapshot.leases:
+                return False
+            leases = dict(snapshot.leases)
+            leases.pop(key, None)
+            self._save_unlocked(
+                snapshot.records,
+                leases,
+                generation=snapshot.generation + 1,
+            )
+            return True
+
+    def prune_expired_leases(self, *, now: datetime | None = None) -> int:
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            before = self._load_snapshot_unlocked()
+            after = self._prune_expired_leases_unlocked(before, now=timestamp)
+            return len(before.leases) - len(after.leases)
+
+    @contextmanager
+    def lease_fence(
+        self,
+        *,
+        expected_generation: int | None = None,
+        now: datetime | None = None,
+    ) -> Iterator[RegistryUsageSnapshot]:
+        """Hold the usage-file lock across one bounded remote delete decision."""
+
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        with _registry_file_lock(self.path):
+            snapshot = self._prune_expired_leases_unlocked(
+                self._load_snapshot_unlocked(),
+                now=timestamp,
+            )
+            if (
+                expected_generation is not None
+                and snapshot.generation != expected_generation
+            ):
+                raise RegistryUsageGenerationChanged(
+                    "registry usage or active leases changed while pruning was planned"
+                )
+            yield snapshot
+
+    def _load_snapshot_unlocked(self) -> RegistryUsageSnapshot:
+        if not self.path.exists():
+            return RegistryUsageSnapshot(generation=0, records={}, leases={})
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("registry usage store must contain a JSON object.")
+        items = raw.get("images", [])
+        if not isinstance(items, list):
+            raise ValueError("registry usage store must contain an images list.")
+        records: dict[tuple[str, str], RegistryImageUsage] = {}
+        for item in items:
+            record = RegistryImageUsage.from_dict(item)
+            if record is None:
+                continue
+            records[(record.repository, record.tag)] = record
+        raw_leases = raw.get("leases", [])
+        leases: dict[tuple[str, str, str], RegistryImageLease] = {}
+        if not isinstance(raw_leases, list):
+            raise ValueError("registry usage store must contain a leases list.")
+        for index, item in enumerate(raw_leases):
+            lease = RegistryImageLease.from_dict(item)
+            if lease is None:
+                # A malformed/partially-written lease must never disappear from
+                # prune protection as though it had expired.
+                raise ValueError(
+                    f"registry usage store contains an invalid lease at index {index}."
+                )
+            if lease.key in leases:
+                raise ValueError("registry usage store contains a duplicate lease.")
+            leases[lease.key] = lease
+        if "generation" not in raw:
+            generation = 0
+        else:
+            try:
+                generation = int(raw["generation"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "registry usage store generation must be an integer."
+                ) from exc
+            if generation < 0:
+                raise ValueError("registry usage store generation cannot be negative.")
+        return RegistryUsageSnapshot(
+            generation=generation,
+            records=records,
+            leases=leases,
+        )
+
+    def _save_unlocked(
+        self,
+        records: dict[tuple[str, str], RegistryImageUsage],
+        leases: dict[tuple[str, str, str], RegistryImageLease],
+        *,
+        generation: int,
+    ) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_name(
+            f"{self.path.name}.tmp-{os.getpid()}-{get_ident()}-{time.monotonic_ns()}"
+        )
+        payload = {
+            "generation": generation,
+            "images": [
+                records[key].to_dict()
+                for key in sorted(records, key=lambda item: (item[0], item[1]))
+            ],
+            "leases": [
+                leases[key].to_dict()
+                for key in sorted(
+                    leases,
+                    key=lambda item: (item[0], item[1], item[2]),
+                )
+            ],
+        }
+        try:
+            descriptor = os.open(
+                tmp_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                file.write(json.dumps(payload, indent=2, sort_keys=True))
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(tmp_path, self.path)
+            os.chmod(self.path, 0o600)
+            directory_fd = os.open(self.path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+
+    def _prune_expired_leases_unlocked(
+        self,
+        snapshot: RegistryUsageSnapshot,
+        *,
+        now: datetime,
+    ) -> RegistryUsageSnapshot:
+        active = {
+            key: lease
+            for key, lease in snapshot.leases.items()
+            if lease.is_active(now)
+        }
+        if len(active) == len(snapshot.leases):
+            return snapshot
+        generation = snapshot.generation + 1
+        self._save_unlocked(snapshot.records, active, generation=generation)
+        return RegistryUsageSnapshot(
+            generation=generation,
+            records=snapshot.records,
+            leases=active,
+        )
 
 
 def registry_prune_plan(
@@ -267,6 +717,10 @@ def registry_prune_plan(
     repository_prefix: str = "",
     max_age_days: float | None = None,
     usage_records: dict[tuple[str, str], RegistryImageUsage] | None = None,
+    active_leases: Mapping[
+        tuple[str, str, str], RegistryImageLease
+    ] | None = None,
+    usage_generation: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     records = list_registry_tags(client, repository_prefix=repository_prefix)
@@ -277,6 +731,7 @@ def registry_prune_plan(
         keep_per_repository=keep_per_repository,
         max_age_days=max_age_days,
         use_last_used_at=use_last_used_at,
+        active_leases=active_leases,
         now=now,
     )
     return {
@@ -284,6 +739,8 @@ def registry_prune_plan(
         "keep_per_repository": keep_per_repository,
         "repository_prefix": repository_prefix,
         "max_age_days": max_age_days,
+        "usage_generation": usage_generation,
+        "active_lease_count": len(_active_leases(active_leases, now=now)),
         "tags": [record.to_dict() for record in records],
         "delete": [record.to_dict() for record in candidates],
     }
@@ -292,15 +749,71 @@ def registry_prune_plan(
 def execute_registry_prune(
     client: RegistryClient,
     records: list[RegistryTag],
+    *,
+    usage_store: RegistryUsageStore | None = None,
+    expected_usage_generation: int | None = None,
+    revalidate: Callable[[RegistryTag], bool] | None = None,
+    all_records: list[RegistryTag] | None = None,
+    now: datetime | None = None,
 ) -> list[RegistryTag]:
-    deleted: set[tuple[str, str]] = set()
+    if usage_store is not None and all_records is None:
+        raise ValueError(
+            "all_records is required with usage_store so digest aliases are fenced"
+        )
+    grouped: dict[tuple[str, str], list[RegistryTag]] = {}
     for record in records:
         key = (record.repository, record.digest)
-        if key in deleted:
-            continue
-        client.delete_manifest(record.repository, record.digest)
-        deleted.add(key)
-    return records
+        grouped.setdefault(key, []).append(record)
+    all_grouped: dict[tuple[str, str], list[RegistryTag]] = {}
+    for record in all_records or records:
+        all_grouped.setdefault((record.repository, record.digest), []).append(record)
+    deleted: list[RegistryTag] = []
+    for (repository, digest), aliases in grouped.items():
+        digest_aliases = all_grouped.get((repository, digest), aliases)
+        if usage_store is not None:
+            # The cross-process store lock remains held through this one remote
+            # delete. RegistryClient bounds the critical section with its
+            # request timeout; other digest decisions release and reacquire it.
+            with usage_store.lease_fence(
+                expected_generation=expected_usage_generation,
+                now=now,
+            ) as snapshot:
+                leased_tags = snapshot.active_lease_tags(now=now)
+                if any(
+                    (record.repository, record.tag) in leased_tags
+                    for record in digest_aliases
+                ):
+                    continue
+                if revalidate is not None and not all(
+                    revalidate(record) for record in digest_aliases
+                ):
+                    continue
+                client.delete_manifest(repository, digest)
+        else:
+            if revalidate is not None and not all(
+                revalidate(record) for record in digest_aliases
+            ):
+                continue
+            client.delete_manifest(repository, digest)
+        deleted.extend(aliases)
+    return deleted
+
+
+@contextmanager
+def registry_maintenance_lock(
+    path: Path,
+    *,
+    blocking: bool = True,
+) -> Iterator[None]:
+    """Fence prune/GC processes that share a maintenance lock path."""
+
+    try:
+        with _registry_file_lock(path, blocking=blocking):
+            yield
+    except BlockingIOError as exc:
+        raise RegistryMaintenanceBusy(
+            f"registry maintenance is already active: {path}"
+        ) from exc
 
 
 def list_registry_tags(
@@ -396,6 +909,9 @@ def select_prune_candidates(
     keep_per_repository: int,
     max_age_days: float | None = None,
     use_last_used_at: bool = False,
+    active_leases: Mapping[
+        tuple[str, str, str], RegistryImageLease
+    ] | None = None,
     now: datetime | None = None,
 ) -> list[RegistryTag]:
     keep = max(0, keep_per_repository)
@@ -404,6 +920,10 @@ def select_prune_candidates(
     by_repository: dict[str, list[RegistryTag]] = {}
     for record in records:
         by_repository.setdefault(record.repository, []).append(record)
+    leased_tags = {
+        (lease.repository, lease.tag)
+        for lease in _active_leases(active_leases, now=now)
+    }
     for repository_records in by_repository.values():
         ordered = sorted(
             repository_records,
@@ -411,6 +931,11 @@ def select_prune_candidates(
             reverse=True,
         )
         protected_digests = {record.digest for record in ordered[:keep]}
+        protected_digests.update(
+            record.digest
+            for record in ordered
+            if (record.repository, record.tag) in leased_tags
+        )
         for record in ordered:
             if record.digest in protected_digests:
                 continue
@@ -443,6 +968,54 @@ def apply_registry_usage(
             )
         )
     return annotated
+
+
+def _active_leases(
+    leases: Mapping[tuple[str, str, str], RegistryImageLease] | None,
+    *,
+    now: datetime | None,
+) -> list[RegistryImageLease]:
+    if not leases:
+        return []
+    reference = _as_utc(now or datetime.now(timezone.utc))
+    return [lease for lease in leases.values() if lease.is_active(reference)]
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _validate_lease_identity(
+    repository: str,
+    tag: str,
+    owner: str,
+) -> tuple[str, str, str]:
+    cleaned = tuple(str(value).strip() for value in (repository, tag, owner))
+    labels = ("repository", "tag", "owner")
+    for label, value in zip(labels, cleaned):
+        if not value:
+            raise ValueError(f"registry lease {label} is required")
+        if len(value) > 256:
+            raise ValueError(f"registry lease {label} is too long")
+        if "\n" in value or "\r" in value:
+            raise ValueError(f"registry lease {label} cannot contain newlines")
+    return cleaned
+
+
+def _validate_lease_ttl(value: float) -> float:
+    try:
+        ttl = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("registry lease TTL must be a finite number") from exc
+    if not math.isfinite(ttl) or ttl <= 0:
+        raise ValueError("registry lease TTL must be a positive finite number")
+    if ttl > MAX_REGISTRY_LEASE_TTL_SECONDS:
+        raise ValueError(
+            f"registry lease TTL cannot exceed {MAX_REGISTRY_LEASE_TTL_SECONDS} seconds"
+        )
+    return ttl
 
 
 def _age_cutoff(
@@ -564,3 +1137,32 @@ def _next_link_path(link: str | None) -> str:
             path = f"{path}?{parsed.query}"
         return path
     return ""
+
+
+@contextmanager
+def _registry_file_lock(
+    path: Path,
+    *,
+    blocking: bool = True,
+) -> Iterator[None]:
+    resolved = Path(path).resolve()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    with _REGISTRY_FILE_LOCKS_GUARD:
+        local_lock = _REGISTRY_FILE_LOCKS.get(resolved)
+        if local_lock is None:
+            local_lock = RLock()
+            _REGISTRY_FILE_LOCKS[resolved] = local_lock
+    acquired = local_lock.acquire(blocking=blocking)
+    if not acquired:
+        raise BlockingIOError(f"lock is already held: {resolved}")
+    try:
+        lock_path = resolved.with_name(resolved.name + ".lock")
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            flags = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
+            fcntl.flock(lock_file.fileno(), flags)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        local_lock.release()

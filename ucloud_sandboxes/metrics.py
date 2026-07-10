@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,9 @@ DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
 DEFAULT_TRACE_SPAN_LIMIT = 250
 DEFAULT_TRACE_LIMIT = 50
+DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
+DEFAULT_METRICS_MAX_FILES = 5
+DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
 _METRICS_LOCKS_GUARD = RLock()
 _METRICS_LOCKS: dict[Path, RLock] = {}
 
@@ -58,9 +62,19 @@ class MetricEvent:
 
 
 class MetricsStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_bytes: int = DEFAULT_METRICS_MAX_BYTES,
+        max_files: int = DEFAULT_METRICS_MAX_FILES,
+        max_event_bytes: int = DEFAULT_METRICS_MAX_EVENT_BYTES,
+    ) -> None:
         self.path = path
         self._lock = _metrics_lock(path)
+        self._max_bytes = max(1, max_bytes)
+        self._max_files = max(1, max_files)
+        self._max_event_bytes = max(1, min(max_event_bytes, self._max_bytes))
 
     def append(
         self,
@@ -74,13 +88,25 @@ class MetricsStore:
             kind=kind,
             data=data or {},
         )
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+        line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode("utf-8")
+        if len(line) > self._max_event_bytes:
+            event = MetricEvent(
+                timestamp=event.timestamp,
+                kind=event.kind,
+                data={
+                    "metrics_payload_truncated": True,
+                    "original_bytes": len(line),
+                },
+            )
             line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode(
                 "utf-8"
             )
-            fd = os.open(self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+        with _metrics_file_lock(self.path, self._lock):
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._rotate_if_needed(len(line))
+            fd = os.open(self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
             try:
+                os.fchmod(fd, 0o600)
                 view = memoryview(line)
                 while view:
                     written = os.write(fd, view)
@@ -92,10 +118,34 @@ class MetricsStore:
         return event
 
     def load_events(self, *, max_events: int = 1000) -> list[MetricEvent]:
-        with self._lock:
-            if not self.path.exists():
-                return []
-            lines = _read_recent_lines(self.path, max_events)
+        with _metrics_file_lock(self.path, self._lock):
+            if max_events > 0:
+                remaining = max_events
+                newest_first = [self.path] + [
+                    self._rotated_path(index)
+                    for index in range(1, self._max_files + 1)
+                ]
+                chunks: list[list[str]] = []
+                for path in newest_first:
+                    if remaining <= 0:
+                        break
+                    if not path.exists():
+                        continue
+                    chunk = _read_recent_lines(path, remaining)
+                    chunks.append(chunk)
+                    remaining -= len(chunk)
+                lines = [line for chunk in reversed(chunks) for line in chunk]
+            else:
+                oldest_first = [
+                    self._rotated_path(index)
+                    for index in range(self._max_files, 0, -1)
+                ] + [self.path]
+                lines = [
+                    line
+                    for path in oldest_first
+                    if path.exists()
+                    for line in _read_recent_lines(path, max_events)
+                ]
         events: list[MetricEvent] = []
         for line in lines:
             if not line.strip():
@@ -110,6 +160,38 @@ class MetricsStore:
         if max_events <= 0:
             return events
         return events[-max_events:]
+
+    def _rotate_if_needed(self, additional_bytes: int) -> None:
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return
+        if self.path.stat().st_size + additional_bytes <= self._max_bytes:
+            return
+        oldest = self._rotated_path(self._max_files)
+        try:
+            oldest.unlink()
+        except FileNotFoundError:
+            pass
+        for index in range(self._max_files - 1, 0, -1):
+            source = self._rotated_path(index)
+            if source.exists():
+                source.replace(self._rotated_path(index + 1))
+        self.path.replace(self._rotated_path(1))
+
+    def _rotated_path(self, index: int) -> Path:
+        return self.path.with_name(f"{self.path.name}.{index}")
+
+
+@contextmanager
+def _metrics_file_lock(path: Path, local_lock: RLock) -> Any:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with local_lock:
+        lock_path = path.with_name(path.name + ".lock")
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _read_recent_lines(

@@ -3,6 +3,9 @@ from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
+import subprocess
+import sys
+from threading import Event
 import unittest
 
 from ucloud_sandboxes.models import ResourceQuantity, utc_now
@@ -17,10 +20,18 @@ from ucloud_sandboxes.routing import (
     RoutingState,
     RoutingStore,
     SandboxRoute,
+    SandboxRouteConflictError,
 )
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_routing_database_is_owner_only(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            route_file = Path(raw_dir) / "routes.sqlite"
+            RoutingStore(route_file).load()
+
+            self.assertEqual(route_file.stat().st_mode & 0o777, 0o600)
+
     def test_concurrent_writes_preserve_valid_state(self) -> None:
         with TemporaryDirectory() as raw_dir:
             route_file = Path(raw_dir) / "routes.json"
@@ -116,6 +127,7 @@ class RoutingStoreTests(unittest.TestCase):
                             resources=ResourceQuantity(
                                 vcpu=1, memory_mb=512, disk_mb=1024
                             ),
+                            state="running",
                             created_at=old,
                             updated_at=old,
                         ),
@@ -781,6 +793,51 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0].attempts, 2)
 
+    def test_failed_create_pending_demand_preserves_incarnation_identity(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            store = RoutingStore(path)
+            resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+
+            store.upsert_pending(
+                "pending-one",
+                resources,
+                generation=4,
+                operation_id="create-4",
+                spec_hash="sha256:spec-4",
+                failure_reason="image_pull_http_502",
+            )
+            store.upsert_pending(
+                "pending-one",
+                resources,
+                generation=4,
+                operation_id="create-4",
+                spec_hash="sha256:spec-4",
+                failure_reason="image_pull_http_503",
+            )
+            replay = RoutingStore(path).get_pending("pending-one")
+            assert replay is not None
+            self.assertEqual(replay.attempts, 2)
+            self.assertEqual(replay.generation, 4)
+            self.assertEqual(replay.operation_id, "create-4")
+            self.assertEqual(replay.spec_hash, "sha256:spec-4")
+            self.assertEqual(replay.failure_reason, "image_pull_http_503")
+
+            store.upsert_pending(
+                "pending-one",
+                resources,
+                generation=5,
+                operation_id="create-5",
+                spec_hash="sha256:spec-5",
+                failure_reason="registry_lease_unavailable",
+            )
+            replacement = RoutingStore(path).get_pending("pending-one")
+
+        assert replacement is not None
+        self.assertEqual(replacement.attempts, 1)
+        self.assertEqual(replacement.generation, 5)
+        self.assertEqual(replacement.operation_id, "create-5")
+
     def test_snapshot_consume_does_not_delete_refreshed_signals(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
@@ -842,6 +899,311 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(remaining.image_builds["image-one"].tag, "registry/image:new")
         self.assertEqual(remaining.prepared["prep-one"].count, 2)
         self.assertEqual(remaining.prepared_builders["builder-one"].count, 2)
+
+    def test_generation_high_water_survives_delete_and_reopen(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            base = SandboxRoute(
+                sandbox_id="versioned-one",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                spec={"id": "versioned-one", "image": "busybox"},
+            )
+            first_store = RoutingStore(path)
+            first = first_store.allocate_sandbox_create(base, spec_hash="hash-1")
+            removed = first_store.delete_sandbox_if_current(
+                first.sandbox_id,
+                generation=first.generation,
+                create_operation_id=first.create_operation_id,
+            )
+            second = RoutingStore(path).allocate_sandbox_create(
+                base,
+                spec_hash="hash-2",
+            )
+
+        self.assertIsNotNone(removed)
+        self.assertEqual(first.generation, 1)
+        self.assertEqual(second.generation, 2)
+        self.assertNotEqual(first.create_operation_id, second.create_operation_id)
+
+    def test_stale_inventory_cannot_overwrite_or_delete_newer_generation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            current = SandboxRoute(
+                sandbox_id="versioned-one",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=2048),
+                spec={"id": "versioned-one", "image": "busybox"},
+                state="running",
+                generation=2,
+                create_operation_id="create-2",
+                spec_hash="hash-2",
+                node_epoch="epoch-1",
+                activity_epoch=5,
+            )
+            store.upsert_sandbox(current)
+            store.reconcile_sandboxes_for_node(
+                current.node_url,
+                [
+                    SandboxRoute(
+                        sandbox_id=current.sandbox_id,
+                        node_id=current.node_id,
+                        job_id=current.job_id,
+                        node_url=current.node_url,
+                        state="running",
+                        generation=1,
+                        create_operation_id="create-1",
+                        spec_hash="hash-1",
+                        node_epoch="epoch-1",
+                        activity_epoch=4,
+                    )
+                ],
+                observed_at=utc_now().isoformat(),
+                node_epoch="epoch-1",
+                activity_epoch=4,
+                inventory_complete=True,
+            )
+            after_stale_entry = store.get_sandbox_readonly(current.sandbox_id)
+            store.reconcile_sandboxes_for_node(
+                current.node_url,
+                [],
+                observed_at=utc_now().isoformat(),
+                node_epoch="epoch-1",
+                activity_epoch=4,
+                inventory_complete=True,
+            )
+            after_stale_absence = store.get_sandbox_readonly(current.sandbox_id)
+
+        for route in (after_stale_entry, after_stale_absence):
+            self.assertIsNotNone(route)
+            assert route is not None
+            self.assertEqual(route.generation, 2)
+            self.assertEqual(route.create_operation_id, "create-2")
+            self.assertEqual(route.spec_hash, "hash-2")
+            self.assertEqual(route.resources, current.resources)
+
+    def test_same_generation_update_requires_exact_nonempty_identity(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            current = SandboxRoute(
+                sandbox_id="versioned-one",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                state="running",
+                generation=4,
+                create_operation_id="create-4",
+                spec_hash="hash-4",
+                node_epoch="epoch-1",
+                activity_epoch=8,
+            )
+            store.upsert_sandbox(current)
+
+            for create_operation_id, spec_hash in (
+                ("", "hash-4"),
+                ("create-4", ""),
+                ("different", "hash-4"),
+                ("create-4", "different"),
+            ):
+                result = store.upsert_sandbox(
+                    SandboxRoute(
+                        **{
+                            **current.__dict__,
+                            "state": "stopped",
+                            "create_operation_id": create_operation_id,
+                            "spec_hash": spec_hash,
+                        }
+                    )
+                )
+                self.assertEqual(result.state, "running")
+
+            stored = store.get_sandbox_readonly(current.sandbox_id)
+
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.state, "running")
+        self.assertEqual(stored.create_operation_id, "create-4")
+        self.assertEqual(stored.spec_hash, "hash-4")
+
+    def test_exact_identity_adopts_new_node_epoch_then_allows_absence(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            first = store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="survived-restart",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    spec={"id": "survived-restart", "image": "busybox"},
+                ),
+                spec_hash="hash-1",
+                create_operation_id="create-1",
+            )
+            store.upsert_sandbox(
+                SandboxRoute(
+                    **{
+                        **first.__dict__,
+                        "state": "running",
+                        "node_epoch": "epoch-before-restart",
+                        "activity_epoch": 100,
+                    }
+                )
+            )
+            adopted_at = utc_now()
+
+            store.reconcile_sandboxes_for_node(
+                first.node_url,
+                [
+                    SandboxRoute(
+                        sandbox_id=first.sandbox_id,
+                        node_id=first.node_id,
+                        job_id=first.job_id,
+                        node_url=first.node_url,
+                        state="running",
+                        generation=first.generation,
+                        create_operation_id=first.create_operation_id,
+                        spec_hash=first.spec_hash,
+                        node_epoch="epoch-after-restart",
+                        activity_epoch=1,
+                    )
+                ],
+                observed_at=adopted_at.isoformat(),
+                node_epoch="epoch-after-restart",
+                activity_epoch=1,
+                inventory_complete=True,
+            )
+            adopted = store.get_sandbox_readonly(first.sandbox_id)
+            store.reconcile_sandboxes_for_node(
+                first.node_url,
+                [],
+                observed_at=(adopted_at + timedelta(seconds=1)).isoformat(),
+                node_epoch="epoch-after-restart",
+                activity_epoch=1,
+                inventory_complete=True,
+            )
+            removed = store.get_sandbox_readonly(first.sandbox_id)
+
+        self.assertIsNotNone(adopted)
+        assert adopted is not None
+        self.assertEqual(adopted.node_epoch, "epoch-after-restart")
+        self.assertEqual(adopted.activity_epoch, 1)
+        self.assertIsNone(removed)
+
+    def test_reconcile_transaction_cannot_delete_concurrent_new_incarnation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            reconciling_store = RoutingStore(path)
+            writer_store = RoutingStore(path)
+            first = writer_store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="reused-id",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    spec={"id": "reused-id", "image": "busybox"},
+                ),
+                spec_hash="hash-1",
+                create_operation_id="create-1",
+            )
+            writer_store.upsert_sandbox(
+                SandboxRoute(**{**first.__dict__, "state": "running"})
+            )
+            snapshot_reached = Event()
+            allow_reconcile_to_continue = Event()
+            original_load = reconciling_store._load_unlocked
+
+            def pause_at_snapshot(conn):
+                snapshot = original_load(conn)
+                snapshot_reached.set()
+                self.assertTrue(allow_reconcile_to_continue.wait(timeout=5))
+                return snapshot
+
+            reconciling_store._load_unlocked = pause_at_snapshot
+
+            def replace_incarnation() -> SandboxRoute:
+                writer_store.delete_sandbox_if_current(
+                    "reused-id",
+                    generation=1,
+                    create_operation_id="create-1",
+                )
+                return writer_store.allocate_sandbox_create(
+                    SandboxRoute(
+                        sandbox_id="reused-id",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node-1:8090",
+                        spec={"id": "reused-id", "image": "python"},
+                    ),
+                    spec_hash="hash-2",
+                    create_operation_id="create-2",
+                )
+
+            observed_at = (utc_now() + timedelta(seconds=1)).isoformat()
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                reconciliation = executor.submit(
+                    reconciling_store.reconcile_sandboxes_for_node,
+                    first.node_url,
+                    [],
+                    observed_at=observed_at,
+                    node_epoch="",
+                    activity_epoch=0,
+                    inventory_complete=True,
+                )
+                self.assertTrue(snapshot_reached.wait(timeout=5))
+                replacement = executor.submit(replace_incarnation)
+                allow_reconcile_to_continue.set()
+                reconciliation.result(timeout=5)
+                replacement.result(timeout=5)
+            stored = RoutingStore(path).get_sandbox_readonly(first.sandbox_id)
+
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.generation, 2)
+        self.assertEqual(stored.create_operation_id, "create-2")
+        self.assertEqual(stored.spec_hash, "hash-2")
+
+    def test_concurrent_different_spec_allocation_rejects_loser_atomically(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            first_store = RoutingStore(path)
+            second_store = RoutingStore(path)
+
+            def allocate(store: RoutingStore, image: str, spec_hash: str):
+                return store.allocate_sandbox_create(
+                    SandboxRoute(
+                        sandbox_id="same-id",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node-1:8090",
+                        spec={"id": "same-id", "image": image},
+                    ),
+                    spec_hash=spec_hash,
+                )
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [
+                    executor.submit(allocate, first_store, "busybox", "hash-a"),
+                    executor.submit(allocate, second_store, "python", "hash-b"),
+                ]
+                results: list[SandboxRoute] = []
+                conflicts = 0
+                for future in futures:
+                    try:
+                        results.append(future.result())
+                    except SandboxRouteConflictError:
+                        conflicts += 1
+            stored = RoutingStore(path).get_sandbox_readonly("same-id")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(conflicts, 1)
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.create_operation_id, results[0].create_operation_id)
+        self.assertEqual(stored.spec_hash, results[0].spec_hash)
 
 
 if __name__ == "__main__":

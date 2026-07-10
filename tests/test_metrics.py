@@ -23,6 +23,56 @@ from ucloud_sandboxes.routing import (
 
 
 class MetricsTests(unittest.TestCase):
+    def test_metrics_state_file_is_owner_only(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.jsonl"
+            store = MetricsStore(path)
+
+            store.append("sensitive", {"token": "redacted-by-operator-policy"})
+
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_metrics_store_rotates_and_bounds_output(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.jsonl"
+            store = MetricsStore(
+                path,
+                max_bytes=220,
+                max_files=2,
+                max_event_bytes=200,
+            )
+
+            for index in range(12):
+                store.append("bounded", {"index": index, "padding": "x" * 24})
+
+            retained = store.load_events(max_events=100)
+            segments = [
+                candidate
+                for candidate in path.parent.glob("metrics.jsonl.*")
+                if candidate.name.removeprefix("metrics.jsonl.").isdigit()
+            ]
+
+            self.assertLessEqual(len(segments), 2)
+            self.assertTrue(retained)
+            self.assertEqual(retained[-1].data["index"], 11)
+            self.assertTrue(all(candidate.stat().st_size <= 220 for candidate in segments))
+            self.assertLessEqual(path.stat().st_size, 220)
+
+    def test_metrics_store_replaces_oversized_event_with_marker(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(
+                Path(raw_dir) / "metrics.jsonl",
+                max_bytes=512,
+                max_event_bytes=160,
+            )
+
+            event = store.append("oversized", {"payload": "x" * 1024})
+            loaded = store.load_events()
+
+            self.assertTrue(event.data["metrics_payload_truncated"])
+            self.assertGreater(event.data["original_bytes"], 160)
+            self.assertEqual(loaded, [event])
+
     def test_load_events_returns_recent_tail(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.jsonl")

@@ -1,10 +1,16 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import json
+import multiprocessing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.managed_registry import (
+    RegistryClient,
     RegistryRequestError,
+    RegistryImageLeaseNotFound,
+    RegistryUsageGenerationChanged,
     RegistryUsageStore,
     RegistryTag,
     _next_link_path,
@@ -12,12 +18,70 @@ from ucloud_sandboxes.managed_registry import (
     list_registry_tags,
     registry_repository_tag_from_image_ref,
     registry_host_from_image_ref,
+    registry_maintenance_lock,
+    registry_prune_plan,
     registry_summary,
     select_prune_candidates,
 )
 
 
+def _acquire_lease_in_process(
+    path: str,
+    repository: str,
+    tag: str,
+    owner: str,
+    result_queue: object,
+) -> None:
+    lease = RegistryUsageStore(Path(path)).acquire_lease(
+        repository,
+        tag,
+        owner,
+        ttl_seconds=60,
+    )
+    result_queue.put(lease.owner)  # type: ignore[attr-defined]
+
+
 class ManagedRegistryTests(unittest.TestCase):
+    def test_registry_usage_state_is_owner_only(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "registry-usage.json"
+            RegistryUsageStore(path).touch_image("registry.test/models/demo:latest")
+
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_registry_catalog_rejects_repeated_pagination_link(self) -> None:
+        client = RegistryClient("http://registry")
+        repeated = '</v2/_catalog?n=1000>; rel="next"'
+        with patch.object(
+            client,
+            "_json_request",
+            return_value=({"repositories": ["repo/a"]}, {"Link": repeated}),
+        ):
+            with self.assertRaisesRegex(ValueError, "repeated pagination"):
+                client.catalog()
+
+    def test_registry_tags_follow_pagination_and_deduplicate(self) -> None:
+        client = RegistryClient("http://registry")
+        with patch.object(
+            client,
+            "_json_request",
+            side_effect=(
+                (
+                    {"tags": ["v1", "v2"]},
+                    {
+                        "Link": (
+                            '</v2/repo/a/tags/list?n=1000&last=v2>; rel="next"'
+                        )
+                    },
+                ),
+                ({"tags": ["v2", "v3"]}, {}),
+            ),
+        ) as fetch:
+            tags = client.tags("repo/a")
+
+        self.assertEqual(tags, ["v1", "v2", "v3"])
+        self.assertEqual(fetch.call_count, 2)
+
     def test_registry_summary_exposes_visible_tags_and_repository_metadata(self) -> None:
         class FakeRegistryClient:
             base_url = "http://registry"
@@ -230,6 +294,265 @@ class ManagedRegistryTests(unittest.TestCase):
             loaded = store.load()
             self.assertIn(("prime-rl/tmax-mini-base", "mswe-2.2.8-r5"), loaded)
 
+    def test_registry_usage_generation_detects_stale_maintenance_snapshot(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            original = store.snapshot()
+            store.touch_image(
+                "localhost:5000/repo/image:v1",
+                when=datetime(2026, 6, 7, tzinfo=timezone.utc),
+            )
+
+            with self.assertRaises(RegistryUsageGenerationChanged):
+                store.save({}, expected_generation=original.generation)
+
+            self.assertEqual(store.snapshot().generation, 1)
+
+    def test_registry_leases_acquire_renew_release_and_expire(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            started = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+
+            acquired = store.acquire_lease(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                ttl_seconds=30,
+                now=started,
+            )
+            self.assertEqual(store.snapshot(now=started).generation, 1)
+            renewed = store.renew_lease(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                ttl_seconds=60,
+                now=started + timedelta(seconds=10),
+            )
+            self.assertEqual(acquired.acquired_at, renewed.acquired_at)
+            self.assertNotEqual(acquired.expires_at, renewed.expires_at)
+            self.assertEqual(
+                store.snapshot(now=started + timedelta(seconds=10)).generation,
+                2,
+            )
+            self.assertTrue(
+                store.release_lease(
+                    "repo/a",
+                    "v1",
+                    "sandbox:one",
+                    now=started + timedelta(seconds=11),
+                )
+            )
+            self.assertEqual(
+                store.snapshot(now=started + timedelta(seconds=11)).generation,
+                3,
+            )
+            with self.assertRaises(RegistryImageLeaseNotFound):
+                store.renew_lease(
+                    "repo/a",
+                    "v1",
+                    "sandbox:one",
+                    ttl_seconds=60,
+                    now=started + timedelta(seconds=12),
+                )
+
+            store.acquire_lease(
+                "repo/a",
+                "v1",
+                "sandbox:two",
+                ttl_seconds=1,
+                now=started + timedelta(seconds=20),
+            )
+            before_expiry = store.snapshot(now=started + timedelta(seconds=20))
+            after_expiry = store.snapshot(now=started + timedelta(seconds=22))
+
+            self.assertEqual(len(before_expiry.leases), 1)
+            self.assertEqual(after_expiry.leases, {})
+            self.assertEqual(after_expiry.generation, before_expiry.generation + 1)
+
+    def test_registry_reference_does_not_expire_without_renewal(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            started = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+
+            reference = store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                now=started,
+            )
+            loaded = RegistryUsageStore(store.path).snapshot(
+                now=started + timedelta(days=3650)
+            )
+
+            self.assertEqual(reference.expires_at, "")
+            self.assertIn(("repo/a", "v1", "sandbox:one"), loaded.leases)
+            self.assertEqual(loaded.active_lease_tags(), {("repo/a", "v1")})
+
+    def test_usage_updates_preserve_active_leases(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            store.acquire_lease(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                ttl_seconds=60,
+            )
+
+            store.touch_image("localhost:5000/repo/a:v1")
+            touched = store.snapshot()
+            store.save(touched.records, expected_generation=touched.generation)
+            saved = store.snapshot()
+
+            self.assertIn(("repo/a", "v1", "sandbox:one"), touched.leases)
+            self.assertIn(("repo/a", "v1", "sandbox:one"), saved.leases)
+
+    def test_registry_lease_ttl_must_be_positive_finite_and_bounded(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+
+            for ttl in (0, -1, float("nan"), float("inf"), 100_000):
+                with self.subTest(ttl=ttl), self.assertRaises(ValueError):
+                    store.acquire_lease(
+                        "repo/a",
+                        "v1",
+                        "sandbox:one",
+                        ttl_seconds=ttl,
+                    )
+
+    def test_old_usage_file_loads_without_lease_fields(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "images": [
+                            {
+                                "image_ref": "registry/repo/a:v1",
+                                "repository": "repo/a",
+                                "tag": "v1",
+                                "last_used_at": "2026-07-01T00:00:00+00:00",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            snapshot = RegistryUsageStore(path).snapshot()
+
+            self.assertEqual(snapshot.generation, 0)
+            self.assertIn(("repo/a", "v1"), snapshot.records)
+            self.assertEqual(snapshot.leases, {})
+
+    def test_malformed_lease_state_fails_closed(self) -> None:
+        valid = {
+            "repository": "repo/a",
+            "tag": "v1",
+            "owner": "sandbox:one",
+            "acquired_at": "2026-07-10T00:00:00+00:00",
+            "renewed_at": "2026-07-10T00:00:00+00:00",
+            "expires_at": "2026-07-10T01:00:00+00:00",
+        }
+        cases = (
+            {"generation": 1, "images": [], "leases": {}},
+            {"generation": 1, "images": [], "leases": [None]},
+            {"generation": 1, "images": [], "leases": [valid, valid]},
+            {"generation": "broken", "images": [], "leases": []},
+            {"generation": -1, "images": [], "leases": []},
+        )
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.json"
+            for payload in cases:
+                with self.subTest(payload=payload):
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        RegistryUsageStore(path).snapshot()
+
+    def test_usage_store_fsyncs_file_and_parent_directory(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            with patch("ucloud_sandboxes.managed_registry.os.fsync") as fsync:
+                store.touch_image("localhost:5000/repo/a:v1")
+
+            self.assertGreaterEqual(fsync.call_count, 2)
+
+    def test_concurrent_process_lease_acquisition_loses_no_owner(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = str(Path(raw_dir) / "usage.json")
+            context = multiprocessing.get_context("spawn")
+            results = context.Queue()
+            processes = [
+                context.Process(
+                    target=_acquire_lease_in_process,
+                    args=(path, "repo/a", "v1", owner, results),
+                )
+                for owner in ("sandbox:one", "sandbox:two")
+            ]
+
+            for process in processes:
+                process.start()
+            for process in processes:
+                process.join(timeout=10)
+                if process.is_alive():
+                    process.terminate()
+                    process.join(timeout=2)
+
+            self.assertEqual([process.exitcode for process in processes], [0, 0])
+            self.assertEqual(
+                {results.get(timeout=2), results.get(timeout=2)},
+                {"sandbox:one", "sandbox:two"},
+            )
+            snapshot = RegistryUsageStore(Path(path)).snapshot()
+            self.assertEqual(snapshot.generation, 2)
+            self.assertEqual(len(snapshot.leases), 2)
+
+    def test_cross_process_lease_acquired_after_plan_prevents_delete(self) -> None:
+        class FakeRegistryClient:
+            def __init__(self) -> None:
+                self.deleted: list[tuple[str, str]] = []
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.json"
+            store = RegistryUsageStore(path)
+            records = [RegistryTag("repo/a", "v1", "sha256:1")]
+            planned = select_prune_candidates(records, keep_per_repository=0)
+            self.assertEqual(planned, records)
+
+            context = multiprocessing.get_context("spawn")
+            results = context.Queue()
+            process = context.Process(
+                target=_acquire_lease_in_process,
+                args=(str(path), "repo/a", "v1", "sandbox:new", results),
+            )
+            process.start()
+            process.join(timeout=10)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=2)
+            self.assertEqual(process.exitcode, 0)
+            self.assertEqual(results.get(timeout=2), "sandbox:new")
+
+            client = FakeRegistryClient()
+            deleted = execute_registry_prune(
+                client,  # type: ignore[arg-type]
+                planned,
+                usage_store=store,
+                all_records=records,
+            )
+
+            self.assertEqual(deleted, [])
+            self.assertEqual(client.deleted, [])
+
+    def test_registry_maintenance_lock_creates_cross_process_lock_file(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "registry-maintenance"
+
+            with registry_maintenance_lock(path):
+                self.assertTrue(path.with_name(path.name + ".lock").exists())
+
     def test_registry_repository_tag_from_image_ref(self) -> None:
         self.assertEqual(
             registry_repository_tag_from_image_ref(
@@ -272,6 +595,99 @@ class ManagedRegistryTests(unittest.TestCase):
             client.deleted,
             [("repo/a", "sha256:1"), ("repo/a", "sha256:2")],
         )
+
+    def test_execute_registry_prune_revalidates_all_digest_aliases(self) -> None:
+        class FakeRegistryClient:
+            def __init__(self) -> None:
+                self.deleted: list[tuple[str, str]] = []
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        client = FakeRegistryClient()
+        deleted = execute_registry_prune(
+            client,  # type: ignore[arg-type]
+            [
+                RegistryTag("repo/a", "safe", "sha256:1"),
+                RegistryTag("repo/a", "in-use", "sha256:1"),
+                RegistryTag("repo/a", "old", "sha256:2"),
+            ],
+            revalidate=lambda record: record.tag != "in-use",
+        )
+
+        self.assertEqual(client.deleted, [("repo/a", "sha256:2")])
+        self.assertEqual([record.tag for record in deleted], ["old"])
+
+    def test_alias_lease_fences_digest_in_plan_and_execution(self) -> None:
+        class FakeRegistryClient:
+            def __init__(self) -> None:
+                self.deleted: list[tuple[str, str]] = []
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            store.acquire_lease(
+                "repo/a",
+                "alias-v2",
+                "sandbox:one",
+                ttl_seconds=60,
+            )
+            snapshot = store.snapshot()
+            records = [
+                RegistryTag("repo/a", "alias-v1", "sha256:shared"),
+                RegistryTag("repo/a", "alias-v2", "sha256:shared"),
+            ]
+
+            planned = select_prune_candidates(
+                records,
+                keep_per_repository=0,
+                active_leases=snapshot.leases,
+            )
+            client = FakeRegistryClient()
+            deleted = execute_registry_prune(
+                client,  # type: ignore[arg-type]
+                [records[0]],
+                usage_store=store,
+                all_records=records,
+            )
+
+            self.assertEqual(planned, [])
+            self.assertEqual(deleted, [])
+            self.assertEqual(client.deleted, [])
+
+    def test_prune_plan_reports_generation_and_excludes_active_lease(self) -> None:
+        class FakeRegistryClient:
+            def catalog(self) -> list[str]:
+                return ["repo/a"]
+
+            def tags(self, repository: str) -> list[str]:
+                return ["v1"]
+
+            def tag_record(self, repository: str, tag: str) -> RegistryTag:
+                return RegistryTag(repository, tag, "sha256:1")
+
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            store.acquire_lease(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                ttl_seconds=60,
+            )
+            snapshot = store.snapshot()
+
+            plan = registry_prune_plan(
+                FakeRegistryClient(),  # type: ignore[arg-type]
+                keep_per_repository=0,
+                active_leases=snapshot.leases,
+                usage_generation=snapshot.generation,
+            )
+
+            self.assertEqual(plan["usage_generation"], snapshot.generation)
+            self.assertEqual(plan["active_lease_count"], 1)
+            self.assertEqual(plan["delete"], [])
 
     def test_next_link_path_extracts_registry_pagination_target(self) -> None:
         self.assertEqual(

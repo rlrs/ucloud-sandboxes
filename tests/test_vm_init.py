@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -228,7 +229,7 @@ class VmInitTests(unittest.TestCase):
             'required_packages_installed "${OFFLINE_REQUIRED_PACKAGES[@]}"',
             script,
         )
-        self.assertEqual(script.count("$SUDO apt-get update"), 2)
+        self.assertEqual(script.count("$SUDO apt-get update"), 3)
         self.assertIn("using package repository fallback", script)
         self.assertIn("APT_REPOSITORY_PACKAGES=()", script)
         self.assertIn('if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]', script)
@@ -307,6 +308,11 @@ class VmInitTests(unittest.TestCase):
             agent_dir.mkdir(parents=True)
             agent_archive = agent_dir / "node-agent-runtime.tar"
             agent_archive.write_bytes(b"agent-runtime")
+            kernel_release = os.uname().release
+            kernel_dir = root / "runtime" / "kernel" / kernel_release
+            kernel_dir.mkdir(parents=True)
+            xfs_module = kernel_dir / "xfs.ko.zst"
+            xfs_module.write_bytes(b"xfs-module")
             files = []
             for name in ("docker-ce", "runsc"):
                 package = package_dir / f"{name}_1.0_amd64.deb"
@@ -341,6 +347,18 @@ class VmInitTests(unittest.TestCase):
                                 "sha256": hashlib.sha256(
                                     agent_archive.read_bytes()
                                 ).hexdigest(),
+                            },
+                            "kernel": {
+                                "release": kernel_release,
+                                "xfs_module": {
+                                    "file": (
+                                        f"runtime/kernel/{kernel_release}/xfs.ko.zst"
+                                    ),
+                                    "size": xfs_module.stat().st_size,
+                                    "sha256": hashlib.sha256(
+                                        xfs_module.read_bytes()
+                                    ).hexdigest(),
+                                },
                             },
                         },
                     }

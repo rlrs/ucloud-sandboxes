@@ -366,6 +366,7 @@ UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
 UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 UCLOUD_PREBUILT_AGENT_ARCHIVE=""
 UCLOUD_PREBUILT_AGENT_SHA256=""
+UCLOUD_OFFLINE_XFS_MODULE=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -410,6 +411,7 @@ PY
       "$UCLOUD_ARCHITECTURE" "$UCLOUD_PACKAGE_EXPECTED_SHA256" <<'PY'
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -472,6 +474,32 @@ with agent_archive.open("rb") as handle:
         agent_digest.update(chunk)
 if agent_digest.hexdigest() != agent.get("sha256"):
     raise SystemExit("preassembled node-agent runtime checksum mismatch")
+kernel = runtime.get("kernel")
+if not isinstance(kernel, dict):
+    raise SystemExit("offline kernel metadata is absent")
+kernel_release = os.uname().release
+if kernel.get("release") != kernel_release:
+    raise SystemExit("offline kernel module release does not match this VM")
+xfs_module = kernel.get("xfs_module")
+if not isinstance(xfs_module, dict):
+    raise SystemExit("offline XFS kernel module metadata is absent")
+xfs_module_file = str(xfs_module.get("file") or "")
+xfs_module_name = Path(xfs_module_file).name
+if (
+    xfs_module_name not in {{"xfs.ko", "xfs.ko.gz", "xfs.ko.xz", "xfs.ko.zst"}}
+    or xfs_module_file != f"runtime/kernel/{{kernel_release}}/{{xfs_module_name}}"
+):
+    raise SystemExit("invalid offline XFS kernel module filename")
+xfs_module_path = bundle_dir / xfs_module_file
+if not xfs_module_path.is_file() or xfs_module_path.stat().st_size != xfs_module.get("size"):
+    raise SystemExit("offline XFS kernel module size mismatch")
+if not archive_digest_verified:
+    module_digest = hashlib.sha256()
+    with xfs_module_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            module_digest.update(chunk)
+    if module_digest.hexdigest() != xfs_module.get("sha256"):
+        raise SystemExit("offline XFS kernel module checksum mismatch")
 PY
     then
       UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
@@ -481,12 +509,14 @@ import json
 from pathlib import Path
 import sys
 
-agent = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]["agent"]
-print(f"{{agent['sha256']}}\\t{{agent['size']}}")
+runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]
+agent = runtime["agent"]
+print(f"{{agent['sha256']}}\\t{{agent['size']}}\\t{{runtime['kernel']['xfs_module']['file']}}")
 PY
 )"
-      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE UCLOUD_XFS_MODULE_FILE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
       UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
+      UCLOUD_OFFLINE_XFS_MODULE="$UCLOUD_PACKAGE_BUNDLE_DIR/$UCLOUD_XFS_MODULE_FILE"
       UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
       if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
         if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
@@ -762,6 +792,22 @@ log_init_phase "container-packages"
 
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"
+  if ! grep -qw xfs /proc/filesystems; then
+    if [ -n "$UCLOUD_OFFLINE_XFS_MODULE" ]; then
+      echo "Loading bundled XFS kernel module"
+      $SUDO insmod "$UCLOUD_OFFLINE_XFS_MODULE"
+    else
+      echo "Installing XFS kernel module fallback"
+      $SUDO apt-get update
+      $SUDO apt-get install --no-install-recommends -y \
+        -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
+      $SUDO modprobe xfs
+    fi
+  fi
+  if ! grep -qw xfs /proc/filesystems; then
+    echo "XFS kernel support is unavailable" >&2
+    exit 1
+  fi
   $SUDO mkdir -p "$UCLOUD_DOCKER_QUOTA_ROOT"
   if [ ! -f "$UCLOUD_DOCKER_QUOTA_IMAGE" ]; then
     $SUDO truncate -s "${{UCLOUD_DOCKER_QUOTA_IMAGE_GB}}G" "$UCLOUD_DOCKER_QUOTA_IMAGE"
@@ -832,9 +878,13 @@ else
 fi
 rm -f "$DOCKER_DAEMON_JSON"
 $SUDO systemctl daemon-reload
+$SUDO dockerd --validate --config-file /etc/docker/daemon.json
 $SUDO systemctl enable docker
 if [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ] || ! systemctl is-active --quiet docker; then
-  $SUDO systemctl restart docker
+  if ! $SUDO systemctl restart docker; then
+    $SUDO journalctl -u containerd.service -u docker.service -n 80 --no-pager >&2 || true
+    exit 1
+  fi
 else
   echo "Docker daemon already configured and running"
 fi

@@ -186,6 +186,9 @@ The post-boot init script should be safe to re-run:
 - Configure Docker's bridge MTU from the VM default-route interface so
   containers and build steps inherit the UCloud network MTU instead of Docker's
   default `1500`.
+- Raise Docker's per-transfer layer concurrency from its conservative defaults
+  to eight downloads and uploads so multi-layer image pulls and builder exports
+  use the available private-network bandwidth.
 - Install the `ucloud-sandboxes` package or sync a release artifact into a
   service-user-owned virtual environment.
 - Record a package fingerprint marker in node state so rerunning init with the

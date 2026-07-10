@@ -679,6 +679,8 @@ import os
 
 config = {{
     "data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
+    "max-concurrent-downloads": 8,
+    "max-concurrent-uploads": 8,
     "runtimes": {{"runsc": {{"path": os.environ["RUNSC_PATH"]}}}},
 }}
 insecure_registries = json.loads(os.environ.get("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON") or "[]")

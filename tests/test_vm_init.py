@@ -172,6 +172,8 @@ class VmInitTests(unittest.TestCase):
         self.assertIn('config["insecure-registries"] = insecure_registries', script)
         self.assertIn('config["storage-driver"] = "overlay2"', script)
         self.assertIn('"containerd-snapshotter": False', script)
+        self.assertIn('"max-concurrent-downloads": 8', script)
+        self.assertIn('"max-concurrent-uploads": 8', script)
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
         self.assertIn("--disable-pip-version-check --upgrade", script)
         self.assertIn("package-bundle.json", script)

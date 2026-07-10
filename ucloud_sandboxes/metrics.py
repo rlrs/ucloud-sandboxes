@@ -498,6 +498,7 @@ def record_vm_init_attempt(
     error: str = "",
     skipped: bool = False,
     reason: str = "",
+    retry_delay_seconds: int | None = None,
 ) -> None:
     if store is None:
         return
@@ -518,6 +519,7 @@ def record_vm_init_attempt(
             "error": error,
             "skipped": skipped,
             "reason": reason,
+            "retry_delay_seconds": retry_delay_seconds,
         },
     )
 
@@ -1100,6 +1102,7 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
                         "stage_duration_ms": data.get("stage_duration_ms"),
                         "run_duration_ms": data.get("run_duration_ms"),
                         "returncode": data.get("returncode"),
+                        "retry_delay_seconds": data.get("retry_delay_seconds"),
                         "skipped": data.get("skipped"),
                         "reason": data.get("reason") or "",
                     }

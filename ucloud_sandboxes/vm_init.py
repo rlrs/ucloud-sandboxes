@@ -23,6 +23,20 @@ DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
 DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
+SANDBOX_RUNTIME_PACKAGES = (
+    "python3",
+    "python3-venv",
+    "xfsprogs",
+    "docker-ce",
+    "docker-ce-cli",
+    "containerd.io",
+    "runsc",
+)
+BUILDER_RUNTIME_PACKAGES = (
+    *SANDBOX_RUNTIME_PACKAGES[:-1],
+    "docker-buildx-plugin",
+    SANDBOX_RUNTIME_PACKAGES[-1],
+)
 DEFAULT_SSH_OPTIONS = (
     "-o",
     "BatchMode=yes",
@@ -181,6 +195,14 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
     heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
     authorized_keys_blob = "\n".join(options.init_authorized_keys)
+    runtime_role = "builder" if options.enable_image_builds else "sandbox"
+    runtime_packages = (
+        BUILDER_RUNTIME_PACKAGES
+        if options.enable_image_builds
+        else SANDBOX_RUNTIME_PACKAGES
+    )
+    runtime_packages_python = repr(list(runtime_packages))
+    runtime_packages_shell = " ".join(runtime_packages)
     label_args = " ".join(
         f"--label {shlex.quote(key + '=' + value)}"
         for key, value in sorted((options.labels or {}).items())
@@ -329,7 +351,7 @@ UCLOUD_PACKAGE_INSTALL_ARGS=()
 UCLOUD_PACKAGE_BUNDLE_DIR=""
 UCLOUD_OFFLINE_RUNTIME_AVAILABLE=0
 UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
-UCLOUD_OFFLINE_PROBE_IMAGE_ID=""
+UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -384,11 +406,9 @@ manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 runtime = manifest.get("runtime")
 if not isinstance(runtime, dict) or runtime.get("platform") != expected_platform:
     raise SystemExit("offline runtime platform does not match this VM")
-expected_packages = [
-    "apt-transport-https", "python3", "python3-venv", "python3-pip", "xfsprogs",
-    "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin",
-    "docker-compose-plugin", "runsc",
-]
+if runtime.get("role") != {runtime_role!r}:
+    raise SystemExit("offline runtime role does not match this VM")
+expected_packages = {runtime_packages_python}
 if runtime.get("packages") != expected_packages:
     raise SystemExit("invalid offline runtime package list")
 package_dir = bundle_dir / "runtime" / "debs"
@@ -438,19 +458,28 @@ if probe.get("file") != "runtime/images/runtime-conformance-busybox.tar":
     raise SystemExit("invalid offline probe image filename")
 if probe.get("os") != "linux" or probe.get("architecture") != sys.argv[2]:
     raise SystemExit("offline probe image platform does not match this VM")
-image_id = str(probe.get("image_id") or "")
+accepted_ids = probe.get("accepted_ids")
+if not isinstance(accepted_ids, list):
+    accepted_ids = [probe.get("image_id")]
+accepted_ids = [str(item or "") for item in accepted_ids]
 checksum = str(probe.get("sha256") or "")
 size = probe.get("size")
-if not image_id.startswith("sha256:") or len(checksum) != 64 or not isinstance(size, int) or size <= 0:
+if (
+    not accepted_ids
+    or any(not item.startswith("sha256:") for item in accepted_ids)
+    or len(checksum) != 64
+    or not isinstance(size, int)
+    or size <= 0
+):
     raise SystemExit("invalid offline probe image metadata")
-print(f"{{checksum}}\t{{size}}\t{{image_id}}")
+print(f"{{checksum}}\t{{size}}\t{{','.join(sorted(set(accepted_ids)))}}")
 PY
 )" \
-          && IFS=$'\t' read -r UCLOUD_PROBE_IMAGE_SHA256 UCLOUD_PROBE_IMAGE_SIZE UCLOUD_PROBE_IMAGE_ID <<< "$UCLOUD_PROBE_IMAGE_SPEC" \
+          && IFS=$'\t' read -r UCLOUD_PROBE_IMAGE_SHA256 UCLOUD_PROBE_IMAGE_SIZE UCLOUD_PROBE_IMAGE_IDS <<< "$UCLOUD_PROBE_IMAGE_SPEC" \
           && [ "$(stat -c %s "$UCLOUD_PROBE_IMAGE_ARCHIVE")" = "$UCLOUD_PROBE_IMAGE_SIZE" ] \
           && printf '%s  %s\\n' "$UCLOUD_PROBE_IMAGE_SHA256" "$UCLOUD_PROBE_IMAGE_ARCHIVE" | sha256sum --check --status -; then
           UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE="$UCLOUD_PROBE_IMAGE_ARCHIVE"
-          UCLOUD_OFFLINE_PROBE_IMAGE_ID="$UCLOUD_PROBE_IMAGE_ID"
+          UCLOUD_OFFLINE_PROBE_IMAGE_IDS="$UCLOUD_PROBE_IMAGE_IDS"
           echo "Verified offline busybox conformance image"
         else
           echo "WARNING: offline busybox conformance image is invalid; the probe may pull it" >&2
@@ -497,10 +526,7 @@ required_packages_installed() {{
   done
 }}
 
-OFFLINE_REQUIRED_PACKAGES=(
-  apt-transport-https python3 python3-venv python3-pip xfsprogs
-  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin runsc
-)
+OFFLINE_REQUIRED_PACKAGES=({runtime_packages_shell})
 NEED_DOCKER_REPOSITORY=0
 NEED_GVISOR_REPOSITORY=0
 command -v docker >/dev/null 2>&1 || NEED_DOCKER_REPOSITORY=1
@@ -524,7 +550,7 @@ if [ "$UCLOUD_OFFLINE_RUNTIME_AVAILABLE" -eq 1 ] \
 fi
 log_init_phase "offline-runtime"
 
-BASE_PACKAGES=(apt-transport-https python3 python3-venv python3-pip xfsprogs)
+BASE_PACKAGES=(python3 python3-venv xfsprogs)
 MISSING_BASE_PACKAGES=()
 for package in "${{BASE_PACKAGES[@]}}"; do
   if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
@@ -607,7 +633,10 @@ Components: stable
 Architectures: $ARCHITECTURE
 Signed-By: /etc/apt/keyrings/docker.asc
 DOCKER_SOURCES
-  CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+  CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io)
+  if [ "{runtime_role}" = builder ]; then
+    CONTAINER_PACKAGES+=(docker-buildx-plugin)
+  fi
 fi
 
 if [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
@@ -736,8 +765,23 @@ log_init_phase "python-package"
 
 if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
   echo "Loading offline busybox conformance image"
+  LOADED_PROBE_IMAGE_IDS=""
+  probe_image_identity_matches() {{
+    local expected actual
+    IFS=',' read -ra expected_ids <<< "$UCLOUD_OFFLINE_PROBE_IMAGE_IDS"
+    for expected in "${{expected_ids[@]}}"; do
+      while read -r actual; do
+        actual="${{actual##*@}}"
+        if [ "$actual" = "$expected" ]; then
+          return 0
+        fi
+      done < <(tr ' ' '\n' <<< "$LOADED_PROBE_IMAGE_IDS")
+    done
+    return 1
+  }}
   if $SUDO docker load --input "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" >/dev/null \
-    && [ "$($SUDO docker image inspect --format '{{{{.Id}}}}' busybox 2>/dev/null)" = "$UCLOUD_OFFLINE_PROBE_IMAGE_ID" ]; then
+    && LOADED_PROBE_IMAGE_IDS="$($SUDO docker image inspect --format '{{{{.Id}}}} {{{{range .RepoDigests}}}}{{{{.}}}} {{{{end}}}}' busybox 2>/dev/null)" \
+    && probe_image_identity_matches; then
     echo "Loaded verified busybox conformance image without registry access"
   else
     echo "WARNING: offline busybox image load failed; the conformance probe may pull it" >&2

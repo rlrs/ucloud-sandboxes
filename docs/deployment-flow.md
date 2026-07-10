@@ -308,8 +308,16 @@ with UCloud using `ensure-ucloud-ssh-key`, pass the public key into autoscaled
 node init with `--init-authorized-key-file`, and have the autoscaler use
 `--init-ssh-private-key-file` when it runs post-boot initialization. The
 autoscaler records attempts in `<state_dir>/vm-bootstrap.json` and retries after
-`--init-retry-seconds` (30 seconds in the live setup); readiness still comes only
-from fresh node heartbeats.
+`--init-retry-seconds` (30 seconds in the live setup). SSH exit status 255 is
+treated as boot-time transport readiness and uses a bounded 1, 2, 4, 8, 16,
+then 30 second retry schedule; script/package failures retain the normal
+backoff. Readiness still comes only from fresh node heartbeats.
+
+Deployment emits separate sandbox and builder node bundles. Both contain the
+wheel closure, Docker Engine, gVisor, XFS tools, and the conformance image;
+only the builder bundle contains Buildx. Neither bundle installs the distro
+`python3-pip`, compiler toolchain, or Docker Compose because the bundled wheel
+closure installs into `python3-venv` without them.
 
 The live all-in-one gateway key has been registered in UCloud as SSH key id
 `3212` with title `ucloud-sandboxes gateway init 2026-07-04 allinone`.

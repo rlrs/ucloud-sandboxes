@@ -20,6 +20,7 @@ class VmBootstrapRecord:
     last_attempt_at: datetime | None = None
     last_success_at: datetime | None = None
     last_error: str = ""
+    retry_delay_seconds: int | None = None
 
     @classmethod
     def from_dict(cls, raw: object) -> "VmBootstrapRecord":
@@ -34,6 +35,11 @@ class VmBootstrapRecord:
             last_attempt_at=_parse_iso(raw.get("lastAttemptAt")),
             last_success_at=_parse_iso(raw.get("lastSuccessAt")),
             last_error=str(raw.get("lastError") or ""),
+            retry_delay_seconds=(
+                max(0, int(raw["retryDelaySeconds"]))
+                if raw.get("retryDelaySeconds") is not None
+                else None
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -46,12 +52,18 @@ class VmBootstrapRecord:
             "lastAttemptAt": _format_iso(self.last_attempt_at),
             "lastSuccessAt": _format_iso(self.last_success_at),
             "lastError": self.last_error,
+            "retryDelaySeconds": self.retry_delay_seconds,
         }
 
     def retry_due(self, *, now: datetime, retry_seconds: int) -> bool:
         if self.last_attempt_at is None:
             return True
-        return (now - self.last_attempt_at).total_seconds() >= max(0, retry_seconds)
+        delay = (
+            self.retry_delay_seconds
+            if self.retry_delay_seconds is not None
+            else retry_seconds
+        )
+        return (now - self.last_attempt_at).total_seconds() >= max(0, delay)
 
 
 class VmBootstrapStore:
@@ -172,6 +184,7 @@ def mark_bootstrap_attempt(
         last_attempt_at=now,
         last_success_at=existing.last_success_at if existing is not None else None,
         last_error="",
+        retry_delay_seconds=None,
     )
     return updated
 
@@ -195,6 +208,7 @@ def mark_bootstrap_success(
         last_attempt_at=existing.last_attempt_at if existing is not None else now,
         last_success_at=now,
         last_error="",
+        retry_delay_seconds=None,
     )
     return updated
 
@@ -204,6 +218,7 @@ def mark_bootstrap_failure(
     intent: VmBootstrapIntent,
     error: str,
     *,
+    retry_delay_seconds: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, VmBootstrapRecord]:
     if now is None:
@@ -219,6 +234,11 @@ def mark_bootstrap_failure(
         last_attempt_at=existing.last_attempt_at if existing is not None else now,
         last_success_at=existing.last_success_at if existing is not None else None,
         last_error=error,
+        retry_delay_seconds=(
+            max(0, retry_delay_seconds)
+            if retry_delay_seconds is not None
+            else None
+        ),
     )
     return updated
 

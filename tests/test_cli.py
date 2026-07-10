@@ -2267,6 +2267,10 @@ class CliTests(unittest.TestCase):
                             str(token_source),
                             "--init-ssh-private-key-file",
                             "/work/ucloud-sandboxes/state/ssh/gateway-init",
+                            "--init-package-spec",
+                            "/release/sandbox.tar.gz",
+                            "--init-builder-package-spec",
+                            "/release/builder.tar.gz",
                             "--init-cpu-overcommit",
                             "2",
                             "--init-memory-overcommit",
@@ -2302,6 +2306,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("UCLOUD_MEMORY_OVERCOMMIT=1.0", calls[0]["script"])
         self.assertIn("UCLOUD_DISK_OVERCOMMIT=1.0", calls[0]["script"])
         self.assertIn("UCLOUD_HEARTBEAT_BEARER_TOKEN=SECRET", calls[0]["script"])
+        self.assertIn(
+            "UCLOUD_PACKAGE_SPEC=/release/builder.tar.gz",
+            calls[0]["script"],
+        )
         self.assertIn("--enable-image-builds --execute-runtime", calls[0]["script"])
         self.assertEqual(payload["bootstrapResults"][0]["status"], "succeeded")
         self.assertEqual(state["jobs"]["job-1"]["status"], "succeeded")

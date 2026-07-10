@@ -1617,6 +1617,14 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="pip package spec installed into autoscaled VMs.",
     )
     parser.add_argument(
+        "--init-builder-package-spec",
+        default="",
+        help=(
+            "Builder-specific package or offline bundle. Defaults to "
+            "--init-package-spec when omitted."
+        ),
+    )
+    parser.add_argument(
         "--init-node-agent-host",
         default="0.0.0.0",
         help="Bind address for autoscaled node agents.",
@@ -4369,13 +4377,14 @@ def run_reconcile_cycle(
                 thread_name_prefix="vm-bootstrap",
             ) as executor:
                 for prepared in runnable_bootstraps:
-                    index, intent, _attempt_count, _started_at, started_perf = prepared
+                    index, intent, attempt_count, _started_at, started_perf = prepared
                     try:
                         assert_provider_fence()
                         future = executor.submit(
                             _execute_vm_bootstrap_attempt,
                             intent,
                             args,
+                            attempt_count=attempt_count,
                             assert_provider_fence=assert_provider_fence,
                             attempt_started_perf=started_perf,
                         )
@@ -4413,6 +4422,7 @@ def run_reconcile_cycle(
                             bootstrap_records,
                             intent,
                             attempt_result.error,
+                            retry_delay_seconds=attempt_result.retry_delay_seconds,
                         )
                     # Only the controller thread mutates and persists the aggregate
                     # state, once for each independently completed remote attempt.
@@ -4429,6 +4439,7 @@ def run_reconcile_cycle(
                         run_duration_ms=attempt_result.run_duration_ms,
                         returncode=attempt_result.returncode,
                         error=attempt_result.error,
+                        retry_delay_seconds=attempt_result.retry_delay_seconds,
                     )
 
         bootstrap_results: list[dict[str, Any]] = []
@@ -4540,12 +4551,14 @@ class _VmBootstrapAttemptResult:
     error: str = ""
     stage_duration_ms: int | None = None
     run_duration_ms: int | None = None
+    retry_delay_seconds: int | None = None
 
 
 def _execute_vm_bootstrap_attempt(
     intent: VmBootstrapIntent,
     args: argparse.Namespace,
     *,
+    attempt_count: int,
     assert_provider_fence: Callable[[], None],
     attempt_started_perf: float,
 ) -> _VmBootstrapAttemptResult:
@@ -4579,6 +4592,13 @@ def _execute_vm_bootstrap_attempt(
                     "package staging exited with status "
                     f"{stage_result.returncode}"
                 )
+                retry_delay_seconds = _bootstrap_retry_delay_seconds(
+                    stage_result.returncode,
+                    attempt_count=attempt_count,
+                    configured_retry_seconds=int(
+                        getattr(args, "init_retry_seconds", 30)
+                    ),
+                )
                 return _VmBootstrapAttemptResult(
                     result={
                         "jobId": intent.job_id,
@@ -4589,11 +4609,13 @@ def _execute_vm_bootstrap_attempt(
                         "error": error,
                         "packageStage": stage_payload,
                         "durationMs": _elapsed_ms(attempt_started_perf),
+                        "retryDelaySeconds": retry_delay_seconds,
                     },
                     status="failed",
                     returncode=stage_result.returncode,
                     error=error,
                     stage_duration_ms=stage_duration_ms,
+                    retry_delay_seconds=retry_delay_seconds,
                 )
             effective_options = replace(
                 intent.options,
@@ -4630,6 +4652,11 @@ def _execute_vm_bootstrap_attempt(
             )
 
         error = f"init command exited with status {run_result.returncode}"
+        retry_delay_seconds = _bootstrap_retry_delay_seconds(
+            run_result.returncode,
+            attempt_count=attempt_count,
+            configured_retry_seconds=int(getattr(args, "init_retry_seconds", 30)),
+        )
         return _VmBootstrapAttemptResult(
             result={
                 "jobId": intent.job_id,
@@ -4641,12 +4668,14 @@ def _execute_vm_bootstrap_attempt(
                 "packageStage": stage_payload,
                 "durationMs": _elapsed_ms(attempt_started_perf),
                 "runDurationMs": run_duration_ms,
+                "retryDelaySeconds": retry_delay_seconds,
             },
             status="failed",
             returncode=run_result.returncode,
             error=error,
             stage_duration_ms=stage_duration_ms,
             run_duration_ms=run_duration_ms,
+            retry_delay_seconds=retry_delay_seconds,
         )
     except Exception as exc:
         return _failed_vm_bootstrap_attempt(
@@ -4665,6 +4694,7 @@ def _failed_vm_bootstrap_attempt(
     *,
     stage_duration_ms: int | None = None,
     run_duration_ms: int | None = None,
+    retry_delay_seconds: int | None = None,
 ) -> _VmBootstrapAttemptResult:
     return _VmBootstrapAttemptResult(
         result={
@@ -4681,7 +4711,21 @@ def _failed_vm_bootstrap_attempt(
         error=error,
         stage_duration_ms=stage_duration_ms,
         run_duration_ms=run_duration_ms,
+        retry_delay_seconds=retry_delay_seconds,
     )
+
+
+def _bootstrap_retry_delay_seconds(
+    returncode: int | None,
+    *,
+    attempt_count: int,
+    configured_retry_seconds: int,
+) -> int | None:
+    if returncode != 255:
+        return None
+    maximum = max(0, int(configured_retry_seconds))
+    transient_delay = 1 << min(max(0, int(attempt_count) - 1), 5)
+    return min(maximum, transient_delay)
 
 
 def record_vm_init_attempt_result(
@@ -4696,6 +4740,7 @@ def record_vm_init_attempt_result(
     run_duration_ms: int | None,
     returncode: int | None,
     error: str = "",
+    retry_delay_seconds: int | None = None,
 ) -> None:
     finished_at = utc_now()
     record_vm_init_attempt(
@@ -4712,6 +4757,7 @@ def record_vm_init_attempt_result(
         run_duration_ms=run_duration_ms,
         returncode=returncode,
         error=error,
+        retry_delay_seconds=retry_delay_seconds,
     )
 
 
@@ -4907,7 +4953,14 @@ def vm_init_options_for_autoscaled_node(
         init_authorized_keys=read_prefixed_init_authorized_keys(args),
         node_id=node_id,
         work_dir=str(getattr(args, "init_work_dir", "/work/ucloud-sandboxes")),
-        package_spec=str(getattr(args, "init_package_spec", "ucloud-sandboxes")),
+        package_spec=str(
+            (
+                getattr(args, "init_builder_package_spec", "")
+                if role == "builder"
+                else ""
+            )
+            or getattr(args, "init_package_spec", "ucloud-sandboxes")
+        ),
         node_agent_host=str(getattr(args, "init_node_agent_host", "0.0.0.0")),
         node_agent_port=node_agent_port,
         node_url=f"http://{node_id}:{node_agent_port}",

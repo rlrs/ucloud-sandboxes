@@ -8,7 +8,12 @@ import subprocess
 from typing import Any
 
 from .deployment import package_version
-from .vm_init import ssh_init_command, ssh_remote_command
+from .vm_init import (
+    BUILDER_RUNTIME_PACKAGES,
+    SANDBOX_RUNTIME_PACKAGES,
+    ssh_init_command,
+    ssh_remote_command,
+)
 
 
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
@@ -84,9 +89,20 @@ class AllInOneDeployPlan:
 
     @property
     def node_package_bundle_path(self) -> str:
+        return self.sandbox_node_package_bundle_path
+
+    @property
+    def sandbox_node_package_bundle_path(self) -> str:
         return str(
             PurePosixPath(self.release_dir)
-            / f"{self.local_wheel.stem}-node-package.tar.gz"
+            / f"{self.local_wheel.stem}-sandbox-node-package.tar.gz"
+        )
+
+    @property
+    def builder_node_package_bundle_path(self) -> str:
+        return str(
+            PurePosixPath(self.release_dir)
+            / f"{self.local_wheel.stem}-builder-node-package.tar.gz"
         )
 
     @property
@@ -340,7 +356,8 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
         "UCLOUD_INIT_AUTHORIZED_KEY_FILE": plan.init_authorized_key_file,
         "UCLOUD_INIT_SSH_PRIVATE_KEY_FILE": plan.init_ssh_private_key_file,
-        "UCLOUD_INIT_PACKAGE_SPEC": plan.node_package_bundle_path,
+        "UCLOUD_INIT_PACKAGE_SPEC": plan.sandbox_node_package_bundle_path,
+        "UCLOUD_INIT_BUILDER_PACKAGE_SPEC": plan.builder_node_package_bundle_path,
         "UCLOUD_DOCKER_INSECURE_REGISTRY": plan.docker_insecure_registry,
         "UCLOUD_DOCKER_HOST_ALIAS": plan.docker_host_alias,
         "UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB": str(plan.docker_quota_image_gb),
@@ -384,6 +401,8 @@ def render_remote_deploy_script(
         f"/etc/systemd/system/{name}": unit_texts[name]
         for name in SYSTEMD_UNIT_NAMES
     }
+    sandbox_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
+    builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -392,7 +411,8 @@ def render_remote_deploy_script(
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
-        f"NODE_PACKAGE_BUNDLE={shlex.quote(plan.node_package_bundle_path)}",
+        f"SANDBOX_NODE_PACKAGE_BUNDLE={shlex.quote(plan.sandbox_node_package_bundle_path)}",
+        f"BUILDER_NODE_PACKAGE_BUNDLE={shlex.quote(plan.builder_node_package_bundle_path)}",
         f"SERVICE_USER={shlex.quote(plan.service_user)}",
         f"SESSION_FILE={shlex.quote(plan.remote_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
@@ -448,9 +468,12 @@ def render_remote_deploy_script(
         'RUNTIME_CODENAME="$(. /etc/os-release && printf \'%s\' "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}")"',
         'RUNTIME_ARCHITECTURE="$(dpkg --print-architecture)"',
         "RUNTIME_BUNDLE_READY=0",
+        "BUILDER_RUNTIME_BUNDLE_READY=0",
         "download_runtime_packages() {",
-        '  archive_dir="$NODE_PACKAGE_WORK/runtime/debs"',
-        '  status_file="$NODE_PACKAGE_WORK/empty-dpkg-status"',
+        '  runtime_name="$1"',
+        "  shift",
+        '  archive_dir="$NODE_PACKAGE_WORK/$runtime_name/debs"',
+        '  status_file="$NODE_PACKAGE_WORK/$runtime_name-empty-dpkg-status"',
         '  mkdir -p "$archive_dir/partial"',
         '  : > "$status_file"',
         "  sudo apt-get --download-only --no-install-recommends -y "
@@ -483,7 +506,7 @@ def render_remote_deploy_script(
         "  fi",
         '  echo "deb [arch=$RUNTIME_ARCHITECTURE signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list >/dev/null || return 1',
         "  sudo apt-get update || return 1",
-        "  download_runtime_packages apt-transport-https python3 python3-venv python3-pip xfsprogs docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin runsc || return 1",
+        f"  download_runtime_packages runtime {sandbox_runtime_packages} || return 1",
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
         "if build_runtime_bundle; then",
@@ -507,9 +530,32 @@ def render_remote_deploy_script(
         '  echo "WARNING: could not bundle the busybox conformance image; cold nodes may pull it" >&2',
         '  rm -rf "$NODE_PACKAGE_WORK/runtime/images"',
         "fi",
-        'python3 - "$REMOTE_WHEEL" "$NODE_PACKAGE_WORK/wheels" "$NODE_PACKAGE_BUNDLE" '
-        '"$NODE_PACKAGE_WORK/runtime" "$RUNTIME_BUNDLE_READY" "$RUNTIME_OS_ID" '
-        '"$RUNTIME_VERSION_ID" "$RUNTIME_CODENAME" "$RUNTIME_ARCHITECTURE" <<\'PY\'',
+        'if [ "$RUNTIME_BUNDLE_READY" -eq 1 ]; then',
+        '  cp -a "$NODE_PACKAGE_WORK/runtime" "$NODE_PACKAGE_WORK/runtime-builder"',
+        '  if download_runtime_packages runtime-builder docker-buildx-plugin; then',
+        '    sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime-builder"',
+        "    BUILDER_RUNTIME_BUNDLE_READY=1",
+        "  else",
+        '    echo "WARNING: could not add Buildx to builder bundle; cold builders will use repository fallback" >&2',
+        '    rm -rf "$NODE_PACKAGE_WORK/runtime-builder"',
+        "  fi",
+        "fi",
+        "for BUNDLE_ROLE in sandbox builder; do",
+        '  if [ "$BUNDLE_ROLE" = builder ]; then',
+        '    BUNDLE_TARGET="$BUILDER_NODE_PACKAGE_BUNDLE"',
+        '    BUNDLE_RUNTIME_DIR="$NODE_PACKAGE_WORK/runtime-builder"',
+        '    BUNDLE_RUNTIME_READY="$BUILDER_RUNTIME_BUNDLE_READY"',
+        f"    BUNDLE_PACKAGES={shlex.quote(builder_runtime_packages)}",
+        "  else",
+        '    BUNDLE_TARGET="$SANDBOX_NODE_PACKAGE_BUNDLE"',
+        '    BUNDLE_RUNTIME_DIR="$NODE_PACKAGE_WORK/runtime"',
+        '    BUNDLE_RUNTIME_READY="$RUNTIME_BUNDLE_READY"',
+        f"    BUNDLE_PACKAGES={shlex.quote(sandbox_runtime_packages)}",
+        "  fi",
+        '  python3 - "$REMOTE_WHEEL" "$NODE_PACKAGE_WORK/wheels" "$BUNDLE_TARGET" '
+        '"$BUNDLE_RUNTIME_DIR" "$BUNDLE_RUNTIME_READY" "$RUNTIME_OS_ID" '
+        '"$RUNTIME_VERSION_ID" "$RUNTIME_CODENAME" "$RUNTIME_ARCHITECTURE" '
+        '"$BUNDLE_ROLE" "$BUNDLE_PACKAGES" <<\'PY\'',
         "import hashlib",
         "import gzip",
         "import io",
@@ -530,6 +576,8 @@ def render_remote_deploy_script(
         "    'codename': sys.argv[8],",
         "    'architecture': sys.argv[9],",
         "}",
+        "runtime_role = sys.argv[10]",
+        "packages = sys.argv[11].split()",
         "package_file = wheel_dir / wheel.name",
         "if not package_file.is_file():",
         "    raise SystemExit(f'pip download did not retain {wheel.name}')",
@@ -542,11 +590,6 @@ def render_remote_deploy_script(
         "",
         "manifest_payload = {'version': 1, 'package_file': wheel.name}",
         "if runtime_ready:",
-        "    packages = [",
-        "        'apt-transport-https', 'python3', 'python3-venv', 'python3-pip', 'xfsprogs',",
-        "        'docker-ce', 'docker-ce-cli', 'containerd.io', 'docker-buildx-plugin',",
-        "        'docker-compose-plugin', 'runsc',",
-        "    ]",
         "    files = [",
         "        {'name': path.name, 'sha256': sha256_file(path), 'size': path.stat().st_size}",
         "        for path in sorted((runtime_dir / 'debs').glob('*.deb'), key=lambda item: item.name)",
@@ -554,6 +597,7 @@ def render_remote_deploy_script(
         "    if not files:",
         "        raise SystemExit('offline runtime package set is empty')",
         "    manifest_payload['runtime'] = {",
+        "        'role': runtime_role,",
         "        'platform': runtime_platform,",
         "        'packages': packages,",
         "        'files': files,",
@@ -562,10 +606,25 @@ def render_remote_deploy_script(
         "    probe_inspect = runtime_dir / 'images' / 'runtime-conformance-busybox.inspect.json'",
         "    if probe_archive.is_file() and probe_inspect.is_file():",
         "        image = json.loads(probe_inspect.read_text(encoding='utf-8'))[0]",
+        "        accepted_ids = {str(image.get('Id') or '')}",
+        "        accepted_ids.update(",
+        "            str(item).rsplit('@', 1)[-1]",
+        "            for item in image.get('RepoDigests') or []",
+        "            if '@sha256:' in str(item)",
+        "        )",
+        "        with tarfile.open(probe_archive, mode='r') as saved:",
+        "            saved_manifest = json.load(saved.extractfile('manifest.json'))",
+        "        config_name = Path(saved_manifest[0]['Config']).name.removesuffix('.json')",
+        "        if len(config_name) == 64:",
+        "            accepted_ids.add(f'sha256:{config_name}')",
+        "        accepted_ids = sorted(",
+        "            item for item in accepted_ids if item.startswith('sha256:')",
+        "        )",
         "        manifest_payload['runtime']['probe_image'] = {",
         "            'reference': 'busybox',",
         "            'file': 'runtime/images/runtime-conformance-busybox.tar',",
         "            'image_id': image['Id'],",
+        "            'accepted_ids': accepted_ids,",
         "            'os': image['Os'],",
         "            'architecture': image['Architecture'],",
         "            'sha256': sha256_file(probe_archive),",
@@ -606,6 +665,7 @@ def render_remote_deploy_script(
         "                    archive.addfile(info, handle)",
         "os.replace(temporary, target)",
         "PY",
+        "done",
         'rm -rf "$NODE_PACKAGE_WORK"',
         "trap - EXIT",
         "",

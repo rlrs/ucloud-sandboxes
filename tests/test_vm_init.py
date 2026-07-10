@@ -188,7 +188,8 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("offline runtime file checksum mismatch", script)
         self.assertIn("Verified offline busybox conformance image", script)
         self.assertIn('docker load --input "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE"', script)
-        self.assertIn("docker image inspect --format '{{.Id}}' busybox", script)
+        self.assertIn("range .RepoDigests", script)
+        self.assertIn("probe_image_identity_matches", script)
         self.assertIn(
             "Installing base packages, Docker Engine, and gVisor from verified offline packages",
             script,
@@ -265,16 +266,12 @@ class VmInitTests(unittest.TestCase):
         end = script.index("\nPY\n    then", start)
         code = compile(script[start:end], "<offline-runtime-validator>", "exec")
         packages = [
-            "apt-transport-https",
             "python3",
             "python3-venv",
-            "python3-pip",
             "xfsprogs",
             "docker-ce",
             "docker-ce-cli",
             "containerd.io",
-            "docker-buildx-plugin",
-            "docker-compose-plugin",
             "runsc",
         ]
 
@@ -300,6 +297,7 @@ class VmInitTests(unittest.TestCase):
                         "version": 1,
                         "package_file": "service.whl",
                         "runtime": {
+                            "role": "sandbox",
                             "platform": {
                                 "os_id": "ubuntu",
                                 "version_id": "24.04",

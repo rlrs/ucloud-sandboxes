@@ -142,13 +142,17 @@ post-boot init layer:
 - Pull and save the `busybox` image used by runtime conformance into the same
   platform-specific artifact when Docker Hub is reachable during deployment.
   Nodes verify the image archive checksum, load it after Docker is configured,
-  and confirm its image ID before probing. If this optional sub-artifact is
+  and confirm either its config or manifest digest before probing. Accepting
+  both identities is required because Docker's containerd and classic image
+  stores expose different values as `.Id`. If this optional sub-artifact is
   missing or invalid, the existing probe path may pull `busybox` instead.
 - Keep the runtime bundle optional at deployment time. If external package
   repositories are unavailable while producing it, deployment still emits the
   Python bundle and cold nodes use the older repository path with a warning.
-  Expect the runtime artifact to be roughly 80–150 MB depending on the resolved
-  Ubuntu package closure.
+  Produce separate sandbox and builder artifacts so Buildx is not transferred
+  to ordinary sandbox nodes. Keep `python3-pip`, compiler headers/toolchains,
+  and Docker Compose out of both artifacts; `python3-venv` plus the bundled
+  wheels is sufficient.
 - Keep Docker's high-churn data and caches on the quota-backed local XFS volume;
   keep service state and release artifacts under `/work` where persistence is
   useful.

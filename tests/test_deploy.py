@@ -1,4 +1,5 @@
 import json
+import io
 from pathlib import Path
 import sys
 import tarfile
@@ -78,7 +79,12 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(
             autoscaler["UCLOUD_INIT_PACKAGE_SPEC"],
             "/work/ucloud-sandboxes/release/"
-            "ucloud_sandboxes-0.2.0-py3-none-any-node-package.tar.gz",
+            "ucloud_sandboxes-0.2.0-py3-none-any-sandbox-node-package.tar.gz",
+        )
+        self.assertEqual(
+            autoscaler["UCLOUD_INIT_BUILDER_PACKAGE_SPEC"],
+            "/work/ucloud-sandboxes/release/"
+            "ucloud_sandboxes-0.2.0-py3-none-any-builder-node-package.tar.gz",
         )
         self.assertEqual(autoscaler["UCLOUD_MAX_INIT_PER_CYCLE"], "4")
         self.assertEqual(
@@ -86,14 +92,17 @@ class DeployTests(unittest.TestCase):
             "ucloud-sandbox-registry=10.0.0.5",
         )
         self.assertIn("/etc/ucloud-sandboxes/gateway.env", script)
-        self.assertIn("NODE_PACKAGE_BUNDLE=", script)
+        self.assertIn("SANDBOX_NODE_PACKAGE_BUNDLE=", script)
+        self.assertIn("BUILDER_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("pip\" download --disable-pip-version-check", script)
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("compresslevel=1", script)
         self.assertIn('Dir::State::status="$status_file"', script)
         self.assertIn('Dir::Cache::archives="$archive_dir"', script)
-        self.assertIn("download_runtime_packages apt-transport-https", script)
+        self.assertIn("download_runtime_packages runtime python3 python3-venv", script)
+        self.assertNotIn("python3-pip", script)
+        self.assertNotIn("docker-compose-plugin", script)
         self.assertIn("docker pull busybox", script)
         self.assertIn("docker save --output", script)
         self.assertIn("'reference': 'busybox'", script)
@@ -152,7 +161,7 @@ class DeployTests(unittest.TestCase):
             )
 
         start = script.index("import hashlib\nimport gzip")
-        end = script.index('\nPY\nrm -rf "$NODE_PACKAGE_WORK"', start)
+        end = script.index('\nPY\ndone\nrm -rf "$NODE_PACKAGE_WORK"', start)
         compile(script[start:end], "<offline-bundle-builder>", "exec")
 
     def test_offline_bundle_builder_records_platform_and_is_deterministic(self) -> None:
@@ -169,10 +178,25 @@ class DeployTests(unittest.TestCase):
             (package_dir / "runsc_1.0_amd64.deb").write_bytes(b"gvisor")
             image_dir = runtime_dir / "images"
             image_dir.mkdir()
-            (image_dir / "runtime-conformance-busybox.tar").write_bytes(b"image")
+            image_archive = image_dir / "runtime-conformance-busybox.tar"
+            config_digest = "c" * 64
+            saved_manifest = json.dumps(
+                [{"Config": f"blobs/sha256/{config_digest}"}]
+            ).encode("utf-8")
+            with tarfile.open(image_archive, mode="w") as archive:
+                info = tarfile.TarInfo("manifest.json")
+                info.size = len(saved_manifest)
+                archive.addfile(info, io.BytesIO(saved_manifest))
             (image_dir / "runtime-conformance-busybox.inspect.json").write_text(
                 json.dumps(
-                    [{"Id": "sha256:image", "Os": "linux", "Architecture": "amd64"}]
+                    [
+                        {
+                            "Id": "sha256:" + "d" * 64,
+                            "RepoDigests": ["busybox@sha256:" + "e" * 64],
+                            "Os": "linux",
+                            "Architecture": "amd64",
+                        }
+                    ]
                 ),
                 encoding="utf-8",
             )
@@ -187,7 +211,7 @@ class DeployTests(unittest.TestCase):
             )
             script = render_remote_deploy_script(plan)
             start = script.index("import hashlib\nimport gzip")
-            end = script.index('\nPY\nrm -rf "$NODE_PACKAGE_WORK"', start)
+            end = script.index('\nPY\ndone\nrm -rf "$NODE_PACKAGE_WORK"', start)
             code = compile(
                 script[start:end],
                 "<offline-bundle-builder>",
@@ -208,6 +232,8 @@ class DeployTests(unittest.TestCase):
                         "24.04",
                         "noble",
                         "amd64",
+                        "sandbox",
+                        "python3 python3-venv xfsprogs docker-ce docker-ce-cli containerd.io runsc",
                     ]
                     exec(code, {"__name__": "__main__"})
             finally:
@@ -230,12 +256,20 @@ class DeployTests(unittest.TestCase):
         )
         self.assertIn("docker-ce", manifest["runtime"]["packages"])
         self.assertIn("runsc", manifest["runtime"]["packages"])
+        self.assertEqual(manifest["runtime"]["role"], "sandbox")
         self.assertEqual(
             [item["name"] for item in manifest["runtime"]["files"]],
             ["docker-ce_1.0_amd64.deb", "runsc_1.0_amd64.deb"],
         )
         self.assertEqual(manifest["runtime"]["probe_image"]["reference"], "busybox")
-        self.assertEqual(manifest["runtime"]["probe_image"]["image_id"], "sha256:image")
+        self.assertEqual(
+            manifest["runtime"]["probe_image"]["accepted_ids"],
+            [
+                "sha256:" + config_digest,
+                "sha256:" + "d" * 64,
+                "sha256:" + "e" * 64,
+            ],
+        )
 
     def test_all_in_one_plan_auto_detects_registry_private_ip(self) -> None:
         with TemporaryDirectory() as raw_dir:

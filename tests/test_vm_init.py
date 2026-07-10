@@ -1,4 +1,7 @@
+import hashlib
+import json
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -172,8 +175,35 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
         self.assertIn("--disable-pip-version-check --upgrade", script)
         self.assertIn("package-bundle.json", script)
+        self.assertIn(
+            'tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json',
+            script,
+        )
+        self.assertNotIn("| grep -qx 'package-bundle.json'", script)
         self.assertIn("Using offline node package bundle", script)
         self.assertIn("--no-index --find-links", script)
+        self.assertIn("offline runtime platform does not match this VM", script)
+        self.assertIn("offline runtime file checksum mismatch", script)
+        self.assertIn("Verified offline busybox conformance image", script)
+        self.assertIn('docker load --input "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE"', script)
+        self.assertIn("docker image inspect --format '{{.Id}}' busybox", script)
+        self.assertIn(
+            "Installing base packages, Docker Engine, and gVisor from verified offline packages",
+            script,
+        )
+        self.assertIn(
+            'apt-get install --no-download --no-install-recommends -y "${local_packages[@]}"',
+            script,
+        )
+        self.assertIn(
+            'required_packages_installed "${OFFLINE_REQUIRED_PACKAGES[@]}"',
+            script,
+        )
+        self.assertEqual(script.count("$SUDO apt-get update"), 2)
+        self.assertIn("using package repository fallback", script)
+        self.assertIn("APT_REPOSITORY_PACKAGES=()", script)
+        self.assertIn('if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]', script)
+        self.assertIn('if [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]', script)
         self.assertIn('"$UCLOUD_PACKAGE_INSTALL_SPEC"', script)
         self.assertIn("--runtime-conformance-file ${UCLOUD_RUNTIME_CONFORMANCE_FILE}", script)
         self.assertIn("ucloud-sandbox-node.service", script)
@@ -205,6 +235,99 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertNotIn("--active 0", script)
         self.assertIn("--label pool=builder", script)
+
+    def test_offline_runtime_validator_python_compiles(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="123",
+                heartbeat_url="https://control.example/v1/nodes/heartbeat",
+            )
+        )
+
+        start = script.index("import hashlib\nimport json")
+        end = script.index("\nPY\n    then", start)
+        compile(script[start:end], "<offline-runtime-validator>", "exec")
+
+        start = script.index("import json\nfrom pathlib import Path\nimport sys\n\nruntime =")
+        end = script.index("\nPY\n)\"", start)
+        compile(script[start:end], "<offline-probe-image-validator>", "exec")
+
+    def test_offline_runtime_validator_checks_files_and_exact_platform(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="123",
+                heartbeat_url="https://control.example/v1/nodes/heartbeat",
+            )
+        )
+        start = script.index("import hashlib\nimport json")
+        end = script.index("\nPY\n    then", start)
+        code = compile(script[start:end], "<offline-runtime-validator>", "exec")
+        packages = [
+            "apt-transport-https",
+            "python3",
+            "python3-venv",
+            "python3-pip",
+            "xfsprogs",
+            "docker-ce",
+            "docker-ce-cli",
+            "containerd.io",
+            "docker-buildx-plugin",
+            "docker-compose-plugin",
+            "runsc",
+        ]
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            package_dir = root / "runtime" / "debs"
+            package_dir.mkdir(parents=True)
+            files = []
+            for name in ("docker-ce", "runsc"):
+                package = package_dir / f"{name}_1.0_amd64.deb"
+                package.write_bytes(name.encode("utf-8"))
+                files.append(
+                    {
+                        "name": package.name,
+                        "size": package.stat().st_size,
+                        "sha256": hashlib.sha256(package.read_bytes()).hexdigest(),
+                    }
+                )
+            manifest = root / "package-bundle.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "package_file": "service.whl",
+                        "runtime": {
+                            "platform": {
+                                "os_id": "ubuntu",
+                                "version_id": "24.04",
+                                "codename": "noble",
+                                "architecture": "amd64",
+                            },
+                            "packages": packages,
+                            "files": files,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_argv = sys.argv
+            try:
+                sys.argv = [
+                    "validator",
+                    str(manifest),
+                    str(root),
+                    "ubuntu",
+                    "24.04",
+                    "noble",
+                    "amd64",
+                ]
+                exec(code, {"__name__": "__main__"})
+                sys.argv[-1] = "arm64"
+                with self.assertRaisesRegex(SystemExit, "platform does not match"):
+                    exec(code, {"__name__": "__main__"})
+            finally:
+                sys.argv = original_argv
 
     def test_rendered_host_alias_python_compiles(self) -> None:
         script = render_vm_init_script(

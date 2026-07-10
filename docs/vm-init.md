@@ -129,18 +129,32 @@ post-boot init layer:
   contains the service wheel and all platform-specific Python dependency wheels,
   so autoscaled VMs install the node agent with `--no-index` instead of reaching
   PyPI during cold scale-up.
-- Install Docker, gVisor, node-agent service files, and config from a release
-  artifact or package. Docker/gVisor are still obtained from their package
-  repositories today; a complete offline runtime bundle remains follow-up work.
-- Set up Docker and gVisor package repositories before a single container
-  runtime `apt-get update`, rather than refreshing apt metadata separately for
-  each runtime.
-- Put Docker's data root, image caches, build caches, and node state under
-  `/work` when practical.
-- Maintain a small warm pool of already-initialized nodes when queue latency or
-  cold-start time matters.
-- Use UCloud VM suspension for expensive-to-recreate nodes when that is cheaper
-  than rebuilding state.
+- Extend that artifact with the complete apt dependency closure for bootstrap
+  packages, Docker Engine, Buildx/Compose, containerd, and gVisor. Deployment
+  downloads the closure into a private empty-status apt cache, so bundle
+  contents do not depend on packages or archive-cache entries already present
+  on the gateway.
+- Record the gateway Ubuntu id, version, codename, and dpkg architecture plus
+  every `.deb` size and SHA-256 in the bundle. A node uses the runtime payload
+  only on an exact platform match and after verifying the complete file set.
+  The compatible happy path installs with `apt-get --no-download` and performs
+  no `apt-get update`; repository setup is an explicit compatibility fallback.
+- Pull and save the `busybox` image used by runtime conformance into the same
+  platform-specific artifact when Docker Hub is reachable during deployment.
+  Nodes verify the image archive checksum, load it after Docker is configured,
+  and confirm its image ID before probing. If this optional sub-artifact is
+  missing or invalid, the existing probe path may pull `busybox` instead.
+- Keep the runtime bundle optional at deployment time. If external package
+  repositories are unavailable while producing it, deployment still emits the
+  Python bundle and cold nodes use the older repository path with a warning.
+  Expect the runtime artifact to be roughly 80–150 MB depending on the resolved
+  Ubuntu package closure.
+- Keep Docker's high-churn data and caches on the quota-backed local XFS volume;
+  keep service state and release artifacts under `/work` where persistence is
+  useful.
+- Use SDK capacity requests to begin billed VM scale-up before sandbox demand
+  reaches the create call. Do not rely on suspended nodes as a warm pool because
+  they are billed like running nodes in the target environment.
 - Treat container images, not VM images, as the reusable sandbox artifact.
 
 ## Init script contract
@@ -162,6 +176,10 @@ The post-boot init script should be safe to re-run:
   an unprotected service.
 - Install or verify Docker.
 - Install or verify gVisor/runsc.
+- Prefer the verified platform-specific runtime payload in the staged node
+  package bundle. Install only bundled versions newer than the corresponding
+  installed packages, and never let apt repair a failed offline transaction by
+  downloading implicitly. Fall back explicitly to configured repositories.
 - Create a sparse XFS image under `/work`, mount it with `pquota`, and configure
   Docker to use that mount as an `overlay2` data root when hard writable-layer
   quotas are required.
@@ -181,11 +199,12 @@ The post-boot init script should be safe to re-run:
 - Persist runtime conformance JSON and pass it to both the node-agent service
   and heartbeat service so security capabilities are derived from probes rather
   than static labels.
-- Emit phase timing log lines for user/key setup, base packages, container
-  packages, Docker storage, Docker daemon config, Python package install,
-  runtime conformance, and systemd service startup. The autoscaler separately
-  records init attempt duration, package staging duration, and remote script
-  duration in `vm_init_attempt` metrics.
+- Emit phase timing log lines for user/key setup, bundle verification, offline
+  runtime installation, repository fallback prerequisites, base packages,
+  container packages, Docker storage, Docker daemon config, Python package
+  install, runtime conformance, and systemd service startup. The autoscaler
+  separately records init attempt duration, package staging duration, and
+  remote script duration in `vm_init_attempt` metrics.
 - Execute independent node initializations with a bounded worker pool. The
   all-in-one deployment admits and initializes up to four ready VMs concurrently
   by default; `--max-init-per-cycle` is both the per-cycle admission limit and

@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+import sys
+import tarfile
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -89,6 +92,20 @@ class DeployTests(unittest.TestCase):
         self.assertIn("pip\" download --disable-pip-version-check", script)
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
+        self.assertIn("compresslevel=1", script)
+        self.assertIn('Dir::State::status="$status_file"', script)
+        self.assertIn('Dir::Cache::archives="$archive_dir"', script)
+        self.assertIn("download_runtime_packages apt-transport-https", script)
+        self.assertIn("docker pull busybox", script)
+        self.assertIn("docker save --output", script)
+        self.assertIn("'reference': 'busybox'", script)
+        self.assertIn("'architecture': sys.argv[9]", script)
+        self.assertIn("'sha256': sha256_file(path)", script)
+        self.assertIn("mode='w|'", script)
+        self.assertIn(
+            "could not build offline Docker/gVisor bundle; cold nodes will use repository fallback",
+            script,
+        )
         self.assertIn("ucloud-sandbox-autoscaler.service", script)
         self.assertIn("ucloud-sandbox-registry-prune.timer", script)
         self.assertIn("systemctl enable --now ucloud-sandbox-registry-prune.timer", script)
@@ -119,6 +136,108 @@ class DeployTests(unittest.TestCase):
             "gateway-token /work/ucloud-sandboxes/state/heartbeat-token",
             script,
         )
+
+    def test_offline_bundle_builder_python_compiles(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+            wheel.write_bytes(b"wheel")
+            script = render_remote_deploy_script(
+                AllInOneDeployPlan(
+                    job_id="job-1",
+                    project_id="project-1",
+                    deployment_id="prod-a",
+                    local_wheel=wheel,
+                    gateway_private_host="sandbox-gateway-prod",
+                    registry_private_ip="10.0.0.5",
+                    private_network_id="net-1",
+                )
+            )
+
+        start = script.index("import hashlib\nimport gzip")
+        end = script.index('\nPY\nrm -rf "$NODE_PACKAGE_WORK"', start)
+        compile(script[start:end], "<offline-bundle-builder>", "exec")
+
+    def test_offline_bundle_builder_records_platform_and_is_deterministic(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            wheel_dir = root / "wheels"
+            wheel_dir.mkdir()
+            wheel = wheel_dir / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+            wheel.write_bytes(b"wheel")
+            runtime_dir = root / "runtime"
+            package_dir = runtime_dir / "debs"
+            package_dir.mkdir(parents=True)
+            (package_dir / "docker-ce_1.0_amd64.deb").write_bytes(b"docker")
+            (package_dir / "runsc_1.0_amd64.deb").write_bytes(b"gvisor")
+            image_dir = runtime_dir / "images"
+            image_dir.mkdir()
+            (image_dir / "runtime-conformance-busybox.tar").write_bytes(b"image")
+            (image_dir / "runtime-conformance-busybox.inspect.json").write_text(
+                json.dumps(
+                    [{"Id": "sha256:image", "Os": "linux", "Architecture": "amd64"}]
+                ),
+                encoding="utf-8",
+            )
+            plan = AllInOneDeployPlan(
+                job_id="job-1",
+                project_id="project-1",
+                deployment_id="prod-a",
+                local_wheel=wheel,
+                gateway_private_host="sandbox-gateway-prod",
+                registry_private_ip="10.0.0.5",
+                private_network_id="net-1",
+            )
+            script = render_remote_deploy_script(plan)
+            start = script.index("import hashlib\nimport gzip")
+            end = script.index('\nPY\nrm -rf "$NODE_PACKAGE_WORK"', start)
+            code = compile(
+                script[start:end],
+                "<offline-bundle-builder>",
+                "exec",
+            )
+            targets = (root / "first.tar.gz", root / "second.tar.gz")
+            original_argv = sys.argv
+            try:
+                for target in targets:
+                    sys.argv = [
+                        "builder",
+                        str(wheel),
+                        str(wheel_dir),
+                        str(target),
+                        str(runtime_dir),
+                        "1",
+                        "ubuntu",
+                        "24.04",
+                        "noble",
+                        "amd64",
+                    ]
+                    exec(code, {"__name__": "__main__"})
+            finally:
+                sys.argv = original_argv
+
+            self.assertEqual(targets[0].read_bytes(), targets[1].read_bytes())
+            with tarfile.open(targets[0], mode="r:gz") as archive:
+                manifest_file = archive.extractfile("package-bundle.json")
+                assert manifest_file is not None
+                manifest = json.loads(manifest_file.read())
+
+        self.assertEqual(
+            manifest["runtime"]["platform"],
+            {
+                "os_id": "ubuntu",
+                "version_id": "24.04",
+                "codename": "noble",
+                "architecture": "amd64",
+            },
+        )
+        self.assertIn("docker-ce", manifest["runtime"]["packages"])
+        self.assertIn("runsc", manifest["runtime"]["packages"])
+        self.assertEqual(
+            [item["name"] for item in manifest["runtime"]["files"]],
+            ["docker-ce_1.0_amd64.deb", "runsc_1.0_amd64.deb"],
+        )
+        self.assertEqual(manifest["runtime"]["probe_image"]["reference"], "busybox")
+        self.assertEqual(manifest["runtime"]["probe_image"]["image_id"], "sha256:image")
 
     def test_all_in_one_plan_auto_detects_registry_private_ip(self) -> None:
         with TemporaryDirectory() as raw_dir:

@@ -320,7 +320,231 @@ if [ -n "$UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE" ] && [ -n "$UCLOUD_NODE_CONTROL
 fi
 log_init_phase "users-and-secrets"
 
-APT_REPOSITORY_PACKAGES=(ca-certificates curl gnupg)
+UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
+UCLOUD_OS_VERSION_ID="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
+UCLOUD_OS_CODENAME="$(. /etc/os-release && printf '%s' "${{UBUNTU_CODENAME:-${{VERSION_CODENAME:-}}}}")"
+UCLOUD_ARCHITECTURE="$(dpkg --print-architecture)"
+UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_SPEC"
+UCLOUD_PACKAGE_INSTALL_ARGS=()
+UCLOUD_PACKAGE_BUNDLE_DIR=""
+UCLOUD_OFFLINE_RUNTIME_AVAILABLE=0
+UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
+UCLOUD_OFFLINE_PROBE_IMAGE_ID=""
+if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
+  && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
+  UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+  UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
+  if [ ! -f "$UCLOUD_PACKAGE_BUNDLE_DIR/.complete" ]; then
+    UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
+    rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    tar --no-same-owner --no-same-permissions -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
+    touch "$UCLOUD_PACKAGE_BUNDLE_TMP/.complete"
+    rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
+    mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
+  fi
+  UCLOUD_PACKAGE_BUNDLE_FILE="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if manifest.get("version") != 1:
+    raise SystemExit("unsupported node package bundle version")
+package_file = str(manifest.get("package_file") or "")
+if not package_file or Path(package_file).name != package_file or not package_file.endswith(".whl"):
+    raise SystemExit("invalid package_file in node package bundle")
+print(package_file)
+PY
+)"
+  UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_BUNDLE_DIR/wheels/$UCLOUD_PACKAGE_BUNDLE_FILE"
+  test -f "$UCLOUD_PACKAGE_INSTALL_SPEC"
+  UCLOUD_PACKAGE_INSTALL_ARGS=(--no-index --find-links "$UCLOUD_PACKAGE_BUNDLE_DIR/wheels")
+  echo "Using offline node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
+  if [ -d "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime" ]; then
+    if python3 - \
+      "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
+      "$UCLOUD_PACKAGE_BUNDLE_DIR" \
+      "$UCLOUD_OS_ID" "$UCLOUD_OS_VERSION_ID" "$UCLOUD_OS_CODENAME" \
+      "$UCLOUD_ARCHITECTURE" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+manifest_path = Path(sys.argv[1])
+bundle_dir = Path(sys.argv[2])
+expected_platform = {{
+    "os_id": sys.argv[3],
+    "version_id": sys.argv[4],
+    "codename": sys.argv[5],
+    "architecture": sys.argv[6],
+}}
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+runtime = manifest.get("runtime")
+if not isinstance(runtime, dict) or runtime.get("platform") != expected_platform:
+    raise SystemExit("offline runtime platform does not match this VM")
+expected_packages = [
+    "apt-transport-https", "python3", "python3-venv", "python3-pip", "xfsprogs",
+    "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin",
+    "docker-compose-plugin", "runsc",
+]
+if runtime.get("packages") != expected_packages:
+    raise SystemExit("invalid offline runtime package list")
+package_dir = bundle_dir / "runtime" / "debs"
+actual_files = {{path.name for path in package_dir.glob("*.deb")}}
+declared_files = set()
+files = runtime.get("files")
+if not isinstance(files, list) or not files:
+    raise SystemExit("offline runtime package set is empty")
+for item in files:
+    if not isinstance(item, dict):
+        raise SystemExit("invalid offline runtime file")
+    filename = str(item.get("name") or "")
+    if Path(filename).name != filename or not filename.endswith(".deb"):
+        raise SystemExit("invalid offline runtime filename")
+    declared_files.add(filename)
+    path = package_dir / filename
+    if not path.is_file() or path.stat().st_size != item.get("size"):
+        raise SystemExit(f"offline runtime file size mismatch: {{filename}}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != item.get("sha256"):
+        raise SystemExit(f"offline runtime file checksum mismatch: {{filename}}")
+if actual_files != declared_files:
+    raise SystemExit("offline runtime file set mismatch")
+PY
+    then
+      UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
+      echo "Verified offline Docker/gVisor packages for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
+      UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
+      if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
+        if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
+          "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
+          "$UCLOUD_ARCHITECTURE" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
+probe = runtime.get("probe_image") if isinstance(runtime, dict) else None
+if not isinstance(probe, dict):
+    raise SystemExit("offline probe image metadata is absent")
+if probe.get("reference") != "busybox":
+    raise SystemExit("invalid offline probe image reference")
+if probe.get("file") != "runtime/images/runtime-conformance-busybox.tar":
+    raise SystemExit("invalid offline probe image filename")
+if probe.get("os") != "linux" or probe.get("architecture") != sys.argv[2]:
+    raise SystemExit("offline probe image platform does not match this VM")
+image_id = str(probe.get("image_id") or "")
+checksum = str(probe.get("sha256") or "")
+size = probe.get("size")
+if not image_id.startswith("sha256:") or len(checksum) != 64 or not isinstance(size, int) or size <= 0:
+    raise SystemExit("invalid offline probe image metadata")
+print(f"{{checksum}}\t{{size}}\t{{image_id}}")
+PY
+)" \
+          && IFS=$'\t' read -r UCLOUD_PROBE_IMAGE_SHA256 UCLOUD_PROBE_IMAGE_SIZE UCLOUD_PROBE_IMAGE_ID <<< "$UCLOUD_PROBE_IMAGE_SPEC" \
+          && [ "$(stat -c %s "$UCLOUD_PROBE_IMAGE_ARCHIVE")" = "$UCLOUD_PROBE_IMAGE_SIZE" ] \
+          && printf '%s  %s\\n' "$UCLOUD_PROBE_IMAGE_SHA256" "$UCLOUD_PROBE_IMAGE_ARCHIVE" | sha256sum --check --status -; then
+          UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE="$UCLOUD_PROBE_IMAGE_ARCHIVE"
+          UCLOUD_OFFLINE_PROBE_IMAGE_ID="$UCLOUD_PROBE_IMAGE_ID"
+          echo "Verified offline busybox conformance image"
+        else
+          echo "WARNING: offline busybox conformance image is invalid; the probe may pull it" >&2
+        fi
+      fi
+    else
+      echo "WARNING: offline runtime bundle is incompatible or corrupt; using package repositories" >&2
+    fi
+  fi
+fi
+log_init_phase "package-bundle"
+
+install_offline_runtime() {{
+  local package_dir="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/debs"
+  local package_file package_name candidate_version installed_version
+  local -a local_packages=()
+  shopt -s nullglob
+  local package_files=("$package_dir"/*.deb)
+  shopt -u nullglob
+  for package_file in "${{package_files[@]}}"; do
+    package_name="$(dpkg-deb -f "$package_file" Package)"
+    candidate_version="$(dpkg-deb -f "$package_file" Version)"
+    installed_version=""
+    if dpkg-query -W -f='${{Status}}' "$package_name" 2>/dev/null | grep -q "install ok installed"; then
+      installed_version="$(dpkg-query -W -f='${{Version}}' "$package_name")"
+    fi
+    if [ -n "$installed_version" ] && dpkg --compare-versions "$installed_version" ge "$candidate_version"; then
+      continue
+    fi
+    local_packages+=("$package_file")
+  done
+  if [ "${{#local_packages[@]}}" -eq 0 ]; then
+    return 0
+  fi
+  $SUDO apt-get install --no-download --no-install-recommends -y "${{local_packages[@]}}"
+}}
+
+required_packages_installed() {{
+  local package
+  for package in "$@"; do
+    if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+      return 1
+    fi
+  done
+}}
+
+OFFLINE_REQUIRED_PACKAGES=(
+  apt-transport-https python3 python3-venv python3-pip xfsprogs
+  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin runsc
+)
+NEED_DOCKER_REPOSITORY=0
+NEED_GVISOR_REPOSITORY=0
+command -v docker >/dev/null 2>&1 || NEED_DOCKER_REPOSITORY=1
+command -v runsc >/dev/null 2>&1 || NEED_GVISOR_REPOSITORY=1
+OFFLINE_RUNTIME_FAILED=0
+if [ "$UCLOUD_OFFLINE_RUNTIME_AVAILABLE" -eq 1 ] \
+  && [ "$NEED_DOCKER_REPOSITORY" -eq 1 ] \
+  && [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
+  echo "Installing base packages, Docker Engine, and gVisor from verified offline packages"
+  if install_offline_runtime \
+    && required_packages_installed "${{OFFLINE_REQUIRED_PACKAGES[@]}}" \
+    && command -v docker >/dev/null 2>&1 \
+    && command -v runsc >/dev/null 2>&1; then
+    NEED_DOCKER_REPOSITORY=0
+    NEED_GVISOR_REPOSITORY=0
+    echo "Sandbox runtime installed without repository access"
+  else
+    OFFLINE_RUNTIME_FAILED=1
+    echo "WARNING: offline runtime install failed; using package repository fallback" >&2
+  fi
+fi
+log_init_phase "offline-runtime"
+
+BASE_PACKAGES=(apt-transport-https python3 python3-venv python3-pip xfsprogs)
+MISSING_BASE_PACKAGES=()
+for package in "${{BASE_PACKAGES[@]}}"; do
+  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+    MISSING_BASE_PACKAGES+=("$package")
+  fi
+done
+NEED_BASE_REPOSITORY=0
+if [ "${{#MISSING_BASE_PACKAGES[@]}}" -gt 0 ]; then
+  NEED_BASE_REPOSITORY=1
+fi
+if [ "$OFFLINE_RUNTIME_FAILED" -eq 1 ]; then
+  NEED_BASE_REPOSITORY=1
+  NEED_DOCKER_REPOSITORY=1
+  NEED_GVISOR_REPOSITORY=1
+fi
+
+APT_REPOSITORY_PACKAGES=()
+if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ] || [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
+  APT_REPOSITORY_PACKAGES=(ca-certificates curl gnupg)
+fi
 MISSING_APT_REPOSITORY_PACKAGES=()
 for package in "${{APT_REPOSITORY_PACKAGES[@]}}"; do
   if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
@@ -332,14 +556,7 @@ if [ "${{#MISSING_APT_REPOSITORY_PACKAGES[@]}}" -gt 0 ]; then
   $SUDO apt-get update
   $SUDO apt-get install -y "${{MISSING_APT_REPOSITORY_PACKAGES[@]}}"
 fi
-
-BASE_PACKAGES=(apt-transport-https python3 python3-venv python3-pip xfsprogs)
-MISSING_BASE_PACKAGES=()
-for package in "${{BASE_PACKAGES[@]}}"; do
-  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    MISSING_BASE_PACKAGES+=("$package")
-  fi
-done
+log_init_phase "repository-prerequisites"
 
 if [ "$UCLOUD_HOST_ALIASES_JSON" != "[]" ]; then
   echo "Installing host aliases"
@@ -373,10 +590,10 @@ log_init_phase "host-aliases"
 
 CONTAINER_PACKAGES=()
 $SUDO install -m 0755 -d /etc/apt/keyrings
-UBUNTU_CODENAME="$(. /etc/os-release && echo "${{UBUNTU_CODENAME:-$VERSION_CODENAME}}")"
-ARCHITECTURE="$(dpkg --print-architecture)"
+UBUNTU_CODENAME="$UCLOUD_OS_CODENAME"
+ARCHITECTURE="$UCLOUD_ARCHITECTURE"
 
-if ! command -v docker >/dev/null 2>&1; then
+if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]; then
   echo "Preparing Docker Engine repository"
   if [ ! -s /etc/apt/keyrings/docker.asc ]; then
     $SUDO curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
@@ -393,7 +610,7 @@ DOCKER_SOURCES
   CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
 fi
 
-if ! command -v runsc >/dev/null 2>&1; then
+if [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
   echo "Preparing gVisor runsc repository"
   if [ ! -s /usr/share/keyrings/gvisor-archive-keyring.gpg ]; then
     curl -fsSL https://gvisor.dev/archive.key | $SUDO gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
@@ -499,40 +716,6 @@ if [ -d "$UCLOUD_VENV_DIR" ]; then
   $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
 fi
 run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
-UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_SPEC"
-UCLOUD_PACKAGE_INSTALL_ARGS=()
-if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
-  && tar -tzf "$UCLOUD_PACKAGE_SPEC" 2>/dev/null | grep -qx 'package-bundle.json'; then
-  UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
-  UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
-  if [ ! -f "$UCLOUD_PACKAGE_BUNDLE_DIR/.complete" ]; then
-    UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
-    rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    tar -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    touch "$UCLOUD_PACKAGE_BUNDLE_TMP/.complete"
-    rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
-    mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
-  fi
-  UCLOUD_PACKAGE_BUNDLE_FILE="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if manifest.get("version") != 1:
-    raise SystemExit("unsupported node package bundle version")
-package_file = str(manifest.get("package_file") or "")
-if not package_file or Path(package_file).name != package_file or not package_file.endswith(".whl"):
-    raise SystemExit("invalid package_file in node package bundle")
-print(package_file)
-PY
-)"
-  UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_BUNDLE_DIR/wheels/$UCLOUD_PACKAGE_BUNDLE_FILE"
-  test -f "$UCLOUD_PACKAGE_INSTALL_SPEC"
-  UCLOUD_PACKAGE_INSTALL_ARGS=(--no-index --find-links "$UCLOUD_PACKAGE_BUNDLE_DIR/wheels")
-  echo "Using offline node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
-fi
 UCLOUD_PACKAGE_MARKER="$UCLOUD_STATE_DIR/installed-package.fingerprint"
 UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC"
 if [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
@@ -548,6 +731,17 @@ else
   $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
 fi
 log_init_phase "python-package"
+
+if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
+  echo "Loading offline busybox conformance image"
+  if $SUDO docker load --input "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" >/dev/null \
+    && [ "$($SUDO docker image inspect --format '{{{{.Id}}}}' busybox 2>/dev/null)" = "$UCLOUD_OFFLINE_PROBE_IMAGE_ID" ]; then
+    echo "Loaded verified busybox conformance image without registry access"
+  else
+    echo "WARNING: offline busybox image load failed; the conformance probe may pull it" >&2
+    $SUDO docker image rm --force busybox >/dev/null 2>&1 || true
+  fi
+fi
 
 echo "Running runtime conformance probe"
 set +e

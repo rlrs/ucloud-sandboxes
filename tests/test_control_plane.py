@@ -3906,7 +3906,7 @@ class ControlPlaneTests(unittest.TestCase):
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
             )
 
-    def test_gateway_keeps_pending_signal_for_async_builder_image_build(self) -> None:
+    def test_gateway_clears_pending_signal_after_async_build_is_accepted(self) -> None:
         digest = "sha256:" + "8" * 64
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
@@ -3969,6 +3969,14 @@ class ControlPlaneTests(unittest.TestCase):
                                 "wait": False,
                             },
                         )
+                        route_store = RoutingStore(raw_path / "routes.json")
+                        self.assertEqual(route_store.pending_image_build_count(), 0)
+                        # A stale signal from an older gateway/retry is also
+                        # cleared when terminal status is observed.
+                        route_store.upsert_pending_image_build(
+                            "custom",
+                            "registry.invalid:5000/custom:latest",
+                        )
                         deadline = monotonic() + 2
                         while True:
                             finished = self._json_request(
@@ -3998,7 +4006,7 @@ class ControlPlaneTests(unittest.TestCase):
                 digest,
             )
             self.assertEqual(
-                RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
+                RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
             )
 
     def test_gateway_uses_bounded_proxy_timeout_for_builder_image_builds(self) -> None:

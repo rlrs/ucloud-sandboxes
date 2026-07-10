@@ -132,6 +132,10 @@ client-to-gateway upload happen before the current image-build trace begins.
 Also, a build rejected while no builder is ready is retried as a new HTTP
 request, so the service exposes current pending-build age but cannot correlate
 that age with the eventual successful build as a single queue-wait sample.
+Pending build demand is cleared as soon as a builder accepts the asynchronous
+build; the builder heartbeat's active-build count then owns liveness. This
+prevents completed or already-running builds from causing replacement capacity
+after an unrelated node termination.
 
 ## Node Agent API
 

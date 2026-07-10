@@ -923,6 +923,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 str(item.get("build_id") or ""),
             ),
         )[-1]
+        selected_image_id = str(selected.get("image_id") or "")
+        if (
+            self.routing_store is not None
+            and selected_image_id
+            and _image_build_response_terminal({"build": selected})
+        ):
+            self.routing_store.clear_pending_image_build(selected_image_id)
         self._record_successful_build_image(selected)
         self._write_json({"build": selected})
 
@@ -1915,6 +1922,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     if isinstance(node_timings, dict):
                         span.set_attribute("node_timings", node_timings)
                         root.set_attribute("node_timings", node_timings)
+                accepted_build_response = 200 <= response.status < 300
                 terminal_build_response = _image_build_response_terminal(
                     response_payload
                 ) or (
@@ -1922,7 +1930,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     and response.status < 500
                     and response.status not in {408, 425, 429}
                 )
-                if terminal_build_response and self.routing_store is not None:
+                if (
+                    (accepted_build_response or terminal_build_response)
+                    and self.routing_store is not None
+                ):
                     self.routing_store.clear_pending_image_build(spec.id)
                 if terminal_build_response:
                     self._release_registry_image_build_reference(build_reference)

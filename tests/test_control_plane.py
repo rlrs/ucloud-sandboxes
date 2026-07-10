@@ -1323,7 +1323,22 @@ class ControlPlaneTests(unittest.TestCase):
                         payload={"command": ["true"]},
                     )
                     session_id = exec_started["session"]["id"]
+                    route_store = RoutingStore(raw_path / "routes.json")
+                    original_exec_sandbox_route = route_store.get_sandbox("multi-one")
+                    assert original_exec_sandbox_route is not None
+                    route_store.delete_sandbox("multi-one")
+                    route_store.upsert_sandbox(
+                        replace(
+                            original_exec_sandbox_route,
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url=f"http://{node1_host}:{node1_port}",
+                        )
+                    )
                     exec_read = self._json_request(f"{base}/v1/exec/{session_id}")
+                    exec_routes_after_start = route_store.load().exec_sessions
+                    route_store.delete_sandbox("multi-one")
+                    route_store.upsert_sandbox(original_exec_sandbox_route)
                     deleted = self._json_request(
                         f"{base}/v1/sandboxes/multi-one",
                         method="DELETE",
@@ -1366,6 +1381,7 @@ class ControlPlaneTests(unittest.TestCase):
                 {"job-2"},
             )
             self.assertEqual(exec_read["session"]["id"], session_id)
+            self.assertEqual(exec_routes_after_start, {})
             self.assertEqual(deleted["deleted"]["spec"]["id"], "multi-one")
             self.assertEqual(second_deleted["deleted"]["spec"]["id"], "multi-two")
             self.assertGreaterEqual(metrics["traces"]["span_count"], 3)

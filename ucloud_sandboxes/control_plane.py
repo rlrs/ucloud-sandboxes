@@ -65,6 +65,7 @@ from .routing import (
     SandboxRouteConflictError,
 )
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
+from .sandbox_exec import exec_session_route
 
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
@@ -2119,15 +2120,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             session = response.json().get("session")
             session_id = session.get("id") if isinstance(session, dict) else None
             if isinstance(session_id, str) and session_id:
-                self.routing_store.upsert_exec(
-                    ExecRoute(
-                        session_id=session_id,
-                        sandbox_id=sandbox_id,
-                        node_id=route.node_id,
-                        job_id=route.job_id,
-                        node_url=route.node_url,
+                session_route = exec_session_route(session_id)
+                if session_route is not None and (
+                    session_route.sandbox_id != sandbox_id
+                    or session_route.node_id != route.node_id
+                    or session_route.job_id != route.job_id
+                ):
+                    self._write_json(
+                        {"error": "node returned an exec session for another route"},
+                        status=HTTPStatus.BAD_GATEWAY,
                     )
-        )
+                    return
+                if session_route is None:
+                    self.routing_store.upsert_exec(
+                        ExecRoute(
+                            session_id=session_id,
+                            sandbox_id=sandbox_id,
+                            node_id=route.node_id,
+                            job_id=route.job_id,
+                            node_url=route.node_url,
+                        )
+                    )
         if self.command == "DELETE" and 200 <= response.status < 300:
             deleted = response.json().get("deleted")
             response_generation = _record_generation(deleted)
@@ -2154,13 +2167,34 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self._send_proxied_response(response)
 
     def _route_exec_request(self, session_id: str, path: str) -> None:
-        route = self.routing_store.get_exec(session_id)
+        session_route = exec_session_route(session_id)
+        route = None
+        if session_route is not None:
+            heartbeat = self._heartbeat_for_route(
+                node_id=session_route.node_id,
+                job_id=session_route.job_id,
+                node_url="",
+            )
+            if heartbeat is not None and heartbeat.node_url:
+                route = ExecRoute(
+                    session_id=session_id,
+                    sandbox_id=session_route.sandbox_id,
+                    node_id=session_route.node_id,
+                    job_id=session_route.job_id,
+                    node_url=heartbeat.node_url,
+                )
+            else:
+                # A rolling-upgrade gateway may have persisted the mapping
+                # before it understood routable session ids.
+                route = self.routing_store.get_exec(session_id)
+        else:
+            route = self.routing_store.get_exec(session_id)
         if route is None:
             self._write_json(
                 {"error": "exec route not found"}, status=HTTPStatus.NOT_FOUND
             )
             return
-        if self._exec_route_is_proven_stale(route):
+        if session_route is None and self._exec_route_is_proven_stale(route):
             self.routing_store.delete_sandbox(route.sandbox_id)
             self._write_json(
                 {

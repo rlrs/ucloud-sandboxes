@@ -1,19 +1,96 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
 import subprocess
-from threading import RLock, Thread
+from threading import Condition, RLock, Thread
+import time
 from typing import Any
 from uuid import uuid4
 
 from .models import utc_now
-from .sandbox import SandboxManager
+from .sandbox import SANDBOX_ID_RE, SandboxManager
 
 
 EXEC_SESSION_ID_PREFIX = "exec-"
+ROUTABLE_EXEC_SESSION_ID_PREFIX = "exec-v1."
+MAX_ROUTABLE_EXEC_SESSION_ID_LENGTH = 1024
+
+
+@dataclass(frozen=True)
+class ExecSessionRoute:
+    sandbox_id: str
+    node_id: str
+    job_id: str
+
+
+def new_exec_session_id(
+    sandbox_id: str,
+    *,
+    node_id: str = "",
+    job_id: str = "",
+) -> str:
+    if not node_id or not job_id:
+        return EXEC_SESSION_ID_PREFIX + uuid4().hex
+    encoded = _exec_session_route_payload(sandbox_id, node_id, job_id)
+    return f"{ROUTABLE_EXEC_SESSION_ID_PREFIX}{encoded}.{uuid4().hex}"
+
+
+def exec_session_sandbox_id(session_id: str) -> str | None:
+    route = exec_session_route(session_id)
+    return route.sandbox_id if route is not None else None
+
+
+def exec_session_route(session_id: str) -> ExecSessionRoute | None:
+    if len(session_id) > MAX_ROUTABLE_EXEC_SESSION_ID_LENGTH:
+        return None
+    if not session_id.startswith(ROUTABLE_EXEC_SESSION_ID_PREFIX):
+        return None
+    parts = session_id.split(".")
+    if len(parts) != 3 or parts[0] != "exec-v1" or len(parts[2]) != 32:
+        return None
+    try:
+        int(parts[2], 16)
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        decoded = base64.b64decode(
+            padded,
+            altchars=b"-_",
+            validate=True,
+        )
+        raw = json.loads(decoded.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    sandbox_id = raw.get("s")
+    node_id = raw.get("n")
+    job_id = raw.get("j")
+    if (
+        not isinstance(sandbox_id, str)
+        or SANDBOX_ID_RE.fullmatch(sandbox_id) is None
+        or not isinstance(node_id, str)
+        or not node_id
+        or len(node_id) > 128
+        or not isinstance(job_id, str)
+        or not job_id
+        or len(job_id) > 128
+        or _exec_session_route_payload(sandbox_id, node_id, job_id) != parts[1]
+    ):
+        return None
+    return ExecSessionRoute(sandbox_id, node_id, job_id)
+
+
+def _exec_session_route_payload(sandbox_id: str, node_id: str, job_id: str) -> str:
+    raw = json.dumps(
+        {"j": job_id, "n": node_id, "s": sandbox_id},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 @dataclass(frozen=True)
@@ -92,6 +169,7 @@ class ExecSession:
     status: str
     created_at: datetime
     updated_at: datetime
+    condition: Condition = field(repr=False, compare=False)
     exit_code: int | None = None
     stdin_open: bool = False
     events: deque[ExecEvent] = field(default_factory=deque)
@@ -118,10 +196,14 @@ class ExecSessionManager:
         *,
         max_sessions: int = 128,
         max_events_per_session: int = 512,
+        route_node_id: str = "",
+        route_job_id: str = "",
     ) -> None:
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
+        self.route_node_id = route_node_id
+        self.route_job_id = route_job_id
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
 
@@ -141,12 +223,17 @@ class ExecSessionManager:
         )
         now = utc_now()
         session = ExecSession(
-            id=EXEC_SESSION_ID_PREFIX + uuid4().hex,
+            id=new_exec_session_id(
+                spec.sandbox_id,
+                node_id=self.route_node_id,
+                job_id=self.route_job_id,
+            ),
             spec=spec,
             argv=argv,
             status="running",
             created_at=now,
             updated_at=now,
+            condition=Condition(self._lock),
             stdin_open=spec.stdin,
             events=deque(maxlen=self.max_events_per_session),
         )
@@ -181,6 +268,31 @@ class ExecSessionManager:
             session = self._require_session_locked(session_id)
             events = [event for event in session.events if event.sequence > after]
             return events[: max(0, limit)]
+
+    def events_after(
+        self,
+        session_id: str,
+        *,
+        after: int = 0,
+        limit: int = 100,
+        wait_seconds: float = 0.0,
+    ) -> list[ExecEvent]:
+        deadline = time.monotonic() + max(0.0, wait_seconds)
+        with self._lock:
+            session = self._require_session_locked(session_id)
+        with session.condition:
+            while True:
+                events = [event for event in session.events if event.sequence > after]
+                if (
+                    events
+                    or session.status in {"exited", "failed"}
+                    or wait_seconds <= 0
+                ):
+                    return events[: max(0, limit)]
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return []
+                session.condition.wait(timeout=remaining)
 
     async def adrain_events(
         self,
@@ -353,6 +465,7 @@ class ExecSessionManager:
         )
         session.next_sequence += 1
         session.updated_at = utc_now()
+        session.condition.notify_all()
 
     def _complete_locked(self, session: ExecSession, exit_code: int) -> None:
         if session.status in {"exited", "failed"}:

@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -6,10 +7,100 @@ import time
 import unittest
 
 from ucloud_sandboxes.sandbox import DockerGvisorRuntime, SandboxManager, SandboxSpec, SandboxStore
-from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
+from ucloud_sandboxes.sandbox_exec import (
+    ExecSessionManager,
+    SandboxExecSpec,
+    exec_session_sandbox_id,
+    new_exec_session_id,
+)
 
 
 class SandboxExecTests(unittest.TestCase):
+    def test_exec_session_id_carries_validated_sandbox_affinity(self) -> None:
+        session_id = new_exec_session_id(
+            "sandbox-one",
+            node_id="node-one",
+            job_id="job-one",
+        )
+
+        self.assertEqual(
+            exec_session_sandbox_id(session_id),
+            "sandbox-one",
+        )
+        self.assertIsNone(exec_session_sandbox_id("exec-legacy"))
+        self.assertIsNone(exec_session_sandbox_id(session_id + "0"))
+        self.assertIsNone(exec_session_sandbox_id("exec-v1.@@@." + "0" * 32))
+        self.assertIsNone(
+            exec_session_sandbox_id(
+                new_exec_session_id(
+                    "sandbox/invalid",
+                    node_id="node-one",
+                    job_id="job-one",
+                )
+            )
+        )
+        self.assertIsNone(
+            exec_session_sandbox_id(
+                "exec-v1." + "a" * 1024 + "." + "0" * 32
+            )
+        )
+
+    def test_event_wait_uses_notifications_and_terminal_sessions_do_not_wait(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                DockerGvisorRuntime(dry_run=True),
+            )
+            manager.create(SandboxSpec(id="sbx-1", image="busybox", memory_mb=128))
+            exec_manager = ExecSessionManager(manager)
+            active = exec_manager.start(
+                SandboxExecSpec(
+                    sandbox_id="sbx-1",
+                    command=("cat",),
+                    stdin=True,
+                )
+            )
+            after = active.next_sequence - 1
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                started = time.monotonic()
+                waiting = executor.submit(
+                    exec_manager.events_after,
+                    active.id,
+                    after=after,
+                    wait_seconds=1.0,
+                )
+                time.sleep(0.05)
+                exec_manager.write_stdin(active.id, "hello")
+                events = waiting.result(timeout=1)
+            woke_after = time.monotonic() - started
+
+            timeout_started = time.monotonic()
+            timed_out = exec_manager.events_after(
+                active.id,
+                after=events[-1].sequence,
+                wait_seconds=0.05,
+            )
+            timeout_duration = time.monotonic() - timeout_started
+            exec_manager.close_stdin(active.id)
+            terminal_after = exec_manager.get(active.id).next_sequence - 1  # type: ignore[union-attr]
+            terminal_started = time.monotonic()
+            terminal = exec_manager.events_after(
+                active.id,
+                after=terminal_after,
+                wait_seconds=1.0,
+            )
+            terminal_duration = time.monotonic() - terminal_started
+
+        self.assertEqual([event.stream for event in events], ["stdin"])
+        self.assertLess(woke_after, 0.5)
+        self.assertEqual(timed_out, [])
+        self.assertGreaterEqual(timeout_duration, 0.04)
+        self.assertEqual(terminal, [])
+        self.assertLess(terminal_duration, 0.1)
+
     def test_event_history_and_session_count_are_bounded(self) -> None:
         with TemporaryDirectory() as raw_dir:
             manager = SandboxManager(

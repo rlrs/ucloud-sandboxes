@@ -438,20 +438,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         after = _int_query(query, "after", 0)
         limit = _int_query(query, "limit", 100)
         wait_seconds = min(30.0, max(0.0, float((query.get("wait_seconds") or ["0"])[0])))
-        deadline = time.monotonic() + wait_seconds
         try:
-            while True:
-                events = self.exec_manager.drain_events(
-                    session_id,
-                    after=after,
-                    limit=limit,
-                )
-                session = self.exec_manager.get(session_id)
-                if events or wait_seconds <= 0 or time.monotonic() >= deadline:
-                    break
-                if session is not None and session.status in {"exited", "failed"}:
-                    break
-                time.sleep(0.05)
+            events = self.exec_manager.events_after(
+                session_id,
+                after=after,
+                limit=limit,
+                wait_seconds=wait_seconds,
+            )
         except ValueError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
             return
@@ -922,7 +915,11 @@ def build_node_agent_server(
             disk=disk_overcommit,
         ),
     )
-    exec_manager = ExecSessionManager(manager)
+    exec_manager = ExecSessionManager(
+        manager,
+        route_node_id=node_id,
+        route_job_id=job_id,
+    )
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime or DockerImageRuntime(dry_run=True),

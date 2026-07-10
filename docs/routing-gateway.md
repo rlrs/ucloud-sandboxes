@@ -153,7 +153,14 @@ Events are ordered by `sequence` and use `stream` values:
 - `exit`
 - `error`
 
-The high-performance exec transport is WebSocket:
+Current node agents mint opaque session ids that include validated sandbox and
+immutable origin node/job affinity. The gateway can therefore route follow-up
+requests back to the process that owns the session without serializing a second
+exec-route write, even if the sandbox route later changes. Legacy session ids
+retain the persisted mapping fallback. Polling waits on per-session event
+notifications; it does not periodically rescan all active sessions.
+
+The optional async node agent also supports a WebSocket exec transport:
 
 - server-to-client binary frames: first byte is stream id, remaining bytes are
   payload
@@ -163,7 +170,7 @@ The high-performance exec transport is WebSocket:
 - client-to-server binary frames: stdin bytes
 - client-to-server JSON frame: `{"type": "close_stdin"}`
 
-The async gateway client exposes this as a WebSocket-backed stream:
+The async gateway client exposes that transport as a WebSocket-backed stream:
 
 ```python
 from ucloud_sandboxes.async_gateway import AsyncNodeGatewayClient
@@ -242,8 +249,9 @@ SSH bytes are not JSON encoded and do not share the exec event protocol.
 For around 100 sandboxes, the target shape is:
 
 - occasional exec sessions: straightforward
-- 100 concurrent interactive exec sessions: one subprocess plus a few asyncio
-  tasks per session, bounded output queues, no stream pump threads
+- 100 concurrent exec sessions on the production node agent: one subprocess
+  plus bounded stdout/stderr/wait threads per session; long polls are notified
+  without a 50 ms busy-wait loop
 - 100 SSH sessions: handled as TCP/WebSocket byte proxying, independent of exec
   event storage
 
@@ -255,8 +263,10 @@ unbounded exec or SSH sessions.
 ## Next steps
 
 - Add route-entry TTL cleanup and recovery reconciliation after gateway restart.
-- Add a public gateway process that authenticates users and forwards WebSocket
-  exec streams to the selected node agent.
+- Bring the complete production node-agent endpoint and heartbeat surface to
+  the aiohttp implementation before switching VM init to it; the current async
+  server is not yet a drop-in replacement.
+- Forward WebSocket exec streams through the authenticated public gateway.
 - Add a public TCP/ProxyCommand gateway for SSH over the node-agent SSH
   WebSocket bridge.
 - Add session cleanup and TTLs for completed exec sessions.

@@ -6,11 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import subprocess
 from typing import Any
-from uuid import uuid4
 
 from .models import utc_now
 from .sandbox import SandboxManager
-from .sandbox_exec import EXEC_SESSION_ID_PREFIX, SandboxExecSpec
+from .sandbox_exec import SandboxExecSpec, new_exec_session_id
 
 
 STDOUT_STREAM_ID = 1
@@ -89,12 +88,16 @@ class AsyncExecSessionManager:
         max_events_per_session: int = 512,
         max_queue_events: int = 64,
         stream_chunk_bytes: int = 16 * 1024,
+        route_node_id: str = "",
+        route_job_id: str = "",
     ) -> None:
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
         self.max_queue_events = max(1, max_queue_events)
         self.stream_chunk_bytes = max(1024, stream_chunk_bytes)
+        self.route_node_id = route_node_id
+        self.route_job_id = route_job_id
         self._sessions: dict[str, AsyncExecSession] = {}
         self._sessions_lock = asyncio.Lock()
 
@@ -114,7 +117,11 @@ class AsyncExecSessionManager:
         )
         now = utc_now()
         session = AsyncExecSession(
-            id=EXEC_SESSION_ID_PREFIX + uuid4().hex,
+            id=new_exec_session_id(
+                spec.sandbox_id,
+                node_id=self.route_node_id,
+                job_id=self.route_job_id,
+            ),
             spec=spec,
             argv=argv,
             status="running",

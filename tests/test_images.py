@@ -33,6 +33,36 @@ from ucloud_sandboxes.sandbox import (
 
 
 class ImageTests(unittest.TestCase):
+    def test_image_record_manifest_digest_is_optional_and_persisted(self) -> None:
+        digest = "sha256:" + "b" * 64
+        now = utc_now()
+        legacy = ImageRecord.from_dict(
+            {
+                "id": "legacy",
+                "tag": "registry.test/image:v1",
+                "source": "registry",
+                "state": "available",
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+        )
+        pinned = ImageRecord(
+            id="pinned",
+            tag="registry.test/image:v2",
+            source="registry",
+            state="available",
+            created_at=now,
+            updated_at=now,
+            manifest_digest=digest,
+        )
+
+        self.assertEqual(legacy.manifest_digest, "")
+        self.assertEqual(ImageRecord.from_dict(pinned.to_dict()), pinned)
+        self.assertEqual(
+            pinned.digest_ref,
+            f"registry.test/image@{digest}",
+        )
+
     def test_image_state_fails_closed_on_malformed_or_duplicate_records(self) -> None:
         with TemporaryDirectory() as raw_dir:
             image_path = Path(raw_dir) / "images.json"
@@ -572,13 +602,15 @@ class ImageTests(unittest.TestCase):
                     context_path="/tmp/context",
                 )
             )
-            record = manager.mark_pushed("base")
+            digest = "sha256:" + "f" * 64
+            record = manager.mark_pushed("base", manifest_digest=digest)
             reloaded = manager.list()[0]
 
             self.assertTrue(record.pushed)
             self.assertTrue(record.available_to_sandboxes)
             self.assertTrue(reloaded.pushed)
             self.assertTrue(reloaded.available_to_sandboxes)
+            self.assertEqual(reloaded.manifest_digest, digest)
 
     def test_image_store_deletes_records_by_tag(self) -> None:
         with TemporaryDirectory() as raw_dir:

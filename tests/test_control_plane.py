@@ -29,9 +29,7 @@ from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime, ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import (
-    RegistryTag,
     RegistryUsageStore,
-    execute_registry_prune,
 )
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
@@ -2293,6 +2291,143 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(CountingNode.post_count, 0)
         self.assertIsNone(RoutingStore(route_file).get_sandbox("blocked-one"))
 
+    def test_pinned_registry_reference_persists_digest_and_protection_usage(
+        self,
+    ) -> None:
+        digest = "sha256:" + "6" * 64
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            self.assertTrue(
+                control_plane._persist_registry_image_protection(
+                    store,
+                    (
+                        "ucloud-sandbox-registry:5000/repo/a:v1"
+                        f"@{digest}"
+                    ),
+                    "sandbox:one",
+                    touch=True,
+                    persistent=True,
+                )
+            )
+            snapshot = store.snapshot()
+
+        lease = snapshot.leases[("repo/a", "v1", "sandbox:one")]
+        self.assertEqual(lease.digest, digest)
+        self.assertIn(
+            ("repo/a", control_plane.digest_protection_tag(digest)),
+            snapshot.records,
+        )
+
+    def test_explicit_managed_digest_fails_closed_without_protection_tag(
+        self,
+    ) -> None:
+        digest = "sha256:" + "7" * 64
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                registry_url="http://registry.invalid:5000",
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                with patch.object(
+                    control_plane.RegistryClient,
+                    "ensure_digest_protection_tag",
+                    side_effect=OSError("registry unavailable"),
+                ):
+                    prepared = self._json_request(
+                        f"http://{host}:{port}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "unprotected-digest",
+                            "count": 1,
+                            "ttl_seconds": 60,
+                            "image": (
+                                "registry.invalid:5000/repo/a:v1"
+                                f"@{digest}"
+                            ),
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                        allow_error=True,
+                    )
+                stored_prepared = RoutingStore(
+                    raw_path / "routes.sqlite"
+                ).prepared_capacity()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(prepared["status"], 400)
+        self.assertTrue(prepared["body"]["retryable"])
+        self.assertEqual(stored_prepared, [])
+
+    def test_managed_image_id_does_not_fall_back_when_digest_protection_fails(
+        self,
+    ) -> None:
+        digest = "sha256:" + "a" * 64
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            image_file = raw_path / "images.json"
+            now = utc_now()
+            ImageStore(image_file).upsert(
+                ImageRecord(
+                    id="protected-image",
+                    tag="registry.invalid:5000/repo/a:v1",
+                    source="build:/tmp/context",
+                    state="available",
+                    created_at=now,
+                    updated_at=now,
+                    pushed=True,
+                    manifest_digest=digest,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                image_file=image_file,
+                registry_url="http://registry.invalid:5000",
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                with patch.object(
+                    control_plane.RegistryClient,
+                    "manifest_digest",
+                    return_value=digest,
+                ), patch.object(
+                    control_plane.RegistryClient,
+                    "ensure_digest_protection_tag",
+                    side_effect=OSError("registry unavailable"),
+                ):
+                    images = self._json_request(f"http://{host}:{port}/v1/images")
+                    prepared = self._json_request(
+                        f"http://{host}:{port}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "unprotected-image-id",
+                            "count": 1,
+                            "ttl_seconds": 60,
+                            "image": "protected-image",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                        allow_error=True,
+                    )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(images["images"][0]["manifest_digest"], "")
+        self.assertEqual(prepared["status"], 400)
+        self.assertTrue(prepared["body"]["retryable"])
+
     def test_failed_sandbox_pull_persists_incarnation_demand_until_cancel(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
@@ -3212,6 +3347,83 @@ class ControlPlaneTests(unittest.TestCase):
                 ],
             )
 
+    def test_gateway_persists_manifest_digest_after_managed_registry_push(
+        self,
+    ) -> None:
+        digest = "sha256:" + "9" * 64
+
+        class RegistryHandler(BaseHTTPRequestHandler):
+            def do_HEAD(self) -> None:
+                self.send_response(200)
+                self.send_header("Docker-Content-Digest", digest)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            image_file = raw_path / "images.json"
+            registry = ThreadingHTTPServer(("127.0.0.1", 0), RegistryHandler)
+            Thread(target=registry.serve_forever, daemon=True).start()
+            try:
+                registry_host, registry_port = registry.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    image_file=image_file,
+                    image_runtime=DockerImageRuntime(dry_run=True),
+                    registry_url=f"http://{registry_host}:{registry_port}",
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    built = self._json_request(
+                        f"http://{host}:{port}/v1/images/build",
+                        method="POST",
+                        payload={
+                            "id": "digest-build",
+                            "tag": (
+                                "ucloud-sandbox-registry:5000/team/image:v1"
+                            ),
+                            "context_path": "/tmp/context",
+                            "push": True,
+                        },
+                    )
+                    prepared = self._json_request(
+                        f"http://{host}:{port}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "digest-build-warmup",
+                            "count": 1,
+                            "ttl_seconds": 60,
+                            "image": "digest-build",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                    )
+                    stored_digest = ImageStore(image_file).load()[
+                        "digest-build"
+                    ].manifest_digest
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                registry.shutdown()
+                registry.server_close()
+
+        self.assertEqual(built["image"]["manifest_digest"], digest)
+        self.assertEqual(stored_digest, digest)
+        self.assertEqual(
+            prepared["prepare"]["image"],
+            (
+                "ucloud-sandbox-registry:5000/team/image:v1"
+                f"@{digest}"
+            ),
+        )
+
     def test_gateway_resolves_pushed_image_id_to_registry_tag_on_create(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
@@ -3460,8 +3672,10 @@ class ControlPlaneTests(unittest.TestCase):
             )
 
     def test_gateway_keeps_pending_signal_for_async_builder_image_build(self) -> None:
+        digest = "sha256:" + "8" * 64
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
+            gateway_image_file = raw_path / "gateway-images.json"
             builder = build_node_agent_server(
                 "127.0.0.1",
                 0,
@@ -3481,8 +3695,9 @@ class ControlPlaneTests(unittest.TestCase):
                     0,
                     raw_path / "heartbeats.json",
                     routing_file=raw_path / "routes.json",
-                    image_file=raw_path / "gateway-images.json",
+                    image_file=gateway_image_file,
                     local_image_builds_enabled=False,
+                    registry_url="http://registry.invalid:5000",
                 )
                 gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
                 gateway_thread.start()
@@ -3503,17 +3718,32 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     self.assertEqual(result.status, 200)
 
-                    built = self._json_request(
-                        f"{base}/v1/images/build",
-                        method="POST",
-                        payload={
-                            "id": "custom",
-                            "tag": "registry.example.org/custom:latest",
-                            "context_path": "/tmp/context",
-                            "push": True,
-                            "wait": False,
-                        },
-                    )
+                    with patch.object(
+                        control_plane.RegistryClient,
+                        "manifest_digest",
+                        return_value=digest,
+                    ):
+                        built = self._json_request(
+                            f"{base}/v1/images/build",
+                            method="POST",
+                            payload={
+                                "id": "custom",
+                                "tag": "registry.invalid:5000/custom:latest",
+                                "context_path": "/tmp/context",
+                                "push": True,
+                                "wait": False,
+                            },
+                        )
+                        deadline = monotonic() + 2
+                        while True:
+                            finished = self._json_request(
+                                f"{base}/v1/images/builds/custom"
+                            )
+                            if finished["build"]["status"] == "succeeded":
+                                break
+                            if monotonic() >= deadline:
+                                self.fail("async image build did not finish")
+                            sleep(0.01)
                 finally:
                     gateway.shutdown()
                     gateway.server_close()
@@ -3523,6 +3753,15 @@ class ControlPlaneTests(unittest.TestCase):
 
             self.assertEqual(built["build"]["image_id"], "custom")
             self.assertEqual(built["build"]["status"], "running")
+            self.assertEqual(finished["build"]["status"], "succeeded")
+            self.assertEqual(
+                finished["build"]["image"]["manifest_digest"],
+                digest,
+            )
+            self.assertEqual(
+                ImageStore(gateway_image_file).load()["custom"].manifest_digest,
+                digest,
+            )
             self.assertEqual(
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
             )
@@ -3710,6 +3949,208 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(deleted["deleted"]["prepare_id"], "eval-soon")
         self.assertEqual(demand_after_delete["prepared_resources"]["vcpu"], 0.0)
         self.assertEqual(demand_after_delete["prepared"], [])
+
+    def test_gateway_pins_managed_registry_image_before_capacity_warmup(self) -> None:
+        digest = "sha256:" + "d" * 64
+
+        class RegistryHandler(BaseHTTPRequestHandler):
+            def do_HEAD(self) -> None:
+                self.send_response(200)
+                self.send_header("Docker-Content-Digest", digest)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            registry = ThreadingHTTPServer(("127.0.0.1", 0), RegistryHandler)
+            Thread(target=registry.serve_forever, daemon=True).start()
+            try:
+                registry_host, registry_port = registry.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    registry_url=f"http://{registry_host}:{registry_port}",
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    prepared = self._json_request(
+                        f"http://{host}:{port}/v1/capacity/prepare",
+                        method="POST",
+                        payload={
+                            "id": "digest-warmup",
+                            "count": 1,
+                            "ttl_seconds": 60,
+                            "image": (
+                                "ucloud-sandbox-registry:5000/team/image:v1"
+                            ),
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                registry.shutdown()
+                registry.server_close()
+
+        expected = (
+            "ucloud-sandbox-registry:5000/team/image:v1" f"@{digest}"
+        )
+        self.assertEqual(prepared["prepare"]["image"], expected)
+        self.assertEqual(prepared["image_warmup"]["image"], expected)
+
+    def test_managed_mutable_tag_is_not_a_digest_cache_hit(self) -> None:
+        mutable = "ucloud-sandbox-registry:5000/team/image:v1"
+        digest = "sha256:" + "e" * 64
+        heartbeat = build_heartbeat(
+            job_id="job-1",
+            node_id="node-1",
+            cached_images=(mutable,),
+        )
+
+        self.assertEqual(
+            control_plane._requested_image_cache_keys(
+                mutable,
+                "image-id",
+                require_digest=True,
+            ),
+            set(),
+        )
+        self.assertFalse(
+            control_plane._heartbeat_has_image(
+                heartbeat,
+                mutable,
+                "image-id",
+                require_digest=True,
+            )
+        )
+        self.assertEqual(
+            control_plane._requested_image_cache_keys(
+                f"{mutable}@{digest}",
+                "image-id",
+                require_digest=True,
+            ),
+            {
+                f"{mutable}@{digest}",
+                f"ucloud-sandbox-registry:5000/team/image@{digest}",
+            },
+        )
+
+    def test_registry_resolution_failure_does_not_trust_mutable_tag_heartbeat(
+        self,
+    ) -> None:
+        mutable = "ucloud-sandbox-registry:5000/team/image:v1"
+
+        class ImageNode(BaseHTTPRequestHandler):
+            pull_count = 0
+
+            def do_GET(self) -> None:
+                if self.path == "/v1/images":
+                    self._write_json(
+                        {
+                            "images": [
+                                {
+                                    "id": "image-id",
+                                    "tag": mutable,
+                                    "source": "registry",
+                                    "state": "available",
+                                }
+                            ]
+                        }
+                    )
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self) -> None:
+                if self.path == "/v1/images/pull":
+                    type(self).pull_count += 1
+                    self._write_json({"error": "registry unavailable"}, status=503)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def _write_json(
+                self,
+                payload: dict[str, object],
+                *,
+                status: int = 200,
+            ) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            node = ThreadingHTTPServer(("127.0.0.1", 0), ImageNode)
+            Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                node_host, node_port = node.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=raw_path / "routes.sqlite",
+                    registry_url="http://127.0.0.1:9",
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    self.assertEqual(
+                        post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id="job-1",
+                                node_id="node-1",
+                                node_url=f"http://{node_host}:{node_port}",
+                                capabilities=("sandbox", "image-cache"),
+                                cached_images=(mutable,),
+                                total_resources=ResourceQuantity(
+                                    vcpu=2,
+                                    memory_mb=2048,
+                                ),
+                            ),
+                        ).status,
+                        200,
+                    )
+                    with patch.object(
+                        control_plane.RegistryClient,
+                        "manifest_digest",
+                        side_effect=OSError("registry unavailable"),
+                    ):
+                        created = self._json_request(
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": "mutable-cache",
+                                "image": mutable,
+                                "cpus": 1,
+                                "memory_mb": 512,
+                            },
+                            allow_error=True,
+                        )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(created["status"], 502)
+        self.assertEqual(ImageNode.pull_count, 1)
 
     def test_gateway_prepares_capacity_with_image_prewarm(self) -> None:
         with TemporaryDirectory() as raw_dir:

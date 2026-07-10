@@ -904,6 +904,8 @@ def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:
         refs.append(record.id)
         if record.tag:
             refs.append(record.tag)
+        if record.digest_ref:
+            refs.append(record.digest_ref)
     return tuple(dict.fromkeys(refs))
 
 

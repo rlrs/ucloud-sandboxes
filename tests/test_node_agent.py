@@ -828,6 +828,15 @@ class NodeAgentTests(unittest.TestCase):
                     method="POST",
                     payload={"image": "busybox:latest", "id": "busybox"},
                 )
+                digest = "sha256:" + "c" * 64
+                self._json_request(
+                    f"{base}/v1/images/pull",
+                    method="POST",
+                    payload={
+                        "image": f"registry.test/team/image:v1@{digest}",
+                        "id": "pinned",
+                    },
+                )
                 heartbeat = self._json_request(f"{base}/v1/heartbeat")
             finally:
                 server.shutdown()
@@ -836,6 +845,10 @@ class NodeAgentTests(unittest.TestCase):
             self.assertTrue(heartbeat["heartbeat"]["cached_images_known"])
             self.assertIn("busybox", heartbeat["heartbeat"]["cached_images"])
             self.assertIn("busybox:latest", heartbeat["heartbeat"]["cached_images"])
+            self.assertIn(
+                f"registry.test/team/image@{digest}",
+                heartbeat["heartbeat"]["cached_images"],
+            )
 
     def test_rejects_disk_request_without_validated_quota_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:

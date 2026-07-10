@@ -18,6 +18,11 @@ import time
 from typing import Any, Callable, Iterable
 from uuid import uuid4
 
+from .managed_registry import (
+    canonical_image_digest_ref,
+    manifest_digest_from_image_ref,
+    normalize_manifest_digest,
+)
 from .models import parse_iso_datetime, utc_now
 from .sandbox import (
     CommandExecutor,
@@ -96,6 +101,7 @@ class ImageRecord:
     updated_at: datetime
     labels: dict[str, str] = field(default_factory=dict)
     pushed: bool = False
+    manifest_digest: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageRecord":
@@ -114,6 +120,12 @@ class ImageRecord:
         labels = raw.get("labels") or {}
         if not isinstance(labels, dict):
             raise ValueError("image record labels must be a JSON object.")
+        raw_manifest_digest = str(
+            raw.get("manifest_digest") or raw.get("manifestDigest") or ""
+        )
+        manifest_digest = normalize_manifest_digest(raw_manifest_digest)
+        if raw_manifest_digest and not manifest_digest:
+            raise ValueError("image record has an invalid manifest digest.")
         return cls(
             id=image_id,
             tag=tag,
@@ -123,6 +135,7 @@ class ImageRecord:
             updated_at=updated_at,
             labels={str(k): str(v) for k, v in dict(labels).items()},
             pushed=bool(raw.get("pushed", False)),
+            manifest_digest=manifest_digest,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -135,12 +148,17 @@ class ImageRecord:
             "updated_at": self.updated_at.isoformat(),
             "labels": dict(self.labels),
             "pushed": self.pushed,
+            "manifest_digest": self.manifest_digest,
             "available_to_sandboxes": self.available_to_sandboxes,
         }
 
     @property
     def available_to_sandboxes(self) -> bool:
         return self.pushed or self.source == "registry"
+
+    @property
+    def digest_ref(self) -> str:
+        return canonical_image_digest_ref(self.tag, self.manifest_digest)
 
 
 @dataclass(frozen=True)
@@ -829,12 +847,23 @@ class ImageManager:
                     wait_seconds = min(wait_seconds, remaining)
                 condition.wait(wait_seconds)
 
-    def mark_pushed(self, image_id: str) -> ImageRecord:
+    def mark_pushed(
+        self,
+        image_id: str,
+        *,
+        manifest_digest: str = "",
+    ) -> ImageRecord:
         records = self.store.load()
         record = records.get(image_id)
         if record is None:
             raise ValueError(f"image record not found: {image_id}")
-        updated = replace(record, pushed=True, updated_at=utc_now())
+        normalized_digest = normalize_manifest_digest(manifest_digest)
+        updated = replace(
+            record,
+            pushed=True,
+            manifest_digest=normalized_digest or record.manifest_digest,
+            updated_at=utc_now(),
+        )
         self.store.upsert(updated)
         return updated
 
@@ -849,6 +878,7 @@ class ImageManager:
             created_at=now,
             updated_at=now,
             pushed=True,
+            manifest_digest=manifest_digest_from_image_ref(image),
         )
         self.store.upsert(record)
         return record, result
@@ -869,6 +899,7 @@ class ImageManager:
             state="planned" if dry_run else "available",
             created_at=now,
             updated_at=now,
+            manifest_digest=manifest_digest_from_image_ref(image),
         )
         self.store.upsert(record)
         return record

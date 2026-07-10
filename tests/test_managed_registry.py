@@ -4,9 +4,14 @@ import multiprocessing
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from ucloud_sandboxes.managed_registry import (
+    MANIFEST_ACCEPT,
+    canonical_image_digest_ref,
+    digest_protection_tag,
+    image_ref_with_manifest_digest,
+    manifest_digest_from_image_ref,
     RegistryClient,
     RegistryRequestError,
     RegistryImageLeaseNotFound,
@@ -42,6 +47,66 @@ def _acquire_lease_in_process(
 
 
 class ManagedRegistryTests(unittest.TestCase):
+    def test_registry_client_creates_digest_protection_tag_from_exact_manifest(
+        self,
+    ) -> None:
+        digest = "sha256:" + "1" * 64
+        manifest = b'{"schemaVersion":2}'
+
+        class FakeResponse:
+            def __init__(
+                self,
+                body: bytes = b"",
+                content_type: str = "application/json",
+            ) -> None:
+                self.body = body
+                self.headers = {"Content-Type": content_type}
+
+            def read(self, _limit: int = -1) -> bytes:
+                return self.body
+
+            def close(self) -> None:
+                return None
+
+        client = RegistryClient("http://registry")
+        missing = RegistryRequestError(404, "HEAD", "/missing", "")
+        with patch.object(
+            client,
+            "manifest_digest",
+            side_effect=(missing, digest),
+        ), patch.object(
+            client,
+            "_request",
+            side_effect=(
+                FakeResponse(
+                    manifest,
+                    "application/vnd.oci.image.manifest.v1+json",
+                ),
+                FakeResponse(),
+            ),
+        ) as request_manifest:
+            tag = client.ensure_digest_protection_tag("repo/a", digest)
+
+        expected_tag = digest_protection_tag(digest)
+        self.assertEqual(tag, expected_tag)
+        self.assertEqual(
+            request_manifest.call_args_list,
+            [
+                call(
+                    f"/v2/repo/a/manifests/{digest}",
+                    headers={"Accept": MANIFEST_ACCEPT},
+                ),
+                call(
+                    f"/v2/repo/a/manifests/{expected_tag}",
+                    method="PUT",
+                    headers={
+                        "Content-Type": "application/vnd.oci.image.manifest.v1+json"
+                    },
+                    data=manifest,
+                ),
+            ],
+        )
+
     def test_registry_usage_state_is_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "registry-usage.json"
@@ -444,6 +509,44 @@ class ManagedRegistryTests(unittest.TestCase):
             self.assertIn(("repo/a", "v1"), snapshot.records)
             self.assertEqual(snapshot.leases, {})
 
+    def test_tag_only_lease_migrates_to_digest_protection_on_reacquire(self) -> None:
+        digest = "sha256:" + "2" * 64
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "generation": 1,
+                        "images": [],
+                        "leases": [
+                            {
+                                "repository": "repo/a",
+                                "tag": "v1",
+                                "owner": "sandbox:one",
+                                "acquired_at": "2026-07-10T00:00:00+00:00",
+                                "renewed_at": "2026-07-10T00:00:00+00:00",
+                                "expires_at": "",
+                                "persistent": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            store = RegistryUsageStore(path)
+            legacy = store.snapshot()
+            updated = store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                digest=digest,
+            )
+            migrated = store.snapshot()
+
+        self.assertEqual(legacy.leases[("repo/a", "v1", "sandbox:one")].digest, "")
+        self.assertEqual(updated.digest, digest)
+        self.assertEqual(migrated.active_lease_digests(), {("repo/a", digest)})
+
     def test_malformed_lease_state_fails_closed(self) -> None:
         valid = {
             "repository": "repo/a",
@@ -572,6 +675,21 @@ class ManagedRegistryTests(unittest.TestCase):
         )
         self.assertEqual(registry_host_from_image_ref("ubuntu:latest"), "")
 
+    def test_manifest_digest_helpers_preserve_tag_and_canonicalize_cache_key(
+        self,
+    ) -> None:
+        digest = "sha256:" + "a" * 64
+        tagged = "registry.example.org/team/image:v1"
+        pinned = image_ref_with_manifest_digest(tagged, digest)
+
+        self.assertEqual(pinned, f"{tagged}@{digest}")
+        self.assertEqual(manifest_digest_from_image_ref(pinned), digest)
+        self.assertEqual(
+            canonical_image_digest_ref(pinned),
+            f"registry.example.org/team/image@{digest}",
+        )
+        self.assertEqual(manifest_digest_from_image_ref(f"{tagged}@sha256:bad"), "")
+
     def test_execute_registry_prune_deletes_duplicate_digest_once(self) -> None:
         class FakeRegistryClient:
             def __init__(self) -> None:
@@ -656,6 +774,84 @@ class ManagedRegistryTests(unittest.TestCase):
             self.assertEqual(planned, [])
             self.assertEqual(deleted, [])
             self.assertEqual(client.deleted, [])
+
+    def test_digest_lease_survives_tag_move_in_plan_and_execution(self) -> None:
+        class FakeRegistryClient:
+            def __init__(self) -> None:
+                self.deleted: list[tuple[str, str]] = []
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        protected_digest = "sha256:" + "3" * 64
+        moved_digest = "sha256:" + "4" * 64
+        protection_tag = digest_protection_tag(protected_digest)
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                digest=protected_digest,
+            )
+            snapshot = store.snapshot()
+            records = [
+                RegistryTag("repo/a", "v1", moved_digest),
+                RegistryTag("repo/a", protection_tag, protected_digest),
+            ]
+
+            planned = select_prune_candidates(
+                records,
+                keep_per_repository=0,
+                active_leases=snapshot.leases,
+            )
+            client = FakeRegistryClient()
+            deleted = execute_registry_prune(
+                client,  # type: ignore[arg-type]
+                records,
+                usage_store=store,
+                all_records=records,
+            )
+
+        self.assertEqual(planned, [records[0]])
+        self.assertEqual(deleted, [records[0]])
+        self.assertEqual(client.deleted, [("repo/a", moved_digest)])
+
+    def test_keep_floor_counts_distinct_digests_instead_of_alias_tags(self) -> None:
+        records = [
+            RegistryTag("repo/a", "new", "sha256:a", "2026-07-04T00:00:00+00:00"),
+            RegistryTag(
+                "repo/a",
+                "new-alias",
+                "sha256:a",
+                "2026-07-03T00:00:00+00:00",
+            ),
+            RegistryTag("repo/a", "middle", "sha256:b", "2026-07-02T00:00:00+00:00"),
+            RegistryTag("repo/a", "old", "sha256:c", "2026-07-01T00:00:00+00:00"),
+        ]
+
+        candidates = select_prune_candidates(records, keep_per_repository=2)
+
+        self.assertEqual(candidates, [records[3]])
+
+    def test_registry_summary_hides_internal_digest_protection_tags(self) -> None:
+        protection_tag = digest_protection_tag("sha256:" + "5" * 64)
+
+        class FakeRegistryClient:
+            base_url = "http://registry"
+
+            def catalog(self) -> list[str]:
+                return ["repo/a"]
+
+            def tags(self, repository: str) -> list[str]:
+                del repository
+                return ["v1", protection_tag]
+
+        summary = registry_summary(FakeRegistryClient())  # type: ignore[arg-type]
+
+        self.assertEqual(summary["scanned_tag_count"], 1)
+        self.assertEqual(summary["internal_tag_count"], 1)
+        self.assertEqual(summary["repositories"][0]["tags"], ["v1"])
 
     def test_prune_plan_reports_generation_and_excludes_active_lease(self) -> None:
         class FakeRegistryClient:

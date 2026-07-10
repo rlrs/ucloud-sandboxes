@@ -8,9 +8,10 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 from threading import RLock, get_ident
 import time
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
 
@@ -31,6 +32,8 @@ MAX_REGISTRY_LEASE_TTL_SECONDS = 24 * 60 * 60
 MAX_REGISTRY_PAGINATION_PAGES = 10_000
 MAX_REGISTRY_JSON_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_REGISTRY_ERROR_PREVIEW_BYTES = 64 * 1024
+_MANIFEST_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_DIGEST_PROTECTION_TAG_RE = re.compile(r"^ucloud-digest-sha256-[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,7 @@ class RegistryImageLease:
     acquired_at: str
     renewed_at: str
     expires_at: str
+    digest: str = ""
 
     @classmethod
     def from_dict(cls, raw: object) -> "RegistryImageLease | None":
@@ -103,6 +107,8 @@ class RegistryImageLease:
         acquired_at = str(raw.get("acquired_at") or raw.get("acquiredAt") or "")
         renewed_at = str(raw.get("renewed_at") or raw.get("renewedAt") or "")
         expires_at = str(raw.get("expires_at") or raw.get("expiresAt") or "")
+        raw_digest = str(raw.get("digest") or raw.get("manifest_digest") or "")
+        digest = normalize_manifest_digest(raw_digest)
         persistent = raw.get("persistent", False)
         if not repository or not tag or not owner:
             return None
@@ -115,6 +121,8 @@ class RegistryImageLease:
             )
         ):
             return None
+        if raw_digest and not digest:
+            return None
         return cls(
             repository=repository,
             tag=tag,
@@ -122,6 +130,7 @@ class RegistryImageLease:
             acquired_at=acquired_at,
             renewed_at=renewed_at,
             expires_at=expires_at,
+            digest=digest,
         )
 
     @property
@@ -143,6 +152,7 @@ class RegistryImageLease:
             "renewed_at": self.renewed_at,
             "expires_at": self.expires_at,
             "persistent": not self.expires_at,
+            "digest": self.digest,
         }
 
 
@@ -159,7 +169,19 @@ class RegistryUsageSnapshot:
         return {
             (lease.repository, lease.tag)
             for lease in self.leases.values()
-            if lease.is_active(reference)
+            if not lease.digest and lease.is_active(reference)
+        }
+
+    def active_lease_digests(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> set[tuple[str, str]]:
+        reference = _as_utc(now or datetime.now(timezone.utc))
+        return {
+            (lease.repository, lease.digest)
+            for lease in self.leases.values()
+            if lease.digest and lease.is_active(reference)
         }
 
 
@@ -264,6 +286,62 @@ class RegistryClient:
         _body, headers = self._json_request(path, headers={"Accept": MANIFEST_ACCEPT})
         return headers.get("Docker-Content-Digest", "")
 
+    def ensure_digest_protection_tag(self, repository: str, digest: str) -> str:
+        """Ensure an immutable tag keeps ``digest`` reachable by registry GC."""
+
+        normalized_digest = _validate_lease_digest(digest)
+        protection_tag = digest_protection_tag(normalized_digest)
+        try:
+            protected_digest = normalize_manifest_digest(
+                self.manifest_digest(repository, protection_tag)
+            )
+        except RegistryRequestError as exc:
+            if exc.status_code != 404:
+                raise
+            protected_digest = ""
+        if protected_digest:
+            if protected_digest != normalized_digest:
+                raise ValueError(
+                    "registry digest protection tag points to a different manifest"
+                )
+            return protection_tag
+
+        source_path = (
+            f"/v2/{_quote_repository(repository)}/manifests/"
+            f"{quote(normalized_digest, safe=':')}"
+        )
+        response = self._request(
+            source_path,
+            headers={"Accept": MANIFEST_ACCEPT},
+        )
+        try:
+            manifest = response.read(MAX_REGISTRY_JSON_RESPONSE_BYTES + 1)
+            content_type = str(response.headers.get("Content-Type") or "").strip()
+        finally:
+            response.close()
+        if len(manifest) > MAX_REGISTRY_JSON_RESPONSE_BYTES:
+            raise ValueError("registry manifest is too large to protect")
+        if not manifest or not content_type:
+            raise ValueError("registry returned an empty or untyped manifest")
+
+        target_path = (
+            f"/v2/{_quote_repository(repository)}/manifests/"
+            f"{quote(protection_tag, safe='')}"
+        )
+        response = self._request(
+            target_path,
+            method="PUT",
+            headers={"Content-Type": content_type},
+            data=manifest,
+        )
+        response.close()
+        stored_digest = normalize_manifest_digest(
+            self.manifest_digest(repository, protection_tag)
+        )
+        if stored_digest != normalized_digest:
+            raise ValueError("registry did not persist the digest protection tag")
+        return protection_tag
+
     def created_at(self, repository: str, tag: str) -> str:
         try:
             manifest, _headers = self._json_request(
@@ -314,9 +392,11 @@ class RegistryClient:
         *,
         method: str = "GET",
         headers: dict[str, str] | None = None,
+        data: bytes | None = None,
     ) -> Any:
         req = request.Request(
             self.base_url + path,
+            data=data,
             method=method,
             headers=headers or {},
         )
@@ -386,32 +466,48 @@ class RegistryUsageStore:
         *,
         when: datetime | None = None,
     ) -> RegistryImageUsage | None:
-        parsed = registry_repository_tag_from_image_ref(image_ref)
-        if parsed is None:
-            return None
-        repository, tag = parsed
+        records = self.touch_images((image_ref,), when=when)
+        return records[0] if records else None
+
+    def touch_images(
+        self,
+        image_refs: Iterable[str],
+        *,
+        when: datetime | None = None,
+    ) -> tuple[RegistryImageUsage, ...]:
         timestamp = when or datetime.now(timezone.utc)
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
-        record = RegistryImageUsage(
-            image_ref=image_ref,
-            repository=repository,
-            tag=tag,
-            last_used_at=timestamp.astimezone(timezone.utc).isoformat(),
-        )
+        usage_records: list[RegistryImageUsage] = []
+        for image_ref in image_refs:
+            parsed = registry_repository_tag_from_image_ref(image_ref)
+            if parsed is None:
+                continue
+            repository, tag = parsed
+            usage_records.append(
+                RegistryImageUsage(
+                    image_ref=image_ref,
+                    repository=repository,
+                    tag=tag,
+                    last_used_at=timestamp.astimezone(timezone.utc).isoformat(),
+                )
+            )
+        if not usage_records:
+            return ()
         with _registry_file_lock(self.path):
             snapshot = self._prune_expired_leases_unlocked(
                 self._load_snapshot_unlocked(),
                 now=timestamp,
             )
             records = dict(snapshot.records)
-            records[(repository, tag)] = record
+            for record in usage_records:
+                records[(record.repository, record.tag)] = record
             self._save_unlocked(
                 records,
                 snapshot.leases,
                 generation=snapshot.generation + 1,
             )
-        return record
+        return tuple(usage_records)
 
     def acquire_lease(
         self,
@@ -420,10 +516,12 @@ class RegistryUsageStore:
         owner: str,
         *,
         ttl_seconds: float,
+        digest: str = "",
         now: datetime | None = None,
     ) -> RegistryImageLease:
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
         ttl = _validate_lease_ttl(ttl_seconds)
+        normalized_digest = _validate_lease_digest(digest)
         timestamp = _as_utc(now or datetime.now(timezone.utc))
         with _registry_file_lock(self.path):
             snapshot = self._prune_expired_leases_unlocked(
@@ -441,6 +539,10 @@ class RegistryUsageStore:
                 ),
                 renewed_at=timestamp.isoformat(),
                 expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
+                digest=(
+                    normalized_digest
+                    or (previous.digest if previous is not None else "")
+                ),
             )
             leases = dict(snapshot.leases)
             leases[key] = lease
@@ -457,6 +559,7 @@ class RegistryUsageStore:
         tag: str,
         owner: str,
         *,
+        digest: str = "",
         now: datetime | None = None,
     ) -> RegistryImageLease:
         """Persist a non-expiring reference to an actively used image tag.
@@ -468,6 +571,7 @@ class RegistryUsageStore:
         """
 
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        normalized_digest = _validate_lease_digest(digest)
         timestamp = _as_utc(now or datetime.now(timezone.utc))
         with _registry_file_lock(self.path):
             snapshot = self._prune_expired_leases_unlocked(
@@ -487,6 +591,10 @@ class RegistryUsageStore:
                 ),
                 renewed_at=timestamp.isoformat(),
                 expires_at="",
+                digest=(
+                    normalized_digest
+                    or (previous.digest if previous is not None else "")
+                ),
             )
             leases = dict(snapshot.leases)
             leases[key] = reference
@@ -504,10 +612,12 @@ class RegistryUsageStore:
         owner: str,
         *,
         ttl_seconds: float,
+        digest: str = "",
         now: datetime | None = None,
     ) -> RegistryImageLease:
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
         ttl = _validate_lease_ttl(ttl_seconds)
+        normalized_digest = _validate_lease_digest(digest)
         timestamp = _as_utc(now or datetime.now(timezone.utc))
         with _registry_file_lock(self.path):
             snapshot = self._prune_expired_leases_unlocked(
@@ -525,6 +635,7 @@ class RegistryUsageStore:
                 acquired_at=previous.acquired_at,
                 renewed_at=timestamp.isoformat(),
                 expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
+                digest=normalized_digest or previous.digest,
             )
             leases = dict(snapshot.leases)
             leases[key] = lease
@@ -779,6 +890,9 @@ def execute_registry_prune(
                 now=now,
             ) as snapshot:
                 leased_tags = snapshot.active_lease_tags(now=now)
+                leased_digests = snapshot.active_lease_digests(now=now)
+                if (repository, digest) in leased_digests:
+                    continue
                 if any(
                     (record.repository, record.tag) in leased_tags
                     for record in digest_aliases
@@ -849,10 +963,11 @@ def registry_summary(
     records: list[dict[str, Any]] = []
     scanned_tag_count = 0
     visible_tag_count_total = 0
+    internal_tag_count_total = 0
     unavailable_records: list[dict[str, Any]] = []
     for repository in scanned:
         try:
-            tags = sorted(client.tags(repository))
+            all_tags = sorted(client.tags(repository))
         except RegistryRequestError as exc:
             if not _registry_repository_name_unknown(exc):
                 raise
@@ -870,16 +985,20 @@ def registry_summary(
             records.append(record)
             unavailable_records.append(record)
             continue
+        tags = [tag for tag in all_tags if not is_digest_protection_tag(tag)]
+        internal_tag_count = len(all_tags) - len(tags)
         visible_tag_limit = max(0, max_tags_per_repository)
         visible_tags = tags[-visible_tag_limit:] if visible_tag_limit else []
         scanned_tag_count += len(tags)
         visible_tag_count_total += len(visible_tags)
+        internal_tag_count_total += internal_tag_count
         records.append(
             {
                 "repository": repository,
                 "namespace": repository.split("/", 1)[0] if "/" in repository else "",
                 "available": True,
                 "tag_count": len(tags),
+                "internal_tag_count": internal_tag_count,
                 "visible_tag_count": len(visible_tags),
                 "tags_truncated": len(visible_tags) < len(tags),
                 "latest_tag": visible_tags[-1] if visible_tags else "",
@@ -894,6 +1013,7 @@ def registry_summary(
         "scanned_repository_count": len(scanned),
         "scanned_tag_count": scanned_tag_count,
         "visible_tag_count": visible_tag_count_total,
+        "internal_tag_count": internal_tag_count_total,
         "unavailable_repository_count": len(unavailable_records),
         "unavailable_repositories": [
             record["repository"] for record in unavailable_records
@@ -923,6 +1043,12 @@ def select_prune_candidates(
     leased_tags = {
         (lease.repository, lease.tag)
         for lease in _active_leases(active_leases, now=now)
+        if not lease.digest
+    }
+    leased_digests = {
+        (lease.repository, lease.digest)
+        for lease in _active_leases(active_leases, now=now)
+        if lease.digest
     }
     for repository_records in by_repository.values():
         ordered = sorted(
@@ -930,11 +1056,20 @@ def select_prune_candidates(
             key=lambda item: _tag_sort_key(item, use_last_used_at=use_last_used_at),
             reverse=True,
         )
-        protected_digests = {record.digest for record in ordered[:keep]}
+        protected_digests: set[str] = set()
+        for record in ordered:
+            if len(protected_digests) >= keep:
+                break
+            protected_digests.add(record.digest)
         protected_digests.update(
             record.digest
             for record in ordered
             if (record.repository, record.tag) in leased_tags
+        )
+        protected_digests.update(
+            record.digest
+            for record in ordered
+            if (record.repository, record.digest) in leased_digests
         )
         for record in ordered:
             if record.digest in protected_digests:
@@ -1018,6 +1153,16 @@ def _validate_lease_ttl(value: float) -> float:
     return ttl
 
 
+def _validate_lease_digest(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    digest = normalize_manifest_digest(raw)
+    if not digest:
+        raise ValueError("registry lease digest must be a valid sha256 digest")
+    return digest
+
+
 def _age_cutoff(
     max_age_days: float | None,
     *,
@@ -1086,6 +1231,58 @@ def registry_repository_tag_from_image_ref(image_ref: str) -> tuple[str, str] | 
     if not repository:
         return None
     return repository, tag
+
+
+def manifest_digest_from_image_ref(image_ref: str) -> str:
+    """Return a normalized digest from a pinned image reference, if present."""
+
+    _separator, found, raw_digest = image_ref.strip().rpartition("@")
+    if not found:
+        return ""
+    return normalize_manifest_digest(raw_digest)
+
+
+def normalize_manifest_digest(digest: str) -> str:
+    normalized = digest.strip().lower()
+    return normalized if _MANIFEST_DIGEST_RE.fullmatch(normalized) else ""
+
+
+def digest_protection_tag(digest: str) -> str:
+    normalized = _validate_lease_digest(digest)
+    algorithm, hexadecimal = normalized.split(":", 1)
+    return f"ucloud-digest-{algorithm}-{hexadecimal}"
+
+
+def is_digest_protection_tag(tag: str) -> bool:
+    return bool(_DIGEST_PROTECTION_TAG_RE.fullmatch(tag.strip().lower()))
+
+
+def image_ref_with_manifest_digest(image_ref: str, digest: str) -> str:
+    """Pin ``image_ref`` while retaining its optional human-readable tag."""
+
+    normalized_digest = normalize_manifest_digest(digest)
+    image = image_ref.strip().split("@", 1)[0]
+    if not image or not normalized_digest:
+        return image_ref.strip()
+    return f"{image}@{normalized_digest}"
+
+
+def canonical_image_digest_ref(image_ref: str, digest: str = "") -> str:
+    """Return the repository@digest identity used for cache comparisons."""
+
+    normalized_digest = normalize_manifest_digest(
+        digest or manifest_digest_from_image_ref(image_ref)
+    )
+    image = image_ref.strip().split("@", 1)[0]
+    if not image or not normalized_digest:
+        return ""
+    prefix, separator, last = image.rpartition("/")
+    if ":" in last:
+        last = last.rsplit(":", 1)[0]
+    if not last:
+        return ""
+    repository = f"{prefix}{separator}{last}" if prefix else last
+    return f"{repository}@{normalized_digest}"
 
 
 def registry_host_from_image_ref(image_ref: str) -> str:

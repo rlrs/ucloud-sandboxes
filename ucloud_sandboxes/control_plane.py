@@ -15,7 +15,7 @@ from threading import BoundedSemaphore, RLock, Thread
 import time
 from typing import Any
 from urllib import error, request
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from .capabilities import DISK_QUOTA_CAPABILITY, has_capability
@@ -35,6 +35,11 @@ from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
     RegistryUsageStore,
+    canonical_image_digest_ref,
+    digest_protection_tag,
+    image_ref_with_manifest_digest,
+    manifest_digest_from_image_ref,
+    normalize_manifest_digest,
     registry_host_from_image_ref,
     registry_repository_tag_from_image_ref,
     registry_summary,
@@ -594,6 +599,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
+        if image:
+            image, image_error = self._resolve_sandbox_image_reference(image)
+            if image_error is not None:
+                self._write_json(image_error, status=HTTPStatus.BAD_REQUEST)
+                return
+
         item = self.routing_store.upsert_prepared_capacity(
             prepare_id,
             resources,
@@ -798,6 +809,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 if self._image_record_missing_registry_manifest(enriched):
                     self.image_manager.store.delete_by_tags([record.tag])
                     continue
+                enriched = self._image_record_with_registry_digest(enriched)
                 images.append(enriched)
         for heartbeat in self._ready_heartbeats():
             response = self._proxy_request(
@@ -817,6 +829,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     enriched["node"] = _node_metadata(heartbeat)
                     if self._image_record_missing_registry_manifest(enriched):
                         continue
+                    enriched = self._image_record_with_registry_digest(enriched)
                     images.append(enriched)
         return images
 
@@ -943,10 +956,56 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raw_image
         ):
             return
+        raw_image = self._image_record_with_registry_digest(raw_image)
+        build["image"] = raw_image
         try:
             self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
         except ValueError:
             pass
+
+    def _managed_registry_manifest_digest(self, image_ref: str) -> str:
+        existing = manifest_digest_from_image_ref(image_ref)
+        if not self.registry_url:
+            return existing
+        coordinates = _managed_registry_image_coordinates(image_ref, self.registry_url)
+        if coordinates is None:
+            return existing
+        repository, image_tag = coordinates
+        client = RegistryClient(self.registry_url)
+        try:
+            digest = existing or normalize_manifest_digest(
+                client.manifest_digest(repository, image_tag)
+            )
+            if not digest:
+                return ""
+            client.ensure_digest_protection_tag(repository, digest)
+        except (OSError, ValueError, RegistryRequestError):
+            return ""
+        return digest
+
+    def _image_record_with_registry_digest(
+        self,
+        record: dict[str, Any],
+    ) -> dict[str, Any]:
+        updated = dict(record)
+        existing = normalize_manifest_digest(str(record.get("manifest_digest") or ""))
+        tag = str(record.get("tag") or "")
+        digest = self._managed_registry_manifest_digest(
+            image_ref_with_manifest_digest(tag, existing) if existing else tag
+        )
+        managed_record = bool(
+            self.registry_url
+            and _managed_registry_image_coordinates(tag, self.registry_url) is not None
+        )
+        if not digest and not managed_record:
+            digest = existing
+        if digest:
+            updated["manifest_digest"] = digest
+        elif managed_record:
+            # Never advertise an unprotected managed digest retained in a
+            # builder/node response from before protection was established.
+            updated["manifest_digest"] = ""
+        return updated
 
     def _create_sandbox_on_node(self) -> None:
         limiter = self.sandbox_create_limiter
@@ -998,7 +1057,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 limiter.release()
 
         try:
-            self._create_sandbox_on_node_locked(body, raw, spec)
+            self._create_sandbox_on_node_locked(spec)
         finally:
             if limiter_acquired:
                 limiter.release()
@@ -1006,8 +1065,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _create_sandbox_on_node_locked(
         self,
-        body: bytes,
-        raw: dict[str, Any],
         spec: SandboxSpec,
     ) -> None:
         trace_id = _request_trace_id(self, "sandbox-create", spec.id)
@@ -1040,9 +1097,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     return
                 if resolved_image != spec.image:
                     spec = replace(spec, image=resolved_image)
-                    raw = dict(raw)
-                    raw["image"] = resolved_image
-                    body = json.dumps(raw).encode("utf-8")
                     root.set_attribute("resolved_image", resolved_image)
 
             with trace_span(
@@ -1658,7 +1712,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                                     else None
                                 )
                                 if push_result is not None:
-                                    record = self.image_manager.mark_pushed(record.id)
+                                    record = self.image_manager.mark_pushed(
+                                        record.id,
+                                        manifest_digest=(
+                                            self._managed_registry_manifest_digest(
+                                                build_spec.tag
+                                            )
+                                        ),
+                                    )
                         finally:
                             self._release_registry_image_build_reference(
                                 build_reference
@@ -1739,6 +1800,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     )
                     span.set_attribute("status_code", int(response.status))
                     response_payload = response.json()
+                    raw_image = response_payload.get("image")
+                    if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(
+                        raw_image
+                    ):
+                        raw_image = self._image_record_with_registry_digest(raw_image)
+                        response_payload["image"] = raw_image
+                        raw_build = response_payload.get("build")
+                        if isinstance(raw_build, dict):
+                            raw_build["image"] = raw_image
+                        response.body = json.dumps(response_payload).encode("utf-8")
                     node_timings = response_payload.get("timings")
                     if isinstance(node_timings, dict):
                         span.set_attribute("node_timings", node_timings)
@@ -1802,6 +1873,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("count must be positive.")
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        image, image_error = self._resolve_sandbox_image_reference(image)
+        if image_error is not None:
+            self._write_json(image_error, status=HTTPStatus.BAD_REQUEST)
             return
 
         self._ensure_registry_image_lease(
@@ -2161,6 +2237,24 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self,
         image: str,
     ) -> tuple[str, dict[str, Any] | None]:
+        existing_digest = manifest_digest_from_image_ref(image)
+        if existing_digest:
+            protected_digest = self._managed_registry_manifest_digest(image)
+            if (
+                self.registry_url
+                and _managed_registry_image_coordinates(image, self.registry_url)
+                is not None
+                and protected_digest != existing_digest
+            ):
+                return image, {
+                    "error": "managed registry digest protection is unavailable",
+                    "retryable": True,
+                    "image": image,
+                }
+            return image, None
+        direct_digest = self._managed_registry_manifest_digest(image)
+        if direct_digest:
+            return image_ref_with_manifest_digest(image, direct_digest), None
         if not _looks_like_image_id_reference(image):
             return image, None
         matches = [
@@ -2186,7 +2280,32 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     str(record.get("tag") or ""),
                 ),
             )[0]
-            return str(selected["tag"]), None
+            selected = self._image_record_with_registry_digest(selected)
+            selected_tag = str(selected["tag"])
+            digest = normalize_manifest_digest(
+                str(selected.get("manifest_digest") or "")
+            )
+            if (
+                not digest
+                and self.registry_url
+                and _managed_registry_image_coordinates(selected_tag, self.registry_url)
+                is not None
+            ):
+                return image, {
+                    "error": "managed registry digest protection is unavailable",
+                    "retryable": True,
+                    "image_id": image,
+                }
+            if (
+                digest
+                and selected.get("location") == "control-plane"
+                and self.image_manager is not None
+            ):
+                try:
+                    self.image_manager.store.upsert(ImageRecord.from_dict(selected))
+                except ValueError:
+                    pass
+            return image_ref_with_manifest_digest(selected_tag, digest), None
         return image, {
             "error": (
                 "image id exists, but it is not available to sandbox nodes; "
@@ -2209,11 +2328,23 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return False
         repository, image_tag = parsed
         try:
-            return not RegistryClient(self.registry_url).tag_exists(
-                repository,
-                image_tag,
+            recorded_digest = normalize_manifest_digest(
+                str(record.get("manifest_digest") or "")
             )
-        except (OSError, ValueError, RegistryRequestError):
+            resolved_digest = RegistryClient(self.registry_url).manifest_digest(
+                repository,
+                recorded_digest or image_tag,
+            )
+            if recorded_digest:
+                return normalize_manifest_digest(resolved_digest) != recorded_digest
+            normalized_digest = normalize_manifest_digest(resolved_digest)
+            if normalized_digest:
+                record["manifest_digest"] = normalized_digest
+                return False
+            return True
+        except RegistryRequestError as exc:
+            return exc.status_code == 404
+        except (OSError, ValueError):
             return False
 
     def _select_capable_node(self, capability: str) -> NodeHeartbeat | None:
@@ -2300,9 +2431,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> set[str]:
         if not image.strip() and not image_id.strip():
             return set()
-        image_keys = {
-            item for item in (image, image_id, image_id_from_tag(image)) if item
-        }
+        image_keys = _requested_image_cache_keys(
+            image,
+            image_id,
+            require_digest=self._managed_image_requires_digest_cache_identity(image),
+        )
         node_ids: set[str] = set()
         for heartbeat in heartbeats:
             if use_heartbeat_cache and heartbeat.cached_images_known:
@@ -2324,7 +2457,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for record in raw_images:
                 if not isinstance(record, dict):
                     continue
-                if record.get("tag") in image_keys or record.get("id") in image_keys:
+                if image_keys.intersection(_image_record_cache_keys(record)):
                     node_ids.add(heartbeat.node_id)
                     break
         return node_ids
@@ -2367,7 +2500,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             and agent_version_is_compatible(heartbeat.agent_version)
         ]
         for heartbeat in candidate_heartbeats:
-            if _heartbeat_has_image(heartbeat, warmup.image, warmup.image_id):
+            if _heartbeat_has_image(
+                heartbeat,
+                warmup.image,
+                warmup.image_id,
+                require_digest=self._managed_image_requires_digest_cache_identity(
+                    warmup.image
+                ),
+            ):
                 warmed_node_ids.add(heartbeat.node_id)
                 self.routing_store.mark_image_warmup_node(
                     warmup.warmup_id,
@@ -2465,9 +2605,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> bool:
         if not image.strip() and not image_id.strip():
             return False
-        image_keys = {
-            item for item in (image, image_id, image_id_from_tag(image)) if item
-        }
+        image_keys = _requested_image_cache_keys(
+            image,
+            image_id,
+            require_digest=self._managed_image_requires_digest_cache_identity(image),
+        )
         if use_heartbeat_cache and heartbeat.cached_images_known:
             return bool(image_keys.intersection(heartbeat.cached_images))
         return heartbeat.node_id in self._nodes_with_image(
@@ -2475,6 +2617,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             [heartbeat],
             image_id=image_id,
             use_heartbeat_cache=use_heartbeat_cache,
+        )
+
+    def _managed_image_requires_digest_cache_identity(self, image: str) -> bool:
+        return bool(
+            self.registry_url
+            and _managed_registry_image_coordinates(image, self.registry_url) is not None
         )
 
     def _ensure_image_on_node(
@@ -3387,18 +3535,43 @@ def _persist_registry_image_protection(
     if coordinates is None:
         return False
     repository, tag = coordinates
+    digest = manifest_digest_from_image_ref(image_ref)
     with _REGISTRY_LEASE_COORDINATION_LOCK:
         if touch:
-            touched = store.touch_image(image_ref, when=now)
-            if touched is None:
+            usage_refs = [image_ref]
+            if digest:
+                usage_refs.append(
+                    f"{repository}:{digest_protection_tag(digest)}"
+                )
+            touch_many = getattr(store, "touch_images", None)
+            if callable(touch_many):
+                touched = touch_many(usage_refs, when=now)
+            else:
+                # Compatibility for test/custom stores implementing the older
+                # single-reference protocol.
+                touched = tuple(
+                    item
+                    for item in (
+                        store.touch_image(ref, when=now) for ref in usage_refs
+                    )
+                    if item is not None
+                )
+            if len(touched) != len(usage_refs):
                 raise ValueError("private-registry image could not be recorded")
         timestamp = now or utc_now()
         snapshot = store.snapshot(now=timestamp)
         existing = snapshot.leases.get((repository, tag, owner))
-        if existing is not None and not existing.expires_at:
+        digest_matches = not digest or (existing is not None and existing.digest == digest)
+        if existing is not None and not existing.expires_at and digest_matches:
             return True
         if persistent:
-            store.acquire_reference(repository, tag, owner, now=timestamp)
+            store.acquire_reference(
+                repository,
+                tag,
+                owner,
+                digest=digest,
+                now=timestamp,
+            )
             return True
         ttl_seconds = float(ttl_seconds)
         if existing is not None:
@@ -3411,7 +3584,7 @@ def _persist_registry_image_protection(
                 # Heartbeats arrive far more frequently than the lease TTL.
                 # Renew only after half the lifetime has elapsed to avoid an
                 # fsync/generation bump on every node report.
-                if remaining >= ttl_seconds / 2:
+                if remaining >= ttl_seconds / 2 and digest_matches:
                     return True
                 # Never replace an existing lease with an earlier deadline,
                 # including leases created with a longer TTL.
@@ -3421,6 +3594,7 @@ def _persist_registry_image_protection(
             tag,
             owner,
             ttl_seconds=ttl_seconds,
+            digest=digest,
             now=timestamp,
         )
     return True
@@ -3531,11 +3705,44 @@ def _heartbeat_has_image(
     heartbeat: NodeHeartbeat,
     image: str,
     image_id: str = "",
+    *,
+    require_digest: bool = False,
 ) -> bool:
     if not heartbeat.cached_images_known:
         return False
-    image_keys = {item for item in (image, image_id, image_id_from_tag(image)) if item}
+    image_keys = _requested_image_cache_keys(
+        image,
+        image_id,
+        require_digest=require_digest,
+    )
     return bool(image_keys.intersection(heartbeat.cached_images))
+
+
+def _requested_image_cache_keys(
+    image: str,
+    image_id: str = "",
+    *,
+    require_digest: bool = False,
+) -> set[str]:
+    """Return only cache identities that prove the requested image is present."""
+
+    digest_ref = canonical_image_digest_ref(image)
+    if digest_ref:
+        return {image.strip(), digest_ref}
+    # A mutable host-qualified tag can move independently of a node heartbeat.
+    # It must be resolved to a digest (or pulled again) before it is a cache hit.
+    if require_digest and registry_host_from_image_ref(image):
+        return set()
+    return {item for item in (image, image_id, image_id_from_tag(image)) if item}
+
+
+def _image_record_cache_keys(record: dict[str, Any]) -> set[str]:
+    tag = str(record.get("tag") or "")
+    image_id = str(record.get("id") or "")
+    digest = normalize_manifest_digest(str(record.get("manifest_digest") or ""))
+    digest_ref = canonical_image_digest_ref(tag, digest)
+    keys = {item for item in (tag, image_id, digest_ref) if item}
+    return keys
 
 
 def _warmup_node_units(
@@ -3643,6 +3850,8 @@ def _image_record_summary(record: dict[str, Any]) -> dict[str, Any]:
         "pushed": bool(record.get("pushed")),
         "available_to_sandboxes": _image_record_available_to_sandboxes(record),
     }
+    if record.get("manifest_digest"):
+        summary["manifest_digest"] = record.get("manifest_digest")
     node = record.get("node")
     if isinstance(node, dict):
         summary["node"] = {

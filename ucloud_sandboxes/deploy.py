@@ -452,7 +452,8 @@ def render_remote_deploy_script(
         'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$SESSION_FILE"',
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-        "ca-certificates curl docker.io gnupg openssh-client openssl python3-venv",
+        "binutils ca-certificates curl docker.io gnupg openssh-client openssl "
+        "python3-venv",
         "",
         'if [ ! -x "$VENV_DIR/bin/python" ]; then',
         '  python3 -m venv "$VENV_DIR"',
@@ -509,6 +510,8 @@ def render_remote_deploy_script(
         '  dpkg-deb --raw-extract "$runsc_package" "$unpack_dir" || return 1',
         '  rm -f "$unpack_dir/usr/bin/containerd-shim-runsc-v1"',
         '  rm -f "$unpack_dir/usr/bin/runsc-metric-server"',
+        '  strip --strip-debug "$unpack_dir/usr/bin/runsc" || return 1',
+        '  "$unpack_dir/usr/bin/runsc" --version >/dev/null || return 1',
         '  rm -f "$unpack_dir/DEBIAN/md5sums"',
         '  replacement="$runsc_package.pruned"',
         '  SOURCE_DATE_EPOCH=0 dpkg-deb --build --root-owner-group -Zgzip -z1 '

@@ -96,6 +96,8 @@ class DeployTests(unittest.TestCase):
         self.assertIn("SANDBOX_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("BUILDER_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("pip\" download --disable-pip-version-check", script)
+        self.assertIn("binutils ca-certificates", script)
+        self.assertIn('strip --strip-debug "$unpack_dir/usr/bin/runsc"', script)
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("compresslevel=1", script)

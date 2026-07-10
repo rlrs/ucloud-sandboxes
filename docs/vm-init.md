@@ -148,6 +148,10 @@ post-boot init layer:
   Buildx, and gVisor payloads directly. This avoids package-database fsync,
   maintainer scripts, and starting Docker twice on every ephemeral VM.
   Repository installation remains the compatibility fallback.
+- Keep only the `runsc` executable from the gVisor package and remove its ELF
+  debug sections at deployment time. The Go build identity and symbol table
+  remain available for diagnostics, while nodes transfer and unpack a smaller
+  verified package.
 - Pull and save the `busybox` image used by runtime conformance into the same
   platform-specific artifact when Docker Hub is reachable during deployment.
   Nodes verify the image archive checksum, load it after Docker is configured,

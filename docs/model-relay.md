@@ -75,8 +75,11 @@ export OPENAI_API_KEY="<sandbox-relay-token>"
 Then create the sandbox with outbound networking:
 
 ```python
+from ucloud_sandboxes_sdk import Image
+
 sandbox = client.create_sandbox(
-    image="registry.example.org/swebench/task:latest",
+    id="run-001-model-client",
+    image=Image.from_registry("registry.example.org/swebench/task:latest"),
     cpus=1,
     memory_mb=2048,
     disk_mb=10240,

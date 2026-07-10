@@ -409,10 +409,9 @@ CMD [\"sleep\", \"900\"]
         tag = f"{registry_prefix.rstrip('/')}/{run_id}/{slug}:latest"
         images.append(
             Image.from_dockerfile(
-                name=f"bench-{run_id}-{slug}",
+                image_id=f"bench-{run_id}-{slug}",
                 tag=tag,
                 context_path=context,
-                push=True,
                 build_args={"BENCH_RUN_ID": run_id},
                 labels={"ucloud-sandboxes.benchmark.run-id": run_id},
             )

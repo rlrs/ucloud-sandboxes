@@ -110,11 +110,14 @@ networking works.
 Use a registry tag as the build tag and push it:
 
 ```python
+from ucloud_sandboxes_sdk import Image
+
 client.build_image(
-    id="mini-swe-python311",
-    tag="ucloud-sandbox-registry:5000/prime-rl/mini-swe-python311:mswe-2.2.8",
-    context_path="./build-context",
-    push=True,
+    Image.from_dockerfile(
+        image_id="mini-swe-python311",
+        tag="ucloud-sandbox-registry:5000/prime-rl/mini-swe-python311:mswe-2.2.8",
+        context_path="./build-context",
+    )
 )
 ```
 
@@ -123,17 +126,16 @@ Then create sandboxes with either the registry tag or the image id:
 ```python
 client.create_sandbox(
     id="sample-1",
-    image="mini-swe-python311",
+    image=Image.from_gateway_id("mini-swe-python311"),
     cpus=1,
     memory_mb=2048,
     disk_mb=10240,
 )
 ```
 
-When `image` is an image id, the gateway resolves it to the recorded pushed
-registry tag. If the image was built without `push=True`, the gateway rejects
-the create request with a clear error because builder-local Docker images are
-not durable and are not copied to sandbox nodes.
+When `image` is a gateway image id, the gateway resolves it to the recorded
+pushed registry tag. SDK builds always push because builder-local Docker images
+are not durable and are not copied to sandbox nodes.
 
 ## Cleanup
 

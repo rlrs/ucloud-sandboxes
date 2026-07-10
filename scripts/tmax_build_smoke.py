@@ -58,7 +58,7 @@ def main() -> int:
 
     client = SandboxClient(
         args.gateway_url,
-        headers={"Authorization": f"Bearer {args.token}"},
+        api_token=args.token,
         timeout_seconds=args.request_timeout_seconds,
     )
     if args.prepare_builder:
@@ -216,10 +216,9 @@ def build_with_retry(
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     image = Image.from_dockerfile(
-        name=context.image_id,
+        image_id=context.image_id,
         tag=context.tag,
         context_path=context.context_path,
-        push=True,
         labels={"ucloud-sandboxes.tmax.task-id": context.task_id},
     )
     deadline = time.monotonic() + args.build_timeout_seconds

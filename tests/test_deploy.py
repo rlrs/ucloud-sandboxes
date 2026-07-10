@@ -16,6 +16,7 @@ from ucloud_sandboxes.deploy import (
     render_env_file,
     render_remote_deploy_script,
 )
+from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
 
 class DeployTests(unittest.TestCase):
@@ -205,9 +206,11 @@ class DeployTests(unittest.TestCase):
             )
             agent_runtime_archive = root / "node-agent-runtime.tar"
             agent_runtime_archive.write_bytes(b"preassembled-agent")
-            xfs_module = root / "xfs.ko.zst"
+            kernel_module_dir = root / "kernel-modules"
+            kernel_module_dir.mkdir()
+            xfs_module = kernel_module_dir / "xfs.ko.zst"
             xfs_module.write_bytes(b"xfs-module")
-            overlay_module = root / "overlay.ko.zst"
+            overlay_module = kernel_module_dir / "overlay.ko.zst"
             overlay_module.write_bytes(b"overlay-module")
             plan = AllInOneDeployPlan(
                 job_id="job-1",
@@ -245,8 +248,8 @@ class DeployTests(unittest.TestCase):
                         "xfsprogs docker-ce docker-ce-cli containerd.io runsc",
                         str(agent_runtime_archive),
                         "6.8.0-test-generic",
-                        str(xfs_module),
-                        str(overlay_module),
+                        str(kernel_module_dir),
+                        " ".join(RUNTIME_KERNEL_MODULES),
                     ]
                     exec(code, {"__name__": "__main__"})
             finally:
@@ -275,8 +278,12 @@ class DeployTests(unittest.TestCase):
             "6.8.0-test-generic",
         )
         self.assertEqual(
-            set(manifest["runtime"]["kernel"]["modules"]),
-            {"xfs", "overlay"},
+            manifest["runtime"]["kernel"]["load"],
+            list(RUNTIME_KERNEL_MODULES),
+        )
+        self.assertEqual(
+            [item["name"] for item in manifest["runtime"]["kernel"]["files"]],
+            ["overlay.ko.zst", "xfs.ko.zst"],
         )
         self.assertEqual(
             [item["name"] for item in manifest["runtime"]["files"]],

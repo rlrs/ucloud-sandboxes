@@ -39,6 +39,21 @@ BUILDER_RUNTIME_PACKAGES = (
     "docker-buildx-plugin",
     SANDBOX_RUNTIME_PACKAGES[-1],
 )
+RUNTIME_KERNEL_MODULES = (
+    "xfs",
+    "overlay",
+    "bridge",
+    "br_netfilter",
+    "veth",
+    "nf_tables",
+    "nft_chain_nat",
+    "nft_compat",
+    "ip_tables",
+    "iptable_nat",
+    "xt_addrtype",
+    "xt_conntrack",
+    "xt_MASQUERADE",
+)
 DEFAULT_SSH_OPTIONS = (
     "-o",
     "BatchMode=yes",
@@ -209,6 +224,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         else SANDBOX_RUNTIME_PACKAGES
     )
     runtime_packages_python = repr(list(runtime_packages))
+    runtime_kernel_modules_python = repr(list(RUNTIME_KERNEL_MODULES))
+    runtime_kernel_modules_shell = " ".join(
+        shlex.quote(module) for module in RUNTIME_KERNEL_MODULES
+    )
     label_args = " ".join(
         f"--label {shlex.quote(key + '=' + value)}"
         for key, value in sorted((options.labels or {}).items())
@@ -366,8 +385,7 @@ UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
 UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 UCLOUD_PREBUILT_AGENT_ARCHIVE=""
 UCLOUD_PREBUILT_AGENT_SHA256=""
-UCLOUD_OFFLINE_XFS_MODULE=""
-UCLOUD_OFFLINE_OVERLAY_MODULE=""
+UCLOUD_OFFLINE_KERNEL_MODULE_DIR=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -413,6 +431,7 @@ PY
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -481,34 +500,35 @@ if not isinstance(kernel, dict):
 kernel_release = os.uname().release
 if kernel.get("release") != kernel_release:
     raise SystemExit("offline kernel module release does not match this VM")
-modules = kernel.get("modules")
-if not isinstance(modules, dict) or set(modules) != {{"xfs", "overlay"}}:
-    raise SystemExit("offline kernel module metadata is incomplete")
-for module_name, module in modules.items():
+if kernel.get("load") != {runtime_kernel_modules_python}:
+    raise SystemExit("offline kernel module load list does not match this runtime")
+module_dir = bundle_dir / "runtime" / "kernel" / kernel_release
+actual_modules = {{path.name for path in module_dir.glob("*.ko*")}}
+declared_modules = set()
+modules = kernel.get("files")
+if not isinstance(modules, list) or not modules:
+    raise SystemExit("offline kernel module closure is absent")
+for module in modules:
     if not isinstance(module, dict):
-        raise SystemExit(f"offline {{module_name}} kernel module metadata is invalid")
-    module_file = str(module.get("file") or "")
-    file_name = Path(module_file).name
-    if (
-        file_name not in {{
-            f"{{module_name}}.ko",
-            f"{{module_name}}.ko.gz",
-            f"{{module_name}}.ko.xz",
-            f"{{module_name}}.ko.zst",
-        }}
-        or module_file != f"runtime/kernel/{{kernel_release}}/{{file_name}}"
+        raise SystemExit("offline kernel module metadata is invalid")
+    file_name = str(module.get("name") or "")
+    if Path(file_name).name != file_name or not re.fullmatch(
+        r"[A-Za-z0-9_.-]+\.ko(?:\.(?:gz|xz|zst))?", file_name
     ):
-        raise SystemExit(f"invalid offline {{module_name}} kernel module filename")
-    module_path = bundle_dir / module_file
+        raise SystemExit("invalid offline kernel module filename")
+    declared_modules.add(file_name)
+    module_path = module_dir / file_name
     if not module_path.is_file() or module_path.stat().st_size != module.get("size"):
-        raise SystemExit(f"offline {{module_name}} kernel module size mismatch")
+        raise SystemExit(f"offline kernel module size mismatch: {{file_name}}")
     if not archive_digest_verified:
         module_digest = hashlib.sha256()
         with module_path.open("rb") as handle:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 module_digest.update(chunk)
         if module_digest.hexdigest() != module.get("sha256"):
-            raise SystemExit(f"offline {{module_name}} kernel module checksum mismatch")
+            raise SystemExit(f"offline kernel module checksum mismatch: {{file_name}}")
+if actual_modules != declared_modules:
+    raise SystemExit("offline kernel module file set mismatch")
 PY
     then
       UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
@@ -520,17 +540,12 @@ import sys
 
 runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]
 agent = runtime["agent"]
-modules = runtime["kernel"]["modules"]
-print(
-    f"{{agent['sha256']}}\\t{{agent['size']}}\\t"
-    f"{{modules['xfs']['file']}}\\t{{modules['overlay']['file']}}"
-)
+print(f"{{agent['sha256']}}\\t{{agent['size']}}")
 PY
 )"
-      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE UCLOUD_XFS_MODULE_FILE UCLOUD_OVERLAY_MODULE_FILE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
       UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
-      UCLOUD_OFFLINE_XFS_MODULE="$UCLOUD_PACKAGE_BUNDLE_DIR/$UCLOUD_XFS_MODULE_FILE"
-      UCLOUD_OFFLINE_OVERLAY_MODULE="$UCLOUD_PACKAGE_BUNDLE_DIR/$UCLOUD_OVERLAY_MODULE_FILE"
+      UCLOUD_OFFLINE_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(uname -r)"
       UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
       if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
         if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
@@ -804,20 +819,41 @@ fi
 log_init_phase "base-packages"
 log_init_phase "container-packages"
 
+UCLOUD_RUNTIME_KERNEL_MODULES=({runtime_kernel_modules_shell})
+if [ -n "$UCLOUD_OFFLINE_KERNEL_MODULE_DIR" ]; then
+  UCLOUD_KERNEL_MODULE_TARGET="/lib/modules/$(uname -r)/updates/ucloud-sandboxes"
+  UCLOUD_KERNEL_MODULE_MARKER="$UCLOUD_KERNEL_MODULE_TARGET/.bundle-sha256"
+  if [ ! -f "$UCLOUD_KERNEL_MODULE_MARKER" ] \
+    || [ "$(cat "$UCLOUD_KERNEL_MODULE_MARKER")" != "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
+    echo "Installing bundled container-runtime kernel module closure"
+    $SUDO rm -rf "$UCLOUD_KERNEL_MODULE_TARGET"
+    $SUDO mkdir -p "$UCLOUD_KERNEL_MODULE_TARGET"
+    for module_file in "$UCLOUD_OFFLINE_KERNEL_MODULE_DIR"/*.ko*; do
+      [ -f "$module_file" ] || {{ echo "Bundled kernel module closure is empty" >&2; exit 1; }}
+      $SUDO install -m 0644 "$module_file" "$UCLOUD_KERNEL_MODULE_TARGET/${{module_file##*/}}"
+    done
+    for module_metadata in modules.order modules.builtin modules.builtin.modinfo; do
+      if [ ! -e "/lib/modules/$(uname -r)/$module_metadata" ]; then
+        $SUDO touch "/lib/modules/$(uname -r)/$module_metadata"
+      fi
+    done
+    $SUDO depmod -a "$(uname -r)"
+    printf '%s\n' "$UCLOUD_PACKAGE_BUNDLE_SHA256" \
+      | $SUDO tee "$UCLOUD_KERNEL_MODULE_MARKER" >/dev/null
+  fi
+else
+  echo "Installing container-runtime kernel module fallback"
+  $SUDO apt-get update
+  $SUDO apt-get install --no-install-recommends -y \
+    -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
+fi
+for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
+  $SUDO modprobe "$module"
+done
+log_init_phase "kernel-modules"
+
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"
-  if ! grep -qw xfs /proc/filesystems; then
-    if [ -n "$UCLOUD_OFFLINE_XFS_MODULE" ]; then
-      echo "Loading bundled XFS kernel module"
-      $SUDO insmod "$UCLOUD_OFFLINE_XFS_MODULE"
-    else
-      echo "Installing XFS kernel module fallback"
-      $SUDO apt-get update
-      $SUDO apt-get install --no-install-recommends -y \
-        -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
-      $SUDO modprobe xfs
-    fi
-  fi
   if ! grep -qw xfs /proc/filesystems; then
     echo "XFS kernel support is unavailable" >&2
     exit 1
@@ -839,18 +875,6 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
 fi
 log_init_phase "docker-storage"
 
-if ! grep -qw overlay /proc/filesystems; then
-  if [ -n "$UCLOUD_OFFLINE_OVERLAY_MODULE" ]; then
-    echo "Loading bundled overlay kernel module"
-    $SUDO insmod "$UCLOUD_OFFLINE_OVERLAY_MODULE"
-  else
-    echo "Installing overlay kernel module fallback"
-    $SUDO apt-get update
-    $SUDO apt-get install --no-install-recommends -y \
-      -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
-    $SUDO modprobe overlay
-  fi
-fi
 if ! grep -qw overlay /proc/filesystems; then
   echo "overlay filesystem support is unavailable" >&2
   exit 1

@@ -140,8 +140,10 @@ post-boot init layer:
   sidecar for the complete artifact. A node uses the runtime payload only on an
   exact platform match and after verifying that single staged digest; it does
   not reread every large package solely to hash it again. The compatible happy
-  path also carries the exact-kernel XFS and overlay modules omitted by the
-  stock VM root filesystem, installs only missing support libraries with
+  path also carries a dependency-closed subset of exact-kernel modules omitted
+  by the stock VM root filesystem: XFS and the Docker overlay, bridge, veth, and
+  netfilter entry points. The node installs that small module tree, loads it
+  with `modprobe`, installs only missing support libraries with
   `apt-get --no-download`, then extracts the bundle-verified Docker, containerd,
   Buildx, and gVisor payloads directly. This avoids package-database fsync,
   maintainer scripts, and starting Docker twice on every ephemeral VM.

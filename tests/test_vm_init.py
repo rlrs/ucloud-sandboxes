@@ -9,6 +9,7 @@ import unittest
 import ucloud_sandboxes.vm_init as vm_init
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.vm_init import (
+    RUNTIME_KERNEL_MODULES,
     VmInitOptions,
     extract_ssh_command,
     extract_ssh_command_from_text,
@@ -229,7 +230,7 @@ class VmInitTests(unittest.TestCase):
             'required_packages_installed "${OFFLINE_REQUIRED_PACKAGES[@]}"',
             script,
         )
-        self.assertEqual(script.count("$SUDO apt-get update"), 4)
+        self.assertEqual(script.count("$SUDO apt-get update"), 3)
         self.assertIn("using package repository fallback", script)
         self.assertIn("APT_REPOSITORY_PACKAGES=()", script)
         self.assertIn('if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]', script)
@@ -352,26 +353,23 @@ class VmInitTests(unittest.TestCase):
                             },
                             "kernel": {
                                 "release": kernel_release,
-                                "modules": {
-                                    "xfs": {
-                                        "file": (
-                                            f"runtime/kernel/{kernel_release}/xfs.ko.zst"
-                                        ),
+                                "load": list(RUNTIME_KERNEL_MODULES),
+                                "files": [
+                                    {
+                                        "name": "xfs.ko.zst",
                                         "size": xfs_module.stat().st_size,
                                         "sha256": hashlib.sha256(
                                             xfs_module.read_bytes()
                                         ).hexdigest(),
                                     },
-                                    "overlay": {
-                                        "file": (
-                                            f"runtime/kernel/{kernel_release}/overlay.ko.zst"
-                                        ),
+                                    {
+                                        "name": "overlay.ko.zst",
                                         "size": overlay_module.stat().st_size,
                                         "sha256": hashlib.sha256(
                                             overlay_module.read_bytes()
                                         ).hexdigest(),
                                     },
-                                },
+                                ],
                             },
                         },
                     }

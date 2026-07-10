@@ -7,6 +7,8 @@ import io
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -2304,6 +2306,148 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["bootstrapResults"][0]["status"], "succeeded")
         self.assertEqual(state["jobs"]["job-1"]["status"], "succeeded")
         self.assertEqual(state["jobs"]["job-1"]["attempts"], 1)
+
+    @allow_fixture_mutations
+    def test_execute_init_runs_bootstraps_concurrently_with_isolated_results(
+        self,
+    ) -> None:
+        barrier = threading.Barrier(3)
+        active_lock = threading.Lock()
+        active = 0
+        peak_active = 0
+
+        class FakeInitResult:
+            def __init__(self, returncode: int) -> None:
+                self.returncode = returncode
+
+        def fake_run_init_over_ssh(
+            ssh_command: str,
+            _script: str,
+            *,
+            timeout_seconds: int | None = None,
+            private_key_file: str | None = None,
+        ) -> FakeInitResult:
+            del timeout_seconds, private_key_file
+            nonlocal active, peak_active
+            with active_lock:
+                active += 1
+                peak_active = max(peak_active, active)
+            try:
+                barrier.wait(timeout=2)
+                port = int(ssh_command.rsplit(" ", 1)[-1])
+                # Complete in a different order than the input inventory.
+                time.sleep({41231: 0.03, 41232: 0.01, 41233: 0.02}[port])
+                return FakeInitResult(17 if port == 41232 else 0)
+            finally:
+                with active_lock:
+                    active -= 1
+
+        def raw_job(index: int) -> dict:
+            return {
+                "id": f"job-{index}",
+                "owner": {"project": "project-1"},
+                "specification": {
+                    "name": f"ucloud-sandbox-node-{index}",
+                    "hostname": f"sandbox-node-{index}",
+                    "application": {"name": "vm-ubuntu", "version": "24.04"},
+                    "product": {
+                        "id": "cpu-amd-zen5-2-vcpu",
+                        "category": "cpu-amd-zen5",
+                    },
+                    "labels": {
+                        "ucloud-sandboxes/node": "true",
+                        "ucloud-sandboxes/deployment": "prod-a",
+                    },
+                },
+                "status": {"state": "RUNNING"},
+                "updates": [
+                    {
+                        "status": (
+                            "SSH Access: ssh ucloud@ssh.cloud.sdu.dk "
+                            f"-p {41230 + index}"
+                        )
+                    }
+                ],
+            }
+
+        original = cli.run_init_over_ssh
+        cli.run_init_over_ssh = fake_run_init_over_ssh
+        try:
+            with TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                state_file = root / "bootstrap.json"
+                jobs_file = root / "jobs.json"
+                jobs_file.write_text(
+                    json.dumps({"items": [raw_job(index) for index in range(1, 4)]}),
+                    encoding="utf-8",
+                )
+
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    result = cli.main(
+                        [
+                            "autoscaler-loop",
+                            "--project",
+                            "project-1",
+                            "--deployment-id",
+                            "prod-a",
+                            "--state-dir",
+                            raw_dir,
+                            "--jobs-file",
+                            str(jobs_file),
+                            "--no-private-network",
+                            "--init-state-file",
+                            str(state_file),
+                            "--execute-init",
+                            "--max-init-per-cycle",
+                            "3",
+                            "--once",
+                            "--init-heartbeat-url",
+                            "http://sandbox-gateway:8090/v1/nodes/heartbeat",
+                            "--output",
+                            "json",
+                        ]
+                    )
+                payload = json.loads(output.getvalue())
+                state = json.loads(state_file.read_text(encoding="utf-8"))
+                metric_events = [
+                    json.loads(line)
+                    for line in (root / "metrics.jsonl")
+                    .read_text(encoding="utf-8")
+                    .splitlines()
+                ]
+        finally:
+            cli.run_init_over_ssh = original
+
+        self.assertEqual(result, 0)
+        self.assertEqual(peak_active, 3)
+        self.assertEqual(
+            [item["jobId"] for item in payload["bootstrapResults"]],
+            ["job-1", "job-2", "job-3"],
+        )
+        self.assertEqual(
+            [item["status"] for item in payload["bootstrapResults"]],
+            ["succeeded", "failed", "succeeded"],
+        )
+        self.assertEqual(payload["bootstrapResults"][1]["returncode"], 17)
+        self.assertEqual(
+            [state["jobs"][f"job-{index}"]["status"] for index in range(1, 4)],
+            ["succeeded", "failed", "succeeded"],
+        )
+        self.assertTrue(
+            all(
+                state["jobs"][f"job-{index}"]["attempts"] == 1
+                for index in range(1, 4)
+            )
+        )
+        init_metrics = [
+            event for event in metric_events if event["kind"] == "vm_init_attempt"
+        ]
+        self.assertEqual(len(init_metrics), 3)
+        self.assertEqual(
+            {event["data"]["job_id"]: event["data"]["status"] for event in init_metrics},
+            {"job-1": "succeeded", "job-2": "failed", "job-3": "succeeded"},
+        )
 
     def test_direct_builder_init_ignores_overcommit(self) -> None:
         options = cli.vm_init_options_from_args(

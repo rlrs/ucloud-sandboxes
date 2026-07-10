@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
-from dataclasses import replace
-from datetime import timedelta
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
 import sys
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
@@ -1529,8 +1529,11 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-init-per-cycle",
         type=int,
-        default=1,
-        help="Maximum VM init attempts per reconcile cycle.",
+        default=4,
+        help=(
+            "Maximum VM init attempts admitted and executed concurrently per "
+            "reconcile cycle."
+        ),
     )
     parser.add_argument(
         "--init-retry-seconds",
@@ -4285,24 +4288,25 @@ def run_reconcile_cycle(
         and execution_authorized
         and bootstrap_intents
     ):
-        bootstrap_results: list[dict[str, Any]] = []
-        for intent in bootstrap_intents:
+        ordered_bootstrap_results: list[dict[str, Any] | None] = [None] * len(
+            bootstrap_intents
+        )
+        runnable_bootstraps: list[
+            tuple[int, VmBootstrapIntent, int, datetime, float]
+        ] = []
+        for index, intent in enumerate(bootstrap_intents):
             if not intent.runnable or not intent.plan.ssh_command:
-                bootstrap_results.append(
-                    {
-                        "jobId": intent.job_id,
-                        "nodeId": intent.node_id,
-                        "role": intent.role,
-                        "skipped": True,
-                        "reason": intent.reason,
-                    }
-                )
+                ordered_bootstrap_results[index] = {
+                    "jobId": intent.job_id,
+                    "nodeId": intent.node_id,
+                    "role": intent.role,
+                    "skipped": True,
+                    "reason": intent.reason,
+                }
                 continue
             assert_provider_fence()
             attempt_started_at = utc_now()
             attempt_started_perf = time.perf_counter()
-            stage_duration_ms: int | None = None
-            run_duration_ms: int | None = None
             bootstrap_records = mark_bootstrap_attempt(bootstrap_records, intent)
             bootstrap_store.save(bootstrap_records)
             attempt_record = bootstrap_records.get(intent.job_id)
@@ -4311,172 +4315,113 @@ def run_reconcile_cycle(
                 if attempt_record is not None
                 else intent.previous_attempts + 1
             )
-            try:
-                assert_provider_fence()
-                effective_options = intent.options
-                stage_started_perf = time.perf_counter()
-                stage_result = stage_vm_init_package_over_ssh(
-                    intent.plan.ssh_command,
-                    intent.options,
-                    timeout_seconds=max(
-                        1, int(getattr(args, "init_timeout_seconds", 1800))
-                    ),
-                    private_key_file=getattr(args, "init_ssh_private_key_file", None),
+            runnable_bootstraps.append(
+                (
+                    index,
+                    intent,
+                    attempt_count,
+                    attempt_started_at,
+                    attempt_started_perf,
                 )
-                stage_elapsed_ms = int(
-                    (time.perf_counter() - stage_started_perf) * 1000
-                )
-                stage_payload: dict[str, Any] | None = None
-                if stage_result is not None:
-                    stage_duration_ms = stage_elapsed_ms
-                    stage_payload = {
-                        "localPath": str(stage_result.local_path),
-                        "remotePath": stage_result.remote_path,
-                        "command": list(stage_result.command),
-                        "returncode": stage_result.returncode,
-                        "durationMs": stage_duration_ms,
-                    }
-                    if stage_result.returncode != 0:
-                        error = (
-                            "package staging exited with status "
-                            f"{stage_result.returncode}"
+            )
+
+        if runnable_bootstraps:
+            max_workers = min(
+                len(runnable_bootstraps),
+                max(1, int(getattr(args, "max_init_per_cycle", 1))),
+            )
+            futures: dict[
+                Future[_VmBootstrapAttemptResult],
+                tuple[int, VmBootstrapIntent, int, datetime, float],
+            ] = {}
+            with ThreadPoolExecutor(
+                max_workers=max_workers,
+                thread_name_prefix="vm-bootstrap",
+            ) as executor:
+                for prepared in runnable_bootstraps:
+                    index, intent, _attempt_count, _started_at, started_perf = prepared
+                    try:
+                        assert_provider_fence()
+                        future = executor.submit(
+                            _execute_vm_bootstrap_attempt,
+                            intent,
+                            args,
+                            assert_provider_fence=assert_provider_fence,
+                            attempt_started_perf=started_perf,
                         )
+                    except Exception as exc:
+                        future = Future()
+                        future.set_result(
+                            _failed_vm_bootstrap_attempt(
+                                intent,
+                                started_perf,
+                                str(exc),
+                            )
+                        )
+                    futures[future] = prepared
+
+                for future in as_completed(futures):
+                    index, intent, attempt_count, started_at, started_perf = futures[
+                        future
+                    ]
+                    try:
+                        attempt_result = future.result()
+                    except Exception as exc:
+                        attempt_result = _failed_vm_bootstrap_attempt(
+                            intent,
+                            started_perf,
+                            str(exc),
+                        )
+
+                    if attempt_result.status == "succeeded":
+                        bootstrap_records = mark_bootstrap_success(
+                            bootstrap_records,
+                            intent,
+                        )
+                    else:
                         bootstrap_records = mark_bootstrap_failure(
                             bootstrap_records,
                             intent,
-                            error,
+                            attempt_result.error,
                         )
-                        bootstrap_results.append(
-                            {
-                                "jobId": intent.job_id,
-                                "nodeId": intent.node_id,
-                                "role": intent.role,
-                                "returncode": stage_result.returncode,
-                                "status": "failed",
-                                "error": error,
-                                "packageStage": stage_payload,
-                                "durationMs": _elapsed_ms(attempt_started_perf),
-                            }
-                        )
-                        record_vm_init_attempt_result(
-                            metrics_store,
-                            intent,
-                            status="failed",
-                            attempts=attempt_count,
-                            started_at=attempt_started_at,
-                            attempt_started_perf=attempt_started_perf,
-                            stage_duration_ms=stage_duration_ms,
-                            run_duration_ms=run_duration_ms,
-                            returncode=stage_result.returncode,
-                            error=error,
-                        )
-                        continue
-                    effective_options = replace(
-                        intent.options,
-                        package_spec=stage_result.remote_path,
-                    )
-                assert_provider_fence()
-                run_started_perf = time.perf_counter()
-                run_result = run_init_over_ssh(
-                    intent.plan.ssh_command,
-                    render_vm_init_script(effective_options),
-                    timeout_seconds=max(
-                        1, int(getattr(args, "init_timeout_seconds", 1800))
-                    ),
-                    private_key_file=getattr(args, "init_ssh_private_key_file", None),
-                )
-                run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
-                if run_result.returncode == 0:
-                    bootstrap_records = mark_bootstrap_success(
-                        bootstrap_records, intent
-                    )
-                    bootstrap_results.append(
-                        {
-                            "jobId": intent.job_id,
-                            "nodeId": intent.node_id,
-                            "role": intent.role,
-                            "returncode": 0,
-                            "status": "succeeded",
-                            "packageStage": stage_payload,
-                            "durationMs": _elapsed_ms(attempt_started_perf),
-                            "runDurationMs": run_duration_ms,
-                        }
-                    )
+                    # Only the controller thread mutates and persists the aggregate
+                    # state, once for each independently completed remote attempt.
+                    bootstrap_store.save(bootstrap_records)
+                    ordered_bootstrap_results[index] = attempt_result.result
                     record_vm_init_attempt_result(
                         metrics_store,
                         intent,
-                        status="succeeded",
+                        status=attempt_result.status,
                         attempts=attempt_count,
-                        started_at=attempt_started_at,
-                        attempt_started_perf=attempt_started_perf,
-                        stage_duration_ms=stage_duration_ms,
-                        run_duration_ms=run_duration_ms,
-                        returncode=0,
+                        started_at=started_at,
+                        attempt_started_perf=started_perf,
+                        stage_duration_ms=attempt_result.stage_duration_ms,
+                        run_duration_ms=attempt_result.run_duration_ms,
+                        returncode=attempt_result.returncode,
+                        error=attempt_result.error,
                     )
-                else:
-                    error = f"init command exited with status {run_result.returncode}"
-                    bootstrap_records = mark_bootstrap_failure(
-                        bootstrap_records,
-                        intent,
-                        error,
-                    )
-                    bootstrap_results.append(
-                        {
-                            "jobId": intent.job_id,
-                            "nodeId": intent.node_id,
-                            "role": intent.role,
-                            "returncode": run_result.returncode,
-                            "status": "failed",
-                            "error": error,
-                            "packageStage": stage_payload,
-                            "durationMs": _elapsed_ms(attempt_started_perf),
-                            "runDurationMs": run_duration_ms,
-                        }
-                    )
-                    record_vm_init_attempt_result(
-                        metrics_store,
-                        intent,
-                        status="failed",
-                        attempts=attempt_count,
-                        started_at=attempt_started_at,
-                        attempt_started_perf=attempt_started_perf,
-                        stage_duration_ms=stage_duration_ms,
-                        run_duration_ms=run_duration_ms,
-                        returncode=run_result.returncode,
-                        error=error,
-                    )
-            except Exception as exc:
-                error = str(exc)
+
+        bootstrap_results: list[dict[str, Any]] = []
+        for index, item in enumerate(ordered_bootstrap_results):
+            if item is None:
+                intent = bootstrap_intents[index]
+                error = "VM init attempt did not produce a result"
                 bootstrap_records = mark_bootstrap_failure(
                     bootstrap_records,
                     intent,
                     error,
                 )
-                bootstrap_results.append(
-                    {
-                        "jobId": intent.job_id,
-                        "nodeId": intent.node_id,
-                        "role": intent.role,
-                        "returncode": None,
-                        "status": "failed",
-                        "error": error,
-                        "durationMs": _elapsed_ms(attempt_started_perf),
-                    }
-                )
-                record_vm_init_attempt_result(
-                    metrics_store,
-                    intent,
-                    status="failed",
-                    attempts=attempt_count,
-                    started_at=attempt_started_at,
-                    attempt_started_perf=attempt_started_perf,
-                    stage_duration_ms=stage_duration_ms,
-                    run_duration_ms=run_duration_ms,
-                    returncode=None,
-                    error=error,
-                )
-            finally:
                 bootstrap_store.save(bootstrap_records)
+                item = {
+                    "jobId": intent.job_id,
+                    "nodeId": intent.node_id,
+                    "role": intent.role,
+                    "returncode": None,
+                    "status": "failed",
+                    "error": error,
+                    "durationMs": 0,
+                }
+            bootstrap_results.append(item)
         result["bootstrapResults"] = bootstrap_results
     elif getattr(args, "execute_init", False) and execution_authorized:
         bootstrap_store.save(bootstrap_records)
@@ -4555,6 +4500,158 @@ def record_observed_vm_metrics(
             continue
         observed_vm_keys[job_id] = key
         record_vm_observed(metrics_store, cycle=cycle, node=node)
+
+
+@dataclass(frozen=True)
+class _VmBootstrapAttemptResult:
+    result: dict[str, Any]
+    status: str
+    returncode: int | None
+    error: str = ""
+    stage_duration_ms: int | None = None
+    run_duration_ms: int | None = None
+
+
+def _execute_vm_bootstrap_attempt(
+    intent: VmBootstrapIntent,
+    args: argparse.Namespace,
+    *,
+    assert_provider_fence: Callable[[], None],
+    attempt_started_perf: float,
+) -> _VmBootstrapAttemptResult:
+    stage_duration_ms: int | None = None
+    run_duration_ms: int | None = None
+    stage_payload: dict[str, Any] | None = None
+    try:
+        assert_provider_fence()
+        effective_options = intent.options
+        stage_started_perf = time.perf_counter()
+        stage_result = stage_vm_init_package_over_ssh(
+            intent.plan.ssh_command,
+            intent.options,
+            timeout_seconds=max(
+                1, int(getattr(args, "init_timeout_seconds", 1800))
+            ),
+            private_key_file=getattr(args, "init_ssh_private_key_file", None),
+        )
+        stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
+        if stage_result is not None:
+            stage_duration_ms = stage_elapsed_ms
+            stage_payload = {
+                "localPath": str(stage_result.local_path),
+                "remotePath": stage_result.remote_path,
+                "command": list(stage_result.command),
+                "returncode": stage_result.returncode,
+                "durationMs": stage_duration_ms,
+            }
+            if stage_result.returncode != 0:
+                error = (
+                    "package staging exited with status "
+                    f"{stage_result.returncode}"
+                )
+                return _VmBootstrapAttemptResult(
+                    result={
+                        "jobId": intent.job_id,
+                        "nodeId": intent.node_id,
+                        "role": intent.role,
+                        "returncode": stage_result.returncode,
+                        "status": "failed",
+                        "error": error,
+                        "packageStage": stage_payload,
+                        "durationMs": _elapsed_ms(attempt_started_perf),
+                    },
+                    status="failed",
+                    returncode=stage_result.returncode,
+                    error=error,
+                    stage_duration_ms=stage_duration_ms,
+                )
+            effective_options = replace(
+                intent.options,
+                package_spec=stage_result.remote_path,
+            )
+
+        assert_provider_fence()
+        run_started_perf = time.perf_counter()
+        run_result = run_init_over_ssh(
+            intent.plan.ssh_command,
+            render_vm_init_script(effective_options),
+            timeout_seconds=max(
+                1, int(getattr(args, "init_timeout_seconds", 1800))
+            ),
+            private_key_file=getattr(args, "init_ssh_private_key_file", None),
+        )
+        run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
+        if run_result.returncode == 0:
+            return _VmBootstrapAttemptResult(
+                result={
+                    "jobId": intent.job_id,
+                    "nodeId": intent.node_id,
+                    "role": intent.role,
+                    "returncode": 0,
+                    "status": "succeeded",
+                    "packageStage": stage_payload,
+                    "durationMs": _elapsed_ms(attempt_started_perf),
+                    "runDurationMs": run_duration_ms,
+                },
+                status="succeeded",
+                returncode=0,
+                stage_duration_ms=stage_duration_ms,
+                run_duration_ms=run_duration_ms,
+            )
+
+        error = f"init command exited with status {run_result.returncode}"
+        return _VmBootstrapAttemptResult(
+            result={
+                "jobId": intent.job_id,
+                "nodeId": intent.node_id,
+                "role": intent.role,
+                "returncode": run_result.returncode,
+                "status": "failed",
+                "error": error,
+                "packageStage": stage_payload,
+                "durationMs": _elapsed_ms(attempt_started_perf),
+                "runDurationMs": run_duration_ms,
+            },
+            status="failed",
+            returncode=run_result.returncode,
+            error=error,
+            stage_duration_ms=stage_duration_ms,
+            run_duration_ms=run_duration_ms,
+        )
+    except Exception as exc:
+        return _failed_vm_bootstrap_attempt(
+            intent,
+            attempt_started_perf,
+            str(exc),
+            stage_duration_ms=stage_duration_ms,
+            run_duration_ms=run_duration_ms,
+        )
+
+
+def _failed_vm_bootstrap_attempt(
+    intent: VmBootstrapIntent,
+    attempt_started_perf: float,
+    error: str,
+    *,
+    stage_duration_ms: int | None = None,
+    run_duration_ms: int | None = None,
+) -> _VmBootstrapAttemptResult:
+    return _VmBootstrapAttemptResult(
+        result={
+            "jobId": intent.job_id,
+            "nodeId": intent.node_id,
+            "role": intent.role,
+            "returncode": None,
+            "status": "failed",
+            "error": error,
+            "durationMs": _elapsed_ms(attempt_started_perf),
+        },
+        status="failed",
+        returncode=None,
+        error=error,
+        stage_duration_ms=stage_duration_ms,
+        run_duration_ms=run_duration_ms,
+    )
 
 
 def record_vm_init_attempt_result(

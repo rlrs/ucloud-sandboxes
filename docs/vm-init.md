@@ -181,6 +181,10 @@ The post-boot init script should be safe to re-run:
   runtime conformance, and systemd service startup. The autoscaler separately
   records init attempt duration, package staging duration, and remote script
   duration in `vm_init_attempt` metrics.
+- Execute independent node initializations with a bounded worker pool. The
+  all-in-one deployment admits and initializes up to four ready VMs concurrently
+  by default; `--max-init-per-cycle` is both the per-cycle admission limit and
+  the concurrency bound.
 - Run node-agent and heartbeat systemd units as the service user with Docker
   supplementary group access, not as root. The init script still uses sudo for
   OS package installation, Docker daemon setup, systemd writes, mounts, and the

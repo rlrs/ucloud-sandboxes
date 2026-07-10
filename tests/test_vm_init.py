@@ -189,6 +189,14 @@ class VmInitTests(unittest.TestCase):
         self.assertIn('"max-concurrent-downloads": 8', script)
         self.assertIn('"max-concurrent-uploads": 8', script)
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
+        self.assertIn(
+            '"$UCLOUD_AGENT_BIN" runtime-conformance',
+            script,
+        )
+        self.assertNotIn(
+            '"$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" runtime-conformance',
+            script,
+        )
         self.assertIn("--disable-pip-version-check --upgrade", script)
         self.assertIn("package-bundle.json", script)
         self.assertIn(

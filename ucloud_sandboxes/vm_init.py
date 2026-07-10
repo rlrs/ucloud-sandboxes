@@ -556,14 +556,21 @@ install_offline_runtime() {{
     if dpkg-query -W -f='${{Status}}' "$package_name" 2>/dev/null | grep -q "install ok installed"; then
       installed_version="$(dpkg-query -W -f='${{Version}}' "$package_name")"
     fi
-    if [ -n "$installed_version" ] && dpkg --compare-versions "$installed_version" ge "$candidate_version"; then
-      continue
-    fi
     case "$package_name" in
       docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|runsc)
+        if [ -n "$installed_version" ] \
+          && dpkg --compare-versions "$installed_version" ge "$candidate_version"; then
+          continue
+        fi
         portable_packages+=("$package_file")
         ;;
       *)
+        # The stock VM already contains a coherent Ubuntu base. Do not turn
+        # the portable bundle into a partial distribution upgrade merely
+        # because the gateway downloaded a newer patch version.
+        if [ -n "$installed_version" ]; then
+          continue
+        fi
         local_packages+=("$package_file")
         ;;
     esac
@@ -639,7 +646,10 @@ if [ "$UCLOUD_OFFLINE_RUNTIME_AVAILABLE" -eq 1 ] \
 fi
 log_init_phase "offline-runtime"
 
-BASE_PACKAGES=(python3 python3-venv xfsprogs)
+BASE_PACKAGES=(python3 xfsprogs)
+if [ -z "$UCLOUD_PREBUILT_AGENT_ARCHIVE" ]; then
+  BASE_PACKAGES+=(python3-venv)
+fi
 MISSING_BASE_PACKAGES=()
 for package in "${{BASE_PACKAGES[@]}}"; do
   if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
@@ -669,7 +679,8 @@ done
 if [ "${{#MISSING_APT_REPOSITORY_PACKAGES[@]}}" -gt 0 ]; then
   echo "Installing package-repository prerequisites: ${{MISSING_APT_REPOSITORY_PACKAGES[*]}}"
   $SUDO apt-get update
-  $SUDO apt-get install -y "${{MISSING_APT_REPOSITORY_PACKAGES[@]}}"
+  $SUDO apt-get install --no-install-recommends -y \
+    -o Dpkg::Use-Pty=0 "${{MISSING_APT_REPOSITORY_PACKAGES[@]}}"
 fi
 log_init_phase "repository-prerequisites"
 
@@ -741,7 +752,8 @@ PACKAGES_TO_INSTALL=("${{MISSING_BASE_PACKAGES[@]}}" "${{CONTAINER_PACKAGES[@]}}
 if [ "${{#PACKAGES_TO_INSTALL[@]}}" -gt 0 ]; then
   echo "Installing base and container packages: ${{PACKAGES_TO_INSTALL[*]}}"
   $SUDO apt-get update
-  $SUDO apt-get install -y "${{PACKAGES_TO_INSTALL[@]}}"
+  $SUDO apt-get install --no-install-recommends -y \
+    -o Dpkg::Use-Pty=0 "${{PACKAGES_TO_INSTALL[@]}}"
 else
   echo "Base and container packages already installed"
 fi
@@ -907,7 +919,7 @@ fi
 
 echo "Running runtime conformance probe"
 set +e
-$SUDO "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" runtime-conformance --sudo --execute --output json | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
+$SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
 CONFORMANCE_STATUS=${{PIPESTATUS[0]}}
 set -e
 if [ "$CONFORMANCE_STATUS" -ne 0 ]; then

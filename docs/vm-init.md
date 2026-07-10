@@ -140,11 +140,12 @@ post-boot init layer:
   sidecar for the complete artifact. A node uses the runtime payload only on an
   exact platform match and after verifying that single staged digest; it does
   not reread every large package solely to hash it again. The compatible happy
-  path installs support libraries and XFS tools with `apt-get --no-download`,
-  then extracts the bundle-verified Docker, containerd, Buildx, and gVisor payloads
-  directly. This avoids package-database fsync, maintainer scripts, and starting
-  Docker twice on every ephemeral VM. Repository installation remains the
-  compatibility fallback.
+  path also carries the exact-kernel XFS and overlay modules omitted by the
+  stock VM root filesystem, installs only missing support libraries with
+  `apt-get --no-download`, then extracts the bundle-verified Docker, containerd,
+  Buildx, and gVisor payloads directly. This avoids package-database fsync,
+  maintainer scripts, and starting Docker twice on every ephemeral VM.
+  Repository installation remains the compatibility fallback.
 - Pull and save the `busybox` image used by runtime conformance into the same
   platform-specific artifact when Docker Hub is reachable during deployment.
   Nodes verify the image archive checksum, load it after Docker is configured,

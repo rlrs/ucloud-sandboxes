@@ -207,6 +207,8 @@ class DeployTests(unittest.TestCase):
             agent_runtime_archive.write_bytes(b"preassembled-agent")
             xfs_module = root / "xfs.ko.zst"
             xfs_module.write_bytes(b"xfs-module")
+            overlay_module = root / "overlay.ko.zst"
+            overlay_module.write_bytes(b"overlay-module")
             plan = AllInOneDeployPlan(
                 job_id="job-1",
                 project_id="project-1",
@@ -244,6 +246,7 @@ class DeployTests(unittest.TestCase):
                         str(agent_runtime_archive),
                         "6.8.0-test-generic",
                         str(xfs_module),
+                        str(overlay_module),
                     ]
                     exec(code, {"__name__": "__main__"})
             finally:
@@ -270,6 +273,10 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(
             manifest["runtime"]["kernel"]["release"],
             "6.8.0-test-generic",
+        )
+        self.assertEqual(
+            set(manifest["runtime"]["kernel"]["modules"]),
+            {"xfs", "overlay"},
         )
         self.assertEqual(
             [item["name"] for item in manifest["runtime"]["files"]],

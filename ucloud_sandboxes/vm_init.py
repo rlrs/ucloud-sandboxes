@@ -367,6 +367,7 @@ UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 UCLOUD_PREBUILT_AGENT_ARCHIVE=""
 UCLOUD_PREBUILT_AGENT_SHA256=""
 UCLOUD_OFFLINE_XFS_MODULE=""
+UCLOUD_OFFLINE_OVERLAY_MODULE=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -480,26 +481,34 @@ if not isinstance(kernel, dict):
 kernel_release = os.uname().release
 if kernel.get("release") != kernel_release:
     raise SystemExit("offline kernel module release does not match this VM")
-xfs_module = kernel.get("xfs_module")
-if not isinstance(xfs_module, dict):
-    raise SystemExit("offline XFS kernel module metadata is absent")
-xfs_module_file = str(xfs_module.get("file") or "")
-xfs_module_name = Path(xfs_module_file).name
-if (
-    xfs_module_name not in {{"xfs.ko", "xfs.ko.gz", "xfs.ko.xz", "xfs.ko.zst"}}
-    or xfs_module_file != f"runtime/kernel/{{kernel_release}}/{{xfs_module_name}}"
-):
-    raise SystemExit("invalid offline XFS kernel module filename")
-xfs_module_path = bundle_dir / xfs_module_file
-if not xfs_module_path.is_file() or xfs_module_path.stat().st_size != xfs_module.get("size"):
-    raise SystemExit("offline XFS kernel module size mismatch")
-if not archive_digest_verified:
-    module_digest = hashlib.sha256()
-    with xfs_module_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            module_digest.update(chunk)
-    if module_digest.hexdigest() != xfs_module.get("sha256"):
-        raise SystemExit("offline XFS kernel module checksum mismatch")
+modules = kernel.get("modules")
+if not isinstance(modules, dict) or set(modules) != {{"xfs", "overlay"}}:
+    raise SystemExit("offline kernel module metadata is incomplete")
+for module_name, module in modules.items():
+    if not isinstance(module, dict):
+        raise SystemExit(f"offline {{module_name}} kernel module metadata is invalid")
+    module_file = str(module.get("file") or "")
+    file_name = Path(module_file).name
+    if (
+        file_name not in {{
+            f"{{module_name}}.ko",
+            f"{{module_name}}.ko.gz",
+            f"{{module_name}}.ko.xz",
+            f"{{module_name}}.ko.zst",
+        }}
+        or module_file != f"runtime/kernel/{{kernel_release}}/{{file_name}}"
+    ):
+        raise SystemExit(f"invalid offline {{module_name}} kernel module filename")
+    module_path = bundle_dir / module_file
+    if not module_path.is_file() or module_path.stat().st_size != module.get("size"):
+        raise SystemExit(f"offline {{module_name}} kernel module size mismatch")
+    if not archive_digest_verified:
+        module_digest = hashlib.sha256()
+        with module_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                module_digest.update(chunk)
+        if module_digest.hexdigest() != module.get("sha256"):
+            raise SystemExit(f"offline {{module_name}} kernel module checksum mismatch")
 PY
     then
       UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
@@ -511,12 +520,17 @@ import sys
 
 runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]
 agent = runtime["agent"]
-print(f"{{agent['sha256']}}\\t{{agent['size']}}\\t{{runtime['kernel']['xfs_module']['file']}}")
+modules = runtime["kernel"]["modules"]
+print(
+    f"{{agent['sha256']}}\\t{{agent['size']}}\\t"
+    f"{{modules['xfs']['file']}}\\t{{modules['overlay']['file']}}"
+)
 PY
 )"
-      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE UCLOUD_XFS_MODULE_FILE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE UCLOUD_XFS_MODULE_FILE UCLOUD_OVERLAY_MODULE_FILE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
       UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
       UCLOUD_OFFLINE_XFS_MODULE="$UCLOUD_PACKAGE_BUNDLE_DIR/$UCLOUD_XFS_MODULE_FILE"
+      UCLOUD_OFFLINE_OVERLAY_MODULE="$UCLOUD_PACKAGE_BUNDLE_DIR/$UCLOUD_OVERLAY_MODULE_FILE"
       UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
       if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
         if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
@@ -824,6 +838,23 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   UCLOUD_DOCKER_DATA_ROOT="$UCLOUD_DOCKER_QUOTA_ROOT"
 fi
 log_init_phase "docker-storage"
+
+if ! grep -qw overlay /proc/filesystems; then
+  if [ -n "$UCLOUD_OFFLINE_OVERLAY_MODULE" ]; then
+    echo "Loading bundled overlay kernel module"
+    $SUDO insmod "$UCLOUD_OFFLINE_OVERLAY_MODULE"
+  else
+    echo "Installing overlay kernel module fallback"
+    $SUDO apt-get update
+    $SUDO apt-get install --no-install-recommends -y \
+      -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
+    $SUDO modprobe overlay
+  fi
+fi
+if ! grep -qw overlay /proc/filesystems; then
+  echo "overlay filesystem support is unavailable" >&2
+  exit 1
+fi
 
 RUNSC_PATH="$(command -v runsc)"
 

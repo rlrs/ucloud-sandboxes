@@ -229,7 +229,7 @@ class VmInitTests(unittest.TestCase):
             'required_packages_installed "${OFFLINE_REQUIRED_PACKAGES[@]}"',
             script,
         )
-        self.assertEqual(script.count("$SUDO apt-get update"), 3)
+        self.assertEqual(script.count("$SUDO apt-get update"), 4)
         self.assertIn("using package repository fallback", script)
         self.assertIn("APT_REPOSITORY_PACKAGES=()", script)
         self.assertIn('if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]', script)
@@ -313,6 +313,8 @@ class VmInitTests(unittest.TestCase):
             kernel_dir.mkdir(parents=True)
             xfs_module = kernel_dir / "xfs.ko.zst"
             xfs_module.write_bytes(b"xfs-module")
+            overlay_module = kernel_dir / "overlay.ko.zst"
+            overlay_module.write_bytes(b"overlay-module")
             files = []
             for name in ("docker-ce", "runsc"):
                 package = package_dir / f"{name}_1.0_amd64.deb"
@@ -350,14 +352,25 @@ class VmInitTests(unittest.TestCase):
                             },
                             "kernel": {
                                 "release": kernel_release,
-                                "xfs_module": {
-                                    "file": (
-                                        f"runtime/kernel/{kernel_release}/xfs.ko.zst"
-                                    ),
-                                    "size": xfs_module.stat().st_size,
-                                    "sha256": hashlib.sha256(
-                                        xfs_module.read_bytes()
-                                    ).hexdigest(),
+                                "modules": {
+                                    "xfs": {
+                                        "file": (
+                                            f"runtime/kernel/{kernel_release}/xfs.ko.zst"
+                                        ),
+                                        "size": xfs_module.stat().st_size,
+                                        "sha256": hashlib.sha256(
+                                            xfs_module.read_bytes()
+                                        ).hexdigest(),
+                                    },
+                                    "overlay": {
+                                        "file": (
+                                            f"runtime/kernel/{kernel_release}/overlay.ko.zst"
+                                        ),
+                                        "size": overlay_module.stat().st_size,
+                                        "sha256": hashlib.sha256(
+                                            overlay_module.read_bytes()
+                                        ).hexdigest(),
+                                    },
                                 },
                             },
                         },

@@ -149,10 +149,18 @@ age source. Tags with no usage entry are kept, because deleting by image
 creation time can remove shared base images that are still actively used.
 
 The same backward-compatible file persists both durable image references and
-finite transient leases. Both are keyed by repository, tag, and owner. Durable
+finite transient leases. Keys remain repository, tag, and owner for migration
+compatibility, while new records also retain the exact manifest digest. Durable
 references have no expiry; transient pull and warmup leases retain an expiry.
-Old usage files without a `generation` or `leases` field continue to load as
-generation zero with no active protection.
+Old usage files without a `generation`, `leases`, or lease digest field continue
+to load and are upgraded when the reference is next observed.
+
+Every resolved managed digest also has a deterministic internal
+`ucloud-digest-sha256-<hex>` tag. The gateway creates it by copying the exact
+manifest media type and bytes under that name. This keeps a pinned digest
+reachable by offline Distribution garbage collection after its user-facing tag
+moves. Internal tags are hidden from registry summaries, and retention floors
+count distinct digests rather than tag aliases.
 
 Sandbox routes acquire a durable reference before image pull/create dispatch.
 The owner is deterministic across restart and includes the persisted route

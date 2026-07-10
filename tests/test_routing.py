@@ -3,8 +3,6 @@ from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
-import subprocess
-import sys
 from threading import Event
 import unittest
 

@@ -9,8 +9,6 @@ from aiohttp import WSMsgType, web
 
 from .async_exec import (
     AsyncExecSessionManager,
-    STDERR_STREAM_ID,
-    STDOUT_STREAM_ID,
 )
 from .deployment import service_health
 from .images import DockerImageRuntime, ImageManager, ImageStore

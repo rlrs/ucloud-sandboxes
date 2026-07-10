@@ -10,9 +10,8 @@ from pathlib import Path
 import sys
 import time
 from typing import Any, Callable
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
 from .agent import (

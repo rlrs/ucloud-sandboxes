@@ -11,7 +11,6 @@ from ucloud_sandboxes.deploy import (
     autoscaler_env,
     gateway_env,
     packaged_systemd_units,
-    relay_env,
     registry_env,
     render_env_file,
     render_remote_deploy_script,
@@ -40,7 +39,6 @@ class DeployTests(unittest.TestCase):
             )
 
             gateway = gateway_env(plan)
-            relay = relay_env(plan)
             autoscaler = autoscaler_env(plan)
             registry = registry_env(plan)
             script = render_remote_deploy_script(plan)

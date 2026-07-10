@@ -11,7 +11,6 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
-from tempfile import TemporaryDirectory
 from threading import Event, RLock, Thread, local
 import time
 from typing import Any, Callable, ContextManager, Iterator, Protocol

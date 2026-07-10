@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, replace
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 from threading import RLock, get_ident
@@ -15,6 +16,7 @@ from .models import (
     NodeHeartbeat,
     NodeRuntimeMetrics,
     ResourceQuantity,
+    SandboxInventoryEntry,
     SandboxNode,
     ScalePolicy,
     VmJob,
@@ -80,6 +82,27 @@ def heartbeat_to_dict(heartbeat: NodeHeartbeat) -> dict[str, Any]:
         if heartbeat.runtime_metrics is not None
         else None
     )
+    raw["reported_at"] = (
+        heartbeat.reported_at.isoformat()
+        if heartbeat.reported_at is not None
+        else None
+    )
+    raw["received_at"] = (
+        heartbeat.received_at.isoformat()
+        if heartbeat.received_at is not None
+        else None
+    )
+    raw["node_epoch"] = heartbeat.node_epoch
+    raw["activity_epoch"] = heartbeat.activity_epoch
+    raw["inventory"] = [item.to_dict() for item in heartbeat.inventory]
+    raw["inventory_complete"] = heartbeat.inventory_complete
+    raw["reserved_resources"] = heartbeat.reserved_resources.to_dict()
+    raw["build_reserved_resources"] = heartbeat.build_reserved_resources.to_dict()
+    raw["physical_disk_total_mb"] = heartbeat.physical_disk_total_mb
+    raw["physical_disk_free_mb"] = heartbeat.physical_disk_free_mb
+    raw["drain_token"] = heartbeat.drain_token
+    raw["drain_activity_epoch"] = heartbeat.drain_activity_epoch
+    raw["admission_open"] = heartbeat.admission_open
     return raw
 
 
@@ -158,12 +181,34 @@ def _save_heartbeats_unlocked(
         heartbeat_to_dict(heartbeats[job_id])
         for job_id in sorted(heartbeats)
     ]
+    payload = json.dumps({"nodes": nodes}, indent=2, sort_keys=True).encode("utf-8")
     try:
-        tmp_path.write_text(
-            json.dumps({"nodes": nodes}, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        tmp_path.replace(path)
+        descriptor = os.open(tmp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            view = memoryview(payload)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise OSError("failed to persist heartbeat state")
+                view = view[written:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(tmp_path, path)
+        os.chmod(path, 0o600)
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            directory_fd = None
+        try:
+            if directory_fd is not None:
+                try:
+                    os.fsync(directory_fd)
+                except OSError:
+                    pass
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
     finally:
         try:
             tmp_path.unlink()
@@ -191,7 +236,59 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         return None
     if updated_at is None:
         return None
+    active_sandboxes = _strict_nonnegative_int(raw.get("active_sandboxes"), default=0)
+    active_image_builds = _strict_nonnegative_int(
+        raw.get("active_image_builds", raw.get("activeImageBuilds")),
+        default=0,
+    )
+    cpu_overcommit = _strict_nonnegative_float(raw.get("cpu_overcommit"), default=1.0)
+    memory_overcommit = _strict_nonnegative_float(
+        raw.get("memory_overcommit"),
+        default=1.0,
+    )
+    disk_overcommit = _strict_nonnegative_float(
+        raw.get("disk_overcommit"),
+        default=1.0,
+    )
+    if None in {
+        active_sandboxes,
+        active_image_builds,
+        cpu_overcommit,
+        memory_overcommit,
+        disk_overcommit,
+    }:
+        return None
+    resource_fields = (
+        raw.get("total_resources"),
+        raw.get("used_resources"),
+        raw.get("reserved_resources", raw.get("reservedResources")),
+        raw.get("build_reserved_resources", raw.get("buildReservedResources")),
+    )
+    if any(not _valid_resource_payload(value) for value in resource_fields):
+        return None
     labels = raw.get("labels")
+    if labels is not None and not isinstance(labels, dict):
+        return None
+    draining = _strict_bool(raw.get("draining"), default=False)
+    cached_images_known = _strict_bool(
+        raw.get("cached_images_known", raw.get("cachedImagesKnown")),
+        default=False,
+    )
+    inventory_complete = _strict_bool(
+        raw.get("inventory_complete", raw.get("inventoryComplete")),
+        default=False,
+    )
+    admission_open = _strict_bool(
+        raw.get("admission_open", raw.get("admissionOpen")),
+        default=True,
+    )
+    if None in {
+        draining,
+        cached_images_known,
+        inventory_complete,
+        admission_open,
+    }:
+        return None
     cached_images = raw.get("cached_images", raw.get("cachedImages"))
     capabilities = raw.get("capabilities", ())
     if isinstance(capabilities, str):
@@ -202,17 +299,35 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         capability_items = tuple(str(item) for item in capabilities if str(item))
     else:
         capability_items = ()
+    raw_inventory = raw.get("inventory")
+    assert inventory_complete is not None
+    if raw_inventory is None:
+        if inventory_complete:
+            return None
+        inventory = ()
+    elif not isinstance(raw_inventory, list):
+        return None
+    else:
+        if any(
+            not isinstance(raw_item, dict)
+            or not _valid_resource_payload(raw_item.get("resources"))
+            for raw_item in raw_inventory
+        ):
+            return None
+        parsed_inventory = tuple(
+            SandboxInventoryEntry.from_dict(raw_item) for raw_item in raw_inventory
+        )
+        if any(item is None for item in parsed_inventory):
+            return None
+        inventory = tuple(item for item in parsed_inventory if item is not None)
     return NodeHeartbeat(
         node_id=node_id,
         job_id=job_id,
         updated_at=updated_at,
-        active_sandboxes=max(0, int(raw.get("active_sandboxes", 0))),
-        active_image_builds=max(
-            0,
-            int(raw.get("active_image_builds", raw.get("activeImageBuilds", 0))),
-        ),
+        active_sandboxes=active_sandboxes,
+        active_image_builds=active_image_builds,
         idle_since=parse_iso_datetime(raw.get("idle_since")),
-        draining=bool(raw.get("draining", False)),
+        draining=bool(draining),
         node_url=string_or_none(raw.get("node_url")),
         agent_version=str(raw.get("agent_version") or ""),
         deployment_id=str(raw.get("deployment_id") or ""),
@@ -220,16 +335,47 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         capabilities=tuple(dict.fromkeys(capability_items)),
         total_resources=ResourceQuantity.from_dict(raw.get("total_resources")),
         used_resources=ResourceQuantity.from_dict(raw.get("used_resources")),
-        cpu_overcommit=float(raw.get("cpu_overcommit", 1.0)),
-        memory_overcommit=float(raw.get("memory_overcommit", 1.0)),
-        disk_overcommit=float(raw.get("disk_overcommit", 1.0)),
+        cpu_overcommit=cpu_overcommit,
+        memory_overcommit=memory_overcommit,
+        disk_overcommit=disk_overcommit,
         labels={str(k): str(v) for k, v in dict(labels or {}).items()},
         cached_images=_string_tuple(cached_images),
-        cached_images_known=(
-            bool(raw.get("cached_images_known", raw.get("cachedImagesKnown", False)))
-            or cached_images is not None
-        ),
+        cached_images_known=bool(cached_images_known) or cached_images is not None,
         runtime_metrics=NodeRuntimeMetrics.from_dict(raw.get("runtime_metrics")),
+        reported_at=parse_iso_datetime(raw.get("reported_at", raw.get("reportedAt"))),
+        received_at=parse_iso_datetime(raw.get("received_at", raw.get("receivedAt"))),
+        node_epoch=str(raw.get("node_epoch", raw.get("nodeEpoch")) or ""),
+        activity_epoch=_nonnegative_int(
+            raw.get("activity_epoch", raw.get("activityEpoch", 0)),
+        ),
+        inventory=inventory,
+        inventory_complete=inventory_complete,
+        reserved_resources=ResourceQuantity.from_dict(
+            raw.get("reserved_resources", raw.get("reservedResources"))
+        ),
+        build_reserved_resources=ResourceQuantity.from_dict(
+            raw.get("build_reserved_resources", raw.get("buildReservedResources"))
+        ),
+        physical_disk_total_mb=_nonnegative_int(
+            raw.get(
+                "physical_disk_total_mb",
+                raw.get("physicalDiskTotalMb", 0),
+            ),
+        ),
+        physical_disk_free_mb=_nonnegative_int(
+            raw.get(
+                "physical_disk_free_mb",
+                raw.get("physicalDiskFreeMb", 0),
+            ),
+        ),
+        drain_token=str(raw.get("drain_token", raw.get("drainToken")) or ""),
+        drain_activity_epoch=_nonnegative_int(
+            raw.get(
+                "drain_activity_epoch",
+                raw.get("drainActivityEpoch", 0),
+            ),
+        ),
+        admission_open=bool(admission_open),
     )
 
 
@@ -245,9 +391,9 @@ def normalize_idle_since(
     if previous is not None and previous.active_workloads == 0:
         return replace(
             heartbeat,
-            idle_since=previous.idle_since or previous.updated_at,
+            idle_since=previous.idle_since or previous.freshness_at,
         )
-    return replace(heartbeat, idle_since=heartbeat.updated_at)
+    return replace(heartbeat, idle_since=heartbeat.freshness_at)
 
 
 def string_or_none(value: object) -> str | None:
@@ -255,6 +401,68 @@ def string_or_none(value: object) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _nonnegative_int(value: object, *, default: int = 0) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError, OverflowError):
+        return max(0, default)
+
+
+def _strict_nonnegative_int(
+    value: object,
+    *,
+    default: int,
+) -> int | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _strict_nonnegative_float(
+    value: object,
+    *,
+    default: float,
+) -> float | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
+
+
+def _valid_resource_payload(value: object) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, dict):
+        return False
+    cpu = value.get("vcpu", value.get("cpu"))
+    memory = value.get("memory_mb", value.get("memoryMb"))
+    disk = value.get("disk_mb", value.get("diskMb"))
+    return (
+        _strict_nonnegative_float(cpu, default=0.0) is not None
+        and _strict_nonnegative_int(memory, default=0) is not None
+        and _strict_nonnegative_int(disk, default=0) is not None
+    )
+
+
+def _strict_bool(value: object, *, default: bool) -> bool | None:
+    if value is None:
+        return default
+    return value if isinstance(value, bool) else None
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:

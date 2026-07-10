@@ -2,6 +2,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
 import asyncio
+import http.client
 import json
 from urllib import request
 from urllib.parse import quote
@@ -12,12 +13,471 @@ from ucloud_sandboxes.gateway import NodeGatewayClient
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
-from ucloud_sandboxes.node_agent import build_node_agent_server
-from ucloud_sandboxes.sandbox import CommandResult, DockerGvisorRuntime
+from ucloud_sandboxes.node_agent import (
+    SANDBOX_GENERATION_HEADER,
+    SANDBOX_OPERATION_ID_HEADER,
+    build_node_agent_server,
+)
+from ucloud_sandboxes.sandbox import (
+    CommandResult,
+    DockerGvisorRuntime,
+    SandboxSpec,
+    sandbox_spec_fingerprint,
+)
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class NodeAgentTests(unittest.TestCase):
+    def test_node_control_auth_protects_every_non_health_route(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                node_control_bearer_token="node-secret",
+            )
+            Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                health = self._json_request(f"{base}/healthz")
+                unauthorized = self._json_request(
+                    f"{base}/v1/heartbeat",
+                    allow_error=True,
+                )
+                wrong_header = self._json_request(
+                    f"{base}/v1/heartbeat",
+                    headers={"X-UCloud-Sandbox-Token": "node-secret"},
+                    allow_error=True,
+                )
+                heartbeat = self._json_request(
+                    f"{base}/v1/heartbeat",
+                    headers={"Authorization": "Bearer node-secret"},
+                )
+                drain = self._json_request(
+                    f"{base}/v1/drain",
+                    method="POST",
+                    payload={"token": "drain-auth", "draining": True},
+                    headers={"Authorization": "Bearer node-secret"},
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertTrue(health["ok"])
+        self.assertEqual(unauthorized["status"], 401)
+        self.assertEqual(wrong_header["status"], 401)
+        self.assertEqual(heartbeat["heartbeat"]["node_id"], "node-1")
+        self.assertEqual(drain["drain"]["token"], "drain-auth")
+
+    def test_node_control_auth_rejects_empty_configured_token(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot be empty"):
+            NodeGatewayClient(
+                "http://node.invalid",
+                node_control_bearer_token="",
+            )
+        with TemporaryDirectory() as raw_dir:
+            with self.assertRaisesRegex(ValueError, "cannot be empty"):
+                build_node_agent_server(
+                    "127.0.0.1",
+                    0,
+                    sandbox_file=Path(raw_dir) / "sandboxes.json",
+                    image_file=Path(raw_dir) / "images.json",
+                    job_id="job-1",
+                    node_id="node-1",
+                    node_control_bearer_token="",
+                )
+
+    def test_create_capacity_uses_effective_overcommitted_resources(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(memory_mb=64),
+                memory_overcommit=2.0,
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                payload = {"id": "fills-node", "image": "busybox", "memory_mb": 128}
+                created = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=payload,
+                )
+                replayed = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=payload,
+                )
+                rejected = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "one-too-many", "image": "busybox", "memory_mb": 1},
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(created["sandbox"]["id"], "fills-node")
+            self.assertTrue(replayed["timings"]["manager"]["idempotent"])
+            self.assertEqual(rejected["status"], 503)
+            self.assertIn("exhausted memory_mb", rejected["error"])
+
+    def test_drain_endpoint_persists_blocks_admission_and_undrains(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            sandbox_file = Path(raw_dir) / "sandboxes.json"
+            image_file = Path(raw_dir) / "images.json"
+
+            def start_server():
+                server = build_node_agent_server(
+                    "127.0.0.1",
+                    0,
+                    sandbox_file=sandbox_file,
+                    image_file=image_file,
+                    job_id="job-1",
+                    node_id="node-1",
+                    image_builds_enabled=True,
+                )
+                thread = Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                host, port = server.server_address
+                return server, f"http://{host}:{port}"
+
+            server, base = start_server()
+            try:
+                drained = self._json_request(
+                    f"{base}/v1/drain",
+                    method="POST",
+                    payload={"token": "drain-http", "draining": True},
+                )["drain"]
+                replay = self._json_request(
+                    f"{base}/v1/drain",
+                    method="POST",
+                    payload={"token": "drain-http", "draining": True},
+                )["drain"]
+                mismatch = self._json_request(
+                    f"{base}/v1/drain",
+                    method="POST",
+                    payload={"token": "other-drain", "draining": True},
+                    allow_error=True,
+                )
+                blocked_create = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "blocked", "image": "busybox", "memory_mb": 64},
+                    allow_error=True,
+                )
+                blocked_build = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload={
+                        "id": "blocked-image",
+                        "tag": "local/blocked:latest",
+                        "context_path": "/tmp/context",
+                        "wait": False,
+                    },
+                    allow_error=True,
+                )
+                heartbeat = self._json_request(f"{base}/v1/heartbeat")["heartbeat"]
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertTrue(drained["ready"])
+            self.assertFalse(drained["admission_open"])
+            self.assertEqual(replay["activity_epoch"], drained["activity_epoch"])
+            self.assertEqual(mismatch["status"], 409)
+            self.assertEqual(blocked_create["status"], 503)
+            self.assertEqual(blocked_build["status"], 503)
+            self.assertTrue(heartbeat["draining"])
+            self.assertEqual(heartbeat["drain_token"], "drain-http")
+            self.assertFalse(heartbeat["admission_open"])
+            self.assertEqual(
+                heartbeat["drain_activity_epoch"],
+                heartbeat["activity_epoch"],
+            )
+
+            restarted, restarted_base = start_server()
+            try:
+                restarted_heartbeat = self._json_request(
+                    f"{restarted_base}/v1/heartbeat"
+                )["heartbeat"]
+                opened = self._json_request(
+                    f"{restarted_base}/v1/drain",
+                    method="POST",
+                    payload={"token": "drain-http", "draining": False},
+                )["drain"]
+                opened_replay = self._json_request(
+                    f"{restarted_base}/v1/drain",
+                    method="POST",
+                    payload={"token": "drain-http", "draining": False},
+                )["drain"]
+                accepted = self._json_request(
+                    f"{restarted_base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "accepted", "image": "busybox", "memory_mb": 64},
+                )
+                open_heartbeat = self._json_request(
+                    f"{restarted_base}/v1/heartbeat"
+                )["heartbeat"]
+            finally:
+                restarted.shutdown()
+                restarted.server_close()
+
+            self.assertTrue(restarted_heartbeat["draining"])
+            self.assertEqual(restarted_heartbeat["drain_token"], "drain-http")
+            self.assertFalse(opened["draining"])
+            self.assertTrue(opened["admission_open"])
+            self.assertEqual(
+                opened_replay["activity_epoch"],
+                opened["activity_epoch"],
+            )
+            self.assertEqual(accepted["sandbox"]["id"], "accepted")
+            self.assertFalse(open_heartbeat["draining"])
+            self.assertEqual(open_heartbeat["drain_token"], "")
+            self.assertTrue(open_heartbeat["admission_open"])
+
+    def test_generation_envelope_delete_headers_and_inventory(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                spec_payload = {
+                    "id": "versioned",
+                    "image": "busybox",
+                    "memory_mb": 128,
+                }
+                spec_hash = sandbox_spec_fingerprint(
+                    SandboxSpec.from_dict(spec_payload)
+                )
+                create_payload = {
+                    **spec_payload,
+                    "_ucloud_operation": {
+                        "operation_id": "create-1",
+                        "generation": 1,
+                        "kind": "create",
+                        "spec_hash": spec_hash,
+                    },
+                }
+                created = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=create_payload,
+                )
+                replay = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=create_payload,
+                )
+                heartbeat = self._json_request(f"{base}/v1/heartbeat")["heartbeat"]
+                legacy_delete = self._json_request(
+                    f"{base}/v1/sandboxes/versioned",
+                    method="DELETE",
+                    allow_error=True,
+                )
+                missing_header = self._json_request(
+                    f"{base}/v1/sandboxes/versioned",
+                    method="DELETE",
+                    headers={SANDBOX_GENERATION_HEADER: "1"},
+                    allow_error=True,
+                )
+                delete_headers = {
+                    SANDBOX_GENERATION_HEADER: "1",
+                    SANDBOX_OPERATION_ID_HEADER: "delete-1",
+                }
+                deleted = self._json_request(
+                    f"{base}/v1/sandboxes/versioned",
+                    method="DELETE",
+                    headers=delete_headers,
+                )
+                delete_replay = self._json_request(
+                    f"{base}/v1/sandboxes/versioned",
+                    method="DELETE",
+                    headers=delete_headers,
+                )
+                stale_create = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload=create_payload,
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(created["sandbox"]["generation"], 1)
+            self.assertEqual(created["sandbox"]["operation_id"], "create-1")
+            self.assertEqual(replay["sandbox"]["generation"], 1)
+            self.assertEqual(legacy_delete["status"], 409)
+            self.assertEqual(missing_header["status"], 400)
+            self.assertEqual(deleted["deleted"]["generation"], 1)
+            self.assertIsNone(delete_replay["deleted"])
+            self.assertEqual(stale_create["status"], 409)
+            self.assertEqual(heartbeat["inventory"][0]["generation"], 1)
+            self.assertEqual(
+                heartbeat["inventory"][0]["operation_id"],
+                "create-1",
+            )
+            self.assertEqual(heartbeat["inventory"][0]["spec_hash"], spec_hash)
+
+    def test_heartbeat_inventory_is_coherent_during_concurrent_creates(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+            )
+            server_thread = Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+            errors: list[BaseException] = []
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+
+                def create(index: int) -> None:
+                    try:
+                        self._json_request(
+                            f"{base}/v1/sandboxes",
+                            method="POST",
+                            payload={
+                                "id": f"sandbox-{index}",
+                                "image": "busybox",
+                                "memory_mb": 64,
+                            },
+                        )
+                    except BaseException as exc:
+                        errors.append(exc)
+
+                creators = [Thread(target=create, args=(index,)) for index in range(6)]
+                for creator in creators:
+                    creator.start()
+                samples = [
+                    self._json_request(f"{base}/v1/heartbeat")["heartbeat"]
+                    for _index in range(6)
+                ]
+                for creator in creators:
+                    creator.join(timeout=5)
+                samples.append(self._json_request(f"{base}/v1/heartbeat")["heartbeat"])
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(errors, [])
+            for heartbeat in samples:
+                inventory = heartbeat["inventory"]
+                reserved_memory = sum(
+                    item["resources"]["memory_mb"] for item in inventory
+                )
+                self.assertTrue(heartbeat["inventory_complete"])
+                self.assertEqual(heartbeat["activity_epoch"], len(inventory))
+                self.assertEqual(
+                    heartbeat["used_resources"]["memory_mb"],
+                    0,
+                )
+                self.assertEqual(
+                    heartbeat["reserved_resources"]["memory_mb"],
+                    reserved_memory,
+                )
+
+    def test_rejects_oversized_and_negative_length_requests(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                max_json_body_bytes=32,
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                oversized = self._json_request(
+                    f"http://{host}:{port}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "large", "image": "busybox", "memory_mb": 128},
+                    allow_error=True,
+                )
+                connection = http.client.HTTPConnection(host, port, timeout=5)
+                connection.putrequest("POST", "/v1/sandboxes")
+                connection.putheader("Content-Length", "-1")
+                connection.endheaders()
+                negative_response = connection.getresponse()
+                negative_status = negative_response.status
+                negative_response.read()
+                connection.close()
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(oversized["status"], 413)
+            self.assertEqual(negative_status, 400)
+
+    def test_runtime_delete_failure_is_503_and_validation_is_400(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DeleteFailureRuntime(),
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "sbx-1", "image": "busybox", "memory_mb": 128},
+                )
+                failed_delete = self._json_request(
+                    f"{base}/v1/sandboxes/sbx-1",
+                    method="DELETE",
+                    allow_error=True,
+                )
+                invalid = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "bad/id", "image": "busybox", "memory_mb": 128},
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+            self.assertEqual(failed_delete["status"], 503)
+            self.assertEqual(invalid["status"], 400)
+
     def test_node_agent_server_uses_high_listen_backlog(self) -> None:
         with TemporaryDirectory() as raw_dir:
             server = build_node_agent_server(
@@ -98,6 +558,7 @@ class NodeAgentTests(unittest.TestCase):
                 listed = self._json_request(f"{base}/v1/sandboxes")
                 healthz = self._json_request(f"{base}/healthz")
                 heartbeat = self._json_request(f"{base}/v1/heartbeat")
+                second_heartbeat = self._json_request(f"{base}/v1/heartbeat")
                 deleted = self._json_request(
                     f"{base}/v1/sandboxes/sbx-1",
                     method="DELETE",
@@ -129,6 +590,32 @@ class NodeAgentTests(unittest.TestCase):
             self.assertEqual(heartbeat["heartbeat"]["effective_resources"]["vcpu"], 8.0)
             self.assertEqual(heartbeat["heartbeat"]["runtime_metrics"]["cpu_percent"], 25.0)
             self.assertEqual(heartbeat["heartbeat"]["runtime_metrics"]["memory_used_mb"], 2048)
+            self.assertTrue(heartbeat["heartbeat"]["node_epoch"])
+            self.assertEqual(
+                second_heartbeat["heartbeat"]["node_epoch"],
+                heartbeat["heartbeat"]["node_epoch"],
+            )
+            self.assertEqual(heartbeat["heartbeat"]["activity_epoch"], 1)
+            self.assertTrue(heartbeat["heartbeat"]["inventory_complete"])
+            self.assertEqual(
+                heartbeat["heartbeat"]["used_resources"]["memory_mb"],
+                0,
+            )
+            self.assertEqual(
+                heartbeat["heartbeat"]["reserved_resources"]["memory_mb"],
+                128,
+            )
+            self.assertGreater(heartbeat["heartbeat"]["physical_disk_total_mb"], 0)
+            self.assertGreater(heartbeat["heartbeat"]["physical_disk_free_mb"], 0)
+            inventory = heartbeat["heartbeat"]["inventory"]
+            self.assertEqual(len(inventory), 1)
+            self.assertEqual(inventory[0]["sandbox_id"], "sbx-1")
+            self.assertEqual(inventory[0]["state"], "planned")
+            self.assertEqual(inventory[0]["resources"]["memory_mb"], 128)
+            self.assertEqual(
+                inventory[0]["spec_hash"],
+                sandbox_spec_fingerprint(SandboxSpec.from_dict(create_payload)),
+            )
             self.assertEqual(deleted["deleted"]["spec"]["id"], "sbx-1")
 
     def test_builds_images_and_snapshots_over_http(self) -> None:
@@ -511,9 +998,52 @@ class NodeAgentTests(unittest.TestCase):
         self.assertEqual(bad_path["status"], 400)
         self.assertIn("must identify a file", bad_path["error"])
 
+    def test_file_download_enforces_exact_configured_body_limit(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            runtime = FileRuntime()
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=runtime,
+                max_file_body_bytes=8,
+            )
+            Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={"id": "sbx-1", "image": "busybox", "memory_mb": 128},
+                )
+                exact = b"\x00\xffbinary"
+                runtime.files[("sbx-1", "/workspace/exact.bin")] = exact
+                runtime.files[("sbx-1", "/workspace/large.bin")] = exact + b"!"
+                downloaded = self._bytes_request(
+                    f"{base}/v1/sandboxes/sbx-1/files?path={quote('/workspace/exact.bin')}"
+                )
+                oversized = self._json_request(
+                    f"{base}/v1/sandboxes/sbx-1/files?path={quote('/workspace/large.bin')}",
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(downloaded["body"], exact)
+        self.assertEqual(oversized["status"], 413)
+        self.assertIn("8 byte download limit", oversized["error"])
+
     def test_async_gateway_exec_handle_reads_events(self) -> None:
         async def scenario(base: str) -> list[str]:
-            client = NodeGatewayClient(base)
+            client = NodeGatewayClient(
+                base,
+                node_control_bearer_token="node-secret",
+            )
             handle = await client.start_exec(
                 "sbx-1",
                 SandboxExecSpec(sandbox_id="sbx-1", command=("echo", "ok")),
@@ -534,6 +1064,7 @@ class NodeAgentTests(unittest.TestCase):
                 job_id="job-1",
                 node_id="node-1",
                 runtime=DockerGvisorRuntime(dry_run=True),
+                node_control_bearer_token="node-secret",
             )
             thread = Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -544,6 +1075,7 @@ class NodeAgentTests(unittest.TestCase):
                     f"{base}/v1/sandboxes",
                     method="POST",
                     payload={"id": "sbx-1", "image": "busybox", "memory_mb": 128},
+                    headers={"Authorization": "Bearer node-secret"},
                 )
                 streams = asyncio.run(scenario(base))
             finally:
@@ -558,14 +1090,15 @@ class NodeAgentTests(unittest.TestCase):
         *,
         method: str = "GET",
         payload: dict | None = None,
+        headers: dict[str, str] | None = None,
         allow_error: bool = False,
     ) -> dict:
         body = None
-        headers = {}
+        request_headers = dict(headers or {})
         if payload is not None:
             body = json.dumps(payload).encode("utf-8")
-            headers["Content-Type"] = "application/json"
-        req = request.Request(url, data=body, method=method, headers=headers)
+            request_headers["Content-Type"] = "application/json"
+        req = request.Request(url, data=body, method=method, headers=request_headers)
         try:
             with request.urlopen(req, timeout=5) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -633,9 +1166,24 @@ class FileRuntime(DockerGvisorRuntime):
         self,
         sandbox_id: str,
         container_path: str,
+        *,
+        max_bytes: int | None = None,
     ):
-        _, result = super().read_file_from_container(sandbox_id, container_path)
+        _, result = super().read_file_from_container(
+            sandbox_id,
+            container_path,
+            max_bytes=max_bytes,
+        )
         return self.files[(sandbox_id, container_path)], result
+
+
+class DeleteFailureRuntime(DockerGvisorRuntime):
+    def __init__(self) -> None:
+        super().__init__(dry_run=True)
+
+    def delete(self, sandbox_id: str) -> CommandResult:
+        del sandbox_id
+        raise RuntimeError("docker daemon temporarily unavailable")
 
 
 class BlockingExecutor:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import math
 import re
 from typing import Any
 
@@ -18,9 +19,16 @@ def utc_now() -> datetime:
 
 
 def parse_millis(value: object) -> datetime | None:
-    if not isinstance(value, (int, float)) or value <= 0:
+    if (
+        not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value <= 0
+    ):
         return None
-    return datetime.fromtimestamp(value / 1000.0, tz=timezone.utc)
+    try:
+        return datetime.fromtimestamp(value / 1000.0, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def parse_iso_datetime(value: object) -> datetime | None:
@@ -68,14 +76,27 @@ def _first_present(raw: dict[str, Any], *keys: str) -> object:
 def _optional_float(value: object) -> float | None:
     if value is None or value == "":
         return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _nonnegative_finite_float(value: object) -> float:
+    try:
+        parsed = float(value or 0.0)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return parsed if math.isfinite(parsed) and parsed >= 0 else 0.0
+
+
+def _nonnegative_int(value: object) -> int:
+    try:
+        parsed = int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, parsed)
 
 
 def cpu_count_from_product_id(product_id: str) -> int | None:
@@ -97,9 +118,18 @@ class ResourceQuantity:
         if not isinstance(raw, dict):
             return cls()
         return cls(
-            vcpu=float(raw.get("vcpu") or raw.get("cpu") or 0.0),
-            memory_mb=int(raw.get("memory_mb") or raw.get("memoryMb") or 0),
-            disk_mb=int(raw.get("disk_mb") or raw.get("diskMb") or 0),
+            vcpu=_nonnegative_finite_float(raw.get("vcpu") or raw.get("cpu")),
+            memory_mb=_nonnegative_int(raw.get("memory_mb") or raw.get("memoryMb")),
+            disk_mb=_nonnegative_int(raw.get("disk_mb") or raw.get("diskMb")),
+        )
+
+    @property
+    def is_valid(self) -> bool:
+        return (
+            math.isfinite(self.vcpu)
+            and self.vcpu >= 0
+            and self.memory_mb >= 0
+            and self.disk_mb >= 0
         )
 
     def to_dict(self) -> dict[str, float | int]:
@@ -132,6 +162,66 @@ class ResourceQuantity:
 
 
 @dataclass(frozen=True)
+class SandboxInventoryEntry:
+    """A versioned node-side observation of one sandbox.
+
+    The generation and operation ID let the control plane distinguish a delayed
+    response from the current incarnation of a sandbox with the same public ID.
+    Older agents can omit the inventory entirely; ``inventory_complete`` on the
+    enclosing heartbeat makes that ambiguity explicit.
+    """
+
+    sandbox_id: str
+    generation: int = 0
+    operation_id: str = ""
+    spec_hash: str = ""
+    state: str = ""
+    resources: ResourceQuantity = ResourceQuantity()
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "SandboxInventoryEntry | None":
+        if not isinstance(raw, dict):
+            return None
+        sandbox_id = str(_first_present(raw, "sandbox_id", "sandboxId") or "").strip()
+        if not sandbox_id:
+            return None
+        try:
+            generation = int(raw.get("generation") or 0)
+        except (TypeError, ValueError):
+            return None
+        if generation < 0:
+            return None
+        operation_id = str(
+            _first_present(raw, "operation_id", "operationId") or ""
+        ).strip()
+        spec_hash = str(_first_present(raw, "spec_hash", "specHash") or "").strip()
+        # A positive generation is only useful as a fencing token when the
+        # complete incarnation identity accompanies it.  Treat a partially
+        # versioned observation as malformed instead of allowing it to match a
+        # current route by public sandbox ID alone.
+        if generation > 0 and (not operation_id or not spec_hash):
+            return None
+        return cls(
+            sandbox_id=sandbox_id,
+            generation=generation,
+            operation_id=operation_id,
+            spec_hash=spec_hash,
+            state=str(raw.get("state") or "").strip(),
+            resources=ResourceQuantity.from_dict(raw.get("resources")),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "sandbox_id": self.sandbox_id,
+            "generation": self.generation,
+            "operation_id": self.operation_id,
+            "spec_hash": self.spec_hash,
+            "state": self.state,
+            "resources": self.resources.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class NodeRuntimeMetrics:
     collected_at: datetime
     cpu_percent: float | None = None
@@ -156,18 +246,15 @@ class NodeRuntimeMetrics:
             collected_at=collected_at,
             cpu_percent=_optional_float(_first_present(raw, "cpu_percent", "cpuPercent")),
             cpu_vcpu=_optional_float(_first_present(raw, "cpu_vcpu", "cpuVcpu")),
-            cpu_count=max(0, int(_first_present(raw, "cpu_count", "cpuCount") or 0)),
-            memory_total_mb=max(
-                0,
-                int(_first_present(raw, "memory_total_mb", "memoryTotalMb") or 0),
+            cpu_count=_nonnegative_int(_first_present(raw, "cpu_count", "cpuCount")),
+            memory_total_mb=_nonnegative_int(
+                _first_present(raw, "memory_total_mb", "memoryTotalMb")
             ),
-            memory_used_mb=max(
-                0,
-                int(_first_present(raw, "memory_used_mb", "memoryUsedMb") or 0),
+            memory_used_mb=_nonnegative_int(
+                _first_present(raw, "memory_used_mb", "memoryUsedMb")
             ),
-            memory_available_mb=max(
-                0,
-                int(_first_present(raw, "memory_available_mb", "memoryAvailableMb") or 0),
+            memory_available_mb=_nonnegative_int(
+                _first_present(raw, "memory_available_mb", "memoryAvailableMb")
             ),
             memory_percent=_optional_float(
                 _first_present(raw, "memory_percent", "memoryPercent")
@@ -258,10 +345,29 @@ class NodeHeartbeat:
     cached_images: tuple[str, ...] = ()
     cached_images_known: bool = False
     runtime_metrics: NodeRuntimeMetrics | None = None
+    reported_at: datetime | None = None
+    received_at: datetime | None = None
+    node_epoch: str = ""
+    activity_epoch: int = 0
+    inventory: tuple[SandboxInventoryEntry, ...] = ()
+    inventory_complete: bool = False
+    reserved_resources: ResourceQuantity = ResourceQuantity()
+    build_reserved_resources: ResourceQuantity = ResourceQuantity()
+    physical_disk_total_mb: int = 0
+    physical_disk_free_mb: int = 0
+    drain_token: str = ""
+    drain_activity_epoch: int = 0
+    admission_open: bool = True
 
     def is_fresh(self, now: datetime, ttl_seconds: int) -> bool:
-        age = (now - self.updated_at).total_seconds()
-        return age <= ttl_seconds
+        age = (now - self.freshness_at).total_seconds()
+        return ttl_seconds >= 0 and 0 <= age <= ttl_seconds
+
+    @property
+    def freshness_at(self) -> datetime:
+        """Return the gateway-controlled receipt time when it is available."""
+
+        return self.received_at or self.updated_at
 
     @property
     def effective_resources(self) -> ResourceQuantity:
@@ -307,7 +413,14 @@ class SandboxNode:
 
     @property
     def is_schedulable(self) -> bool:
-        return self.is_ready and self.agent_version_compatible
+        heartbeat = self.heartbeat
+        return bool(
+            self.is_ready
+            and self.agent_version_compatible
+            and heartbeat is not None
+            and not heartbeat.draining
+            and heartbeat.admission_open
+        )
 
     @property
     def is_provisioning(self) -> bool:

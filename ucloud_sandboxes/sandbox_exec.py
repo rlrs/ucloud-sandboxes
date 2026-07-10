@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 import subprocess
@@ -93,7 +94,7 @@ class ExecSession:
     updated_at: datetime
     exit_code: int | None = None
     stdin_open: bool = False
-    events: list[ExecEvent] = field(default_factory=list)
+    events: deque[ExecEvent] = field(default_factory=deque)
     next_sequence: int = 1
     process: subprocess.Popen[str] | None = field(default=None, repr=False, compare=False)
 
@@ -111,8 +112,16 @@ class ExecSession:
 
 
 class ExecSessionManager:
-    def __init__(self, sandbox_manager: SandboxManager) -> None:
+    def __init__(
+        self,
+        sandbox_manager: SandboxManager,
+        *,
+        max_sessions: int = 128,
+        max_events_per_session: int = 512,
+    ) -> None:
         self.sandbox_manager = sandbox_manager
+        self.max_sessions = max(1, max_sessions)
+        self.max_events_per_session = max(1, max_events_per_session)
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
 
@@ -139,8 +148,10 @@ class ExecSessionManager:
             created_at=now,
             updated_at=now,
             stdin_open=spec.stdin,
+            events=deque(maxlen=self.max_events_per_session),
         )
         with self._lock:
+            self._make_session_room_locked()
             self._sessions[session.id] = session
             self._append_event_locked(session, "status", "started")
         if runtime.dry_run:
@@ -306,6 +317,23 @@ class ExecSessionManager:
         if session is None:
             raise ValueError(f"exec session not found: {session_id}")
         return session
+
+    def _make_session_room_locked(self) -> None:
+        if len(self._sessions) < self.max_sessions:
+            return
+        terminal = sorted(
+            (
+                session
+                for session in self._sessions.values()
+                if session.status in {"exited", "failed"}
+            ),
+            key=lambda session: (session.updated_at, session.id),
+        )
+        for session in terminal:
+            self._sessions.pop(session.id, None)
+            if len(self._sessions) < self.max_sessions:
+                return
+        raise RuntimeError("exec session capacity reached")
 
     def _append_event_locked(
         self,

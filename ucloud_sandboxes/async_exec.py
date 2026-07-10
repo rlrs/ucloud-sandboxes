@@ -85,15 +85,18 @@ class AsyncExecSessionManager:
         self,
         sandbox_manager: SandboxManager,
         *,
+        max_sessions: int = 128,
         max_events_per_session: int = 512,
         max_queue_events: int = 64,
         stream_chunk_bytes: int = 16 * 1024,
     ) -> None:
         self.sandbox_manager = sandbox_manager
+        self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
         self.max_queue_events = max(1, max_queue_events)
         self.stream_chunk_bytes = max(1024, stream_chunk_bytes)
         self._sessions: dict[str, AsyncExecSession] = {}
+        self._sessions_lock = asyncio.Lock()
 
     async def start(self, spec: SandboxExecSpec) -> AsyncExecSession:
         spec.validate()
@@ -121,7 +124,9 @@ class AsyncExecSessionManager:
             output_queue=asyncio.Queue(maxsize=self.max_queue_events),
             events=deque(maxlen=self.max_events_per_session),
         )
-        self._sessions[session.id] = session
+        async with self._sessions_lock:
+            await self._make_session_room_locked()
+            self._sessions[session.id] = session
         await self._append_event(session, "status", b"started")
         if runtime.dry_run:
             await self._append_event(session, "status", b"dry-run")
@@ -235,11 +240,45 @@ class AsyncExecSessionManager:
     ) -> None:
         exit_code = await process.wait()
         try:
-            await asyncio.wait_for(asyncio.gather(*stream_tasks), timeout=2.0)
+            await asyncio.wait_for(
+                asyncio.gather(*stream_tasks, return_exceptions=True),
+                timeout=2.0,
+            )
         except asyncio.TimeoutError:
-            pass
+            for task in stream_tasks:
+                task.cancel()
+            await asyncio.gather(*stream_tasks, return_exceptions=True)
         session.stdin_open = False
         await self._complete(session, exit_code)
+
+    async def _make_session_room_locked(self) -> None:
+        if len(self._sessions) < self.max_sessions:
+            return
+        terminal = sorted(
+            (
+                session
+                for session in self._sessions.values()
+                if session.status in {"exited", "failed"}
+            ),
+            key=lambda session: (session.updated_at, session.id),
+        )
+        for session in terminal:
+            self._sessions.pop(session.id, None)
+            await self._cleanup_session_tasks(session)
+            if len(self._sessions) < self.max_sessions:
+                return
+        raise RuntimeError("exec session capacity reached")
+
+    @staticmethod
+    async def _cleanup_session_tasks(session: AsyncExecSession) -> None:
+        current = asyncio.current_task()
+        tasks = [task for task in session.tasks if task is not current]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        session.tasks.clear()
 
     def _require_session(self, session_id: str) -> AsyncExecSession:
         session = self._sessions.get(session_id)
@@ -266,7 +305,21 @@ class AsyncExecSessionManager:
             session.updated_at = utc_now()
             session.events.append(event)
             session.condition.notify_all()
-        await session.output_queue.put(event)
+        # WebSocket delivery is best effort; the bounded replay deque above is
+        # the authoritative polling history.  Never let an absent or slow
+        # WebSocket consumer block stdout/stderr pumps or the final exit event.
+        if session.output_queue.full():
+            try:
+                session.output_queue.get_nowait()
+                session.output_queue.task_done()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            session.output_queue.put_nowait(event)
+        except asyncio.QueueFull:
+            # A concurrent consumer/publisher can change queue state between
+            # the checks.  The replay deque still retains this event.
+            pass
         return event
 
     async def _complete(self, session: AsyncExecSession, exit_code: int) -> None:

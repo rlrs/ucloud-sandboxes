@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import base64
 import binascii
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -18,14 +19,33 @@ from typing import Any, Callable, Iterable
 from uuid import uuid4
 
 from .models import parse_iso_datetime, utc_now
-from .sandbox import CommandExecutor, CommandResult, SubprocessExecutor
+from .sandbox import (
+    CommandExecutor,
+    CommandResult,
+    SandboxAdmissionClosedError,
+    SandboxStore,
+    SubprocessExecutor,
+    _AdvisoryFileLock,
+    _atomic_write_json,
+    _sandbox_create_lock,
+)
 
 
 IMAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 BUILD_TERMINAL_STATES = {"succeeded", "failed"}
 BUILD_LOG_TAIL_CHARS = 64 * 1024
+COMMAND_OUTPUT_TAIL_CHARS = 64 * 1024
+COMMAND_OUTPUT_READ_CHARS = 16 * 1024
+COMMAND_OUTPUT_TRUNCATION_MARKER = "[output truncated; showing retained tail]\n"
+DEFAULT_TERMINAL_BUILD_HISTORY = 256
+BUILD_LOG_FLUSH_CHARS = 16 * 1024
+BUILD_LOG_FLUSH_INTERVAL_SECONDS = 0.25
 _IMAGE_LOCKS_GUARD = RLock()
-_IMAGE_LOCKS: dict[Path, RLock] = {}
+_IMAGE_LOCKS: dict[Path, _AdvisoryFileLock] = {}
+
+
+class ImageBuildCapacityError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -83,12 +103,22 @@ class ImageRecord:
         updated_at = parse_iso_datetime(raw.get("updated_at"))
         if created_at is None or updated_at is None:
             raise ValueError("image record has invalid timestamps.")
+        image_id = str(raw.get("id") or "")
+        tag = str(raw.get("tag") or "")
+        source = str(raw.get("source") or "")
+        state = str(raw.get("state") or "")
+        if not IMAGE_ID_RE.fullmatch(image_id):
+            raise ValueError("image record has an invalid image id.")
+        if not tag or not source or not state:
+            raise ValueError("image record is missing tag, source, or state.")
         labels = raw.get("labels") or {}
+        if not isinstance(labels, dict):
+            raise ValueError("image record labels must be a JSON object.")
         return cls(
-            id=str(raw.get("id") or ""),
-            tag=str(raw.get("tag") or ""),
-            source=str(raw.get("source") or ""),
-            state=str(raw.get("state") or ""),
+            id=image_id,
+            tag=tag,
+            source=source,
+            state=state,
             created_at=created_at,
             updated_at=updated_at,
             labels={str(k): str(v) for k, v in dict(labels).items()},
@@ -134,6 +164,7 @@ class ImageBuildRecord:
     finished_at: str = ""
     image: dict[str, Any] = field(default_factory=dict)
     timings: dict[str, Any] = field(default_factory=dict)
+    owner_pid: int = 0
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
@@ -169,6 +200,7 @@ class ImageBuildRecord:
             finished_at=str(raw.get("finished_at") or raw.get("finishedAt") or ""),
             image={str(key): value for key, value in image.items()},
             timings={str(key): value for key, value in timings.items()},
+            owner_pid=max(0, _optional_int(raw.get("owner_pid")) or 0),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -192,6 +224,7 @@ class ImageBuildRecord:
             "finished_at": self.finished_at,
             "image": dict(self.image),
             "timings": dict(self.timings),
+            "owner_pid": self.owner_pid,
         }
 
     @property
@@ -304,13 +337,39 @@ class DockerImageRuntime:
             errors="replace",
             bufsize=1,
         )
-        chunks: list[str] = []
+        # Continue delivering every chunk to the live callback, but retain only
+        # a bounded diagnostic tail in CommandResult. Docker build output can
+        # otherwise consume all node memory during a long or noisy build.
+        output_tail = ""
+        output_truncated = False
         assert process.stdout is not None
-        for chunk in process.stdout:
-            chunks.append(chunk)
-            on_output("combined", chunk)
+        try:
+            while True:
+                chunk = process.stdout.read(COMMAND_OUTPUT_READ_CHARS)
+                if not chunk:
+                    break
+                if len(output_tail) + len(chunk) > COMMAND_OUTPUT_TAIL_CHARS:
+                    output_truncated = True
+                output_tail = _tail_text(
+                    output_tail + chunk,
+                    limit=COMMAND_OUTPUT_TAIL_CHARS,
+                )
+                on_output("combined", chunk)
+        except BaseException:
+            process.terminate()
+            process.wait()
+            raise
+        finally:
+            process.stdout.close()
         exit_code = process.wait()
-        output = "".join(chunks)
+        output = (
+            COMMAND_OUTPUT_TRUNCATION_MARKER
+            + output_tail[
+                -(COMMAND_OUTPUT_TAIL_CHARS - len(COMMAND_OUTPUT_TRUNCATION_MARKER)) :
+            ]
+            if output_truncated
+            else output_tail
+        )
         result = CommandResult(argv=argv, exit_code=exit_code, stdout=output)
         if result.exit_code != 0:
             raise RuntimeError(
@@ -326,54 +385,31 @@ class ImageStore:
         self._lock = _image_lock(path)
 
     def load(self) -> dict[str, ImageRecord]:
-        with self._lock:
-            if not self.path.exists():
-                return {}
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict):
-                raise ValueError("image store must contain a JSON object.")
-            items = raw.get("images", [])
-            if not isinstance(items, list):
-                raise ValueError("image store must contain an images list.")
-            records: dict[str, ImageRecord] = {}
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                record = ImageRecord.from_dict(item)
-                records[record.id] = record
-            return records
+        with self._lock.hold(exclusive=False):
+            return self._load_unlocked()
 
     def save(self, records: dict[str, ImageRecord]) -> None:
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-            payload = {
-                "images": [records[image_id].to_dict() for image_id in sorted(records)]
-            }
-            tmp_path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
-            tmp_path.replace(self.path)
+        with self._lock.hold(exclusive=True):
+            self._save_unlocked(records)
 
     def upsert(self, record: ImageRecord) -> dict[str, ImageRecord]:
-        with self._lock:
-            records = self.load()
+        with self._lock.hold(exclusive=True):
+            records = self._load_unlocked()
             records[record.id] = record
-            self.save(records)
+            self._save_unlocked(records)
             return records
 
     def delete_by_tags(self, tags: Iterable[str]) -> list[ImageRecord]:
         tag_set = {tag for tag in tags if tag}
         if not tag_set:
             return []
-        with self._lock:
-            records = self.load()
+        with self._lock.hold(exclusive=True):
+            records = self._load_unlocked()
             removed = [
                 record for record in records.values() if record.tag in tag_set
             ]
             if removed:
-                self.save(
+                self._save_unlocked(
                     {
                         image_id: record
                         for image_id, record in records.items()
@@ -382,59 +418,119 @@ class ImageStore:
                 )
             return removed
 
+    def _load_unlocked(self) -> dict[str, ImageRecord]:
+        if not self.path.exists():
+            return {}
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("image store must contain a JSON object.")
+        items = raw.get("images", [])
+        if not isinstance(items, list):
+            raise ValueError("image store must contain an images list.")
+        records: dict[str, ImageRecord] = {}
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"image store contains an invalid record at index {index}."
+                )
+            record = ImageRecord.from_dict(item)
+            if record.id in records:
+                raise ValueError(f"image store contains duplicate image id {record.id!r}.")
+            records[record.id] = record
+        return records
+
+    def _save_unlocked(self, records: dict[str, ImageRecord]) -> None:
+        _atomic_write_json(
+            self.path,
+            {
+                "images": [
+                    records[image_id].to_dict()
+                    for image_id in sorted(records)
+                ]
+            },
+        )
+
 
 class ImageBuildStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_terminal_builds: int = DEFAULT_TERMINAL_BUILD_HISTORY,
+    ) -> None:
         self.path = path
+        self.max_terminal_builds = max(0, max_terminal_builds)
         self._lock = _image_lock(path)
 
     def load(self) -> dict[str, ImageBuildRecord]:
-        with self._lock:
-            if not self.path.exists():
-                return {}
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict):
-                raise ValueError("image build store must contain a JSON object.")
-            items = raw.get("builds", [])
-            if not isinstance(items, list):
-                raise ValueError("image build store must contain a builds list.")
-            records: dict[str, ImageBuildRecord] = {}
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                record = ImageBuildRecord.from_dict(item)
-                if record is not None:
-                    records[record.build_id] = record
-            return records
+        with self._lock.hold(exclusive=False):
+            return self._load_unlocked()
 
     def save(self, records: dict[str, ImageBuildRecord]) -> None:
-        with self._lock:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-            payload = {
-                "builds": [
-                    records[build_id].to_dict()
-                    for build_id in sorted(
-                        records,
-                        key=lambda item: (
-                            records[item].created_at,
-                            records[item].build_id,
-                        ),
-                    )
-                ]
-            }
-            tmp_path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
-            tmp_path.replace(self.path)
+        with self._lock.hold(exclusive=True):
+            self._save_unlocked(records)
 
     def upsert(self, record: ImageBuildRecord) -> dict[str, ImageBuildRecord]:
-        with self._lock:
-            records = self.load()
+        with self._lock.hold(exclusive=True):
+            records = self._load_unlocked()
             records[record.build_id] = record
-            self.save(records)
+            self._save_unlocked(records)
             return records
+
+    def reserve_build(
+        self,
+        record: ImageBuildRecord,
+        *,
+        max_active_builds: int,
+    ) -> tuple[ImageBuildRecord, bool]:
+        """Atomically deduplicate, capacity-check, and persist a new build."""
+        with self._lock.hold(exclusive=True):
+            records = self._load_unlocked()
+            matching = sorted(
+                (
+                    existing
+                    for existing in records.values()
+                    if existing.image_id == record.image_id
+                    and existing.tag == record.tag
+                    and not existing.terminal
+                ),
+                key=lambda item: (item.created_at, item.build_id),
+            )
+            if matching:
+                return matching[-1], False
+            active_count = sum(1 for existing in records.values() if not existing.terminal)
+            if active_count >= max_active_builds:
+                raise ImageBuildCapacityError(
+                    f"image build capacity reached ({max_active_builds})"
+                )
+            records[record.build_id] = record
+            self._save_unlocked(records)
+            return record, True
+
+    def reconcile_interrupted(self) -> tuple[ImageBuildRecord, ...]:
+        with self._lock.hold(exclusive=True):
+            records = self._load_unlocked()
+            now = utc_now().isoformat()
+            interrupted: list[ImageBuildRecord] = []
+            for build_id, record in records.items():
+                if record.terminal or _pid_is_running(record.owner_pid):
+                    continue
+                error = "image build interrupted by node-agent restart"
+                if record.error:
+                    error = f"{record.error}; {error}"
+                updated = replace(
+                    record,
+                    status="failed",
+                    error=error,
+                    updated_at=now,
+                    finished_at=now,
+                )
+                records[build_id] = updated
+                interrupted.append(updated)
+            compacted = self._bounded_records(records)
+            if interrupted or len(compacted) != len(records):
+                self._save_unlocked(compacted)
+            return tuple(interrupted)
 
     def get(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         records = self.load()
@@ -466,6 +562,74 @@ class ImageBuildStore:
             return None
         return sorted(matches, key=lambda item: (item.created_at, item.build_id))[-1]
 
+    def _load_unlocked(self) -> dict[str, ImageBuildRecord]:
+        if not self.path.exists():
+            return {}
+        raw = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("image build store must contain a JSON object.")
+        items = raw.get("builds", [])
+        if not isinstance(items, list):
+            raise ValueError("image build store must contain a builds list.")
+        records: dict[str, ImageBuildRecord] = {}
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"image build store contains an invalid record at index {index}."
+                )
+            record = ImageBuildRecord.from_dict(item)
+            if record is None:
+                raise ValueError(
+                    f"image build store contains an invalid record at index {index}."
+                )
+            if record.build_id in records:
+                raise ValueError(
+                    f"image build store contains duplicate build id {record.build_id!r}."
+                )
+            records[record.build_id] = record
+        return records
+
+    def _save_unlocked(self, records: dict[str, ImageBuildRecord]) -> None:
+        records = self._bounded_records(records)
+        _atomic_write_json(
+            self.path,
+            {
+                "builds": [
+                    records[build_id].to_dict()
+                    for build_id in sorted(
+                        records,
+                        key=lambda item: (
+                            records[item].created_at,
+                            records[item].build_id,
+                        ),
+                    )
+                ]
+            },
+        )
+
+    def _bounded_records(
+        self,
+        records: dict[str, ImageBuildRecord],
+    ) -> dict[str, ImageBuildRecord]:
+        """Retain every active build plus the newest bounded terminal history."""
+        active = {
+            build_id: record
+            for build_id, record in records.items()
+            if not record.terminal
+        }
+        terminal = sorted(
+            (record for record in records.values() if record.terminal),
+            key=lambda record: (
+                record.finished_at or record.updated_at or record.created_at,
+                record.build_id,
+            ),
+            reverse=True,
+        )[: self.max_terminal_builds]
+        return {
+            **active,
+            **{record.build_id: record for record in terminal},
+        }
+
 
 class ImageManager:
     def __init__(
@@ -474,13 +638,20 @@ class ImageManager:
         runtime: DockerImageRuntime,
         *,
         build_store: ImageBuildStore | None = None,
+        max_active_builds: int = 4,
+        admission_store: SandboxStore | None = None,
     ) -> None:
         self.store = store
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(default_image_build_file(store.path))
+        self.max_active_builds = max(1, max_active_builds)
+        self.admission_store = admission_store
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
+        self._pending_build_logs: dict[str, str] = {}
+        self._build_log_last_flush: dict[str, float] = {}
+        self.reconcile_interrupted_builds()
 
     def list(self) -> list[ImageRecord]:
         return list(self.store.load().values())
@@ -495,7 +666,17 @@ class ImageManager:
         return sum(1 for record in self.build_store.load().values() if not record.terminal)
 
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
-        return self.build_store.get(build_id_or_image_id)
+        with self._build_lock:
+            record = self.build_store.get(build_id_or_image_id)
+            if record is not None and record.build_id in self._pending_build_logs:
+                self._flush_build_log_locked(record.build_id)
+                record = self.build_store.get(build_id_or_image_id)
+            return record
+
+    def reconcile_interrupted_builds(self) -> tuple[ImageBuildRecord, ...]:
+        """Fail persisted non-terminal builds that have no worker after restart."""
+        with self._build_lock:
+            return self.build_store.reconcile_interrupted()
 
     def build(self, spec: ImageBuildSpec) -> tuple[ImageRecord, CommandResult]:
         spec.validate()
@@ -521,12 +702,26 @@ class ImageManager:
         cleanup: Callable[[], None] | None = None,
     ) -> tuple[ImageBuildRecord, bool]:
         spec.validate()
-        with self._build_lock:
-            active = self.build_store.active_for_image(spec.id, tag=spec.tag)
-            if active is not None:
-                if cleanup is not None:
-                    cleanup()
-                return active, False
+        admission_gate = (
+            _sandbox_create_lock(self.admission_store.path, "image-build-admission")
+            if self.admission_store is not None
+            else nullcontext()
+        )
+        with admission_gate, self._build_lock:
+            if self.admission_store is not None:
+                drain = self.admission_store.load_state().drain
+                if not drain.admission_open:
+                    active = self.build_store.active_for_image(spec.id, tag=spec.tag)
+                    if active is not None:
+                        if cleanup is not None:
+                            cleanup()
+                        return active, False
+                    if cleanup is not None:
+                        cleanup()
+                    raise SandboxAdmissionClosedError(
+                        f"image build admission is closed while drain token "
+                        f"{drain.token!r} is active"
+                    )
             now = utc_now().isoformat()
             build_id = str(uuid4())
             record = ImageBuildRecord(
@@ -546,9 +741,24 @@ class ImageManager:
                     "total_ms": None,
                     "phases": {},
                 },
+                owner_pid=os.getpid(),
             )
-            self.build_store.upsert(record)
+            try:
+                record, build_started = self.build_store.reserve_build(
+                    record,
+                    max_active_builds=self.max_active_builds,
+                )
+            except ImageBuildCapacityError:
+                if cleanup is not None:
+                    cleanup()
+                raise
+            if not build_started:
+                if cleanup is not None:
+                    cleanup()
+                return record, False
+            build_id = record.build_id
             self._build_conditions[build_id] = Condition(self._build_lock)
+            self._build_log_last_flush[build_id] = time.monotonic()
             thread = Thread(
                 target=self._run_tracked_build,
                 args=(build_id, spec, push, cleanup),
@@ -556,7 +766,7 @@ class ImageManager:
             )
             self._active_threads[build_id] = thread
             thread.start()
-            return record, True
+            return record, build_started
 
     def wait_for_build(
         self,
@@ -696,48 +906,76 @@ class ImageManager:
                 timings=_build_timings(phases, started),
             )
         finally:
-            if cleanup is not None:
-                phase = time.monotonic()
-                try:
-                    cleanup()
-                finally:
-                    phases["cleanup_ms"] = _elapsed_ms(phase)
-                    self._update_build_timings(build_id, phases, started)
-            with self._build_lock:
-                self._active_threads.pop(build_id, None)
-                condition = self._build_conditions.get(build_id)
-                if condition is not None:
-                    condition.notify_all()
+            try:
+                if cleanup is not None:
+                    phase = time.monotonic()
+                    try:
+                        cleanup()
+                    finally:
+                        phases["cleanup_ms"] = _elapsed_ms(phase)
+                        self._update_build_timings(build_id, phases, started)
+            finally:
+                with self._build_lock:
+                    self._active_threads.pop(build_id, None)
+                    self._pending_build_logs.pop(build_id, None)
+                    self._build_log_last_flush.pop(build_id, None)
+                    condition = self._build_conditions.pop(build_id, None)
+                    if condition is not None:
+                        condition.notify_all()
 
     def _append_build_log(self, build_id: str, stream: str, chunk: str) -> None:
         if not chunk:
             return
         prefix = "" if stream == "combined" else f"[{stream}] "
         with self._build_lock:
-            record = self.build_store.get(build_id)
-            if record is None:
-                return
-            updated = replace(
-                record,
-                log_tail=_tail_text(record.log_tail + prefix + chunk),
-                updated_at=utc_now().isoformat(),
+            pending = _tail_text(
+                self._pending_build_logs.get(build_id, "") + prefix + chunk
             )
-            self.build_store.upsert(updated)
-            condition = self._build_conditions.get(build_id)
-            if condition is not None:
-                condition.notify_all()
+            self._pending_build_logs[build_id] = pending
+            last_flush = self._build_log_last_flush.get(build_id, 0.0)
+            if (
+                len(pending) >= BUILD_LOG_FLUSH_CHARS
+                or time.monotonic() - last_flush >= BUILD_LOG_FLUSH_INTERVAL_SECONDS
+            ):
+                self._flush_build_log_locked(build_id)
 
     def _update_build(self, build_id: str, **changes: Any) -> ImageBuildRecord | None:
         with self._build_lock:
             record = self.build_store.get(build_id)
             if record is None:
                 return None
+            pending = self._pending_build_logs.pop(build_id, "")
+            if pending:
+                record = replace(
+                    record,
+                    log_tail=_tail_text(record.log_tail + pending),
+                )
+                self._build_log_last_flush[build_id] = time.monotonic()
             updated = replace(record, updated_at=utc_now().isoformat(), **changes)
             self.build_store.upsert(updated)
             condition = self._build_conditions.get(build_id)
             if condition is not None:
                 condition.notify_all()
             return updated
+
+    def _flush_build_log_locked(self, build_id: str) -> ImageBuildRecord | None:
+        pending = self._pending_build_logs.pop(build_id, "")
+        if not pending:
+            return self.build_store.get(build_id)
+        record = self.build_store.get(build_id)
+        if record is None:
+            return None
+        updated = replace(
+            record,
+            log_tail=_tail_text(record.log_tail + pending),
+            updated_at=utc_now().isoformat(),
+        )
+        self.build_store.upsert(updated)
+        self._build_log_last_flush[build_id] = time.monotonic()
+        condition = self._build_conditions.get(build_id)
+        if condition is not None:
+            condition.notify_all()
+        return updated
 
     def _update_build_timings(
         self,
@@ -766,12 +1004,12 @@ def _elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))
 
 
-def _image_lock(path: Path) -> RLock:
+def _image_lock(path: Path) -> _AdvisoryFileLock:
     key = path.resolve()
     with _IMAGE_LOCKS_GUARD:
         lock = _IMAGE_LOCKS.get(key)
         if lock is None:
-            lock = RLock()
+            lock = _AdvisoryFileLock(key)
             _IMAGE_LOCKS[key] = lock
         return lock
 
@@ -787,6 +1025,18 @@ def _optional_int(raw: object) -> int | None:
         return int(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def _tail_text(value: str, *, limit: int = BUILD_LOG_TAIL_CHARS) -> str:

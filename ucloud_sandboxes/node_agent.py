@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
+import hmac
 import json
+import math
 from pathlib import Path
+import shutil
 import time
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
+from uuid import uuid4
 
 from .agent import build_heartbeat
 from .deployment import service_health
@@ -20,18 +24,34 @@ from .images import (
     materialize_uploaded_build_context,
 )
 from .registry import heartbeat_to_dict
-from .models import NodeRuntimeMetrics, ResourceQuantity
+from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry
 from .runtime_metrics import sample_node_runtime_metrics
 from .capabilities import merge_capabilities
 from .sandbox import (
     DockerGvisorRuntime,
+    SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxFileTooLargeError,
     SandboxManager,
+    SandboxOperation,
     SandboxRecord,
     SandboxSpec,
     SandboxStore,
+    sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionManager, SandboxExecSpec
+
+
+DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
+DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
+# Public node API headers for a versioned DELETE operation.  Callers must send
+# both together; omitting both selects the legacy generation-zero operation.
+SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
+SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
+
+
+class RequestBodyTooLargeError(ValueError):
+    pass
 
 
 class NodeAgentHandler(BaseHTTPRequestHandler):
@@ -51,6 +71,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     capabilities: tuple[str, ...]
     image_builds_enabled: bool
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None]
+    node_epoch: str
+    physical_disk_path: Path
+    node_control_bearer_token: str | None = None
+    max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
+    max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
 
     def do_GET(self) -> None:
@@ -58,7 +83,31 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/healthz":
             self._write_json(service_health("node-agent"))
             return
+        if not self._check_node_control_authorized():
+            return
         if parsed.path == "/v1/heartbeat":
+            node_snapshot = self.manager.heartbeat_snapshot(
+                active_build_count=(
+                    self.image_manager.active_build_count
+                    if self.image_builds_enabled
+                    else lambda: 0
+                )
+            )
+            activity = node_snapshot.activity
+            physical_disk_total_mb, physical_disk_free_mb = _physical_disk_usage_mb(
+                self.physical_disk_path
+            )
+            inventory = tuple(
+                SandboxInventoryEntry(
+                    sandbox_id=record.spec.id,
+                    generation=record.generation,
+                    operation_id=record.operation_id,
+                    spec_hash=record.spec_hash or sandbox_spec_fingerprint(record.spec),
+                    state=record.state,
+                    resources=record.spec.requested_resources(),
+                )
+                for record in activity.records
+            )
             self._write_json(
                 {
                     "heartbeat": heartbeat_to_dict(
@@ -69,20 +118,33 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             agent_version=self.agent_version,
                             deployment_id=self.deployment_id,
                             init_version=self.init_version,
-                            active_sandboxes=self.manager.active_count(),
-                            active_image_builds=(
-                                self.image_manager.active_build_count()
-                                if self.image_builds_enabled
-                                else 0
-                            ),
+                            active_sandboxes=activity.active_sandboxes,
+                            active_image_builds=node_snapshot.active_image_builds,
+                            draining=node_snapshot.drain.draining,
                             capabilities=self.capabilities,
                             total_resources=self.total_resources,
-                            used_resources=self.manager.requested_resources(),
+                            used_resources=activity.used_resources,
                             cpu_overcommit=self.cpu_overcommit,
                             memory_overcommit=self.memory_overcommit,
                             disk_overcommit=self.disk_overcommit,
                             cached_images=_cached_image_refs(self.image_manager),
                             runtime_metrics=self.runtime_metrics_provider(),
+                            node_epoch=self.node_epoch,
+                            activity_epoch=activity.activity_revision,
+                            inventory=inventory,
+                            inventory_complete=True,
+                            reserved_resources=activity.reserved_resources,
+                            physical_disk_total_mb=physical_disk_total_mb,
+                            physical_disk_free_mb=physical_disk_free_mb,
+                            drain_token=(
+                                node_snapshot.drain.token
+                                if node_snapshot.drain.draining
+                                else ""
+                            ),
+                            drain_activity_epoch=(
+                                node_snapshot.drain.drain_activity_epoch
+                            ),
+                            admission_open=node_snapshot.drain.admission_open,
                         )
                     )
                 }
@@ -153,7 +215,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
+        if not self._check_node_control_authorized():
+            return
         parsed = urlparse(self.path)
+        if parsed.path == "/v1/drain":
+            self._configure_drain()
+            return
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
@@ -177,7 +244,53 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
+    def _configure_drain(self) -> None:
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("drain payload must be a JSON object")
+            token = str(raw.get("token") or "").strip()
+            draining = raw.get("draining")
+            if not isinstance(draining, bool):
+                raise ValueError("draining must be a boolean")
+            snapshot = self.manager.configure_drain(
+                token,
+                draining,
+                active_build_count=(
+                    self.image_manager.active_build_count
+                    if self.image_builds_enabled
+                    else lambda: 0
+                ),
+            )
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json(
+            {
+                "drain": {
+                    "token": snapshot.drain.token,
+                    "draining": snapshot.drain.draining,
+                    "admission_open": snapshot.drain.admission_open,
+                    "drain_activity_epoch": (
+                        snapshot.drain.drain_activity_epoch
+                    ),
+                    "activity_epoch": snapshot.activity.activity_revision,
+                    "active_sandboxes": snapshot.activity.active_sandboxes,
+                    "reserved_resources": (
+                        snapshot.activity.reserved_resources.to_dict()
+                    ),
+                    "active_image_builds": snapshot.active_image_builds,
+                    "ready": snapshot.ready,
+                }
+            }
+        )
+
     def do_PUT(self) -> None:
+        if not self._check_node_control_authorized():
+            return
         parsed = urlparse(self.path)
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/files"):
             self._upload_file(parsed)
@@ -195,15 +308,30 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 raise ValueError("sandbox payload must be a JSON object")
             phase = time.monotonic()
             spec = SandboxSpec.from_dict(raw)
+            operation_raw = raw.get("_ucloud_operation")
+            operation = (
+                SandboxOperation.from_dict(operation_raw)
+                if operation_raw is not None
+                else None
+            )
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
-            record, result, manager_timings = self.manager.create_with_timings(spec)
+            record, result, manager_timings = self.manager.create_with_timings(
+                spec,
+                operation=operation,
+            )
             phases["manager_create_ms"] = _elapsed_ms(phase)
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
+        except SandboxCapacityUnavailableError as exc:
+            self._write_json(
+                {"error": str(exc)},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         status = (
             HTTPStatus.OK
@@ -235,7 +363,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             spec = SandboxExecSpec.from_dict(raw, sandbox_id=sandbox_id)
             session = self.exec_manager.start(spec)
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_json({"session": session.to_dict()}, status=HTTPStatus.CREATED)
 
@@ -289,7 +417,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if raw.get("eof"):
                 session = self.exec_manager.close_stdin(session_id)
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_json({"session": session.to_dict()})
 
@@ -326,10 +454,10 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         try:
-            content = self._read_raw_body()
+            content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
             result = self.manager.upload_file(sandbox_id, container_path, content)
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_json(
             {
@@ -352,9 +480,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         try:
-            content, result = self.manager.download_file(sandbox_id, container_path)
+            content, result = self.manager.download_file(
+                sandbox_id,
+                container_path,
+                max_bytes=self.max_file_body_bytes,
+            )
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_bytes(
             content,
@@ -415,7 +547,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 build = self.image_manager.wait_for_build(build.build_id) or build
                 phases["wait_for_build_ms"] = _elapsed_ms(phase)
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         timings = {
             "total_ms": _elapsed_ms(started),
@@ -464,7 +596,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             image_id = str(raw["id"]) if raw.get("id") else None
             record, result = self.image_manager.pull(image, image_id=image_id)
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_json(
             {
@@ -499,7 +631,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 dry_run=self.manager.runtime.dry_run,
             )
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         self._write_json(
             {
@@ -517,6 +649,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         return unquote(path[len(prefix):])
 
     def do_DELETE(self) -> None:
+        if not self._check_node_control_authorized():
+            return
         parsed = urlparse(self.path)
         prefix = "/v1/sandboxes/"
         if not parsed.path.startswith(prefix):
@@ -527,9 +661,17 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "sandbox id is required"}, status=HTTPStatus.BAD_REQUEST)
             return
         try:
-            record, result = self.manager.delete(sandbox_id)
+            generation, operation_id = self._delete_operation_headers()
+            record, result = self.manager.delete(
+                sandbox_id,
+                generation=generation,
+                operation_id=operation_id,
+            )
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
         except (RuntimeError, ValueError) as exc:
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            self._write_exception(exc)
             return
         payload: dict[str, Any] = {
             "deleted": record.to_dict() if record is not None else None,
@@ -538,11 +680,54 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         }
         self._write_json(payload)
 
+    def _delete_operation_headers(self) -> tuple[int, str]:
+        generation_header = self.headers.get(SANDBOX_GENERATION_HEADER)
+        operation_id_header = self.headers.get(SANDBOX_OPERATION_ID_HEADER)
+        if generation_header is None and operation_id_header is None:
+            return 0, ""
+        if generation_header is None or operation_id_header is None:
+            raise ValueError(
+                f"{SANDBOX_GENERATION_HEADER} and {SANDBOX_OPERATION_ID_HEADER} "
+                "must be supplied together"
+            )
+        try:
+            generation = int(generation_header)
+        except ValueError as exc:
+            raise ValueError(f"{SANDBOX_GENERATION_HEADER} must be an integer") from exc
+        operation_id = operation_id_header.strip()
+        if generation < 0:
+            raise ValueError(f"{SANDBOX_GENERATION_HEADER} cannot be negative")
+        if not operation_id:
+            raise ValueError(f"{SANDBOX_OPERATION_ID_HEADER} cannot be empty")
+        return generation, operation_id
+
+    def _check_node_control_authorized(self) -> bool:
+        expected = self.node_control_bearer_token
+        if expected is None:
+            return True
+        authorization = self.headers.get("Authorization") or ""
+        prefix = "Bearer "
+        supplied = (
+            authorization[len(prefix) :]
+            if authorization.startswith(prefix)
+            else ""
+        )
+        if supplied and hmac.compare_digest(supplied, expected):
+            return True
+        body = json.dumps({"error": "unauthorized"}).encode("utf-8")
+        self.send_response(HTTPStatus.UNAUTHORIZED)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("WWW-Authenticate", "Bearer")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
     def log_message(self, format: str, *args: object) -> None:
         del format, args
 
     def _read_json_body(self) -> object:
-        raw = self._read_raw_body().decode("utf-8")
+        raw = self._read_raw_body(max_bytes=self.max_json_body_bytes).decode("utf-8")
         if not raw:
             raise ValueError("empty request body")
         try:
@@ -550,13 +735,35 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as exc:
             raise ValueError(f"invalid JSON: {exc}") from exc
 
-    def _read_raw_body(self) -> bytes:
-        length_header = self.headers.get("Content-Length", "0")
+    def _read_raw_body(self, *, max_bytes: int | None = None) -> bytes:
+        if self.headers.get("Transfer-Encoding"):
+            raise ValueError("Transfer-Encoding is not supported; use Content-Length")
+        length_header = self.headers.get("Content-Length")
+        if length_header is None:
+            raise ValueError("Content-Length header is required")
         try:
             length = int(length_header)
         except ValueError as exc:
             raise ValueError("invalid Content-Length") from exc
-        return self.rfile.read(max(0, length))
+        if length < 0:
+            raise ValueError("Content-Length cannot be negative")
+        if max_bytes is not None and length > max_bytes:
+            raise RequestBodyTooLargeError(
+                f"request body exceeds the {max_bytes} byte limit"
+            )
+        body = self.rfile.read(length)
+        if len(body) != length:
+            raise ValueError("request body ended before Content-Length bytes were read")
+        return body
+
+    def _write_exception(self, exc: RuntimeError | ValueError) -> None:
+        if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
+            status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        elif isinstance(exc, RuntimeError):
+            status = HTTPStatus.SERVICE_UNAVAILABLE
+        else:
+            status = HTTPStatus.BAD_REQUEST
+        self._write_json({"error": str(exc)}, status=status)
 
     def _write_json(
         self,
@@ -610,16 +817,47 @@ def build_node_agent_server(
     image_builds_enabled: bool = False,
     extra_capabilities: tuple[str, ...] = (),
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
+    max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
+    max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
+    max_active_image_builds: int = 4,
+    physical_disk_path: Path | None = None,
+    node_control_bearer_token: str | None = None,
 ) -> HighBacklogThreadingHTTPServer:
+    if node_control_bearer_token is not None and not node_control_bearer_token.strip():
+        raise ValueError("node control bearer token cannot be empty")
+    if (
+        max_json_body_bytes < 1
+        or max_file_body_bytes < 1
+        or max_active_image_builds < 1
+    ):
+        raise ValueError("node-agent request and build limits must be positive")
+    configured_resources = total_resources or ResourceQuantity()
+    if not configured_resources.is_valid:
+        raise ValueError("total_resources cannot contain negative or non-finite values")
+    overcommit = {
+        "cpu_overcommit": cpu_overcommit,
+        "memory_overcommit": memory_overcommit,
+        "disk_overcommit": disk_overcommit,
+    }
+    for name, factor in overcommit.items():
+        if not math.isfinite(factor) or factor < 0:
+            raise ValueError(f"{name} must be finite and non-negative")
     manager = SandboxManager(
         SandboxStore(sandbox_file),
         runtime or DockerGvisorRuntime(dry_run=True),
         ssh_port_range=ssh_port_range,
+        effective_capacity=configured_resources.scaled(
+            cpu=cpu_overcommit,
+            memory=memory_overcommit,
+            disk=disk_overcommit,
+        ),
     )
     exec_manager = ExecSessionManager(manager)
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime or DockerImageRuntime(dry_run=True),
+        max_active_builds=max_active_image_builds,
+        admission_store=manager.store,
     )
 
     class BoundHandler(NodeAgentHandler):
@@ -634,7 +872,7 @@ def build_node_agent_server(
     BoundHandler.agent_version = agent_version
     BoundHandler.deployment_id = deployment_id
     BoundHandler.init_version = init_version
-    BoundHandler.total_resources = total_resources or ResourceQuantity()
+    BoundHandler.total_resources = configured_resources
     BoundHandler.cpu_overcommit = cpu_overcommit
     BoundHandler.memory_overcommit = memory_overcommit
     BoundHandler.disk_overcommit = disk_overcommit
@@ -643,6 +881,13 @@ def build_node_agent_server(
         capabilities.extend(["image-build", "snapshot"])
     BoundHandler.capabilities = merge_capabilities(tuple(capabilities), extra_capabilities)
     BoundHandler.image_builds_enabled = image_builds_enabled
+    BoundHandler.node_epoch = uuid4().hex
+    BoundHandler.physical_disk_path = physical_disk_path or _default_physical_disk_path(
+        sandbox_file
+    )
+    BoundHandler.node_control_bearer_token = node_control_bearer_token
+    BoundHandler.max_json_body_bytes = max_json_body_bytes
+    BoundHandler.max_file_body_bytes = max_file_body_bytes
     BoundHandler.runtime_metrics_provider = staticmethod(
         runtime_metrics_provider or sample_node_runtime_metrics
     )
@@ -660,6 +905,25 @@ def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:
         if record.tag:
             refs.append(record.tag)
     return tuple(dict.fromkeys(refs))
+
+
+def _default_physical_disk_path(sandbox_file: Path) -> Path:
+    docker_quota_root = Path("/var/lib/ucloud-sandboxes/docker-xfs")
+    if docker_quota_root.exists():
+        return docker_quota_root
+    return sandbox_file.parent
+
+
+def _physical_disk_usage_mb(path: Path) -> tuple[int, int]:
+    candidate = path
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    try:
+        usage = shutil.disk_usage(candidate)
+    except OSError:
+        return 0, 0
+    divisor = 1024 * 1024
+    return usage.total // divisor, usage.free // divisor
 
 
 def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:

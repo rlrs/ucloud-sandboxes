@@ -10,6 +10,40 @@ from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
 
 
 class SandboxExecTests(unittest.TestCase):
+    def test_event_history_and_session_count_are_bounded(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                DockerGvisorRuntime(dry_run=True),
+            )
+            manager.create(SandboxSpec(id="sbx-1", image="busybox", memory_mb=128))
+            exec_manager = ExecSessionManager(
+                manager,
+                max_sessions=1,
+                max_events_per_session=2,
+            )
+            active = exec_manager.start(
+                SandboxExecSpec(
+                    sandbox_id="sbx-1",
+                    command=("cat",),
+                    stdin=True,
+                )
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "capacity"):
+                exec_manager.start(
+                    SandboxExecSpec(sandbox_id="sbx-1", command=("true",))
+                )
+
+            exec_manager.close_stdin(active.id)
+            replacement = exec_manager.start(
+                SandboxExecSpec(sandbox_id="sbx-1", command=("true",))
+            )
+            events = exec_manager.drain_events(replacement.id)
+
+            self.assertEqual(len(events), 2)
+            self.assertEqual(events[-1].stream, "exit")
+
     def test_dry_run_exec_records_events(self) -> None:
         with TemporaryDirectory() as raw_dir:
             manager = SandboxManager(

@@ -19,10 +19,21 @@ class AsyncNodeGatewayClient:
         node_url: str,
         *,
         session: ClientSession | None = None,
+        node_control_bearer_token: str | None = None,
     ) -> None:
+        if (
+            node_control_bearer_token is not None
+            and not node_control_bearer_token.strip()
+        ):
+            raise ValueError("node control bearer token cannot be empty")
         self.node_url = node_url.rstrip("/")
         self._session = session
         self._owned_session: ClientSession | None = None
+        self._node_control_headers = (
+            {"Authorization": f"Bearer {node_control_bearer_token}"}
+            if node_control_bearer_token is not None
+            else {}
+        )
 
     async def __aenter__(self) -> "AsyncNodeGatewayClient":
         await self._client()
@@ -46,6 +57,8 @@ class AsyncNodeGatewayClient:
         async with (await self._client()).post(
             f"{self.node_url}/v1/sandboxes/{sandbox_id}/exec",
             json=payload,
+            headers=self._node_control_headers,
+            allow_redirects=False,
         ) as response:
             if response.status >= 400:
                 raise AsyncGatewayError(await response.text())
@@ -67,12 +80,15 @@ class AsyncNodeGatewayClient:
             f"{self.node_url}/v1/exec/{session['id']}/ws",
             heartbeat=30.0,
             max_msg_size=16 * 1024 * 1024,
+            headers=self._node_control_headers,
         )
         return ExecWebSocketStream(session["id"], ws)
 
     async def get_ssh_target(self, sandbox_id: str) -> dict[str, Any]:
         async with (await self._client()).get(
-            f"{self.node_url}/v1/sandboxes/{sandbox_id}/ssh"
+            f"{self.node_url}/v1/sandboxes/{sandbox_id}/ssh",
+            headers=self._node_control_headers,
+            allow_redirects=False,
         ) as response:
             if response.status >= 400:
                 raise AsyncGatewayError(await response.text())
@@ -86,6 +102,7 @@ class AsyncNodeGatewayClient:
             f"{self.node_url}/v1/sandboxes/{sandbox_id}/ssh/ws",
             heartbeat=30.0,
             max_msg_size=16 * 1024 * 1024,
+            headers=self._node_control_headers,
         )
         return TcpWebSocketStream(ws)
 

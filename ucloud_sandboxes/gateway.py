@@ -8,6 +8,14 @@ from urllib import error, request
 from .sandbox_exec import SandboxExecSpec
 
 
+MAX_GATEWAY_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+class _RejectNodeRedirects(request.HTTPRedirectHandler):
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
 class GatewayError(RuntimeError):
     pass
 
@@ -15,9 +23,25 @@ class GatewayError(RuntimeError):
 class NodeGatewayClient:
     """Async-capable client for the VM node-agent sandbox routing API."""
 
-    def __init__(self, node_url: str, *, timeout_seconds: float = 30.0) -> None:
+    def __init__(
+        self,
+        node_url: str,
+        *,
+        timeout_seconds: float = 30.0,
+        node_control_bearer_token: str | None = None,
+    ) -> None:
+        if (
+            node_control_bearer_token is not None
+            and not node_control_bearer_token.strip()
+        ):
+            raise ValueError("node control bearer token cannot be empty")
         self.node_url = node_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self._node_control_headers = (
+            {"Authorization": f"Bearer {node_control_bearer_token}"}
+            if node_control_bearer_token is not None
+            else {}
+        )
 
     async def start_exec(
         self,
@@ -93,7 +117,9 @@ class NodeGatewayClient:
         payload: dict[str, Any] | None,
     ) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
-        headers = {"Content-Type": "application/json"} if payload is not None else {}
+        headers = dict(self._node_control_headers)
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
         req = request.Request(
             self.node_url + path,
             data=body,
@@ -101,11 +127,22 @@ class NodeGatewayClient:
             headers=headers,
         )
         try:
-            with request.urlopen(req, timeout=self.timeout_seconds) as response:
-                raw = response.read().decode("utf-8")
+            with request.build_opener(_RejectNodeRedirects()).open(
+                req,
+                timeout=self.timeout_seconds,
+            ) as response:
+                raw_bytes = response.read(MAX_GATEWAY_RESPONSE_BYTES + 1)
+                if len(raw_bytes) > MAX_GATEWAY_RESPONSE_BYTES:
+                    raise GatewayError("node-agent response exceeds the 16 MiB limit")
+                raw = raw_bytes.decode("utf-8")
                 decoded = json.loads(raw) if raw else {}
         except error.HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")
+            raw_bytes = exc.read(MAX_GATEWAY_RESPONSE_BYTES + 1)
+            if len(raw_bytes) > MAX_GATEWAY_RESPONSE_BYTES:
+                raise GatewayError(
+                    "node-agent error response exceeds the 16 MiB limit"
+                ) from exc
+            raw = raw_bytes.decode("utf-8", errors="replace")
             try:
                 decoded = json.loads(raw) if raw else {}
             except json.JSONDecodeError:

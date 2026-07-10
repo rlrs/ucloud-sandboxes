@@ -1145,16 +1145,43 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
         )
         attempts = item.get("init_attempts")
         if isinstance(attempts, list):
-            item["init_attempts"] = attempts[-10:]
+            ordered_attempts = sorted(
+                attempts,
+                key=lambda attempt: str(attempt.get("started_at") or ""),
+            )
+            first_attempt = ordered_attempts[0] if ordered_attempts else None
             succeeded = [
                 attempt
-                for attempt in attempts
+                for attempt in ordered_attempts
                 if attempt.get("status") == "succeeded"
                 and isinstance(attempt.get("duration_ms"), int)
             ]
-            item["last_successful_init_duration_ms"] = (
-                succeeded[-1]["duration_ms"] if succeeded else None
+            last_success = succeeded[-1] if succeeded else None
+            first_init_attempt_at = (
+                first_attempt.get("started_at") if first_attempt is not None else None
             )
+            item["running_to_first_init_attempt_ms"] = _duration_ms(
+                item.get("ucloud_started_at"),
+                first_init_attempt_at,
+            )
+            item["first_init_attempt_to_first_heartbeat_ms"] = _duration_ms(
+                first_init_attempt_at,
+                item.get("first_heartbeat_at"),
+            )
+            item["last_successful_init_duration_ms"] = (
+                last_success["duration_ms"] if last_success is not None else None
+            )
+            item["last_successful_package_stage_ms"] = (
+                _optional_int(last_success.get("stage_duration_ms"))
+                if last_success is not None
+                else None
+            )
+            item["last_successful_remote_init_ms"] = (
+                _optional_int(last_success.get("run_duration_ms"))
+                if last_success is not None
+                else None
+            )
+            item["init_attempts"] = ordered_attempts[-10:]
     return {
         "samples": len(records),
         "items": items,

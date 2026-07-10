@@ -405,9 +405,13 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(item["job_id"], "job-1")
         self.assertEqual(item["role"], "sandbox")
         self.assertEqual(item["submit_to_running_ms"], 30_000)
+        self.assertEqual(item["running_to_first_init_attempt_ms"], 10_000)
         self.assertEqual(item["running_to_first_heartbeat_ms"], 75_000)
+        self.assertEqual(item["first_init_attempt_to_first_heartbeat_ms"], 65_000)
         self.assertEqual(item["first_heartbeat_to_first_sandbox_ms"], 7_000)
         self.assertEqual(item["last_successful_init_duration_ms"], 60_000)
+        self.assertEqual(item["last_successful_package_stage_ms"], 1_000)
+        self.assertEqual(item["last_successful_remote_init_ms"], 59_000)
         self.assertEqual(item["first_sandbox_scale_up_wait_ms"], 112_000)
 
     def test_builds_trace_summary_from_spans(self) -> None:

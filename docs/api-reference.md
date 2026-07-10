@@ -86,6 +86,11 @@ refreshed.
         "role": "sandbox",
         "state": "RUNNING",
         "submit_to_running_ms": 27145,
+        "ucloud_created_to_running_ms": 26900,
+        "running_to_first_init_attempt_ms": 11800,
+        "last_successful_package_stage_ms": 2400,
+        "last_successful_remote_init_ms": 63000,
+        "first_init_attempt_to_first_heartbeat_ms": 65514,
         "running_to_first_heartbeat_ms": 101714,
         "first_heartbeat_to_first_sandbox_ms": 11601,
         "last_successful_init_duration_ms": 66000
@@ -101,7 +106,32 @@ existing-route checks, node selection, image availability or pull, and node
 create proxying. Image build traces cover builder selection, pending-build
 enqueueing, builder proxying, and node-reported build timings. Node-agent
 responses include `timings` fields for sandbox creation and image builds; image
-build records also include Docker build/push phase durations.
+build records also include Docker build/push phase durations. In particular,
+the builder response separates request-body read, context materialization,
+build wait, Docker build, and registry push. Sandbox responses separate the
+gateway proxy from node-side request handling and Docker container creation.
+
+The lifecycle boundaries have deliberately narrow meanings:
+
+- `ucloud_created_to_running_ms` is the provider-side VM wait visible from
+  UCloud timestamps.
+- `running_to_first_init_attempt_ms` ends when the controller first starts an
+  SSH bootstrap attempt. It includes SSH announcement and autoscaler polling
+  delay because UCloud does not expose a separate SSH-ready timestamp.
+- `last_successful_package_stage_ms` and
+  `last_successful_remote_init_ms` split package transfer from the remote init
+  script.
+- `first_init_attempt_to_first_heartbeat_ms` measures from bootstrap start to
+  node registration/readiness. The heartbeat can arrive just before the SSH
+  init command exits, so this boundary does not assume a strictly sequential
+  init-then-registration process. `first_heartbeat_to_first_sandbox_ms` then
+  measures time to the first sandbox placement on that node.
+
+Two cold-path intervals are not yet exact. SDK context preparation and the
+client-to-gateway upload happen before the current image-build trace begins.
+Also, a build rejected while no builder is ready is retried as a new HTTP
+request, so the service exposes current pending-build age but cannot correlate
+that age with the eventual successful build as a single queue-wait sample.
 
 ## Node Agent API
 

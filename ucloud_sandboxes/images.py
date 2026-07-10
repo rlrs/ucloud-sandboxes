@@ -18,6 +18,7 @@ import time
 from typing import Any, Callable, Iterable
 from uuid import uuid4
 
+from .build_context_store import BuildContextBlobStore
 from .managed_registry import (
     canonical_image_digest_ref,
     manifest_digest_from_image_ref,
@@ -1135,8 +1136,11 @@ def _dockerfile_path(context_path: str, dockerfile: str) -> str:
 
 
 @contextmanager
-def uploaded_build_context(raw: dict[str, Any]):
-    context = materialize_uploaded_build_context(raw)
+def uploaded_build_context(
+    raw: dict[str, Any],
+    context_store: BuildContextBlobStore | None = None,
+):
+    context = materialize_uploaded_build_context(raw, context_store)
     if context is None:
         yield None
         return
@@ -1155,7 +1159,68 @@ class MaterializedBuildContext:
         self._temporary_directory.cleanup()
 
 
-def materialize_uploaded_build_context(raw: dict[str, Any]) -> MaterializedBuildContext | None:
+def uploaded_build_context_reference(
+    raw: dict[str, Any],
+    context_store: BuildContextBlobStore | None,
+) -> tuple[str, int] | None:
+    digest = raw.get("context_archive_digest")
+    if digest is None:
+        return None
+    if raw.get("context_archive_base64") is not None:
+        raise ValueError(
+            "use either context_archive_digest or context_archive_base64, not both."
+        )
+    if not isinstance(digest, str):
+        raise ValueError("context_archive_digest must be a string.")
+    if str(raw.get("context_archive_format") or "tar.gz") != "tar.gz":
+        raise ValueError("unsupported context_archive_format; expected tar.gz.")
+    if raw.get("context_path") not in {None, "."}:
+        raise ValueError("context_path must be '.' for an uploaded build context.")
+    archive_size = raw.get("context_archive_size")
+    if isinstance(archive_size, bool) or not isinstance(archive_size, int):
+        raise ValueError("context_archive_size must be a non-negative integer.")
+    if archive_size < 0:
+        raise ValueError("context_archive_size must be a non-negative integer.")
+    if context_store is None:
+        raise ValueError("content-addressed build contexts are not configured.")
+    try:
+        stored_size = context_store.size(digest)
+    except (FileNotFoundError, ValueError) as exc:
+        raise ValueError(
+            f"build context {digest!r} has not been uploaded."
+        ) from exc
+    if stored_size != archive_size:
+        raise ValueError(
+            f"build context size mismatch: expected {archive_size}, stored {stored_size}."
+        )
+    return digest, stored_size
+
+
+def materialize_uploaded_build_context(
+    raw: dict[str, Any],
+    context_store: BuildContextBlobStore | None = None,
+) -> MaterializedBuildContext | None:
+    reference = uploaded_build_context_reference(raw, context_store)
+    if reference is not None:
+        digest, _ = reference
+        temporary_directory: tempfile.TemporaryDirectory[str] = (
+            tempfile.TemporaryDirectory(prefix="ucloud-image-context-")
+        )
+        context_dir = Path(temporary_directory.name)
+        try:
+            with context_store.open(digest) as archive_file:
+                _extract_safe_tar_gz_file(archive_file, context_dir)
+            context_store.touch(digest)
+        except FileNotFoundError as exc:
+            temporary_directory.cleanup()
+            raise ValueError(
+                f"build context {digest!r} has not been uploaded."
+            ) from exc
+        except Exception:
+            temporary_directory.cleanup()
+            raise
+        return MaterializedBuildContext(context_dir, temporary_directory)
+
     archive = raw.get("context_archive_base64")
     if archive is None:
         return None
@@ -1181,8 +1246,12 @@ def materialize_uploaded_build_context(raw: dict[str, Any]) -> MaterializedBuild
 
 
 def _extract_safe_tar_gz(payload: bytes, destination: Path) -> None:
+    _extract_safe_tar_gz_file(io.BytesIO(payload), destination)
+
+
+def _extract_safe_tar_gz_file(payload: Any, destination: Path) -> None:
     try:
-        archive = tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz")
+        archive = tarfile.open(fileobj=payload, mode="r:gz")
     except tarfile.TarError as exc:
         raise ValueError("context archive is not a valid tar.gz file.") from exc
     with archive:

@@ -15,10 +15,11 @@ from threading import BoundedSemaphore, RLock, Thread
 import time
 from typing import Any
 from urllib import error, request
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 from .capabilities import DISK_QUOTA_CAPABILITY, has_capability
+from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_compatible, service_health
 from .http_server import HighBacklogThreadingHTTPServer
@@ -30,6 +31,7 @@ from .images import (
     ImageStore,
     image_id_from_tag,
     uploaded_build_context,
+    uploaded_build_context_reference,
 )
 from .managed_registry import (
     RegistryClient,
@@ -82,6 +84,9 @@ IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
+DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
+DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
+DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
 NODE_RECONCILE_PROXY_TIMEOUT_SECONDS = 5
 NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
 NODE_DISCOVERY_TOTAL_TIMEOUT_SECONDS = 2.0
@@ -91,6 +96,10 @@ REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 DEFAULT_METRICS_EVENT_LIMIT = 2000
 FULL_METRICS_EVENT_LIMIT = 10000
 REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
+
+
+class RequestBodyTooLargeError(ValueError):
+    pass
 
 
 class RegistryImageReferenceUnavailable(RuntimeError):
@@ -146,6 +155,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     deployment_id: str
     heartbeat_ttl_seconds: int
     image_manager: ImageManager | None
+    build_context_store: BuildContextBlobStore
     local_image_builds_enabled: bool
     metrics_store: MetricsStore | None
     registry_url: str | None
@@ -372,11 +382,49 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self._check_authorized():
             return
+        context_digest = _build_context_digest_from_path(parsed.path)
+        if context_digest is not None:
+            self._store_build_context(context_digest)
+            return
         if self._route_to_nodes(parsed.path):
             return
         if self._proxy_to_node():
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+
+    def _store_build_context(self, digest: str) -> None:
+        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if content_type.strip().lower() != "application/gzip":
+            self.close_connection = True
+            self._write_json(
+                {"error": "build contexts require Content-Type: application/gzip"},
+                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
+        try:
+            length = self._request_content_length(
+                max_bytes=self.build_context_store.max_blob_bytes
+            )
+            result = self.build_context_store.put_with_status(
+                digest,
+                ContentLengthReader(self.rfile, length),
+                content_length=length,
+            )
+            self.build_context_store.gc(protected=(digest,))
+        except RequestBodyTooLargeError as exc:
+            self.close_connection = True
+            self._write_json(
+                {"error": str(exc)}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            )
+            return
+        except (OSError, ValueError) as exc:
+            self.close_connection = True
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json(
+            {"digest": digest, "size": length, "deduplicated": result.deduplicated},
+            status=HTTPStatus.OK if result.deduplicated else HTTPStatus.CREATED,
+        )
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
@@ -405,6 +453,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         *,
         max_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     ) -> bytes:
+        length = self._request_content_length(max_bytes=max_bytes)
+        body = self.rfile.read(length)
+        if len(body) != length:
+            raise ValueError("request body ended before Content-Length bytes were read")
+        return body
+
+    def _request_content_length(self, *, max_bytes: int | None = None) -> int:
         if self.headers.get("Transfer-Encoding"):
             raise ValueError("Transfer-Encoding is not supported; use Content-Length")
         length_header = self.headers.get("Content-Length")
@@ -416,12 +471,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raise ValueError("invalid Content-Length") from exc
         if length < 0:
             raise ValueError("Content-Length cannot be negative")
-        if length > max_bytes:
-            raise ValueError(f"request body exceeds the {max_bytes} byte limit")
-        body = self.rfile.read(length)
-        if len(body) != length:
-            raise ValueError("request body ended before Content-Length bytes were read")
-        return body
+        if max_bytes is not None and length > max_bytes:
+            raise RequestBodyTooLargeError(
+                f"request body exceeds the {max_bytes} byte limit"
+            )
+        return length
 
     def _write_json(
         self,
@@ -1664,6 +1718,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
+            context_reference = uploaded_build_context_reference(
+                raw, self.build_context_store
+            )
             spec = ImageBuildSpec.from_dict(raw)
             spec.validate()
             push = bool(raw.get("push", False))
@@ -1691,7 +1748,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         parent_span_id=root.span_id,
                     ) as span:
                         try:
-                            with uploaded_build_context(raw) as context_path:
+                            with uploaded_build_context(
+                                raw, self.build_context_store
+                            ) as context_path:
                                 build_spec = spec
                                 span.set_attribute(
                                     "uploaded_context", context_path is not None
@@ -1780,6 +1839,34 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 ):
                     if self.routing_store is not None:
                         self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                if context_reference is not None:
+                    with trace_span(
+                        self.metrics_store,
+                        trace_id,
+                        "gateway.image_build_context_sync",
+                        parent_span_id=root.span_id,
+                        attributes={"node_id": heartbeat.node_id},
+                    ) as span:
+                        context_response = self._ensure_node_build_context(
+                            heartbeat.node_url or "", context_reference
+                        )
+                        span.set_attribute(
+                            "status_code", int(context_response.status)
+                        )
+                        context_payload = context_response.json()
+                        if "deduplicated" in context_payload:
+                            span.set_attribute(
+                                "deduplicated",
+                                bool(context_payload["deduplicated"]),
+                            )
+                    if not 200 <= context_response.status < 300:
+                        root.status = "error"
+                        root.set_attribute("outcome", "context_proxy_failed")
+                        root.set_attribute(
+                            "status_code", int(context_response.status)
+                        )
+                        self._send_proxied_response(context_response)
+                        return
                 build_reference = self._begin_registry_image_build_reference(
                     spec,
                     push=push,
@@ -1854,6 +1941,43 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except RuntimeError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
+
+    def _ensure_node_build_context(
+        self,
+        node_url: str,
+        reference: tuple[str, int],
+    ) -> ProxiedResponse:
+        digest, size = reference
+        path = f"/v1/image-contexts/{quote(digest, safe=':')}"
+        probe = self._proxy_request(node_url, path, method="GET")
+        if 200 <= probe.status < 300:
+            payload = probe.json()
+            if payload.get("digest") == digest and payload.get("size") == size:
+                return probe
+        elif probe.status != HTTPStatus.NOT_FOUND:
+            return probe
+
+        try:
+            with self.build_context_store.open(digest) as archive:
+                return self._proxy_request(
+                    node_url,
+                    path,
+                    method="PUT",
+                    body=archive,
+                    extra_headers={
+                        "Content-Type": "application/gzip",
+                        "Content-Length": str(size),
+                    },
+                    timeout_seconds=IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
+                )
+        except FileNotFoundError:
+            return ProxiedResponse(
+                HTTPStatus.BAD_REQUEST,
+                {"Content-Type": "application/json"},
+                json.dumps(
+                    {"error": f"build context {digest!r} has not been uploaded"}
+                ).encode("utf-8"),
+            )
 
     def _route_image_pull(self) -> None:
         try:
@@ -2813,7 +2937,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         path: str,
         *,
         method: str,
-        body: bytes | None = None,
+        body: Any = None,
         timeout_seconds: float = DEFAULT_PROXY_TIMEOUT_SECONDS,
         extra_headers: dict[str, str] | None = None,
     ) -> ProxiedResponse:
@@ -2956,6 +3080,7 @@ def build_server(
     registry_url: str | None = None,
     registry_usage_file: Path | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
+    build_context_store_dir: Path | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
@@ -2975,6 +3100,15 @@ def build_server(
         if image_file is not None
         else None
     )
+    context_path_source = image_file or heartbeat_file
+    build_context_store = BuildContextBlobStore(
+        build_context_store_dir
+        or context_path_source.parent / f"{context_path_source.stem}-contexts",
+        max_blob_bytes=DEFAULT_MAX_PROXY_BODY_BYTES,
+        max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
+        max_entries=DEFAULT_MAX_BUILD_CONTEXT_ENTRIES,
+        max_age_seconds=DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS,
+    )
 
     class BoundHandler(ControlPlaneHandler):
         pass
@@ -2988,6 +3122,7 @@ def build_server(
     BoundHandler.deployment_id = (deployment_id or "").strip()
     BoundHandler.heartbeat_ttl_seconds = heartbeat_ttl_seconds
     BoundHandler.image_manager = image_manager
+    BoundHandler.build_context_store = build_context_store
     BoundHandler.local_image_builds_enabled = (
         image_runtime is not None
         if local_image_builds_enabled is None
@@ -3049,6 +3184,14 @@ def _sandbox_id_from_path(path: str) -> str | None:
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
+
+
+def _build_context_digest_from_path(path: str) -> str | None:
+    prefix = "/v1/image-contexts/"
+    if not path.startswith(prefix):
+        return None
+    digest = unquote(path[len(prefix):])
+    return digest if digest and "/" not in digest else None
 
 
 def _image_build_key_from_path(path: str) -> str | None:

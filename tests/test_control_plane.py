@@ -1,14 +1,18 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
+from io import BytesIO
 from tempfile import TemporaryDirectory
 from http.client import HTTPConnection
 from threading import Event, Lock, Thread
 from time import monotonic, sleep
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import base64
+import hashlib
 from pathlib import Path
 import sqlite3
+import tarfile
 from urllib import error, request
 from urllib.parse import quote
 import unittest
@@ -72,6 +76,31 @@ class CountingPullRuntime(DockerImageRuntime):
         with self._lock:
             self.pulls.append(image)
         return CommandResult(argv=("docker", "pull", image), exit_code=0)
+
+
+class ContextRecordingRuntime(DockerImageRuntime):
+    def __init__(self) -> None:
+        super().__init__(dry_run=True)
+        self.context_paths: list[Path] = []
+        self.dockerfiles: list[bytes] = []
+
+    def build(self, spec, *, push=False, on_output=None):
+        context_path = Path(spec.context_path)
+        self.context_paths.append(context_path)
+        self.dockerfiles.append((context_path / spec.dockerfile).read_bytes())
+        return super().build(spec, push=push, on_output=on_output)
+
+
+def _tar_gz_context(files: dict[str, bytes]) -> bytes:
+    output = BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for name, payload in sorted(files.items()):
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            info.mode = 0o644
+            info.mtime = 0
+            archive.addfile(info, BytesIO(payload))
+    return output.getvalue()
 
 
 class FileRuntime(DockerGvisorRuntime):
@@ -3586,6 +3615,204 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(result["body"]["pending_image_builds"], 1)
             self.assertEqual(
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
+            )
+
+    def test_content_addressed_context_survives_503_and_streams_to_builder(self) -> None:
+        archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
+        digest = f"sha256:{hashlib.sha256(archive).hexdigest()}"
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway_contexts = raw_path / "gateway-contexts"
+            builder_contexts = raw_path / "builder-contexts"
+            runtime = ContextRecordingRuntime()
+            builder = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "builder-sandboxes.json",
+                image_file=raw_path / "builder-images.json",
+                job_id="job-builder",
+                node_id="builder-1",
+                image_runtime=runtime,
+                image_builds_enabled=True,
+                node_control_bearer_token="node-secret",
+                build_context_store_dir=builder_contexts,
+            )
+            Thread(target=builder.serve_forever, daemon=True).start()
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.json",
+                gateway_bearer_token="gateway-secret",
+                node_control_bearer_token="node-secret",
+                local_image_builds_enabled=False,
+                build_context_store_dir=gateway_contexts,
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+
+                def upload(
+                    target_digest: str,
+                    *,
+                    authorized: bool = True,
+                    allow_error: bool = False,
+                ) -> tuple[int, dict]:
+                    headers = {"Content-Type": "application/gzip"}
+                    if authorized:
+                        headers["Authorization"] = "Bearer gateway-secret"
+                    req = request.Request(
+                        f"{base}/v1/image-contexts/{target_digest}",
+                        data=archive,
+                        method="PUT",
+                        headers=headers,
+                    )
+                    try:
+                        with request.urlopen(req, timeout=5) as response:
+                            return response.status, json.loads(response.read())
+                    except error.HTTPError as exc:
+                        if not allow_error:
+                            raise
+                        return exc.code, json.loads(exc.read())
+
+                unauthorized = upload(digest, authorized=False, allow_error=True)
+                mismatch = upload(
+                    "sha256:" + "0" * 64,
+                    allow_error=True,
+                )
+                stored = upload(digest)
+                duplicate = upload(digest)
+
+                build_payload = {
+                    "id": "content-addressed",
+                    "tag": "registry.example.org/content-addressed:latest",
+                    "context_path": ".",
+                    "context_archive_digest": digest,
+                    "context_archive_format": "tar.gz",
+                    "context_archive_size": len(archive),
+                }
+                queued = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload=build_payload,
+                    headers={"Authorization": "Bearer gateway-secret"},
+                    allow_error=True,
+                )
+                self.assertTrue(
+                    (gateway_contexts / "sha256" / digest.removeprefix("sha256:")).is_file()
+                )
+
+                builder_host, builder_port = builder.server_address
+                heartbeat = post_heartbeat_with_headers(
+                    f"{base}/v1/nodes/heartbeat",
+                    build_heartbeat(
+                        job_id="job-builder",
+                        node_id="builder-1",
+                        node_url=f"http://{builder_host}:{builder_port}",
+                        capabilities=("image-cache", "image-build", "snapshot"),
+                        total_resources=ResourceQuantity(
+                            vcpu=16, memory_mb=49152, disk_mb=200000
+                        ),
+                    ),
+                    {"Authorization": "Bearer gateway-secret"},
+                )
+                built = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload=build_payload,
+                    headers={"Authorization": "Bearer gateway-secret"},
+                    allow_error=True,
+                )
+                builder_store = builder.RequestHandlerClass.build_context_store
+                original_put = builder_store.put_with_status
+                builder_uploads = 0
+
+                def counting_put(*args, **kwargs):
+                    nonlocal builder_uploads
+                    builder_uploads += 1
+                    return original_put(*args, **kwargs)
+
+                builder_store.put_with_status = counting_put
+                built_from_cached_context = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload={
+                        **build_payload,
+                        "id": "content-addressed-cached",
+                        "tag": "registry.example.org/content-addressed:cached",
+                    },
+                    headers={"Authorization": "Bearer gateway-secret"},
+                )
+                missing = self._json_request(
+                    f"{base}/v1/images/build",
+                    method="POST",
+                    payload={
+                        **build_payload,
+                        "id": "missing-context",
+                        "context_archive_digest": "sha256:" + "f" * 64,
+                    },
+                    headers={"Authorization": "Bearer gateway-secret"},
+                    allow_error=True,
+                )
+
+                legacy = self._json_request(
+                    f"http://{builder_host}:{builder_port}/v1/images/build",
+                    method="POST",
+                    payload={
+                        "id": "legacy-context",
+                        "tag": "registry.example.org/legacy:latest",
+                        "context_path": ".",
+                        "context_archive_base64": base64.b64encode(archive).decode(),
+                        "context_archive_format": "tar.gz",
+                    },
+                    headers={"Authorization": "Bearer node-secret"},
+                    allow_error=True,
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                builder.shutdown()
+                builder.server_close()
+
+            self.assertEqual(unauthorized[0], 401)
+            self.assertEqual(mismatch[0], 400)
+            self.assertIn("digest mismatch", mismatch[1]["error"])
+            self.assertEqual(
+                stored,
+                (
+                    201,
+                    {"deduplicated": False, "digest": digest, "size": len(archive)},
+                ),
+            )
+            self.assertEqual(
+                duplicate,
+                (
+                    200,
+                    {"deduplicated": True, "digest": digest, "size": len(archive)},
+                ),
+            )
+            self.assertEqual(queued["status"], 503)
+            self.assertEqual(heartbeat.status, 200)
+            self.assertNotIn("status", built, built)
+            self.assertEqual(built["image"]["id"], "content-addressed")
+            self.assertEqual(
+                built_from_cached_context["image"]["id"],
+                "content-addressed-cached",
+            )
+            self.assertEqual(builder_uploads, 0)
+            self.assertEqual(missing["status"], 400)
+            self.assertIn("has not been uploaded", missing["body"]["error"])
+            self.assertNotIn("status", legacy, legacy)
+            self.assertEqual(legacy["image"]["id"], "legacy-context")
+            self.assertEqual(
+                runtime.dockerfiles,
+                [b"FROM scratch\n", b"FROM scratch\n", b"FROM scratch\n"],
+            )
+            self.assertTrue(runtime.context_paths)
+            self.assertTrue(all(not path.exists() for path in runtime.context_paths))
+            self.assertTrue(
+                (builder_contexts / "sha256" / digest.removeprefix("sha256:")).is_file()
             )
 
     def test_gateway_routes_image_build_to_builder_only_node(self) -> None:

@@ -168,6 +168,7 @@ The `service` value is `control-plane`, `node-agent`, `async-node-agent`, or
 
 The gateway/control plane additionally exposes:
 
+- `PUT /v1/image-contexts/sha256:<digest>`
 - `POST /v1/images/build` when started with
   `serve-control-plane --enable-image-builds`
 - `GET /v1/capacity/prepare`
@@ -176,6 +177,16 @@ The gateway/control plane additionally exposes:
 - `GET /v1/builders/prepare`
 - `POST /v1/builders/prepare`
 - `DELETE /v1/builders/prepare/<prepare-id>`
+
+Build clients upload a deterministic `tar.gz` context to
+`PUT /v1/image-contexts/sha256:<digest>` with `Content-Type:
+application/gzip` and `Content-Length`, then submit the small build JSON with
+`context_archive_digest`, `context_archive_size`, and
+`context_archive_format: "tar.gz"`. The gateway verifies and stores the blob,
+so it survives a no-builder retry, and streams it to the selected builder only
+when absent there. Stores are bounded and content-addressed; temporary extracted
+directories are removed after the tracked build. The legacy
+`context_archive_base64` build field remains accepted for older SDKs.
 
 `POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
 and optional `image`. The capacity signal is consumed by the autoscaler after

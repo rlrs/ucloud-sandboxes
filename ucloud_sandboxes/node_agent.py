@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from .agent import build_heartbeat
+from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .deployment import service_health
 from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
@@ -44,6 +45,9 @@ from .sandbox_exec import ExecSessionManager, SandboxExecSpec
 
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
+DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
+DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
+DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
 # Public node API headers for a versioned DELETE operation.  Callers must send
 # both together; omitting both selects the legacy generation-zero operation.
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
@@ -58,6 +62,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     manager: SandboxManager
     exec_manager: ExecSessionManager
     image_manager: ImageManager
+    build_context_store: BuildContextBlobStore
     job_id: str
     node_id: str
     node_url: str | None
@@ -188,6 +193,20 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        context_digest = _build_context_digest_from_path(parsed.path)
+        if context_digest is not None:
+            try:
+                size = self.build_context_store.size(context_digest)
+            except (FileNotFoundError, ValueError):
+                self._write_json(
+                    {"error": "build context not found"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            self._write_json(
+                {"digest": context_digest, "size": size, "deduplicated": True}
+            )
+            return
         if parsed.path == "/v1/images/builds":
             self._write_json(
                 {
@@ -292,10 +311,48 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if not self._check_node_control_authorized():
             return
         parsed = urlparse(self.path)
+        context_digest = _build_context_digest_from_path(parsed.path)
+        if context_digest is not None:
+            self._store_build_context(context_digest)
+            return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/files"):
             self._upload_file(parsed)
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+
+    def _store_build_context(self, digest: str) -> None:
+        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if content_type.strip().lower() != "application/gzip":
+            self.close_connection = True
+            self._write_json(
+                {"error": "build contexts require Content-Type: application/gzip"},
+                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
+        try:
+            length = self._request_content_length(
+                max_bytes=self.build_context_store.max_blob_bytes
+            )
+            result = self.build_context_store.put_with_status(
+                digest,
+                ContentLengthReader(self.rfile, length),
+                content_length=length,
+            )
+            self.build_context_store.gc(protected=(digest,))
+        except RequestBodyTooLargeError as exc:
+            self.close_connection = True
+            self._write_json(
+                {"error": str(exc)}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            )
+            return
+        except (OSError, ValueError) as exc:
+            self.close_connection = True
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json(
+            {"digest": digest, "size": length, "deduplicated": result.deduplicated},
+            status=HTTPStatus.OK if result.deduplicated else HTTPStatus.CREATED,
+        )
 
     def _create_sandbox(self) -> None:
         started = time.monotonic()
@@ -508,6 +565,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         started = time.monotonic()
         phases: dict[str, int] = {}
+        materialized_context = None
+        cleanup_transferred = False
         try:
             phase = time.monotonic()
             raw = self._read_json_body()
@@ -517,7 +576,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             push = bool(raw.get("push", False))
             wait = bool(raw.get("wait", True))
             phase = time.monotonic()
-            materialized_context = materialize_uploaded_build_context(raw)
+            materialized_context = materialize_uploaded_build_context(
+                raw, self.build_context_store
+            )
             phases["materialize_context_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
             spec = ImageBuildSpec.from_dict(raw)
@@ -541,6 +602,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     else None
                 ),
             )
+            cleanup_transferred = materialized_context is not None
             phases["start_build_ms"] = _elapsed_ms(phase)
             if wait:
                 phase = time.monotonic()
@@ -549,6 +611,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
+        finally:
+            if materialized_context is not None and not cleanup_transferred:
+                materialized_context.cleanup()
         timings = {
             "total_ms": _elapsed_ms(started),
             "phases": phases,
@@ -736,6 +801,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             raise ValueError(f"invalid JSON: {exc}") from exc
 
     def _read_raw_body(self, *, max_bytes: int | None = None) -> bytes:
+        length = self._request_content_length(max_bytes=max_bytes)
+        body = self.rfile.read(length)
+        if len(body) != length:
+            raise ValueError("request body ended before Content-Length bytes were read")
+        return body
+
+    def _request_content_length(self, *, max_bytes: int | None = None) -> int:
         if self.headers.get("Transfer-Encoding"):
             raise ValueError("Transfer-Encoding is not supported; use Content-Length")
         length_header = self.headers.get("Content-Length")
@@ -751,10 +823,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             raise RequestBodyTooLargeError(
                 f"request body exceeds the {max_bytes} byte limit"
             )
-        body = self.rfile.read(length)
-        if len(body) != length:
-            raise ValueError("request body ended before Content-Length bytes were read")
-        return body
+        return length
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
@@ -822,6 +891,7 @@ def build_node_agent_server(
     max_active_image_builds: int = 4,
     physical_disk_path: Path | None = None,
     node_control_bearer_token: str | None = None,
+    build_context_store_dir: Path | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
@@ -859,6 +929,14 @@ def build_node_agent_server(
         max_active_builds=max_active_image_builds,
         admission_store=manager.store,
     )
+    build_context_store = BuildContextBlobStore(
+        build_context_store_dir
+        or image_file.parent / f"{image_file.stem}-contexts",
+        max_blob_bytes=max_file_body_bytes,
+        max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
+        max_entries=DEFAULT_MAX_BUILD_CONTEXT_ENTRIES,
+        max_age_seconds=DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS,
+    )
 
     class BoundHandler(NodeAgentHandler):
         pass
@@ -866,6 +944,7 @@ def build_node_agent_server(
     BoundHandler.manager = manager
     BoundHandler.exec_manager = exec_manager
     BoundHandler.image_manager = image_manager
+    BoundHandler.build_context_store = build_context_store
     BoundHandler.job_id = job_id
     BoundHandler.node_id = node_id
     BoundHandler.node_url = node_url
@@ -944,6 +1023,14 @@ def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:
     if suffix:
         return unquote(path[len(prefix):-len(suffix)])
     return unquote(path[len(prefix):])
+
+
+def _build_context_digest_from_path(path: str) -> str | None:
+    prefix = "/v1/image-contexts/"
+    if not path.startswith(prefix):
+        return None
+    digest = unquote(path[len(prefix):])
+    return digest if digest and "/" not in digest else None
 
 
 def _image_build_key_from_path(path: str) -> str | None:

@@ -29,6 +29,30 @@ class BlobGCResult:
 
 
 @dataclass(frozen=True)
+class BlobPutResult:
+    path: Path
+    deduplicated: bool
+
+
+class ContentLengthReader:
+    """Expose exactly one HTTP request body without reading the next request."""
+
+    def __init__(self, reader: BinaryIO, content_length: int) -> None:
+        self._reader = reader
+        self._remaining = _nonnegative_int(content_length, "content_length")
+
+    def read(self, size: int = -1) -> bytes:
+        if self._remaining == 0:
+            return b""
+        if size < 0 or size > self._remaining:
+            size = self._remaining
+        chunk = self._reader.read(size)
+        if isinstance(chunk, (bytes, bytearray, memoryview)):
+            self._remaining -= len(chunk)
+        return chunk
+
+
+@dataclass(frozen=True)
 class _BlobEntry:
     digest: str
     path: Path
@@ -74,6 +98,17 @@ class BuildContextBlobStore:
         *,
         content_length: int,
     ) -> Path:
+        return self.put_with_status(
+            digest, reader, content_length=content_length
+        ).path
+
+    def put_with_status(
+        self,
+        digest: str,
+        reader: BinaryIO,
+        *,
+        content_length: int,
+    ) -> BlobPutResult:
         digest_hex = _digest_hex(digest)
         length = _nonnegative_int(content_length, "content_length")
         if length > self.max_blob_bytes:
@@ -125,11 +160,11 @@ class BuildContextBlobStore:
             with self._hold_lock():
                 if target.exists() and _file_matches_digest(target, digest_hex):
                     os.chmod(target, 0o600)
-                    return target
+                    return BlobPutResult(target, deduplicated=True)
                 os.replace(temporary, target)
                 os.chmod(target, 0o600)
                 _fsync_directory(self.blob_dir)
-            return target
+            return BlobPutResult(target, deduplicated=False)
         finally:
             if descriptor >= 0:
                 os.close(descriptor)

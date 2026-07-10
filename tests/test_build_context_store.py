@@ -9,7 +9,10 @@ import stat
 from tempfile import TemporaryDirectory
 import unittest
 
-from ucloud_sandboxes.build_context_store import BuildContextBlobStore
+from ucloud_sandboxes.build_context_store import (
+    BuildContextBlobStore,
+    ContentLengthReader,
+)
 
 
 def _digest(payload: bytes) -> str:
@@ -17,6 +20,20 @@ def _digest(payload: bytes) -> str:
 
 
 class BuildContextBlobStoreTests(unittest.TestCase):
+    def test_content_length_reader_does_not_consume_the_next_request(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            payload = b"body"
+            source = BytesIO(payload + b"next-request")
+            store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=8)
+
+            store.put(
+                _digest(payload),
+                ContentLengthReader(source, len(payload)),
+                content_length=len(payload),
+            )
+
+            self.assertEqual(source.read(), b"next-request")
+
     def test_put_validates_digest_length_and_stream_boundary(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=8)
@@ -69,8 +86,12 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             first_mtime_ns = first.stat().st_mtime_ns
             first.chmod(0o644)
 
-            second = store.put(digest, BytesIO(payload), content_length=len(payload))
+            result = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            )
+            second = result.path
 
+            self.assertTrue(result.deduplicated)
             self.assertEqual(second.stat().st_ino, first_inode)
             self.assertEqual(second.stat().st_mtime_ns, first_mtime_ns)
             self.assertEqual(stat.S_IMODE(second.stat().st_mode), 0o600)
@@ -83,8 +104,11 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             path = store.path(digest)
             path.write_bytes(b"corrupt")
 
-            store.put(digest, BytesIO(payload), content_length=len(payload))
+            result = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            )
 
+            self.assertFalse(result.deduplicated)
             self.assertEqual(path.read_bytes(), payload)
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
 

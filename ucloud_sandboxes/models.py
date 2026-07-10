@@ -424,8 +424,6 @@ class SandboxNode:
 
     @property
     def is_provisioning(self) -> bool:
-        if not self.agent_version_compatible:
-            return False
         return self.job.state in {"IN_QUEUE", "SUSPENDED"} or (
             self.job.state == "RUNNING" and not self.heartbeat_fresh
         )

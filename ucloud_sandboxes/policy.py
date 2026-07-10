@@ -29,10 +29,16 @@ def evaluate_scale(
         now=now,
     )[: max(0, policy.max_stop_per_cycle)]
     pool_nodes = [node for node in nodes if _counts_as_pool_node(node, policy, now, 0)]
-    # Incompatible nodes consume real provider slots but contribute no usable
-    # capacity. Keeping those sets separate prevents version drift from opening
-    # the hard limits and causing a replacement stampede.
-    capacity_nodes = [node for node in pool_nodes if node.agent_version_compatible]
+    # A booting node can temporarily have no usable version label. It remains
+    # unschedulable, but receives normal time-decaying provisioning credit so
+    # transient metadata lag or a failed bootstrap cannot create replacement
+    # VMs while the first VM is already billable. A ready incompatible node
+    # contributes no capacity.
+    capacity_nodes = [
+        node
+        for node in pool_nodes
+        if node.agent_version_compatible or node.is_provisioning
+    ]
     ready_nodes = [node for node in capacity_nodes if node.is_schedulable]
 
     oldest_pending_seconds = max(0, demand.oldest_pending_seconds)
@@ -507,8 +513,8 @@ def _security_adjusted_resources(
 
 
 def _node_has_disk_quota(node: SandboxNode) -> bool:
-    if node.heartbeat is None:
-        return node.is_provisioning
+    if node.is_provisioning:
+        return True
     return node.heartbeat is not None and has_capability(
         node.heartbeat.capabilities,
         DISK_QUOTA_CAPABILITY,

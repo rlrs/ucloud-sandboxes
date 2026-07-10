@@ -215,14 +215,10 @@ def evaluate_builder_scale(
         builder_nodes,
         now=now,
     )[: max(0, policy.max_stop_per_cycle)]
-    relevant_nodes = [
-        node
-        for node in builder_nodes
-        if not node.job.is_final and node.agent_version_compatible
-    ]
-    ready_nodes = [node for node in relevant_nodes if node.is_schedulable]
-    provisioning_nodes = [node for node in relevant_nodes if node.is_provisioning]
-    total_nodes = len(relevant_nodes)
+    pool_nodes = [node for node in builder_nodes if not node.job.is_final]
+    ready_nodes = [node for node in pool_nodes if node.is_schedulable]
+    provisioning_nodes = [node for node in pool_nodes if node.is_provisioning]
+    total_nodes = len(pool_nodes)
     max_builder_nodes = max(0, max_builder_nodes)
     pending_builds = max(0, pending_builds)
     prepared_builders = max(0, prepared_builders)

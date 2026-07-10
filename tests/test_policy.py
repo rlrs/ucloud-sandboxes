@@ -195,6 +195,35 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 0)
         self.assertIn("max_nodes=1 reached", decision.reasons[0])
 
+    def test_booting_unversioned_node_prevents_replacement_stampede(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "booting",
+                    state="RUNNING",
+                    fresh=False,
+                    heartbeat_present=False,
+                    agent_version_compatible=False,
+                    started_at=now - timedelta(seconds=30),
+                )
+            ],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=1,
+                    memory_mb=1024,
+                    disk_mb=1024,
+                )
+            ),
+            ScalePolicy(max_nodes=8, max_create_per_cycle=4),
+            now=now,
+        )
+
+        self.assertEqual(decision.provisioning_nodes, 1)
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.projected_free_resources.vcpu, 1)
+        self.assertGreaterEqual(decision.projected_free_resources.disk_mb, 1024)
+
     def test_respects_max_nodes_for_resource_deficit(self) -> None:
         decision = evaluate_scale(
             [

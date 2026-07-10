@@ -139,8 +139,8 @@ class ReconcileTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.stops, ("builder-old",))
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.total_nodes, 0)
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.total_nodes, 1)
         self.assertIn("incompatible agent version", decision.reasons[0])
 
     def test_builder_scale_stops_idle_builder_when_no_build_demand(self) -> None:

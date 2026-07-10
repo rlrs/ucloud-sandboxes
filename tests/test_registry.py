@@ -166,7 +166,7 @@ class RegistryTests(unittest.TestCase):
         )
 
         self.assertFalse(nodes[0].agent_version_compatible)
-        self.assertFalse(nodes[0].is_provisioning)
+        self.assertTrue(nodes[0].is_provisioning)
 
     def test_heartbeat_store_roundtrip(self) -> None:
         with TemporaryDirectory() as raw_dir:

@@ -517,21 +517,45 @@ def run_exec_round(
 
     def run_one(handle: Any) -> dict[str, Any]:
         started = time.monotonic()
+        exec_started: float | None = None
         try:
-            result = handle.exec(command, timeout_seconds=timeout_seconds)
+            exec_handle = handle.client.start_exec(handle.id, command)
+            exec_started = time.monotonic()
+            result = exec_handle.wait(timeout_seconds=timeout_seconds)
+            completed = time.monotonic()
             return {
                 "ok": result.success,
-                "duration_ms": round((time.monotonic() - started) * 1000, 3),
+                "duration_ms": round((completed - started) * 1000, 3),
+                "start_duration_ms": round((exec_started - started) * 1000, 3),
+                "wait_duration_ms": round((completed - exec_started) * 1000, 3),
+                "start_ok": True,
+                "wait_ok": True,
                 "status": result.status,
                 "exit_code": result.exit_code,
                 "error": "" if result.success else result.stderr[-500:],
             }
         except BaseException as exc:
-            return {
+            completed = time.monotonic()
+            failed = {
                 "ok": False,
-                "duration_ms": round((time.monotonic() - started) * 1000, 3),
+                "duration_ms": round((completed - started) * 1000, 3),
                 "error": f"{type(exc).__name__}: {exc}",
             }
+            if exec_started is None:
+                failed["start_duration_ms"] = failed["duration_ms"]
+                failed["start_ok"] = False
+            else:
+                failed["start_duration_ms"] = round(
+                    (exec_started - started) * 1000,
+                    3,
+                )
+                failed["wait_duration_ms"] = round(
+                    (completed - exec_started) * 1000,
+                    3,
+                )
+                failed["start_ok"] = True
+                failed["wait_ok"] = False
+            return failed
 
     started = time.monotonic()
     results = run_parallel(
@@ -547,6 +571,24 @@ def run_exec_round(
         "latency_ms": latency_summary(
             [float(item["duration_ms"]) for item in results]
         ),
+        "start_latency_ms": latency_summary(
+            [
+                float(item["start_duration_ms"])
+                for item in results
+                if "start_duration_ms" in item
+            ]
+        ),
+        "wait_latency_ms": latency_summary(
+            [
+                float(item["wait_duration_ms"])
+                for item in results
+                if "wait_duration_ms" in item
+            ]
+        ),
+        "start_succeeded": sum(bool(item.get("start_ok")) for item in results),
+        "start_failed": sum(item.get("start_ok") is False for item in results),
+        "wait_succeeded": sum(bool(item.get("wait_ok")) for item in results),
+        "wait_failed": sum(item.get("wait_ok") is False for item in results),
         "errors": [item.get("error") for item in results if not item["ok"]][:20],
     }
     emit("exec_round_complete", label=label, **payload)

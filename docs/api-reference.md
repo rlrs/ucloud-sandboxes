@@ -193,8 +193,9 @@ directories are removed after the tracked build. The legacy
 `context_archive_base64` build field remains accepted for older SDKs.
 
 `POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
-and optional `image`. The capacity signal is consumed by the autoscaler after
-one reconciliation cycle. If `image` is supplied, the gateway also creates a
+and optional `image`. Each prepared unit remains until a matching sandbox
+allocation atomically claims it or its TTL expires; provider acceptance alone
+does not consume it. If `image` is supplied, the gateway also creates a
 transient image warmup work item with the same prepare id and TTL. Warmup runs
 in the background as sandbox nodes heartbeat, and completes once cached node
 capacity can fit the requested sandbox count. The response includes

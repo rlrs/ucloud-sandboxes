@@ -19,6 +19,9 @@ class ConfigTests(unittest.TestCase):
                     "stale_provisioning_after_seconds": 600,
                     "stale_provisioning_capacity_weight": 0.1,
                     "scale_down_idle_seconds": 900,
+                    "cpu_overcommit": 2.0,
+                    "memory_overcommit": 1.2,
+                    "disk_overcommit": 1.0,
                 },
                 "gateway_public_link_id": "12345368",
                 "gateway_public_link_port": 8090,
@@ -33,6 +36,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.stale_provisioning_after_seconds, 600)
         self.assertEqual(config.policy.stale_provisioning_capacity_weight, 0.1)
         self.assertEqual(config.policy.scale_down_idle_seconds, 900)
+        self.assertEqual(config.policy.cpu_overcommit, 2.0)
+        self.assertEqual(config.policy.memory_overcommit, 1.2)
+        self.assertEqual(config.policy.disk_overcommit, 1.0)
+        self.assertEqual(config.policy.schedulable_node_resources.vcpu, 32)
         self.assertEqual(config.gateway_public_link_id, "12345368")
         self.assertEqual(config.gateway_public_link_port, 8090)
         self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.jsonl")
@@ -68,6 +75,8 @@ class ConfigTests(unittest.TestCase):
                     }
                 }
             },
+            "zero cpu overcommit": {"policy": {"cpu_overcommit": 0}},
+            "nan memory overcommit": {"policy": {"memory_overcommit": "nan"}},
             "invalid public link port": {"gateway_public_link_port": 70000},
         }
 

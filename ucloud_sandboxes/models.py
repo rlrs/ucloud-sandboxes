@@ -380,15 +380,28 @@ class NodeHeartbeat:
     @property
     def free_resources(self) -> ResourceQuantity:
         effective = self.effective_resources
+        unavailable = (
+            self.used_resources
+            + self.reserved_resources
+            + self.build_reserved_resources
+        )
         return ResourceQuantity(
-            vcpu=max(0.0, effective.vcpu - self.used_resources.vcpu),
-            memory_mb=max(0, effective.memory_mb - self.used_resources.memory_mb),
-            disk_mb=max(0, effective.disk_mb - self.used_resources.disk_mb),
+            vcpu=max(0.0, effective.vcpu - unavailable.vcpu),
+            memory_mb=max(0, effective.memory_mb - unavailable.memory_mb),
+            disk_mb=max(0, effective.disk_mb - unavailable.disk_mb),
         )
 
     @property
     def active_workloads(self) -> int:
-        return max(0, self.active_sandboxes) + max(0, self.active_image_builds)
+        reserved = self.reserved_resources + self.build_reserved_resources
+        reserved_work = int(
+            reserved.vcpu > 0 or reserved.memory_mb > 0 or reserved.disk_mb > 0
+        )
+        return (
+            max(0, self.active_sandboxes)
+            + max(0, self.active_image_builds)
+            + reserved_work
+        )
 
 
 @dataclass(frozen=True)
@@ -453,7 +466,7 @@ class ScalePolicy:
     max_create_per_cycle: int = 4
     max_stop_per_cycle: int = 1
     max_provisioning_nodes: int = 8
-    provisioning_capacity_weight: float = 0.5
+    provisioning_capacity_weight: float = 1.0
     stale_provisioning_after_seconds: int = 300
     stale_provisioning_capacity_weight: float = 0.0
     scale_down_idle_seconds: int = 600
@@ -464,6 +477,19 @@ class ScalePolicy:
         memory_mb=32768,
         disk_mb=204800,
     )
+    cpu_overcommit: float = 1.0
+    memory_overcommit: float = 1.0
+    disk_overcommit: float = 1.0
+
+    @property
+    def schedulable_node_resources(self) -> ResourceQuantity:
+        """Expected scheduler capacity of one autoscaled sandbox node."""
+
+        return self.default_node_resources.scaled(
+            cpu=max(0.0, self.cpu_overcommit),
+            memory=max(0.0, self.memory_overcommit),
+            disk=max(0.0, self.disk_overcommit),
+        )
 
 
 @dataclass(frozen=True)

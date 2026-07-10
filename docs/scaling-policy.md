@@ -58,22 +58,23 @@ and should stay at zero unless there is a measured latency SLO that justifies
 always-on cost.
 
 Prepared-capacity signals are the burst-oriented alternative. `POST
-/v1/capacity/prepare` records a one-shot scale-up signal equal to `count *
-per-sandbox resources`; the autoscaler treats it like pending sandbox demand
-for one executing reconciliation cycle, but no sandbox ids, callers, nodes, or
-standing capacity are reserved. Use this when a runner knows a batch is about
-to start and wants VM scale-up to begin before the first `POST /v1/sandboxes`.
-The signal is consumed after the autoscaler reacts. The TTL is only a cleanup
-bound for missed cycles or a stopped autoscaler, and the signal can be canceled
-with `DELETE /v1/capacity/prepare/<id>` before it is consumed.
+/v1/capacity/prepare` records a scale-up reservation equal to `count *
+per-sandbox resources`; the autoscaler treats it like pending sandbox demand.
+Use this when a runner knows a batch is about to start and wants VM scale-up to
+begin before the first `POST /v1/sandboxes`. Each newly reserved sandbox with
+the same resource shape and, when specified, image atomically claims one unit
+from the prepared count. This keeps the reservation alive through slow VM
+boots without double-counting the sandboxes it was created for. Unclaimed
+units expire at the TTL or can be canceled with `DELETE
+/v1/capacity/prepare/<id>`.
 If the prepare payload includes `image`, the gateway also tries to pull that
 image onto enough ready sandbox-node capacity for the requested sandbox count.
 If no suitable node is ready yet, the gateway records a transient image warmup
-work item with the same prepare id and TTL. The capacity signal is still
-consumed after one autoscaler cycle; the image warmup is not capacity demand and
-does not reserve nodes. It is completed when heartbeating sandbox nodes with the
-image can fit the requested `count * resources`, or it expires with the prepare
-TTL.
+work item with the same prepare id and TTL. Capacity is claimed by matching
+sandbox reservations; the image warmup is tracked independently so claiming
+capacity does not cancel an in-flight pull. It is completed when heartbeating
+sandbox nodes with the image can fit the requested `count * resources`, or it
+expires with the prepare TTL.
 
 Failed sandbox creates are not durable queue entries. When `POST /v1/sandboxes`
 cannot fit on a ready node, the gateway records a short-lived pending scale-up
@@ -101,13 +102,12 @@ counts toward pending demand. `1.0` is optimistic. Values around `0.5` to
 
 `stale_provisioning_after_seconds` and
 `stale_provisioning_capacity_weight` reduce the credited capacity of a VM that
-has been provisioning too long. The same discount applies when
-`--oldest-pending-seconds` exceeds the stale threshold, because old unscheduled
-demand means the in-flight VMs have not actually relieved the backlog yet. This
-lets the autoscaler react to stuck jobs. With the default stale weight of `0.0`,
-stale queued, suspended, or booting VMs are removed from the active pool count
-and no longer consume `max_provisioning_nodes`; they are historical provider
-state, not usable sandbox capacity.
+has itself been provisioning too long. Backlog age does not make a newly
+submitted VM stale. With the default stale weight of `0.0`, a stale queued,
+suspended, or booting VM contributes no projected capacity, but it still counts
+against the hard provider and `max_provisioning_nodes` limits until UCloud
+reports it final. This prevents duplicate submissions from bypassing the cap
+while a billed or provider-visible job still exists.
 
 `scale_down_idle_seconds` prevents the controller from stopping a VM immediately
 after its last sandbox exits. The control plane records when a heartbeat first

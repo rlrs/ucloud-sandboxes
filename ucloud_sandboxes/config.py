@@ -173,6 +173,24 @@ class AutoscalerConfig:
                 minimum=1,
             ),
             default_node_resources=ResourceQuantity.from_dict(default_node_resources_raw),
+            cpu_overcommit=_config_float(
+                "policy.cpu_overcommit",
+                policy_raw.get("cpu_overcommit", policy_defaults.cpu_overcommit),
+                minimum=0.0,
+            ),
+            memory_overcommit=_config_float(
+                "policy.memory_overcommit",
+                policy_raw.get(
+                    "memory_overcommit",
+                    policy_defaults.memory_overcommit,
+                ),
+                minimum=0.0,
+            ),
+            disk_overcommit=_config_float(
+                "policy.disk_overcommit",
+                policy_raw.get("disk_overcommit", policy_defaults.disk_overcommit),
+                minimum=0.0,
+            ),
         )
         if policy.min_nodes > policy.max_nodes:
             raise ValueError("policy.min_nodes cannot exceed policy.max_nodes.")
@@ -184,6 +202,12 @@ class AutoscalerConfig:
             raise ValueError(
                 "policy.default_node_resources values must all be positive."
             )
+        if (
+            policy.cpu_overcommit <= 0
+            or policy.memory_overcommit <= 0
+            or policy.disk_overcommit <= 0
+        ):
+            raise ValueError("policy overcommit values must all be positive.")
         gateway_public_link_port = _config_int(
             "gateway_public_link_port",
             raw.get("gateway_public_link_port", defaults.gateway_public_link_port),

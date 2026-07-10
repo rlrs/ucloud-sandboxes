@@ -5,11 +5,13 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
+import math
 import os
 from pathlib import Path
 import sys
+from threading import Event
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
@@ -41,6 +43,7 @@ from .capabilities import (
 )
 from .bootstrap import (
     VmBootstrapIntent,
+    VmBootstrapRecord,
     VmBootstrapStore,
     build_vm_bootstrap_intents,
     mark_bootstrap_attempt,
@@ -99,6 +102,7 @@ from .model_relay import (
     create_model_relay_app,
 )
 from .models import (
+    NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
@@ -135,7 +139,7 @@ from .registry import (
     load_heartbeats,
     merge_jobs_and_heartbeats,
 )
-from .routing import RoutingStore, sandbox_demand_from_routing_state
+from .routing import SandboxRoute, RoutingStore, sandbox_demand_from_routing_state
 from .runtime_probe import DockerRuntimeProbe
 from .sandbox import DockerGvisorRuntime
 from .ucloud import (
@@ -1681,19 +1685,19 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--init-cpu-overcommit",
         type=float,
-        default=1.0,
+        default=None,
         help="CPU overcommit multiplier advertised by autoscaled VM node agents.",
     )
     parser.add_argument(
         "--init-memory-overcommit",
         type=float,
-        default=1.0,
+        default=None,
         help="Memory overcommit multiplier advertised by autoscaled VM node agents.",
     )
     parser.add_argument(
         "--init-disk-overcommit",
         type=float,
-        default=1.0,
+        default=None,
         help="Disk overcommit multiplier advertised by autoscaled VM node agents.",
     )
     parser.add_argument(
@@ -3151,6 +3155,23 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     process_lock: AutoscalerProcessLock | None = (
         provider_state.process_lock() if provider_state is not None else None
     )
+    bootstrap_coordinator = (
+        _VmBootstrapCoordinator(
+            max(1, int(getattr(args, "max_init_per_cycle", 1))),
+            metrics_store,
+        )
+        if (
+            getattr(args, "execute_init", False)
+            and not args.once
+            and int(getattr(args, "max_init_per_cycle", 1)) > 0
+        )
+        else None
+    )
+
+    def assert_process_fence() -> None:
+        if process_lock is None or not process_lock.held:
+            raise AutoscalerStateError("autoscaler controller lock is not held")
+
     try:
         while True:
             cycle += 1
@@ -3169,10 +3190,12 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             routing_store = RoutingStore(route_file)
             routing_state = routing_store.load()
             pending_snapshot = list(routing_state.pending.values())
-            prepared_snapshot = list(routing_state.prepared.values())
             pending_image_build_snapshot = list(routing_state.image_builds.values())
             prepared_builder_snapshot = list(routing_state.prepared_builders.values())
             demand = sandbox_demand_from_routing_state(routing_state)
+            route_reservations = sandbox_route_reservations(
+                routing_state.sandboxes.values()
+            )
             pending_image_builds = max(
                 int(getattr(args, "pending_image_builds", 0) or 0),
                 len(pending_image_build_snapshot),
@@ -3189,6 +3212,9 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                 metrics_store=metrics_store,
                 provider_state=provider_state,
                 provider_mutations_allowed=controller_active,
+                route_reservations=route_reservations,
+                bootstrap_coordinator=bootstrap_coordinator,
+                provider_fence=assert_process_fence,
             )
             removed_routes = []
             consumed_pending_demand = []
@@ -3233,9 +3259,6 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                 ):
                     consumed_pending_demand = routing_store.consume_pending_demand(
                         pending_snapshot
-                    )
-                    consumed_prepared_capacity = (
-                        routing_store.consume_prepared_capacity(prepared_snapshot)
                     )
                 if controller_active and result.get(
                     "builderCapacityOperationSucceeded"
@@ -3307,8 +3330,16 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             sys.stdout.flush()
             if args.once:
                 return 0
-            time.sleep(interval)
+            if bootstrap_coordinator is not None:
+                bootstrap_coordinator.wait_for_activity(interval)
+            else:
+                time.sleep(interval)
     finally:
+        if bootstrap_coordinator is not None:
+            # The provider fence must remain held until every submitted SSH
+            # init attempt has returned. Otherwise a replacement controller
+            # can retry the same durable attempt while this process still runs.
+            bootstrap_coordinator.shutdown(wait=True)
         if process_lock is not None:
             process_lock.release()
 
@@ -3619,6 +3650,9 @@ def run_reconcile_cycle(
     metrics_store: MetricsStore | None = None,
     provider_state: AutoscalerStateStore | None = None,
     provider_mutations_allowed: bool = False,
+    route_reservations: dict[str, tuple[SandboxRoute, ...]] | None = None,
+    bootstrap_coordinator: _VmBootstrapCoordinator | None = None,
+    provider_fence: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     execution_requested = bool(
         args.execute or args.execute_stops or getattr(args, "execute_init", False)
@@ -3636,6 +3670,8 @@ def run_reconcile_cycle(
     def assert_provider_fence() -> None:
         if not provider_mutations_allowed:
             raise AutoscalerStateError("autoscaler controller lock is not held")
+        if provider_fence is not None:
+            provider_fence()
 
     client: UCloudClient | None = None
 
@@ -3750,6 +3786,10 @@ def run_reconcile_cycle(
             for job_id, heartbeat in heartbeats.items()
             if job_id not in final_heartbeat_job_ids
         }
+    heartbeats = apply_route_reservations_to_heartbeats(
+        heartbeats,
+        route_reservations or {},
+    )
     effective_policy = policy_with_cli_overrides(config.policy, args)
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
     sandbox_nodes = sandbox_pool_nodes(nodes, config)
@@ -4051,14 +4091,24 @@ def run_reconcile_cycle(
         getattr(args, "init_state_file", None) or config.bootstrap_file()
     )
     bootstrap_store = VmBootstrapStore(Path(bootstrap_state_file))
+    active_bootstrap_job_ids = {
+        node.job_id
+        for node in (*sandbox_nodes, *builder_nodes)
+        if not node.job.is_final
+    }
     bootstrap_records = prune_bootstrap_records(
         bootstrap_store.load(),
-        {
-            node.job_id
-            for node in (*sandbox_nodes, *builder_nodes)
-            if not node.job.is_final
-        },
+        active_bootstrap_job_ids,
     )
+    completed_bootstrap_results: list[dict[str, Any]] = []
+    if bootstrap_coordinator is not None and execution_authorized:
+        bootstrap_records, completed_bootstrap_results = (
+            bootstrap_coordinator.collect_completed(
+                bootstrap_records,
+                bootstrap_store,
+                active_job_ids=active_bootstrap_job_ids,
+            )
+        )
 
     def plan_bootstrap_from_payload(payload: dict[str, Any]) -> Any:
         plan = plan_vm_init(payload)
@@ -4077,11 +4127,22 @@ def run_reconcile_cycle(
                 )
         return plan
 
+    bootstrap_nodes = [*sandbox_nodes, *builder_nodes]
+    max_bootstraps = max(0, int(getattr(args, "max_init_per_cycle", 1)))
+    if bootstrap_coordinator is not None:
+        in_flight_job_ids = bootstrap_coordinator.in_flight_job_ids
+        bootstrap_nodes = [
+            node for node in bootstrap_nodes if node.job_id not in in_flight_job_ids
+        ]
+        max_bootstraps = min(
+            max_bootstraps,
+            bootstrap_coordinator.available_slots,
+        )
     bootstrap_intents = build_vm_bootstrap_intents(
-        [*sandbox_nodes, *builder_nodes],
+        bootstrap_nodes,
         bootstrap_records,
         retry_seconds=max(0, int(getattr(args, "init_retry_seconds", 30))),
-        max_per_cycle=max(0, int(getattr(args, "max_init_per_cycle", 1))),
+        max_per_cycle=max_bootstraps,
         options_for_node=lambda node, role: vm_init_options_for_autoscaled_node(
             node,
             role,
@@ -4212,7 +4273,7 @@ def run_reconcile_cycle(
         "bootstrapIntents": [
             vm_bootstrap_intent_to_dict(intent) for intent in bootstrap_intents
         ],
-        "bootstrapResults": [],
+        "bootstrapResults": list(completed_bootstrap_results),
         "executeCreates": bool(args.execute and execution_authorized),
         "executeStops": bool(args.execute_stops and execution_authorized),
         "executeInit": bool(
@@ -4316,7 +4377,7 @@ def run_reconcile_cycle(
     result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
         provider_operation_results,
         decision.resource_deficit,
-        effective_policy.default_node_resources,
+        effective_policy.schedulable_node_resources,
     )
     desired_builders = min(
         max(1 if builder_pending > 0 else 0, builder_prepared),
@@ -4329,6 +4390,34 @@ def run_reconcile_cycle(
     )
 
     if (
+        bootstrap_coordinator is not None
+        and getattr(args, "execute_init", False)
+        and execution_authorized
+    ):
+        bootstrap_results = list(completed_bootstrap_results)
+        for intent in bootstrap_intents:
+            if not intent.runnable or not intent.plan.ssh_command:
+                bootstrap_results.append(
+                    {
+                        "jobId": intent.job_id,
+                        "nodeId": intent.node_id,
+                        "role": intent.role,
+                        "skipped": True,
+                        "reason": intent.reason,
+                    }
+                )
+                continue
+            bootstrap_records, scheduled = bootstrap_coordinator.submit(
+                intent,
+                args,
+                bootstrap_records,
+                bootstrap_store,
+                assert_provider_fence=assert_provider_fence,
+            )
+            bootstrap_results.append(scheduled)
+        result["bootstrapResults"] = bootstrap_results
+        bootstrap_store.save(bootstrap_records)
+    elif (
         getattr(args, "execute_init", False)
         and execution_authorized
         and bootstrap_intents
@@ -4565,6 +4654,183 @@ class _VmBootstrapAttemptResult:
     init_total_ms: int | None = None
 
 
+@dataclass(frozen=True)
+class _InFlightVmBootstrap:
+    intent: VmBootstrapIntent
+    attempt_count: int
+    started_at: datetime
+    started_perf: float
+    future: Future[_VmBootstrapAttemptResult]
+
+
+class _VmBootstrapCoordinator:
+    """Run VM init attempts across reconcile cycles without worker state writes."""
+
+    def __init__(self, max_workers: int, metrics_store: MetricsStore | None) -> None:
+        if max_workers < 1:
+            raise ValueError("VM bootstrap concurrency must be positive")
+        self.max_workers = max_workers
+        self.metrics_store = metrics_store
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="vm-bootstrap",
+        )
+        self._in_flight: dict[str, _InFlightVmBootstrap] = {}
+        self._activity = Event()
+        self._next_retry_deadline: float | None = None
+
+    @property
+    def in_flight_job_ids(self) -> frozenset[str]:
+        return frozenset(self._in_flight)
+
+    @property
+    def available_slots(self) -> int:
+        return max(0, self.max_workers - len(self._in_flight))
+
+    def submit(
+        self,
+        intent: VmBootstrapIntent,
+        args: argparse.Namespace,
+        records: dict[str, VmBootstrapRecord],
+        store: VmBootstrapStore,
+        *,
+        assert_provider_fence: Callable[[], None],
+    ) -> tuple[dict[str, VmBootstrapRecord], dict[str, Any]]:
+        if intent.job_id in self._in_flight:
+            raise AutoscalerStateError(
+                f"VM init is already in flight for {intent.job_id}"
+            )
+        if self.available_slots <= 0:
+            raise AutoscalerStateError("VM init concurrency is exhausted")
+        assert_provider_fence()
+        started_at = utc_now()
+        started_perf = time.perf_counter()
+        records = mark_bootstrap_attempt(records, intent, now=started_at)
+        store.save(records)
+        record = records.get(intent.job_id)
+        attempt_count = (
+            record.attempts if record is not None else intent.previous_attempts + 1
+        )
+        try:
+            future = self._executor.submit(
+                _execute_vm_bootstrap_attempt,
+                intent,
+                args,
+                attempt_count=attempt_count,
+                assert_provider_fence=assert_provider_fence,
+                attempt_started_perf=started_perf,
+            )
+            future.add_done_callback(lambda _future: self._activity.set())
+        except Exception as exc:
+            future = Future()
+            future.set_result(
+                _failed_vm_bootstrap_attempt(intent, started_perf, str(exc))
+            )
+        self._in_flight[intent.job_id] = _InFlightVmBootstrap(
+            intent=intent,
+            attempt_count=attempt_count,
+            started_at=started_at,
+            started_perf=started_perf,
+            future=future,
+        )
+        return records, {
+            "jobId": intent.job_id,
+            "nodeId": intent.node_id,
+            "role": intent.role,
+            "status": "attempting",
+            "attempts": attempt_count,
+        }
+
+    def collect_completed(
+        self,
+        records: dict[str, VmBootstrapRecord],
+        store: VmBootstrapStore,
+        *,
+        active_job_ids: set[str],
+    ) -> tuple[dict[str, VmBootstrapRecord], list[dict[str, Any]]]:
+        results: list[dict[str, Any]] = []
+        for job_id, prepared in tuple(self._in_flight.items()):
+            if not prepared.future.done():
+                continue
+            del self._in_flight[job_id]
+            try:
+                attempt_result = prepared.future.result()
+            except Exception as exc:
+                attempt_result = _failed_vm_bootstrap_attempt(
+                    prepared.intent,
+                    prepared.started_perf,
+                    str(exc),
+                )
+            if job_id in active_job_ids:
+                if attempt_result.status == "succeeded":
+                    records = mark_bootstrap_success(records, prepared.intent)
+                else:
+                    records = mark_bootstrap_failure(
+                        records,
+                        prepared.intent,
+                        attempt_result.error,
+                        retry_delay_seconds=attempt_result.retry_delay_seconds,
+                    )
+                    if attempt_result.retry_delay_seconds is not None:
+                        retry_deadline = time.monotonic() + max(
+                            0,
+                            attempt_result.retry_delay_seconds,
+                        )
+                        self._next_retry_deadline = (
+                            retry_deadline
+                            if self._next_retry_deadline is None
+                            else min(self._next_retry_deadline, retry_deadline)
+                        )
+                store.save(records)
+            duration_ms = _bootstrap_result_duration_ms(attempt_result)
+            record_vm_init_attempt_result(
+                self.metrics_store,
+                prepared.intent,
+                status=attempt_result.status,
+                attempts=prepared.attempt_count,
+                started_at=prepared.started_at,
+                attempt_started_perf=prepared.started_perf,
+                stage_duration_ms=attempt_result.stage_duration_ms,
+                run_duration_ms=attempt_result.run_duration_ms,
+                returncode=attempt_result.returncode,
+                error=attempt_result.error,
+                retry_delay_seconds=attempt_result.retry_delay_seconds,
+                init_phases_ms=attempt_result.init_phases_ms,
+                init_total_ms=attempt_result.init_total_ms,
+                duration_ms=duration_ms,
+                finished_at=(
+                    prepared.started_at
+                    + timedelta(milliseconds=duration_ms)
+                ),
+            )
+            results.append(attempt_result.result)
+        return records, results
+
+    def wait_for_activity(self, timeout_seconds: float) -> None:
+        timeout = max(0.0, timeout_seconds)
+        retry_deadline = self._next_retry_deadline
+        if retry_deadline is not None:
+            retry_remaining = retry_deadline - time.monotonic()
+            if retry_remaining <= 0:
+                self._next_retry_deadline = None
+                return
+            timeout = min(timeout, retry_remaining)
+        # Clear before checking futures so a completion cannot be lost between
+        # the predicate and the blocking wait.
+        self._activity.clear()
+        if any(item.future.done() for item in self._in_flight.values()):
+            return
+        self._activity.wait(timeout)
+        if (
+            self._next_retry_deadline is not None
+            and self._next_retry_deadline <= time.monotonic()
+        ):
+            self._next_retry_deadline = None
+
+    def shutdown(self, *, wait: bool = True) -> None:
+        self._executor.shutdown(wait=wait, cancel_futures=not wait)
+
+
 def _execute_vm_bootstrap_attempt(
     intent: VmBootstrapIntent,
     args: argparse.Namespace,
@@ -4766,8 +5032,15 @@ def record_vm_init_attempt_result(
     retry_delay_seconds: int | None = None,
     init_phases_ms: dict[str, int] | None = None,
     init_total_ms: int | None = None,
+    duration_ms: int | None = None,
+    finished_at: datetime | None = None,
 ) -> None:
-    finished_at = utc_now()
+    effective_duration_ms = (
+        _elapsed_ms(attempt_started_perf)
+        if duration_ms is None
+        else max(0, int(duration_ms))
+    )
+    effective_finished_at = finished_at or utc_now()
     record_vm_init_attempt(
         metrics_store,
         job_id=intent.job_id,
@@ -4776,8 +5049,8 @@ def record_vm_init_attempt_result(
         status=status,
         attempts=attempts,
         started_at=started_at.isoformat(),
-        finished_at=finished_at.isoformat(),
-        duration_ms=_elapsed_ms(attempt_started_perf),
+        finished_at=effective_finished_at.isoformat(),
+        duration_ms=effective_duration_ms,
         stage_duration_ms=stage_duration_ms,
         run_duration_ms=run_duration_ms,
         returncode=returncode,
@@ -4790,6 +5063,13 @@ def record_vm_init_attempt_result(
 
 def _elapsed_ms(started_perf: float) -> int:
     return max(0, int((time.perf_counter() - started_perf) * 1000))
+
+
+def _bootstrap_result_duration_ms(result: _VmBootstrapAttemptResult) -> int:
+    value = result.result.get("durationMs")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return max(0, int(value))
 
 
 def load_jobs_for_plan(
@@ -4830,12 +5110,91 @@ def policy_with_cli_overrides(
             effective,
             scale_down_idle_seconds=max(0, int(scale_down_seconds)),
         )
+    capacity_factors = {
+        "cpu_overcommit": getattr(args, "init_cpu_overcommit", None),
+        "memory_overcommit": getattr(args, "init_memory_overcommit", None),
+        "disk_overcommit": getattr(args, "init_disk_overcommit", None),
+    }
+    factor_updates: dict[str, float] = {}
+    for field_name, raw_value in capacity_factors.items():
+        if raw_value is None:
+            continue
+        factor_updates[field_name] = _node_capacity_factor(raw_value, 1.0)
+    if factor_updates:
+        effective = replace(effective, **factor_updates)
     builder_idle_seconds = getattr(args, "builder_scale_down_idle_seconds", None)
     if builder_idle_seconds is None:
         return effective
     return replace(
         effective,
         builder_scale_down_idle_seconds=max(0, int(builder_idle_seconds)),
+    )
+
+
+def _node_capacity_factor(raw_value: object, default: float) -> float:
+    value = float(default if raw_value is None else raw_value)
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("node capacity factors must be positive finite numbers")
+    return value
+
+
+def sandbox_route_reservations(
+    routes: Iterable[SandboxRoute],
+) -> dict[str, tuple[SandboxRoute, ...]]:
+    routes_by_job: dict[str, list[SandboxRoute]] = {}
+    for route in routes:
+        job_id = route.job_id.strip()
+        if not job_id:
+            continue
+        routes_by_job.setdefault(job_id, []).append(route)
+    return {
+        job_id: tuple(sorted(items, key=lambda route: route.sandbox_id))
+        for job_id, items in routes_by_job.items()
+    }
+
+
+def apply_route_reservations_to_heartbeats(
+    heartbeats: dict[str, NodeHeartbeat],
+    routes_by_job: dict[str, tuple[SandboxRoute, ...]],
+) -> dict[str, NodeHeartbeat]:
+    """Conservatively merge newer route reservations into stale heartbeats."""
+
+    reconciled: dict[str, NodeHeartbeat] = {}
+    for job_id, heartbeat in heartbeats.items():
+        inventory = {item.sandbox_id: item for item in heartbeat.inventory}
+        missing_routes = [
+            route
+            for route in routes_by_job.get(job_id, ())
+            if not _heartbeat_inventory_contains_route(inventory, route)
+        ]
+        missing_resources = ResourceQuantity()
+        for route in missing_routes:
+            missing_resources = missing_resources + route.resources
+        used = heartbeat.used_resources + missing_resources
+        active_sandboxes = (
+            heartbeat.active_sandboxes + len(missing_routes)
+        )
+        reconciled[job_id] = replace(
+            heartbeat,
+            used_resources=used,
+            active_sandboxes=active_sandboxes,
+        )
+    return reconciled
+
+
+def _heartbeat_inventory_contains_route(
+    inventory: dict[str, Any],
+    route: SandboxRoute,
+) -> bool:
+    item = inventory.get(route.sandbox_id)
+    if item is None:
+        return False
+    if route.generation <= 0 and item.generation <= 0:
+        return True
+    return bool(
+        route.generation == item.generation
+        and route.create_operation_id == item.operation_id
+        and route.spec_hash == item.spec_hash
     )
 
 
@@ -4852,22 +5211,24 @@ def build_activity_sandbox_warm_resources(
         and max(0, prepared_builder_count) <= 0
     ):
         return ResourceQuantity()
-    return policy.default_node_resources
+    return policy.schedulable_node_resources
 
 
 def demand_with_build_warm_resources(
     demand: SandboxDemand,
     build_warm_resources: ResourceQuantity,
 ) -> SandboxDemand:
-    if (
-        build_warm_resources.vcpu <= 0
-        and build_warm_resources.memory_mb <= 0
-        and build_warm_resources.disk_mb <= 0
-    ):
+    desired = demand.desired_resources
+    supplement = ResourceQuantity(
+        vcpu=max(0.0, build_warm_resources.vcpu - desired.vcpu),
+        memory_mb=max(0, build_warm_resources.memory_mb - desired.memory_mb),
+        disk_mb=max(0, build_warm_resources.disk_mb - desired.disk_mb),
+    )
+    if supplement == ResourceQuantity():
         return demand
     return replace(
         demand,
-        prepared_resources=demand.prepared_resources + build_warm_resources,
+        prepared_resources=demand.prepared_resources + supplement,
     )
 
 
@@ -4948,9 +5309,18 @@ def vm_init_options_for_autoscaled_node(
             total_resources,
             disk_mb=min(total_resources.disk_mb, docker_quota_image_gb * 1024),
         )
-    cpu_overcommit = max(0.0, float(getattr(args, "init_cpu_overcommit", 1.0)))
-    memory_overcommit = max(0.0, float(getattr(args, "init_memory_overcommit", 1.0)))
-    disk_overcommit = max(0.0, float(getattr(args, "init_disk_overcommit", 1.0)))
+    cpu_overcommit = _node_capacity_factor(
+        getattr(args, "init_cpu_overcommit", None),
+        config.policy.cpu_overcommit,
+    )
+    memory_overcommit = _node_capacity_factor(
+        getattr(args, "init_memory_overcommit", None),
+        config.policy.memory_overcommit,
+    )
+    disk_overcommit = _node_capacity_factor(
+        getattr(args, "init_disk_overcommit", None),
+        config.policy.disk_overcommit,
+    )
     if role == "builder":
         cpu_overcommit = 1.0
         memory_overcommit = 1.0

@@ -248,10 +248,10 @@ def _projected_free_resources(
                     node.heartbeat.free_resources,
                 )
             elif node.is_provisioning:
-                effective = node.heartbeat.effective_resources
-                if _has_resource_demand(effective):
+                free = node.heartbeat.free_resources
+                if _has_resource_demand(node.heartbeat.effective_resources):
                     total = total + _scale_resources(
-                        _security_adjusted_resources(node, effective),
+                        _security_adjusted_resources(node, free),
                         _provisioning_weight(
                             node,
                             policy,
@@ -302,10 +302,21 @@ def _estimated_node_resources(
         memory_mb = policy.default_node_resources.memory_mb
     if disk_mb <= 0:
         disk_mb = policy.default_node_resources.disk_mb
-    return ResourceQuantity(
+    physical = ResourceQuantity(
         vcpu=vcpu,
         memory_mb=memory_mb,
         disk_mb=disk_mb,
+    )
+    estimated = physical.scaled(
+        cpu=max(0.0, policy.cpu_overcommit),
+        memory=max(0.0, policy.memory_overcommit),
+        disk=max(0.0, policy.disk_overcommit),
+    )
+    maximum = policy.schedulable_node_resources
+    return ResourceQuantity(
+        vcpu=min(estimated.vcpu, maximum.vcpu),
+        memory_mb=min(estimated.memory_mb, maximum.memory_mb),
+        disk_mb=min(estimated.disk_mb, maximum.disk_mb),
     )
 
 
@@ -315,13 +326,15 @@ def _provisioning_weight(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> float:
+    del oldest_pending_seconds
     weight = _clamp_ratio(policy.provisioning_capacity_weight)
     stale_after = max(0, policy.stale_provisioning_after_seconds)
     if stale_after <= 0:
         return weight
-    provisioning_age = _provisioning_age_seconds(node, now) or 0.0
-    age_seconds = max(provisioning_age, float(max(0, oldest_pending_seconds)))
-    if age_seconds >= stale_after:
+    provisioning_age = _provisioning_age_seconds(node, now)
+    if provisioning_age is None:
+        return min(weight, _clamp_ratio(policy.stale_provisioning_capacity_weight))
+    if provisioning_age >= stale_after:
         return min(weight, _clamp_ratio(policy.stale_provisioning_capacity_weight))
     return weight
 
@@ -357,7 +370,9 @@ def _counts_as_active_provisioning(
 
 def _provisioning_age_seconds(node: SandboxNode, now: datetime) -> float | None:
     reference = (
-        node.job.started_at if node.job.state == "RUNNING" else node.job.created_at
+        (node.job.started_at or node.job.created_at)
+        if node.job.state == "RUNNING"
+        else node.job.created_at
     )
     if reference is None:
         return None
@@ -561,7 +576,7 @@ def _has_resource_deficit(value: ResourceQuantity) -> bool:
 
 
 def _nodes_for_resource_deficit(deficit: ResourceQuantity, policy: ScalePolicy) -> int:
-    defaults = policy.default_node_resources
+    defaults = policy.schedulable_node_resources
     counts = [1]
     if deficit.vcpu > 0 and defaults.vcpu > 0:
         counts.append(_ceil_div_float(deficit.vcpu, defaults.vcpu))

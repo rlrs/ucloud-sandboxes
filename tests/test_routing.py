@@ -452,6 +452,114 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(deleted.prepare_id if deleted else None, "prep-2")
         self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
 
+    def test_new_matching_routes_claim_prepared_capacity_once(self) -> None:
+        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        image = "registry.example.org/workload@sha256:" + "a" * 64
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_prepared_capacity(
+                "prep-1",
+                resources,
+                count=2,
+                ttl_seconds=600,
+                image=image,
+            )
+            route = SandboxRoute(
+                sandbox_id="sandbox-1",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=resources,
+                spec={"id": "sandbox-1", "image": image},
+            )
+            first = store.allocate_sandbox_create(route, spec_hash="spec-1")
+            repeated = store.allocate_sandbox_create(route, spec_hash="spec-1")
+            after_first = store.prepared_capacity()
+            store.allocate_sandbox_create(
+                SandboxRoute(
+                    **{
+                        **route.__dict__,
+                        "sandbox_id": "sandbox-2",
+                        "spec": {"id": "sandbox-2", "image": image},
+                    }
+                ),
+                spec_hash="spec-2",
+            )
+            after_second = store.prepared_capacity()
+
+        self.assertEqual(first, repeated)
+        self.assertEqual(after_first[0].count, 1)
+        self.assertEqual(after_second, [])
+
+    def test_route_does_not_claim_capacity_for_a_different_image(self) -> None:
+        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_prepared_capacity(
+                "prep-1",
+                resources,
+                count=1,
+                ttl_seconds=600,
+                image="registry.example.org/expected:latest",
+            )
+            store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=resources,
+                    spec={
+                        "id": "sandbox-1",
+                        "image": "registry.example.org/other:latest",
+                    },
+                ),
+                spec_hash="spec-1",
+            )
+
+            prepared = store.prepared_capacity()
+
+        self.assertEqual([item.prepare_id for item in prepared], ["prep-1"])
+
+    def test_route_claims_image_specific_capacity_before_generic_capacity(
+        self,
+    ) -> None:
+        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        image = "registry.example.org/workload:latest"
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_prepared_capacity(
+                "generic-older",
+                resources,
+                count=1,
+                ttl_seconds=600,
+            )
+            store.upsert_prepared_capacity(
+                "image-newer",
+                resources,
+                count=1,
+                ttl_seconds=600,
+                image=image,
+            )
+            store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=resources,
+                    spec={"id": "sandbox-1", "image": image},
+                ),
+                spec_hash="spec-1",
+            )
+
+            remaining = store.prepared_capacity()
+
+        self.assertEqual(
+            [item.prepare_id for item in remaining],
+            ["generic-older"],
+        )
+
     def test_image_warmup_survives_prepared_capacity_consumption(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

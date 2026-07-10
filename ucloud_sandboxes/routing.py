@@ -555,6 +555,59 @@ class RoutingStore:
                 )
             return stored
 
+    def _claim_prepared_capacity_unlocked(
+        self,
+        conn: sqlite3.Connection,
+        route: SandboxRoute,
+    ) -> PreparedCapacityDemand | None:
+        route_image = str(route.spec.get("image") or "").strip()
+        now = utc_now()
+        matching = [
+            item
+            for item in (
+                _prepared_from_row(row)
+                for row in conn.execute(
+                    """
+                    SELECT prepare_id, resources_json, count, created_at,
+                           updated_at, expires_at, image
+                    FROM prepared_capacity
+                    """
+                )
+            )
+            if not item.is_expired(now)
+            and item.resources == route.resources
+            and (not item.image or item.image == route_image)
+        ]
+        if not matching:
+            return None
+        selected = min(
+            matching,
+            key=lambda item: (
+                0 if item.image == route_image and item.image else 1,
+                item.created_at,
+                item.prepare_id,
+            ),
+        )
+        if selected.count <= 1:
+            conn.execute(
+                "DELETE FROM prepared_capacity WHERE prepare_id = ?",
+                (selected.prepare_id,),
+            )
+        else:
+            self._write_prepared(
+                conn,
+                PreparedCapacityDemand(
+                    prepare_id=selected.prepare_id,
+                    resources=selected.resources,
+                    count=selected.count - 1,
+                    created_at=selected.created_at,
+                    updated_at=now.isoformat(),
+                    expires_at=selected.expires_at,
+                    image=selected.image,
+                ),
+            )
+        return selected
+
     def allocate_sandbox_create(
         self,
         route: SandboxRoute,
@@ -611,6 +664,7 @@ class RoutingStore:
                 conn.execute(
                     "DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,)
                 )
+                self._claim_prepared_capacity_unlocked(conn, stored)
             return stored
 
     def prepare_sandbox_delete(self, sandbox_id: str) -> SandboxRoute | None:

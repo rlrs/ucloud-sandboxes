@@ -190,6 +190,15 @@ class CliTests(unittest.TestCase):
             )
         )
 
+    def test_no_create_operation_does_not_consume_pending_demand(self) -> None:
+        self.assertFalse(
+            cli._sandbox_capacity_operation_succeeded(
+                [],
+                ResourceQuantity(),
+                ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800),
+            )
+        )
+
     def test_provider_http_rejection_and_ambiguity_are_journaled_differently(
         self,
     ) -> None:
@@ -1348,6 +1357,7 @@ class CliTests(unittest.TestCase):
                             "items": [
                                 {
                                     "id": "recovered-job",
+                                    "createdAt": int(utc_now().timestamp() * 1000),
                                     "owner": {"project": "project-1"},
                                     "specification": submitted[0]["items"][0],
                                     "status": {"state": "IN_QUEUE"},
@@ -1644,6 +1654,7 @@ class CliTests(unittest.TestCase):
                             "items": [
                                 {
                                     "id": "recovered-job",
+                                    "createdAt": int(utc_now().timestamp() * 1000),
                                     "owner": {"project": "project-1"},
                                     "specification": submitted_item,
                                     "status": {"state": "IN_QUEUE"},
@@ -1745,6 +1756,7 @@ class CliTests(unittest.TestCase):
                             "items": [
                                 {
                                     "id": "delayed-job",
+                                    "createdAt": int(utc_now().timestamp() * 1000),
                                     "owner": {"project": "project-1"},
                                     "specification": submitted[0]["items"][0],
                                     "status": {"state": "IN_QUEUE"},
@@ -1786,7 +1798,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(remaining, [])
 
     @allow_fixture_mutations
-    def test_executing_autoscaler_loop_consumes_prepared_capacity_signal(self) -> None:
+    def test_autoscaler_keeps_prepared_capacity_until_sandboxes_claim_it(self) -> None:
         submitted: list[tuple[str, dict]] = []
 
         class FakeUCloudClient:
@@ -1834,7 +1846,25 @@ class CliTests(unittest.TestCase):
                     )
 
                 payload = json.loads(output.getvalue())
-                remaining_demand = RoutingStore(route_file).pending_demand()
+                store = RoutingStore(route_file)
+                demand_after_scale = store.pending_demand()
+                for index in range(4):
+                    store.allocate_sandbox_create(
+                        SandboxRoute(
+                            sandbox_id=f"sandbox-{index}",
+                            node_id="node-1",
+                            job_id="created-node",
+                            node_url="http://node-1:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1,
+                                memory_mb=2048,
+                                disk_mb=8192,
+                            ),
+                            spec={"id": f"sandbox-{index}", "image": "busybox"},
+                        ),
+                        spec_hash=f"spec-{index}",
+                    )
+                demand_after_claims = store.pending_demand()
         finally:
             cli.UCloudClient = original_client
 
@@ -1842,11 +1872,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(submitted[0][0], "project-1")
         self.assertEqual(payload["createdJobIds"], ["created-node"])
         self.assertEqual(payload["decision"]["preparedResources"]["vcpu"], 4.0)
-        self.assertEqual(
-            [item["prepare_id"] for item in payload["consumedPreparedCapacity"]],
-            ["eval-soon"],
-        )
-        self.assertEqual(remaining_demand.prepared_resources, ResourceQuantity())
+        self.assertEqual(payload["consumedPreparedCapacity"], [])
+        self.assertEqual(demand_after_scale.prepared_resources.vcpu, 4)
+        self.assertEqual(demand_after_claims.prepared_resources, ResourceQuantity())
 
     def test_autoscaler_loop_once_uses_route_file_pending_image_builds(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1978,7 +2006,9 @@ class CliTests(unittest.TestCase):
                 vcpu=8,
                 memory_mb=16384,
                 disk_mb=102400,
-            )
+            ),
+            cpu_overcommit=2.0,
+            memory_overcommit=1.25,
         )
 
         resources = cli.build_activity_sandbox_warm_resources(
@@ -1989,8 +2019,107 @@ class CliTests(unittest.TestCase):
         )
         demand = cli.demand_with_build_warm_resources(SandboxDemand(), resources)
 
-        self.assertEqual(resources, policy.default_node_resources)
-        self.assertEqual(demand.prepared_resources, policy.default_node_resources)
+        self.assertEqual(resources, policy.schedulable_node_resources)
+        self.assertEqual(
+            demand.prepared_resources,
+            policy.schedulable_node_resources,
+        )
+
+    def test_build_warm_resources_supplement_instead_of_double_counting_demand(
+        self,
+    ) -> None:
+        warm = ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800)
+        demand = SandboxDemand(
+            pending_resources=ResourceQuantity(vcpu=16, memory_mb=8192, disk_mb=16384),
+            prepared_resources=ResourceQuantity(
+                vcpu=33,
+                memory_mb=16896,
+                disk_mb=33792,
+            ),
+        )
+
+        combined = cli.demand_with_build_warm_resources(demand, warm)
+
+        self.assertEqual(
+            combined.desired_resources,
+            ResourceQuantity(vcpu=49, memory_mb=39321, disk_mb=204800),
+        )
+
+    def test_policy_cli_overcommit_matches_node_init_capacity(self) -> None:
+        policy = cli.policy_with_cli_overrides(
+            ScalePolicy(),
+            argparse.Namespace(
+                scale_down_idle_seconds=None,
+                builder_scale_down_idle_seconds=None,
+                init_cpu_overcommit=2.0,
+                init_memory_overcommit=1.2,
+                init_disk_overcommit=1.0,
+            ),
+        )
+
+        self.assertEqual(
+            policy.schedulable_node_resources,
+            ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800),
+        )
+
+    def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:
+        configured = ScalePolicy(
+            cpu_overcommit=2.0,
+            memory_overcommit=1.2,
+            disk_overcommit=1.0,
+        )
+        policy = cli.policy_with_cli_overrides(
+            configured,
+            argparse.Namespace(
+                scale_down_idle_seconds=None,
+                builder_scale_down_idle_seconds=None,
+                init_cpu_overcommit=None,
+                init_memory_overcommit=None,
+                init_disk_overcommit=None,
+            ),
+        )
+
+        self.assertEqual(policy, configured)
+
+    def test_route_reservations_bound_stale_heartbeat_free_capacity(self) -> None:
+        routes = [
+            SandboxRoute(
+                sandbox_id=f"sandbox-{index}",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                state="running",
+            )
+            for index in range(8)
+        ]
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            total_resources=ResourceQuantity(
+                vcpu=16,
+                memory_mb=32768,
+                disk_mb=204800,
+            ),
+            used_resources=ResourceQuantity(),
+            cpu_overcommit=2.0,
+            memory_overcommit=1.2,
+        )
+
+        reservations = cli.sandbox_route_reservations(routes)
+        reconciled = cli.apply_route_reservations_to_heartbeats(
+            {"job-1": heartbeat},
+            reservations,
+        )["job-1"]
+
+        self.assertEqual(reconciled.active_sandboxes, 8)
+        self.assertEqual(
+            reconciled.used_resources,
+            ResourceQuantity(vcpu=8, memory_mb=4096, disk_mb=8192),
+        )
+        self.assertEqual(reconciled.free_resources.vcpu, 24)
 
     def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
         demand = SandboxDemand(
@@ -2621,7 +2750,7 @@ class CliTests(unittest.TestCase):
 
     def test_fenced_stop_waits_for_matching_empty_gateway_heartbeat(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []
-        drain_tokens: list[str] = []
+        drain_actions: list[tuple[str, bool]] = []
 
         class SuccessfulStopClient:
             def __init__(self, _session_store) -> None:
@@ -2718,11 +2847,24 @@ class CliTests(unittest.TestCase):
             )
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
-            def post_drain(_url: str, token: str) -> dict:
-                drain_tokens.append(token)
-                if len(drain_tokens) == 1:
+            def post_drain(
+                _url: str,
+                token: str,
+                *,
+                draining: bool = True,
+                bearer_token=None,
+            ) -> dict:
+                del bearer_token
+                drain_actions.append((token, draining))
+                if len(drain_actions) == 1:
                     raise TimeoutError("drain request timed out")
-                return {"draining": True}
+                return {
+                    "drain": {
+                        "draining": draining,
+                        "token": token,
+                        "admission_open": not draining,
+                    }
+                }
 
             with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
                 cli, "_post_node_drain", side_effect=post_drain
@@ -2766,8 +2908,25 @@ class CliTests(unittest.TestCase):
                     provider_state=state,
                     provider_mutations_allowed=True,
                 )
-                save_heartbeat(token=intent.token)
+                save_heartbeat()
                 acknowledged = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                save_heartbeat()
+                rearmed = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                replacement_intent = state.list_drain_intents(state="active")[0]
+                save_heartbeat(token=replacement_intent.token)
+                terminated = cli.run_reconcile_cycle(
                     config,
                     args,
                     demand=SandboxDemand(),
@@ -2776,11 +2935,19 @@ class CliTests(unittest.TestCase):
                 )
 
         self.assertEqual(terminate_calls, [("owned",)])
-        self.assertEqual(len(set(drain_tokens)), 1)
-        for blocked in (failed_request, stale, mismatch, reserved):
+        self.assertEqual(len({token for token, _draining in drain_actions}), 2)
+        self.assertIn((intent.token, False), drain_actions)
+        for blocked in (
+            failed_request,
+            stale,
+            mismatch,
+            reserved,
+            acknowledged,
+            rearmed,
+        ):
             self.assertEqual(blocked["definitelyTerminatedJobIds"], [])
-        self.assertEqual(acknowledged["drainReadyStopJobIds"], ["owned"])
-        self.assertEqual(acknowledged["definitelyTerminatedJobIds"], ["owned"])
+        self.assertEqual(terminated["drainReadyStopJobIds"], ["owned"])
+        self.assertEqual(terminated["definitelyTerminatedJobIds"], ["owned"])
         self.assertEqual(mismatch["stopJobIds"], ["owned"])
         self.assertEqual(mismatch["drainingJobIds"], ["owned"])
 

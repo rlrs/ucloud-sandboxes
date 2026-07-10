@@ -232,6 +232,11 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertEqual(script.count("$SUDO apt-get update"), 3)
         self.assertIn("using package repository fallback", script)
+        self.assertIn(
+            "install -m 0644 /lib/systemd/system/containerd.service",
+            script,
+        )
+        self.assertIn("systemctl restart containerd.service", script)
         self.assertIn("APT_REPOSITORY_PACKAGES=()", script)
         self.assertIn('if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]', script)
         self.assertIn('if [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]', script)

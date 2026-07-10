@@ -513,7 +513,7 @@ for module in modules:
         raise SystemExit("offline kernel module metadata is invalid")
     file_name = str(module.get("name") or "")
     if Path(file_name).name != file_name or not re.fullmatch(
-        r"[A-Za-z0-9_.-]+\.ko(?:\.(?:gz|xz|zst))?", file_name
+        r"[A-Za-z0-9_.-]+\\.ko(?:\\.(?:gz|xz|zst))?", file_name
     ):
         raise SystemExit("invalid offline kernel module filename")
     declared_modules.add(file_name)
@@ -666,6 +666,12 @@ install_offline_runtime() {{
       return 1
     fi
   done
+  # containerd.io still ships this unit under /lib. The UCloud stock VM is
+  # not merged-/usr and systemd searches /usr/lib/systemd/system instead.
+  if [ -f /lib/systemd/system/containerd.service ]; then
+    $SUDO install -m 0644 /lib/systemd/system/containerd.service \
+      /usr/lib/systemd/system/containerd.service
+  fi
   if ! getent group docker >/dev/null 2>&1; then
     $SUDO groupadd --system docker
   fi
@@ -933,6 +939,13 @@ else
 fi
 rm -f "$DOCKER_DAEMON_JSON"
 $SUDO systemctl daemon-reload
+$SUDO systemctl enable containerd.service
+if ! systemctl is-active --quiet containerd.service; then
+  if ! $SUDO systemctl restart containerd.service; then
+    $SUDO journalctl -u containerd.service -n 80 --no-pager >&2 || true
+    exit 1
+  fi
+fi
 $SUDO dockerd --validate --config-file /etc/docker/daemon.json
 $SUDO systemctl enable docker
 if [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ] || ! systemctl is-active --quiet docker; then

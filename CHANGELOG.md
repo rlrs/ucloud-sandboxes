@@ -4,6 +4,11 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.41 - 2026-07-11
+
+- Bounded serialized sandbox placement admission to 250 ms and reduced concurrent long-running creates from 64 to 32, preventing multi-minute scheduler convoys under burst load.
+- Made HTTP worker saturation return an explicit retryable JSON 503 instead of closing accepted sockets and triggering UCloud's HTML `Job is unavailable` response.
+
 ## 0.3.40 - 2026-07-11
 
 - Made TTL expiration preempt active exec, SSH, and file-I/O leases so expired sandboxes cannot keep old nodes alive indefinitely.

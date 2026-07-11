@@ -2303,6 +2303,109 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_gateway_placement_contention_fails_fast_with_retryable_json(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                metrics_file=raw_path / "metrics.jsonl",
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                self.assertTrue(
+                    control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
+                )
+                started = monotonic()
+                try:
+                    result = self._json_request(
+                        f"http://{host}:{port}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "placement-busy",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 128,
+                            "disk_mb": 64,
+                        },
+                        allow_error=True,
+                    )
+                finally:
+                    control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                elapsed = monotonic() - started
+                metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(result["status"], 503)
+        self.assertTrue(result["body"]["retryable"])
+        self.assertIn("reserving sandbox placement", result["body"]["error"])
+        self.assertLess(elapsed, 1)
+        self.assertTrue(
+            any(
+                item["status"] == "error"
+                and item["spans"][0]["attributes"].get("outcome")
+                == "placement_busy"
+                for item in metrics["traces"]["recent"]
+            )
+        )
+
+    def test_gateway_create_burst_returns_only_retryable_json(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                max_concurrent_sandbox_creates=8,
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+
+                def create(index: int) -> dict:
+                    return self._json_request(
+                        f"http://{host}:{port}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": f"overload-{index}",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 128,
+                            "disk_mb": 64,
+                        },
+                        allow_error=True,
+                    )
+
+                self.assertTrue(
+                    control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
+                )
+                started = monotonic()
+                try:
+                    with ThreadPoolExecutor(max_workers=96) as executor:
+                        results = list(executor.map(create, range(192)))
+                finally:
+                    control_plane._GATEWAY_SCHEDULING_LOCK.release()
+                elapsed = monotonic() - started
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual({result["status"] for result in results}, {503})
+        self.assertTrue(all(result["body"]["retryable"] for result in results))
+        self.assertTrue(
+            all(
+                isinstance(result["body"].get("error"), str)
+                for result in results
+            )
+        )
+        self.assertLess(elapsed, 5)
+
     def test_gateway_create_admission_precedes_body_read_and_caps_json(self) -> None:
         with TemporaryDirectory() as raw_dir:
             gateway = build_server(

@@ -87,10 +87,11 @@ _IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
 _GATEWAY_SCHEDULING_LOCK = RLock()
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
 REGISTRY_IMAGE_LEASE_TTL_SECONDS = 60 * 60
-DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 64
+DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 32
 FORK_PROXY_TIMEOUT_SECONDS = FORK_REQUEST_TIMEOUT_SECONDS
 SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
 SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS = 5
+SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS = 0.25
 # Build execution is asynchronous. This timeout only covers proxying the build
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
@@ -114,6 +115,10 @@ REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
 
 class RequestBodyTooLargeError(ValueError):
     pass
+
+
+class GatewaySchedulingBusyError(RuntimeError):
+    """Placement serialization is occupied and the caller should retry."""
 
 
 class RegistryImageReferenceUnavailable(RuntimeError):
@@ -1307,6 +1312,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         spec=spec.to_dict(),
                         spec_hash=sandbox_spec_fingerprint(spec),
                     )
+                except GatewaySchedulingBusyError:
+                    root.status = "error"
+                    root.set_attribute("outcome", "placement_busy")
+                    self._write_json(
+                        {
+                            "error": (
+                                "gateway is busy reserving sandbox placement; "
+                                "retry shortly"
+                            ),
+                            "retryable": True,
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={
+                            "Retry-After": str(
+                                SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS
+                            ),
+                            "X-UCloud-Sandbox-Retryable": "true",
+                        },
+                    )
+                    return
                 except SandboxRouteConflictError:
                     root.status = "error"
                     root.set_attribute("outcome", "concurrent_spec_conflict")
@@ -2792,36 +2817,45 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         spec: dict[str, Any],
         spec_hash: str,
     ) -> tuple[NodeHeartbeat, SandboxRoute] | None:
-        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
-            heartbeat = self._select_node(
-                requested,
-                image=image,
-                required_capabilities=(
-                    (FORK_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY)
-                    if bool(spec.get("forkable"))
-                    else ()
-                ),
+        if not _GATEWAY_SCHEDULING_LOCK.acquire(
+            timeout=SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS
+        ):
+            raise GatewaySchedulingBusyError(
+                "sandbox placement is already being reserved"
             )
-            if heartbeat is None:
-                return None
-            now = utc_now()
-            route = self.routing_store.allocate_sandbox_create(
-                SandboxRoute(
-                    sandbox_id=sandbox_id,
-                    node_id=heartbeat.node_id,
-                    job_id=heartbeat.job_id,
-                    node_url=heartbeat.node_url or "",
-                    resources=requested,
-                    spec=dict(spec),
-                    state="creating",
-                    node_epoch=heartbeat.node_epoch,
-                    activity_epoch=heartbeat.activity_epoch,
-                    created_at=now.isoformat(),
-                    updated_at=now.isoformat(),
-                ),
-                spec_hash=spec_hash,
-            )
-            return heartbeat, route
+        try:
+            with _gateway_placement_lock(self.routing_store.path, blocking=False):
+                heartbeat = self._select_node(
+                    requested,
+                    image=image,
+                    required_capabilities=(
+                        (FORK_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY)
+                        if bool(spec.get("forkable"))
+                        else ()
+                    ),
+                )
+                if heartbeat is None:
+                    return None
+                now = utc_now()
+                route = self.routing_store.allocate_sandbox_create(
+                    SandboxRoute(
+                        sandbox_id=sandbox_id,
+                        node_id=heartbeat.node_id,
+                        job_id=heartbeat.job_id,
+                        node_url=heartbeat.node_url or "",
+                        resources=requested,
+                        spec=dict(spec),
+                        state="creating",
+                        node_epoch=heartbeat.node_epoch,
+                        activity_epoch=heartbeat.activity_epoch,
+                        created_at=now.isoformat(),
+                        updated_at=now.isoformat(),
+                    ),
+                    spec_hash=spec_hash,
+                )
+                return heartbeat, route
+        finally:
+            _GATEWAY_SCHEDULING_LOCK.release()
 
     def _resolve_sandbox_image_reference(
         self,
@@ -4308,13 +4342,19 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
 
 
 @contextmanager
-def _gateway_placement_lock(route_path: Path):
+def _gateway_placement_lock(route_path: Path, *, blocking: bool = True):
     """Serialize route accounting and intent persistence across gateways."""
 
     lock_path = route_path.with_name(route_path.name + ".placement.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+", encoding="utf-8") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        operation = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+        try:
+            fcntl.flock(lock_file.fileno(), operation)
+        except BlockingIOError as exc:
+            raise GatewaySchedulingBusyError(
+                "sandbox placement is reserved by another gateway process"
+            ) from exc
         try:
             yield
         finally:

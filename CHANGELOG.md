@@ -4,6 +4,13 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.44 - 2026-07-11
+
+- Decoupled node-agent protocol compatibility from the gateway package patch
+  version. Gateways now accept explicitly supported older 0.3.x node agents,
+  allowing gateway-only rolling updates without making the entire live node
+  pool unschedulable.
+
 ## 0.3.43 - 2026-07-11
 
 - Raised the central gateway HTTP handler limit from 256 to 2,048 and the

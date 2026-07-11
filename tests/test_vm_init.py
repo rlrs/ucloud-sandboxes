@@ -188,6 +188,24 @@ class VmInitTests(unittest.TestCase):
         self.assertIn('config["insecure-registries"] = insecure_registries', script)
         self.assertIn('config["storage-driver"] = "overlay2"', script)
         self.assertIn('"containerd-snapshotter": False', script)
+        self.assertIn("Installing raw runsc restore wrapper", script)
+        self.assertIn(
+            "UCLOUD_RUNSC_RESTORE_WRAPPER=/usr/local/libexec/ucloud-runsc-restore",
+            script,
+        )
+        self.assertIn(
+            "UCLOUD_RUNSC_RESTORE_CONFIG=/etc/ucloud-sandboxes/runsc-restore.json",
+            script,
+        )
+        self.assertIn('"runsc-restore": {', script)
+        self.assertIn(
+            '"path": os.environ["UCLOUD_RUNSC_RESTORE_WRAPPER"]',
+            script,
+        )
+        self.assertLess(
+            script.index("Installing raw runsc restore wrapper"),
+            script.index("Configuring Docker daemon with bridge MTU"),
+        )
         self.assertIn('"max-concurrent-downloads": 8', script)
         self.assertIn('"max-concurrent-uploads": 8', script)
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
@@ -446,6 +464,71 @@ class VmInitTests(unittest.TestCase):
         )
 
         self.assertNotIn("--execute-runtime", script)
+
+    def test_installs_checkpoint_helper_before_live_fork_conformance(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="123",
+                heartbeat_url="https://control.example/v1/nodes/heartbeat",
+            )
+        )
+
+        self.assertIn('"experimental": True', script)
+        self.assertIn('"--allow-live-tcp-migration=false"', script)
+        self.assertIn('"--net-disconnect-ok=true"', script)
+        self.assertIn('"--allow-connected-on-save=false"', script)
+        self.assertIn(
+            "UCLOUD_CHECKPOINT_HELPER=/usr/local/libexec/ucloud-sandbox-checkpoint",
+            script,
+        )
+        self.assertIn(
+            'UCLOUD_CHECKPOINT_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-checkpoints"',
+            script,
+        )
+        self.assertIn(
+            'install -d -m 0700 -o root -g root "$UCLOUD_CHECKPOINT_ROOT"',
+            script,
+        )
+        self.assertIn(
+            'mv -f "$UCLOUD_CHECKPOINT_HELPER_TMP" "$UCLOUD_CHECKPOINT_HELPER"',
+            script,
+        )
+        self.assertIn(
+            'visudo -cf "$UCLOUD_CHECKPOINT_SUDOERS_TMP"',
+            script,
+        )
+        self.assertIn('$SUDO "$UCLOUD_CHECKPOINT_HELPER" gc >/dev/null', script)
+        self.assertIn(
+            "ExecStartPre=/usr/bin/sudo -n ${UCLOUD_CHECKPOINT_HELPER} gc",
+            script,
+        )
+        self.assertLess(
+            script.index('echo "Installing privileged checkpoint helper"'),
+            script.index('echo "Running runtime conformance probe"'),
+        )
+        self.assertIn(
+            'runtime-conformance --sudo --execute --output json --probe-live-fork '
+            '--checkpoint-helper "$UCLOUD_CHECKPOINT_HELPER" '
+            '--checkpoint-root "$UCLOUD_CHECKPOINT_ROOT"',
+            script,
+        )
+        self.assertIn(
+            "--checkpoint-helper ${UCLOUD_CHECKPOINT_HELPER} "
+            "--checkpoint-root ${UCLOUD_CHECKPOINT_ROOT}",
+            script,
+        )
+        self.assertIn("UCLOUD_CHECKPOINT_HELPER=$UCLOUD_CHECKPOINT_HELPER", script)
+        self.assertIn("UCLOUD_CHECKPOINT_ROOT=$UCLOUD_CHECKPOINT_ROOT", script)
+
+    def test_rejects_service_user_that_can_inject_sudoers_syntax(self) -> None:
+        with self.assertRaisesRegex(ValueError, "safe local account"):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="123",
+                    heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                    service_user="ucloud,ALL",
+                )
+            )
 
     def test_stages_local_package_spec_over_ssh(self) -> None:
         calls: list[dict] = []

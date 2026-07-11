@@ -5,12 +5,16 @@ import unittest
 
 from ucloud_sandboxes.capabilities import (
     DISK_QUOTA_CAPABILITY,
+    FORK_LOCAL_CAPABILITY,
+    GVISOR_LIVE_FORK_PROBE,
     RUNTIME_CONFORMANCE_CAPABILITY,
     TMPFS_QUOTA_PROBE,
     conformance_capabilities_from_file,
     conformance_results_from_file,
     merge_capabilities,
 )
+
+RUNTIME_FINGERPRINT = "a" * 64
 
 
 class CapabilityTests(unittest.TestCase):
@@ -77,6 +81,117 @@ class CapabilityTests(unittest.TestCase):
             )
 
             self.assertEqual(conformance_capabilities_from_file(path), ())
+
+    def test_derives_local_fork_capability_from_executed_live_probe(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {"name": TMPFS_QUOTA_PROBE, "ok": True},
+                            {
+                                "name": GVISOR_LIVE_FORK_PROBE,
+                                "ok": True,
+                                "skipped": False,
+                                "required": False,
+                                "runtime_fingerprint": RUNTIME_FINGERPRINT,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            capabilities = conformance_capabilities_from_file(path)
+
+            self.assertIn(RUNTIME_CONFORMANCE_CAPABILITY, capabilities)
+            self.assertIn(FORK_LOCAL_CAPABILITY, capabilities)
+
+    def test_live_fork_requires_both_writable_quota_probes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {
+                                "name": GVISOR_LIVE_FORK_PROBE,
+                                "ok": True,
+                                "runtime_fingerprint": RUNTIME_FINGERPRINT,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            capabilities = conformance_capabilities_from_file(path)
+
+            self.assertNotIn(FORK_LOCAL_CAPABILITY, capabilities)
+
+    def test_live_fork_fails_closed_on_runtime_fingerprint_change(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {"name": TMPFS_QUOTA_PROBE, "ok": True},
+                            {
+                                "name": GVISOR_LIVE_FORK_PROBE,
+                                "ok": True,
+                                "runtime_fingerprint": RUNTIME_FINGERPRINT,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            capabilities = conformance_capabilities_from_file(
+                path,
+                expected_fork_runtime_fingerprint="b" * 64,
+            )
+
+            self.assertNotIn(FORK_LOCAL_CAPABILITY, capabilities)
+            self.assertFalse(
+                conformance_results_from_file(
+                    path,
+                    expected_fork_runtime_fingerprint="b" * 64,
+                )[GVISOR_LIVE_FORK_PROBE]
+            )
+
+    def test_skipped_live_probe_does_not_advertise_fork_capability(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {
+                                "name": GVISOR_LIVE_FORK_PROBE,
+                                "ok": True,
+                                "skipped": True,
+                                "required": False,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            capabilities = conformance_capabilities_from_file(path)
+
+            self.assertIn(RUNTIME_CONFORMANCE_CAPABILITY, capabilities)
+            self.assertNotIn(FORK_LOCAL_CAPABILITY, capabilities)
 
     def test_merge_capabilities_deduplicates(self) -> None:
         self.assertEqual(

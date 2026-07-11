@@ -200,6 +200,17 @@ The post-boot init script should be safe to re-run:
   an unprotected service.
 - Install or verify Docker.
 - Install or verify gVisor/runsc.
+- Enable Docker's experimental checkpoint capture API, install the root-owned
+  `ucloud-sandbox-checkpoint` reflink helper with a command-scoped sudo rule and
+  the root-owned `ucloud-runsc-restore` OCI wrapper used only for fork children,
+  keep sealed fork artifacts under `DockerRootDir/ucloud-checkpoints`, and run
+  its locked crash-debris GC during init and before each node-agent start. The
+  node then mark-and-sweeps helper inventory against durable restore intents;
+  ambiguous pending state fails startup without deleting it.
+- Run the optional `gvisor-live-fork-v1` source/child memory-restore probe; only
+  a node that also passes writable-layer and tmpfs quota enforcement, with a
+  conformance fingerprint matching its current Docker/runsc/wrapper configuration,
+  advertises `fork-local-v1`.
 - Prefer the verified platform-specific runtime payload in the staged node
   package bundle. Install only bundled versions newer than the corresponding
   installed packages, and never let apt repair a failed offline transaction by

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from contextlib import asynccontextmanager
 import time
 from typing import Any, AsyncIterator
@@ -48,6 +49,27 @@ class RelayHarness:
                     f"{expected}: {payload!r}"
                 )
             return response.status, payload
+
+    async def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        expected: int | None = None,
+        **kwargs: Any,
+    ) -> tuple[int, bytes, dict[str, str]]:
+        async with self.client.request(
+            method,
+            self.base_url + path,
+            **kwargs,
+        ) as response:
+            payload = await response.read()
+            if expected is not None and response.status != expected:
+                raise AssertionError(
+                    f"{method} {path} returned {response.status}, expected "
+                    f"{expected}: {payload!r}"
+                )
+            return response.status, payload, dict(response.headers)
 
     async def register(
         self,
@@ -99,6 +121,33 @@ class RelayHarness:
                 "registration_token": registration_token,
                 "lease_id": request["lease_id"],
                 "response": body,
+            },
+        )
+        return payload
+
+    async def respond_bytes(
+        self,
+        request: dict[str, Any],
+        registration_token: str,
+        body: bytes,
+        *,
+        status: int = 200,
+        headers: dict[str, str] | None = None,
+        auth_headers: dict[str, str] | None = None,
+        expected: int = 200,
+    ) -> dict[str, Any] | str:
+        _status, payload = await self.request(
+            "POST",
+            "/worker/respond",
+            expected=expected,
+            headers=auth_headers,
+            json={
+                "request_id": request["request_id"],
+                "registration_token": registration_token,
+                "lease_id": request["lease_id"],
+                "body_base64": base64.b64encode(body).decode("ascii"),
+                "status": status,
+                "headers": headers or {},
             },
         )
         return payload
@@ -169,7 +218,9 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
-    async def test_reregister_fences_every_operation_from_prior_incarnation(self) -> None:
+    async def test_reregister_fences_every_operation_from_prior_incarnation(
+        self,
+    ) -> None:
         state = ModelRelayState()
         first_token = str(
             (await state.register_rollout("rollout-aba"))["registration_token"]
@@ -243,13 +294,19 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             statuses = []
             for method, path, kwargs in (
                 ("GET", "/worker/poll", {"params": {"rollout_id": "token-required"}}),
-                ("POST", "/unregister_rollout", {"json": {"rollout_id": "token-required"}}),
+                (
+                    "POST",
+                    "/unregister_rollout",
+                    {"json": {"rollout_id": "token-required"}},
+                ),
             ):
                 status, _payload = await relay.request(method, path, **kwargs)
                 statuses.append(status)
         self.assertEqual(statuses, [400, 400])
 
-    async def test_diagnostics_and_completed_payloads_expire_without_reregistration(self) -> None:
+    async def test_diagnostics_and_completed_payloads_expire_without_reregistration(
+        self,
+    ) -> None:
         state = ModelRelayState(
             completed_request_retention_seconds=0.005,
             worker_retention_seconds=0.005,
@@ -275,7 +332,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_respond_rechecks_lease_expiry_before_accepting_result(self) -> None:
         state = ModelRelayState()
-        token = str((await state.register_rollout("expiry-check"))["registration_token"])
+        token = str(
+            (await state.register_rollout("expiry-check"))["registration_token"]
+        )
         request, leased = await enqueue_and_poll(state, "expiry-check", token)
         leased.lease_expires_at = time.time() - 1
         with self.assertRaises(web.HTTPConflict):
@@ -351,7 +410,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 504)
         self.assertEqual((stats["inflight"], stats["counters"]["timed_out"]), (1, 1))
 
-    async def test_completed_tombstones_and_worker_diagnostics_have_hard_caps(self) -> None:
+    async def test_completed_tombstones_and_worker_diagnostics_have_hard_caps(
+        self,
+    ) -> None:
         state = ModelRelayState(max_completed_requests=2, max_workers=2)
         token = str((await state.register_rollout("hard-caps"))["registration_token"])
         for index in range(3):
@@ -441,6 +502,126 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded["x-request-metadata"], "safe")
         self.assertEqual(body["choices"][0]["message"]["content"], "pong")
 
+    async def test_general_tunnel_preserves_http_bytes_path_query_and_headers(
+        self,
+    ) -> None:
+        async with relay_app(
+            sandbox_bearer_token="sandbox-token",
+            worker_bearer_token="worker-token",
+            request_timeout_seconds=5,
+            worker_poll_timeout_seconds=1,
+        ) as relay:
+            worker_headers = {"Authorization": "Bearer worker-token"}
+            _status, registered = await relay.request(
+                "POST",
+                "/v1/tunnels/register",
+                expected=201,
+                headers=worker_headers,
+                json={"tunnel_id": "tunnel-1", "metadata": {"kind": "http"}},
+            )
+            token = registered["rollout"]["registration_token"]
+            request_body = b"\x00\xffbinary-request"
+            client_task = asyncio.create_task(
+                relay.request_bytes(
+                    "PUT",
+                    "/tunnels/tunnel-1/api/a%2Fb%20c?x=1&x=2&literal=one+two",
+                    headers={
+                        "X-UCloud-Relay-Token": "sandbox-token",
+                        "Authorization": "Bearer upstream-secret",
+                        "Content-Type": "application/octet-stream",
+                        "X-Custom": "safe",
+                    },
+                    data=request_body,
+                )
+            )
+            _status, polled = await relay.request(
+                "GET",
+                "/worker/poll",
+                expected=200,
+                headers=worker_headers,
+                params={
+                    "tunnel_id": "tunnel-1",
+                    "registration_token": token,
+                },
+            )
+            request = polled["request"]
+            await relay.respond_bytes(
+                request,
+                token,
+                b"\xffbinary-response",
+                status=207,
+                auth_headers=worker_headers,
+                headers={
+                    "Content-Type": "application/vnd.ucloud.test",
+                    "X-Upstream": "worker",
+                    "Connection": "close",
+                },
+            )
+            response_status, response_body, response_headers = await client_task
+
+        forwarded = {key.lower(): value for key, value in request["headers"].items()}
+        response_headers = {
+            key.lower(): value for key, value in response_headers.items()
+        }
+        self.assertEqual(request["rollout_id"], "tunnel-1")
+        self.assertEqual(request["tunnel_id"], "tunnel-1")
+        self.assertEqual(request["method"], "PUT")
+        self.assertEqual(
+            request["endpoint"],
+            "/api/a%2Fb%20c?x=1&x=2&literal=one+two",
+        )
+        self.assertEqual(base64.b64decode(request["body_base64"]), request_body)
+        self.assertEqual(request["body_size"], len(request_body))
+        self.assertIsNone(request["body"])
+        self.assertEqual(forwarded["authorization"], "Bearer upstream-secret")
+        self.assertEqual(forwarded["content-type"], "application/octet-stream")
+        self.assertEqual(forwarded["x-custom"], "safe")
+        self.assertNotIn("x-ucloud-relay-token", forwarded)
+        self.assertEqual(
+            (response_status, response_body), (207, b"\xffbinary-response")
+        )
+        self.assertEqual(
+            response_headers["content-type"],
+            "application/vnd.ucloud.test",
+        )
+        self.assertEqual(response_headers["x-upstream"], "worker")
+        self.assertNotEqual(response_headers.get("connection"), "close")
+
+    async def test_general_tunnel_exposes_json_and_rejects_invalid_base64_response(
+        self,
+    ) -> None:
+        async with relay_app(request_timeout_seconds=5) as relay:
+            token = await relay.register("json-tunnel")
+            client_task = asyncio.create_task(
+                relay.request_bytes(
+                    "POST",
+                    "/tunnels/json-tunnel/echo",
+                    json={"hello": "world"},
+                )
+            )
+            request = (await relay.poll("json-tunnel", token))["request"]
+            invalid_status, _payload = await relay.request(
+                "POST",
+                "/worker/respond",
+                json={
+                    "request_id": request["request_id"],
+                    "registration_token": token,
+                    "lease_id": request["lease_id"],
+                    "body_base64": "not base64!",
+                },
+            )
+            await relay.respond_bytes(
+                request,
+                token,
+                b'{"echo":true}',
+                headers={"Content-Type": "application/json"},
+            )
+            status, body, _headers = await client_task
+
+        self.assertEqual(request["body"], {"hello": "world"}, repr(request))
+        self.assertEqual(invalid_status, 400)
+        self.assertEqual((status, body), (200, b'{"echo":true}'))
+
     async def test_plain_v1_endpoint_accepts_rollout_header(self) -> None:
         async with relay_app(request_timeout_seconds=5) as relay:
             token = await relay.register("rollout-2")
@@ -498,7 +679,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     break
                 await asyncio.sleep(0.01)
 
-            first = (await relay.poll("rollout-batch", token, limit="2", worker_id="worker-a"))["requests"]
+            first = (
+                await relay.poll(
+                    "rollout-batch", token, limit="2", worker_id="worker-a"
+                )
+            )["requests"]
             self.assertEqual(len(first), 2)
             for request in first:
                 await relay.respond(
@@ -524,7 +709,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["workers"][0]["worker_id"], "worker-a")
 
     async def test_expired_lease_is_retried_and_stale_response_rejected(self) -> None:
-        async with relay_app(request_timeout_seconds=5, worker_lease_seconds=0.01) as relay:
+        async with relay_app(
+            request_timeout_seconds=5, worker_lease_seconds=0.01
+        ) as relay:
             token = await relay.register("rollout-retry")
             task = asyncio.create_task(relay.model_call("rollout-retry"))
             first = (
@@ -555,7 +742,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["counters"]["lease_expired"], 1)
 
     async def test_worker_can_renew_lease_for_long_inference(self) -> None:
-        async with relay_app(request_timeout_seconds=5, worker_lease_seconds=0.01) as relay:
+        async with relay_app(
+            request_timeout_seconds=5, worker_lease_seconds=0.01
+        ) as relay:
             token = await relay.register("rollout-renew")
             task = asyncio.create_task(relay.model_call("rollout-renew"))
             leased = (
@@ -590,13 +779,13 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["counters"]["lease_expired"], 0)
 
     async def test_expired_lease_cannot_be_renewed(self) -> None:
-        async with relay_app(request_timeout_seconds=5, worker_lease_seconds=0.01) as relay:
+        async with relay_app(
+            request_timeout_seconds=5, worker_lease_seconds=0.01
+        ) as relay:
             token = await relay.register("rollout-expired-renew")
             task = asyncio.create_task(relay.model_call("rollout-expired-renew"))
             leased = (
-                await relay.poll(
-                    "rollout-expired-renew", token, lease_seconds="0.01"
-                )
+                await relay.poll("rollout-expired-renew", token, lease_seconds="0.01")
             )["request"]
             await asyncio.sleep(0.03)
             status, _payload = await relay.request(

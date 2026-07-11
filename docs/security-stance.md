@@ -163,6 +163,9 @@ The probe checks:
 - numeric non-root execution works
 - Docker `--storage-opt size=16m` rejects a bounded 32 MB write
 - Docker `--tmpfs /tmp:size=16m` rejects a bounded 32 MB write
+- when initialized for live fork, a checkpoint restores initial-workload memory into a
+  distinct runsc container whose in-sandbox network identity adopts its fresh
+  Docker bridge address while the source remains runnable
 
 VM init writes this probe result to
 `/work/ucloud-sandboxes/state/runtime-conformance.json`. The node-agent and
@@ -170,6 +173,72 @@ periodic heartbeat derive `runtime-conformance` and `disk-quota` capabilities
 from that file. The scheduler only credits node disk capacity when `disk-quota`
 is present, and the node runtime rejects `disk_mb` when Docker storage quota
 support has not been validated.
+
+## Live-fork security contract
+
+`fork-local-v1` is opt-in per sandbox with `forkable=true`, explicit memory and
+writable-storage limits, and `fork_protocol.version=agent-v1`; it is advertised only after the
+live checkpoint, writable-layer quota, and tmpfs quota probes all succeed. The
+live result is bound to the current Docker server, runsc path/version, and socket
+policy fingerprint, so changing that runtime configuration disables fork until
+conformance is rerun. The resumable workload must be the initial
+container process tree. gVisor intentionally kills every exec-origin thread
+group during restore—including descendants detached after the `docker exec`
+caller exits—because their external callers cannot be reconstructed. The node
+therefore rejects a fork while a tracked exec session is active, and the live
+probe verifies that a detached OriginExec descendant remains in the resumed
+source but is absent from the restored child.
+
+Checkpoint artifacts contain application memory and must be treated like live
+credentials. They are stored mode `0700` beneath Docker's local XFS data root,
+sealed with source container/image/spec identity, and removed after a completed
+restore. A root-owned helper is the only component that stages them into Docker
+metadata. A separate root-owned OCI wrapper accepts only the matching staged
+marker and converts that child's ordinary start into raw `runsc restore`; it
+does not accept a caller-supplied filesystem path. Both read root-owned
+fixed-path configuration, reject symlinks and
+path traversal, requires full Docker IDs and SHA-256 identities, and confines
+copy/delete actions to the checkpoint and target-container directories. The
+helper derives a conservative byte reservation from the mandatory memory,
+writable-root/workspace, `/tmp`, and `/run` limits, includes every pending
+reservation in admission, and refuses to start capture when the Docker
+filesystem cannot cover the total. Seal also
+rejects a checkpoint larger than its declared bound. Its locked garbage
+collector removes only exact helper-generated temporary/trash names and never
+age-deletes pending or sealed artifacts. The node-agent remains unprivileged;
+its sudo rule names only this helper. Membership
+in the Docker group is already root-equivalent and remains the larger host
+trust boundary.
+
+Before either node-agent starts serving, it compares the helper's validated
+inventory with durable restore records. It removes only unreferenced sealed
+artifacts, staged reflinks, and generation-scoped application directories. An
+unreferenced *pending* artifact is treated as possible dockerd/runsc activity;
+startup fails closed before performing any destructive reconciliation.
+
+The generated `runsc` capture runtime and `runsc-restore` child runtime
+explicitly set
+`--allow-live-tcp-migration=false`, `--net-disconnect-ok=true`, and
+`--allow-connected-on-save=false`, so external TCP and Unix-domain sockets are
+disconnected at checkpoint. A fork
+does not duplicate one authenticated connection across branches. However, all
+ordinary process memory is cloned, including tokens, request state, random
+generator state, and identity cached by the application. A fork-aware agent is
+required to quiesce requests before save, observe `resume` versus `restore` via
+`/proc/gvisor/checkpoint`, read fresh child identity from
+`/proc/gvisor/spec_environ`, reconnect, obtain new credentials, and overwrite
+inherited credentials before acknowledging the per-fork nonce. The node invokes
+prepare/ready hooks with a configurable 1-60 second deadline that communicate
+with PID 1 and does not mark the child running until the restore acknowledgment succeeds. A hook timeout or
+failure leaves a durable `restoring` intent for exact replay.
+
+`agent-v1` is a nonce-fenced, monotonic PID-1 state machine, not a best-effort
+shell callback. For one nonce, `cancel` is terminal and must dominate a late
+`prepare`; after acknowledging cancel, the workload must never enter the
+quiesced state for that nonce. The node treats a local `docker exec` timeout as
+ambiguous because terminating the client does not prove the daemon-side exec
+stopped. It therefore retains the restore intent and artifact instead of
+deleting state that a late hook could still reference.
 
 ## Node control authentication
 
@@ -183,8 +252,11 @@ credential. Periodic local heartbeat reads, image pulls/warmups, and autoscaler
 drain requests use the same protected channel. Empty configured token files are
 fatal at service startup.
 Both `NodeGatewayClient` and `AsyncNodeGatewayClient` accept the same optional
-node-control token for direct internal client use; authenticated node requests
-reject redirects so the credential is not forwarded to another origin.
+node-control token for their direct internal operations; authenticated node
+requests reject redirects so the credential is not forwarded to another
+origin. Their fork convenience methods deliberately target the public control
+plane, which is the only component allowed to allocate route generations and
+construct node-operation fences.
 
 The current generated deployment uses one deployment-wide node-control token.
 It prevents a bridge-network sandbox that learns the node address from invoking

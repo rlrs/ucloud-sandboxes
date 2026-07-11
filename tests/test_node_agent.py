@@ -1,4 +1,5 @@
 from pathlib import Path
+from dataclasses import replace
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
 import asyncio
@@ -21,13 +22,313 @@ from ucloud_sandboxes.node_agent import (
 from ucloud_sandboxes.sandbox import (
     CommandResult,
     DockerGvisorRuntime,
+    RecordingExecutor,
     SandboxSpec,
+    sandbox_fork_target,
     sandbox_spec_fingerprint,
 )
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class NodeAgentTests(unittest.TestCase):
+    def test_fork_capability_requires_enabled_runtime(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            disabled = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=root / "disabled-sandboxes.json",
+                image_file=root / "disabled-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(dry_run=True),
+                extra_capabilities=("fork-local-v1",),
+            )
+            enabled = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=root / "enabled-sandboxes.json",
+                image_file=root / "enabled-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(
+                    dry_run=True,
+                    fork_enabled=True,
+                    checkpoint_root=root / "checkpoints",
+                ),
+                extra_capabilities=("fork-local-v1",),
+            )
+            try:
+                self.assertNotIn(
+                    "fork-local-v1", disabled.RequestHandlerClass.capabilities
+                )
+                self.assertIn(
+                    "fork-local-v1", enabled.RequestHandlerClass.capabilities
+                )
+            finally:
+                disabled.server_close()
+                enabled.server_close()
+
+    def test_live_fork_endpoint_requires_and_replays_exact_envelopes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=Path(raw_dir) / "checkpoints",
+            )
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=runtime,
+            )
+            Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                created = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "fork-parent",
+                        "image": "busybox",
+                        "command": ["sleep", "infinity"],
+                        "memory_mb": 64,
+                        "disk_mb": 64,
+                        "forkable": True,
+                        "fork_protocol": {
+                            "version": "agent-v1",
+                            "prepare_command": ["/ucloud/fork-agent", "prepare"],
+                            "ready_command": ["/ucloud/fork-agent", "ready"],
+                        },
+                    },
+                )["sandbox"]
+                manager = server.RequestHandlerClass.manager
+                source_record = manager.get("fork-parent")
+                self.assertIsNotNone(source_record)
+                manager.store.upsert(replace(source_record, state="running"))
+                source_spec = SandboxSpec.from_dict(created["spec"])
+                target = sandbox_fork_target(
+                    source_spec,
+                    {"id": "fork-child", "env": {"AGENT_BRANCH": "child"}},
+                )
+                payload = {
+                    "sandbox": target.to_dict(),
+                    "_ucloud_operation": {
+                        "operation_id": "fork-child-operation",
+                        "generation": 1,
+                        "kind": "create",
+                        "spec_hash": sandbox_spec_fingerprint(target),
+                    },
+                    "_ucloud_source": {
+                        "generation": created["generation"],
+                        "spec_hash": created["spec_hash"],
+                    },
+                }
+
+                forked = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=payload,
+                )
+                replayed = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=payload,
+                )
+                stale = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        **payload,
+                        "sandbox": {**target.to_dict(), "id": "stale-child"},
+                        "_ucloud_operation": {
+                            **payload["_ucloud_operation"],
+                            "operation_id": "stale-child-operation",
+                            "spec_hash": sandbox_spec_fingerprint(
+                                replace(target, id="stale-child")
+                            ),
+                        },
+                        "_ucloud_source": {
+                            **payload["_ucloud_source"],
+                            "spec_hash": "0" * 64,
+                        },
+                    },
+                    allow_error=True,
+                )
+                mixed = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        **payload,
+                        "sandboxes": [target.to_dict()],
+                        "_ucloud_operations": [payload["_ucloud_operation"]],
+                    },
+                    allow_error=True,
+                )
+                original_get = manager.get
+
+                def unavailable_store(_sandbox_id: str):
+                    raise ValueError("corrupt sandbox store")
+
+                manager.get = unavailable_store  # type: ignore[method-assign]
+                try:
+                    store_unavailable = self._json_request(
+                        f"{base}/v1/sandboxes/fork-parent/forks",
+                        method="POST",
+                        payload=payload,
+                        allow_error=True,
+                    )
+                finally:
+                    manager.get = original_get  # type: ignore[method-assign]
+                failed_target = sandbox_fork_target(
+                    source_spec,
+                    {"id": "failed-after-intent"},
+                )
+                failed_payload = {
+                    "sandbox": failed_target.to_dict(),
+                    "_ucloud_operation": {
+                        "operation_id": "failed-after-intent-operation",
+                        "generation": 1,
+                        "kind": "create",
+                        "spec_hash": sandbox_spec_fingerprint(failed_target),
+                    },
+                    "_ucloud_source": payload["_ucloud_source"],
+                }
+                runtime.dry_run = False
+                runtime.executor = RecordingExecutor(
+                    exit_code=1,
+                    stderr="forced restore failure",
+                )
+                failed_after_intent = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=failed_payload,
+                    allow_error=True,
+                )
+                manager.store.delete("fork-parent")
+                source_missing_replay = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=payload,
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(forked["sandbox"]["creation_kind"], "restore")
+        self.assertEqual(forked["sandbox"]["source_sandbox_id"], "fork-parent")
+        self.assertEqual(forked["fork"]["commands"], [])
+        self.assertIs(forked["intent_persisted"], True)
+        self.assertTrue(replayed["timings"]["manager"]["idempotent"])
+        self.assertEqual(stale["status"], 409)
+        self.assertIs(stale["intent_persisted"], False)
+        self.assertEqual(mixed["status"], 400)
+        self.assertIn("both sandbox and sandboxes", mixed["error"])
+        self.assertEqual(store_unavailable["status"], 503)
+        self.assertNotIn("intent_persisted", store_unavailable)
+        self.assertEqual(failed_after_intent["status"], 503)
+        self.assertIs(failed_after_intent["intent_persisted"], True)
+        self.assertEqual(source_missing_replay["status"], 404)
+        self.assertIs(source_missing_replay["intent_persisted"], True)
+
+    def test_live_fork_endpoint_restores_batch_from_one_checkpoint(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=Path(raw_dir) / "checkpoints",
+            )
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=runtime,
+            )
+            Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                created = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "fork-parent",
+                        "image": "busybox",
+                        "command": ["sleep", "infinity"],
+                        "memory_mb": 64,
+                        "disk_mb": 64,
+                        "forkable": True,
+                        "fork_protocol": {
+                            "version": "agent-v1",
+                            "prepare_command": ["/ucloud/fork-agent", "prepare"],
+                            "ready_command": ["/ucloud/fork-agent", "ready"],
+                        },
+                    },
+                )["sandbox"]
+                manager = server.RequestHandlerClass.manager
+                source_record = manager.get("fork-parent")
+                self.assertIsNotNone(source_record)
+                manager.store.upsert(replace(source_record, state="running"))
+                source_spec = SandboxSpec.from_dict(created["spec"])
+                targets = tuple(
+                    sandbox_fork_target(source_spec, {"id": child_id})
+                    for child_id in ("fork-child-a", "fork-child-b")
+                )
+                payload = {
+                    "sandboxes": [target.to_dict() for target in targets],
+                    "_ucloud_operations": [
+                        {
+                            "operation_id": f"fork-batch-{index}",
+                            "generation": 1,
+                            "kind": "create",
+                            "spec_hash": sandbox_spec_fingerprint(target),
+                        }
+                        for index, target in enumerate(targets)
+                    ],
+                    "_ucloud_source": {
+                        "generation": created["generation"],
+                        "spec_hash": created["spec_hash"],
+                    },
+                }
+                forked = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=payload,
+                )
+                replayed = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload=payload,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(
+            [record["id"] for record in forked["sandboxes"]],
+            ["fork-child-a", "fork-child-b"],
+        )
+        self.assertEqual(
+            {record["checkpoint_id"] for record in forked["sandboxes"]},
+            {forked["forks"][0]["checkpoint_id"]},
+        )
+        self.assertEqual(
+            [item["sandbox_id"] for item in forked["forks"]],
+            ["fork-child-a", "fork-child-b"],
+        )
+        self.assertIs(forked["intent_persisted"], True)
+        self.assertTrue(replayed["timings"]["manager"]["idempotent"])
+
     def test_node_control_auth_protects_every_non_health_route(self) -> None:
         with TemporaryDirectory() as raw_dir:
             server = build_node_agent_server(
@@ -956,12 +1257,22 @@ class NodeAgentTests(unittest.TestCase):
                     },
                 )
                 target = self._json_request(f"{base}/v1/sandboxes/ssh-one/ssh")
+                manager = server.RequestHandlerClass.manager
+                record = manager.get("ssh-one")
+                self.assertIsNotNone(record)
+                manager.store.upsert(replace(record, state="restoring"))
+                manager.runtime.dry_run = False
+                quarantined = self._json_request(
+                    f"{base}/v1/sandboxes/ssh-one/ssh",
+                    allow_error=True,
+                )
             finally:
                 server.shutdown()
                 server.server_close()
 
             self.assertEqual(target["ssh"]["port"], 23000)
             self.assertEqual(target["ssh"]["command"], "ssh -p 23000 sandbox@127.0.0.1")
+            self.assertEqual(quarantined["status"], 409)
 
     def test_file_upload_and_download_over_http(self) -> None:
         with TemporaryDirectory() as raw_dir:

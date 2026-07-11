@@ -460,7 +460,6 @@ def render_remote_deploy_script(
         "fi",
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$VENV_DIR"',
         '"$VENV_DIR/bin/pip" install --upgrade pip',
-        '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
         'NODE_PACKAGE_WORK="$(mktemp -d)"',
         'trap \'rm -rf "$NODE_PACKAGE_WORK"\' EXIT',
         'mkdir -p "$NODE_PACKAGE_WORK/wheels"',
@@ -761,6 +760,11 @@ def render_remote_deploy_script(
         "done",
         'rm -rf "$NODE_PACKAGE_WORK"',
         "trap - EXIT",
+        # Keep the running services on their old package metadata until every
+        # expensive node artifact is complete. Otherwise an old autoscaler can
+        # observe the new version mid-deploy and bootstrap a mislabeled node
+        # from the previous bundle.
+        '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
         "",
         "create_secret() {",
         '  path="$1"',

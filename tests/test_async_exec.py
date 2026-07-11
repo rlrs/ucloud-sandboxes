@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -72,7 +73,10 @@ class AsyncExecTests(unittest.TestCase):
                     SandboxStore(Path(raw_dir) / "sandboxes.json"),
                     DockerGvisorRuntime(dry_run=True),
                 )
-                manager.create(SandboxSpec(id="sbx-1", image="busybox", memory_mb=128))
+                record, _result = manager.create(
+                    SandboxSpec(id="sbx-1", image="busybox", memory_mb=128)
+                )
+                manager.store.upsert(replace(record, state="running"))
                 manager.runtime = LocalExecRuntime()  # type: ignore[assignment]
                 exec_manager = AsyncExecSessionManager(manager, max_sessions=1)
                 first = await exec_manager.start(
@@ -185,7 +189,10 @@ class AsyncExecTests(unittest.TestCase):
                     SandboxStore(Path(raw_dir) / "sandboxes.json"),
                     DockerGvisorRuntime(dry_run=True),
                 )
-                manager.create(SandboxSpec(id="sbx-1", image="busybox", memory_mb=128))
+                record, _result = manager.create(
+                    SandboxSpec(id="sbx-1", image="busybox", memory_mb=128)
+                )
+                manager.store.upsert(replace(record, state="running"))
                 manager.runtime = LocalExecRuntime()  # type: ignore[assignment]
                 exec_manager = AsyncExecSessionManager(manager, max_queue_events=8)
                 session = await exec_manager.start(

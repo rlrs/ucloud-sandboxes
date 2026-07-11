@@ -35,6 +35,9 @@ from .autoscaler_state import (
 )
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
+    FORK_LOCAL_CAPABILITY,
+    GVISOR_LIVE_FORK_PROBE,
+    STORAGE_OPT_QUOTA_PROBE,
     TMPFS_QUOTA_PROBE,
     conformance_capabilities_from_file,
     conformance_results_from_file,
@@ -140,7 +143,11 @@ from .registry import (
     merge_jobs_and_heartbeats,
 )
 from .routing import SandboxRoute, RoutingStore, sandbox_demand_from_routing_state
-from .runtime_probe import DockerRuntimeProbe
+from .runtime_probe import (
+    DEFAULT_CHECKPOINT_HELPER,
+    DEFAULT_CHECKPOINT_ROOT,
+    DockerRuntimeProbe,
+)
 from .sandbox import DockerGvisorRuntime
 from .ucloud import (
     SessionStore,
@@ -463,6 +470,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Runtime conformance JSON used to derive security capabilities.",
     )
     node_agent.add_argument(
+        "--checkpoint-helper",
+        default=DEFAULT_CHECKPOINT_HELPER,
+        help="Privileged helper used to prepare and stage checkpoint artifacts.",
+    )
+    node_agent.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        help=(
+            "Docker-root-relative checkpoint artifact directory. Required when "
+            "the conformance file enables local live fork."
+        ),
+    )
+    node_agent.add_argument(
         "--execute-runtime",
         action="store_true",
         help="Actually execute Docker commands. Default is dry-run.",
@@ -512,6 +532,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--runtime-name",
         default="runsc",
         help="Docker runtime name for gVisor/runsc.",
+    )
+    async_node_agent.add_argument(
+        "--runtime-conformance-file",
+        type=Path,
+        help="Runtime conformance JSON used to validate optional live fork support.",
+    )
+    async_node_agent.add_argument(
+        "--checkpoint-helper",
+        default=DEFAULT_CHECKPOINT_HELPER,
+        help="Privileged helper used to prepare and stage checkpoint artifacts.",
+    )
+    async_node_agent.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        help=(
+            "Docker-root-relative checkpoint artifact directory. Required when "
+            "the conformance file enables local live fork."
+        ),
     )
     async_node_agent.add_argument(
         "--execute-runtime",
@@ -616,6 +654,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--execute",
         action="store_true",
         help="Execute probes. Default renders the probe commands without running them.",
+    )
+    runtime_conformance.add_argument(
+        "--probe-live-fork",
+        action="store_true",
+        help=(
+            "Also test optional cross-container gVisor checkpoint restore. "
+            "Failure is reported but does not fail required runtime conformance."
+        ),
+    )
+    runtime_conformance.add_argument(
+        "--checkpoint-helper",
+        default=DEFAULT_CHECKPOINT_HELPER,
+        help="Privileged helper used to prepare and stage checkpoint artifacts.",
+    )
+    runtime_conformance.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        default=Path(DEFAULT_CHECKPOINT_ROOT),
+        help=(
+            "Checkpoint artifact root configured for the helper; production VM "
+            "initialization should pass the Docker-root-relative path explicitly."
+        ),
     )
     runtime_conformance.add_argument(
         "--output", choices=("text", "json"), default="text", help="Output format."
@@ -2130,6 +2190,44 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     return 0
 
 
+def _node_runtime_conformance(
+    args: argparse.Namespace,
+    path: Path | None,
+) -> tuple[tuple[str, ...], dict[str, bool]]:
+    """Load persisted results and bind live fork to the current daemon/runsc."""
+
+    initial_results = conformance_results_from_file(path)
+    expected_fingerprint: str | None = None
+    if all(
+        initial_results.get(probe)
+        for probe in (
+            GVISOR_LIVE_FORK_PROBE,
+            STORAGE_OPT_QUOTA_PROBE,
+            TMPFS_QUOTA_PROBE,
+        )
+    ):
+        try:
+            expected_fingerprint = DockerRuntimeProbe(
+                docker_binary=args.docker_binary,
+                runtime_name=args.runtime_name,
+                use_sudo=False,
+                execute=True,
+            ).live_fork_runtime_fingerprint()
+        except (OSError, RuntimeError):
+            # A stale report must never enable restore against a runtime whose
+            # exact socket policy/version can no longer be established.
+            expected_fingerprint = ""
+    results = conformance_results_from_file(
+        path,
+        expected_fork_runtime_fingerprint=expected_fingerprint,
+    )
+    capabilities = conformance_capabilities_from_file(
+        path,
+        expected_fork_runtime_fingerprint=expected_fingerprint,
+    )
+    return capabilities, results
+
+
 def cmd_serve_node_agent(args: argparse.Namespace) -> int:
     config = load_config(args)
     sandbox_file = args.sandbox_file or config.sandbox_file()
@@ -2139,10 +2237,10 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
     node_id = args.node_id or default_node_id(job_id)
     runtime_conformance_file = getattr(args, "runtime_conformance_file", None)
-    conformance_capabilities = conformance_capabilities_from_file(
-        runtime_conformance_file
+    conformance_capabilities, conformance_results = _node_runtime_conformance(
+        args,
+        runtime_conformance_file,
     )
-    conformance_results = conformance_results_from_file(runtime_conformance_file)
     runtime = DockerGvisorRuntime(
         docker_binary=args.docker_binary,
         runtime_name=args.runtime_name,
@@ -2151,6 +2249,16 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
             DISK_QUOTA_CAPABILITY,
         ),
         allow_tmpfs_workspace=bool(conformance_results.get(TMPFS_QUOTA_PROBE)),
+        fork_enabled=has_capability(
+            conformance_capabilities,
+            FORK_LOCAL_CAPABILITY,
+        ),
+        checkpoint_root=getattr(args, "checkpoint_root", None),
+        checkpoint_helper=getattr(
+            args,
+            "checkpoint_helper",
+            DEFAULT_CHECKPOINT_HELPER,
+        ),
         dry_run=not args.execute_runtime,
     )
     image_runtime = DockerImageRuntime(
@@ -2218,9 +2326,29 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
     config = load_config(args)
     sandbox_file = args.sandbox_file or config.sandbox_file()
     image_file = args.image_file or config.image_file()
+    runtime_conformance_file = getattr(args, "runtime_conformance_file", None)
+    conformance_capabilities, conformance_results = _node_runtime_conformance(
+        args,
+        runtime_conformance_file,
+    )
     runtime = DockerGvisorRuntime(
         docker_binary=args.docker_binary,
         runtime_name=args.runtime_name,
+        allow_storage_opt_quota=has_capability(
+            conformance_capabilities,
+            DISK_QUOTA_CAPABILITY,
+        ),
+        allow_tmpfs_workspace=bool(conformance_results.get(TMPFS_QUOTA_PROBE)),
+        fork_enabled=has_capability(
+            conformance_capabilities,
+            FORK_LOCAL_CAPABILITY,
+        ),
+        checkpoint_root=getattr(args, "checkpoint_root", None),
+        checkpoint_helper=getattr(
+            args,
+            "checkpoint_helper",
+            DEFAULT_CHECKPOINT_HELPER,
+        ),
         dry_run=not args.execute_runtime,
     )
     app = create_async_node_agent_app(
@@ -2272,9 +2400,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
             args.completed_request_retention_seconds,
         ),
         max_inflight_requests=args.max_inflight_requests,
-        max_inflight_requests_per_rollout=(
-            args.max_inflight_requests_per_rollout
-        ),
+        max_inflight_requests_per_rollout=(args.max_inflight_requests_per_rollout),
         max_inflight_bytes=args.max_inflight_bytes,
     )
     print(f"Serving model relay on http://{args.host}:{args.port}")
@@ -2441,6 +2567,17 @@ def cmd_runtime_conformance(args: argparse.Namespace) -> int:
         image=args.image,
         use_sudo=args.sudo,
         execute=args.execute,
+        probe_live_fork=getattr(args, "probe_live_fork", False),
+        checkpoint_helper=getattr(
+            args,
+            "checkpoint_helper",
+            DEFAULT_CHECKPOINT_HELPER,
+        ),
+        checkpoint_root=getattr(
+            args,
+            "checkpoint_root",
+            Path(DEFAULT_CHECKPOINT_ROOT),
+        ),
     ).run()
     payload = report.to_dict()
     if args.output == "json":
@@ -2556,9 +2693,7 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
     if args.execute:
         deleted = []
         for attempt in range(3):
-            usage_snapshot = (
-                usage_store.snapshot() if usage_store is not None else None
-            )
+            usage_snapshot = usage_store.snapshot() if usage_store is not None else None
             usage_records = (
                 usage_snapshot.records if usage_snapshot is not None else None
             )
@@ -3370,6 +3505,7 @@ def _post_node_drain(
         headers=request_headers,
         method="POST",
     )
+
     class RejectNodeRedirects(HTTPRedirectHandler):
         def redirect_request(self, *_args: object, **_kwargs: object) -> None:
             return None
@@ -3604,9 +3740,7 @@ def _successful_create_operation_count(
     job_ids = [str(job_id) for item in relevant for job_id in item.get("jobIds", [])]
     if (
         not relevant
-        or not all(
-            item.get("state") in {"accepted", "recovered"} for item in relevant
-        )
+        or not all(item.get("state") in {"accepted", "recovered"} for item in relevant)
         or len(job_ids) != len(relevant)
         or len(set(job_ids)) != len(job_ids)
     ):
@@ -3657,7 +3791,11 @@ def run_reconcile_cycle(
     execution_requested = bool(
         args.execute or args.execute_stops or getattr(args, "execute_init", False)
     )
-    if execution_requested and not provider_mutations_allowed and provider_state is None:
+    if (
+        execution_requested
+        and not provider_mutations_allowed
+        and provider_state is None
+    ):
         raise AutoscalerStateError(
             "provider mutations require the local autoscaler controller lock"
         )
@@ -3689,9 +3827,7 @@ def run_reconcile_cycle(
     create_visibility_guards: list[dict[str, Any]] = []
     blocked_create_roles: set[str] = set()
     if execution_authorized and provider_state is not None:
-        recoveries = provider_state.recover_uncertain_creates(
-            [job.raw for job in jobs]
-        )
+        recoveries = provider_state.recover_uncertain_creates([job.raw for job in jobs])
         for recovery in recoveries:
             operation = provider_state.get_operation(recovery.operation_id)
             role = operation.role if operation is not None else ""
@@ -4055,8 +4191,10 @@ def run_reconcile_cycle(
                     )
                     canceled_drain_job_ids.append(intent.job_id)
             else:
-                ready = not error and node is not None and node_drain_ready(
-                    node, intent.token
+                ready = (
+                    not error
+                    and node is not None
+                    and node_drain_ready(node, intent.token)
                 )
                 if ready:
                     drain_ready_stop_job_ids.append(intent.job_id)
@@ -4064,9 +4202,7 @@ def run_reconcile_cycle(
                 {
                     "jobId": intent.job_id,
                     "role": intent.role,
-                    "action": (
-                        "undrain" if intent.state == "canceling" else "drain"
-                    ),
+                    "action": ("undrain" if intent.state == "canceling" else "drain"),
                     "nodeUrl": node_url,
                     "requestSucceeded": not error,
                     "heartbeatReady": ready,
@@ -4082,9 +4218,7 @@ def run_reconcile_cycle(
         ]
     active_drain_job_ids = {intent.job_id for intent in active_drain_intents}
     canceling_drain_job_ids = {
-        intent.job_id
-        for intent in pending_drain_intents
-        if intent.state == "canceling"
+        intent.job_id for intent in pending_drain_intents if intent.state == "canceling"
     }
     pending_drain_job_ids = active_drain_job_ids | canceling_drain_job_ids
     bootstrap_state_file = (
@@ -4364,8 +4498,7 @@ def run_reconcile_cycle(
                 for item in provider_operation_results
                 if item.get("kind") == "stop"
                 and (
-                    item.get("state") == "accepted"
-                    or item.get("state") == "recovered"
+                    item.get("state") == "accepted" or item.get("state") == "recovered"
                 )
                 for job_id in item.get("jobIds", [])
             }
@@ -4798,10 +4931,7 @@ class _VmBootstrapCoordinator:
                 init_phases_ms=attempt_result.init_phases_ms,
                 init_total_ms=attempt_result.init_total_ms,
                 duration_ms=duration_ms,
-                finished_at=(
-                    prepared.started_at
-                    + timedelta(milliseconds=duration_ms)
-                ),
+                finished_at=(prepared.started_at + timedelta(milliseconds=duration_ms)),
             )
             results.append(attempt_result.result)
         return records, results
@@ -4849,9 +4979,7 @@ def _execute_vm_bootstrap_attempt(
         stage_result = stage_vm_init_package_over_ssh(
             intent.plan.ssh_command,
             intent.options,
-            timeout_seconds=max(
-                1, int(getattr(args, "init_timeout_seconds", 1800))
-            ),
+            timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
         )
         stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
@@ -4867,8 +4995,7 @@ def _execute_vm_bootstrap_attempt(
             }
             if stage_result.returncode != 0:
                 error = (
-                    "package staging exited with status "
-                    f"{stage_result.returncode}"
+                    "package staging exited with status " f"{stage_result.returncode}"
                 )
                 retry_delay_seconds = _bootstrap_retry_delay_seconds(
                     stage_result.returncode,
@@ -4906,9 +5033,7 @@ def _execute_vm_bootstrap_attempt(
         run_result = run_init_over_ssh(
             intent.plan.ssh_command,
             render_vm_init_script(effective_options),
-            timeout_seconds=max(
-                1, int(getattr(args, "init_timeout_seconds", 1800))
-            ),
+            timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
         )
         run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
@@ -5171,9 +5296,7 @@ def apply_route_reservations_to_heartbeats(
         for route in missing_routes:
             missing_resources = missing_resources + route.resources
         used = heartbeat.used_resources + missing_resources
-        active_sandboxes = (
-            heartbeat.active_sandboxes + len(missing_routes)
-        )
+        active_sandboxes = heartbeat.active_sandboxes + len(missing_routes)
         reconciled[job_id] = replace(
             heartbeat,
             used_resources=used,
@@ -5377,8 +5500,7 @@ def vm_init_options_for_autoscaled_node(
         host_aliases=tuple(getattr(args, "init_host_alias", []) or []),
         enable_image_builds=role == "builder",
         buildx_direct_push=(
-            role == "builder"
-            and bool(getattr(args, "init_buildx_direct_push", False))
+            role == "builder" and bool(getattr(args, "init_buildx_direct_push", False))
         ),
         buildx_cache_ref=(
             str(getattr(args, "init_buildx_cache_ref", "") or "")
@@ -6000,9 +6122,7 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
             getattr(args, "node_control_bearer_token_file", "") or ""
         ),
         node_control_bearer_token=read_bearer_token_source(
-            token_file=str(
-                getattr(args, "node_control_bearer_token_file", "") or ""
-            ),
+            token_file=str(getattr(args, "node_control_bearer_token_file", "") or ""),
             source_file=getattr(args, "node_control_bearer_token_source_file", None),
         ),
         service_user=args.service_user,

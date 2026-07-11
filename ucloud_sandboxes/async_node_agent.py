@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 from pathlib import Path
+import time
 from typing import Any
 
 from aiohttp import WSMsgType, web
@@ -13,15 +14,28 @@ from .async_exec import (
 from .deployment import service_health
 from .images import DockerImageRuntime, ImageManager, ImageStore
 from .models import ResourceQuantity
-from .node_agent import SANDBOX_GENERATION_HEADER, SANDBOX_OPERATION_ID_HEADER
+from .node_agent import (
+    DEFAULT_MAX_JSON_BODY_BYTES,
+    SANDBOX_GENERATION_HEADER,
+    SANDBOX_OPERATION_ID_HEADER,
+    _fork_request_is_batch,
+    _fork_request_error_payload,
+    _fork_result_payload,
+    _fork_source_envelope,
+    _fork_wire_target,
+)
 from .sandbox import (
+    MAX_FORK_FANOUT,
     DockerGvisorRuntime,
+    SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
+    SandboxForkUnsupportedError,
     SandboxManager,
     SandboxOperation,
     SandboxSpec,
     SandboxStore,
+    sandbox_fork_target,
 )
 from .sandbox_exec import SandboxExecSpec
 
@@ -29,6 +43,10 @@ from .sandbox_exec import SandboxExecSpec
 SANDBOX_MANAGER_KEY = web.AppKey("sandbox_manager", SandboxManager)
 IMAGE_MANAGER_KEY = web.AppKey("image_manager", ImageManager)
 EXEC_MANAGER_KEY = web.AppKey("exec_manager", AsyncExecSessionManager)
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.monotonic() - started) * 1000))
 
 
 async def create_sandbox(request: web.Request) -> web.Response:
@@ -64,6 +82,220 @@ async def create_sandbox(request: web.Request) -> web.Response:
             "exitCode": result.exit_code,
         },
         status=200 if timings.get("idempotent") else 201,
+    )
+
+
+async def fork_sandbox(request: web.Request) -> web.Response:
+    started = time.monotonic()
+    phases: dict[str, int] = {}
+    manager = sandbox_manager(request)
+    source_sandbox_id = request.match_info["sandbox_id"]
+    target: SandboxSpec | None = None
+    operation: SandboxOperation | None = None
+    targets: tuple[SandboxSpec, ...] = ()
+    operations: tuple[SandboxOperation, ...] = ()
+    batch = False
+    source_generation_for_intent: int | None = None
+    try:
+        phase = time.monotonic()
+        raw = await request.json()
+        phases["read_request_ms"] = _elapsed_ms(phase)
+        if not isinstance(raw, dict):
+            raise ValueError("fork payload must be a JSON object")
+
+        phase = time.monotonic()
+        batch = _fork_request_is_batch(raw)
+        source_generation, source_spec_hash = _fork_source_envelope(raw)
+        source_generation_for_intent = source_generation
+        raw_targets: list[dict[str, Any]] = []
+        if batch:
+            raw_targets_value = raw.get("sandboxes")
+            raw_operations = raw.get("_ucloud_operations")
+            if not isinstance(raw_targets_value, list) or not raw_targets_value:
+                raise ValueError("sandboxes must be a non-empty JSON array")
+            if len(raw_targets_value) > MAX_FORK_FANOUT:
+                raise ValueError(
+                    f"fork fan-out cannot exceed {MAX_FORK_FANOUT} sandboxes"
+                )
+            if not all(isinstance(item, dict) for item in raw_targets_value):
+                raise ValueError("each fork sandbox must be a JSON object")
+            raw_targets = list(raw_targets_value)
+            if (
+                not isinstance(raw_operations, list)
+                or len(raw_operations) != len(raw_targets)
+            ):
+                raise ValueError(
+                    "_ucloud_operations must contain one operation per sandbox"
+                )
+            operations = tuple(
+                SandboxOperation.from_dict(item) for item in raw_operations
+            )
+            targets = tuple(_fork_wire_target(item) for item in raw_targets)
+        else:
+            operation = SandboxOperation.from_dict(raw.get("_ucloud_operation"))
+            operations = (operation,)
+            target = _fork_wire_target(raw)
+            targets = (target,)
+
+        try:
+            source = await asyncio.to_thread(manager.get, source_sandbox_id)
+        except (OSError, RuntimeError, ValueError) as exc:
+            return web.json_response(
+                {
+                    "error": f"sandbox store unavailable during fork: {exc}",
+                    "retryable": True,
+                },
+                status=503,
+            )
+        if source is None:
+            payload = _fork_request_error_payload(
+                f"source sandbox not found: {source_sandbox_id}",
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+            )
+            return web.json_response(
+                payload,
+                status=404,
+            )
+        if batch:
+            targets = tuple(
+                sandbox_fork_target(source.spec, item) for item in raw_targets
+            )
+        else:
+            target = sandbox_fork_target(source.spec, raw)
+            targets = (target,)
+        phases["parse_fork_ms"] = _elapsed_ms(phase)
+
+        phase = time.monotonic()
+        if batch:
+            records, results, manager_timings = await asyncio.to_thread(
+                manager.fork_many_with_timings,
+                source_sandbox_id,
+                targets,
+                operations=operations,
+                source_generation=source_generation,
+                source_spec_hash=source_spec_hash,
+            )
+        else:
+            record, result, manager_timings = await asyncio.to_thread(
+                manager.fork_with_timings,
+                source_sandbox_id,
+                target,
+                operation=operation,
+                source_generation=source_generation,
+                source_spec_hash=source_spec_hash,
+            )
+            records, results = (record,), (result,)
+        phases["manager_fork_ms"] = _elapsed_ms(phase)
+    except SandboxBusyError as exc:
+        return web.json_response(
+            _fork_request_error_payload(
+                str(exc),
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+                retryable=True,
+            ),
+            status=409,
+        )
+    except SandboxConflictError as exc:
+        return web.json_response(
+            _fork_request_error_payload(
+                str(exc),
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+            ),
+            status=409,
+        )
+    except SandboxCapacityUnavailableError as exc:
+        return web.json_response(
+            _fork_request_error_payload(
+                str(exc),
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+                retryable=True,
+            ),
+            status=503,
+        )
+    except SandboxForkUnsupportedError as exc:
+        return web.json_response(
+            _fork_request_error_payload(
+                str(exc),
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+                capability="fork-local-v1",
+            ),
+            status=501,
+        )
+    except RuntimeError as exc:
+        return web.json_response(
+            _fork_request_error_payload(
+                str(exc),
+                manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+            ),
+            status=503,
+        )
+    except ValueError as exc:
+        payload = _fork_request_error_payload(
+            str(exc),
+            manager,
+            targets,
+            operations,
+            batch=batch,
+            source_sandbox_id=source_sandbox_id,
+            source_generation=source_generation_for_intent,
+        )
+        store_ambiguous = "intent_persisted" not in payload
+        if store_ambiguous:
+            payload["retryable"] = True
+        return web.json_response(
+            payload,
+            status=503 if store_ambiguous else 400,
+        )
+    response_payload: dict[str, Any] = {
+        "intent_persisted": True,
+        "timings": {
+            "total_ms": _elapsed_ms(started),
+            "phases": phases,
+            "manager": manager_timings,
+        },
+    }
+    if batch:
+        response_payload["sandboxes"] = [record.to_dict() for record in records]
+        response_payload["forks"] = [
+            {"sandbox_id": record.spec.id, **_fork_result_payload(result)}
+            for record, result in zip(records, results, strict=True)
+        ]
+    else:
+        response_payload["sandbox"] = records[0].to_dict()
+        response_payload["fork"] = _fork_result_payload(results[0])
+    return web.json_response(
+        response_payload,
+        status=200 if manager_timings.get("idempotent") else 201,
     )
 
 
@@ -263,25 +495,55 @@ async def exec_websocket(request: web.Request) -> web.WebSocketResponse:
 
 
 async def sandbox_ssh(request: web.Request) -> web.Response:
-    record = await asyncio.to_thread(
-        sandbox_manager(request).get,
-        request.match_info["sandbox_id"],
-    )
-    if record is None:
+    manager = sandbox_manager(request)
+    sandbox_id = request.match_info["sandbox_id"]
+    try:
+        with manager.lifecycle.shared(sandbox_id):
+            record = await asyncio.to_thread(
+                manager.require_activity_sandbox,
+                sandbox_id,
+            )
+    except SandboxBusyError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    except ValueError:
         raise web.HTTPNotFound(text="sandbox not found")
     ssh = record.to_dict().get("ssh")
     if not ssh:
         raise web.HTTPBadRequest(text="sandbox ssh is not enabled")
-    return web.json_response({"sandboxId": request.match_info["sandbox_id"], "ssh": ssh})
+    return web.json_response({"sandboxId": sandbox_id, "ssh": ssh})
 
 
 async def sandbox_ssh_websocket(request: web.Request) -> web.WebSocketResponse:
+    manager = sandbox_manager(request)
+    sandbox_id = request.match_info["sandbox_id"]
+    try:
+        manager.lifecycle.acquire_shared(sandbox_id)
+    except SandboxBusyError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    try:
+        try:
+            return await _sandbox_ssh_websocket_with_lease(
+                request,
+                manager,
+                sandbox_id,
+            )
+        except SandboxBusyError as exc:
+            raise web.HTTPConflict(text=str(exc)) from exc
+        except ValueError as exc:
+            raise web.HTTPNotFound(text="sandbox not found") from exc
+    finally:
+        manager.lifecycle.release_shared(sandbox_id)
+
+
+async def _sandbox_ssh_websocket_with_lease(
+    request: web.Request,
+    manager: SandboxManager,
+    sandbox_id: str,
+) -> web.WebSocketResponse:
     record = await asyncio.to_thread(
-        sandbox_manager(request).get,
-        request.match_info["sandbox_id"],
+        manager.require_activity_sandbox,
+        sandbox_id,
     )
-    if record is None:
-        raise web.HTTPNotFound(text="sandbox not found")
     if not record.spec.ssh.enabled or record.spec.ssh.host_port is None:
         raise web.HTTPBadRequest(text="sandbox ssh is not enabled")
 
@@ -383,7 +645,9 @@ def create_async_node_agent_app(
         ssh_port_range=ssh_port_range,
         effective_capacity=total_resources,
     )
+    manager.reconcile_checkpoint_storage()
     app = web.Application(
+        client_max_size=DEFAULT_MAX_JSON_BODY_BYTES,
         middlewares=[_node_control_auth_middleware(node_control_bearer_token)]
     )
     app[SANDBOX_MANAGER_KEY] = manager
@@ -396,6 +660,7 @@ def create_async_node_agent_app(
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/v1/sandboxes", list_sandboxes)
     app.router.add_post("/v1/sandboxes", create_sandbox)
+    app.router.add_post("/v1/sandboxes/{sandbox_id}/forks", fork_sandbox)
     app.router.add_delete("/v1/sandboxes/{sandbox_id}", delete_sandbox)
     app.router.add_post("/v1/drain", configure_drain)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/exec", start_exec)

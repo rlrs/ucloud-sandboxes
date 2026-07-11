@@ -175,6 +175,7 @@ class ExecSession:
     events: deque[ExecEvent] = field(default_factory=deque)
     next_sequence: int = 1
     process: subprocess.Popen[str] | None = field(default=None, repr=False, compare=False)
+    activity_lease: bool = field(default=False, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -209,18 +210,21 @@ class ExecSessionManager:
 
     def start(self, spec: SandboxExecSpec) -> ExecSession:
         spec.validate()
-        record = self.sandbox_manager.get(spec.sandbox_id)
-        if record is None:
-            raise ValueError(f"sandbox not found: {spec.sandbox_id}")
+        self.sandbox_manager.lifecycle.acquire_shared(spec.sandbox_id)
         runtime = self.sandbox_manager.runtime
-        argv = runtime.exec_command(
-            spec.sandbox_id,
-            spec.command,
-            env=spec.env,
-            working_dir=spec.working_dir,
-            interactive=spec.stdin,
-            tty=spec.tty,
-        )
+        try:
+            self.sandbox_manager.require_activity_sandbox(spec.sandbox_id)
+            argv = runtime.exec_command(
+                spec.sandbox_id,
+                spec.command,
+                env=spec.env,
+                working_dir=spec.working_dir,
+                interactive=spec.stdin,
+                tty=spec.tty,
+            )
+        except Exception:
+            self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
+            raise
         now = utc_now()
         session = ExecSession(
             id=new_exec_session_id(
@@ -236,11 +240,17 @@ class ExecSessionManager:
             condition=Condition(self._lock),
             stdin_open=spec.stdin,
             events=deque(maxlen=self.max_events_per_session),
+            activity_lease=True,
         )
-        with self._lock:
-            self._make_session_room_locked()
-            self._sessions[session.id] = session
-            self._append_event_locked(session, "status", "started")
+        try:
+            with self._lock:
+                self._make_session_room_locked()
+                self._sessions[session.id] = session
+                self._append_event_locked(session, "status", "started")
+        except Exception:
+            self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
+            session.activity_lease = False
+            raise
         if runtime.dry_run:
             self._finish_dry_run(session)
             return session
@@ -473,3 +483,6 @@ class ExecSessionManager:
         session.exit_code = exit_code
         session.status = "exited" if exit_code == 0 else "failed"
         self._append_event_locked(session, "exit", "", exit_code=exit_code)
+        if session.activity_lease:
+            session.activity_lease = False
+            self.sandbox_manager.lifecycle.release_shared(session.spec.sandbox_id)

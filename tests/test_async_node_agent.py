@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -8,6 +9,7 @@ from aiohttp import ClientSession, web
 from ucloud_sandboxes.async_gateway import AsyncNodeGatewayClient
 from ucloud_sandboxes.async_node_agent import (
     IMAGE_MANAGER_KEY,
+    SANDBOX_MANAGER_KEY,
     create_async_node_agent_app,
 )
 from ucloud_sandboxes.deployment import package_version
@@ -19,14 +21,271 @@ from ucloud_sandboxes.node_agent import (
 )
 from ucloud_sandboxes.sandbox import (
     DockerGvisorRuntime,
+    RecordingExecutor,
     SandboxAdmissionClosedError,
     SandboxSpec,
+    sandbox_fork_target,
     sandbox_spec_fingerprint,
 )
 from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class AsyncNodeAgentTests(unittest.TestCase):
+    def test_live_fork_endpoint_matches_sync_protocol(self) -> None:
+        async def scenario() -> None:
+            with TemporaryDirectory() as raw_dir:
+                runtime = DockerGvisorRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=Path(raw_dir) / "checkpoints",
+                )
+                app = create_async_node_agent_app(
+                    sandbox_file=Path(raw_dir) / "sandboxes.json",
+                    image_file=Path(raw_dir) / "images.json",
+                    runtime=runtime,
+                )
+                runner = web.AppRunner(app)
+                await runner.setup()
+                site = web.TCPSite(runner, "127.0.0.1", 0)
+                await site.start()
+                sockets = site._server.sockets if site._server else []
+                port = sockets[0].getsockname()[1]
+                base = f"http://127.0.0.1:{port}"
+                try:
+                    async with ClientSession() as client:
+                        async with client.post(
+                            f"{base}/v1/sandboxes",
+                            json={
+                                "id": "fork-parent",
+                                "image": "busybox",
+                                "command": ["sleep", "infinity"],
+                                "memory_mb": 64,
+                                "disk_mb": 64,
+                                "forkable": True,
+                                "fork_protocol": {
+                                    "version": "agent-v1",
+                                    "prepare_command": ["/ucloud/fork-agent", "prepare"],
+                                    "ready_command": ["/ucloud/fork-agent", "ready"],
+                                },
+                            },
+                        ) as response:
+                            self.assertEqual(response.status, 201)
+                            created = (await response.json())["sandbox"]
+                        manager = app[SANDBOX_MANAGER_KEY]
+                        source_record = manager.get("fork-parent")
+                        self.assertIsNotNone(source_record)
+                        manager.store.upsert(replace(source_record, state="running"))
+                        source_spec = SandboxSpec.from_dict(created["spec"])
+                        target = sandbox_fork_target(
+                            source_spec,
+                            {"id": "fork-child"},
+                        )
+                        payload = {
+                            "sandbox": target.to_dict(),
+                            "_ucloud_operation": {
+                                "operation_id": "fork-child-operation",
+                                "generation": 1,
+                                "kind": "create",
+                                "spec_hash": sandbox_spec_fingerprint(target),
+                            },
+                            "_ucloud_source": {
+                                "generation": created["generation"],
+                                "spec_hash": created["spec_hash"],
+                            },
+                        }
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=payload,
+                        ) as response:
+                            self.assertEqual(response.status, 201)
+                            forked = await response.json()
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=payload,
+                        ) as response:
+                            self.assertEqual(response.status, 200)
+                            replayed = await response.json()
+                        stale_target = sandbox_fork_target(
+                            source_spec,
+                            {"id": "stale-child"},
+                        )
+                        stale_payload = {
+                            "sandbox": stale_target.to_dict(),
+                            "_ucloud_operation": {
+                                "operation_id": "stale-child-operation",
+                                "generation": 1,
+                                "kind": "create",
+                                "spec_hash": sandbox_spec_fingerprint(stale_target),
+                            },
+                            "_ucloud_source": {
+                                **payload["_ucloud_source"],
+                                "spec_hash": "0" * 64,
+                            },
+                        }
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=stale_payload,
+                        ) as response:
+                            self.assertEqual(response.status, 409)
+                            stale = await response.json()
+                        mixed_payload = {
+                            **payload,
+                            "sandboxes": [target.to_dict()],
+                            "_ucloud_operations": [payload["_ucloud_operation"]],
+                        }
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=mixed_payload,
+                        ) as response:
+                            self.assertEqual(response.status, 400)
+                            mixed_error = await response.json()
+                        original_get = manager.get
+
+                        def unavailable_store(_sandbox_id: str):
+                            raise ValueError("corrupt sandbox store")
+
+                        manager.get = unavailable_store  # type: ignore[method-assign]
+                        try:
+                            async with client.post(
+                                f"{base}/v1/sandboxes/fork-parent/forks",
+                                json=payload,
+                            ) as response:
+                                self.assertEqual(response.status, 503)
+                                store_unavailable = await response.json()
+                        finally:
+                            manager.get = original_get  # type: ignore[method-assign]
+                        failed_target = sandbox_fork_target(
+                            source_spec,
+                            {"id": "failed-after-intent"},
+                        )
+                        failed_payload = {
+                            "sandbox": failed_target.to_dict(),
+                            "_ucloud_operation": {
+                                "operation_id": "failed-after-intent-operation",
+                                "generation": 1,
+                                "kind": "create",
+                                "spec_hash": sandbox_spec_fingerprint(failed_target),
+                            },
+                            "_ucloud_source": payload["_ucloud_source"],
+                        }
+                        runtime.dry_run = False
+                        runtime.executor = RecordingExecutor(
+                            exit_code=1,
+                            stderr="forced restore failure",
+                        )
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=failed_payload,
+                        ) as response:
+                            self.assertEqual(response.status, 503)
+                            failed_after_intent = await response.json()
+                finally:
+                    await runner.cleanup()
+
+                self.assertEqual(
+                    forked["sandbox"]["source_sandbox_id"], "fork-parent"
+                )
+                self.assertEqual(forked["fork"]["commands"], [])
+                self.assertIs(forked["intent_persisted"], True)
+                self.assertTrue(replayed["timings"]["manager"]["idempotent"])
+                self.assertIs(stale["intent_persisted"], False)
+                self.assertIn("both sandbox and sandboxes", mixed_error["error"])
+                self.assertNotIn("intent_persisted", store_unavailable)
+                self.assertIs(failed_after_intent["intent_persisted"], True)
+
+        asyncio.run(scenario())
+
+    def test_live_fork_endpoint_supports_batch_fanout(self) -> None:
+        async def scenario() -> None:
+            with TemporaryDirectory() as raw_dir:
+                app = create_async_node_agent_app(
+                    sandbox_file=Path(raw_dir) / "sandboxes.json",
+                    image_file=Path(raw_dir) / "images.json",
+                    runtime=DockerGvisorRuntime(
+                        dry_run=True,
+                        allow_storage_opt_quota=True,
+                        fork_enabled=True,
+                        checkpoint_root=Path(raw_dir) / "checkpoints",
+                    ),
+                )
+                runner = web.AppRunner(app)
+                await runner.setup()
+                site = web.TCPSite(runner, "127.0.0.1", 0)
+                await site.start()
+                sockets = site._server.sockets if site._server else []
+                base = f"http://127.0.0.1:{sockets[0].getsockname()[1]}"
+                try:
+                    async with ClientSession() as client:
+                        async with client.post(
+                            f"{base}/v1/sandboxes",
+                            json={
+                                "id": "fork-parent",
+                                "image": "busybox",
+                                "command": ["sleep", "infinity"],
+                                "memory_mb": 64,
+                                "disk_mb": 64,
+                                "forkable": True,
+                                "fork_protocol": {
+                                    "version": "agent-v1",
+                                    "prepare_command": [
+                                        "/ucloud/fork-agent",
+                                        "prepare",
+                                    ],
+                                    "ready_command": [
+                                        "/ucloud/fork-agent",
+                                        "ready",
+                                    ],
+                                },
+                            },
+                        ) as response:
+                            created = (await response.json())["sandbox"]
+                        manager = app[SANDBOX_MANAGER_KEY]
+                        source = manager.get("fork-parent")
+                        self.assertIsNotNone(source)
+                        manager.store.upsert(replace(source, state="running"))
+                        source_spec = SandboxSpec.from_dict(created["spec"])
+                        targets = tuple(
+                            sandbox_fork_target(source_spec, {"id": child_id})
+                            for child_id in ("child-a", "child-b")
+                        )
+                        payload = {
+                            "sandboxes": [target.to_dict() for target in targets],
+                            "_ucloud_operations": [
+                                {
+                                    "operation_id": f"batch-{index}",
+                                    "generation": 1,
+                                    "kind": "create",
+                                    "spec_hash": sandbox_spec_fingerprint(target),
+                                }
+                                for index, target in enumerate(targets)
+                            ],
+                            "_ucloud_source": {
+                                "generation": created["generation"],
+                                "spec_hash": created["spec_hash"],
+                            },
+                        }
+                        async with client.post(
+                            f"{base}/v1/sandboxes/fork-parent/forks",
+                            json=payload,
+                        ) as response:
+                            self.assertEqual(response.status, 201)
+                            forked = await response.json()
+                finally:
+                    await runner.cleanup()
+
+                self.assertEqual(
+                    [item["sandbox_id"] for item in forked["forks"]],
+                    ["child-a", "child-b"],
+                )
+                self.assertEqual(
+                    len({item["checkpoint_id"] for item in forked["forks"]}),
+                    1,
+                )
+                self.assertIs(forked["intent_persisted"], True)
+
+        asyncio.run(scenario())
+
     def test_node_control_auth_protects_http_and_client_calls(self) -> None:
         async def scenario() -> None:
             with TemporaryDirectory() as raw_dir:

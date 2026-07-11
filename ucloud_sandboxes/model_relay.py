@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 from collections import deque
 from dataclasses import dataclass, field
 import json
@@ -28,6 +30,12 @@ DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT = 1024
 DEFAULT_MAX_INFLIGHT_BYTES = 128 * 1024**2
 DEFAULT_MAX_COMPLETED_REQUESTS = 8192
 DEFAULT_MAX_WORKERS = 4096
+MAX_RELAY_BODY_BYTES = 32 * 1024**2
+MAX_WORKER_RESPONSE_BYTES = 32 * 1024**2
+RELAY_TOKEN_HEADER = "X-UCloud-Relay-Token"
+TUNNEL_HTTP_METHODS = frozenset(
+    {"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"}
+)
 SANDBOX_TOKEN_KEY = web.AppKey("model_relay_sandbox_token", str | None)
 WORKER_TOKEN_KEY = web.AppKey("model_relay_worker_token", str | None)
 POLL_TIMEOUT_KEY = web.AppKey("model_relay_poll_timeout", float)
@@ -49,7 +57,8 @@ class RelayRequest:
     registration_token: str
     endpoint: str
     method: str
-    body: JsonObject
+    body: object
+    body_bytes: bytes
     headers: dict[str, str]
     created_at: float
     future: asyncio.Future[RelayWorkerResponse]
@@ -67,11 +76,14 @@ class RelayRequest:
         return {
             "request_id": self.request_id,
             "rollout_id": self.rollout_id,
+            "tunnel_id": self.rollout_id,
             "registration_token": self.registration_token,
             "endpoint": self.endpoint,
             "method": self.method,
             "headers": dict(self.headers),
-            "body": dict(self.body),
+            "body": self.body,
+            "body_base64": base64.b64encode(self.body_bytes).decode("ascii"),
+            "body_size": len(self.body_bytes),
             "created_at": self.created_at,
             "expires_at": self.expires_at,
             "delivered_at": self.delivered_at,
@@ -166,6 +178,7 @@ class ModelRelayState:
                 )
             record = {
                 "rollout_id": rollout_id,
+                "tunnel_id": rollout_id,
                 "registration_token": registration_token,
                 "metadata": dict(metadata or {}),
                 "registered_at": time.time(),
@@ -245,27 +258,46 @@ class ModelRelayState:
         *,
         rollout_id: str,
         endpoint: str,
-        body: JsonObject,
+        body: object,
         headers: dict[str, str],
+        method: str = "POST",
+        body_bytes: bytes | None = None,
     ) -> RelayRequest:
         validate_rollout_id(rollout_id)
+        method = method.upper()
+        if method not in TUNNEL_HTTP_METHODS:
+            raise web.HTTPMethodNotAllowed(method, sorted(TUNNEL_HTTP_METHODS))
+        if not endpoint.startswith("/") or endpoint.startswith("//"):
+            raise web.HTTPBadRequest(text="relay endpoint must be an absolute path")
+        if body_bytes is None:
+            body_bytes = json.dumps(
+                body,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        if len(body_bytes) > MAX_RELAY_BODY_BYTES:
+            raise web.HTTPRequestEntityTooLarge(
+                max_size=MAX_RELAY_BODY_BYTES,
+                actual_size=len(body_bytes),
+            )
         loop = asyncio.get_running_loop()
         async with self._condition:
             now = time.time()
             self._prune_completed_locked(now)
             self._expire_requests_locked(now)
             if rollout_id not in self._rollouts:
-                raise web.HTTPNotFound(
-                    text=f"rollout is not registered: {rollout_id}"
-                )
-            payload_bytes = len(
-                json.dumps(
-                    {"body": body, "headers": headers},
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ).encode("utf-8")
-            )
+                raise web.HTTPNotFound(text=f"rollout is not registered: {rollout_id}")
+            metadata_bytes = json.dumps(
+                {
+                    "endpoint": endpoint,
+                    "method": method,
+                    "headers": headers,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            payload_bytes = len(body_bytes) + len(metadata_bytes)
             rollout_inflight = self._rollout_inflight_counts.get(rollout_id, 0)
             rejection_reason = ""
             if len(self._requests) >= self._max_inflight_requests:
@@ -288,8 +320,9 @@ class ModelRelayState:
                     self._rollouts[rollout_id]["registration_token"]
                 ),
                 endpoint=endpoint,
-                method="POST",
-                body=dict(body),
+                method=method,
+                body=_copy_json_value(body),
+                body_bytes=bytes(body_bytes),
                 headers=dict(headers),
                 created_at=created_at,
                 future=loop.create_future(),
@@ -588,9 +621,7 @@ class ModelRelayState:
     ) -> None:
         current = self._rollouts.get(rollout_id)
         if current is None:
-            raise web.HTTPNotFound(
-                text=f"rollout is not registered: {rollout_id}"
-            )
+            raise web.HTTPNotFound(text=f"rollout is not registered: {rollout_id}")
         if str(current["registration_token"]) != registration_token:
             raise web.HTTPConflict(text="rollout registration is no longer current")
 
@@ -600,7 +631,9 @@ class ModelRelayState:
         registration_token: str,
     ) -> None:
         if request.registration_token != registration_token:
-            raise web.HTTPConflict(text="request belongs to a different rollout registration")
+            raise web.HTTPConflict(
+                text="request belongs to a different rollout registration"
+            )
         self._require_current_registration_locked(
             request.rollout_id,
             registration_token,
@@ -613,7 +646,9 @@ class ModelRelayState:
     ) -> None:
         _completed_at, request_registration_token = self._completed[request_id]
         if request_registration_token != registration_token:
-            raise web.HTTPConflict(text="request belongs to a different rollout registration")
+            raise web.HTTPConflict(
+                text="request belongs to a different rollout registration"
+            )
         current = next(
             (
                 record
@@ -827,7 +862,8 @@ def create_model_relay_app(
     max_workers: int = DEFAULT_MAX_WORKERS,
     state: ModelRelayState | None = None,
 ) -> web.Application:
-    app = web.Application(client_max_size=32 * 1024**2)
+    # Base64 expands worker response bodies by 4/3 inside the JSON control API.
+    app = web.Application(client_max_size=48 * 1024**2)
     app[STATE_KEY] = state or ModelRelayState(
         request_timeout_seconds=request_timeout_seconds,
         completed_request_retention_seconds=completed_request_retention_seconds,
@@ -847,8 +883,11 @@ def create_model_relay_app(
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/v1/relay/stats", relay_stats)
     app.router.add_get("/v1/relay/rollouts", list_rollouts)
+    app.router.add_get("/v1/tunnels", list_rollouts)
     app.router.add_post("/register_rollout", register_rollout)
+    app.router.add_post("/v1/tunnels/register", register_rollout)
     app.router.add_post("/unregister_rollout", unregister_rollout)
+    app.router.add_post("/v1/tunnels/unregister", unregister_rollout)
     app.router.add_post("/worker/heartbeat", worker_heartbeat)
     app.router.add_get("/worker/poll", worker_poll)
     app.router.add_post("/worker/renew", worker_renew)
@@ -861,6 +900,12 @@ def create_model_relay_app(
         openai_chat_completions,
     )
     app.router.add_post("/rollouts/{rollout_id}/v1/responses", openai_responses)
+    app.router.add_route("*", "/tunnels/{tunnel_id}", tunnel_http_proxy)
+    app.router.add_route(
+        "*",
+        "/tunnels/{tunnel_id}/{tunnel_path:.*}",
+        tunnel_http_proxy,
+    )
     return app
 
 
@@ -881,7 +926,9 @@ async def list_rollouts(request: web.Request) -> web.Response:
 async def register_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(payload.get("rollout_id") or payload.get("id") or "")
+    rollout_id = str(
+        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
+    )
     metadata = payload.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise web.HTTPBadRequest(text="metadata must be a JSON object")
@@ -892,18 +939,29 @@ async def register_rollout(request: web.Request) -> web.Response:
 async def unregister_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(payload.get("rollout_id") or payload.get("id") or "")
+    rollout_id = str(
+        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
+    )
     registration_token = _registration_token_from_payload(payload)
     existed = await _state(request).unregister_rollout(
         rollout_id,
         registration_token=registration_token,
     )
-    return web.json_response({"ok": True, "rollout_id": rollout_id, "existed": existed})
+    return web.json_response(
+        {
+            "ok": True,
+            "rollout_id": rollout_id,
+            "tunnel_id": rollout_id,
+            "existed": existed,
+        }
+    )
 
 
 async def worker_poll(request: web.Request) -> web.Response:
     _require_worker_token(request)
-    rollout_id = str(request.query.get("rollout_id") or "")
+    rollout_id = str(
+        request.query.get("rollout_id") or request.query.get("tunnel_id") or ""
+    )
     registration_token = _registration_token_from_request(request)
     worker_id = _worker_id_from_request(request)
     timeout_seconds = _float_query(
@@ -937,7 +995,9 @@ async def worker_poll(request: web.Request) -> web.Response:
 async def worker_heartbeat(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(payload.get("rollout_id") or payload.get("id") or "")
+    rollout_id = str(
+        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
+    )
     registration_token = _registration_token_from_payload(payload)
     worker_id = str(payload.get("worker_id") or "")
     metadata = payload.get("metadata")
@@ -990,7 +1050,7 @@ async def worker_respond(request: web.Request) -> web.Response:
     if not request_id:
         raise web.HTTPBadRequest(text="request_id is required")
     lease_id = str(payload.get("lease_id") or "")
-    body = payload.get("response", payload.get("body", {}))
+    body = _worker_response_body(payload)
     status = _status_code(payload.get("status"), default=200)
     headers = _string_mapping(payload.get("headers"))
     result = await _state(request).respond(
@@ -1045,12 +1105,44 @@ async def openai_responses(request: web.Request) -> web.Response:
     return await _openai_proxy(request, endpoint="/v1/responses")
 
 
+async def tunnel_http_proxy(request: web.Request) -> web.Response:
+    _require_sandbox_token(request)
+    if request.method not in TUNNEL_HTTP_METHODS:
+        raise web.HTTPMethodNotAllowed(request.method, sorted(TUNNEL_HTTP_METHODS))
+    tunnel_id = str(request.match_info.get("tunnel_id") or "")
+    validate_rollout_id(tunnel_id)
+    endpoint = _tunnel_endpoint(request)
+    body_bytes = await request.read()
+    if len(body_bytes) > MAX_RELAY_BODY_BYTES:
+        raise web.HTTPRequestEntityTooLarge(
+            max_size=MAX_RELAY_BODY_BYTES,
+            actual_size=len(body_bytes),
+        )
+    relay_request = await _state(request).enqueue(
+        rollout_id=tunnel_id,
+        endpoint=endpoint,
+        method=request.method,
+        body=_decode_tunnel_json(request.content_type, body_bytes),
+        body_bytes=body_bytes,
+        headers=_forward_headers(request),
+    )
+    response = await _wait_for_worker_response(
+        request,
+        relay_request,
+        openai_errors=False,
+    )
+    return _generic_http_response(request, response)
+
+
 async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
     _require_sandbox_token(request)
     payload = await _json_object(request)
     if payload.get("stream"):
         return web.json_response(
-            _openai_error("streaming model relay is not implemented yet", "relay_streaming_unsupported"),
+            _openai_error(
+                "streaming model relay is not implemented yet",
+                "relay_streaming_unsupported",
+            ),
             status=400,
         )
     rollout_id = _rollout_id_from_request(request)
@@ -1058,8 +1150,42 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
         rollout_id=rollout_id,
         endpoint=endpoint,
         body=payload,
+        body_bytes=json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8"),
         headers=_forward_headers(request),
     )
+    response = await _wait_for_worker_response(
+        request,
+        relay_request,
+        openai_errors=True,
+    )
+    if isinstance(response.body, bytes):
+        try:
+            response_body = json.loads(response.body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            response_body = _openai_error(
+                "relay worker returned a non-JSON OpenAI response",
+                "relay_invalid_worker_response",
+            )
+            response = RelayWorkerResponse(502, response_body)
+    else:
+        response_body = response.body
+    return web.json_response(
+        response_body,
+        status=response.status,
+        headers=_safe_response_headers(response.headers),
+    )
+
+
+async def _wait_for_worker_response(
+    request: web.Request,
+    relay_request: RelayRequest,
+    *,
+    openai_errors: bool,
+) -> RelayWorkerResponse:
     try:
         response = await _state(request).wait_for_response(
             relay_request,
@@ -1068,7 +1194,11 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
     except asyncio.TimeoutError:
         timeout_response = RelayWorkerResponse(
             504,
-            _openai_error("model relay request timed out", "relay_timeout"),
+            _relay_error(
+                "relay request timed out",
+                "relay_timeout",
+                openai=openai_errors,
+            ),
         )
         persisted = await _state(request).cancel_request(
             request_id=relay_request.request_id,
@@ -1079,7 +1209,11 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
     except asyncio.CancelledError:
         cancel_response = RelayWorkerResponse(
             499,
-            _openai_error("model relay request was canceled", "relay_canceled"),
+            _relay_error(
+                "relay request was canceled",
+                "relay_canceled",
+                openai=openai_errors,
+            ),
         )
         await _state(request).cancel_request(
             request_id=relay_request.request_id,
@@ -1087,11 +1221,7 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
             reason="client_canceled",
         )
         raise
-    return web.json_response(
-        response.body,
-        status=response.status,
-        headers=_safe_response_headers(response.headers),
-    )
+    return response
 
 
 def _state(request: web.Request) -> ModelRelayState:
@@ -1099,6 +1229,14 @@ def _state(request: web.Request) -> ModelRelayState:
 
 
 async def _json_object(request: web.Request) -> JsonObject:
+    if (
+        request.content_length is not None
+        and request.content_length > MAX_RELAY_BODY_BYTES
+    ):
+        raise web.HTTPRequestEntityTooLarge(
+            max_size=MAX_RELAY_BODY_BYTES,
+            actual_size=request.content_length,
+        )
     try:
         payload = await request.json()
     except Exception as exc:  # aiohttp raises different JSON errors by version.
@@ -1191,6 +1329,9 @@ def _require_worker_token(request: web.Request) -> None:
 def _require_bearer_token(request: web.Request, expected: str | None) -> None:
     if expected is None:
         return
+    relay_token = request.headers.get(RELAY_TOKEN_HEADER) or ""
+    if relay_token in {expected, f"Bearer {expected}"}:
+        return
     raw = request.headers.get("Authorization") or ""
     if raw != f"Bearer {expected}":
         raise web.HTTPUnauthorized(text="missing or invalid bearer token")
@@ -1246,15 +1387,24 @@ def _string_mapping(raw: object) -> dict[str, str]:
 
 def _forward_headers(request: web.Request) -> dict[str, str]:
     blocked = {
-        "authorization",
         "connection",
         "content-length",
-        "content-type",
         "host",
         "proxy-authorization",
         "transfer-encoding",
+        RELAY_TOKEN_HEADER.lower(),
         "x-ucloud-sandbox-token",
     }
+    expected = request.app[SANDBOX_TOKEN_KEY]
+    relay_header = request.headers.get(RELAY_TOKEN_HEADER) or ""
+    relay_header_authenticated = expected is None or relay_header in {
+        expected,
+        f"Bearer {expected}",
+    }
+    if not relay_header_authenticated:
+        # Backward-compatible OpenAI clients use Authorization for relay auth;
+        # never leak that credential to the worker-local upstream.
+        blocked.add("authorization")
     return {
         key: value
         for key, value in request.headers.items()
@@ -1262,24 +1412,105 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
     }
 
 
-def _safe_response_headers(headers: dict[str, str]) -> dict[str, str]:
+def _safe_response_headers(
+    headers: dict[str, str],
+    *,
+    preserve_content_type: bool = False,
+) -> dict[str, str]:
     blocked = {
         "connection",
         "content-length",
-        "content-type",
         "proxy-authenticate",
         "proxy-authorization",
         "transfer-encoding",
     }
-    return {
-        key: value
-        for key, value in headers.items()
-        if key.lower() not in blocked
-    }
+    if not preserve_content_type:
+        blocked.add("content-type")
+    return {key: value for key, value in headers.items() if key.lower() not in blocked}
 
 
 def _openai_error(message: str, error_type: str) -> JsonObject:
     return {"error": {"message": message, "type": error_type}}
+
+
+def _relay_error(message: str, error_type: str, *, openai: bool) -> JsonObject:
+    if openai:
+        return _openai_error(message, error_type)
+    return {"error": message, "code": error_type}
+
+
+def _worker_response_body(payload: JsonObject) -> object:
+    if "body_base64" not in payload:
+        return payload.get("response", payload.get("body", {}))
+    raw = payload.get("body_base64")
+    if not isinstance(raw, str):
+        raise web.HTTPBadRequest(text="body_base64 must be a string")
+    try:
+        decoded = base64.b64decode(raw.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error) as exc:
+        raise web.HTTPBadRequest(text="body_base64 is invalid") from exc
+    if len(decoded) > MAX_WORKER_RESPONSE_BYTES:
+        raise web.HTTPRequestEntityTooLarge(
+            max_size=MAX_WORKER_RESPONSE_BYTES,
+            actual_size=len(decoded),
+        )
+    return decoded
+
+
+def _decode_tunnel_json(content_type: str, body: bytes) -> object:
+    if not body or not (
+        content_type == "application/json" or content_type.endswith("+json")
+    ):
+        return None
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        # The tunnel is byte-preserving. Invalid JSON remains available in
+        # body_base64 for the upstream service to validate itself.
+        return None
+
+
+def _tunnel_endpoint(request: web.Request) -> str:
+    # Work from raw_path rather than match_info so percent-encoding, repeated
+    # query parameters, and literal '+' characters reach the upstream exactly.
+    raw_path, separator, raw_query = request.raw_path.partition("?")
+    path_parts = raw_path.split("/", 3)
+    tunnel_path = path_parts[3] if len(path_parts) == 4 else ""
+    endpoint = f"/{tunnel_path}"
+    return f"{endpoint}?{raw_query}" if separator else endpoint
+
+
+def _generic_http_response(
+    request: web.Request,
+    response: RelayWorkerResponse,
+) -> web.Response:
+    headers = _safe_response_headers(
+        response.headers,
+        preserve_content_type=True,
+    )
+    if isinstance(response.body, bytes):
+        body = response.body
+        if body and not any(key.lower() == "content-type" for key in headers):
+            headers["Content-Type"] = "application/octet-stream"
+    else:
+        body = json.dumps(
+            response.body,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if not any(key.lower() == "content-type" for key in headers):
+            headers["Content-Type"] = "application/json"
+    return web.Response(
+        body=b"" if request.method == "HEAD" else body,
+        status=response.status,
+        headers=headers,
+    )
+
+
+def _copy_json_value(value: object) -> object:
+    if value is None:
+        return None
+    return json.loads(json.dumps(value, ensure_ascii=False))
 
 
 def _set_response(

@@ -2,6 +2,56 @@
 
 This project uses semantic versioning.
 
+## Unreleased
+
+## 0.3.37 - 2026-07-11
+
+- Generalized the OpenAI model relay into an additional authenticated buffered
+  HTTP reverse tunnel with byte-safe bodies, arbitrary ordinary HTTP methods,
+  exact encoded paths/query strings, safe header forwarding, and tunnel aliases
+  for registration and discovery. Existing OpenAI routes remain compatible.
+
+## 0.3.35 - 2026-07-11
+
+- Restored fork children with raw runsc's detached lifecycle semantics so the
+  OCI start call returns to containerd instead of waiting for PID 1 to exit.
+
+## 0.3.34 - 2026-07-11
+
+- Replaced Docker's unsupported cross-container `--checkpoint` start with a
+  root-owned `runsc-restore` OCI runtime wrapper. Docker/containerd retain
+  child lifecycle ownership while the wrapper durably substitutes raw
+  `runsc restore` only for helper-staged fork children.
+
+## 0.3.33 - 2026-07-11
+
+- Made the live-fork probe mutate checkpointed tmpfs files as their owning
+  non-root workload user when capabilities are dropped.
+- Completed node bundles before switching the gateway package metadata, so a
+  running old autoscaler cannot bootstrap a mislabeled mixed-version node
+  during an all-in-one deployment.
+
+## 0.3.32 - 2026-07-11
+
+- Fixed the live-fork conformance probe's `/proc/net/tcp` established-session
+  match so valid gVisor nodes can advertise `fork-local-v1`.
+
+## 0.3.31 - 2026-07-11
+
+- Added probe-gated, node-local live sandbox forks using gVisor
+  checkpoint/restore, durable generation-fenced restore intents, XFS reflink
+  checkpoint staging through a narrow privileged helper, same-node gateway
+  reservation, and exec/file lifecycle barriers.
+- Added the `forkable` sandbox contract, `POST /v1/sandboxes/<id>/forks`,
+  same-instant multi-child fan-out with bounded parallel restores, restore-time
+  child identity through gVisor's spec environment, mandatory memory/storage
+  bounds, and bounded nonce-fenced quiesce/re-key readiness hooks.
+- Added startup mark-and-sweep for proven-unreferenced sealed, staged, and
+  application checkpoint state; ambiguous pending saves remain fail-closed.
+- Bounded retry inspection/readiness in parallel and made post-commit
+  checkpoint cleanup best-effort under one wall-clock deadline, so maximum
+  fan-out recovery cannot overrun the shared gateway request budget.
+
 ## 0.3.30 - 2026-07-10
 
 - Rejected expired model-relay leases at response time, bounded relay admission,

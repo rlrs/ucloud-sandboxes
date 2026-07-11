@@ -109,7 +109,9 @@ class CliTests(unittest.TestCase):
                         )
                         self.assertIn(expected, stderr.getvalue())
 
-    def test_autoscaler_provider_state_is_deployment_scoped_not_route_scoped(self) -> None:
+    def test_autoscaler_provider_state_is_deployment_scoped_not_route_scoped(
+        self,
+    ) -> None:
         config = AutoscalerConfig(
             project_id="project-1",
             deployment_id="prod-a",
@@ -285,6 +287,44 @@ class CliTests(unittest.TestCase):
             Path("/tmp/heartbeat-token"),
         )
 
+    def test_runtime_conformance_parser_accepts_optional_live_fork_probe(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "runtime-conformance",
+                "--probe-live-fork",
+                "--checkpoint-helper",
+                "/test/checkpoint-helper",
+                "--checkpoint-root",
+                "/test/checkpoints",
+            ]
+        )
+
+        self.assertTrue(args.probe_live_fork)
+        self.assertEqual(args.checkpoint_helper, "/test/checkpoint-helper")
+        self.assertEqual(args.checkpoint_root, Path("/test/checkpoints"))
+
+    def test_node_agent_parsers_accept_checkpoint_runtime_options(self) -> None:
+        for command in ("serve-node-agent", "serve-async-node-agent"):
+            with self.subTest(command=command):
+                args = cli.build_parser().parse_args(
+                    [
+                        command,
+                        "--runtime-conformance-file",
+                        "/test/conformance.json",
+                        "--checkpoint-helper",
+                        "/test/checkpoint-helper",
+                        "--checkpoint-root",
+                        "/test/checkpoints",
+                    ]
+                )
+
+                self.assertEqual(
+                    args.runtime_conformance_file,
+                    Path("/test/conformance.json"),
+                )
+                self.assertEqual(args.checkpoint_helper, "/test/checkpoint-helper")
+                self.assertEqual(args.checkpoint_root, Path("/test/checkpoints"))
+
     def test_model_relay_cli_wires_admission_limits(self) -> None:
         args = cli.build_parser().parse_args(
             [
@@ -299,7 +339,9 @@ class CliTests(unittest.TestCase):
         )
 
         with (
-            patch.object(cli, "create_model_relay_app", return_value=object()) as create,
+            patch.object(
+                cli, "create_model_relay_app", return_value=object()
+            ) as create,
             patch("aiohttp.web.run_app") as run_app,
             redirect_stdout(io.StringIO()),
         ):
@@ -318,7 +360,9 @@ class CliTests(unittest.TestCase):
             ["serve-model-relay", "--max-inflight-requests", "0"]
         )
 
-        with self.assertRaisesRegex(ValueError, "max-inflight-requests must be positive"):
+        with self.assertRaisesRegex(
+            ValueError, "max-inflight-requests must be positive"
+        ):
             cli.cmd_serve_model_relay(args)
 
     def test_top_level_version_flag_reports_package_version(self) -> None:
@@ -1274,7 +1318,9 @@ class CliTests(unittest.TestCase):
     def test_reconcile_rejects_provider_mutation_flags(self) -> None:
         class FailingUCloudClient:
             def __init__(self, _session_store) -> None:
-                raise AssertionError("read-only reconcile must not construct a provider client")
+                raise AssertionError(
+                    "read-only reconcile must not construct a provider client"
+                )
 
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -1380,10 +1426,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(second_result, 0)
         self.assertEqual(len(submitted), 1)
         self.assertEqual(second["createRecoveryResults"][0]["state"], "recovered")
-        self.assertEqual(second["createRecoveryResults"][0]["jobIds"], ["recovered-job"])
+        self.assertEqual(
+            second["createRecoveryResults"][0]["jobIds"], ["recovered-job"]
+        )
         self.assertEqual(len(operations), 1)
         self.assertEqual(operations[0].state, "settled")
-        self.assertTrue(first["autoscalerStateFile"].endswith("autoscaler-state.sqlite"))
+        self.assertTrue(
+            first["autoscalerStateFile"].endswith("autoscaler-state.sqlite")
+        )
         self.assertTrue(first["controllerLockHeld"])
 
     @allow_fixture_mutations
@@ -2572,17 +2622,17 @@ class CliTests(unittest.TestCase):
             ["succeeded", "failed", "succeeded"],
         )
         self.assertTrue(
-            all(
-                state["jobs"][f"job-{index}"]["attempts"] == 1
-                for index in range(1, 4)
-            )
+            all(state["jobs"][f"job-{index}"]["attempts"] == 1 for index in range(1, 4))
         )
         init_metrics = [
             event for event in metric_events if event["kind"] == "vm_init_attempt"
         ]
         self.assertEqual(len(init_metrics), 3)
         self.assertEqual(
-            {event["data"]["job_id"]: event["data"]["status"] for event in init_metrics},
+            {
+                event["data"]["job_id"]: event["data"]["status"]
+                for event in init_metrics
+            },
             {"job-1": "succeeded", "job-2": "failed", "job-3": "succeeded"},
         )
 
@@ -3076,18 +3126,14 @@ class CliTests(unittest.TestCase):
                 rising = cli.run_reconcile_cycle(
                     config,
                     args,
-                    demand=SandboxDemand(
-                        pending_resources=ResourceQuantity(vcpu=1)
-                    ),
+                    demand=SandboxDemand(pending_resources=ResourceQuantity(vcpu=1)),
                     provider_state=state,
                     provider_mutations_allowed=True,
                 )
                 acknowledged = cli.run_reconcile_cycle(
                     config,
                     args,
-                    demand=SandboxDemand(
-                        pending_resources=ResourceQuantity(vcpu=1)
-                    ),
+                    demand=SandboxDemand(pending_resources=ResourceQuantity(vcpu=1)),
                     provider_state=state,
                     provider_mutations_allowed=True,
                 )
@@ -3413,6 +3459,70 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
 
+    def test_async_node_agent_enables_fork_only_from_conformance(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            conformance_file = root / "runtime-conformance.json"
+            conformance_file.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {"name": "tmpfs-quota-enforced", "ok": True},
+                            {
+                                "name": "gvisor-live-fork-v1",
+                                "ok": True,
+                                "runtime_fingerprint": "a" * 64,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = cli.build_parser().parse_args(
+                [
+                    "serve-async-node-agent",
+                    "--sandbox-file",
+                    str(root / "sandboxes.json"),
+                    "--image-file",
+                    str(root / "images.json"),
+                    "--runtime-conformance-file",
+                    str(conformance_file),
+                    "--checkpoint-helper",
+                    "/test/checkpoint-helper",
+                    "--checkpoint-root",
+                    str(root / "checkpoints"),
+                ]
+            )
+            captured: dict = {}
+
+            def fake_create_async_node_agent_app(*_args, **kwargs):
+                captured.update(kwargs)
+                return object()
+
+            with (
+                patch.object(
+                    cli,
+                    "create_async_node_agent_app",
+                    side_effect=fake_create_async_node_agent_app,
+                ),
+                patch.object(
+                    cli.DockerRuntimeProbe,
+                    "live_fork_runtime_fingerprint",
+                    return_value="a" * 64,
+                ),
+                patch("aiohttp.web.run_app"),
+                redirect_stdout(io.StringIO()),
+            ):
+                result = cli.cmd_serve_async_node_agent(args)
+
+        self.assertEqual(result, 0)
+        runtime = captured["runtime"]
+        self.assertTrue(runtime.fork_enabled)
+        self.assertEqual(runtime.checkpoint_root, root / "checkpoints")
+        self.assertEqual(runtime.checkpoint_helper, "/test/checkpoint-helper")
+
     def test_serve_node_agent_enables_tmpfs_workspace_from_conformance(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -3424,6 +3534,11 @@ class CliTests(unittest.TestCase):
                         "results": [
                             {"name": "storage-opt-quota-enforced", "ok": True},
                             {"name": "tmpfs-quota-enforced", "ok": True},
+                            {
+                                "name": "gvisor-live-fork-v1",
+                                "ok": True,
+                                "runtime_fingerprint": "a" * 64,
+                            },
                         ],
                     }
                 ),
@@ -3447,7 +3562,14 @@ class CliTests(unittest.TestCase):
             original = cli.build_node_agent_server
             cli.build_node_agent_server = fake_build_node_agent_server
             try:
-                with redirect_stdout(io.StringIO()):
+                with (
+                    patch.object(
+                        cli.DockerRuntimeProbe,
+                        "live_fork_runtime_fingerprint",
+                        return_value="a" * 64,
+                    ),
+                    redirect_stdout(io.StringIO()),
+                ):
                     cli.cmd_serve_node_agent(
                         argparse.Namespace(
                             config=None,
@@ -3459,6 +3581,8 @@ class CliTests(unittest.TestCase):
                             job_id="job-1",
                             node_id="node-1",
                             runtime_conformance_file=conformance_file,
+                            checkpoint_helper="/test/checkpoint-helper",
+                            checkpoint_root=root / "checkpoints",
                             docker_binary="docker",
                             runtime_name="runsc",
                             execute_runtime=True,
@@ -3484,6 +3608,9 @@ class CliTests(unittest.TestCase):
         runtime = captured["runtime"]
         self.assertTrue(runtime.allow_storage_opt_quota)
         self.assertTrue(runtime.allow_tmpfs_workspace)
+        self.assertTrue(runtime.fork_enabled)
+        self.assertEqual(runtime.checkpoint_root, root / "checkpoints")
+        self.assertEqual(runtime.checkpoint_helper, "/test/checkpoint-helper")
 
 
 if __name__ == "__main__":

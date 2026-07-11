@@ -51,8 +51,17 @@ from ucloud_sandboxes.routing import (
 from ucloud_sandboxes.sandbox import (
     CommandResult,
     DockerGvisorRuntime,
+    FORK_REQUEST_TIMEOUT_SECONDS,
     SandboxSpec,
+    SandboxForkProtocolSpec,
+    sandbox_fork_target,
     sandbox_spec_fingerprint,
+)
+
+FORK_PROTOCOL = SandboxForkProtocolSpec(
+    version="agent-v1",
+    prepare_command=("/ucloud/fork-agent", "prepare"),
+    ready_command=("/ucloud/fork-agent", "ready"),
 )
 
 
@@ -142,6 +151,531 @@ class FileRuntime(DockerGvisorRuntime):
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_fork_proxy_timeout_matches_bounded_runtime_budget(self) -> None:
+        self.assertEqual(
+            control_plane.FORK_PROXY_TIMEOUT_SECONDS,
+            FORK_REQUEST_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(FORK_REQUEST_TIMEOUT_SECONDS, 55 * 60)
+
+    def test_fork_request_preflight_accounts_for_expanded_batch_specs(self) -> None:
+        source = SandboxSpec(
+            id="fork-parent",
+            image="busybox",
+            env={"LARGE_INHERITED_VALUE": "x" * 4096},
+            memory_mb=64,
+            disk_mb=64,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        source_route = SandboxRoute(
+            sandbox_id=source.id,
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node.invalid",
+            resources=source.requested_resources(),
+            spec=source.to_dict(),
+            state="running",
+            generation=1,
+            create_operation_id="create-parent",
+            spec_hash=sandbox_spec_fingerprint(source),
+        )
+        targets = tuple(
+            sandbox_fork_target(source, {"id": f"child-{index}"})
+            for index in range(4)
+        )
+        public_body = json.dumps(
+            {"sandboxes": [{"id": target.id} for target in targets]}
+        ).encode("utf-8")
+
+        expanded_size = control_plane._sandbox_fork_request_body_upper_bound(
+            source_route,
+            targets,
+            batch=True,
+        )
+
+        self.assertGreater(expanded_size, len(public_body) * 20)
+        self.assertGreater(expanded_size, 16_000)
+
+    def test_fork_route_release_follows_node_intent_signal(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            source_spec = SandboxSpec(
+                id="fork-parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=64,
+                disk_mb=64,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_hash = sandbox_spec_fingerprint(source_spec)
+            routes = RoutingStore(route_file)
+            routes.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id=source_spec.id,
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=source_spec.requested_resources(),
+                    spec=source_spec.to_dict(),
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-parent",
+                    spec_hash=source_hash,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=route_file,
+            )
+            responses = [
+                control_plane.ProxiedResponse(
+                    503,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"capacity changed","intent_persisted":false}',
+                ),
+                control_plane.ProxiedResponse(
+                    409,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"restore interrupted","intent_persisted":true}',
+                ),
+                control_plane.ProxiedResponse(
+                    503,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"batch rejected","intent_persisted":false}',
+                ),
+                control_plane.ProxiedResponse(
+                    502,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"ambiguous"}',
+                ),
+                control_plane.ProxiedResponse(
+                    503,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"definitive","intent_persisted":false}',
+                ),
+                control_plane.ProxiedResponse(
+                    409,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"existing intent","intent_persisted":true}',
+                ),
+                control_plane.ProxiedResponse(
+                    409,
+                    {"Content-Type": "application/json"},
+                    (
+                        b'{"error":"overlapping fanout","intents":['
+                        b'{"sandbox_id":"overlap-a","intent_persisted":true},'
+                        b'{"sandbox_id":"overlap-c","intent_persisted":false}]}'
+                    ),
+                ),
+            ]
+
+            def fake_proxy_request(_handler, *_args, **_kwargs):
+                return responses.pop(0)
+
+            gateway.RequestHandlerClass._proxy_request = fake_proxy_request
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                self.assertEqual(
+                    post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url="http://node.invalid",
+                            agent_version=package_version(),
+                            capabilities=(
+                                "sandbox",
+                                "fork-local-v1",
+                                "disk-quota",
+                            ),
+                            total_resources=ResourceQuantity(
+                                memory_mb=1024,
+                                disk_mb=1024,
+                            ),
+                        ),
+                    ).status,
+                    200,
+                )
+                mixed_shape = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        "sandbox": {"id": "mixed-one"},
+                        "sandboxes": [{"id": "mixed-two"}],
+                    },
+                    allow_error=True,
+                )
+                injected_fence = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        "sandbox": {"id": "injected"},
+                        "_ucloud_source": {
+                            "generation": 1,
+                            "spec_hash": source_hash,
+                        },
+                    },
+                    allow_error=True,
+                )
+                before_intent = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "before-intent"}},
+                    allow_error=True,
+                )
+                released = RoutingStore(route_file).get_sandbox("before-intent")
+                after_intent = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "after-intent"}},
+                    allow_error=True,
+                )
+                retained = RoutingStore(route_file).get_sandbox("after-intent")
+                rejected_batch = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        "sandboxes": [
+                            {"id": "batch-before-intent-a"},
+                            {"id": "batch-before-intent-b"},
+                        ]
+                    },
+                    allow_error=True,
+                )
+                rejected_routes = (
+                    RoutingStore(route_file).get_sandbox("batch-before-intent-a"),
+                    RoutingStore(route_file).get_sandbox("batch-before-intent-b"),
+                )
+                self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "ambiguous-then-false"}},
+                    allow_error=True,
+                )
+                ambiguous_route = RoutingStore(route_file).get_sandbox(
+                    "ambiguous-then-false"
+                )
+                self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "ambiguous-then-false"}},
+                    allow_error=True,
+                )
+                definitive_route = RoutingStore(route_file).get_sandbox(
+                    "ambiguous-then-false"
+                )
+                self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "overlap-a"}},
+                    allow_error=True,
+                )
+                overlap_a_before = RoutingStore(route_file).get_sandbox("overlap-a")
+                self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={
+                        "sandboxes": [
+                            {"id": "overlap-a"},
+                            {"id": "overlap-c"},
+                        ]
+                    },
+                    allow_error=True,
+                )
+                overlap_a_after = RoutingStore(route_file).get_sandbox("overlap-a")
+                overlap_c_after = RoutingStore(route_file).get_sandbox("overlap-c")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(before_intent["status"], 503, before_intent)
+        self.assertEqual(mixed_shape["status"], 400)
+        self.assertEqual(injected_fence["status"], 400)
+        self.assertIsNone(released)
+        self.assertEqual(after_intent["status"], 409)
+        self.assertIsNotNone(retained)
+        self.assertEqual(rejected_batch["status"], 503)
+        self.assertEqual(rejected_routes, (None, None))
+        self.assertIsNotNone(ambiguous_route)
+        self.assertIsNone(definitive_route)
+        self.assertIsNotNone(overlap_a_before)
+        self.assertEqual(overlap_a_after, overlap_a_before)
+        self.assertIsNone(overlap_c_after)
+
+    def test_fork_route_survives_ambiguous_then_busy_replay(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            source_spec = SandboxSpec(
+                id="fork-parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=64,
+                disk_mb=64,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_hash = sandbox_spec_fingerprint(source_spec)
+            routes = RoutingStore(route_file)
+            routes.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id=source_spec.id,
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=source_spec.requested_resources(),
+                    spec=source_spec.to_dict(),
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-parent",
+                    spec_hash=source_hash,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=route_file,
+            )
+            responses = [
+                control_plane.ProxiedResponse(
+                    502,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"node connection closed"}',
+                ),
+                control_plane.ProxiedResponse(
+                    409,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"sandbox has active exec/file activity"}',
+                ),
+            ]
+
+            def fake_proxy_request(_handler, *_args, **_kwargs):
+                return responses.pop(0)
+
+            gateway.RequestHandlerClass._proxy_request = fake_proxy_request
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                self.assertEqual(
+                    post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id="job-1",
+                            node_id="node-1",
+                            node_url="http://node.invalid",
+                            agent_version=package_version(),
+                            capabilities=(
+                                "sandbox",
+                                "fork-local-v1",
+                                "disk-quota",
+                            ),
+                            total_resources=ResourceQuantity(
+                                memory_mb=1024,
+                                disk_mb=1024,
+                            ),
+                        ),
+                    ).status,
+                    200,
+                )
+                first = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "fork-child"}},
+                    allow_error=True,
+                )
+                after_first = RoutingStore(route_file).get_sandbox("fork-child")
+                second = self._json_request(
+                    f"{base}/v1/sandboxes/fork-parent/forks",
+                    method="POST",
+                    payload={"sandbox": {"id": "fork-child"}},
+                    allow_error=True,
+                )
+                after_second = RoutingStore(route_file).get_sandbox("fork-child")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(first["status"], 502)
+        self.assertEqual(second["status"], 409)
+        self.assertIsNotNone(after_first)
+        self.assertEqual(after_second, after_first)
+
+    def test_live_fork_reserves_and_replays_child_on_source_node(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=raw_path / "checkpoints",
+            )
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "node-sandboxes.json",
+                image_file=raw_path / "node-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=4096,
+                    disk_mb=4096,
+                ),
+                runtime=runtime,
+                extra_capabilities=("fork-local-v1", "disk-quota"),
+            )
+            Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                node_host, node_port = node.server_address
+                node_url = f"http://{node_host}:{node_port}"
+                route_file = raw_path / "routes.sqlite"
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    heartbeat = build_heartbeat(
+                        job_id="job-1",
+                        node_id="node-1",
+                        node_url=node_url,
+                        agent_version=package_version(),
+                        capabilities=(
+                            "sandbox",
+                            "image-cache",
+                            "fork-local-v1",
+                            "disk-quota",
+                        ),
+                        total_resources=ResourceQuantity(
+                            vcpu=4,
+                            memory_mb=4096,
+                            disk_mb=4096,
+                        ),
+                    )
+                    self.assertEqual(
+                        post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat", heartbeat
+                        ).status,
+                        200,
+                    )
+                    parent = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "fork-parent",
+                            "image": "busybox",
+                            "command": ["sleep", "infinity"],
+                            "memory_mb": 64,
+                            "disk_mb": 64,
+                            "forkable": True,
+                            "fork_protocol": FORK_PROTOCOL.to_dict(),
+                            "network": "bridge",
+                        },
+                    )["sandbox"]
+                    self.assertEqual(
+                        parent["spec_hash"],
+                        sandbox_spec_fingerprint(
+                            SandboxSpec.from_dict(parent["spec"])
+                        ),
+                    )
+
+                    node_manager = node.RequestHandlerClass.manager
+                    node_parent = node_manager.get("fork-parent")
+                    self.assertIsNotNone(node_parent)
+                    node_manager.store.upsert(replace(node_parent, state="running"))
+                    routes = RoutingStore(route_file)
+                    parent_route = routes.get_sandbox("fork-parent")
+                    self.assertIsNotNone(parent_route)
+                    routes.upsert_sandbox(replace(parent_route, state="running"))
+
+                    forked = self._json_request(
+                        f"{base}/v1/sandboxes/fork-parent/forks",
+                        method="POST",
+                        payload={
+                            "id": "fork-child",
+                            "env": {"AGENT_BRANCH": "child"},
+                        },
+                    )
+                    replayed = self._json_request(
+                        f"{base}/v1/sandboxes/fork-parent/forks",
+                        method="POST",
+                        payload={
+                            "id": "fork-child",
+                            "env": {"AGENT_BRANCH": "child"},
+                        },
+                    )
+                    fanout = self._json_request(
+                        f"{base}/v1/sandboxes/fork-parent/forks",
+                        method="POST",
+                        payload={
+                            "sandboxes": [
+                                {"id": "fork-child-a"},
+                                {"id": "fork-child-b"},
+                            ]
+                        },
+                    )
+                    fanout_replayed = self._json_request(
+                        f"{base}/v1/sandboxes/fork-parent/forks",
+                        method="POST",
+                        payload={
+                            "sandboxes": [
+                                {"id": "fork-child-a"},
+                                {"id": "fork-child-b"},
+                            ]
+                        },
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+            parent_route = RoutingStore(route_file).get_sandbox("fork-parent")
+            child_route = RoutingStore(route_file).get_sandbox("fork-child")
+            child_a_route = RoutingStore(route_file).get_sandbox("fork-child-a")
+            child_b_route = RoutingStore(route_file).get_sandbox("fork-child-b")
+            self.assertIsNotNone(parent_route)
+            self.assertIsNotNone(child_route)
+            self.assertIsNotNone(child_a_route)
+            self.assertIsNotNone(child_b_route)
+            self.assertEqual(child_route.node_id, parent_route.node_id)
+            self.assertTrue(child_route.create_operation_id.startswith("fork-"))
+            self.assertEqual(
+                forked["sandbox"]["source_sandbox_id"], "fork-parent"
+            )
+            self.assertEqual(
+                forked["sandbox"]["source_generation"], parent["generation"]
+            )
+            self.assertEqual(forked["fork"]["commands"], [])
+            self.assertTrue(replayed["timings"]["manager"]["idempotent"])
+            self.assertEqual(
+                [record["id"] for record in fanout["sandboxes"]],
+                ["fork-child-a", "fork-child-b"],
+            )
+            self.assertEqual(
+                len({item["checkpoint_id"] for item in fanout["forks"]}),
+                1,
+            )
+            self.assertEqual(child_a_route.node_id, parent_route.node_id)
+            self.assertEqual(child_b_route.node_id, parent_route.node_id)
+            self.assertTrue(
+                fanout_replayed["timings"]["manager"]["idempotent"]
+            )
+
     def test_gateway_replaces_public_auth_with_node_control_credential(self) -> None:
         observed: dict[str, str | None] = {}
 
@@ -332,6 +866,55 @@ class ControlPlaneTests(unittest.TestCase):
                 [],
             )
         )
+
+    def test_forkable_placement_requires_fork_and_disk_capabilities(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            base = NodeHeartbeat(
+                node_id="node-base",
+                job_id="job-base",
+                updated_at=utc_now(),
+                active_sandboxes=0,
+                node_url="http://node-base:8090",
+                agent_version=package_version(),
+                total_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=8192,
+                    disk_mb=100_000,
+                ),
+            )
+            candidates = [
+                replace(
+                    base,
+                    node_id="fork-only",
+                    capabilities=("sandbox", "fork-local-v1"),
+                ),
+                replace(
+                    base,
+                    node_id="disk-only",
+                    capabilities=("sandbox", "disk-quota"),
+                ),
+                replace(
+                    base,
+                    node_id="both",
+                    capabilities=(
+                        "sandbox",
+                        "fork-local-v1",
+                        "disk-quota",
+                    ),
+                ),
+            ]
+            handler._ready_sandbox_heartbeats = lambda: candidates
+            handler._nodes_with_image = lambda *_args, **_kwargs: set()
+
+            selected = handler._select_node(
+                ResourceQuantity(memory_mb=512, disk_mb=1024),
+                required_capabilities=("fork-local-v1", "disk-quota"),
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.node_id, "both")
 
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):

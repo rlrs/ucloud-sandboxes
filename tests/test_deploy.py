@@ -101,6 +101,12 @@ class DeployTests(unittest.TestCase):
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("compresslevel=1", script)
+        bundle_complete = script.index('trap - EXIT')
+        gateway_install = script.index(
+            '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"'
+        )
+        self.assertGreater(gateway_install, bundle_complete)
+        self.assertLess(gateway_install, script.index("create_secret()"))
         self.assertIn('Dir::State::status="$status_file"', script)
         self.assertIn('Dir::Cache::archives="$archive_dir"', script)
         self.assertIn("download_runtime_packages runtime xfsprogs", script)

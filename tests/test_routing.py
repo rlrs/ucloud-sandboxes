@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -108,6 +109,47 @@ class RoutingStoreTests(unittest.TestCase):
         assert preserved is not None
         self.assertEqual(preserved.spec, spec)
         self.assertEqual(preserved.state, "creating")
+
+    def test_finalize_sandbox_create_never_overwrites_or_resurrects_delete(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            reserved = SandboxRoute(
+                sandbox_id="fork-child",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(memory_mb=64, disk_mb=64),
+                spec={"id": "fork-child", "image": "busybox"},
+                state="creating",
+                generation=1,
+                create_operation_id="fork-operation",
+                spec_hash="spec-hash",
+            )
+            store.upsert_sandbox(reserved)
+            deleting = store.prepare_sandbox_delete("fork-child")
+            self.assertIsNotNone(deleting)
+
+            rejected = store.finalize_sandbox_create(
+                replace(reserved, state="running")
+            )
+            still_deleting = store.get_sandbox("fork-child")
+            assert deleting is not None
+            assert still_deleting is not None
+            self.assertIsNone(rejected)
+            self.assertEqual(
+                still_deleting.delete_operation_id,
+                deleting.delete_operation_id,
+            )
+
+            store.delete_sandbox_if_current(
+                "fork-child",
+                generation=1,
+                delete_operation_id=deleting.delete_operation_id,
+            )
+            self.assertIsNone(
+                store.finalize_sandbox_create(replace(reserved, state="running"))
+            )
+            self.assertIsNone(store.get_sandbox("fork-child"))
 
     def test_reconcile_sandboxes_for_node_removes_missing_node_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -490,6 +532,60 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(first, repeated)
         self.assertEqual(after_first[0].count, 1)
         self.assertEqual(after_second, [])
+
+    def test_batch_create_reservations_are_atomic_and_exactly_replayable(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            base = SandboxRoute(
+                sandbox_id="child-a",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(memory_mb=64),
+                spec={"id": "child-a", "image": "busybox"},
+            )
+            requests = (
+                (base, "hash-a", "fork-a"),
+                (
+                    SandboxRoute(
+                        **{
+                            **base.__dict__,
+                            "sandbox_id": "child-b",
+                            "spec": {"id": "child-b", "image": "busybox"},
+                        }
+                    ),
+                    "hash-b",
+                    "fork-b",
+                ),
+            )
+            first = store.allocate_sandbox_creates(requests)
+            replayed = store.allocate_sandbox_creates(requests)
+
+            with self.assertRaises(SandboxRouteConflictError):
+                store.allocate_sandbox_creates(
+                    (
+                        (
+                            SandboxRoute(
+                                **{
+                                    **base.__dict__,
+                                    "sandbox_id": "not-persisted",
+                                    "spec": {
+                                        "id": "not-persisted",
+                                        "image": "busybox",
+                                    },
+                                }
+                            ),
+                            "hash-new",
+                            "fork-new",
+                        ),
+                        (requests[1][0], "different-hash", "fork-b"),
+                    )
+                )
+            rolled_back = store.get_sandbox("not-persisted")
+
+        self.assertEqual([created for _route, created in first], [True, True])
+        self.assertEqual([created for _route, created in replayed], [False, False])
+        self.assertIsNone(rolled_back)
 
     def test_route_does_not_claim_capacity_for_a_different_image(self) -> None:
         resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)

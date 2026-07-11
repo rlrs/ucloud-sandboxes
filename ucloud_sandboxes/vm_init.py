@@ -12,8 +12,10 @@ import subprocess
 import sys
 from typing import Any
 
+from .checkpoint_helper import render_checkpoint_helper_script
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .models import ResourceQuantity, VmJob, vm_job_from_payload
+from .runsc_restore import render_runsc_restore_script
 
 
 DEFAULT_WORK_DIR = "/work/ucloud-sandboxes"
@@ -27,6 +29,12 @@ DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
 DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
+DEFAULT_CHECKPOINT_HELPER = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+DEFAULT_CHECKPOINT_HELPER_CONFIG = "/etc/ucloud-sandboxes/checkpoint-helper.json"
+DEFAULT_CHECKPOINT_HELPER_SUDOERS = "/etc/sudoers.d/ucloud-sandbox-checkpoint"
+DEFAULT_RUNSC_RESTORE_WRAPPER = "/usr/local/libexec/ucloud-runsc-restore"
+DEFAULT_RUNSC_RESTORE_CONFIG = "/etc/ucloud-sandboxes/runsc-restore.json"
+DEFAULT_RUNSC_RESTORE_STATE_ROOT = "/run/ucloud-sandboxes/runsc-restore"
 SANDBOX_RUNTIME_PACKAGES = (
     "xfsprogs",
     "docker-ce",
@@ -212,6 +220,18 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     state_dir = str(PurePosixPath(work_dir) / "state")
     runtime_conformance_file = str(PurePosixPath(state_dir) / "runtime-conformance.json")
+    checkpoint_helper = DEFAULT_CHECKPOINT_HELPER
+    checkpoint_helper_config = DEFAULT_CHECKPOINT_HELPER_CONFIG
+    checkpoint_helper_sudoers = DEFAULT_CHECKPOINT_HELPER_SUDOERS
+    checkpoint_helper_source = render_checkpoint_helper_script(
+        config_path=checkpoint_helper_config
+    )
+    runsc_restore_wrapper = DEFAULT_RUNSC_RESTORE_WRAPPER
+    runsc_restore_config = DEFAULT_RUNSC_RESTORE_CONFIG
+    runsc_restore_state_root = DEFAULT_RUNSC_RESTORE_STATE_ROOT
+    runsc_restore_source = render_runsc_restore_script(
+        config_path=runsc_restore_config
+    )
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
@@ -298,6 +318,12 @@ UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(list(options.docker_insecure_registries)))}
 UCLOUD_HOST_ALIASES_JSON={shlex.quote(json.dumps(list(options.host_aliases)))}
 UCLOUD_RUNTIME_CONFORMANCE_FILE={shlex.quote(runtime_conformance_file)}
+UCLOUD_CHECKPOINT_HELPER={shlex.quote(checkpoint_helper)}
+UCLOUD_CHECKPOINT_HELPER_CONFIG={shlex.quote(checkpoint_helper_config)}
+UCLOUD_CHECKPOINT_HELPER_SUDOERS={shlex.quote(checkpoint_helper_sudoers)}
+UCLOUD_RUNSC_RESTORE_WRAPPER={shlex.quote(runsc_restore_wrapper)}
+UCLOUD_RUNSC_RESTORE_CONFIG={shlex.quote(runsc_restore_config)}
+UCLOUD_RUNSC_RESTORE_STATE_ROOT={shlex.quote(runsc_restore_state_root)}
 UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
 {authorized_keys_blob}
 UCLOUD_AUTHORIZED_KEYS
@@ -879,6 +905,7 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   fi
   UCLOUD_DOCKER_DATA_ROOT="$UCLOUD_DOCKER_QUOTA_ROOT"
 fi
+UCLOUD_CHECKPOINT_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-checkpoints"
 log_init_phase "docker-storage"
 
 if ! grep -qw overlay /proc/filesystems; then
@@ -887,6 +914,33 @@ if ! grep -qw overlay /proc/filesystems; then
 fi
 
 RUNSC_PATH="$(command -v runsc)"
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_CHECKPOINT_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
+
+echo "Installing raw runsc restore wrapper"
+$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_RUNSC_RESTORE_WRAPPER")" /etc/ucloud-sandboxes
+$SUDO install -d -m 0700 -o root -g root "$UCLOUD_CHECKPOINT_ROOT"
+UCLOUD_RUNSC_RESTORE_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_RUNSC_RESTORE_WRAPPER")/.ucloud-runsc-restore.XXXXXX")"
+$SUDO tee "$UCLOUD_RUNSC_RESTORE_TMP" >/dev/null <<'UCLOUD_RUNSC_RESTORE_PY'
+{runsc_restore_source}UCLOUD_RUNSC_RESTORE_PY
+$SUDO chown root:root "$UCLOUD_RUNSC_RESTORE_TMP"
+$SUDO chmod 0755 "$UCLOUD_RUNSC_RESTORE_TMP"
+$SUDO mv -f "$UCLOUD_RUNSC_RESTORE_TMP" "$UCLOUD_RUNSC_RESTORE_WRAPPER"
+UCLOUD_RUNSC_RESTORE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.runsc-restore.XXXXXX")"
+python3 - <<'PY' | $SUDO tee "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP" >/dev/null
+import json
+import os
+
+print(json.dumps({{
+    "version": 1,
+    "real_runsc": os.environ["RUNSC_PATH"],
+    "docker_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
+    "checkpoint_root": os.environ["UCLOUD_CHECKPOINT_ROOT"],
+    "state_root": os.environ["UCLOUD_RUNSC_RESTORE_STATE_ROOT"],
+}}, sort_keys=True))
+PY
+$SUDO chown root:root "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP"
+$SUDO chmod 0600 "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP"
+$SUDO mv -f "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP" "$UCLOUD_RUNSC_RESTORE_CONFIG"
 
 detect_default_route_mtu() {{
   local iface mtu
@@ -906,7 +960,7 @@ detect_default_route_mtu() {{
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
   UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
 fi
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
 DOCKER_DAEMON_JSON="$(mktemp)"
@@ -916,9 +970,27 @@ import os
 
 config = {{
     "data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
+    "experimental": True,
     "max-concurrent-downloads": 8,
     "max-concurrent-uploads": 8,
-    "runtimes": {{"runsc": {{"path": os.environ["RUNSC_PATH"]}}}},
+    "runtimes": {{
+        "runsc": {{
+            "path": os.environ["RUNSC_PATH"],
+            "runtimeArgs": [
+                "--allow-live-tcp-migration=false",
+                "--net-disconnect-ok=true",
+                "--allow-connected-on-save=false",
+            ],
+        }},
+        "runsc-restore": {{
+            "path": os.environ["UCLOUD_RUNSC_RESTORE_WRAPPER"],
+            "runtimeArgs": [
+                "--allow-live-tcp-migration=false",
+                "--net-disconnect-ok=true",
+                "--allow-connected-on-save=false",
+            ],
+        }},
+    }},
 }}
 insecure_registries = json.loads(os.environ.get("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON") or "[]")
 if insecure_registries:
@@ -1009,6 +1081,40 @@ else
 fi
 log_init_phase "python-package"
 
+echo "Installing privileged checkpoint helper"
+$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_CHECKPOINT_HELPER")"
+$SUDO install -d -m 0700 -o root -g root "$UCLOUD_CHECKPOINT_ROOT"
+UCLOUD_CHECKPOINT_HELPER_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_CHECKPOINT_HELPER")/.ucloud-checkpoint-helper.XXXXXX")"
+$SUDO tee "$UCLOUD_CHECKPOINT_HELPER_TMP" >/dev/null <<'UCLOUD_CHECKPOINT_HELPER_PY'
+{checkpoint_helper_source}UCLOUD_CHECKPOINT_HELPER_PY
+$SUDO chown root:root "$UCLOUD_CHECKPOINT_HELPER_TMP"
+$SUDO chmod 0755 "$UCLOUD_CHECKPOINT_HELPER_TMP"
+$SUDO mv -f "$UCLOUD_CHECKPOINT_HELPER_TMP" "$UCLOUD_CHECKPOINT_HELPER"
+
+UCLOUD_CHECKPOINT_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.checkpoint-helper.XXXXXX")"
+python3 - <<'PY' | $SUDO tee "$UCLOUD_CHECKPOINT_CONFIG_TMP" >/dev/null
+import json
+import os
+
+print(json.dumps({{
+    "version": 1,
+    "docker_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
+    "checkpoint_root": os.environ["UCLOUD_CHECKPOINT_ROOT"],
+}}, sort_keys=True))
+PY
+$SUDO chown root:root "$UCLOUD_CHECKPOINT_CONFIG_TMP"
+$SUDO chmod 0600 "$UCLOUD_CHECKPOINT_CONFIG_TMP"
+$SUDO mv -f "$UCLOUD_CHECKPOINT_CONFIG_TMP" "$UCLOUD_CHECKPOINT_HELPER_CONFIG"
+
+UCLOUD_CHECKPOINT_SUDOERS_TMP="$($SUDO mktemp "/etc/sudoers.d/.ucloud-sandbox-checkpoint.XXXXXX")"
+printf '%s ALL=(root) NOPASSWD: %s\n' "$UCLOUD_SERVICE_USER" "$UCLOUD_CHECKPOINT_HELPER" | $SUDO tee "$UCLOUD_CHECKPOINT_SUDOERS_TMP" >/dev/null
+$SUDO chown root:root "$UCLOUD_CHECKPOINT_SUDOERS_TMP"
+$SUDO chmod 0440 "$UCLOUD_CHECKPOINT_SUDOERS_TMP"
+$SUDO visudo -cf "$UCLOUD_CHECKPOINT_SUDOERS_TMP" >/dev/null
+$SUDO mv -f "$UCLOUD_CHECKPOINT_SUDOERS_TMP" "$UCLOUD_CHECKPOINT_HELPER_SUDOERS"
+$SUDO "$UCLOUD_CHECKPOINT_HELPER" gc >/dev/null
+log_init_phase "checkpoint-helper"
+
 if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
   echo "Loading offline busybox conformance image"
   LOADED_PROBE_IMAGE_IDS=""
@@ -1037,7 +1143,7 @@ fi
 
 echo "Running runtime conformance probe"
 set +e
-$SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
+$SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json --probe-live-fork --checkpoint-helper "$UCLOUD_CHECKPOINT_HELPER" --checkpoint-root "$UCLOUD_CHECKPOINT_ROOT" | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
 CONFORMANCE_STATUS=${{PIPESTATUS[0]}}
 set -e
 if [ "$CONFORMANCE_STATUS" -ne 0 ]; then
@@ -1079,6 +1185,8 @@ UCLOUD_DOCKER_QUOTA_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON=$UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
 UCLOUD_HOST_ALIASES_JSON=$UCLOUD_HOST_ALIASES_JSON
 UCLOUD_RUNTIME_CONFORMANCE_FILE=$UCLOUD_RUNTIME_CONFORMANCE_FILE
+UCLOUD_CHECKPOINT_HELPER=$UCLOUD_CHECKPOINT_HELPER
+UCLOUD_CHECKPOINT_ROOT=$UCLOUD_CHECKPOINT_ROOT
 NODE_ENV
 
 echo "Writing node-agent systemd service"
@@ -1096,7 +1204,8 @@ Group=$UCLOUD_SERVICE_GROUP
 SupplementaryGroups=docker
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart={agent_bin} serve-node-agent --job-id ${{UCLOUD_JOB_ID}} --node-id ${{UCLOUD_NODE_ID}} --node-url ${{UCLOUD_NODE_URL}} --host ${{UCLOUD_NODE_AGENT_HOST}} --port ${{UCLOUD_NODE_AGENT_PORT}}{deployment_flag}{version_flags} --sandbox-file ${{UCLOUD_STATE_DIR}}/sandboxes.json --image-file ${{UCLOUD_STATE_DIR}}/images.json --ssh-port-start ${{UCLOUD_SSH_PORT_START}} --ssh-port-end ${{UCLOUD_SSH_PORT_END}} --total-vcpu ${{UCLOUD_TOTAL_VCPU}} --total-memory-mb ${{UCLOUD_TOTAL_MEMORY_MB}} --total-disk-mb ${{UCLOUD_TOTAL_DISK_MB}} --cpu-overcommit ${{UCLOUD_CPU_OVERCOMMIT}} --memory-overcommit ${{UCLOUD_MEMORY_OVERCOMMIT}} --disk-overcommit ${{UCLOUD_DISK_OVERCOMMIT}} --runtime-conformance-file ${{UCLOUD_RUNTIME_CONFORMANCE_FILE}}{build_flag}{runtime_flag}{node_control_auth_flag}
+ExecStartPre=/usr/bin/sudo -n ${{UCLOUD_CHECKPOINT_HELPER}} gc
+ExecStart={agent_bin} serve-node-agent --job-id ${{UCLOUD_JOB_ID}} --node-id ${{UCLOUD_NODE_ID}} --node-url ${{UCLOUD_NODE_URL}} --host ${{UCLOUD_NODE_AGENT_HOST}} --port ${{UCLOUD_NODE_AGENT_PORT}}{deployment_flag}{version_flags} --sandbox-file ${{UCLOUD_STATE_DIR}}/sandboxes.json --image-file ${{UCLOUD_STATE_DIR}}/images.json --ssh-port-start ${{UCLOUD_SSH_PORT_START}} --ssh-port-end ${{UCLOUD_SSH_PORT_END}} --total-vcpu ${{UCLOUD_TOTAL_VCPU}} --total-memory-mb ${{UCLOUD_TOTAL_MEMORY_MB}} --total-disk-mb ${{UCLOUD_TOTAL_DISK_MB}} --cpu-overcommit ${{UCLOUD_CPU_OVERCOMMIT}} --memory-overcommit ${{UCLOUD_MEMORY_OVERCOMMIT}} --disk-overcommit ${{UCLOUD_DISK_OVERCOMMIT}} --runtime-conformance-file ${{UCLOUD_RUNTIME_CONFORMANCE_FILE}} --checkpoint-helper ${{UCLOUD_CHECKPOINT_HELPER}} --checkpoint-root ${{UCLOUD_CHECKPOINT_ROOT}}{build_flag}{runtime_flag}{node_control_auth_flag}
 Restart=always
 RestartSec=5
 
@@ -1479,9 +1588,5 @@ def _reject_newline(name: str, value: str) -> None:
 def _validate_service_user(value: str) -> None:
     if not value:
         raise ValueError("service user is required.")
-    if value.startswith("-"):
-        raise ValueError("service user cannot start with '-'.")
-    if "/" in value or ":" in value:
-        raise ValueError("service user cannot contain '/' or ':'.")
-    if any(character.isspace() for character in value):
-        raise ValueError("service user cannot contain whitespace.")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]{0,31}", value):
+        raise ValueError("service user must be a safe local account name.")

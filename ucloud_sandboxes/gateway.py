@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 import json
 from typing import Any, AsyncIterator
 from urllib import error, request
+from urllib.parse import quote
 
+from .sandbox import FORK_REQUEST_TIMEOUT_SECONDS, MAX_FORK_FANOUT
 from .sandbox_exec import SandboxExecSpec
 
 
@@ -20,8 +23,76 @@ class GatewayError(RuntimeError):
     pass
 
 
+def _fork_success_error(
+    response: dict[str, Any],
+    *,
+    source_sandbox_id: str,
+    requested_ids: tuple[str, ...],
+    batch: bool,
+) -> str | None:
+    if not requested_ids or any(not sandbox_id for sandbox_id in requested_ids):
+        return "fork request requires a non-empty sandbox id"
+    if response.get("intent_persisted") is not True:
+        return "control plane returned a fork success without durable intent"
+    if not isinstance(response.get("timings"), dict):
+        return "control plane returned a fork success without timings"
+    records_raw = response.get("sandboxes") if batch else [response.get("sandbox")]
+    forks_raw = response.get("forks") if batch else [response.get("fork")]
+    if (
+        not isinstance(records_raw, list)
+        or not isinstance(forks_raw, list)
+        or len(records_raw) != len(requested_ids)
+        or len(forks_raw) != len(requested_ids)
+        or not all(isinstance(item, dict) for item in records_raw)
+        or not all(isinstance(item, dict) for item in forks_raw)
+    ):
+        return "control plane returned an invalid fork response shape"
+
+    checkpoint_ids: set[str] = set()
+    fork_nonces: set[str] = set()
+    for requested_id, record, fork in zip(
+        requested_ids, records_raw, forks_raw, strict=True
+    ):
+        record_id = str(record.get("id") or record.get("sandbox_id") or "")
+        checkpoint_id = str(record.get("checkpoint_id") or "")
+        fork_nonce = str(record.get("fork_nonce") or "")
+        commands = fork.get("commands")
+        if (
+            record_id != requested_id
+            or str(record.get("state") or "") != "running"
+            or str(record.get("creation_kind") or "") != "restore"
+            or str(record.get("source_sandbox_id") or "") != source_sandbox_id
+            or not checkpoint_id
+            or len(fork_nonce) != 64
+            or any(character not in "0123456789abcdef" for character in fork_nonce)
+            or str(fork.get("checkpoint_id") or "") != checkpoint_id
+            or fork.get("restored") is not True
+            or not isinstance(commands, list)
+            or any(
+                not isinstance(command, list)
+                or any(not isinstance(argument, str) for argument in command)
+                for command in commands
+            )
+            or (
+                batch
+                and str(fork.get("sandbox_id") or "") != requested_id
+            )
+        ):
+            return "control plane returned inconsistent fork confirmation"
+        checkpoint_ids.add(checkpoint_id)
+        fork_nonces.add(fork_nonce)
+    if batch and (len(checkpoint_ids) != 1 or len(fork_nonces) != 1):
+        return "control plane returned children from different fork instants"
+    return None
+
+
 class NodeGatewayClient:
-    """Async-capable client for the VM node-agent sandbox routing API."""
+    """Client for gateway APIs (the historical class name is retained).
+
+    Fork methods must point at the public control plane: only it owns route
+    generation and the fenced node-operation envelope. Other methods remain
+    usable with a directly addressed node agent.
+    """
 
     def __init__(
         self,
@@ -42,6 +113,64 @@ class NodeGatewayClient:
             if node_control_bearer_token is not None
             else {}
         )
+
+    async def fork_sandbox(
+        self,
+        source_sandbox_id: str,
+        sandbox: dict[str, Any],
+        *,
+        timeout_seconds: float = FORK_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Fork one sandbox through the public control plane."""
+        payload = {"sandbox": dict(sandbox)}
+        response = await self._request_json(
+            "POST",
+            self._fork_path(source_sandbox_id),
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+        requested_id = str(sandbox.get("id") or "")
+        error_message = _fork_success_error(
+            response,
+            source_sandbox_id=source_sandbox_id,
+            requested_ids=(requested_id,),
+            batch=False,
+        )
+        if error_message is not None:
+            raise GatewayError(error_message)
+        return response
+
+    async def fork_sandboxes(
+        self,
+        source_sandbox_id: str,
+        sandboxes: Sequence[dict[str, Any]],
+        *,
+        timeout_seconds: float = FORK_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Fork several sandboxes through the public control plane."""
+        requested = tuple(dict(sandbox) for sandbox in sandboxes)
+        if not 1 <= len(requested) <= MAX_FORK_FANOUT:
+            raise ValueError(f"fork batch size must be in [1, {MAX_FORK_FANOUT}]")
+        payload = {"sandboxes": list(requested)}
+        response = await self._request_json(
+            "POST",
+            self._fork_path(source_sandbox_id),
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+        error_message = _fork_success_error(
+            response,
+            source_sandbox_id=source_sandbox_id,
+            requested_ids=tuple(str(item.get("id") or "") for item in requested),
+            batch=True,
+        )
+        if error_message is not None:
+            raise GatewayError(error_message)
+        return response
+
+    @staticmethod
+    def _fork_path(source_sandbox_id: str) -> str:
+        return f"/v1/sandboxes/{quote(source_sandbox_id, safe='')}/forks"
 
     async def start_exec(
         self,
@@ -102,12 +231,14 @@ class NodeGatewayClient:
         path: str,
         *,
         payload: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         return await asyncio.to_thread(
             self._request_json_sync,
             method,
             path,
             payload,
+            timeout_seconds,
         )
 
     def _request_json_sync(
@@ -115,6 +246,7 @@ class NodeGatewayClient:
         method: str,
         path: str,
         payload: dict[str, Any] | None,
+        timeout_seconds: float | None,
     ) -> dict[str, Any]:
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
         headers = dict(self._node_control_headers)
@@ -129,7 +261,11 @@ class NodeGatewayClient:
         try:
             with request.build_opener(_RejectNodeRedirects()).open(
                 req,
-                timeout=self.timeout_seconds,
+                timeout=(
+                    self.timeout_seconds
+                    if timeout_seconds is None
+                    else timeout_seconds
+                ),
             ) as response:
                 raw_bytes = response.read(MAX_GATEWAY_RESPONSE_BYTES + 1)
                 if len(raw_bytes) > MAX_GATEWAY_RESPONSE_BYTES:
@@ -148,7 +284,7 @@ class NodeGatewayClient:
             except json.JSONDecodeError:
                 decoded = {"error": raw}
             raise GatewayError(f"node-agent request failed ({exc.code}): {decoded}") from exc
-        except (OSError, json.JSONDecodeError) as exc:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise GatewayError(f"node-agent request failed: {exc}") from exc
         if not isinstance(decoded, dict):
             raise GatewayError("node-agent returned a non-object JSON payload.")

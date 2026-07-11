@@ -27,17 +27,22 @@ from .images import (
 from .registry import heartbeat_to_dict
 from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry
 from .runtime_metrics import sample_node_runtime_metrics
-from .capabilities import merge_capabilities
+from .capabilities import FORK_LOCAL_CAPABILITY, merge_capabilities
 from .sandbox import (
+    MAX_FORK_FANOUT,
+    SandboxBusyError,
     DockerGvisorRuntime,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxFileTooLargeError,
+    SandboxForkRuntimeResult,
+    SandboxForkUnsupportedError,
     SandboxManager,
     SandboxOperation,
     SandboxRecord,
     SandboxSpec,
     SandboxStore,
+    sandbox_fork_target,
     sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionManager, SandboxExecSpec
@@ -243,6 +248,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/forks"):
+            self._fork_sandbox(parsed.path)
+            return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/exec"):
             self._start_exec(parsed.path)
             return
@@ -424,6 +432,253 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"session": session.to_dict()}, status=HTTPStatus.CREATED)
 
+    def _fork_sandbox(self, path: str) -> None:
+        started = time.monotonic()
+        phases: dict[str, int] = {}
+        source_sandbox_id = _sandbox_id_from_path(path, suffix="/forks")
+        target: SandboxSpec | None = None
+        operation: SandboxOperation | None = None
+        targets: tuple[SandboxSpec, ...] = ()
+        operations: tuple[SandboxOperation, ...] = ()
+        batch = False
+        source_generation_for_intent: int | None = None
+        try:
+            phase = time.monotonic()
+            raw = self._read_json_body()
+            phases["read_request_ms"] = _elapsed_ms(phase)
+            if not isinstance(raw, dict):
+                raise ValueError("fork payload must be a JSON object")
+
+            phase = time.monotonic()
+            batch = _fork_request_is_batch(raw)
+            source_generation, source_spec_hash = _fork_source_envelope(raw)
+            source_generation_for_intent = source_generation
+            raw_targets: list[dict[str, Any]] = []
+            if batch:
+                raw_targets_value = raw.get("sandboxes")
+                raw_operations = raw.get("_ucloud_operations")
+                if not isinstance(raw_targets_value, list) or not raw_targets_value:
+                    raise ValueError("sandboxes must be a non-empty JSON array")
+                if len(raw_targets_value) > MAX_FORK_FANOUT:
+                    raise ValueError(
+                        f"fork fan-out cannot exceed {MAX_FORK_FANOUT} sandboxes"
+                    )
+                if not all(isinstance(item, dict) for item in raw_targets_value):
+                    raise ValueError("each fork sandbox must be a JSON object")
+                raw_targets = list(raw_targets_value)
+                if (
+                    not isinstance(raw_operations, list)
+                    or len(raw_operations) != len(raw_targets)
+                ):
+                    raise ValueError(
+                        "_ucloud_operations must contain one operation per sandbox"
+                    )
+                operations = tuple(
+                    SandboxOperation.from_dict(item) for item in raw_operations
+                )
+                targets = tuple(_fork_wire_target(item) for item in raw_targets)
+            else:
+                operation = SandboxOperation.from_dict(raw.get("_ucloud_operation"))
+                operations = (operation,)
+                target = _fork_wire_target(raw)
+                targets = (target,)
+
+            try:
+                source = self.manager.get(source_sandbox_id)
+            except (OSError, RuntimeError, ValueError) as exc:
+                self._write_json(
+                    {
+                        "error": f"sandbox store unavailable during fork: {exc}",
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+            if source is None:
+                payload = _fork_request_error_payload(
+                    f"source sandbox not found: {source_sandbox_id}",
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                )
+                self._write_json(
+                    payload,
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            if batch:
+                targets = tuple(
+                    sandbox_fork_target(source.spec, item) for item in raw_targets
+                )
+            else:
+                target = sandbox_fork_target(source.spec, raw)
+                targets = (target,)
+            phases["parse_fork_ms"] = _elapsed_ms(phase)
+
+            phase = time.monotonic()
+            if batch:
+                records, results, manager_timings = (
+                    self.manager.fork_many_with_timings(
+                        source_sandbox_id,
+                        targets,
+                        operations=operations,
+                        source_generation=source_generation,
+                        source_spec_hash=source_spec_hash,
+                    )
+                )
+            else:
+                record, result, manager_timings = self.manager.fork_with_timings(
+                    source_sandbox_id,
+                    target,
+                    operation=operation,
+                    source_generation=source_generation,
+                    source_spec_hash=source_spec_hash,
+                )
+                records, results = (record,), (result,)
+            phases["manager_fork_ms"] = _elapsed_ms(phase)
+        except SandboxBusyError as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                    retryable=True,
+                ),
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        except SandboxConflictError as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                ),
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        except SandboxCapacityUnavailableError as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                    retryable=True,
+                ),
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        except SandboxForkUnsupportedError as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                    capability="fork-local-v1",
+                ),
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+        except (RequestBodyTooLargeError, SandboxFileTooLargeError) as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                ),
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+        except RuntimeError as exc:
+            self._write_json(
+                _fork_request_error_payload(
+                    str(exc),
+                    self.manager,
+                    targets,
+                    operations,
+                    batch=batch,
+                    source_sandbox_id=source_sandbox_id,
+                    source_generation=source_generation_for_intent,
+                    retryable=True,
+                ),
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        except ValueError as exc:
+            payload = _fork_request_error_payload(
+                str(exc),
+                self.manager,
+                targets,
+                operations,
+                batch=batch,
+                source_sandbox_id=source_sandbox_id,
+                source_generation=source_generation_for_intent,
+            )
+            store_ambiguous = "intent_persisted" not in payload
+            if store_ambiguous:
+                payload["retryable"] = True
+            self._write_json(
+                payload,
+                status=(
+                    HTTPStatus.SERVICE_UNAVAILABLE
+                    if store_ambiguous
+                    else HTTPStatus.BAD_REQUEST
+                ),
+            )
+            return
+
+        response_payload: dict[str, Any] = {
+            "intent_persisted": True,
+            "timings": {
+                "total_ms": _elapsed_ms(started),
+                "phases": phases,
+                "manager": manager_timings,
+            },
+        }
+        if batch:
+            response_payload["sandboxes"] = [record.to_dict() for record in records]
+            response_payload["forks"] = [
+                {
+                    "sandbox_id": record.spec.id,
+                    **_fork_result_payload(result),
+                }
+                for record, result in zip(records, results, strict=True)
+            ]
+        else:
+            response_payload["sandbox"] = records[0].to_dict()
+            response_payload["fork"] = _fork_result_payload(results[0])
+        self._write_json(
+            response_payload,
+            status=(
+                HTTPStatus.OK
+                if manager_timings.get("idempotent")
+                else HTTPStatus.CREATED
+            ),
+        )
+
     def _exec_session(self, path: str) -> None:
         session_id = self._exec_session_id_from_path(path)
         session = self.exec_manager.get(session_id)
@@ -484,8 +739,16 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         prefix = "/v1/sandboxes/"
         suffix = "/ssh"
         sandbox_id = unquote(path[len(prefix):-len(suffix)])
-        record = self.manager.get(sandbox_id)
-        if record is None:
+        try:
+            with self.manager.lifecycle.shared(sandbox_id):
+                record = self.manager.require_activity_sandbox(sandbox_id)
+        except SandboxBusyError as exc:
+            self._write_json(
+                {"error": str(exc), "retryable": True},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        except ValueError:
             self._write_json({"error": "sandbox not found"}, status=HTTPStatus.NOT_FOUND)
             return
         ssh = record.to_dict().get("ssh")
@@ -915,6 +1178,7 @@ def build_node_agent_server(
             disk=disk_overcommit,
         ),
     )
+    manager.reconcile_checkpoint_storage()
     exec_manager = ExecSessionManager(
         manager,
         route_node_id=node_id,
@@ -955,7 +1219,14 @@ def build_node_agent_server(
     capabilities = ["image-cache"] if image_builds_enabled else ["sandbox", "image-cache"]
     if image_builds_enabled:
         capabilities.extend(["image-build", "snapshot"])
-    BoundHandler.capabilities = merge_capabilities(tuple(capabilities), extra_capabilities)
+    merged_capabilities = merge_capabilities(tuple(capabilities), extra_capabilities)
+    if image_builds_enabled or not manager.runtime.fork_enabled:
+        merged_capabilities = tuple(
+            capability
+            for capability in merged_capabilities
+            if capability != FORK_LOCAL_CAPABILITY
+        )
+    BoundHandler.capabilities = merged_capabilities
     BoundHandler.image_builds_enabled = image_builds_enabled
     BoundHandler.node_epoch = uuid4().hex
     BoundHandler.physical_disk_path = physical_disk_path or _default_physical_disk_path(
@@ -1013,6 +1284,179 @@ def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:
 
 def _elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))
+
+
+def _fork_source_envelope(raw: dict[str, Any]) -> tuple[int, str]:
+    source_raw = raw.get("_ucloud_source")
+    if not isinstance(source_raw, dict):
+        raise ValueError("_ucloud_source must be a JSON object")
+    try:
+        generation = int(source_raw.get("generation"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("source generation must be an integer") from exc
+    if generation < 0:
+        raise ValueError("source generation cannot be negative")
+    spec_hash = str(source_raw.get("spec_hash") or "").strip()
+    if not spec_hash:
+        raise ValueError("source spec_hash is required")
+    return generation, spec_hash
+
+
+def _fork_request_is_batch(raw: dict[str, Any]) -> bool:
+    """Validate the mutually-exclusive single and fan-out wire shapes."""
+
+    batch = "sandboxes" in raw
+    if "sandbox" in raw and "target" in raw:
+        raise ValueError("fork payload cannot contain both sandbox and target")
+    single = "sandbox" in raw or "target" in raw
+    if batch and single:
+        raise ValueError("fork payload cannot contain both sandbox and sandboxes")
+    if batch and "_ucloud_operation" in raw:
+        raise ValueError(
+            "batch fork payload cannot contain singular _ucloud_operation"
+        )
+    if not batch and "_ucloud_operations" in raw:
+        raise ValueError(
+            "single fork payload cannot contain plural _ucloud_operations"
+        )
+    return batch
+
+
+def _fork_wire_target(raw: object) -> SandboxSpec:
+    """Parse the gateway's full target spec without consulting the source."""
+
+    if not isinstance(raw, dict):
+        raise ValueError("fork sandbox must be a JSON object")
+    target_raw = raw.get("sandbox", raw.get("target", raw))
+    if not isinstance(target_raw, dict) or not target_raw.get("image"):
+        raise ValueError("node fork requests require a complete sandbox spec")
+    target = SandboxSpec.from_dict(target_raw)
+    target.validate()
+    return target
+
+
+def _fork_intent_persisted(
+    manager: SandboxManager,
+    target: SandboxSpec | None,
+    operation: SandboxOperation | None,
+    *,
+    source_sandbox_id: str,
+    source_generation: int | None,
+) -> bool | None:
+    """Return whether this exact fork has a durable destination intent.
+
+    ``None`` is deliberately reserved for an unreadable/ambiguous store.  The
+    gateway must retain its reservation in that case, just as it does for an
+    interrupted node request.
+    """
+
+    if target is None or operation is None or source_generation is None:
+        return False
+    try:
+        record = manager.get(target.id)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if record is None:
+        return False
+    return (
+        record.generation == operation.generation
+        and record.operation_id == operation.operation_id
+        and record.spec_hash == operation.spec_hash
+        and record.creation_kind == "restore"
+        and record.source_sandbox_id == source_sandbox_id
+        and record.source_generation == source_generation
+        and bool(record.checkpoint_id)
+        and len(record.fork_nonce) == 64
+        and all(character in "0123456789abcdef" for character in record.fork_nonce)
+        and record.state in {"restoring", "running"}
+    )
+
+
+def _fork_error_payload(
+    error: str,
+    manager: SandboxManager,
+    target: SandboxSpec | None,
+    operation: SandboxOperation | None,
+    *,
+    source_sandbox_id: str,
+    source_generation: int | None,
+    **fields: Any,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"error": error, **fields}
+    persisted = _fork_intent_persisted(
+        manager,
+        target,
+        operation,
+        source_sandbox_id=source_sandbox_id,
+        source_generation=source_generation,
+    )
+    if persisted is not None:
+        payload["intent_persisted"] = persisted
+    return payload
+
+
+def _fork_request_error_payload(
+    error: str,
+    manager: SandboxManager,
+    targets: tuple[SandboxSpec, ...],
+    operations: tuple[SandboxOperation, ...],
+    *,
+    batch: bool,
+    source_sandbox_id: str,
+    source_generation: int | None,
+    **fields: Any,
+) -> dict[str, Any]:
+    if not batch:
+        target = targets[0] if targets else None
+        operation = operations[0] if operations else None
+        return _fork_error_payload(
+            error,
+            manager,
+            target,
+            operation,
+            source_sandbox_id=source_sandbox_id,
+            source_generation=source_generation,
+            **fields,
+        )
+
+    payload: dict[str, Any] = {"error": error, **fields}
+    if not targets or len(targets) != len(operations):
+        payload["intent_persisted"] = False
+        return payload
+    persisted = tuple(
+        _fork_intent_persisted(
+            manager,
+            target,
+            operation,
+            source_sandbox_id=source_sandbox_id,
+            source_generation=source_generation,
+        )
+        for target, operation in zip(targets, operations, strict=True)
+    )
+    payload["intents"] = [
+        {
+            "sandbox_id": target.id,
+            "intent_persisted": value,
+        }
+        for target, value in zip(targets, persisted, strict=True)
+    ]
+    if all(value is True for value in persisted):
+        payload["intent_persisted"] = True
+    elif all(value is False for value in persisted):
+        payload["intent_persisted"] = False
+    # A partial/unreadable set is ambiguous. Omitting the signal makes the
+    # gateway retain every reservation for safe exact replay.
+    return payload
+
+
+def _fork_result_payload(result: SandboxForkRuntimeResult) -> dict[str, Any]:
+    return {
+        "checkpoint_id": result.checkpoint_id,
+        "restored": result.restored,
+        # Runtime argv can contain restore-time environment values. Keep the
+        # stable response shape without reflecting secrets.
+        "commands": [],
+    }
 
 
 def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:

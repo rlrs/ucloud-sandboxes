@@ -2,38 +2,1625 @@ from pathlib import Path
 from dataclasses import replace
 from datetime import timedelta
 from tempfile import TemporaryDirectory
-from threading import Barrier, Lock, Thread
+from threading import Barrier, Event, Lock, Thread
 import hashlib
 import json
 import multiprocessing
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.sandbox import (
     CommandResult,
+    DEFAULT_FORK_RESTORE_PARALLELISM,
     DockerGvisorRuntime,
+    FORK_CHILD_SETUP_ALLOWANCE_SECONDS,
+    FORK_REQUEST_TIMEOUT_SECONDS,
+    MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS,
+    MAX_FORK_FANOUT,
+    MAX_FORK_PROTOCOL_TIMEOUT_SECONDS,
+    MAX_FORK_RESTORE_PARALLELISM,
+    MAX_FORK_RESTORE_TIMEOUT_SECONDS,
     RecordingExecutor,
     SandboxFileTooLargeError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxAdmissionClosedError,
     SandboxFilesystemSpec,
+    SandboxForkProtocolSpec,
+    SandboxForkRuntimeResult,
+    SandboxBusyError,
     SandboxManager,
     SandboxOperation,
     SandboxSecuritySpec,
+    SandboxSshSpec,
     SandboxSpec,
     SandboxStore,
     SandboxStaleOperationError,
+    SandboxForkCommandTimeoutError,
     SANDBOX_GENERATION_LABEL,
     SANDBOX_OPERATION_ID_LABEL,
     SANDBOX_SPEC_HASH_LABEL,
+    application_checkpoint_id,
     sandbox_spec_fingerprint,
+    sandbox_fork_target,
 )
+
+FORK_PROTOCOL = SandboxForkProtocolSpec(
+    version="agent-v1",
+    prepare_command=("/usr/local/bin/ucloud-fork-agent", "prepare"),
+    ready_command=("/usr/local/bin/ucloud-fork-agent", "ready"),
+)
+FORK_NONCE = "a" * 64
+
+
+class ForkCaptureFailureExecutor:
+    def __init__(
+        self,
+        source: SandboxSpec,
+        source_hash: str,
+        *,
+        timeout: bool,
+        ambiguous_exit_code: int = 124,
+    ) -> None:
+        self.source = source
+        self.source_hash = source_hash
+        self.timeout = timeout
+        self.ambiguous_exit_code = ambiguous_exit_code
+        self.commands: list[tuple[str, ...]] = []
+
+    def _result(self, argv: tuple[str, ...]) -> CommandResult:
+        if argv[:2] == ("docker", "inspect"):
+            template = argv[3]
+            if template == "{{json .Config.Labels}}":
+                return CommandResult(
+                    argv=argv,
+                    exit_code=0,
+                    stdout=json.dumps(
+                        {
+                            "ucloud-sandboxes.managed": "true",
+                            "ucloud-sandboxes.sandbox-id": self.source.id,
+                            SANDBOX_GENERATION_LABEL: "3",
+                            SANDBOX_OPERATION_ID_LABEL: "source-create-3",
+                            SANDBOX_SPEC_HASH_LABEL: self.source_hash,
+                        }
+                    ),
+                )
+            if template == "{{.State.Running}}":
+                return CommandResult(argv=argv, exit_code=0, stdout="true")
+            if template == "{{.Id}} {{.Image}}":
+                return CommandResult(
+                    argv=argv,
+                    exit_code=0,
+                    stdout=("1" * 64 + " sha256:" + "2" * 64),
+                )
+        if "/usr/local/libexec/ucloud-sandbox-checkpoint" in argv:
+            helper_index = argv.index("/usr/local/libexec/ucloud-sandbox-checkpoint")
+            if argv[helper_index + 1] == "status":
+                return CommandResult(argv=argv, exit_code=4)
+            return CommandResult(argv=argv, exit_code=0)
+        if argv[:2] == ("docker", "exec"):
+            role = argv[-1]
+            output = (
+                f"UCLOUD_FORK_PREPARED={FORK_NONCE}\n"
+                if role == "prepare"
+                else f"UCLOUD_FORK_READY={FORK_NONCE}:{role}\n"
+            )
+            return CommandResult(argv=argv, exit_code=0, stdout=output)
+        if argv[:3] == ("docker", "checkpoint", "create"):
+            return CommandResult(argv=argv, exit_code=1, stderr="save rejected")
+        return CommandResult(argv=argv, exit_code=0)
+
+    def run(
+        self,
+        argv: tuple[str, ...],
+        *,
+        input: bytes | None = None,
+    ) -> CommandResult:
+        del input
+        self.commands.append(argv)
+        return self._result(argv)
+
+    def run_with_timeout(
+        self,
+        argv: tuple[str, ...],
+        *,
+        timeout_seconds: float,
+        input: bytes | None = None,
+    ) -> CommandResult:
+        del timeout_seconds, input
+        self.commands.append(argv)
+        if self.timeout and argv[:3] == ("docker", "checkpoint", "create"):
+            return CommandResult(
+                argv=argv,
+                exit_code=self.ambiguous_exit_code,
+                stderr="client did not complete",
+            )
+        return self._result(argv)
 
 
 class SandboxRuntimeTests(unittest.TestCase):
+    def test_forkable_create_and_delete_manage_private_application_path(self) -> None:
+        class LifecycleExecutor:
+            def __init__(self) -> None:
+                self.commands: list[tuple[str, ...]] = []
+
+            def run(self, argv, *, input=None):
+                del input
+                self.commands.append(argv)
+                if argv[:2] == ("docker", "inspect"):
+                    return CommandResult(
+                        argv=argv,
+                        exit_code=1,
+                        stderr="No such container",
+                    )
+                return CommandResult(argv=argv, exit_code=0)
+
+        with TemporaryDirectory() as raw_dir:
+            executor = LifecycleExecutor()
+            checkpoint_root = Path(raw_dir) / "ucloud-checkpoints"
+            runtime = DockerGvisorRuntime(
+                executor=executor,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=checkpoint_root,
+                checkpoint_helper="/checkpoint-helper",
+                checkpoint_helper_sudo=False,
+            )
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                runtime,
+            )
+            spec = SandboxSpec(
+                id="forkable",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+
+            record, _result = manager.create(spec)
+            manager.delete(spec.id)
+
+        application_id = application_checkpoint_id(
+            spec.id,
+            record.generation,
+            record.spec_hash,
+        )
+        app_prepare = ("/checkpoint-helper", "app-prepare", application_id)
+        app_drop = ("/checkpoint-helper", "app-drop", application_id)
+        self.assertIn(app_prepare, executor.commands)
+        self.assertIn(app_drop, executor.commands)
+        create = next(
+            command for command in executor.commands if command[:2] == ("docker", "run")
+        )
+        self.assertIn(
+            "dev.gvisor.internal.checkpoint.path="
+            f"{checkpoint_root}/application/{application_id}",
+            create,
+        )
+        self.assertLess(
+            executor.commands.index(app_prepare), executor.commands.index(create)
+        )
+        remove = next(
+            command for command in executor.commands if command[:2] == ("docker", "rm")
+        )
+        self.assertLess(
+            executor.commands.index(remove), executor.commands.index(app_drop)
+        )
+
+    def test_fork_ready_hook_must_acknowledge_exact_nonce_and_role(self) -> None:
+        spec = SandboxSpec(
+            id="child",
+            image="busybox",
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        expected = f"UCLOUD_FORK_READY={FORK_NONCE}:restore\n"
+        runtime = DockerGvisorRuntime(
+            executor=RecordingExecutor(stdout=expected),
+        )
+
+        result = runtime.wait_fork_ready(
+            spec,
+            checkpoint_id="fork-artifact-1",
+            fork_nonce=FORK_NONCE,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.argv[-3:], ("fork-artifact-1", FORK_NONCE, "restore"))
+
+        rejected = DockerGvisorRuntime(
+            executor=RecordingExecutor(stdout="UCLOUD_FORK_READY=stale:restore\n"),
+        )
+        with self.assertRaisesRegex(RuntimeError, "no nonce acknowledgment"):
+            rejected.wait_fork_ready(
+                spec,
+                checkpoint_id="fork-artifact-1",
+                fork_nonce=FORK_NONCE,
+            )
+
+        overflowed = DockerGvisorRuntime(
+            executor=RecordingExecutor(exit_code=125),
+        )
+        with self.assertRaises(SandboxForkCommandTimeoutError):
+            overflowed.wait_fork_ready(
+                spec,
+                checkpoint_id="fork-artifact-1",
+                fork_nonce=FORK_NONCE,
+            )
+
+    def test_live_fork_builds_checkpoint_reflink_restore_sequence(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox:latest",
+            command=("sh", "-c", "while :; do sleep 1; done"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(
+            source,
+            {"id": "child", "env": {"AGENT_BRANCH": "child"}},
+        )
+        operation = _create_operation(target, 4, "fork-child-4")
+        runtime = DockerGvisorRuntime(
+            dry_run=True,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        result = runtime.fork(
+            source,
+            target,
+            operation,
+            source_generation=3,
+            source_spec_hash=sandbox_spec_fingerprint(source),
+            checkpoint_id="fork-artifact-1",
+            fork_nonce=FORK_NONCE,
+        )
+
+        commands = result.commands
+        self.assertTrue(
+            any(command[1:3] == ("checkpoint", "create") for command in commands)
+        )
+        create = next(
+            command for command in commands if command[:2] == ("docker", "create")
+        )
+        self.assertIn("sha256:" + "0" * 64, create)
+        self.assertIn("UCLOUD_SANDBOX_FORK_PARENT=parent", create)
+        self.assertIn("UCLOUD_SANDBOX_ID=child", create)
+        self.assertIn(f"UCLOUD_SANDBOX_FORK_NONCE={FORK_NONCE}", create)
+        self.assertEqual(create[create.index("--runtime") + 1], "runsc-restore")
+        self.assertIn(
+            "dev.ucloud.sandboxes.restore.checkpoint=state",
+            create,
+        )
+        helper_prepare = next(
+            command
+            for command in commands
+            if "/usr/local/libexec/ucloud-sandbox-checkpoint" in command
+            and "prepare" in command
+        )
+        self.assertEqual(helper_prepare[-4:], ("128", "1024", "64", "16"))
+        self.assertTrue(any("stage" in command for command in commands))
+        self.assertTrue(
+            any(
+                command[:2] == ("docker", "start")
+                for command in commands
+            )
+        )
+        prepare_index = next(
+            index
+            for index, command in enumerate(commands)
+            if "/usr/local/bin/ucloud-fork-agent" in command
+            and command[-1] == "prepare"
+        )
+        storage_prepare_index = commands.index(helper_prepare)
+        checkpoint_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[1:3] == ("checkpoint", "create")
+        )
+        resume_index = next(
+            index
+            for index, command in enumerate(commands)
+            if "/usr/local/bin/ucloud-fork-agent" in command and command[-1] == "resume"
+        )
+        start_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[:2] == ("docker", "start")
+        )
+        restore_index = next(
+            index
+            for index, command in enumerate(commands)
+            if "/usr/local/bin/ucloud-fork-agent" in command
+            and command[-1] == "restore"
+        )
+        self.assertLess(storage_prepare_index, prepare_index)
+        self.assertLess(prepare_index, checkpoint_index)
+        self.assertLess(checkpoint_index, resume_index)
+        self.assertLess(resume_index, start_index)
+        self.assertLess(start_index, restore_index)
+
+    def test_live_fork_fanout_captures_source_once_for_all_children(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox:latest",
+            command=("sh", "-c", "while :; do sleep 1; done"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        targets = (
+            sandbox_fork_target(source, {"id": "child-a"}),
+            sandbox_fork_target(source, {"id": "child-b"}),
+            sandbox_fork_target(source, {"id": "child-c"}),
+        )
+        operations = tuple(
+            _create_operation(target, 4, f"fork-{target.id}-4") for target in targets
+        )
+        runtime = DockerGvisorRuntime(
+            dry_run=True,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        results = runtime.fork_many(
+            source,
+            tuple(zip(targets, operations, strict=True)),
+            source_generation=3,
+            source_spec_hash=sandbox_spec_fingerprint(source),
+            checkpoint_id="fork-set-artifact-1",
+            fork_nonce=FORK_NONCE,
+        )
+
+        commands = [command for result in results for command in result.commands]
+        self.assertEqual(
+            sum(command[1:3] == ("checkpoint", "create") for command in commands),
+            1,
+        )
+        self.assertEqual(
+            sum(
+                command[:2] == ("docker", "start")
+                for command in commands
+            ),
+            3,
+        )
+        self.assertEqual(sum("stage" in command for command in commands), 3)
+        self.assertEqual(
+            {result.checkpoint_id for result in results},
+            {"fork-set-artifact-1"},
+        )
+        checkpoint_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[1:3] == ("checkpoint", "create")
+        )
+        complete_index = next(
+            index for index, command in enumerate(commands) if "complete" in command
+        )
+        seal_index = next(
+            index for index, command in enumerate(commands) if "seal" in command
+        )
+        self.assertLess(checkpoint_index, complete_index)
+        self.assertLess(complete_index, seal_index)
+
+    def test_live_fork_fanout_restores_in_bounded_parallel_request_order(self) -> None:
+        class ParallelForkRuntime(DockerGvisorRuntime):
+            def __init__(self) -> None:
+                super().__init__(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=Path("/checkpoints"),
+                    fork_restore_parallelism=8,
+                )
+                self.guard = Lock()
+                self.first_wave = Barrier(8)
+                self.capture_count = 0
+                self.capture_complete = False
+                self.active = 0
+                self.max_active = 0
+
+            def fork(  # type: ignore[override]
+                self,
+                source: SandboxSpec,
+                target: SandboxSpec,
+                operation: SandboxOperation,
+                **kwargs: object,
+            ) -> SandboxForkRuntimeResult:
+                del source, operation
+                if kwargs.get("_capture_only"):
+                    with self.guard:
+                        self.capture_count += 1
+                        self.capture_complete = True
+                    return SandboxForkRuntimeResult(
+                        checkpoint_id=str(kwargs["checkpoint_id"]),
+                        commands=(("capture",),),
+                    )
+                with self.guard:
+                    self.assert_capture_complete()
+                    self.active += 1
+                    self.max_active = max(self.max_active, self.active)
+                try:
+                    index = int(target.id.removeprefix("child-"))
+                    if index < 8:
+                        self.first_wave.wait(timeout=1)
+                    time.sleep(0.005 * (1 + index % 3))
+                finally:
+                    with self.guard:
+                        self.active -= 1
+                return SandboxForkRuntimeResult(
+                    checkpoint_id=str(kwargs["checkpoint_id"]),
+                    commands=(("restore", target.id),),
+                )
+
+            def assert_capture_complete(self) -> None:
+                if not self.capture_complete:
+                    raise AssertionError("restore started before checkpoint capture")
+
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            memory_mb=128,
+            disk_mb=128,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        targets = tuple(
+            sandbox_fork_target(source, {"id": f"child-{index}"}) for index in range(10)
+        )
+        operations = tuple(
+            _create_operation(target, 4, f"fork-{target.id}-4") for target in targets
+        )
+        runtime = ParallelForkRuntime()
+
+        results = runtime.fork_many(
+            source,
+            tuple(zip(targets, operations, strict=True)),
+            source_generation=3,
+            source_spec_hash=sandbox_spec_fingerprint(source),
+            checkpoint_id="fork-set-parallel",
+            fork_nonce=FORK_NONCE,
+        )
+
+        self.assertEqual(runtime.capture_count, 1)
+        self.assertEqual(runtime.max_active, 8)
+        self.assertEqual(
+            [result.commands[-1][-1] for result in results],
+            [target.id for target in targets],
+        )
+        self.assertEqual(results[0].commands[0], ("capture",))
+
+    def test_live_fork_fanout_stops_scheduling_after_restore_failure(self) -> None:
+        class FailingParallelRuntime(DockerGvisorRuntime):
+            def __init__(self) -> None:
+                super().__init__(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=Path("/checkpoints"),
+                    fork_restore_parallelism=8,
+                )
+                self.guard = Lock()
+                self.started: list[str] = []
+                self.first_started = Event()
+
+            def fork(  # type: ignore[override]
+                self,
+                source: SandboxSpec,
+                target: SandboxSpec,
+                operation: SandboxOperation,
+                **kwargs: object,
+            ) -> SandboxForkRuntimeResult:
+                del source, operation
+                if kwargs.get("_capture_only"):
+                    return SandboxForkRuntimeResult(
+                        checkpoint_id=str(kwargs["checkpoint_id"]),
+                        commands=(("capture",),),
+                    )
+                with self.guard:
+                    self.started.append(target.id)
+                if target.id == "child-0":
+                    self.first_started.set()
+                    time.sleep(0.05)
+                elif target.id == "child-1":
+                    self.first_started.wait(timeout=1)
+                    raise RuntimeError("restore rejected")
+                else:
+                    time.sleep(0.05)
+                return SandboxForkRuntimeResult(
+                    checkpoint_id=str(kwargs["checkpoint_id"]),
+                    commands=(("restore", target.id),),
+                )
+
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            memory_mb=128,
+            disk_mb=128,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        targets = tuple(
+            sandbox_fork_target(source, {"id": f"child-{index}"}) for index in range(10)
+        )
+        operations = tuple(
+            _create_operation(target, 4, f"fork-{target.id}-4") for target in targets
+        )
+        runtime = FailingParallelRuntime()
+
+        with self.assertRaisesRegex(RuntimeError, "restore rejected"):
+            runtime.fork_many(
+                source,
+                tuple(zip(targets, operations, strict=True)),
+                source_generation=3,
+                source_spec_hash=sandbox_spec_fingerprint(source),
+                checkpoint_id="fork-set-failure",
+                fork_nonce=FORK_NONCE,
+            )
+
+        self.assertNotIn("child-8", runtime.started)
+        self.assertNotIn("child-9", runtime.started)
+
+    def test_live_fork_deadlines_and_parallelism_are_bounded(self) -> None:
+        class DeadlineExecutor(RecordingExecutor):
+            def __init__(self) -> None:
+                super().__init__()
+                self.timeouts: list[float] = []
+
+            def run_with_timeout(
+                self,
+                argv: tuple[str, ...],
+                *,
+                timeout_seconds: float,
+                input: bytes | None = None,
+            ) -> CommandResult:
+                self.timeouts.append(timeout_seconds)
+                return self.run(argv, input=input)
+
+        self.assertEqual(DEFAULT_FORK_RESTORE_PARALLELISM, 8)
+        coupled_child_seconds = max(
+            (
+                (recovered + DEFAULT_FORK_RESTORE_PARALLELISM - 1)
+                // DEFAULT_FORK_RESTORE_PARALLELISM
+            )
+            * MAX_FORK_PROTOCOL_TIMEOUT_SECONDS
+            + (
+                (
+                    MAX_FORK_FANOUT
+                    - recovered
+                    + DEFAULT_FORK_RESTORE_PARALLELISM
+                    - 1
+                )
+                // DEFAULT_FORK_RESTORE_PARALLELISM
+            )
+            * (
+                FORK_CHILD_SETUP_ALLOWANCE_SECONDS
+                + MAX_FORK_RESTORE_TIMEOUT_SECONDS
+                + MAX_FORK_PROTOCOL_TIMEOUT_SECONDS
+            )
+            for recovered in range(MAX_FORK_FANOUT + 1)
+        )
+        self.assertEqual(coupled_child_seconds, 37 * 60)
+        self.assertEqual(FORK_REQUEST_TIMEOUT_SECONDS, 55 * 60)
+        executor = DeadlineExecutor()
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            fork_command_timeout_seconds=MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS,
+            fork_restore_timeout_seconds=MAX_FORK_RESTORE_TIMEOUT_SECONDS,
+            fork_restore_parallelism=MAX_FORK_RESTORE_PARALLELISM,
+        )
+        self.assertEqual(
+            runtime.fork_command_timeout_seconds,
+            MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            runtime.fork_restore_timeout_seconds,
+            MAX_FORK_RESTORE_TIMEOUT_SECONDS,
+        )
+        runtime._run_fork_command(("docker", "checkpoint"), phase="checkpoint")
+        runtime._run_fork_command(("docker", "start"), phase="restore")
+        self.assertEqual(
+            executor.timeouts,
+            [
+                float(MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS),
+                float(MAX_FORK_RESTORE_TIMEOUT_SECONDS),
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "checkpoint timeout"):
+            DockerGvisorRuntime(
+                fork_command_timeout_seconds=MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS + 1
+            )
+        with self.assertRaisesRegex(ValueError, "restore timeout"):
+            DockerGvisorRuntime(
+                fork_restore_timeout_seconds=MAX_FORK_RESTORE_TIMEOUT_SECONDS + 1
+            )
+        with self.assertRaisesRegex(ValueError, "parallelism"):
+            DockerGvisorRuntime(
+                fork_restore_parallelism=MAX_FORK_RESTORE_PARALLELISM + 1
+            )
+        with self.assertRaisesRegex(ValueError, "parallelism"):
+            DockerGvisorRuntime(
+                fork_restore_parallelism=DEFAULT_FORK_RESTORE_PARALLELISM - 1
+            )
+        with self.assertRaisesRegex(ValueError, r"\[1, 60\]"):
+            replace(FORK_PROTOCOL, timeout_seconds=61).validate(required=True)
+
+    def test_live_fork_setup_timeout_cleans_stage_but_preserves_ambiguous_create(
+        self,
+    ) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            memory_mb=128,
+            disk_mb=128,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+        operation = _create_operation(target, 4, "fork-child-4")
+
+        class SetupTimeoutExecutor:
+            def __init__(self, timeout_phase: str) -> None:
+                self.timeout_phase = timeout_phase
+                self.commands: list[tuple[str, ...]] = []
+                self.timeouts: list[float] = []
+
+            def _result(self, argv: tuple[str, ...]) -> CommandResult:
+                if argv[:2] == ("docker", "inspect"):
+                    template = argv[3]
+                    sandbox_name = argv[-1]
+                    if template == "{{json .Config.Labels}}":
+                        if sandbox_name.endswith("parent"):
+                            return CommandResult(
+                                argv=argv,
+                                exit_code=0,
+                                stdout=json.dumps(
+                                    {
+                                        "ucloud-sandboxes.managed": "true",
+                                        "ucloud-sandboxes.sandbox-id": source.id,
+                                        SANDBOX_GENERATION_LABEL: "3",
+                                        SANDBOX_OPERATION_ID_LABEL: "source-create-3",
+                                        SANDBOX_SPEC_HASH_LABEL: source_hash,
+                                    }
+                                ),
+                            )
+                        return CommandResult(
+                            argv=argv,
+                            exit_code=1,
+                            stderr="No such container",
+                        )
+                    if template == "{{.State.Running}}":
+                        return CommandResult(argv=argv, exit_code=0, stdout="true")
+                    if template == "{{.Id}} {{.Image}}":
+                        container_id = (
+                            "1" * 64 if sandbox_name.endswith("parent") else "3" * 64
+                        )
+                        return CommandResult(
+                            argv=argv,
+                            exit_code=0,
+                            stdout=f"{container_id} sha256:{'2' * 64}",
+                        )
+                helper_path = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+                if helper_path in argv:
+                    action = argv[argv.index(helper_path) + 1]
+                    if action == "status":
+                        return CommandResult(
+                            argv=argv,
+                            exit_code=0,
+                            stdout=json.dumps(
+                                {
+                                    "artifact_id": "fork-setup-timeout",
+                                    "checkpoint_id": "state",
+                                    "source_container_id": "1" * 64,
+                                    "source_image_id": "sha256:" + "2" * 64,
+                                    "source_spec_hash": source_hash,
+                                }
+                            ),
+                        )
+                    return CommandResult(argv=argv, exit_code=0)
+                if argv[:2] == ("docker", "exec"):
+                    role = argv[-1]
+                    return CommandResult(
+                        argv=argv,
+                        exit_code=0,
+                        stdout=f"UCLOUD_FORK_READY={FORK_NONCE}:{role}\n",
+                    )
+                if argv[:2] == ("docker", "create"):
+                    return CommandResult(argv=argv, exit_code=0, stdout="3" * 64)
+                return CommandResult(argv=argv, exit_code=0)
+
+            def run(
+                self,
+                argv: tuple[str, ...],
+                *,
+                input: bytes | None = None,
+            ) -> CommandResult:
+                del input
+                self.commands.append(argv)
+                return self._result(argv)
+
+            def run_with_timeout(
+                self,
+                argv: tuple[str, ...],
+                *,
+                timeout_seconds: float,
+                input: bytes | None = None,
+            ) -> CommandResult:
+                del input
+                self.commands.append(argv)
+                self.timeouts.append(timeout_seconds)
+                helper_path = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+                helper_action = (
+                    argv[argv.index(helper_path) + 1] if helper_path in argv else ""
+                )
+                if (
+                    self.timeout_phase == "create" and argv[:2] == ("docker", "create")
+                ) or (self.timeout_phase == "stage" and helper_action == "stage"):
+                    return CommandResult(argv=argv, exit_code=124, stderr="timed out")
+                return self._result(argv)
+
+        for timeout_phase in ("create", "stage"):
+            with self.subTest(timeout_phase=timeout_phase):
+                executor = SetupTimeoutExecutor(timeout_phase)
+                runtime = DockerGvisorRuntime(
+                    executor=executor,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+                )
+
+                with self.assertRaises(SandboxForkCommandTimeoutError):
+                    runtime.fork(
+                        source,
+                        target,
+                        operation,
+                        source_generation=3,
+                        source_operation_id="source-create-3",
+                        source_spec_hash=source_hash,
+                        checkpoint_id="fork-setup-timeout",
+                        fork_nonce=FORK_NONCE,
+                    )
+
+                helper_actions = [
+                    command[
+                        command.index("/usr/local/libexec/ucloud-sandbox-checkpoint")
+                        + 1
+                    ]
+                    for command in executor.commands
+                    if "/usr/local/libexec/ucloud-sandbox-checkpoint" in command
+                ]
+                removed = any(
+                    command[:3] == ("docker", "rm", "-f")
+                    for command in executor.commands
+                )
+                if timeout_phase == "stage":
+                    self.assertIn("unstage", helper_actions)
+                    self.assertTrue(removed)
+                else:
+                    self.assertNotIn("unstage", helper_actions)
+                    self.assertFalse(removed)
+                self.assertFalse(
+                    any(
+                        command[:2] == ("docker", "start")
+                        for command in executor.commands
+                    )
+                )
+
+    def test_live_fork_rejects_changed_source_runtime_identity(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+        executor = RecordingExecutor(
+            stdout=json.dumps(
+                {
+                    "ucloud-sandboxes.managed": "true",
+                    "ucloud-sandboxes.sandbox-id": source.id,
+                    SANDBOX_GENERATION_LABEL: "99",
+                    SANDBOX_OPERATION_ID_LABEL: "replacement",
+                    SANDBOX_SPEC_HASH_LABEL: source_hash,
+                }
+            )
+        )
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        with self.assertRaisesRegex(
+            SandboxStaleOperationError, "source runtime identity changed"
+        ):
+            runtime.fork(
+                source,
+                target,
+                _create_operation(target, 4, "fork-child-4"),
+                source_generation=3,
+                source_operation_id="source-create-3",
+                source_spec_hash=source_hash,
+                checkpoint_id="fork-artifact-identity",
+                fork_nonce=FORK_NONCE,
+            )
+
+        self.assertFalse(
+            any(
+                command[1:3] == ("checkpoint", "create")
+                for command in executor.commands
+            )
+        )
+
+    def test_known_checkpoint_failure_cancels_quiesce_before_drop(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+        executor = ForkCaptureFailureExecutor(source, source_hash, timeout=False)
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "checkpoint failed"):
+            runtime.fork(
+                source,
+                target,
+                _create_operation(target, 4, "fork-child-4"),
+                source_generation=3,
+                source_operation_id="source-create-3",
+                source_spec_hash=source_hash,
+                checkpoint_id="fork-artifact-failure",
+                fork_nonce=FORK_NONCE,
+            )
+
+        commands = executor.commands
+        helper_path = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+        helper_prepare_index = next(
+            index
+            for index, command in enumerate(commands)
+            if helper_path in command
+            and command[command.index(helper_path) + 1] == "prepare"
+        )
+        protocol_prepare_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[:2] == ("docker", "exec") and command[-1] == "prepare"
+        )
+        checkpoint_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[:3] == ("docker", "checkpoint", "create")
+        )
+        cancel_index = next(
+            index
+            for index, command in enumerate(commands)
+            if command[:2] == ("docker", "exec") and command[-1] == "cancel"
+        )
+        final_drop_index = max(
+            index
+            for index, command in enumerate(commands)
+            if helper_path in command
+            and command[command.index(helper_path) + 1] == "drop"
+        )
+        self.assertEqual(
+            commands[helper_prepare_index][-4:],
+            ("128", "1024", "64", "16"),
+        )
+        self.assertLess(helper_prepare_index, protocol_prepare_index)
+        self.assertLess(protocol_prepare_index, checkpoint_index)
+        self.assertLess(checkpoint_index, cancel_index)
+        self.assertLess(cancel_index, final_drop_index)
+
+    def test_checkpoint_timeout_keeps_quiesce_and_pending_artifact(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+        executor = ForkCaptureFailureExecutor(source, source_hash, timeout=True)
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        with self.assertRaises(SandboxForkCommandTimeoutError):
+            runtime.fork(
+                source,
+                target,
+                _create_operation(target, 4, "fork-child-4"),
+                source_generation=3,
+                source_operation_id="source-create-3",
+                source_spec_hash=source_hash,
+                checkpoint_id="fork-artifact-timeout",
+                fork_nonce=FORK_NONCE,
+            )
+
+        helper_path = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+        helper_actions = [
+            command[command.index(helper_path) + 1]
+            for command in executor.commands
+            if helper_path in command
+        ]
+        self.assertEqual(helper_actions, ["status", "drop", "prepare"])
+        self.assertFalse(
+            any(
+                command[:2] == ("docker", "exec") and command[-1] == "cancel"
+                for command in executor.commands
+            )
+        )
+
+    def test_checkpoint_output_overflow_is_also_ambiguous(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+        executor = ForkCaptureFailureExecutor(
+            source,
+            source_hash,
+            timeout=True,
+            ambiguous_exit_code=125,
+        )
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        with self.assertRaises(SandboxForkCommandTimeoutError):
+            runtime.fork(
+                source,
+                target,
+                _create_operation(target, 4, "fork-child-overflow-4"),
+                source_generation=3,
+                source_operation_id="source-create-3",
+                source_spec_hash=source_hash,
+                checkpoint_id="fork-artifact-output-overflow",
+                fork_nonce=FORK_NONCE,
+            )
+
+        self.assertFalse(
+            any(
+                command[:2] == ("docker", "exec") and command[-1] == "cancel"
+                for command in executor.commands
+            )
+        )
+        helper_path = "/usr/local/libexec/ucloud-sandbox-checkpoint"
+        self.assertEqual(
+            [
+                command[command.index(helper_path) + 1]
+                for command in executor.commands
+                if helper_path in command
+            ],
+            ["status", "drop", "prepare"],
+        )
+
+    def test_live_fork_never_recaptures_ambiguous_pending_checkpoint(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+        target = sandbox_fork_target(source, {"id": "child"})
+        source_hash = sandbox_spec_fingerprint(source)
+
+        class PendingCheckpointExecutor:
+            def __init__(self) -> None:
+                self.commands: list[tuple[str, ...]] = []
+
+            def run(
+                self,
+                argv: tuple[str, ...],
+                *,
+                input: bytes | None = None,
+            ) -> CommandResult:
+                del input
+                self.commands.append(argv)
+                if argv[:2] == ("docker", "inspect"):
+                    template = argv[3]
+                    if template == "{{json .Config.Labels}}":
+                        return CommandResult(
+                            argv=argv,
+                            exit_code=0,
+                            stdout=json.dumps(
+                                {
+                                    "ucloud-sandboxes.managed": "true",
+                                    "ucloud-sandboxes.sandbox-id": source.id,
+                                    SANDBOX_GENERATION_LABEL: "3",
+                                    SANDBOX_OPERATION_ID_LABEL: "source-create-3",
+                                    SANDBOX_SPEC_HASH_LABEL: source_hash,
+                                }
+                            ),
+                        )
+                    if template == "{{.State.Running}}":
+                        return CommandResult(argv=argv, exit_code=0, stdout="true")
+                    if template == "{{.Id}} {{.Image}}":
+                        return CommandResult(
+                            argv=argv,
+                            exit_code=0,
+                            stdout=("1" * 64 + " sha256:" + "2" * 64),
+                        )
+                if "status" in argv:
+                    return CommandResult(argv=argv, exit_code=3)
+                if "seal" in argv:
+                    return CommandResult(
+                        argv=argv,
+                        exit_code=2,
+                        stderr="completion marker is missing",
+                    )
+                return CommandResult(argv=argv, exit_code=0)
+
+        executor = PendingCheckpointExecutor()
+        runtime = DockerGvisorRuntime(
+            executor=executor,
+            allow_storage_opt_quota=True,
+            fork_enabled=True,
+            checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "refusing to recapture"):
+            runtime.fork(
+                source,
+                target,
+                _create_operation(target, 4, "fork-child-4"),
+                source_generation=3,
+                source_operation_id="source-create-3",
+                source_spec_hash=source_hash,
+                checkpoint_id="fork-artifact-pending",
+                fork_nonce=FORK_NONCE,
+            )
+
+        self.assertFalse(any("drop" in command for command in executor.commands))
+        self.assertFalse(
+            any(
+                command[1:3] == ("checkpoint", "create")
+                for command in executor.commands
+            )
+        )
+
+    def test_manager_fanout_persists_all_intents_with_one_checkpoint(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=Path(raw_dir) / "checkpoints",
+            )
+            manager = SandboxManager(store, runtime)
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            targets = (
+                sandbox_fork_target(source, {"id": "child-a"}),
+                sandbox_fork_target(source, {"id": "child-b"}),
+            )
+
+            records, results = manager.fork_many(source.id, targets)
+
+            checkpoint_ids = {record.checkpoint_id for record in records}
+            fork_nonces = {record.fork_nonce for record in records}
+            self.assertEqual(len(checkpoint_ids), 1)
+            self.assertEqual(len(fork_nonces), 1)
+            self.assertRegex(next(iter(fork_nonces)), r"^[0-9a-f]{64}$")
+            self.assertTrue(next(iter(checkpoint_ids)).startswith("fork-set-"))
+            self.assertEqual({record.state for record in records}, {"running"})
+            persisted = store.load_state().records
+            self.assertEqual(
+                {persisted[target.id].checkpoint_id for target in targets},
+                checkpoint_ids,
+            )
+            self.assertEqual(
+                {persisted[target.id].fork_nonce for target in targets},
+                fork_nonces,
+            )
+            commands = [command for result in results for command in result.commands]
+            self.assertEqual(
+                sum(command[1:3] == ("checkpoint", "create") for command in commands),
+                1,
+            )
+
+            replayed, replay_result = manager.fork(source.id, targets[0])
+            self.assertEqual(replayed.checkpoint_id, next(iter(checkpoint_ids)))
+            self.assertEqual(replay_result.checkpoint_id, replayed.checkpoint_id)
+
+    def test_manager_recovery_is_bounded_parallel_ordered_and_fail_safe(self) -> None:
+        class RecoveryRuntime(DockerGvisorRuntime):
+            def __init__(self, checkpoint_root: Path) -> None:
+                super().__init__(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=checkpoint_root,
+                    fork_restore_parallelism=8,
+                )
+                self.guard = Lock()
+                self.mode = "create"
+                self.identities: dict[str, tuple[int, str, str]] = {}
+                self.inspect_barrier = Barrier(8)
+                self.ready_barrier = Barrier(8)
+                self.failure_started = Event()
+                self.inspect_active = 0
+                self.ready_active = 0
+                self.max_inspect_active = 0
+                self.max_ready_active = 0
+                self.inspect_budgets: list[float] = []
+                self.ready_started: list[str] = []
+
+            def managed_container_identity(  # type: ignore[override]
+                self,
+                sandbox_id: str,
+                **kwargs: object,
+            ) -> tuple[int, str, str] | None:
+                if self.mode == "create":
+                    return None
+                budget = kwargs.get("_fork_setup_budget")
+                with self.guard:
+                    self.inspect_active += 1
+                    self.max_inspect_active = max(
+                        self.max_inspect_active,
+                        self.inspect_active,
+                    )
+                    self.inspect_budgets.append(
+                        float(getattr(budget, "limit_seconds"))
+                    )
+                try:
+                    index = int(sandbox_id.removeprefix("child-"))
+                    if index < 8:
+                        self.inspect_barrier.wait(timeout=1)
+                    time.sleep(0.002 * (index % 3))
+                    return self.identities[sandbox_id]
+                finally:
+                    with self.guard:
+                        self.inspect_active -= 1
+
+            def managed_container_running(  # type: ignore[override]
+                self,
+                sandbox_id: str,
+                **_kwargs: object,
+            ) -> bool:
+                return self.mode != "create" and sandbox_id in self.identities
+
+            def wait_fork_ready(  # type: ignore[override]
+                self,
+                spec: SandboxSpec,
+                *,
+                checkpoint_id: str,
+                fork_nonce: str,
+            ) -> CommandResult:
+                if self.mode == "create":
+                    return super().wait_fork_ready(
+                        spec,
+                        checkpoint_id=checkpoint_id,
+                        fork_nonce=fork_nonce,
+                    )
+                with self.guard:
+                    self.ready_started.append(spec.id)
+                    self.ready_active += 1
+                    self.max_ready_active = max(
+                        self.max_ready_active,
+                        self.ready_active,
+                    )
+                try:
+                    if self.mode == "failure":
+                        if spec.id == "child-1":
+                            self.failure_started.set()
+                            raise RuntimeError("recovery readiness rejected")
+                        self.failure_started.wait(timeout=1)
+                        time.sleep(0.05)
+                    else:
+                        index = int(spec.id.removeprefix("child-"))
+                        if index < 8:
+                            self.ready_barrier.wait(timeout=1)
+                        time.sleep(0.002 * (2 - index % 3))
+                    return CommandResult(
+                        argv=("ready", spec.id),
+                        exit_code=0,
+                    )
+                finally:
+                    with self.guard:
+                        self.ready_active -= 1
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = RecoveryRuntime(Path(raw_dir) / "checkpoints")
+            manager = SandboxManager(store, runtime)
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            targets = tuple(
+                sandbox_fork_target(source, {"id": f"child-{index}"})
+                for index in range(10)
+            )
+            created, _results = manager.fork_many(source.id, targets)
+            runtime.identities = {
+                record.spec.id: (
+                    record.generation,
+                    record.operation_id,
+                    record.spec_hash,
+                )
+                for record in created
+            }
+
+            state = store.load_state()
+            for record in created:
+                state.records[record.spec.id] = replace(record, state="restoring")
+            store.save_state(state.records, state.tombstones)
+            runtime.mode = "success"
+
+            recovered, results, timings = manager.fork_many_with_timings(
+                source.id,
+                targets,
+            )
+
+            self.assertEqual([record.spec.id for record in recovered], [
+                target.id for target in targets
+            ])
+            self.assertTrue(all(result.commands == () for result in results))
+            self.assertEqual(runtime.max_inspect_active, 8)
+            self.assertEqual(runtime.max_ready_active, 8)
+            self.assertTrue(runtime.inspect_budgets)
+            self.assertTrue(
+                all(0 < budget <= 30 for budget in runtime.inspect_budgets)
+            )
+            self.assertIn("recover_inspect_ms", timings["phases"])
+            self.assertIn("recover_ready_ms", timings["phases"])
+
+            state = store.load_state()
+            for record in recovered:
+                state.records[record.spec.id] = replace(record, state="restoring")
+            store.save_state(state.records, state.tombstones)
+            runtime.mode = "failure"
+            runtime.inspect_barrier = Barrier(8)
+            runtime.failure_started = Event()
+            runtime.ready_started.clear()
+
+            with self.assertRaisesRegex(RuntimeError, "readiness rejected"):
+                manager.fork_many(source.id, targets)
+
+            self.assertNotIn("child-8", runtime.ready_started)
+            self.assertNotIn("child-9", runtime.ready_started)
+            persisted = store.load_state().records
+            self.assertEqual(
+                {persisted[target.id].state for target in targets},
+                {"restoring"},
+            )
+
+    def test_manager_post_commit_cleanup_has_one_wall_clock_budget(self) -> None:
+        class SlowCleanupRuntime(DockerGvisorRuntime):
+            def __init__(self, checkpoint_root: Path) -> None:
+                super().__init__(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=checkpoint_root,
+                    fork_restore_parallelism=8,
+                )
+                self.guard = Lock()
+                self.cleanup_calls = 0
+                self.cleanup_active = 0
+                self.max_cleanup_active = 0
+                self.cleanup_budgets: list[float] = []
+                self.release_budgets: list[float] = []
+
+            def cleanup_restored_checkpoint(  # type: ignore[override]
+                self,
+                sandbox_id: str,
+                **kwargs: object,
+            ) -> CommandResult:
+                budget = kwargs["_fork_setup_budget"]
+                remaining = float(getattr(budget, "remaining_seconds"))
+                with self.guard:
+                    self.cleanup_calls += 1
+                    self.cleanup_active += 1
+                    self.max_cleanup_active = max(
+                        self.max_cleanup_active,
+                        self.cleanup_active,
+                    )
+                    self.cleanup_budgets.append(remaining)
+                try:
+                    time.sleep(remaining)
+                finally:
+                    with self.guard:
+                        self.cleanup_active -= 1
+                return CommandResult(argv=("cleanup", sandbox_id), exit_code=0)
+
+            def release_checkpoint(  # type: ignore[override]
+                self,
+                checkpoint_id: str,
+                **kwargs: object,
+            ) -> CommandResult:
+                budget = kwargs["_fork_setup_budget"]
+                remaining = float(getattr(budget, "remaining_seconds"))
+                self.release_budgets.append(remaining)
+                time.sleep(remaining)
+                return CommandResult(argv=("release", checkpoint_id), exit_code=0)
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = SlowCleanupRuntime(Path(raw_dir) / "checkpoints")
+            manager = SandboxManager(store, runtime)
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            targets = tuple(
+                sandbox_fork_target(source, {"id": f"child-{index}"})
+                for index in range(16)
+            )
+
+            started = time.monotonic()
+            with patch(
+                "ucloud_sandboxes.sandbox.FORK_SETUP_CLEANUP_ALLOWANCE_SECONDS",
+                0.05,
+            ):
+                records, _results = manager.fork_many(source.id, targets)
+            elapsed = time.monotonic() - started
+
+            self.assertLess(elapsed, 0.3)
+            self.assertLess(runtime.cleanup_calls, len(targets))
+            self.assertEqual(runtime.max_cleanup_active, 8)
+            self.assertTrue(
+                all(0 < budget <= 0.05 for budget in runtime.cleanup_budgets)
+            )
+            self.assertTrue(
+                all(0 < budget <= 0.05 for budget in runtime.release_budgets)
+            )
+            self.assertEqual({record.state for record in records}, {"running"})
+
+    def test_shared_checkpoint_is_released_after_last_restore_intent(self) -> None:
+        class TrackingRuntime(DockerGvisorRuntime):
+            def __init__(self, checkpoint_root: Path) -> None:
+                super().__init__(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=checkpoint_root,
+                )
+                self.released: list[str] = []
+
+            def release_checkpoint(
+                self,
+                checkpoint_id: str,
+                **_kwargs: object,
+            ) -> CommandResult:
+                self.released.append(checkpoint_id)
+                return CommandResult(argv=("release", checkpoint_id), exit_code=0)
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = TrackingRuntime(Path(raw_dir) / "checkpoints")
+            manager = SandboxManager(store, runtime)
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            targets = (
+                sandbox_fork_target(source, {"id": "child-a"}),
+                sandbox_fork_target(source, {"id": "child-b"}),
+            )
+            records, _results = manager.fork_many(source.id, targets)
+            checkpoint_id = records[0].checkpoint_id
+            self.assertEqual(runtime.released, [checkpoint_id])
+
+            manager.delete("child-a")
+            self.assertEqual(runtime.released, [checkpoint_id, checkpoint_id])
+
+            manager.delete("child-b")
+            self.assertEqual(
+                runtime.released,
+                [checkpoint_id, checkpoint_id, checkpoint_id],
+            )
+
+    def test_manager_fanout_capacity_failure_persists_no_partial_intent(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=Path(raw_dir) / "checkpoints",
+            )
+            manager = SandboxManager(
+                store,
+                runtime,
+                effective_capacity=ResourceQuantity(memory_mb=300),
+            )
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            targets = (
+                sandbox_fork_target(source, {"id": "child-a", "memory_mb": 96}),
+                sandbox_fork_target(source, {"id": "child-b", "memory_mb": 96}),
+            )
+
+            with self.assertRaises(SandboxCapacityUnavailableError):
+                manager.fork_many(source.id, targets)
+
+            self.assertEqual(set(store.load_state().records), {source.id})
+
+    def test_manager_rejects_oversized_fanout_before_persisting_intents(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            manager = SandboxManager(
+                store,
+                DockerGvisorRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                    fork_enabled=True,
+                    checkpoint_root=Path(raw_dir) / "checkpoints",
+                ),
+            )
+            targets = tuple(
+                SandboxSpec(id=f"child-{index}", image="busybox") for index in range(65)
+            )
+
+            with self.assertRaisesRegex(ValueError, "cannot exceed 64"):
+                manager.fork_many("parent", targets)
+
+            self.assertEqual(store.load_state().records, {})
+
+    def test_fork_target_rejects_restore_incompatible_changes(self) -> None:
+        source = SandboxSpec(
+            id="parent",
+            image="busybox",
+            command=("sleep", "infinity"),
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        )
+
+        with self.assertRaisesRegex(ValueError, "restore-incompatible"):
+            sandbox_fork_target(
+                source,
+                {
+                    "sandbox": {
+                        **source.to_dict(),
+                        "id": "child",
+                        "command": ["echo", "fresh-process"],
+                    }
+                },
+            )
+
+    def test_fork_persists_restore_intent_and_exec_lease_blocks_it(self) -> None:
+        from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                fork_enabled=True,
+                checkpoint_root=Path(raw_dir) / "checkpoints",
+            )
+            manager = SandboxManager(store, runtime)
+            source = SandboxSpec(
+                id="parent",
+                image="busybox",
+                command=("sleep", "infinity"),
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            source_record, _result = manager.create(source)
+            store.upsert(replace(source_record, state="running"))
+            target = sandbox_fork_target(source, {"id": "child"})
+            sessions = ExecSessionManager(manager)
+            session = sessions.start(
+                SandboxExecSpec(
+                    sandbox_id=source.id,
+                    command=("sh",),
+                    stdin=True,
+                )
+            )
+
+            with self.assertRaises(SandboxBusyError):
+                manager.fork(source.id, target)
+
+            sessions.close_stdin(session.id)
+            record, fork_result = manager.fork(source.id, target)
+
+            self.assertEqual(record.state, "running")
+            self.assertEqual(record.creation_kind, "restore")
+            self.assertEqual(record.source_sandbox_id, source.id)
+            self.assertEqual(record.source_generation, source_record.generation)
+            self.assertEqual(record.checkpoint_id, fork_result.checkpoint_id)
+
+            self.assertEqual(
+                manager.require_activity_sandbox(source.id).state,
+                "running",
+            )
+            runtime.checkpoint_artifact_state = lambda _checkpoint: "pending"  # type: ignore[method-assign]
+            deleted, _delete_result = manager.delete(target.id)
+            self.assertIsNotNone(deleted)
+
     def test_drain_persists_replays_and_requires_matching_undrain_token(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "sandboxes.json"
@@ -55,7 +1642,9 @@ class SandboxRuntimeTests(unittest.TestCase):
 
             self.assertTrue(drained.ready)
             self.assertFalse(drained.drain.admission_open)
-            self.assertEqual(replay.activity.activity_revision, drained.activity.activity_revision)
+            self.assertEqual(
+                replay.activity.activity_revision, drained.activity.activity_revision
+            )
             persisted = SandboxStore(path).load_state().drain
             self.assertTrue(persisted.draining)
             self.assertEqual(persisted.token, "drain-1")
@@ -117,9 +1706,7 @@ class SandboxRuntimeTests(unittest.TestCase):
             replay, _result = manager.create(spec)
             self.assertEqual(replay, existing)
             with self.assertRaises(SandboxAdmissionClosedError):
-                manager.create(
-                    SandboxSpec(id="new", image="busybox", memory_mb=128)
-                )
+                manager.create(SandboxSpec(id="new", image="busybox", memory_mb=128))
             manager.delete(spec.id)
             ready = manager.heartbeat_snapshot(active_build_count=lambda: 0)
             self.assertTrue(ready.ready)
@@ -159,6 +1746,7 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertEqual([process.exitcode for process in processes], [0] * 4)
             self.assertEqual(outcomes, ["closed"] * 4)
             self.assertEqual(SandboxStore(path).load(), {})
+
     def test_runtime_command_carries_operation_identity_labels(self) -> None:
         spec = SandboxSpec(id="versioned", image="busybox", memory_mb=128)
         operation = _create_operation(spec, generation=7, operation_id="create-7")
@@ -386,7 +1974,9 @@ class SandboxRuntimeTests(unittest.TestCase):
                             {
                                 "ucloud-sandboxes.managed": "true",
                                 "ucloud-sandboxes.sandbox-id": self.spec.id,
-                                SANDBOX_GENERATION_LABEL: str(self.operation.generation),
+                                SANDBOX_GENERATION_LABEL: str(
+                                    self.operation.generation
+                                ),
                                 SANDBOX_OPERATION_ID_LABEL: self.operation.operation_id,
                                 SANDBOX_SPEC_HASH_LABEL: self.operation.spec_hash,
                             }
@@ -408,7 +1998,7 @@ class SandboxRuntimeTests(unittest.TestCase):
                 DockerGvisorRuntime(executor=executor),
             )
 
-            with self.assertRaisesRegex(RuntimeError, "response was lost"):
+            with self.assertRaisesRegex(RuntimeError, "failed with exit code 1"):
                 manager.create(spec, operation=operation)
 
             intent = SandboxStore(path).load()[spec.id]
@@ -462,7 +2052,7 @@ class SandboxRuntimeTests(unittest.TestCase):
                 SandboxStore(path),
                 DockerGvisorRuntime(executor=executor),
             )
-            with self.assertRaisesRegex(RuntimeError, "daemon unavailable"):
+            with self.assertRaisesRegex(RuntimeError, "failed with exit code 1"):
                 manager.create(spec, operation=operation)
             self.assertEqual(SandboxStore(path).load()[spec.id].state, "planned")
 
@@ -479,7 +2069,9 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertTrue(timings["idempotent"])
             self.assertEqual(executor.create_calls, 2)
 
-    def test_delete_replay_completes_durable_intent_after_runtime_crash_window(self) -> None:
+    def test_delete_replay_completes_durable_intent_after_runtime_crash_window(
+        self,
+    ) -> None:
         class FailSecondSaveStore(SandboxStore):
             def __init__(self, path: Path) -> None:
                 super().__init__(path)
@@ -571,6 +2163,7 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertEqual(outcomes.count("stale:1"), 3)
             record = SandboxStore(path).load()[spec.id]
             self.assertEqual(record.generation, 2)
+
     def test_delete_treats_missing_container_as_idempotent_success(self) -> None:
         executor = RecordingExecutor(
             exit_code=1,
@@ -604,7 +2197,9 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertEqual([record.spec.id for record in snapshot.records], ["one"])
             self.assertEqual(snapshot.activity_revision, 1)
 
-    def test_capacity_admission_counts_planned_records_and_preserves_replay(self) -> None:
+    def test_capacity_admission_counts_planned_records_and_preserves_replay(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw_dir:
             store = SandboxStore(Path(raw_dir) / "sandboxes.json")
             manager = SandboxManager(
@@ -753,7 +2348,9 @@ class SandboxRuntimeTests(unittest.TestCase):
                     with result_lock:
                         errors.append(exc)
 
-            threads = [Thread(target=create, args=(f"ssh-{index}",)) for index in range(2)]
+            threads = [
+                Thread(target=create, args=(f"ssh-{index}",)) for index in range(2)
+            ]
             for thread in threads:
                 thread.start()
             for thread in threads:
@@ -916,9 +2513,7 @@ class SandboxRuntimeTests(unittest.TestCase):
         self.assertIn("UCLOUD_SANDBOX_ENABLE_SSHD=1", argv)
         self.assertIn("UCLOUD_SANDBOX_SSH_PORT=22", argv)
         paths_env = next(
-            item
-            for item in argv
-            if item.startswith("UCLOUD_SANDBOX_LINUX_HOST_PATHS=")
+            item for item in argv if item.startswith("UCLOUD_SANDBOX_LINUX_HOST_PATHS=")
         )
         self.assertIn("/var/spool/cron", paths_env)
         self.assertIn("--entrypoint", argv)
@@ -950,7 +2545,9 @@ class SandboxRuntimeTests(unittest.TestCase):
         round_tripped = SandboxSpec.from_dict(raw)
 
         self.assertEqual(raw["profile"], "linux_host")
-        self.assertEqual(raw["linux_host"]["writable_paths"], ["/tests", "/logs/verifier"])
+        self.assertEqual(
+            raw["linux_host"]["writable_paths"], ["/tests", "/logs/verifier"]
+        )
         self.assertTrue(round_tripped.linux_host.enable_cron)
         self.assertTrue(round_tripped.linux_host.enable_sshd)
         self.assertFalse(round_tripped.linux_host.keep_alive)
@@ -973,6 +2570,69 @@ class SandboxRuntimeTests(unittest.TestCase):
     def test_rejects_invalid_sandbox_id(self) -> None:
         with self.assertRaises(ValueError):
             SandboxSpec(id="../bad", image="busybox").validate()
+
+    def test_forkable_sandbox_requires_bounded_memory_disk_and_agent_protocol(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(ValueError, "memory_mb"):
+            SandboxSpec(
+                id="unbounded-fork",
+                image="busybox",
+                cpus=1,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            ).validate()
+
+        with self.assertRaisesRegex(ValueError, "disk_mb"):
+            SandboxSpec(
+                id="unbounded-fork-storage",
+                image="busybox",
+                memory_mb=128,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            ).validate()
+
+        with self.assertRaisesRegex(ValueError, "fork_protocol"):
+            SandboxSpec(
+                id="unsafe-fork",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+            ).validate()
+
+        SandboxSpec(
+            id="safe-fork",
+            image="busybox",
+            memory_mb=128,
+            disk_mb=1024,
+            forkable=True,
+            fork_protocol=FORK_PROTOCOL,
+        ).validate()
+
+        with self.assertRaisesRegex(ValueError, "cannot expose SSH"):
+            SandboxSpec(
+                id="fork-with-ssh",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                network="bridge",
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+                ssh=SandboxSshSpec(enabled=True, host_port=22022),
+            ).validate()
+
+    def test_rejects_user_labels_reserved_for_runtime_identity(self) -> None:
+        spec = SandboxSpec(
+            id="forged-label",
+            image="busybox",
+            memory_mb=128,
+            labels={"UCLOUD-SANDBOXES.managed": "false"},
+        )
+
+        with self.assertRaisesRegex(ValueError, "reserved.*ucloud-sandboxes"):
+            spec.validate()
 
     def test_rejects_missing_resource_request(self) -> None:
         with self.assertRaisesRegex(ValueError, "resources are required"):
@@ -1002,7 +2662,9 @@ class SandboxRuntimeTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = SandboxStore(Path(raw_dir) / "sandboxes.json")
             executor = RecordingExecutor()
-            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            runtime = DockerGvisorRuntime(
+                executor=executor, allow_storage_opt_quota=True
+            )
             manager = SandboxManager(store, runtime)
             spec = SandboxSpec(
                 id="same",
@@ -1048,7 +2710,9 @@ class SandboxRuntimeTests(unittest.TestCase):
                     )
                 )
 
-    def test_manager_recovers_managed_container_after_conflict_without_store_record(self) -> None:
+    def test_manager_recovers_managed_container_after_conflict_without_store_record(
+        self,
+    ) -> None:
         class ConflictExecutor:
             def __init__(self, spec: SandboxSpec) -> None:
                 self.spec = spec
@@ -1062,7 +2726,7 @@ class SandboxRuntimeTests(unittest.TestCase):
                         exit_code=1,
                         stderr=(
                             "Conflict. The container name "
-                            "\"/ucloud-sandbox-recovered\" is already in use"
+                            '"/ucloud-sandbox-recovered" is already in use'
                         ),
                     )
                 labels = {
@@ -1086,7 +2750,9 @@ class SandboxRuntimeTests(unittest.TestCase):
                 disk_mb=512,
             )
             executor = ConflictExecutor(spec)
-            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            runtime = DockerGvisorRuntime(
+                executor=executor, allow_storage_opt_quota=True
+            )
             manager = SandboxManager(store, runtime)
 
             record, result, timings = manager.create_with_timings(spec)
@@ -1120,7 +2786,7 @@ class SandboxRuntimeTests(unittest.TestCase):
                         exit_code=1,
                         stderr=(
                             "Conflict. The container name "
-                            "\"/ucloud-sandbox-legacy\" is already in use"
+                            '"/ucloud-sandbox-legacy" is already in use'
                         ),
                     )
                 labels = {
@@ -1144,7 +2810,9 @@ class SandboxRuntimeTests(unittest.TestCase):
                 disk_mb=512,
             )
             executor = LegacyFingerprintConflictExecutor(spec)
-            runtime = DockerGvisorRuntime(executor=executor, allow_storage_opt_quota=True)
+            runtime = DockerGvisorRuntime(
+                executor=executor, allow_storage_opt_quota=True
+            )
             manager = SandboxManager(store, runtime)
 
             record, _result, timings = manager.create_with_timings(spec)
@@ -1297,7 +2965,9 @@ class SandboxRuntimeTests(unittest.TestCase):
             source.write_bytes(b"hello")
             runtime = DockerGvisorRuntime(dry_run=True)
 
-            upload = runtime.copy_to_container("abc-123", source, "/workspace/payload.txt")
+            upload = runtime.copy_to_container(
+                "abc-123", source, "/workspace/payload.txt"
+            )
             download = runtime.copy_from_container(
                 "abc-123",
                 "/workspace/payload.txt",
@@ -1367,7 +3037,9 @@ class SandboxRuntimeTests(unittest.TestCase):
             ),
         )
 
-    def test_file_download_preserves_exact_limit_and_rejects_limit_plus_one(self) -> None:
+    def test_file_download_preserves_exact_limit_and_rejects_limit_plus_one(
+        self,
+    ) -> None:
         exact = b"\x00\xffbinary"
         runtime = DockerGvisorRuntime(executor=RecordingExecutor(stdout_bytes=exact))
 
@@ -1413,6 +3085,129 @@ class SandboxRuntimeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 runtime.copy_to_container("abc-123", source, "/workspace/")
 
+    def test_startup_reconciles_only_proven_unreferenced_checkpoint_state(self) -> None:
+        class InventoryRuntime(DockerGvisorRuntime):
+            def __init__(self, inventory: dict[str, object]) -> None:
+                super().__init__(
+                    checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+                    fork_enabled=True,
+                    allow_storage_opt_quota=True,
+                    dry_run=False,
+                )
+                self.inventory = inventory
+                self.removed_artifacts: list[str] = []
+                self.removed_staged: list[tuple[str, str]] = []
+                self.removed_applications: list[str] = []
+
+            def checkpoint_helper_inventory(self) -> dict[str, object]:
+                return self.inventory
+
+            def cleanup_staged_checkpoint(
+                self, target_container_id: str, checkpoint_id: str
+            ) -> CommandResult:
+                self.removed_staged.append((target_container_id, checkpoint_id))
+                return CommandResult(argv=(), exit_code=0)
+
+            def release_checkpoint(self, checkpoint_id: str) -> CommandResult:
+                self.removed_artifacts.append(checkpoint_id)
+                return CommandResult(argv=(), exit_code=0)
+
+            def drop_application_checkpoint_id(
+                self, application_id: str
+            ) -> CommandResult:
+                self.removed_applications.append(application_id)
+                return CommandResult(argv=(), exit_code=0)
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            setup_runtime = DockerGvisorRuntime(
+                dry_run=True,
+                fork_enabled=True,
+                allow_storage_opt_quota=True,
+                checkpoint_root=Path("/var/lib/docker/ucloud-checkpoints"),
+            )
+            setup = SandboxManager(store, setup_runtime)
+            spec = SandboxSpec(
+                id="restoring-child",
+                image="busybox",
+                memory_mb=128,
+                disk_mb=1024,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            )
+            operation = _create_operation(spec, 3, "restore-child-3")
+            record, _result = setup.create(spec, operation=operation)
+            store.upsert(
+                replace(
+                    record,
+                    state="restoring",
+                    creation_kind="restore",
+                    source_sandbox_id="source",
+                    source_generation=2,
+                    checkpoint_id="active-checkpoint",
+                    fork_nonce=FORK_NONCE,
+                )
+            )
+            active_application = application_checkpoint_id(
+                spec.id, operation.generation, operation.spec_hash
+            )
+            target_container_id = "b" * 64
+            inventory: dict[str, object] = {
+                "version": 1,
+                "artifacts": [
+                    {"artifact_id": "active-checkpoint", "state": "pending"},
+                    {"artifact_id": "completed-checkpoint", "state": "sealed"},
+                ],
+                "applications": [active_application, "orphan-application"],
+                "staged": [
+                    {
+                        "artifact_id": "completed-checkpoint",
+                        "target_container_id": target_container_id,
+                        "checkpoint_id": "state",
+                    }
+                ],
+            }
+            runtime = InventoryRuntime(inventory)
+            manager = SandboxManager(store, runtime)
+
+            counters = manager.reconcile_checkpoint_storage()
+
+            self.assertEqual(runtime.removed_artifacts, ["completed-checkpoint"])
+            self.assertEqual(runtime.removed_staged, [(target_container_id, "state")])
+            self.assertEqual(runtime.removed_applications, ["orphan-application"])
+            self.assertEqual(counters["pending_retained"], 0)
+
+            runtime.inventory = {
+                "version": 1,
+                "artifacts": [
+                    {"artifact_id": "orphan-pending", "state": "pending"},
+                    {"artifact_id": "also-sealed", "state": "sealed"},
+                ],
+                "applications": [active_application, "second-orphan-app"],
+                "staged": [
+                    {
+                        "artifact_id": "also-sealed",
+                        "target_container_id": "c" * 64,
+                        "checkpoint_id": "state",
+                    }
+                ],
+            }
+            cleanup_before = (
+                list(runtime.removed_artifacts),
+                list(runtime.removed_staged),
+                list(runtime.removed_applications),
+            )
+            with self.assertRaisesRegex(RuntimeError, "operator reconciliation"):
+                manager.reconcile_checkpoint_storage()
+            self.assertEqual(
+                (
+                    runtime.removed_artifacts,
+                    runtime.removed_staged,
+                    runtime.removed_applications,
+                ),
+                cleanup_before,
+            )
+
 
 class CountingSandboxStore(SandboxStore):
     def __init__(self, path: Path) -> None:
@@ -1443,7 +3238,9 @@ class CrashRecoveryExecutor:
         self.operation = operation
         self.create_calls = 0
 
-    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
+    def run(
+        self, argv: tuple[str, ...], *, input: bytes | None = None
+    ) -> CommandResult:
         del input
         if len(argv) > 1 and argv[1] == "run":
             self.create_calls += 1

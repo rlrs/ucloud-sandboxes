@@ -555,6 +555,47 @@ class RoutingStore:
                 )
             return stored
 
+    def finalize_sandbox_create(self, route: SandboxRoute) -> SandboxRoute | None:
+        """Finalize an exact create reservation unless DELETE already won.
+
+        A long-running create/fork may complete after a concurrent delete has
+        marked or removed its route.  This compare-and-swap prevents the late
+        success response from clearing that delete intent or resurrecting the
+        deleted route.
+        """
+
+        with self._lock:
+            now = utc_now().isoformat()
+            with self._transaction() as conn:
+                existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if (
+                    existing is None
+                    or existing.generation != route.generation
+                    or existing.create_operation_id != route.create_operation_id
+                    or existing.spec_hash != route.spec_hash
+                    or existing.node_id != route.node_id
+                    or existing.node_url != route.node_url
+                    or bool(existing.delete_operation_id)
+                ):
+                    return None
+                stored = replace(
+                    route,
+                    delete_operation_id="",
+                    node_epoch=existing.node_epoch,
+                    activity_epoch=max(
+                        existing.activity_epoch,
+                        route.activity_epoch,
+                    ),
+                    created_at=existing.created_at or route.created_at,
+                    updated_at=now,
+                )
+                self._write_sandbox(conn, stored)
+                conn.execute(
+                    "DELETE FROM pending WHERE sandbox_id = ?",
+                    (route.sandbox_id,),
+                )
+            return stored
+
     def _claim_prepared_capacity_unlocked(
         self,
         conn: sqlite3.Connection,
@@ -666,6 +707,79 @@ class RoutingStore:
                 )
                 self._claim_prepared_capacity_unlocked(conn, stored)
             return stored
+
+    def allocate_sandbox_creates(
+        self,
+        requests: Iterable[tuple[SandboxRoute, str, str]],
+    ) -> tuple[tuple[SandboxRoute, bool], ...]:
+        """Persist a set of create reservations in one SQLite transaction.
+
+        The boolean paired with each route is true only when this call created
+        that reservation.  Existing routes are accepted solely as exact
+        idempotent replays; any conflict aborts the entire batch.
+        """
+
+        requested = tuple(requests)
+        if not requested:
+            raise ValueError("at least one sandbox create reservation is required")
+        sandbox_ids = [route.sandbox_id for route, _hash, _operation in requested]
+        if len(set(sandbox_ids)) != len(sandbox_ids):
+            raise ValueError("sandbox create reservation ids must be unique")
+        for _route, spec_hash, operation_id in requested:
+            if not operation_id.strip() or not spec_hash.strip():
+                raise ValueError("create operation id and spec hash are required")
+
+        with self._lock:
+            now = utc_now().isoformat()
+            allocated: list[tuple[SandboxRoute, bool]] = []
+            with self._transaction() as conn:
+                for route, spec_hash, operation_id in requested:
+                    normalized_hash = spec_hash.strip()
+                    normalized_operation = operation_id.strip()
+                    existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                    if existing is not None:
+                        if (
+                            existing.spec_hash != normalized_hash
+                            or existing.create_operation_id != normalized_operation
+                            or (existing.spec and route.spec and existing.spec != route.spec)
+                        ):
+                            raise SandboxRouteConflictError(
+                                "sandbox route already exists with a different "
+                                f"operation: {route.sandbox_id}"
+                            )
+                        allocated.append((existing, False))
+                        continue
+
+                    row = conn.execute(
+                        "SELECT generation FROM sandbox_generation_hwm "
+                        "WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    ).fetchone()
+                    high_water = int(row["generation"]) if row is not None else 0
+                    stored = SandboxRoute(
+                        sandbox_id=route.sandbox_id,
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        node_url=route.node_url,
+                        resources=route.resources,
+                        spec=dict(route.spec),
+                        state="creating",
+                        generation=high_water + 1,
+                        create_operation_id=normalized_operation,
+                        spec_hash=normalized_hash,
+                        node_epoch=route.node_epoch,
+                        activity_epoch=max(0, route.activity_epoch),
+                        created_at=route.created_at or now,
+                        updated_at=now,
+                    )
+                    self._write_sandbox(conn, stored)
+                    conn.execute(
+                        "DELETE FROM pending WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    )
+                    self._claim_prepared_capacity_unlocked(conn, stored)
+                    allocated.append((stored, True))
+            return tuple(allocated)
 
     def prepare_sandbox_delete(self, sandbox_id: str) -> SandboxRoute | None:
         """Persist and reuse one delete operation for the current generation."""

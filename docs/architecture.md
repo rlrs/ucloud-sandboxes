@@ -77,3 +77,87 @@ a bounded tmpfs workspace at `filesystem.workspace_path`; that stricter mode is
 only enabled when the `tmpfs-quota-enforced` probe passed. Sandboxes also get
 explicit bounded `/tmp` and `/run` tmpfs mounts so common temporary writes do
 not bypass writable-layer quota as an unbounded runtime default.
+
+## Local live fork
+
+Forkable sandboxes use gVisor checkpoint/restore rather than the existing
+Docker-image `snapshot` operation. The first production scope is node-local:
+
+Every forkable source has explicit memory and writable-storage limits. Before
+quiescing it, the node reserves enough local Docker storage for resident
+memory, the bounded writable root/workspace, and both tmpfs mounts. A source is
+placed only on a node advertising `fork-local-v1`; direct node admission
+enforces the same rule.
+
+1. The gateway validates the source generation and reserves destination
+   generations on the same node.
+2. The node persists a `creation_kind=restore` intent before runtime work, so a
+   crash replay cannot accidentally start the child from its image entrypoint.
+3. A bounded workload `prepare` hook quiesces the initial process tree and
+   confirms it is waiting on `/proc/gvisor/checkpoint`.
+4. Docker checkpoints the source through its `io.containerd.runc.v2`/`runsc`
+   compatibility path with `--leave-running`. Current runsc checkpoints are
+   uncompressed by default.
+5. A root-owned, narrowly scoped helper records Docker completion, then seals
+   the artifact under
+   `DockerRootDir/ucloud-checkpoints`. It only accepts validated IDs and can
+   reflink-copy a sealed checkpoint into the new Docker container's private
+   checkpoint directory.
+6. Docker/containerd perform an ordinary start of each already-created
+   destination using the root-owned `runsc-restore` OCI runtime wrapper. The
+   wrapper durably binds the child ID to its helper-staged image during OCI
+   `create`, then substitutes raw `runsc restore --image-path=...` for OCI
+   `start`. The restored process tree therefore runs under the destination
+   container ID and Docker's fresh cgroup/network identity without using
+   Docker's unsupported cross-container checkpoint restore API.
+7. The node keeps every child in `restoring` until its bounded workload hook
+   acknowledges the persisted nonce after identity rotation and reconnection.
+
+The helper and wrapper split privilege narrowly. The helper validates, seals,
+accounts, and reflink-stages checkpoint trees. The wrapper accepts only a
+root-owned helper marker and an OCI annotation emitted by the node agent; it
+cannot choose arbitrary paths. Docker/containerd still own container metadata,
+rootfs, cgroup, network, exec, log, and delete lifecycle. XFS reflinks avoid a
+second physical copy of the memory image during staging. A fan-out request
+captures the source once and stages the same immutable instant into every
+child. Raw runsc restores are synchronous,
+but the node runs up to eight independent child restores concurrently and
+returns results in request order. It stops scheduling queued children after a
+failure while allowing already-running restores to settle into their durable
+intents. Each child ultimately owns its restored memory.
+
+On an exact retry, Docker identity/running inspection uses the same bounded
+worker pool under one wall-clock setup allowance. Nonce readiness checks are
+also parallel and bounded. After the durable `running` commit, checkpoint
+unstaging and artifact release are best-effort under one shared cleanup
+deadline, so cleanup cannot hold the response open indefinitely.
+
+Fork operations take an exclusive per-sandbox lifecycle lease. Exec and file
+operations hold shared leases, so checkpoint cannot race an attached exec,
+delete, or file mutation. The destination intent and immutable checkpoint ID
+are generation-fenced and replayable. A child observed running with the exact
+generation labels must still pass the workload readiness hook after a
+node-agent crash; a stopped or partial child is removed and recreated from the
+same sealed checkpoint.
+
+Node startup performs a mark-and-sweep against the durable sandbox store. It
+reclaims only sealed/staged/application state proven unreferenced. Pending
+checkpoint state without a matching restore intent is never guessed safe and
+prevents the node from serving until an operator establishes that no runtime
+writer remains.
+
+The PID-1 protocol is monotonic per nonce: a cancel acknowledgment permanently
+fences any late prepare callback. Host-side hook or Docker timeouts are
+ambiguous, so the node leaves the durable intent quarantined and never assumes
+that killing a local CLI also stopped work owned by dockerd.
+
+The capability is fail-closed. VM init enables Docker's experimental checkpoint
+capture API, installs the privileged helper and root-owned restore wrapper, and
+runs the `gvisor-live-fork-v1` probe.
+Only a node that restores initial-workload memory into a distinct container,
+exposes the child's new spec identity and in-sandbox adoption of its Docker
+bridge address, tears down a live socket, excludes a detached OriginExec
+descendant from the child, and can
+checkpoint the resumed source again advertises `fork-local-v1`.
+Cross-node restore, shared copy-on-write process memory, and background page
+loading are separate future runtime features.

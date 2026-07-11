@@ -18,7 +18,11 @@ from urllib import error, request
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
-from .capabilities import DISK_QUOTA_CAPABILITY, has_capability
+from .capabilities import (
+    DISK_QUOTA_CAPABILITY,
+    FORK_LOCAL_CAPABILITY,
+    has_capability,
+)
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_compatible, service_health
@@ -64,7 +68,14 @@ from .routing import (
     SandboxRoute,
     SandboxRouteConflictError,
 )
-from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
+from .sandbox import (
+    FORK_REQUEST_TIMEOUT_SECONDS,
+    MAX_FORK_FANOUT,
+    SandboxSpec,
+    sandbox_fork_target,
+    sandbox_spec_fingerprint,
+    sandbox_specs_match,
+)
 from .sandbox_exec import exec_session_route
 
 
@@ -76,6 +87,7 @@ _GATEWAY_SCHEDULING_LOCK = RLock()
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
 REGISTRY_IMAGE_LEASE_TTL_SECONDS = 60 * 60
 DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 64
+FORK_PROXY_TIMEOUT_SECONDS = FORK_REQUEST_TIMEOUT_SECONDS
 SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
 SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS = 5
 # Build execution is asynchronous. This timeout only covers proxying the build
@@ -123,7 +135,7 @@ class ProxiedResponse:
     def json(self) -> dict[str, Any]:
         try:
             decoded = json.loads(self.body.decode("utf-8")) if self.body else {}
-        except json.JSONDecodeError:
+        except (UnicodeDecodeError, json.JSONDecodeError):
             return {}
         return decoded if isinstance(decoded, dict) else {}
 
@@ -545,6 +557,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return True
         if path == "/v1/sandboxes" and self.command == "POST":
             self._create_sandbox_on_node()
+            return True
+        fork_source_id = _sandbox_fork_source_from_path(path)
+        if fork_source_id is not None and self.command == "POST":
+            self._fork_sandbox_on_node(fork_source_id)
             return True
         if path == "/v1/capacity/prepare" and self.command == "GET":
             self._list_prepared_capacity()
@@ -1436,6 +1452,381 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         create_operation_id=route.create_operation_id,
                     )
             self._send_proxied_response(response)
+
+    def _fork_sandbox_on_node(self, source_sandbox_id: str) -> None:
+        limiter = self.sandbox_create_limiter
+        limiter_acquired = False
+        if limiter is not None and not limiter.acquire(blocking=False):
+            self._write_json(
+                {
+                    "error": "gateway is busy creating or forking sandboxes; retry shortly",
+                    "retryable": True,
+                    "max_concurrent_sandbox_creates": (
+                        self.max_concurrent_sandbox_creates
+                    ),
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
+        limiter_acquired = limiter is not None
+        try:
+            self._fork_sandbox_on_node_locked(source_sandbox_id)
+        finally:
+            if limiter_acquired:
+                limiter.release()
+
+    def _fork_sandbox_on_node_locked(self, source_sandbox_id: str) -> None:
+        try:
+            body = self._read_raw_body(max_bytes=DEFAULT_MAX_JSON_BODY_BYTES)
+            raw = json.loads(body.decode("utf-8")) if body else None
+            if not isinstance(raw, dict):
+                raise ValueError("fork payload must be a JSON object")
+        except (json.JSONDecodeError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        source_route = self.routing_store.get_sandbox_readonly(source_sandbox_id)
+        if source_route is None:
+            source_route = self._discover_sandbox_route(source_sandbox_id)
+        if source_route is None:
+            self._write_json(
+                {"error": "source sandbox route not found"},
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        if (source_route.state or "unknown").lower() != "running":
+            self._write_json(
+                {
+                    "error": "source sandbox is not confirmed running",
+                    "retryable": True,
+                    "sandbox_id": source_sandbox_id,
+                },
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        if not source_route.spec:
+            source_record = self._sandbox_record_on_node(
+                source_route.node_url,
+                source_sandbox_id,
+            )
+            if source_record is not None:
+                source_route = _route_with_sandbox_record(
+                    source_route,
+                    source_record,
+                )
+                source_route = self.routing_store.upsert_sandbox(source_route)
+        try:
+            source_spec = SandboxSpec.from_dict(source_route.spec)
+            source_spec.validate()
+            if not source_route.spec_hash:
+                raise ValueError(
+                    "source route does not carry an exact current spec identity"
+                )
+            batch = _public_fork_request_is_batch(raw)
+            if batch:
+                raw_targets = raw.get("sandboxes")
+                if not isinstance(raw_targets, list) or not raw_targets:
+                    raise ValueError("sandboxes must be a non-empty JSON array")
+                if len(raw_targets) > MAX_FORK_FANOUT:
+                    raise ValueError(
+                        f"fork fan-out cannot exceed {MAX_FORK_FANOUT} sandboxes"
+                    )
+                if not all(isinstance(item, dict) for item in raw_targets):
+                    raise ValueError("each fork sandbox must be a JSON object")
+                targets = tuple(
+                    sandbox_fork_target(source_spec, item) for item in raw_targets
+                )
+                if len({target.id for target in targets}) != len(targets):
+                    raise ValueError("fork fan-out target ids must be unique")
+            else:
+                targets = (sandbox_fork_target(source_spec, raw),)
+        except (TypeError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        heartbeat = self._heartbeat_for_route(
+            node_id=source_route.node_id,
+            job_id=source_route.job_id,
+            node_url=source_route.node_url,
+        )
+        if (
+            heartbeat is None
+            or not heartbeat.node_url
+            or not heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+            or heartbeat.draining
+            or not agent_version_is_compatible(heartbeat.agent_version)
+        ):
+            self._write_json(
+                {
+                    "error": "source sandbox node is not ready for a local fork",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        if not has_capability(heartbeat.capabilities, FORK_LOCAL_CAPABILITY):
+            self._write_json(
+                {
+                    "error": "source sandbox node does not support live local fork",
+                    "capability": FORK_LOCAL_CAPABILITY,
+                },
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+
+        if _sandbox_fork_request_body_upper_bound(
+            source_route,
+            targets,
+            batch=batch,
+        ) > DEFAULT_MAX_JSON_BODY_BYTES:
+            self._write_json(
+                {
+                    "error": (
+                        "expanded fork request exceeds the node JSON body limit"
+                    ),
+                    "max_bytes": DEFAULT_MAX_JSON_BODY_BYTES,
+                    "intent_persisted": False,
+                },
+                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            )
+            return
+
+        try:
+            reservations = self._reserve_forks_on_source_node(
+                source_route,
+                heartbeat,
+                targets,
+            )
+        except SandboxRouteConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        if reservations is None:
+            required = ResourceQuantity()
+            for target in targets:
+                required += target.requested_resources()
+            self._write_json(
+                {
+                    "error": (
+                        "source sandbox node lacks capacity for fork children"
+                        if batch
+                        else "source sandbox node lacks capacity for fork child"
+                    ),
+                    "retryable": True,
+                    "required_resources": required.to_dict(),
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        routes = tuple(route for route, _created in reservations)
+        created_routes = tuple(
+            route for route, created in reservations if created
+        )
+
+        referenced_created_routes: list[SandboxRoute] = []
+        try:
+            for route, created in reservations:
+                self._ensure_registry_route_reference(route, touch=True)
+                if created:
+                    referenced_created_routes.append(route)
+        except RegistryImageReferenceUnavailable:
+            for route in referenced_created_routes:
+                self._release_registry_route_reference(route)
+            for route in created_routes:
+                self.routing_store.delete_sandbox_if_current(
+                    route.sandbox_id,
+                    generation=route.generation,
+                    create_operation_id=route.create_operation_id,
+                )
+            raise
+
+        response = self._proxy_request(
+            heartbeat.node_url or "",
+            f"/v1/sandboxes/{quote(source_sandbox_id, safe='')}/forks",
+            method="POST",
+            timeout_seconds=FORK_PROXY_TIMEOUT_SECONDS,
+            body=(
+                _sandbox_fork_batch_request_body(source_route, targets, routes)
+                if batch
+                else _sandbox_fork_request_body(
+                    source_route, targets[0], routes[0]
+                )
+            ),
+        )
+        payload = response.json()
+        if 200 <= response.status < 300:
+            if batch:
+                records = payload.get("sandboxes")
+                forks = payload.get("forks")
+                valid_response = _sandbox_fork_batch_result_matches_routes(
+                    payload,
+                    records,
+                    forks,
+                    routes,
+                    targets,
+                    source_route,
+                )
+            else:
+                record = payload.get("sandbox")
+                records = [record]
+                valid_response = (
+                    isinstance(record, dict)
+                    and _sandbox_fork_record_matches_route(
+                        record,
+                        routes[0],
+                        targets[0],
+                        source_route,
+                    )
+                    and _sandbox_fork_result_matches_record(payload, record)
+                )
+            if not valid_response:
+                # A success response with an invalid confirmation is ambiguous:
+                # keep the exact route identity so a retry can safely replay it.
+                self._write_json(
+                    {
+                        "error": (
+                            "node fork response did not confirm the assigned child "
+                            "generation and source identity"
+                        ),
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+            finalization_conflict = False
+            for route, target, record in zip(
+                routes, targets, records, strict=True
+            ):
+                stored_route = self.routing_store.finalize_sandbox_create(
+                    _route_with_sandbox_record(route, record)
+                )
+                if stored_route is None:
+                    finalization_conflict = True
+                    continue
+                record_sandbox_scheduled(
+                    self.metrics_store,
+                    sandbox_id=target.id,
+                    route=stored_route,
+                    resources=target.requested_resources(),
+                    pending=None,
+                )
+                self._record_registry_image_used(target.image)
+            if finalization_conflict:
+                self._write_json(
+                    {
+                        "error": (
+                            "fork completed while a child route was concurrently "
+                            "deleted"
+                        ),
+                        "intent_persisted": True,
+                    },
+                    status=HTTPStatus.CONFLICT,
+                )
+                return
+        else:
+            intent_states = _node_fork_intent_states(payload, routes)
+            for route, intent_persisted in zip(
+                routes, intent_states, strict=True
+            ):
+                if intent_persisted is not False:
+                    continue
+                current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+                if (
+                    current is None
+                    or (current.state or "unknown").lower() != "creating"
+                ):
+                    continue
+                removed = self.routing_store.delete_sandbox_if_current(
+                    route.sandbox_id,
+                    generation=route.generation,
+                    create_operation_id=route.create_operation_id,
+                )
+                if removed is not None:
+                    self._release_registry_route_reference(removed)
+        self._send_proxied_response(response)
+
+    def _reserve_forks_on_source_node(
+        self,
+        source_route: SandboxRoute,
+        heartbeat: NodeHeartbeat,
+        targets: tuple[SandboxSpec, ...],
+    ) -> tuple[tuple[SandboxRoute, bool], ...] | None:
+        if not targets:
+            raise ValueError("at least one fork target is required")
+        if len({target.id for target in targets}) != len(targets):
+            raise ValueError("fork fan-out target ids must be unique")
+        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(
+            self.routing_store.path
+        ):
+            current_source = self.routing_store.get_sandbox_readonly(
+                source_route.sandbox_id
+            )
+            if (
+                current_source is None
+                or current_source.generation != source_route.generation
+                or current_source.spec_hash != source_route.spec_hash
+                or current_source.node_id != source_route.node_id
+            ):
+                raise SandboxRouteConflictError(
+                    "source sandbox route changed before fork reservation"
+                )
+
+            current_routes = list(self.routing_store.sandbox_routes_readonly())
+            requests: list[tuple[SandboxRoute, str, str]] = []
+            now = utc_now().isoformat()
+            for target in targets:
+                target_hash = sandbox_spec_fingerprint(target)
+                operation_id = _sandbox_fork_operation_id(
+                    source_route, target_hash
+                )
+                existing = self.routing_store.get_sandbox_readonly(target.id)
+                if existing is not None:
+                    if (
+                        existing.spec_hash != target_hash
+                        or existing.create_operation_id != operation_id
+                        or existing.node_id != heartbeat.node_id
+                    ):
+                        raise SandboxRouteConflictError(
+                            "fork child already exists with another identity: "
+                            f"{target.id}"
+                        )
+                    candidate = existing
+                else:
+                    if not _node_can_fit(
+                        heartbeat, target.requested_resources(), current_routes
+                    ):
+                        return None
+                    candidate = SandboxRoute(
+                        sandbox_id=target.id,
+                        node_id=heartbeat.node_id,
+                        job_id=heartbeat.job_id,
+                        node_url=heartbeat.node_url or "",
+                        resources=target.requested_resources(),
+                        spec=target.to_dict(),
+                        state="creating",
+                        node_epoch=heartbeat.node_epoch,
+                        activity_epoch=heartbeat.activity_epoch,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    # Account for every earlier child before admitting the next.
+                    current_routes.append(candidate)
+                requests.append((candidate, target_hash, operation_id))
+            return self.routing_store.allocate_sandbox_creates(requests)
+
+    def _reserve_fork_on_source_node(
+        self,
+        source_route: SandboxRoute,
+        heartbeat: NodeHeartbeat,
+        target: SandboxSpec,
+    ) -> tuple[SandboxRoute, bool] | None:
+        reservations = self._reserve_forks_on_source_node(
+            source_route, heartbeat, (target,)
+        )
+        return reservations[0] if reservations is not None else None
 
     def _persist_failed_sandbox_demand(
         self,
@@ -2348,12 +2739,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         requested: ResourceQuantity,
         *,
         image: str | None = None,
+        required_capabilities: tuple[str, ...] = (),
     ) -> NodeHeartbeat | None:
         routes = list(self.routing_store.sandbox_routes_readonly())
         candidates = [
             heartbeat
             for heartbeat in self._ready_sandbox_heartbeats()
             if agent_version_is_compatible(heartbeat.agent_version)
+            and all(
+                has_capability(heartbeat.capabilities, capability)
+                for capability in required_capabilities
+            )
             and _node_can_fit(heartbeat, requested, routes)
         ]
         if not candidates:
@@ -2394,6 +2790,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             heartbeat = self._select_node(
                 requested,
                 image=image,
+                required_capabilities=(
+                    (FORK_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY)
+                    if bool(spec.get("forkable"))
+                    else ()
+                ),
             )
             if heartbeat is None:
                 return None
@@ -3245,6 +3646,18 @@ def _sandbox_id_from_path(path: str) -> str | None:
     return unquote(rest.split("/", 1)[0])
 
 
+def _sandbox_fork_source_from_path(path: str) -> str | None:
+    prefix = "/v1/sandboxes/"
+    suffix = "/forks"
+    if not path.startswith(prefix) or not path.endswith(suffix):
+        return None
+    encoded = path[len(prefix):-len(suffix)]
+    source_id = unquote(encoded)
+    if not source_id or "/" in source_id:
+        return None
+    return source_id
+
+
 def _build_context_digest_from_path(path: str) -> str | None:
     prefix = "/v1/image-contexts/"
     if not path.startswith(prefix):
@@ -3463,6 +3876,223 @@ def _sandbox_create_request_body(spec: SandboxSpec, route: SandboxRoute) -> byte
         "spec_hash": route.spec_hash,
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _sandbox_fork_operation_id(
+    source_route: SandboxRoute,
+    target_spec_hash: str,
+) -> str:
+    identity = "\0".join(
+        (
+            source_route.sandbox_id,
+            str(source_route.generation),
+            source_route.spec_hash,
+            target_spec_hash,
+        )
+    )
+    return "fork-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
+
+
+def _public_fork_request_is_batch(raw: dict[str, Any]) -> bool:
+    batch = "sandboxes" in raw
+    if "sandbox" in raw and "target" in raw:
+        raise ValueError("fork payload cannot contain both sandbox and target")
+    single = "sandbox" in raw or "target" in raw
+    if batch and single:
+        raise ValueError("fork payload cannot contain both sandbox and sandboxes")
+    reserved = sorted(key for key in raw if str(key).startswith("_ucloud_"))
+    if reserved:
+        raise ValueError(
+            "public fork payload cannot contain internal fencing fields: "
+            + ", ".join(reserved)
+        )
+    return batch
+
+
+def _sandbox_fork_request_body_upper_bound(
+    source_route: SandboxRoute,
+    targets: tuple[SandboxSpec, ...],
+    *,
+    batch: bool,
+) -> int:
+    """Size the expanded internal request before persisting reservations."""
+
+    preview_routes = tuple(
+        SandboxRoute(
+            sandbox_id=target.id,
+            node_id=source_route.node_id,
+            job_id=source_route.job_id,
+            node_url=source_route.node_url,
+            resources=target.requested_resources(),
+            spec=target.to_dict(),
+            state="creating",
+            # SQLite generations are signed 64-bit integers.  Using the
+            # largest value makes this a safe serialization upper bound.
+            generation=(2**63) - 1,
+            create_operation_id=_sandbox_fork_operation_id(
+                source_route,
+                sandbox_spec_fingerprint(target),
+            ),
+            spec_hash=sandbox_spec_fingerprint(target),
+        )
+        for target in targets
+    )
+    body = (
+        _sandbox_fork_batch_request_body(source_route, targets, preview_routes)
+        if batch
+        else _sandbox_fork_request_body(
+            source_route,
+            targets[0],
+            preview_routes[0],
+        )
+    )
+    return len(body)
+
+
+def _sandbox_fork_request_body(
+    source_route: SandboxRoute,
+    target: SandboxSpec,
+    child_route: SandboxRoute,
+) -> bytes:
+    payload = {
+        "sandbox": target.to_dict(),
+        "_ucloud_operation": {
+            "operation_id": child_route.create_operation_id,
+            "generation": child_route.generation,
+            "kind": "create",
+            "spec_hash": child_route.spec_hash,
+        },
+        "_ucloud_source": {
+            "generation": source_route.generation,
+            "spec_hash": source_route.spec_hash,
+        },
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _sandbox_fork_batch_request_body(
+    source_route: SandboxRoute,
+    targets: tuple[SandboxSpec, ...],
+    child_routes: tuple[SandboxRoute, ...],
+) -> bytes:
+    if not targets or len(targets) != len(child_routes):
+        raise ValueError("fork batch requires one child route per sandbox")
+    payload = {
+        "sandboxes": [target.to_dict() for target in targets],
+        "_ucloud_operations": [
+            {
+                "operation_id": route.create_operation_id,
+                "generation": route.generation,
+                "kind": "create",
+                "spec_hash": route.spec_hash,
+            }
+            for route in child_routes
+        ],
+        "_ucloud_source": {
+            "generation": source_route.generation,
+            "spec_hash": source_route.spec_hash,
+        },
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _sandbox_fork_record_matches_route(
+    record: dict[str, Any],
+    child_route: SandboxRoute,
+    target: SandboxSpec,
+    source_route: SandboxRoute,
+) -> bool:
+    try:
+        source_generation = int(record.get("source_generation"))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    fork_nonce = str(record.get("fork_nonce") or "")
+    return (
+        _sandbox_record_matches_route(record, child_route, target)
+        and str(record.get("state") or "") == "running"
+        and str(record.get("creation_kind") or "") == "restore"
+        and str(record.get("source_sandbox_id") or "")
+        == source_route.sandbox_id
+        and source_generation == source_route.generation
+        and bool(str(record.get("checkpoint_id") or ""))
+        and len(fork_nonce) == 64
+        and all(character in "0123456789abcdef" for character in fork_nonce)
+    )
+
+
+def _sandbox_fork_result_matches_record(
+    payload: dict[str, Any],
+    record: dict[str, Any],
+) -> bool:
+    fork = payload.get("fork")
+    timings = payload.get("timings")
+    if not isinstance(fork, dict) or not isinstance(timings, dict):
+        return False
+    commands = fork.get("commands")
+    return (
+        payload.get("intent_persisted") is True
+        and str(record.get("state") or "") == "running"
+        and
+        str(fork.get("checkpoint_id") or "")
+        == str(record.get("checkpoint_id") or "")
+        and fork.get("restored") is True
+        and isinstance(commands, list)
+        and all(
+            isinstance(command, list)
+            and all(isinstance(argument, str) for argument in command)
+            for command in commands
+        )
+    )
+
+
+def _sandbox_fork_batch_result_matches_routes(
+    payload: dict[str, Any],
+    records: object,
+    forks: object,
+    child_routes: tuple[SandboxRoute, ...],
+    targets: tuple[SandboxSpec, ...],
+    source_route: SandboxRoute,
+) -> bool:
+    timings = payload.get("timings")
+    if (
+        not isinstance(records, list)
+        or not isinstance(forks, list)
+        or not isinstance(timings, dict)
+        or len(records) != len(child_routes)
+        or len(forks) != len(child_routes)
+        or len(targets) != len(child_routes)
+    ):
+        return False
+    checkpoint_ids: set[str] = set()
+    fork_nonces: set[str] = set()
+    for record, fork, child_route, target in zip(
+        records, forks, child_routes, targets, strict=True
+    ):
+        if (
+            not isinstance(record, dict)
+            or not isinstance(fork, dict)
+            or str(fork.get("sandbox_id") or "") != target.id
+            or not _sandbox_fork_record_matches_route(
+                record, child_route, target, source_route
+            )
+            or not _sandbox_fork_result_matches_record(
+                {
+                    "fork": fork,
+                    "timings": timings,
+                    "intent_persisted": payload.get("intent_persisted"),
+                },
+                record,
+            )
+        ):
+            return False
+        checkpoint_ids.add(str(record.get("checkpoint_id") or ""))
+        fork_nonces.add(str(record.get("fork_nonce") or ""))
+    return (
+        len(checkpoint_ids) == 1
+        and "" not in checkpoint_ids
+        and len(fork_nonces) == 1
+        and "" not in fork_nonces
+    )
 
 
 def _enrich_sandbox_record(
@@ -3966,6 +4596,33 @@ def _warmup_node_units(
 
 def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
     return response.status in {408, 425, 429, 500, 502, 503, 504}
+
+
+def _node_fork_intent_states(
+    payload: dict[str, Any],
+    routes: tuple[SandboxRoute, ...],
+) -> tuple[bool | None, ...]:
+    """Read exact per-child intent state, falling back to the batch signal."""
+
+    top_level = payload.get("intent_persisted")
+    fallback = top_level if isinstance(top_level, bool) else None
+    raw_intents = payload.get("intents")
+    if not isinstance(raw_intents, list):
+        return tuple(fallback for _route in routes)
+    parsed: dict[str, bool | None] = {}
+    for item in raw_intents:
+        if not isinstance(item, dict):
+            return tuple(fallback for _route in routes)
+        sandbox_id = str(item.get("sandbox_id") or "")
+        if not sandbox_id or sandbox_id in parsed:
+            return tuple(fallback for _route in routes)
+        value = item.get("intent_persisted")
+        if value is not None and not isinstance(value, bool):
+            return tuple(fallback for _route in routes)
+        parsed[sandbox_id] = value
+    if set(parsed) != {route.sandbox_id for route in routes}:
+        return tuple(fallback for _route in routes)
+    return tuple(parsed[route.sandbox_id] for route in routes)
 
 
 def _image_build_response_terminal(payload: dict[str, Any]) -> bool:

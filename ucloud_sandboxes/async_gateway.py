@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+import json
 from typing import Any, AsyncIterator
+from urllib.parse import quote
 
-from aiohttp import ClientSession, WSMsgType
+from aiohttp import ClientSession, ClientTimeout, ContentTypeError, WSMsgType
 
 from .async_exec import STREAM_NAMES
+from .gateway import _fork_success_error
+from .sandbox import FORK_REQUEST_TIMEOUT_SECONDS, MAX_FORK_FANOUT
 from .sandbox_exec import SandboxExecSpec
 
 
@@ -14,6 +19,8 @@ class AsyncGatewayError(RuntimeError):
 
 
 class AsyncNodeGatewayClient:
+    """Async gateway client; fork methods target the public control plane."""
+
     def __init__(
         self,
         node_url: str,
@@ -34,6 +41,88 @@ class AsyncNodeGatewayClient:
             if node_control_bearer_token is not None
             else {}
         )
+
+    async def fork_sandbox(
+        self,
+        source_sandbox_id: str,
+        sandbox: dict[str, Any],
+        *,
+        timeout_seconds: float = FORK_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Fork one sandbox through the public control plane."""
+        payload = {"sandbox": dict(sandbox)}
+        response = await self._post_fork(
+            source_sandbox_id,
+            payload,
+            timeout_seconds=timeout_seconds,
+        )
+        requested_id = str(sandbox.get("id") or "")
+        error_message = _fork_success_error(
+            response,
+            source_sandbox_id=source_sandbox_id,
+            requested_ids=(requested_id,),
+            batch=False,
+        )
+        if error_message is not None:
+            raise AsyncGatewayError(error_message)
+        return response
+
+    async def fork_sandboxes(
+        self,
+        source_sandbox_id: str,
+        sandboxes: Sequence[dict[str, Any]],
+        *,
+        timeout_seconds: float = FORK_REQUEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Fork several sandboxes through the public control plane."""
+        requested = tuple(dict(sandbox) for sandbox in sandboxes)
+        if not 1 <= len(requested) <= MAX_FORK_FANOUT:
+            raise ValueError(f"fork batch size must be in [1, {MAX_FORK_FANOUT}]")
+        payload = {"sandboxes": list(requested)}
+        response = await self._post_fork(
+            source_sandbox_id,
+            payload,
+            timeout_seconds=timeout_seconds,
+        )
+        error_message = _fork_success_error(
+            response,
+            source_sandbox_id=source_sandbox_id,
+            requested_ids=tuple(str(item.get("id") or "") for item in requested),
+            batch=True,
+        )
+        if error_message is not None:
+            raise AsyncGatewayError(error_message)
+        return response
+
+    async def _post_fork(
+        self,
+        source_sandbox_id: str,
+        payload: dict[str, Any],
+        *,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        encoded_source_id = quote(source_sandbox_id, safe="")
+        async with (await self._client()).post(
+            f"{self.node_url}/v1/sandboxes/{encoded_source_id}/forks",
+            json=payload,
+            headers=self._node_control_headers,
+            allow_redirects=False,
+            timeout=ClientTimeout(total=timeout_seconds),
+        ) as response:
+            if not 200 <= response.status < 300:
+                raise AsyncGatewayError(
+                    f"node-agent request failed ({response.status}): "
+                    f"{await response.text()}"
+                )
+            try:
+                raw = await response.json()
+            except (ContentTypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise AsyncGatewayError(
+                    "node-agent returned an invalid JSON fork payload."
+                ) from exc
+        if not isinstance(raw, dict):
+            raise AsyncGatewayError("node-agent returned a non-object fork payload.")
+        return raw
 
     async def __aenter__(self) -> "AsyncNodeGatewayClient":
         await self._client()

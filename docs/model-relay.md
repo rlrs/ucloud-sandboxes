@@ -101,6 +101,33 @@ custom transport sets one of these rollout selectors:
 - `X-Rollout-Id`
 - `?rollout_id=<id>`
 
+## General HTTP Reverse Tunnel
+
+The relay can also expose a worker-local HTTP service without an OpenAI API
+shape. Register a tunnel through `POST /v1/tunnels/register`, then send public
+traffic to:
+
+```text
+https://relay.example.org/tunnels/<tunnel-id>/<upstream-path>
+```
+
+Use `X-UCloud-Relay-Token: <sandbox-token>` for relay authentication. This
+dedicated header is important when the upstream service needs its own
+`Authorization` header; the relay strips its own credential and forwards the
+upstream credential unchanged. Legacy OpenAI clients may continue using
+`Authorization: Bearer <sandbox-token>`.
+
+Workers use the same long-poll, lease, renewal, and fenced-response protocol as
+model calls. A tunnel request envelope adds `tunnel_id`, `body_base64`, and
+`body_size`; `body_base64` is authoritative for arbitrary bytes. Workers return
+binary bodies with `body_base64` on `/worker/respond`. Methods, raw
+percent-encoded paths, query strings, safe end-to-end headers, status codes, and
+request/response bodies are preserved.
+
+This implementation is buffered HTTP. Request and response bodies are limited
+to 32 MiB each. Hop-by-hop headers are removed. WebSockets, streaming/SSE, HTTP
+trailers, and raw TCP are not implemented by this protocol.
+
 ## Worker API
 
 Register a rollout before the sandbox starts making model calls:

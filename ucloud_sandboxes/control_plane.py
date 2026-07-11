@@ -921,10 +921,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _list_images_across_nodes(self) -> None:
         self._write_json({"images": self._image_records_across_nodes()})
 
-    def _image_records_across_nodes(self) -> list[dict[str, Any]]:
+    def _image_records_across_nodes(
+        self,
+        *,
+        image_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         images: list[dict[str, Any]] = []
         if self.image_manager is not None:
             for record in sorted(self.image_manager.list(), key=lambda item: item.id):
+                if image_id is not None and record.id != image_id:
+                    continue
                 enriched = record.to_dict()
                 enriched["location"] = "control-plane"
                 if self._image_record_missing_registry_manifest(enriched):
@@ -946,6 +952,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 continue
             for record in raw_images:
                 if isinstance(record, dict):
+                    if image_id is not None and record.get("id") != image_id:
+                        continue
                     enriched = dict(record)
                     enriched["node"] = _node_metadata(heartbeat)
                     if self._image_record_missing_registry_manifest(enriched):
@@ -2881,11 +2889,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return image_ref_with_manifest_digest(image, direct_digest), None
         if not _looks_like_image_id_reference(image):
             return image, None
-        matches = [
-            record
-            for record in self._image_records_across_nodes()
-            if record.get("id") == image
-        ]
+        matches = self._image_records_across_nodes(image_id=image)
         if not matches:
             return image, None
         available = [

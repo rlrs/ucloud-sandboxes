@@ -4,6 +4,12 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.42 - 2026-07-11
+
+- Filtered internal image records by the requested image ID before registry
+  enrichment, eliminating registry fan-out and multi-second create admission
+  stalls for ordinary unqualified container images.
+
 ## 0.3.41 - 2026-07-11
 
 - Bounded serialized sandbox placement admission to 250 ms and reduced concurrent long-running creates from 64 to 32, preventing multi-minute scheduler convoys under burst load.

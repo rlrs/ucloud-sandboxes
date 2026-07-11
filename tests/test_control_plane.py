@@ -3167,6 +3167,61 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(prepared["status"], 400)
         self.assertTrue(prepared["body"]["retryable"])
 
+    def test_unrelated_image_records_are_not_enriched_during_create(self) -> None:
+        digest = "sha256:" + "b" * 64
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            image_file = raw_path / "images.json"
+            now = utc_now()
+            image_store = ImageStore(image_file)
+            for index in range(20):
+                image_store.upsert(
+                    ImageRecord(
+                        id=f"unrelated-{index}",
+                        tag=f"registry.invalid:5000/repo/image-{index}:v1",
+                        source="build:/tmp/context",
+                        state="available",
+                        created_at=now,
+                        updated_at=now,
+                        pushed=True,
+                        manifest_digest=digest,
+                    )
+                )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                image_file=image_file,
+                registry_url="http://registry.invalid:5000",
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                with patch.object(
+                    control_plane.RegistryClient,
+                    "manifest_digest",
+                    return_value=digest,
+                ) as manifest_digest:
+                    created = self._json_request(
+                        f"http://{host}:{port}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "regular-image-create",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 128,
+                            "disk_mb": 1024,
+                        },
+                        allow_error=True,
+                    )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(created["status"], 503)
+        manifest_digest.assert_not_called()
+
     def test_failed_sandbox_pull_persists_incarnation_demand_until_cancel(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

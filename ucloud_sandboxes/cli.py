@@ -56,7 +56,11 @@ from .bootstrap import (
 )
 from .async_node_agent import create_async_node_agent_app
 from .config import AutoscalerConfig
-from .control_plane import DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES, build_server
+from .control_plane import (
+    DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
+    DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
+    build_server,
+)
 from .deployment import (
     AGENT_VERSION_LABEL,
     BUILDER_LABEL,
@@ -324,6 +328,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Maximum concurrent sandbox create requests handled by the gateway. "
             "Set 0 to disable gateway create backpressure."
+        ),
+    )
+    serve.add_argument(
+        "--max-http-request-threads",
+        type=int,
+        default=DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
+        help=(
+            "Maximum concurrent HTTP request handlers at the gateway. Long-poll "
+            "exec requests occupy a handler until they return."
         ),
     )
     serve.add_argument(
@@ -2152,6 +2165,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_url=registry_url,
         registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
         max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
+        max_http_request_threads=args.max_http_request_threads,
     )
     host, port = server.server_address
     print(f"Serving heartbeat receiver on http://{host}:{port}")

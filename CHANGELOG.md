@@ -4,6 +4,13 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.43 - 2026-07-11
+
+- Raised the central gateway HTTP handler limit from 256 to 2,048 and the
+  listen backlog from 1,024 to 4,096, providing headroom for 512 concurrent
+  rollout long-polls while preserving explicit JSON overload responses.
+- Added a gateway CLI override for the HTTP handler limit.
+
 ## 0.3.42 - 2026-07-11
 
 - Filtered internal image records by the requested image ID before registry

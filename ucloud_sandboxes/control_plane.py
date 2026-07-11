@@ -88,6 +88,7 @@ _GATEWAY_SCHEDULING_LOCK = RLock()
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
 REGISTRY_IMAGE_LEASE_TTL_SECONDS = 60 * 60
 DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 32
+DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS = 2048
 FORK_PROXY_TIMEOUT_SECONDS = FORK_REQUEST_TIMEOUT_SECONDS
 SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS = 2
 SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS = 5
@@ -3584,6 +3585,7 @@ def build_server(
     registry_url: str | None = None,
     registry_usage_file: Path | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
+    max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     build_context_store_dir: Path | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
@@ -3647,7 +3649,11 @@ def build_server(
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
-    return HighBacklogThreadingHTTPServer((host, port), BoundHandler)
+    return HighBacklogThreadingHTTPServer(
+        (host, port),
+        BoundHandler,
+        max_request_threads=max_http_request_threads,
+    )
 
 
 def _is_node_api_path(path: str) -> bool:

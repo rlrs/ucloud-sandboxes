@@ -25,6 +25,7 @@ from ucloud_sandboxes.agent import (
 )
 from ucloud_sandboxes import control_plane
 from ucloud_sandboxes.control_plane import (
+    DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
     IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
     build_server,
@@ -734,6 +735,10 @@ class ControlPlaneTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     server.request_queue_size,
                     DEFAULT_HTTP_REQUEST_QUEUE_SIZE,
+                )
+                self.assertEqual(
+                    server.max_request_threads,
+                    DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
                 )
             finally:
                 server.server_close()

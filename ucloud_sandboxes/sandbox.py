@@ -902,10 +902,11 @@ class _ForkSetupBudget:
 class SandboxLifecycleCoordinator:
     """Coordinates exec/file activity with checkpoint, restore, and delete.
 
-    A gVisor restore deliberately kills exec-origin processes.  Fork therefore
+    A gVisor restore deliberately kills exec-origin processes. Fork therefore
     takes an exclusive lease on both source and destination and fails fast if
-    an attached exec is active; new exec/file activity is rejected until the
-    transition has completed.
+    attached activity is present. Termination instead preempts shared activity:
+    it closes admission before removing the container, while existing exec/file
+    operations are severed by runtime deletion.
     """
 
     def __init__(self) -> None:
@@ -939,13 +940,18 @@ class SandboxLifecycleCoordinator:
             self.release_shared(sandbox_id)
 
     @contextmanager
-    def exclusive(self, *sandbox_ids: str) -> Iterator[None]:
+    def exclusive(
+        self,
+        *sandbox_ids: str,
+        allow_shared: bool = False,
+    ) -> Iterator[None]:
         ids = tuple(sorted(set(sandbox_ids)))
         with self._condition:
             conflicts = [
                 sandbox_id
                 for sandbox_id in ids
-                if sandbox_id in self._exclusive or self._shared.get(sandbox_id, 0) > 0
+                if sandbox_id in self._exclusive
+                or (not allow_shared and self._shared.get(sandbox_id, 0) > 0)
             ]
             if conflicts:
                 raise SandboxBusyError(
@@ -2633,7 +2639,9 @@ class DockerGvisorRuntime:
         try:
             inventory = json.loads(result.stdout)
         except json.JSONDecodeError as exc:
-            raise RuntimeError("checkpoint helper returned invalid inventory JSON") from exc
+            raise RuntimeError(
+                "checkpoint helper returned invalid inventory JSON"
+            ) from exc
         if (
             not isinstance(inventory, dict)
             or inventory.get("version") != 1
@@ -3244,7 +3252,9 @@ class SandboxManager:
             orphan_pending: list[str] = []
             for raw in raw_artifacts:
                 if not isinstance(raw, dict):
-                    raise RuntimeError("checkpoint inventory contains an invalid artifact")
+                    raise RuntimeError(
+                        "checkpoint inventory contains an invalid artifact"
+                    )
                 artifact_id = str(raw.get("artifact_id") or "")
                 artifact_state = str(raw.get("state") or "")
                 validate_checkpoint_id(artifact_id)
@@ -3268,7 +3278,9 @@ class SandboxManager:
 
             for raw in raw_staged:
                 if not isinstance(raw, dict):
-                    raise RuntimeError("checkpoint inventory contains invalid staged data")
+                    raise RuntimeError(
+                        "checkpoint inventory contains invalid staged data"
+                    )
                 artifact_id = str(raw.get("artifact_id") or "")
                 if artifact_id in active_artifacts:
                     continue
@@ -3709,18 +3721,14 @@ class SandboxManager:
                         )
                     }
                     adopts_unfinished_lineage = len(lineages) == 1 and all(
-                        (
-                            existing := state.records.get(target_id)
-                        )
-                        is not None
+                        (existing := state.records.get(target_id)) is not None
                         and existing.creation_kind == "restore"
                         and existing.source_sandbox_id == source_sandbox_id
                         and existing.source_generation == source.generation
                         and existing.generation == operation.generation
                         and existing.operation_id == operation.operation_id
                         and existing.spec_hash == operation.spec_hash
-                        and (existing.checkpoint_id, existing.fork_nonce)
-                        in lineages
+                        and (existing.checkpoint_id, existing.fork_nonce) in lineages
                         for target_id, operation in requested_by_id.items()
                     )
                     if not adopts_unfinished_lineage:
@@ -3891,9 +3899,7 @@ class SandboxManager:
                 inspect_recovery_candidate,
             )
             phases["recover_inspect_ms"] = _elapsed_ms(phase)
-            ready_indexes = [
-                index for index in recovery_indexes if inspected[index]
-            ]
+            ready_indexes = [index for index in recovery_indexes if inspected[index]]
             pending_indexes = [
                 index for index in recovery_indexes if not inspected[index]
             ]
@@ -4156,7 +4162,11 @@ class SandboxManager:
         generation: int = 0,
         operation_id: str = "",
     ) -> tuple[SandboxRecord | None, CommandResult]:
-        with self.lifecycle.exclusive(sandbox_id):
+        # Termination is the hard lifecycle boundary. Existing attached exec,
+        # SSH, and file operations hold shared leases, but they must not veto a
+        # forced container removal. Mark the sandbox exclusive first so no new
+        # activity can start, then let runtime deletion sever existing work.
+        with self.lifecycle.exclusive(sandbox_id, allow_shared=True):
             return self._delete_uncoordinated(
                 sandbox_id,
                 generation=generation,

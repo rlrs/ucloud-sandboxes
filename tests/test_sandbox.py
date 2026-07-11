@@ -311,12 +311,7 @@ class SandboxRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(helper_prepare[-4:], ("128", "1024", "64", "16"))
         self.assertTrue(any("stage" in command for command in commands))
-        self.assertTrue(
-            any(
-                command[:2] == ("docker", "start")
-                for command in commands
-            )
-        )
+        self.assertTrue(any(command[:2] == ("docker", "start") for command in commands))
         prepare_index = next(
             index
             for index, command in enumerate(commands)
@@ -391,10 +386,7 @@ class SandboxRuntimeTests(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            sum(
-                command[:2] == ("docker", "start")
-                for command in commands
-            ),
+            sum(command[:2] == ("docker", "start") for command in commands),
             3,
         )
         self.assertEqual(sum("stage" in command for command in commands), 3)
@@ -598,12 +590,7 @@ class SandboxRuntimeTests(unittest.TestCase):
             )
             * MAX_FORK_PROTOCOL_TIMEOUT_SECONDS
             + (
-                (
-                    MAX_FORK_FANOUT
-                    - recovered
-                    + DEFAULT_FORK_RESTORE_PARALLELISM
-                    - 1
-                )
+                (MAX_FORK_FANOUT - recovered + DEFAULT_FORK_RESTORE_PARALLELISM - 1)
                 // DEFAULT_FORK_RESTORE_PARALLELISM
             )
             * (
@@ -1218,9 +1205,7 @@ class SandboxRuntimeTests(unittest.TestCase):
                         self.max_inspect_active,
                         self.inspect_active,
                     )
-                    self.inspect_budgets.append(
-                        float(getattr(budget, "limit_seconds"))
-                    )
+                    self.inspect_budgets.append(float(getattr(budget, "limit_seconds")))
                 try:
                     index = int(sandbox_id.removeprefix("child-"))
                     if index < 8:
@@ -1317,16 +1302,15 @@ class SandboxRuntimeTests(unittest.TestCase):
                 targets,
             )
 
-            self.assertEqual([record.spec.id for record in recovered], [
-                target.id for target in targets
-            ])
+            self.assertEqual(
+                [record.spec.id for record in recovered],
+                [target.id for target in targets],
+            )
             self.assertTrue(all(result.commands == () for result in results))
             self.assertEqual(runtime.max_inspect_active, 8)
             self.assertEqual(runtime.max_ready_active, 8)
             self.assertTrue(runtime.inspect_budgets)
-            self.assertTrue(
-                all(0 < budget <= 30 for budget in runtime.inspect_budgets)
-            )
+            self.assertTrue(all(0 < budget <= 30 for budget in runtime.inspect_budgets))
             self.assertIn("recover_inspect_ms", timings["phases"])
             self.assertIn("recover_ready_ms", timings["phases"])
 
@@ -2181,6 +2165,119 @@ class SandboxRuntimeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "daemon unavailable"):
             runtime.delete("sandbox")
+
+    def test_delete_preempts_active_exec_and_file_activity(self) -> None:
+        from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
+
+        class BlockingFileRuntime(DockerGvisorRuntime):
+            def __init__(self) -> None:
+                super().__init__(dry_run=True)
+                self.file_started = Event()
+                self.release_file = Event()
+
+            def write_file_to_container(
+                self,
+                sandbox_id: str,
+                container_path: str,
+                content: bytes,
+                *,
+                owner: str | None = None,
+            ) -> CommandResult:
+                self.file_started.set()
+                self.release_file.wait(2)
+                return super().write_file_to_container(
+                    sandbox_id,
+                    container_path,
+                    content,
+                    owner=owner,
+                )
+
+        with TemporaryDirectory() as raw_dir:
+            runtime = BlockingFileRuntime()
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                runtime,
+            )
+            manager.create(
+                SandboxSpec(id="terminate-me", image="busybox", memory_mb=128)
+            )
+            sessions = ExecSessionManager(manager)
+            session = sessions.start(
+                SandboxExecSpec(
+                    sandbox_id="terminate-me",
+                    command=("cat",),
+                    stdin=True,
+                )
+            )
+            file_errors: list[BaseException] = []
+
+            def upload() -> None:
+                try:
+                    manager.upload_file(
+                        "terminate-me",
+                        "/workspace/active",
+                        b"data",
+                    )
+                except BaseException as exc:
+                    file_errors.append(exc)
+
+            file_thread = Thread(target=upload)
+            file_thread.start()
+            self.assertTrue(runtime.file_started.wait(1))
+
+            deleted, result = manager.delete("terminate-me")
+
+            self.assertIsNotNone(deleted)
+            self.assertEqual(result.exit_code, 0)
+            self.assertNotIn("terminate-me", manager.store.load())
+            sessions.close_stdin(session.id)
+            runtime.release_file.set()
+            file_thread.join(timeout=1)
+
+        self.assertFalse(file_thread.is_alive())
+        self.assertEqual(file_errors, [])
+
+    def test_delete_closes_new_activity_admission_while_runtime_removes(self) -> None:
+        class BlockingDeleteRuntime(DockerGvisorRuntime):
+            def __init__(self) -> None:
+                super().__init__(dry_run=True)
+                self.delete_started = Event()
+                self.release_delete = Event()
+
+            def delete(self, sandbox_id: str) -> CommandResult:
+                self.delete_started.set()
+                self.release_delete.wait(2)
+                return super().delete(sandbox_id)
+
+        with TemporaryDirectory() as raw_dir:
+            runtime = BlockingDeleteRuntime()
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                runtime,
+            )
+            manager.create(
+                SandboxSpec(id="terminate-me", image="busybox", memory_mb=128)
+            )
+            manager.lifecycle.acquire_shared("terminate-me")
+            errors: list[BaseException] = []
+
+            def delete() -> None:
+                try:
+                    manager.delete("terminate-me")
+                except BaseException as exc:
+                    errors.append(exc)
+
+            delete_thread = Thread(target=delete)
+            delete_thread.start()
+            self.assertTrue(runtime.delete_started.wait(1))
+            with self.assertRaises(SandboxBusyError):
+                manager.lifecycle.acquire_shared("terminate-me")
+            runtime.release_delete.set()
+            delete_thread.join(timeout=1)
+            manager.lifecycle.release_shared("terminate-me")
+
+        self.assertFalse(delete_thread.is_alive())
+        self.assertEqual(errors, [])
 
     def test_activity_snapshot_uses_one_store_load(self) -> None:
         with TemporaryDirectory() as raw_dir:

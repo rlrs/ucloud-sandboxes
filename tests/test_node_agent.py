@@ -62,9 +62,7 @@ class NodeAgentTests(unittest.TestCase):
                 self.assertNotIn(
                     "fork-local-v1", disabled.RequestHandlerClass.capabilities
                 )
-                self.assertIn(
-                    "fork-local-v1", enabled.RequestHandlerClass.capabilities
-                )
+                self.assertIn("fork-local-v1", enabled.RequestHandlerClass.capabilities)
             finally:
                 disabled.server_close()
                 enabled.server_close()
@@ -529,9 +527,9 @@ class NodeAgentTests(unittest.TestCase):
                     method="POST",
                     payload={"id": "accepted", "image": "busybox", "memory_mb": 64},
                 )
-                open_heartbeat = self._json_request(
-                    f"{restarted_base}/v1/heartbeat"
-                )["heartbeat"]
+                open_heartbeat = self._json_request(f"{restarted_base}/v1/heartbeat")[
+                    "heartbeat"
+                ]
             finally:
                 restarted.shutdown()
                 restarted.server_close()
@@ -810,7 +808,9 @@ class NodeAgentTests(unittest.TestCase):
                 job_id="job-1",
                 node_id="node-1",
                 node_url="http://node-1:8090",
-                total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
+                total_resources=ResourceQuantity(
+                    vcpu=4, memory_mb=8192, disk_mb=100_000
+                ),
                 cpu_overcommit=2.0,
                 runtime=runtime,
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
@@ -889,8 +889,12 @@ class NodeAgentTests(unittest.TestCase):
             self.assertEqual(heartbeat["heartbeat"]["node_url"], "http://node-1:8090")
             self.assertEqual(heartbeat["heartbeat"]["active_sandboxes"], 0)
             self.assertEqual(heartbeat["heartbeat"]["effective_resources"]["vcpu"], 8.0)
-            self.assertEqual(heartbeat["heartbeat"]["runtime_metrics"]["cpu_percent"], 25.0)
-            self.assertEqual(heartbeat["heartbeat"]["runtime_metrics"]["memory_used_mb"], 2048)
+            self.assertEqual(
+                heartbeat["heartbeat"]["runtime_metrics"]["cpu_percent"], 25.0
+            )
+            self.assertEqual(
+                heartbeat["heartbeat"]["runtime_metrics"]["memory_used_mb"], 2048
+            )
             self.assertTrue(heartbeat["heartbeat"]["node_epoch"])
             self.assertEqual(
                 second_heartbeat["heartbeat"]["node_epoch"],
@@ -918,6 +922,51 @@ class NodeAgentTests(unittest.TestCase):
                 sandbox_spec_fingerprint(SandboxSpec.from_dict(create_payload)),
             )
             self.assertEqual(deleted["deleted"]["spec"]["id"], "sbx-1")
+
+    def test_delete_terminates_sandbox_with_active_exec(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(dry_run=True),
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "terminate-active",
+                        "image": "busybox",
+                        "memory_mb": 128,
+                    },
+                )
+                started = self._json_request(
+                    f"{base}/v1/sandboxes/terminate-active/exec",
+                    method="POST",
+                    payload={"command": ["cat"], "stdin": True},
+                )
+                deleted = self._json_request(
+                    f"{base}/v1/sandboxes/terminate-active",
+                    method="DELETE",
+                )
+                listed = self._json_request(f"{base}/v1/sandboxes")
+                server.RequestHandlerClass.exec_manager.close_stdin(
+                    started["session"]["id"]
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(deleted["deleted"]["spec"]["id"], "terminate-active")
+        self.assertEqual(listed["sandboxes"], [])
 
     def test_builds_images_and_snapshots_over_http(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1038,7 +1087,24 @@ class NodeAgentTests(unittest.TestCase):
             self.assertEqual(heartbeat["heartbeat"]["active_image_builds"], 1)
             self.assertEqual(finished["status"], "succeeded")
             self.assertIn("building layer", finished["log_tail"])
-            self.assertEqual(executor.commands, [("docker", "build", "-f", "/tmp/context/Dockerfile", "-t", "local/python-base:latest", "--label", "ucloud-sandboxes.image=true", "--label", "ucloud-sandboxes.image-id=python-base", "/tmp/context")])
+            self.assertEqual(
+                executor.commands,
+                [
+                    (
+                        "docker",
+                        "build",
+                        "-f",
+                        "/tmp/context/Dockerfile",
+                        "-t",
+                        "local/python-base:latest",
+                        "--label",
+                        "ucloud-sandboxes.image=true",
+                        "--label",
+                        "ucloud-sandboxes.image-id=python-base",
+                        "/tmp/context",
+                    )
+                ],
+            )
             self.assertEqual(images["images"][0]["id"], "python-base")
 
     def test_regular_node_rejects_image_builds(self) -> None:
@@ -1074,7 +1140,9 @@ class NodeAgentTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
 
-            self.assertEqual(heartbeat["heartbeat"]["capabilities"], ["sandbox", "image-cache"])
+            self.assertEqual(
+                heartbeat["heartbeat"]["capabilities"], ["sandbox", "image-cache"]
+            )
             self.assertEqual(result["status"], 403)
 
     def test_node_heartbeat_includes_extra_security_capabilities(self) -> None:
@@ -1516,7 +1584,9 @@ class BlockingExecutor:
         self.release = Event()
         self.commands: list[tuple[str, ...]] = []
 
-    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
+    def run(
+        self, argv: tuple[str, ...], *, input: bytes | None = None
+    ) -> CommandResult:
         self.commands.append(argv)
         self.started.set()
         self.release.wait(5)

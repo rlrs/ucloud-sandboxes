@@ -181,8 +181,7 @@ class ControlPlaneTests(unittest.TestCase):
             spec_hash=sandbox_spec_fingerprint(source),
         )
         targets = tuple(
-            sandbox_fork_target(source, {"id": f"child-{index}"})
-            for index in range(4)
+            sandbox_fork_target(source, {"id": f"child-{index}"}) for index in range(4)
         )
         public_body = json.dumps(
             {"sandboxes": [{"id": target.id} for target in targets]}
@@ -566,9 +565,7 @@ class ControlPlaneTests(unittest.TestCase):
                         ),
                     )
                     self.assertEqual(
-                        post_heartbeat(
-                            f"{base}/v1/nodes/heartbeat", heartbeat
-                        ).status,
+                        post_heartbeat(f"{base}/v1/nodes/heartbeat", heartbeat).status,
                         200,
                     )
                     parent = self._json_request(
@@ -587,9 +584,7 @@ class ControlPlaneTests(unittest.TestCase):
                     )["sandbox"]
                     self.assertEqual(
                         parent["spec_hash"],
-                        sandbox_spec_fingerprint(
-                            SandboxSpec.from_dict(parent["spec"])
-                        ),
+                        sandbox_spec_fingerprint(SandboxSpec.from_dict(parent["spec"])),
                     )
 
                     node_manager = node.RequestHandlerClass.manager
@@ -654,9 +649,7 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertIsNotNone(child_b_route)
             self.assertEqual(child_route.node_id, parent_route.node_id)
             self.assertTrue(child_route.create_operation_id.startswith("fork-"))
-            self.assertEqual(
-                forked["sandbox"]["source_sandbox_id"], "fork-parent"
-            )
+            self.assertEqual(forked["sandbox"]["source_sandbox_id"], "fork-parent")
             self.assertEqual(
                 forked["sandbox"]["source_generation"], parent["generation"]
             )
@@ -672,9 +665,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(child_a_route.node_id, parent_route.node_id)
             self.assertEqual(child_b_route.node_id, parent_route.node_id)
-            self.assertTrue(
-                fanout_replayed["timings"]["manager"]["idempotent"]
-            )
+            self.assertTrue(fanout_replayed["timings"]["manager"]["idempotent"])
 
     def test_gateway_replaces_public_auth_with_node_control_credential(self) -> None:
         observed: dict[str, str | None] = {}
@@ -682,9 +673,7 @@ class ControlPlaneTests(unittest.TestCase):
         class NodeProbeHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
                 observed["authorization"] = self.headers.get("Authorization")
-                observed["public_token"] = self.headers.get(
-                    "X-UCloud-Sandbox-Token"
-                )
+                observed["public_token"] = self.headers.get("X-UCloud-Sandbox-Token")
                 observed["proxy_authorization"] = self.headers.get(
                     "Proxy-Authorization"
                 )
@@ -1599,6 +1588,35 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(unauthorized["body"], {"error": "unauthorized"})
             self.assertEqual(authorized, {"sandboxes": []})
             self.assertEqual(header_authorized, {"sandboxes": []})
+
+    def test_health_reports_unavailable_registry_usage_state(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            usage_path = raw_path / "registry-usage.json"
+            usage_path.mkdir()
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                registry_usage_file=usage_path,
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                health = self._json_request(
+                    f"http://{host}:{port}/healthz",
+                    allow_error=True,
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(health["status"], 503)
+        self.assertFalse(health["body"]["ok"])
+        self.assertEqual(
+            health["body"]["registry_usage"],
+            {"ok": False, "error": "state file is unavailable"},
+        )
 
     def test_distinct_gateway_and_heartbeat_tokens_are_channel_scoped(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -2655,9 +2673,7 @@ class ControlPlaneTests(unittest.TestCase):
                                 "spec_hash": operation["spec_hash"],
                             }
                         )
-                    self._write_json(
-                        {"sandboxes": sandboxes}
-                    )
+                    self._write_json({"sandboxes": sandboxes})
                     return
                 self.send_response(404)
                 self.end_headers()
@@ -2759,9 +2775,7 @@ class ControlPlaneTests(unittest.TestCase):
                         ).status,
                         200,
                     )
-                    refreshed = self._json_request(
-                        f"{base}/v1/sandboxes?refresh=true"
-                    )
+                    refreshed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
                     after_restart = RegistryUsageStore(usage_file).snapshot()
                     route = RoutingStore(route_file).get_sandbox("ambiguous-one")
                 finally:
@@ -2928,10 +2942,7 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertTrue(
                 control_plane._persist_registry_image_protection(
                     store,
-                    (
-                        "ucloud-sandbox-registry:5000/repo/a:v1"
-                        f"@{digest}"
-                    ),
+                    ("ucloud-sandbox-registry:5000/repo/a:v1" f"@{digest}"),
                     "sandbox:one",
                     touch=True,
                     persistent=True,
@@ -2974,10 +2985,7 @@ class ControlPlaneTests(unittest.TestCase):
                             "id": "unprotected-digest",
                             "count": 1,
                             "ttl_seconds": 60,
-                            "image": (
-                                "registry.invalid:5000/repo/a:v1"
-                                f"@{digest}"
-                            ),
+                            "image": ("registry.invalid:5000/repo/a:v1" f"@{digest}"),
                             "cpus": 1,
                             "memory_mb": 512,
                         },
@@ -4013,9 +4021,7 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "digest-build",
-                            "tag": (
-                                "ucloud-sandbox-registry:5000/team/image:v1"
-                            ),
+                            "tag": ("ucloud-sandbox-registry:5000/team/image:v1"),
                             "context_path": "/tmp/context",
                             "push": True,
                         },
@@ -4032,9 +4038,9 @@ class ControlPlaneTests(unittest.TestCase):
                             "memory_mb": 512,
                         },
                     )
-                    stored_digest = ImageStore(image_file).load()[
-                        "digest-build"
-                    ].manifest_digest
+                    stored_digest = (
+                        ImageStore(image_file).load()["digest-build"].manifest_digest
+                    )
                 finally:
                     gateway.shutdown()
                     gateway.server_close()
@@ -4046,10 +4052,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored_digest, digest)
         self.assertEqual(
             prepared["prepare"]["image"],
-            (
-                "ucloud-sandbox-registry:5000/team/image:v1"
-                f"@{digest}"
-            ),
+            ("ucloud-sandbox-registry:5000/team/image:v1" f"@{digest}"),
         )
 
     def test_gateway_resolves_pushed_image_id_to_registry_tag_on_create(self) -> None:
@@ -4216,7 +4219,9 @@ class ControlPlaneTests(unittest.TestCase):
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 1
             )
 
-    def test_content_addressed_context_survives_503_and_streams_to_builder(self) -> None:
+    def test_content_addressed_context_survives_503_and_streams_to_builder(
+        self,
+    ) -> None:
         archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
         digest = f"sha256:{hashlib.sha256(archive).hexdigest()}"
         with TemporaryDirectory() as raw_dir:
@@ -4303,7 +4308,9 @@ class ControlPlaneTests(unittest.TestCase):
                     allow_error=True,
                 )
                 self.assertTrue(
-                    (gateway_contexts / "sha256" / digest.removeprefix("sha256:")).is_file()
+                    (
+                        gateway_contexts / "sha256" / digest.removeprefix("sha256:")
+                    ).is_file()
                 )
 
                 builder_host, builder_port = builder.server_address
@@ -4827,9 +4834,7 @@ class ControlPlaneTests(unittest.TestCase):
                             "id": "digest-warmup",
                             "count": 1,
                             "ttl_seconds": 60,
-                            "image": (
-                                "ucloud-sandbox-registry:5000/team/image:v1"
-                            ),
+                            "image": ("ucloud-sandbox-registry:5000/team/image:v1"),
                             "cpus": 1,
                             "memory_mb": 512,
                         },
@@ -4841,9 +4846,7 @@ class ControlPlaneTests(unittest.TestCase):
                 registry.shutdown()
                 registry.server_close()
 
-        expected = (
-            "ucloud-sandbox-registry:5000/team/image:v1" f"@{digest}"
-        )
+        expected = "ucloud-sandbox-registry:5000/team/image:v1" f"@{digest}"
         self.assertEqual(prepared["prepare"]["image"], expected)
         self.assertEqual(prepared["image_warmup"]["image"], expected)
 
@@ -5721,9 +5724,7 @@ class ControlPlaneTests(unittest.TestCase):
             node_url="http://node-1:8090",
             total_resources=ResourceQuantity(vcpu=10, memory_mb=10_000, disk_mb=10_000),
             used_resources=ResourceQuantity(vcpu=2, memory_mb=2_000, disk_mb=2_000),
-            reserved_resources=ResourceQuantity(
-                vcpu=1, memory_mb=1_000, disk_mb=1_000
-            ),
+            reserved_resources=ResourceQuantity(vcpu=1, memory_mb=1_000, disk_mb=1_000),
             build_reserved_resources=ResourceQuantity(
                 vcpu=1, memory_mb=1_000, disk_mb=1_000
             ),

@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import math
+import os
 from pathlib import Path
 import sqlite3
 from threading import BoundedSemaphore, RLock, Thread
@@ -183,7 +184,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if self.path == "/healthz":
-            self._write_json(service_health("control-plane"))
+            health = service_health("control-plane")
+            registry_usage_error = self._registry_usage_health_error()
+            if registry_usage_error:
+                health["ok"] = False
+                health["registry_usage"] = {
+                    "ok": False,
+                    "error": registry_usage_error,
+                }
+                self._write_json(health, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            else:
+                self._write_json(health)
             return
         asset = dashboard_asset(parsed.path)
         if asset is not None:
@@ -608,6 +619,28 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _registry_usage_health_error(self) -> str:
+        store = self.registry_usage_store
+        if store is None:
+            return ""
+        path = store.path
+        try:
+            if not path.exists():
+                if not path.parent.is_dir() or not os.access(path.parent, os.W_OK):
+                    return "state directory is not writable"
+                return ""
+            with path.open("r+", encoding="utf-8") as file:
+                payload = json.load(file)
+            if not isinstance(payload, dict):
+                return "state file is invalid"
+            if not isinstance(payload.get("images", []), list) or not isinstance(
+                payload.get("leases", []), list
+            ):
+                return "state file is invalid"
+        except (OSError, ValueError, json.JSONDecodeError):
+            return "state file is unavailable"
+        return ""
+
     def _write_routing_store_unavailable(self, exc: sqlite3.DatabaseError) -> None:
         self._write_json(
             {
@@ -861,9 +894,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             for observed_route in routes:
                 stored_route = (
-                    self.routing_store.get_sandbox_readonly(
-                        observed_route.sandbox_id
-                    )
+                    self.routing_store.get_sandbox_readonly(observed_route.sandbox_id)
                     or observed_route
                 )
                 self._ensure_registry_route_reference(stored_route, touch=True)
@@ -1212,9 +1243,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         except (TypeError, ValueError):
                             existing_spec_matches = False
                     if (
-                        (existing.spec_hash and existing.spec_hash != requested_hash)
-                        or not existing_spec_matches
-                    ):
+                        existing.spec_hash and existing.spec_hash != requested_hash
+                    ) or not existing_spec_matches:
                         root.status = "error"
                         root.set_attribute("outcome", "generation_spec_conflict")
                         self._write_json(
@@ -1578,16 +1608,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if _sandbox_fork_request_body_upper_bound(
-            source_route,
-            targets,
-            batch=batch,
-        ) > DEFAULT_MAX_JSON_BODY_BYTES:
+        if (
+            _sandbox_fork_request_body_upper_bound(
+                source_route,
+                targets,
+                batch=batch,
+            )
+            > DEFAULT_MAX_JSON_BODY_BYTES
+        ):
             self._write_json(
                 {
-                    "error": (
-                        "expanded fork request exceeds the node JSON body limit"
-                    ),
+                    "error": ("expanded fork request exceeds the node JSON body limit"),
                     "max_bytes": DEFAULT_MAX_JSON_BODY_BYTES,
                     "intent_persisted": False,
                 },
@@ -1622,9 +1653,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             return
         routes = tuple(route for route, _created in reservations)
-        created_routes = tuple(
-            route for route, created in reservations if created
-        )
+        created_routes = tuple(route for route, created in reservations if created)
 
         referenced_created_routes: list[SandboxRoute] = []
         try:
@@ -1651,9 +1680,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             body=(
                 _sandbox_fork_batch_request_body(source_route, targets, routes)
                 if batch
-                else _sandbox_fork_request_body(
-                    source_route, targets[0], routes[0]
-                )
+                else _sandbox_fork_request_body(source_route, targets[0], routes[0])
             ),
         )
         payload = response.json()
@@ -1697,9 +1724,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 return
             finalization_conflict = False
-            for route, target, record in zip(
-                routes, targets, records, strict=True
-            ):
+            for route, target, record in zip(routes, targets, records, strict=True):
                 stored_route = self.routing_store.finalize_sandbox_create(
                     _route_with_sandbox_record(route, record)
                 )
@@ -1728,9 +1753,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 return
         else:
             intent_states = _node_fork_intent_states(payload, routes)
-            for route, intent_persisted in zip(
-                routes, intent_states, strict=True
-            ):
+            for route, intent_persisted in zip(routes, intent_states, strict=True):
                 if intent_persisted is not False:
                     continue
                 current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
@@ -1758,9 +1781,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raise ValueError("at least one fork target is required")
         if len({target.id for target in targets}) != len(targets):
             raise ValueError("fork fan-out target ids must be unique")
-        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(
-            self.routing_store.path
-        ):
+        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
             current_source = self.routing_store.get_sandbox_readonly(
                 source_route.sandbox_id
             )
@@ -1779,9 +1800,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             now = utc_now().isoformat()
             for target in targets:
                 target_hash = sandbox_spec_fingerprint(target)
-                operation_id = _sandbox_fork_operation_id(
-                    source_route, target_hash
-                )
+                operation_id = _sandbox_fork_operation_id(source_route, target_hash)
                 existing = self.routing_store.get_sandbox_readonly(target.id)
                 if existing is not None:
                     if (
@@ -2263,9 +2282,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         context_response = self._ensure_node_build_context(
                             heartbeat.node_url or "", context_reference
                         )
-                        span.set_attribute(
-                            "status_code", int(context_response.status)
-                        )
+                        span.set_attribute("status_code", int(context_response.status))
                         context_payload = context_response.json()
                         if "deduplicated" in context_payload:
                             span.set_attribute(
@@ -2275,9 +2292,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     if not 200 <= context_response.status < 300:
                         root.status = "error"
                         root.set_attribute("outcome", "context_proxy_failed")
-                        root.set_attribute(
-                            "status_code", int(context_response.status)
-                        )
+                        root.set_attribute("status_code", int(context_response.status))
                         self._send_proxied_response(context_response)
                         return
                 build_reference = self._begin_registry_image_build_reference(
@@ -2301,9 +2316,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     span.set_attribute("status_code", int(response.status))
                     response_payload = response.json()
                     raw_image = response_payload.get("image")
-                    if isinstance(raw_image, dict) and _image_record_available_to_sandboxes(
-                        raw_image
-                    ):
+                    if isinstance(
+                        raw_image, dict
+                    ) and _image_record_available_to_sandboxes(raw_image):
                         raw_image = self._image_record_with_registry_digest(raw_image)
                         response_payload["image"] = raw_image
                         raw_build = response_payload.get("build")
@@ -2323,9 +2338,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     and response.status not in {408, 425, 429}
                 )
                 if (
-                    (accepted_build_response or terminal_build_response)
-                    and self.routing_store is not None
-                ):
+                    accepted_build_response or terminal_build_response
+                ) and self.routing_store is not None:
                     self.routing_store.clear_pending_image_build(spec.id)
                 if terminal_build_response:
                     self._release_registry_image_build_reference(build_reference)
@@ -2619,11 +2633,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if not heartbeat.inventory_complete:
                 continue
             item = next(
-                (
-                    item
-                    for item in heartbeat.inventory
-                    if item.sandbox_id == sandbox_id
-                ),
+                (item for item in heartbeat.inventory if item.sandbox_id == sandbox_id),
                 None,
             )
             if item is None:
@@ -2681,9 +2691,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         record,
                     )
                     self.routing_store.upsert_sandbox(route)
-                    route = (
-                        self.routing_store.get_sandbox_readonly(sandbox_id) or route
-                    )
+                    route = self.routing_store.get_sandbox_readonly(sandbox_id) or route
                     self._ensure_registry_route_reference(route, touch=True)
                     return route
         return None
@@ -2784,9 +2792,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         spec: dict[str, Any],
         spec_hash: str,
     ) -> tuple[NodeHeartbeat, SandboxRoute] | None:
-        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(
-            self.routing_store.path
-        ):
+        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
             heartbeat = self._select_node(
                 requested,
                 image=image,
@@ -3206,7 +3212,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _managed_image_requires_digest_cache_identity(self, image: str) -> bool:
         return bool(
             self.registry_url
-            and _managed_registry_image_coordinates(image, self.registry_url) is not None
+            and _managed_registry_image_coordinates(image, self.registry_url)
+            is not None
         )
 
     def _ensure_image_on_node(
@@ -3336,8 +3343,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         body = None
         is_sandbox_create = (
-            self.command == "POST"
-            and urlparse(self.path).path == "/v1/sandboxes"
+            self.command == "POST" and urlparse(self.path).path == "/v1/sandboxes"
         )
         limiter = self.sandbox_create_limiter if is_sandbox_create else None
         limiter_acquired = False
@@ -3425,9 +3431,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             }:
                 del headers[key]
         if self.node_control_bearer_token is not None:
-            headers["Authorization"] = (
-                f"Bearer {self.node_control_bearer_token}"
-            )
+            headers["Authorization"] = f"Bearer {self.node_control_bearer_token}"
         proxied = request.Request(
             node_url.rstrip("/") + path,
             data=body,
@@ -3501,7 +3505,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> bool:
         authorization = self.headers.get("Authorization") or ""
         prefix = "Bearer "
-        bearer = authorization[len(prefix) :] if authorization.startswith(prefix) else ""
+        bearer = (
+            authorization[len(prefix) :] if authorization.startswith(prefix) else ""
+        )
         if bearer and hmac.compare_digest(bearer, expected):
             return True
         if allow_ucloud_sandbox_header:
@@ -3651,7 +3657,7 @@ def _sandbox_fork_source_from_path(path: str) -> str | None:
     suffix = "/forks"
     if not path.startswith(prefix) or not path.endswith(suffix):
         return None
-    encoded = path[len(prefix):-len(suffix)]
+    encoded = path[len(prefix) : -len(suffix)]
     source_id = unquote(encoded)
     if not source_id or "/" in source_id:
         return None
@@ -3662,7 +3668,7 @@ def _build_context_digest_from_path(path: str) -> str | None:
     prefix = "/v1/image-contexts/"
     if not path.startswith(prefix):
         return None
-    digest = unquote(path[len(prefix):])
+    digest = unquote(path[len(prefix) :])
     return digest if digest and "/" not in digest else None
 
 
@@ -4011,8 +4017,7 @@ def _sandbox_fork_record_matches_route(
         _sandbox_record_matches_route(record, child_route, target)
         and str(record.get("state") or "") == "running"
         and str(record.get("creation_kind") or "") == "restore"
-        and str(record.get("source_sandbox_id") or "")
-        == source_route.sandbox_id
+        and str(record.get("source_sandbox_id") or "") == source_route.sandbox_id
         and source_generation == source_route.generation
         and bool(str(record.get("checkpoint_id") or ""))
         and len(fork_nonce) == 64
@@ -4032,8 +4037,7 @@ def _sandbox_fork_result_matches_record(
     return (
         payload.get("intent_persisted") is True
         and str(record.get("state") or "") == "running"
-        and
-        str(fork.get("checkpoint_id") or "")
+        and str(fork.get("checkpoint_id") or "")
         == str(record.get("checkpoint_id") or "")
         and fork.get("restored") is True
         and isinstance(commands, list)
@@ -4372,9 +4376,7 @@ def _persist_registry_image_protection(
         if touch:
             usage_refs = [image_ref]
             if digest:
-                usage_refs.append(
-                    f"{repository}:{digest_protection_tag(digest)}"
-                )
+                usage_refs.append(f"{repository}:{digest_protection_tag(digest)}")
             touch_many = getattr(store, "touch_images", None)
             if callable(touch_many):
                 touched = touch_many(usage_refs, when=now)
@@ -4383,9 +4385,7 @@ def _persist_registry_image_protection(
                 # single-reference protocol.
                 touched = tuple(
                     item
-                    for item in (
-                        store.touch_image(ref, when=now) for ref in usage_refs
-                    )
+                    for item in (store.touch_image(ref, when=now) for ref in usage_refs)
                     if item is not None
                 )
             if len(touched) != len(usage_refs):
@@ -4393,7 +4393,9 @@ def _persist_registry_image_protection(
         timestamp = now or utc_now()
         snapshot = store.snapshot(now=timestamp)
         existing = snapshot.leases.get((repository, tag, owner))
-        digest_matches = not digest or (existing is not None and existing.digest == digest)
+        digest_matches = not digest or (
+            existing is not None and existing.digest == digest
+        )
         if existing is not None and not existing.expires_at and digest_matches:
             return True
         if persistent:
@@ -4493,11 +4495,7 @@ def _run_image_warmup_task(
                 headers={
                     "Content-Type": "application/json",
                     **(
-                        {
-                            "Authorization": (
-                                f"Bearer {node_control_bearer_token}"
-                            )
-                        }
+                        {"Authorization": (f"Bearer {node_control_bearer_token}")}
                         if node_control_bearer_token is not None
                         else {}
                     ),

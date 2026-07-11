@@ -160,9 +160,7 @@ class RegistryImageLease:
 class RegistryUsageSnapshot:
     generation: int
     records: dict[tuple[str, str], RegistryImageUsage]
-    leases: dict[tuple[str, str, str], RegistryImageLease] = field(
-        default_factory=dict
-    )
+    leases: dict[tuple[str, str, str], RegistryImageLease] = field(default_factory=dict)
 
     def active_lease_tags(self, *, now: datetime | None = None) -> set[tuple[str, str]]:
         reference = _as_utc(now or datetime.now(timezone.utc))
@@ -276,7 +274,9 @@ class RegistryClient:
 
     def manifest_digest(self, repository: str, tag: str) -> str:
         path = f"/v2/{_quote_repository(repository)}/manifests/{quote(tag, safe='')}"
-        response = self._request(path, method="HEAD", headers={"Accept": MANIFEST_ACCEPT})
+        response = self._request(
+            path, method="HEAD", headers={"Accept": MANIFEST_ACCEPT}
+        )
         try:
             digest = response.headers.get("Docker-Content-Digest")
         finally:
@@ -535,7 +535,9 @@ class RegistryUsageStore:
                 tag=tag,
                 owner=owner,
                 acquired_at=(
-                    previous.acquired_at if previous is not None else timestamp.isoformat()
+                    previous.acquired_at
+                    if previous is not None
+                    else timestamp.isoformat()
                 ),
                 renewed_at=timestamp.isoformat(),
                 expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
@@ -782,6 +784,14 @@ class RegistryUsageStore:
                 os.O_CREAT | os.O_EXCL | os.O_WRONLY,
                 0o600,
             )
+            try:
+                _adopt_shared_state_owner(
+                    descriptor,
+                    self.path if self.path.exists() else self.path.parent,
+                )
+            except BaseException:
+                os.close(descriptor)
+                raise
             with os.fdopen(descriptor, "w", encoding="utf-8") as file:
                 file.write(json.dumps(payload, indent=2, sort_keys=True))
                 file.flush()
@@ -806,9 +816,7 @@ class RegistryUsageStore:
         now: datetime,
     ) -> RegistryUsageSnapshot:
         active = {
-            key: lease
-            for key, lease in snapshot.leases.items()
-            if lease.is_active(now)
+            key: lease for key, lease in snapshot.leases.items() if lease.is_active(now)
         }
         if len(active) == len(snapshot.leases):
             return snapshot
@@ -828,9 +836,7 @@ def registry_prune_plan(
     repository_prefix: str = "",
     max_age_days: float | None = None,
     usage_records: dict[tuple[str, str], RegistryImageUsage] | None = None,
-    active_leases: Mapping[
-        tuple[str, str, str], RegistryImageLease
-    ] | None = None,
+    active_leases: Mapping[tuple[str, str, str], RegistryImageLease] | None = None,
     usage_generation: int | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
@@ -959,7 +965,7 @@ def registry_summary(
     max_tags_per_repository: int = 50,
 ) -> dict[str, Any]:
     repositories = sorted(client.catalog())
-    scanned = repositories[:max(0, max_repositories)]
+    scanned = repositories[: max(0, max_repositories)]
     records: list[dict[str, Any]] = []
     scanned_tag_count = 0
     visible_tag_count_total = 0
@@ -1029,9 +1035,7 @@ def select_prune_candidates(
     keep_per_repository: int,
     max_age_days: float | None = None,
     use_last_used_at: bool = False,
-    active_leases: Mapping[
-        tuple[str, str, str], RegistryImageLease
-    ] | None = None,
+    active_leases: Mapping[tuple[str, str, str], RegistryImageLease] | None = None,
     now: datetime | None = None,
 ) -> list[RegistryTag]:
     keep = max(0, keep_per_repository)
@@ -1308,8 +1312,7 @@ def _registry_repository_name_unknown(exc: RegistryRequestError) -> bool:
     if not isinstance(errors, list):
         return False
     return any(
-        isinstance(item, dict) and item.get("code") == "NAME_UNKNOWN"
-        for item in errors
+        isinstance(item, dict) and item.get("code") == "NAME_UNKNOWN" for item in errors
     )
 
 
@@ -1327,7 +1330,7 @@ def _next_link_path(link: str | None) -> str:
         end = part.find(">", start + 1)
         if start < 0 or end <= start:
             continue
-        target = part[start + 1:end]
+        target = part[start + 1 : end]
         parsed = urlparse(target)
         path = parsed.path or target
         if parsed.query:
@@ -1355,6 +1358,7 @@ def _registry_file_lock(
     try:
         lock_path = resolved.with_name(resolved.name + ".lock")
         with lock_path.open("a+", encoding="utf-8") as lock_file:
+            _adopt_shared_state_owner(lock_file.fileno(), resolved.parent)
             flags = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
             fcntl.flock(lock_file.fileno(), flags)
             try:
@@ -1363,3 +1367,20 @@ def _registry_file_lock(
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     finally:
         local_lock.release()
+
+
+def _adopt_shared_state_owner(descriptor: int, owner_source: Path) -> None:
+    """Keep root maintenance writes accessible to the service account.
+
+    Atomic replacement creates a new inode owned by the writing process. The
+    registry maintenance jobs run as root while the gateway runs as the owner
+    of the state directory, so root must explicitly retain that shared owner.
+    """
+
+    if os.geteuid() != 0:
+        return
+    try:
+        ownership = owner_source.stat()
+    except FileNotFoundError:
+        ownership = owner_source.parent.stat()
+    os.fchown(descriptor, ownership.st_uid, ownership.st_gid)

@@ -65,6 +65,18 @@ class DeployTests(unittest.TestCase):
             registry["UCLOUD_IMAGE_FILE"],
             "/work/ucloud-sandboxes/state/images.json",
         )
+        self.assertIn(
+            "REGISTRY_USAGE_FILE=/work/ucloud-sandboxes/state/registry-usage.json",
+            script,
+        )
+        self.assertIn(
+            'for path in "$REGISTRY_USAGE_FILE" "$REGISTRY_USAGE_FILE.lock"; do',
+            script,
+        )
+        self.assertIn(
+            'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
+            script,
+        )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_HEARTBEAT_URL"],
             "http://sandbox-gateway-prod:8090/v1/nodes/heartbeat",
@@ -95,13 +107,13 @@ class DeployTests(unittest.TestCase):
         self.assertIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertIn("SANDBOX_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("BUILDER_NODE_PACKAGE_BUNDLE=", script)
-        self.assertIn("pip\" download --disable-pip-version-check", script)
+        self.assertIn('pip" download --disable-pip-version-check', script)
         self.assertIn("binutils ca-certificates", script)
         self.assertIn('strip --strip-debug "$unpack_dir/usr/bin/runsc"', script)
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("compresslevel=1", script)
-        bundle_complete = script.index('trap - EXIT')
+        bundle_complete = script.index("trap - EXIT")
         gateway_install = script.index(
             '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"'
         )
@@ -127,7 +139,9 @@ class DeployTests(unittest.TestCase):
         )
         self.assertIn("ucloud-sandbox-autoscaler.service", script)
         self.assertIn("ucloud-sandbox-registry-prune.timer", script)
-        self.assertIn("systemctl enable --now ucloud-sandbox-registry-prune.timer", script)
+        self.assertIn(
+            "systemctl enable --now ucloud-sandbox-registry-prune.timer", script
+        )
         self.assertIn("curl -fsS http://127.0.0.1:8090/healthz", script)
         self.assertIn(
             "create_secret /work/ucloud-sandboxes/state/gateway-token",
@@ -388,7 +402,10 @@ class DeployTests(unittest.TestCase):
             "--init-buildx-direct-push",
             units["ucloud-sandbox-autoscaler.service"],
         )
-        self.assertIn("EnvironmentFile=/etc/ucloud-sandboxes/gateway.env", units["ucloud-sandbox-gateway.service"])
+        self.assertIn(
+            "EnvironmentFile=/etc/ucloud-sandboxes/gateway.env",
+            units["ucloud-sandbox-gateway.service"],
+        )
 
 
 if __name__ == "__main__":

@@ -322,9 +322,7 @@ def registry_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_REGISTRY_PORT": str(plan.registry_port),
         "UCLOUD_REGISTRY_DATA_DIR": plan.registry_data_dir,
         "UCLOUD_REGISTRY_RETENTION_DAYS": f"{plan.registry_retention_days:g}",
-        "UCLOUD_REGISTRY_KEEP_PER_REPOSITORY": str(
-            plan.registry_keep_per_repository
-        ),
+        "UCLOUD_REGISTRY_KEEP_PER_REPOSITORY": str(plan.registry_keep_per_repository),
         "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
         "UCLOUD_IMAGE_FILE": plan.image_file,
     }
@@ -399,8 +397,7 @@ def render_remote_deploy_script(
         "/etc/ucloud-sandboxes/autoscaler.env": render_env_file(autoscaler_env(plan)),
     }
     unit_files = {
-        f"/etc/systemd/system/{name}": unit_texts[name]
-        for name in SYSTEMD_UNIT_NAMES
+        f"/etc/systemd/system/{name}": unit_texts[name] for name in SYSTEMD_UNIT_NAMES
     }
     sandbox_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
@@ -410,6 +407,7 @@ def render_remote_deploy_script(
         "set -euo pipefail",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"STATE_DIR={shlex.quote(plan.state_dir)}",
+        f"REGISTRY_USAGE_FILE={shlex.quote(plan.registry_usage_file)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
@@ -422,12 +420,12 @@ def render_remote_deploy_script(
         f"REGISTRY_PRIVATE_IP={shlex.quote(plan.registry_private_ip)}",
         "",
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
-        'detect_registry_private_ip() {',
-        '  ip -o -4 addr show scope global | awk \'',
+        "detect_registry_private_ip() {",
+        "  ip -o -4 addr show scope global | awk '",
         "    {",
         '      split($4, addr, "/")',
         "      ip = addr[1]",
-        '      if (ip !~ /^127\\./ && ip !~ /^169\\.254\\./ && ip !~ /^172\\.17\\./) {',
+        "      if (ip !~ /^127\\./ && ip !~ /^169\\.254\\./ && ip !~ /^172\\.17\\./) {",
         "        print ip",
         "        exit",
         "      }",
@@ -446,6 +444,12 @@ def render_remote_deploy_script(
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR/ssh"',
+        'for path in "$REGISTRY_USAGE_FILE" "$REGISTRY_USAGE_FILE.lock"; do',
+        '  if [ -e "$path" ]; then',
+        '    sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
+        '    sudo chmod 600 "$path"',
+        "  fi",
+        "done",
         'test -s "$REMOTE_WHEEL"',
         'test -s "$SESSION_FILE"',
         'chmod 600 "$SESSION_FILE"',
@@ -461,7 +465,7 @@ def render_remote_deploy_script(
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$VENV_DIR"',
         '"$VENV_DIR/bin/pip" install --upgrade pip',
         'NODE_PACKAGE_WORK="$(mktemp -d)"',
-        'trap \'rm -rf "$NODE_PACKAGE_WORK"\' EXIT',
+        "trap 'rm -rf \"$NODE_PACKAGE_WORK\"' EXIT",
         'mkdir -p "$NODE_PACKAGE_WORK/wheels"',
         '"$VENV_DIR/bin/pip" download --disable-pip-version-check '
         '--only-binary=:all: --dest "$NODE_PACKAGE_WORK/wheels" "$REMOTE_WHEEL"',
@@ -470,7 +474,7 @@ def render_remote_deploy_script(
         'mkdir -p "$NODE_AGENT_RUNTIME_DIR/site-packages"',
         '"$VENV_DIR/bin/pip" install --disable-pip-version-check '
         '--no-compile --target "$NODE_AGENT_RUNTIME_DIR/site-packages" "$REMOTE_WHEEL"',
-        'tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner '
+        "tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner "
         '-cf "$NODE_AGENT_RUNTIME_ARCHIVE" -C "$NODE_AGENT_RUNTIME_DIR" .',
         'RUNTIME_OS_ID="$(. /etc/os-release && printf \'%s\' "$ID")"',
         'RUNTIME_VERSION_ID="$(. /etc/os-release && printf \'%s\' "$VERSION_ID")"',
@@ -513,7 +517,7 @@ def render_remote_deploy_script(
         '  "$unpack_dir/usr/bin/runsc" --version >/dev/null || return 1',
         '  rm -f "$unpack_dir/DEBIAN/md5sums"',
         '  replacement="$runsc_package.pruned"',
-        '  SOURCE_DATE_EPOCH=0 dpkg-deb --build --root-owner-group -Zgzip -z1 '
+        "  SOURCE_DATE_EPOCH=0 dpkg-deb --build --root-owner-group -Zgzip -z1 "
         '"$unpack_dir" "$replacement" >/dev/null || return 1',
         '  mv "$replacement" "$runsc_package"',
         '  rm -rf "$unpack_dir"',
@@ -523,18 +527,18 @@ def render_remote_deploy_script(
         '  mkdir -p "$RUNTIME_KERNEL_MODULE_DIR"',
         '  module_paths="$(for module in $RUNTIME_KERNEL_MODULES; do',
         '    sudo modprobe --show-depends "$module" || exit 1',
-        "  done | awk '$1 == \"insmod\" {print $2}' | sort -u)\" || return 1",
+        '  done | awk \'$1 == "insmod" {print $2}\' | sort -u)" || return 1',
         '  [ -n "$module_paths" ] || return 1',
-        '  while IFS= read -r module_path; do',
+        "  while IFS= read -r module_path; do",
         '    [ -f "$module_path" ] || return 1',
         '    module_target="$RUNTIME_KERNEL_MODULE_DIR/${module_path##*/}"',
         '    if [ -f "$module_target" ] && ! cmp -s "$module_path" "$module_target"; then',
         '      echo "Conflicting kernel module basename: ${module_path##*/}" >&2',
-        '      return 1',
-        '    fi',
+        "      return 1",
+        "    fi",
         '    cp "$module_path" "$module_target" || return 1',
         '  done <<< "$module_paths"',
-        '  find "$RUNTIME_KERNEL_MODULE_DIR" -type f -name \'*.ko*\' -print -quit | grep -q .',
+        "  find \"$RUNTIME_KERNEL_MODULE_DIR\" -type f -name '*.ko*' -print -quit | grep -q .",
         "}",
         "build_runtime_bundle() {",
         '  if [ "$RUNTIME_OS_ID" != ubuntu ] || [ -z "$RUNTIME_CODENAME" ]; then',
@@ -576,7 +580,7 @@ def render_remote_deploy_script(
         '  mkdir -p "$probe_dir"',
         "  sudo systemctl start docker || return 1",
         "  sudo docker pull busybox || return 1",
-        '  probe_architecture="$(sudo docker image inspect --format \'{{.Architecture}}\' busybox)"',
+        "  probe_architecture=\"$(sudo docker image inspect --format '{{.Architecture}}' busybox)\"",
         '  [ "$probe_architecture" = "$RUNTIME_ARCHITECTURE" ] || return 1',
         '  sudo docker image inspect busybox > "$probe_dir/runtime-conformance-busybox.inspect.json" || return 1',
         '  sudo docker save --output "$probe_dir/runtime-conformance-busybox.tar" busybox || return 1',
@@ -588,7 +592,7 @@ def render_remote_deploy_script(
         "fi",
         'if [ "$RUNTIME_BUNDLE_READY" -eq 1 ]; then',
         '  cp -a "$NODE_PACKAGE_WORK/runtime" "$NODE_PACKAGE_WORK/runtime-builder"',
-        '  if download_runtime_packages runtime-builder docker-buildx-plugin; then',
+        "  if download_runtime_packages runtime-builder docker-buildx-plugin; then",
         '    sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime-builder"',
         "    BUILDER_RUNTIME_BUNDLE_READY=1",
         "  else",
@@ -613,7 +617,7 @@ def render_remote_deploy_script(
         '"$RUNTIME_VERSION_ID" "$RUNTIME_CODENAME" "$RUNTIME_ARCHITECTURE" '
         '"$BUNDLE_ROLE" "$BUNDLE_PACKAGES" "$NODE_AGENT_RUNTIME_ARCHIVE" '
         '"$RUNTIME_KERNEL_RELEASE" "$RUNTIME_KERNEL_MODULE_DIR" '
-        '"$RUNTIME_KERNEL_MODULES" <<\'PY\'',
+        "\"$RUNTIME_KERNEL_MODULES\" <<'PY'",
         "import hashlib",
         "import gzip",
         "import io",
@@ -887,7 +891,9 @@ def run_remote_script_over_ssh(
         timeout=timeout_seconds,
     )
     if completed.returncode != 0:
-        raise ValueError(f"remote all-in-one deploy failed with exit {completed.returncode}")
+        raise ValueError(
+            f"remote all-in-one deploy failed with exit {completed.returncode}"
+        )
     return RemoteCommandResult(
         command=command,
         returncode=completed.returncode,
@@ -916,7 +922,9 @@ def read_remote_text_over_ssh(
         timeout=timeout_seconds,
     )
     if completed.returncode != 0:
-        raise ValueError(f"failed to read remote file {remote_path}: exit {completed.returncode}")
+        raise ValueError(
+            f"failed to read remote file {remote_path}: exit {completed.returncode}"
+        )
     return completed.stdout
 
 
@@ -931,8 +939,8 @@ def _install_root_file_snippet(path: str, content: str, *, mode: str) -> str:
             f"cat > \"$tmp_file\" <<'{marker}'",
             content.rstrip("\n"),
             marker,
-            f"sudo install -m {shlex.quote(mode)} \"$tmp_file\" {shlex.quote(path)}",
-            "rm -f \"$tmp_file\"",
+            f'sudo install -m {shlex.quote(mode)} "$tmp_file" {shlex.quote(path)}',
+            'rm -f "$tmp_file"',
         ]
     )
 

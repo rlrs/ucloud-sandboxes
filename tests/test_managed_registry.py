@@ -114,6 +114,25 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_root_registry_writes_adopt_shared_state_owner(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            directory = Path(raw_dir)
+            path = directory / "registry-usage.json"
+            owner = directory.stat()
+            with patch(
+                "ucloud_sandboxes.managed_registry.os.geteuid",
+                return_value=0,
+            ), patch("ucloud_sandboxes.managed_registry.os.fchown") as fchown:
+                RegistryUsageStore(path).touch_image("registry.test/models/demo:latest")
+
+            self.assertGreaterEqual(fchown.call_count, 2)
+            self.assertTrue(
+                all(
+                    item.args[1:] == (owner.st_uid, owner.st_gid)
+                    for item in fchown.call_args_list
+                )
+            )
+
     def test_registry_catalog_rejects_repeated_pagination_link(self) -> None:
         client = RegistryClient("http://registry")
         repeated = '</v2/_catalog?n=1000>; rel="next"'
@@ -133,11 +152,7 @@ class ManagedRegistryTests(unittest.TestCase):
             side_effect=(
                 (
                     {"tags": ["v1", "v2"]},
-                    {
-                        "Link": (
-                            '</v2/repo/a/tags/list?n=1000&last=v2>; rel="next"'
-                        )
-                    },
+                    {"Link": ('</v2/repo/a/tags/list?n=1000&last=v2>; rel="next"')},
                 ),
                 ({"tags": ["v2", "v3"]}, {}),
             ),
@@ -147,7 +162,9 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(tags, ["v1", "v2", "v3"])
         self.assertEqual(fetch.call_count, 2)
 
-    def test_registry_summary_exposes_visible_tags_and_repository_metadata(self) -> None:
+    def test_registry_summary_exposes_visible_tags_and_repository_metadata(
+        self,
+    ) -> None:
         class FakeRegistryClient:
             base_url = "http://registry"
 
@@ -248,7 +265,9 @@ class ManagedRegistryTests(unittest.TestCase):
             [("repo/a", "v1")],
         )
 
-    def test_select_prune_candidates_uses_tag_order_when_created_at_missing(self) -> None:
+    def test_select_prune_candidates_uses_tag_order_when_created_at_missing(
+        self,
+    ) -> None:
         records = [
             RegistryTag("repo/a", "v1", "sha256:1"),
             RegistryTag("repo/a", "v3", "sha256:3"),
@@ -262,7 +281,9 @@ class ManagedRegistryTests(unittest.TestCase):
             [("repo/a", "v1"), ("repo/a", "v2")],
         )
 
-    def test_select_prune_candidates_can_delete_old_single_tag_repositories(self) -> None:
+    def test_select_prune_candidates_can_delete_old_single_tag_repositories(
+        self,
+    ) -> None:
         records = [
             RegistryTag("repo/old", "only", "sha256:1", "2026-06-01T00:00:00+00:00"),
             RegistryTag("repo/new", "only", "sha256:2", "2026-06-06T00:00:00+00:00"),
@@ -311,7 +332,9 @@ class ManagedRegistryTests(unittest.TestCase):
             [("repo/a", "old-and-unused")],
         )
 
-    def test_select_prune_candidates_keeps_missing_usage_in_last_used_mode(self) -> None:
+    def test_select_prune_candidates_keeps_missing_usage_in_last_used_mode(
+        self,
+    ) -> None:
         records = [
             RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00")
         ]

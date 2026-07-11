@@ -4,6 +4,14 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.38 - 2026-07-11
+
+- Preserved the gateway service account ownership when root-run registry
+  maintenance atomically rewrites shared usage state and its lock file.
+- Repaired existing registry usage ownership during all-in-one convergence.
+- Made control-plane health report `503` when configured registry usage state
+  is unreadable, unwritable, or invalid instead of reporting false health.
+
 ## 0.3.37 - 2026-07-11
 
 - Generalized the OpenAI model relay into an additional authenticated buffered

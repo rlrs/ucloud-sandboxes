@@ -2979,6 +2979,42 @@ class SandboxRuntimeTests(unittest.TestCase):
             self.assertEqual([record.spec.id for record in expired], ["short"])
             self.assertEqual(store.load(), {})
 
+    def test_expiration_preempts_active_exec(self) -> None:
+        from ucloud_sandboxes.sandbox_exec import ExecSessionManager, SandboxExecSpec
+
+        with TemporaryDirectory() as raw_dir:
+            store = SandboxStore(Path(raw_dir) / "sandboxes.json")
+            runtime = DockerGvisorRuntime(dry_run=True)
+            manager = SandboxManager(store, runtime)
+            manager.create(
+                SandboxSpec(
+                    id="expired-active",
+                    image="busybox",
+                    ttl_seconds=1,
+                    memory_mb=128,
+                )
+            )
+            sessions = ExecSessionManager(manager)
+            session = sessions.start(
+                SandboxExecSpec(
+                    sandbox_id="expired-active",
+                    command=("cat",),
+                    stdin=True,
+                )
+            )
+            record = store.load()["expired-active"]
+
+            expired = manager.cleanup_expired(
+                now=record.created_at + timedelta(seconds=2)
+            )
+
+            self.assertEqual(
+                [expired_record.spec.id for expired_record in expired],
+                ["expired-active"],
+            )
+            self.assertEqual(store.load(), {})
+            sessions.close_stdin(session.id)
+
     def test_ssh_enabled_sandbox_gets_port_and_publish_flag(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = SandboxStore(Path(raw_dir) / "sandboxes.json")

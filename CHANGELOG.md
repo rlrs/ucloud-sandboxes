@@ -4,6 +4,10 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.40 - 2026-07-11
+
+- Made TTL expiration preempt active exec, SSH, and file-I/O leases so expired sandboxes cannot keep old nodes alive indefinitely.
+
 ## 0.3.39 - 2026-07-11
 
 - Made sandbox termination preempt active exec, SSH, and file-I/O lifecycle leases while fencing new activity until forced runtime removal completes. Fork and restore operations remain strictly exclusive.

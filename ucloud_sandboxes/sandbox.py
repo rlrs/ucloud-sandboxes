@@ -4581,7 +4581,10 @@ class SandboxManager:
                 except RuntimeError:
                     continue
             try:
-                with self.lifecycle.exclusive(record.spec.id):
+                # TTL expiration is termination, not a cooperative lifecycle
+                # transition. Active exec, SSH, and file operations must not
+                # keep an expired sandbox (and its node) alive indefinitely.
+                with self.lifecycle.exclusive(record.spec.id, allow_shared=True):
                     self.runtime.delete(record.spec.id)
                     if record.spec.forkable:
                         self.runtime.drop_application_checkpoint(

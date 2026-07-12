@@ -11,14 +11,62 @@ from ucloud_sandboxes.bootstrap import (
     VmBootstrapIntent,
     VmBootstrapRecord,
     VmBootstrapStore,
+    build_vm_bootstrap_intents,
 )
 from ucloud_sandboxes.cli import _bootstrap_retry_delay_seconds
 from ucloud_sandboxes.metrics import MetricsStore
-from ucloud_sandboxes.models import VmJob
+from ucloud_sandboxes.models import SandboxNode, VmJob
 from ucloud_sandboxes.vm_init import VmInitOptions, VmInitPlan
 
 
 class BootstrapRetryTests(unittest.TestCase):
+    def test_successful_init_is_not_replayed_for_a_stale_heartbeat(self) -> None:
+        job = VmJob(
+            id="job-1",
+            project_id="project-1",
+            name="ucloud-sandbox-node-1",
+            application_name="vm-ubuntu",
+            application_version="24.04",
+            product_id="cpu",
+            product_category="cpu",
+            state="RUNNING",
+            raw={"id": "job-1"},
+        )
+        node = SandboxNode(
+            job=job,
+            heartbeat=None,
+            active_sandboxes=0,
+            heartbeat_fresh=False,
+        )
+        plan = VmInitPlan(
+            job=job,
+            ssh_command="ssh job-1",
+            runnable=True,
+            reason="ready",
+        )
+
+        intents = build_vm_bootstrap_intents(
+            [node],
+            {
+                "job-1": VmBootstrapRecord(
+                    job_id="job-1",
+                    status="succeeded",
+                    attempts=1,
+                )
+            },
+            retry_seconds=30,
+            max_per_cycle=1,
+            options_for_node=lambda _node, _role: VmInitOptions(
+                job_id="job-1",
+                heartbeat_url="http://gateway/v1/nodes/heartbeat",
+            ),
+            plan_for_payload=lambda _payload: plan,
+        )
+
+        self.assertEqual(len(intents), 1)
+        self.assertFalse(intents[0].runnable)
+        self.assertIn("previously succeeded", intents[0].reason)
+
     def test_fast_failure_retry_is_not_blocked_by_slow_peer(self) -> None:
         slow_release = Event()
         fast_finished = Event()

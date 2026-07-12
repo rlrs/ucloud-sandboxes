@@ -32,7 +32,9 @@ def node(
     memory_overcommit: float = 1.0,
     capabilities: tuple[str, ...] = ("disk-quota",),
     idle_since=None,
+    heartbeat_updated_at=None,
     heartbeat_present: bool = True,
+    inventory_complete: bool = False,
     agent_version_compatible: bool = True,
     draining: bool = False,
     admission_open: bool = True,
@@ -45,7 +47,7 @@ def node(
         heartbeat = NodeHeartbeat(
             node_id=f"node-{job_id}",
             job_id=job_id,
-            updated_at=utc_now() - timedelta(seconds=5),
+            updated_at=heartbeat_updated_at or utc_now() - timedelta(seconds=5),
             active_sandboxes=active,
             active_image_builds=active_image_builds,
             idle_since=idle_since,
@@ -56,6 +58,7 @@ def node(
             capabilities=capabilities,
             draining=draining,
             admission_open=admission_open,
+            inventory_complete=inventory_complete,
         )
     return SandboxNode(
         job=VmJob(
@@ -229,6 +232,75 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.projected_free_resources.vcpu, 0)
         self.assertEqual(decision.creates, 1)
+
+    def test_stops_unreachable_empty_node_after_eviction_lease(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "lost",
+                    fresh=False,
+                    heartbeat_updated_at=now - timedelta(hours=1),
+                    inventory_complete=True,
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                max_stop_per_cycle=1,
+                unreachable_stop_after_seconds=1800,
+            ),
+            now=now,
+        )
+
+        self.assertEqual(decision.stops, ("lost",))
+        self.assertIn("unreachable empty", decision.reasons[0])
+
+    def test_does_not_stop_unreachable_node_without_empty_inventory_proof(
+        self,
+    ) -> None:
+        now = utc_now()
+        for candidate in (
+            node(
+                "incomplete",
+                fresh=False,
+                heartbeat_updated_at=now - timedelta(hours=1),
+                inventory_complete=False,
+            ),
+            node(
+                "routed",
+                active=1,
+                fresh=False,
+                heartbeat_updated_at=now - timedelta(hours=1),
+                inventory_complete=True,
+            ),
+        ):
+            with self.subTest(job_id=candidate.job_id):
+                decision = evaluate_scale(
+                    [candidate],
+                    SandboxDemand(),
+                    ScalePolicy(unreachable_stop_after_seconds=1800),
+                    now=now,
+                )
+                self.assertEqual(decision.stops, ())
+
+    def test_stops_never_ready_vm_after_unreachable_eviction_lease(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "never-ready",
+                    fresh=False,
+                    heartbeat_present=False,
+                    created_at=now - timedelta(hours=1),
+                    started_at=now - timedelta(hours=1),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(unreachable_stop_after_seconds=1800),
+            now=now,
+        )
+
+        self.assertEqual(decision.stops, ("never-ready",))
 
     def test_old_backlog_does_not_age_newly_submitted_capacity(self) -> None:
         now = utc_now()

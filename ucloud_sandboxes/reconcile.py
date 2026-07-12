@@ -28,6 +28,7 @@ from .models import (
     ScalePolicy,
     utc_now,
 )
+from .policy import unreachable_node_stop_ready
 from .vm_submit import (
     DEFAULT_VM_DISK_GB,
     VmApplicationRef,
@@ -211,10 +212,19 @@ def evaluate_builder_scale(
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
+    stop_budget = max(0, policy.max_stop_per_cycle)
+    unreachable_stop_candidates = [
+        node
+        for node in builder_nodes
+        if unreachable_node_stop_ready(node, policy, now=now)
+    ][:stop_budget]
+    unreachable_job_ids = {
+        node.job_id for node in unreachable_stop_candidates
+    }
     incompatible_stop_candidates = _incompatible_stop_candidates(
-        builder_nodes,
+        [node for node in builder_nodes if node.job_id not in unreachable_job_ids],
         now=now,
-    )[: max(0, policy.max_stop_per_cycle)]
+    )[: max(0, stop_budget - len(unreachable_stop_candidates))]
     pool_nodes = [node for node in builder_nodes if not node.job.is_final]
     ready_nodes = [node for node in pool_nodes if node.is_schedulable]
     provisioning_nodes = [node for node in pool_nodes if node.is_provisioning]
@@ -226,6 +236,19 @@ def evaluate_builder_scale(
     desired_nodes = min(desired_nodes, max_builder_nodes)
     actions: list[ScaleAction] = []
     reasons: list[str] = []
+
+    if unreachable_stop_candidates:
+        job_ids = tuple(node.job_id for node in unreachable_stop_candidates)
+        reason = "unreachable empty builder node(s) exceeded the eviction lease"
+        actions.append(
+            ScaleAction(
+                kind="stop",
+                count=len(job_ids),
+                job_ids=job_ids,
+                reason=reason,
+            )
+        )
+        reasons.append(reason)
 
     if incompatible_stop_candidates:
         job_ids = tuple(node.job_id for node in incompatible_stop_candidates)

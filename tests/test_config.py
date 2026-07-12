@@ -18,6 +18,7 @@ class ConfigTests(unittest.TestCase):
                     "provisioning_capacity_weight": 0.5,
                     "stale_provisioning_after_seconds": 600,
                     "stale_provisioning_capacity_weight": 0.1,
+                    "unreachable_stop_after_seconds": 3600,
                     "scale_down_idle_seconds": 900,
                     "cpu_overcommit": 2.0,
                     "memory_overcommit": 1.2,
@@ -35,6 +36,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.provisioning_capacity_weight, 0.5)
         self.assertEqual(config.policy.stale_provisioning_after_seconds, 600)
         self.assertEqual(config.policy.stale_provisioning_capacity_weight, 0.1)
+        self.assertEqual(config.policy.unreachable_stop_after_seconds, 3600)
         self.assertEqual(config.policy.scale_down_idle_seconds, 900)
         self.assertEqual(config.policy.cpu_overcommit, 2.0)
         self.assertEqual(config.policy.memory_overcommit, 1.2)

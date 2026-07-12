@@ -132,6 +132,40 @@ def build_vm_bootstrap_intents(
         options = options_for_node(node, role)
         record = records.get(node.job_id)
         attempts = record.attempts if record is not None else 0
+        stale_workloads = max(
+            node.active_sandboxes,
+            node.heartbeat.active_workloads if node.heartbeat is not None else 0,
+        )
+        if stale_workloads > 0:
+            plan = plan_for_payload(node.job.raw)
+            intents.append(
+                VmBootstrapIntent(
+                    job_id=node.job_id,
+                    node_id=options.normalized_node_id(),
+                    role=role,
+                    plan=plan,
+                    options=options,
+                    runnable=False,
+                    reason="stale node still owns gateway-managed work",
+                    previous_attempts=attempts,
+                )
+            )
+            continue
+        if record is not None and record.status == "succeeded":
+            plan = plan_for_payload(node.job.raw)
+            intents.append(
+                VmBootstrapIntent(
+                    job_id=node.job_id,
+                    node_id=options.normalized_node_id(),
+                    role=role,
+                    plan=plan,
+                    options=options,
+                    runnable=False,
+                    reason="VM init previously succeeded; waiting for heartbeat",
+                    previous_attempts=attempts,
+                )
+            )
+            continue
         if record is not None and not record.retry_due(now=now, retry_seconds=retry_seconds):
             plan = plan_for_payload(node.job.raw)
             intents.append(

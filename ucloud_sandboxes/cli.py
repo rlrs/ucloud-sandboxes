@@ -127,7 +127,11 @@ from .networking import (
     stable_hostname,
 )
 from .node_agent import build_node_agent_server
-from .policy import evaluate_scale
+from .policy import (
+    evaluate_scale,
+    unreachable_node_reference,
+    unreachable_node_stop_ready,
+)
 from .reconcile import (
     VmCreateIntent,
     VmNodeSubmissionDefaults,
@@ -3590,12 +3594,19 @@ def _drain_intent_to_dict(intent: DrainIntent) -> dict[str, Any]:
     }
 
 
-def _stop_operation_has_drain_proof(
+def _stop_operation_has_safety_proof(
     provider_state: AutoscalerStateStore,
     operation: ProviderOperation,
 ) -> bool:
     if operation.kind != "stop" or len(operation.target_job_ids) != 1:
         return operation.kind != "stop"
+    if operation.request.get("unreachableStaleReady") is True:
+        return bool(
+            str(operation.request.get("unreachableReference") or "").strip()
+            and operation.request.get("routeCount") == 0
+            and operation.request.get("lastKnownActiveSandboxes") == 0
+            and operation.request.get("lastHeartbeatSafeToStop") is True
+        )
     token = str(operation.request.get("drainToken") or "").strip()
     if not token or operation.request.get("drainReady") is not True:
         return False
@@ -3629,8 +3640,9 @@ def apply_prepared_provider_operations(
         ):
             continue
         # Recurring autoscaler stops must never execute from a legacy or
-        # partially-written journal record that predates the drain handshake.
-        if prepared.kind == "stop" and not _stop_operation_has_drain_proof(
+        # partially-written journal record without a fresh drain proof or a
+        # conservative unreachable-empty lease proof.
+        if prepared.kind == "stop" and not _stop_operation_has_safety_proof(
             provider_state, prepared
         ):
             continue
@@ -3942,6 +3954,10 @@ def run_reconcile_cycle(
     )
     effective_policy = policy_with_cli_overrides(config.policy, args)
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
+    nodes = apply_route_reservations_to_nodes(
+        nodes,
+        route_reservations or {},
+    )
     sandbox_nodes = sandbox_pool_nodes(nodes, config)
     builder_nodes = builder_pool_nodes(nodes)
     builder_pending = max(
@@ -4119,6 +4135,16 @@ def run_reconcile_cycle(
             )
             stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
             blocked_stop_job_ids = (*blocked_stop_job_ids, *blocked_canceling)
+    stop_nodes_by_job_id = {
+        node.job_id: node for node in (*sandbox_nodes, *builder_nodes)
+    }
+    unreachable_stop_job_ids = tuple(
+        job_id
+        for job_id in stop_job_ids
+        if (node := stop_nodes_by_job_id.get(job_id)) is not None
+        and unreachable_node_stop_ready(node, effective_policy)
+    )
+    unreachable_stop_job_id_set = set(unreachable_stop_job_ids)
     active_drain_intents: list[DrainIntent] = []
     drain_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
@@ -4147,6 +4173,8 @@ def run_reconcile_cycle(
 
         sandbox_stop_set = set(sandbox_stop_job_ids)
         for job_id in stop_job_ids:
+            if job_id in unreachable_stop_job_id_set:
+                continue
             provider_state.prepare_drain_intent(
                 deployment_id=operation_deployment_id,
                 job_id=job_id,
@@ -4162,7 +4190,12 @@ def run_reconcile_cycle(
             node_url = str(heartbeat.node_url or "").strip() if heartbeat else ""
             response: dict[str, Any] = {}
             error = ""
-            if not node_url:
+            if (
+                intent.state == "active"
+                and intent.job_id in unreachable_stop_job_id_set
+            ):
+                error = "unreachable stale-node stop proof selected"
+            elif not node_url:
                 error = "fresh node heartbeat has no node URL"
             else:
                 try:
@@ -4343,39 +4376,63 @@ def run_reconcile_cycle(
             builder_create_intents = labeled_builder_intents
             create_intents = [*sandbox_create_intents, *builder_create_intents]
         if args.execute_stops:
-            stop_ids_to_journal = tuple(drain_ready_stop_job_ids)
+            stop_ids_to_journal = tuple(
+                dict.fromkeys(
+                    [*drain_ready_stop_job_ids, *unreachable_stop_job_ids]
+                )
+            )
             sandbox_stop_set = set(sandbox_stop_job_ids)
             drain_intents_by_job = {
                 intent.job_id: intent for intent in active_drain_intents
             }
             for job_id in stop_ids_to_journal:
+                unreachable_ready = job_id in unreachable_stop_job_id_set
                 drain_intent = drain_intents_by_job.get(job_id)
                 role = (
                     drain_intent.role
-                    if drain_intent is not None
+                    if drain_intent is not None and not unreachable_ready
                     else ("sandbox" if job_id in sandbox_stop_set else "builder")
                 )
                 request: dict[str, Any] = {
                     "type": "bulk",
                     "items": [{"id": job_id}],
                 }
-                if drain_intent is None:
+                if unreachable_ready:
+                    node = stop_nodes_by_job_id[job_id]
+                    reference = unreachable_node_reference(node)
+                    request.update(
+                        {
+                            "unreachableStaleReady": True,
+                            "unreachableReference": (
+                                reference.isoformat() if reference is not None else ""
+                            ),
+                            "routeCount": len(
+                                (route_reservations or {}).get(job_id, ())
+                            ),
+                            "lastKnownActiveSandboxes": node.active_sandboxes,
+                            "lastHeartbeatSafeToStop": True,
+                            "lastHeartbeatPresent": node.heartbeat is not None,
+                        }
+                    )
+                elif drain_intent is None:
                     raise AutoscalerStateError(
                         f"drain-ready job has no durable intent: {job_id}"
                     )
-                request.update(
-                    {
-                        "drainToken": drain_intent.token,
-                        "drainReady": True,
-                    }
+                else:
+                    request.update(
+                        {
+                            "drainToken": drain_intent.token,
+                            "drainReady": True,
+                        }
+                    )
+                intent_key = (
+                    f"{role}:{job_id}:unreachable:{request['unreachableReference']}"
+                    if unreachable_ready
+                    else f"{role}:{job_id}:{drain_intent.token}"
                 )
                 journaled_stop_operations.append(
                     provider_state.prepare_operation(
-                        intent_key=(
-                            f"{role}:{job_id}:{drain_intent.token}"
-                            if drain_intent is not None
-                            else f"{role}:{job_id}"
-                        ),
+                        intent_key=intent_key,
                         kind="stop",
                         deployment_id=operation_deployment_id,
                         role=role,
@@ -4412,6 +4469,7 @@ def run_reconcile_cycle(
         "cancelingDrainJobIds": sorted(canceling_drain_job_ids),
         "canceledDrainJobIds": sorted(canceled_drain_job_ids),
         "drainReadyStopJobIds": list(drain_ready_stop_job_ids),
+        "unreachableReadyStopJobIds": list(unreachable_stop_job_ids),
         "drainIntents": [
             _drain_intent_to_dict(intent) for intent in pending_drain_intents
         ],
@@ -4989,12 +5047,14 @@ def _execute_vm_bootstrap_attempt(
     try:
         assert_provider_fence()
         effective_options = intent.options
+        known_hosts_file = _bootstrap_known_hosts_file(intent, args)
         stage_started_perf = time.perf_counter()
         stage_result = stage_vm_init_package_over_ssh(
             intent.plan.ssh_command,
             intent.options,
             timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
+            known_hosts_file=known_hosts_file,
         )
         stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
         if stage_result is not None:
@@ -5049,6 +5109,7 @@ def _execute_vm_bootstrap_attempt(
             render_vm_init_script(effective_options),
             timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
+            known_hosts_file=known_hosts_file,
         )
         run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
         init_phases_ms = dict(getattr(run_result, "phase_durations_ms", ()))
@@ -5113,6 +5174,31 @@ def _execute_vm_bootstrap_attempt(
             stage_duration_ms=stage_duration_ms,
             run_duration_ms=run_duration_ms,
         )
+
+
+def _bootstrap_known_hosts_file(
+    intent: VmBootstrapIntent,
+    args: argparse.Namespace,
+) -> str | None:
+    private_key_file = str(
+        getattr(args, "init_ssh_private_key_file", "") or ""
+    ).strip()
+    state_file = str(getattr(args, "init_state_file", "") or "").strip()
+    if state_file:
+        directory = Path(state_file).expanduser().parent / "ssh-known-hosts"
+    elif private_key_file:
+        directory = Path(private_key_file).expanduser().parent / "known_hosts"
+    else:
+        return None
+    safe_job_id = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in intent.job_id
+    ).strip("_")
+    if not safe_job_id:
+        raise ValueError("job id cannot produce an SSH known-hosts filename")
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(directory, 0o700)
+    return str(directory / safe_job_id[:128])
 
 
 def _failed_vm_bootstrap_attempt(
@@ -5317,6 +5403,24 @@ def apply_route_reservations_to_heartbeats(
             active_sandboxes=active_sandboxes,
         )
     return reconciled
+
+
+def apply_route_reservations_to_nodes(
+    nodes: list[SandboxNode],
+    routes_by_job: dict[str, tuple[SandboxRoute, ...]],
+) -> list[SandboxNode]:
+    """Keep route ownership visible even when a job has no heartbeat record."""
+
+    return [
+        replace(
+            node,
+            active_sandboxes=max(
+                node.active_sandboxes,
+                len(routes_by_job.get(node.job_id, ())),
+            ),
+        )
+        for node in nodes
+    ]
 
 
 def _heartbeat_inventory_contains_route(

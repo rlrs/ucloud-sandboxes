@@ -4,6 +4,15 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.46 - 2026-07-12
+
+- Evicted unreachable empty worker VMs after a conservative heartbeat lease
+  using a durable provider-stop proof, while preserving route ownership and
+  the normal fresh-node drain handshake.
+- Stopped replaying successful VM bootstrap on heartbeat loss and isolated SSH
+  host keys per UCloud job so recycled SSH gateway ports cannot poison later
+  node initialization.
+
 ## 0.3.45 - 2026-07-12
 
 - Doubled the default autoscaled sandbox-node product and provisional capacity

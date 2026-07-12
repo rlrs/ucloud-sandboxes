@@ -33,6 +33,7 @@ data:
     "provisioning_capacity_weight": 0.75,
     "stale_provisioning_after_seconds": 1800,
     "stale_provisioning_capacity_weight": 0.0,
+    "unreachable_stop_after_seconds": 1800,
     "scale_down_idle_seconds": 600,
     "builder_scale_down_idle_seconds": 900,
     "default_node_resources": {
@@ -109,6 +110,13 @@ against the hard provider and `max_provisioning_nodes` limits until UCloud
 reports it final. This prevents duplicate submissions from bypassing the cap
 while a billed or provider-visible job still exists.
 
+`unreachable_stop_after_seconds` is a separate, conservative eviction lease for
+a running VM whose heartbeat has disappeared. After the lease expires, the VM
+is eligible for provider termination only when it owns no gateway routes and
+its last complete heartbeat inventory was empty, or when it never produced a
+heartbeat at all. Set it to `0` to disable unreachable-node eviction. Fresh
+nodes continue to use the normal drain-token handshake described below.
+
 `scale_down_idle_seconds` prevents the controller from stopping a VM immediately
 after its last sandbox exits. The control plane records when a heartbeat first
 reports zero active sandboxes and counts the grace from that idle transition,
@@ -163,6 +171,14 @@ acknowledgement and performs the journaled terminate. Draining or
 admission-closed nodes remain in the provider pool count but contribute no ready
 or projected free placement capacity. Final UCloud jobs retire their drain
 intents.
+
+There is one bounded exception for a node that cannot participate in the drain
+protocol at all. After `unreachable_stop_after_seconds`, an owned running VM may
+receive a durable unreachable-stop proof when it has no gateway routes and its
+last complete heartbeat inventory was empty, or when it never emitted a
+heartbeat. This proof permits the same journaled provider termination without a
+node acknowledgement. It does not apply to a fresh node, an incomplete last
+inventory, or any node with retained route ownership.
 
 The journal moves an operation from `prepared` to `uncertain` before making the
 provider call. A crash or timeout leaves that same operation uncertain. A

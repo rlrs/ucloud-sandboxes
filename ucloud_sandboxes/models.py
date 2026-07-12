@@ -469,6 +469,7 @@ class ScalePolicy:
     provisioning_capacity_weight: float = 1.0
     stale_provisioning_after_seconds: int = 300
     stale_provisioning_capacity_weight: float = 0.0
+    unreachable_stop_after_seconds: int = 1800
     scale_down_idle_seconds: int = 600
     builder_scale_down_idle_seconds: int = 900
     heartbeat_ttl_seconds: int = 120

@@ -31,6 +31,7 @@ from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
+    SandboxNode,
     ScalePolicy,
     VmJob,
     utc_now,
@@ -2171,6 +2172,38 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(reconciled.free_resources.vcpu, 24)
 
+    def test_route_reservations_remain_visible_without_a_heartbeat(self) -> None:
+        job = VmJob(
+            id="job-1",
+            project_id="project-1",
+            name="ucloud-sandbox-node-1",
+            application_name="vm-ubuntu",
+            application_version="24.04",
+            product_id="cpu",
+            product_category="cpu",
+            state="RUNNING",
+        )
+        node = SandboxNode(
+            job=job,
+            heartbeat=None,
+            active_sandboxes=0,
+            heartbeat_fresh=False,
+        )
+        route = SandboxRoute(
+            sandbox_id="sandbox-1",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            state="running",
+        )
+
+        reconciled = cli.apply_route_reservations_to_nodes(
+            [node],
+            {"job-1": (route,)},
+        )
+
+        self.assertEqual(reconciled[0].active_sandboxes, 1)
+
     def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
         demand = SandboxDemand(
             pending_resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
@@ -2361,6 +2394,7 @@ class CliTests(unittest.TestCase):
             *,
             timeout_seconds: int | None = None,
             private_key_file: str | None = None,
+            known_hosts_file: str | None = None,
         ) -> FakeInitResult:
             calls.append(
                 {
@@ -2368,6 +2402,7 @@ class CliTests(unittest.TestCase):
                     "script": script,
                     "timeout_seconds": timeout_seconds,
                     "private_key_file": private_key_file,
+                    "known_hosts_file": known_hosts_file,
                 }
             )
             return FakeInitResult()
@@ -2473,6 +2508,10 @@ class CliTests(unittest.TestCase):
             calls[0]["private_key_file"],
             "/work/ucloud-sandboxes/state/ssh/gateway-init",
         )
+        self.assertEqual(
+            calls[0]["known_hosts_file"],
+            str(root / "ssh-known-hosts" / "job-1"),
+        )
         self.assertIn(
             "UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON='[\"ucloud-sandbox-registry:5000\"]'",
             calls[0]["script"],
@@ -2513,8 +2552,9 @@ class CliTests(unittest.TestCase):
             *,
             timeout_seconds: int | None = None,
             private_key_file: str | None = None,
+            known_hosts_file: str | None = None,
         ) -> FakeInitResult:
-            del timeout_seconds, private_key_file
+            del timeout_seconds, private_key_file, known_hosts_file
             nonlocal active, peak_active
             with active_lock:
                 active += 1
@@ -2880,7 +2920,11 @@ class CliTests(unittest.TestCase):
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
                 state_dir=raw_dir,
-                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+                policy=ScalePolicy(
+                    max_stop_per_cycle=1,
+                    scale_down_idle_seconds=0,
+                    unreachable_stop_after_seconds=0,
+                ),
             )
             args = argparse.Namespace(
                 jobs_file=jobs_file,
@@ -3000,6 +3044,114 @@ class CliTests(unittest.TestCase):
         self.assertEqual(terminated["definitelyTerminatedJobIds"], ["owned"])
         self.assertEqual(mismatch["stopJobIds"], ["owned"])
         self.assertEqual(mismatch["drainingJobIds"], ["owned"])
+
+    def test_unreachable_empty_node_uses_durable_stop_proof_without_drain(
+        self,
+    ) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "owned": NodeHeartbeat(
+                        node_id="node-owned",
+                        job_id="owned",
+                        updated_at=utc_now() - timedelta(hours=1),
+                        active_sandboxes=0,
+                        node_url="http://node-owned:8090",
+                        agent_version=package_version(),
+                        capabilities=("disk-quota",),
+                        inventory_complete=True,
+                    )
+                }
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(
+                    max_stop_per_cycle=1,
+                    unreachable_stop_after_seconds=1800,
+                ),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=True,
+                execute_init=True,
+                init_state_file=root / "bootstrap.json",
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
+                cli,
+                "_post_node_drain",
+                side_effect=AssertionError("unreachable node must not be drained"),
+            ):
+                result = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+
+        self.assertEqual(terminate_calls, [("owned",)])
+        self.assertEqual(result["unreachableReadyStopJobIds"], ["owned"])
+        self.assertEqual(result["drainReadyStopJobIds"], [])
+        self.assertEqual(result["drainIntents"], [])
+        self.assertEqual(result["bootstrapIntents"], [])
+        self.assertEqual(result["definitelyTerminatedJobIds"], ["owned"])
 
     def test_demand_rise_durably_cancels_drain_before_ambiguous_undrain(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []

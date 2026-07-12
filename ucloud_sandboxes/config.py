@@ -148,6 +148,14 @@ class AutoscalerConfig:
                 minimum=0.0,
                 maximum=1.0,
             ),
+            unreachable_stop_after_seconds=_config_int(
+                "policy.unreachable_stop_after_seconds",
+                policy_raw.get(
+                    "unreachable_stop_after_seconds",
+                    policy_defaults.unreachable_stop_after_seconds,
+                ),
+                minimum=0,
+            ),
             scale_down_idle_seconds=_config_int(
                 "policy.scale_down_idle_seconds",
                 policy_raw.get(

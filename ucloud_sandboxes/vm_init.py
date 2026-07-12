@@ -1342,8 +1342,17 @@ def ssh_init_command(
     ssh_command: str,
     *,
     private_key_file: str | None = None,
+    known_hosts_file: str | None = None,
 ) -> tuple[str, ...]:
-    return (*ssh_command_with_options(ssh_command, private_key_file=private_key_file), "bash", "-s")
+    return (
+        *ssh_command_with_options(
+            ssh_command,
+            private_key_file=private_key_file,
+            known_hosts_file=known_hosts_file,
+        ),
+        "bash",
+        "-s",
+    )
 
 
 def ssh_remote_command(
@@ -1351,16 +1360,25 @@ def ssh_remote_command(
     remote_command: str,
     *,
     private_key_file: str | None = None,
+    known_hosts_file: str | None = None,
 ) -> tuple[str, ...]:
     if not remote_command:
         raise ValueError("remote command is required.")
-    return (*ssh_command_with_options(ssh_command, private_key_file=private_key_file), remote_command)
+    return (
+        *ssh_command_with_options(
+            ssh_command,
+            private_key_file=private_key_file,
+            known_hosts_file=known_hosts_file,
+        ),
+        remote_command,
+    )
 
 
 def ssh_command_with_options(
     ssh_command: str,
     *,
     private_key_file: str | None = None,
+    known_hosts_file: str | None = None,
 ) -> tuple[str, ...]:
     argv = tuple(shlex.split(ssh_command))
     if not argv:
@@ -1371,7 +1389,17 @@ def ssh_command_with_options(
     if private_key_file:
         _reject_newline("private key file", private_key_file)
         private_key_args = ("-i", private_key_file)
-    return (argv[0], *DEFAULT_SSH_OPTIONS, *private_key_args, *argv[1:])
+    known_hosts_args: tuple[str, ...] = ()
+    if known_hosts_file:
+        _reject_newline("known hosts file", known_hosts_file)
+        known_hosts_args = ("-o", f"UserKnownHostsFile={known_hosts_file}")
+    return (
+        argv[0],
+        *DEFAULT_SSH_OPTIONS,
+        *known_hosts_args,
+        *private_key_args,
+        *argv[1:],
+    )
 
 
 def run_init_over_ssh(
@@ -1380,8 +1408,13 @@ def run_init_over_ssh(
     *,
     timeout_seconds: int | None = None,
     private_key_file: str | None = None,
+    known_hosts_file: str | None = None,
 ) -> VmInitRunResult:
-    command = ssh_init_command(ssh_command, private_key_file=private_key_file)
+    command = ssh_init_command(
+        ssh_command,
+        private_key_file=private_key_file,
+        known_hosts_file=known_hosts_file,
+    )
     completed = subprocess.run(
         command,
         input=script,
@@ -1480,6 +1513,7 @@ def stage_vm_init_package_over_ssh(
     *,
     timeout_seconds: int | None = None,
     private_key_file: str | None = None,
+    known_hosts_file: str | None = None,
     remote_package_dir: str = DEFAULT_REMOTE_PACKAGE_DIR,
 ) -> VmInitPackageStageResult | None:
     local_path = local_package_spec_path(options.package_spec)
@@ -1509,6 +1543,7 @@ def stage_vm_init_package_over_ssh(
             ssh_command,
             probe_command,
             private_key_file=private_key_file,
+            known_hosts_file=known_hosts_file,
         ),
         check=False,
         timeout=timeout_seconds,
@@ -1521,6 +1556,7 @@ def stage_vm_init_package_over_ssh(
                 ssh_command,
                 probe_command,
                 private_key_file=private_key_file,
+                known_hosts_file=known_hosts_file,
             ),
             returncode=0,
             package_sha256=package_sha256,
@@ -1534,6 +1570,7 @@ def stage_vm_init_package_over_ssh(
                 ssh_command,
                 probe_command,
                 private_key_file=private_key_file,
+                known_hosts_file=known_hosts_file,
             ),
             returncode=255,
             package_sha256=package_sha256,
@@ -1552,6 +1589,7 @@ def stage_vm_init_package_over_ssh(
         ssh_command,
         remote_command,
         private_key_file=private_key_file,
+        known_hosts_file=known_hosts_file,
     )
     # Runtime bundles are large enough that concurrent bootstrap workers must
     # not each retain a complete copy in controller memory.

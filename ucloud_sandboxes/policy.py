@@ -24,10 +24,19 @@ def evaluate_scale(
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
-    incompatible_stop_candidates = _incompatible_stop_candidates(
+    stop_budget = max(0, policy.max_stop_per_cycle)
+    unreachable_stop_candidates = _unreachable_stop_candidates(
         nodes,
+        policy,
         now=now,
-    )[: max(0, policy.max_stop_per_cycle)]
+    )[:stop_budget]
+    unreachable_job_ids = {
+        node.job_id for node in unreachable_stop_candidates
+    }
+    incompatible_stop_candidates = _incompatible_stop_candidates(
+        [node for node in nodes if node.job_id not in unreachable_job_ids],
+        now=now,
+    )[: max(0, stop_budget - len(unreachable_stop_candidates))]
     pool_nodes = [node for node in nodes if _counts_as_pool_node(node, policy, now, 0)]
     # A booting node can temporarily have no usable version label. It remains
     # unschedulable, but receives normal time-decaying provisioning credit so
@@ -68,6 +77,19 @@ def evaluate_scale(
     )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
+
+    if unreachable_stop_candidates:
+        job_ids = tuple(node.job_id for node in unreachable_stop_candidates)
+        reason = "unreachable empty sandbox node(s) exceeded the eviction lease"
+        actions.append(
+            ScaleAction(
+                kind="stop",
+                count=len(job_ids),
+                job_ids=job_ids,
+                reason=reason,
+            )
+        )
+        reasons.append(reason)
 
     if incompatible_stop_candidates:
         job_ids = tuple(node.job_id for node in incompatible_stop_candidates)
@@ -462,6 +484,73 @@ def _incompatible_stop_candidates(
         candidates,
         key=lambda node: (
             node.job.started_at or node.job.created_at or now,
+            node.job_id,
+        ),
+    )
+
+
+def unreachable_node_stop_ready(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Return whether an unreachable node has conservative provider-stop proof.
+
+    A fresh node must always use the drain-token handshake.  This fallback is
+    only for a running VM that has exceeded its heartbeat lease, owns no known
+    sandbox routes, and whose last complete inventory was empty.  A VM that
+    never emitted a heartbeat cannot have admitted gateway-managed work.
+    """
+
+    if now is None:
+        now = utc_now()
+    timeout_seconds = max(0, policy.unreachable_stop_after_seconds)
+    if (
+        timeout_seconds <= 0
+        or node.job.is_final
+        or node.job.state != "RUNNING"
+        or node.heartbeat_fresh
+        or node.active_sandboxes != 0
+    ):
+        return False
+    reference = unreachable_node_reference(node)
+    if reference is None or (now - reference).total_seconds() < timeout_seconds:
+        return False
+    heartbeat = node.heartbeat
+    if heartbeat is None:
+        return True
+    return bool(
+        heartbeat.inventory_complete
+        and not heartbeat.inventory
+        and heartbeat.active_workloads == 0
+        and heartbeat.used_resources == ResourceQuantity()
+        and heartbeat.reserved_resources == ResourceQuantity()
+        and heartbeat.build_reserved_resources == ResourceQuantity()
+    )
+
+
+def unreachable_node_reference(node: SandboxNode) -> datetime | None:
+    heartbeat = node.heartbeat
+    if heartbeat is not None:
+        return heartbeat.freshness_at
+    return node.job.started_at or node.job.created_at
+
+
+def _unreachable_stop_candidates(
+    nodes: list[SandboxNode],
+    policy: ScalePolicy,
+    *,
+    now: datetime,
+) -> list[SandboxNode]:
+    return sorted(
+        [
+            node
+            for node in nodes
+            if unreachable_node_stop_ready(node, policy, now=now)
+        ],
+        key=lambda node: (
+            unreachable_node_reference(node) or now,
             node.job_id,
         ),
     )

@@ -650,6 +650,21 @@ class VmInitTests(unittest.TestCase):
             ),
         )
 
+    def test_builds_ssh_init_command_with_job_scoped_known_hosts(self) -> None:
+        command = ssh_init_command(
+            "ssh ucloud@ssh.cloud.sdu.dk -p 41231",
+            private_key_file="/work/ucloud-sandboxes/state/ssh/gateway-init",
+            known_hosts_file=(
+                "/work/ucloud-sandboxes/state/ssh-known-hosts/job-123"
+            ),
+        )
+
+        self.assertIn(
+            "UserKnownHostsFile=/work/ucloud-sandboxes/state/ssh-known-hosts/job-123",
+            command,
+        )
+        self.assertIn("StrictHostKeyChecking=accept-new", command)
+
     def test_rejects_non_ssh_command(self) -> None:
         with self.assertRaises(ValueError):
             ssh_init_command("curl https://example.invalid")

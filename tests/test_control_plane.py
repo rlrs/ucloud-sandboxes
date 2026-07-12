@@ -4315,6 +4315,27 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(structured["status"], 503)
         self.assertIn("Job is unavailable", structured["upstream_body_preview"])
 
+    def test_node_dns_failure_is_a_structured_retryable_503(self) -> None:
+        response = control_plane._node_transport_error_response(
+            OSError("Temporary failure in name resolution")
+        )
+
+        self.assertEqual(response.status, 503)
+        self.assertEqual(response.transport_error_kind, "dns")
+        self.assertEqual(response.json()["code"], "node_dns_unavailable")
+        self.assertTrue(response.json()["retryable"])
+        self.assertFalse(control_plane._node_create_may_still_be_running(response))
+
+    def test_node_timeout_is_a_structured_retryable_504(self) -> None:
+        response = control_plane._node_transport_error_response(
+            TimeoutError("timed out")
+        )
+
+        self.assertEqual(response.status, 504)
+        self.assertEqual(response.json()["code"], "node_request_timeout")
+        self.assertTrue(response.json()["retryable"])
+        self.assertTrue(control_plane._node_create_may_still_be_running(response))
+
     def test_enriches_old_node_sandbox_records_with_top_level_identity(self) -> None:
         heartbeat = build_heartbeat(
             job_id="job-1",

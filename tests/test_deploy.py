@@ -2,6 +2,7 @@ import json
 import io
 from pathlib import Path
 import sys
+import subprocess
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
@@ -48,25 +49,25 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(gateway["UCLOUD_DEPLOYMENT_ID"], "prod-a")
         self.assertEqual(
             gateway["UCLOUD_HEARTBEAT_TOKEN_FILE"],
-            "/work/ucloud-sandboxes/state/heartbeat-token",
+            "/work/data/ucloud-sandboxes/state/heartbeat-token",
         )
         self.assertEqual(
             gateway["UCLOUD_NODE_CONTROL_TOKEN_FILE"],
-            "/work/ucloud-sandboxes/state/node-control-token",
+            "/work/data/ucloud-sandboxes/state/node-control-token",
         )
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
         self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "30")
         self.assertEqual(registry["UCLOUD_REGISTRY_KEEP_PER_REPOSITORY"], "0")
         self.assertEqual(
             registry["UCLOUD_REGISTRY_USAGE_FILE"],
-            "/work/ucloud-sandboxes/state/registry-usage.json",
+            "/work/data/ucloud-sandboxes/state/registry-usage.json",
         )
         self.assertEqual(
             registry["UCLOUD_IMAGE_FILE"],
-            "/work/ucloud-sandboxes/state/images.json",
+            "/work/data/ucloud-sandboxes/state/images.json",
         )
         self.assertIn(
-            "REGISTRY_USAGE_FILE=/work/ucloud-sandboxes/state/registry-usage.json",
+            "REGISTRY_USAGE_FILE=/work/data/ucloud-sandboxes/state/registry-usage.json",
             script,
         )
         self.assertIn(
@@ -83,11 +84,11 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_HEARTBEAT_TOKEN_SOURCE_FILE"],
-            "/work/ucloud-sandboxes/state/heartbeat-token",
+            "/work/data/ucloud-sandboxes/state/heartbeat-token",
         )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE"],
-            "/work/ucloud-sandboxes/state/node-control-token",
+            "/work/data/ucloud-sandboxes/state/node-control-token",
         )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_PACKAGE_SPEC"],
@@ -154,17 +155,37 @@ class DeployTests(unittest.TestCase):
         )
         self.assertIn("curl -fsS http://127.0.0.1:8090/healthz", script)
         self.assertIn(
-            "create_secret /work/ucloud-sandboxes/state/gateway-token",
+            "create_secret /work/data/ucloud-sandboxes/state/gateway-token",
             script,
         )
         self.assertIn(
-            "create_secret /work/ucloud-sandboxes/state/heartbeat-token",
+            "create_secret /work/data/ucloud-sandboxes/state/heartbeat-token",
             script,
         )
         self.assertIn(
-            "create_secret /work/ucloud-sandboxes/state/node-control-token",
+            "create_secret /work/data/ucloud-sandboxes/state/node-control-token",
             script,
         )
+        self.assertIn("PROJECT_MOUNT_DIR=/work/data", script)
+        self.assertIn('mountpoint -q "$PROJECT_MOUNT_DIR"', script)
+        self.assertIn("LEGACY_STATE_DIR=/work/ucloud-sandboxes/state", script)
+        self.assertIn(
+            "LEGACY_STATE_BACKUP_DIR=/work/ucloud-sandboxes/state.pre-persistent-v1",
+            script,
+        )
+        self.assertIn(
+            "PERSISTENT_STATE_MARKER=/work/data/ucloud-sandboxes/state/.persistent-state-v1",
+            script,
+        )
+        self.assertIn('sudo cp -a "$LEGACY_STATE_DIR/." "$MIGRATION_DIR/"', script)
+        self.assertIn(
+            'sudo mv "$LEGACY_STATE_DIR" "$LEGACY_STATE_BACKUP_DIR"', script
+        )
+        self.assertIn('sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"', script)
+        self.assertIn('sudo systemctl stop "$unit"', script)
+        self.assertNotIn('systemctl stop "$unit" 2>/dev/null || true', script)
+        self.assertIn("RequiresMountsFor=/work/data", script)
+        self.assertIn("ExecStartPre=/usr/bin/mountpoint -q /work/data", script)
         self.assertEqual(
             len(
                 {
@@ -176,8 +197,48 @@ class DeployTests(unittest.TestCase):
             3,
         )
         self.assertNotIn(
-            "gateway-token /work/ucloud-sandboxes/state/heartbeat-token",
+            "gateway-token /work/data/ucloud-sandboxes/state/heartbeat-token",
             script,
+        )
+
+        syntax = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_all_in_one_plan_uses_project_drive_for_durable_state(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+            wheel.write_bytes(b"wheel")
+            plan = AllInOneDeployPlan(
+                job_id="job-1",
+                project_id="project-1",
+                deployment_id="prod-a",
+                local_wheel=wheel,
+                install_root="/srv/ucloud-sandboxes",
+                project_mount_dir="/mnt/project-data",
+                gateway_private_host="sandbox-gateway-prod",
+                registry_private_ip="10.0.0.5",
+                private_network_id="net-1",
+            )
+
+        self.assertEqual(plan.state_dir, "/mnt/project-data/ucloud-sandboxes/state")
+        self.assertEqual(plan.legacy_state_dir, "/srv/ucloud-sandboxes/state")
+        self.assertEqual(
+            plan.legacy_state_backup_dir,
+            "/srv/ucloud-sandboxes/state.pre-persistent-v1",
+        )
+        self.assertEqual(
+            plan.staged_session_file,
+            "/srv/ucloud-sandboxes/release/.deploy-ucloud-session.json",
+        )
+        self.assertEqual(
+            plan.remote_session_file,
+            "/mnt/project-data/ucloud-sandboxes/state/ucloud-session.json",
         )
 
     def test_offline_bundle_builder_python_compiles(self) -> None:

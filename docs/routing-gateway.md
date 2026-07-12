@@ -42,11 +42,20 @@ id: 12345368
 domain: app-sandboxes.cloud.sdu.dk
 product: ucloud/u1-publiclink/u1-publiclink
 state: READY
-bound job: 12349450
+bound job: 12353689
 bound port: 8090
 ```
 
 The same all-in-one VM also runs the relay, registry, and autoscaler.
+
+If UCloud powers off a worker VM after it has already run, the autoscaler keeps
+the worker's sandbox routes while it issues a durable resume operation. Calls
+to the temporarily absent private hostname return structured retryable JSON
+instead of provider HTML or an opaque gateway error: DNS absence is HTTP 503
+with `code=node_dns_unavailable`, and a connected request timeout is HTTP 504
+with `code=node_request_timeout`. Clients should retry those responses. A DNS
+failure on sandbox creation releases the provisional route because no
+connection was established and the node could not have received the create.
 
 The target job resource fragment is:
 
@@ -71,13 +80,14 @@ the link as bound while the public endpoint returns `449`.
 
 Current smoke-test shape:
 
-- gateway VM job `12349450` runs `serve-control-plane --host 0.0.0.0 --port 8090`
-  with `/work/ucloud-sandboxes/state/heartbeats.json` and
-  `/work/ucloud-sandboxes/state/routes.sqlite`
+- gateway VM job `12353689` runs `serve-control-plane --host 0.0.0.0 --port 8090`
+  with `/work/data/ucloud-sandboxes/state/heartbeats.json` and
+  `/work/data/ucloud-sandboxes/state/routes.sqlite` after the persistent-state
+  migration is deployed
 - gateway route lookups are served from an in-memory index; `routes.sqlite` is
   a write-through recovery and pending-demand database shared with the
   autoscaler
-- gateway VM job `12349450` also runs `autoscaler-loop` as a systemd service
+- gateway VM job `12353689` also runs `autoscaler-loop` as a systemd service
   with create execution, label-gated stop execution, a 5-second reconcile
   interval, a 600-second sandbox idle grace, and a 900-second builder idle
   grace enabled

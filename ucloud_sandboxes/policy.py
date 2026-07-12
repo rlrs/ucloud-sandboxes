@@ -368,7 +368,7 @@ def _counts_as_pool_node(
     oldest_pending_seconds: int,
 ) -> bool:
     del policy, now, oldest_pending_seconds
-    if node.job.is_final:
+    if node.job.is_final or node.job.is_unexpectedly_suspended:
         return False
     # Capacity weighting and hard provider limits are separate concerns. A stale
     # provisioning job may contribute no projected resources, but it is still a
@@ -385,7 +385,7 @@ def _counts_as_active_provisioning(
     del policy, now, oldest_pending_seconds
     # max_provisioning_nodes is a hard in-flight job limit, not a measure of the
     # capacity currently credited to that job.
-    return node.job.state in {"IN_QUEUE", "SUSPENDED"} or (
+    return node.job.state == "IN_QUEUE" or node.job.is_initially_suspended or (
         node.job.state == "RUNNING" and not node.heartbeat_fresh
     )
 
@@ -475,7 +475,7 @@ def _incompatible_stop_candidates(
     for node in nodes:
         if node.job.is_final or node.agent_version_compatible:
             continue
-        if node.job.state in {"IN_QUEUE", "SUSPENDED"}:
+        if node.job.state == "IN_QUEUE" or node.job.is_initially_suspended:
             candidates.append(node)
             continue
         if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:

@@ -4,6 +4,25 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+- Recover autoscaled worker and builder VMs that UCloud suspends after they
+  have run. Resume requests use the durable provider-operation journal,
+  preserve sandbox routes, are rate-limited and replay-safe, and are confirmed
+  from exhaustive job inventory before settling.
+- Distinguish UCloud's initial boot-time `SUSPENDED` state from a post-run
+  suspension. Post-run suspended VMs now contribute zero projected capacity
+  and do not consume create/provisioning limits while recovery is pending.
+- Return structured retryable node transport failures: DNS outages are HTTP
+  503 `node_dns_unavailable`, timeouts are HTTP 504
+  `node_request_timeout`, and other transport failures remain JSON HTTP 502s.
+- Persisted all-in-one gateway state on the attached project drive, with a
+  one-shot fail-closed migration from job-local state and stable credentials,
+  image mappings, registry references, routes, and autoscaler journals across
+  gateway replacement. The legacy state path becomes a compatibility symlink so
+  package downgrades continue using current persistent state.
+- Added generated systemd mount dependencies and mountpoint preflights so the
+  gateway, relay, registry, maintenance, and autoscaler services cannot start
+  against an unmounted persistent-data path.
+
 ## 0.3.46 - 2026-07-12
 
 - Evicted unreachable empty worker VMs after a conservative heartbeat lease

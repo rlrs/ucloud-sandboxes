@@ -31,6 +31,14 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-registry-gc.timer",
     "ucloud-sandbox-autoscaler.service",
 )
+PERSISTENT_STORAGE_SYSTEMD_UNITS = (
+    "ucloud-sandbox-gateway.service",
+    "ucloud-sandbox-relay.service",
+    "ucloud-sandbox-registry.service",
+    "ucloud-sandbox-registry-prune.service",
+    "ucloud-sandbox-registry-gc.service",
+    "ucloud-sandbox-autoscaler.service",
+)
 
 
 @dataclass(frozen=True)
@@ -74,7 +82,19 @@ class AllInOneDeployPlan:
 
     @property
     def state_dir(self) -> str:
+        return str(PurePosixPath(self.project_mount_dir) / "ucloud-sandboxes" / "state")
+
+    @property
+    def legacy_state_dir(self) -> str:
         return str(PurePosixPath(self.install_root) / "state")
+
+    @property
+    def legacy_state_backup_dir(self) -> str:
+        return str(PurePosixPath(self.install_root) / "state.pre-persistent-v1")
+
+    @property
+    def persistent_state_marker_file(self) -> str:
+        return str(PurePosixPath(self.state_dir) / ".persistent-state-v1")
 
     @property
     def release_dir(self) -> str:
@@ -87,6 +107,10 @@ class AllInOneDeployPlan:
     @property
     def remote_wheel_path(self) -> str:
         return str(PurePosixPath(self.release_dir) / self.local_wheel.name)
+
+    @property
+    def staged_session_file(self) -> str:
+        return str(PurePosixPath(self.release_dir) / ".deploy-ucloud-session.json")
 
     @property
     def node_package_bundle_path(self) -> str:
@@ -188,6 +212,14 @@ class AllInOneDeployPlan:
             _reject_bad_text(label, value)
             if not value:
                 raise ValueError(f"{label} is required.")
+        for label, value in {
+            "install root": self.install_root,
+            "project mount dir": self.project_mount_dir,
+        }.items():
+            if not PurePosixPath(value).is_absolute():
+                raise ValueError(f"{label} must be an absolute path.")
+        if PurePosixPath(self.project_mount_dir) == PurePosixPath("/"):
+            raise ValueError("project mount dir cannot be the filesystem root.")
         _reject_bad_text("registry private IP", self.registry_private_ip)
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
@@ -229,6 +261,9 @@ class AllInOneDeployPlan:
             "nodePackageBundlePath": self.node_package_bundle_path,
             "installRoot": self.install_root,
             "stateDir": self.state_dir,
+            "legacyStateDir": self.legacy_state_dir,
+            "legacyStateBackupDir": self.legacy_state_backup_dir,
+            "persistentStateMarkerFile": self.persistent_state_marker_file,
             "projectMountDir": self.project_mount_dir,
             "registryDataDir": self.registry_data_dir,
             "gatewayPort": self.gateway_port,
@@ -246,6 +281,7 @@ class AllInOneDeployPlan:
             "dockerInsecureRegistry": self.docker_insecure_registry,
             "dockerHostAlias": self.docker_host_alias,
             "remoteSessionFile": self.remote_session_file,
+            "stagedSessionFile": self.staged_session_file,
             "gatewayTokenFile": self.gateway_token_file,
             "heartbeatTokenFile": self.heartbeat_token_file,
             "nodeControlTokenFile": self.node_control_token_file,
@@ -399,6 +435,17 @@ def render_remote_deploy_script(
     unit_files = {
         f"/etc/systemd/system/{name}": unit_texts[name] for name in SYSTEMD_UNIT_NAMES
     }
+    persistent_mount = _systemd_env_quote(plan.project_mount_dir)
+    persistent_storage_dropin = "\n".join(
+        (
+            "[Unit]",
+            f"RequiresMountsFor={persistent_mount}",
+            "",
+            "[Service]",
+            f"ExecStartPre=/usr/bin/mountpoint -q {persistent_mount}",
+            "",
+        )
+    )
     sandbox_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
@@ -406,7 +453,11 @@ def render_remote_deploy_script(
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
+        f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"STATE_DIR={shlex.quote(plan.state_dir)}",
+        f"LEGACY_STATE_DIR={shlex.quote(plan.legacy_state_dir)}",
+        f"LEGACY_STATE_BACKUP_DIR={shlex.quote(plan.legacy_state_backup_dir)}",
+        f"PERSISTENT_STATE_MARKER={shlex.quote(plan.persistent_state_marker_file)}",
         f"REGISTRY_USAGE_FILE={shlex.quote(plan.registry_usage_file)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
@@ -415,11 +466,24 @@ def render_remote_deploy_script(
         f"BUILDER_NODE_PACKAGE_BUNDLE={shlex.quote(plan.builder_node_package_bundle_path)}",
         f"SERVICE_USER={shlex.quote(plan.service_user)}",
         f"SESSION_FILE={shlex.quote(plan.remote_session_file)}",
+        f"STAGED_SESSION_FILE={shlex.quote(plan.staged_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
         f"INIT_KEY_COMMENT={shlex.quote(plan.deployment_id + ' gateway init')}",
         f"REGISTRY_PRIVATE_IP={shlex.quote(plan.registry_private_ip)}",
         "",
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
+        'if ! mountpoint -q "$PROJECT_MOUNT_DIR"; then',
+        '  echo "Persistent project drive is not mounted at $PROJECT_MOUNT_DIR" >&2',
+        "  exit 1",
+        "fi",
+        'if [ ! -f "$PERSISTENT_STATE_MARKER" ] && [ -d "$STATE_DIR" ] && find "$STATE_DIR" -mindepth 1 -print -quit | grep -q .; then',
+        '  echo "Persistent state exists without its migration marker: $STATE_DIR" >&2',
+        "  exit 1",
+        "fi",
+        'if [ ! -s "$STAGED_SESSION_FILE" ] && [ ! -s "$SESSION_FILE" ] && [ ! -s "$LEGACY_STATE_DIR/ucloud-session.json" ]; then',
+        '  echo "No staged, persistent, or legacy UCloud session is available" >&2',
+        "  exit 1",
+        "fi",
         "detect_registry_private_ip() {",
         "  ip -o -4 addr show scope global | awk '",
         "    {",
@@ -442,18 +506,7 @@ def render_remote_deploy_script(
         "",
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$INSTALL_ROOT"',
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
-        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"',
-        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR/ssh"',
-        'for path in "$REGISTRY_USAGE_FILE" "$REGISTRY_USAGE_FILE.lock"; do',
-        '  if [ -e "$path" ]; then',
-        '    sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
-        '    sudo chmod 600 "$path"',
-        "  fi",
-        "done",
         'test -s "$REMOTE_WHEEL"',
-        'test -s "$SESSION_FILE"',
-        'chmod 600 "$SESSION_FILE"',
-        'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$SESSION_FILE"',
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
         "binutils ca-certificates curl docker.io gnupg openssh-client openssl "
@@ -770,6 +823,72 @@ def render_remote_deploy_script(
         # from the previous bundle.
         '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
         "",
+        "for unit in \\",
+        "  ucloud-sandbox-registry-prune.timer \\",
+        "  ucloud-sandbox-registry-gc.timer \\",
+        "  ucloud-sandbox-autoscaler.service \\",
+        "  ucloud-sandbox-gateway.service \\",
+        "  ucloud-sandbox-relay.service \\",
+        "  ucloud-sandbox-registry-prune.service \\",
+        "  ucloud-sandbox-registry-gc.service; do",
+        '  if sudo systemctl cat "$unit" >/dev/null 2>&1; then',
+        '    sudo systemctl stop "$unit"',
+        "  fi",
+        "done",
+        'if [ ! -f "$PERSISTENT_STATE_MARKER" ]; then',
+        '  if [ -d "$STATE_DIR" ] && find "$STATE_DIR" -mindepth 1 -print -quit | grep -q .; then',
+        '    echo "Persistent state exists without its migration marker: $STATE_DIR" >&2',
+        "    exit 1",
+        "  fi",
+        '  MIGRATION_DIR="${STATE_DIR}.migrate.$$"',
+        '  sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$MIGRATION_DIR"',
+        '  if [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ] && [ -d "$LEGACY_STATE_DIR" ]; then',
+        '    sudo cp -a "$LEGACY_STATE_DIR/." "$MIGRATION_DIR/"',
+        "  fi",
+        '  sudo touch "$MIGRATION_DIR/.persistent-state-v1"',
+        '  sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$MIGRATION_DIR"',
+        '  if [ -d "$STATE_DIR" ]; then',
+        '    sudo rmdir "$STATE_DIR"',
+        "  fi",
+        '  sudo mv "$MIGRATION_DIR" "$STATE_DIR"',
+        "fi",
+        'if [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ]; then',
+        '  if [ -L "$LEGACY_STATE_DIR" ]; then',
+        '    if [ "$(readlink -f "$LEGACY_STATE_DIR")" != "$STATE_DIR" ]; then',
+        '      echo "Legacy state symlink does not target persistent state: $LEGACY_STATE_DIR" >&2',
+        "      exit 1",
+        "    fi",
+        '  elif [ -e "$LEGACY_STATE_DIR" ]; then',
+        '    if [ -e "$LEGACY_STATE_BACKUP_DIR" ] || [ -L "$LEGACY_STATE_BACKUP_DIR" ]; then',
+        '      echo "Legacy state backup already exists: $LEGACY_STATE_BACKUP_DIR" >&2',
+        "      exit 1",
+        "    fi",
+        '    sudo mv "$LEGACY_STATE_DIR" "$LEGACY_STATE_BACKUP_DIR"',
+        '    sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"',
+        "  else",
+        '    sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"',
+        "  fi",
+        "fi",
+        'sudo chmod 0700 "$STATE_DIR"',
+        'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"',
+        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR/ssh"',
+        'if [ -s "$STAGED_SESSION_FILE" ]; then',
+        '  sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STAGED_SESSION_FILE" "$SESSION_FILE"',
+        '  rm -f "$STAGED_SESSION_FILE"',
+        "fi",
+        'if [ ! -s "$SESSION_FILE" ]; then',
+        '  echo "UCloud session file is missing after persistent-state migration: $SESSION_FILE" >&2',
+        "  exit 1",
+        "fi",
+        'chmod 600 "$SESSION_FILE"',
+        'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$SESSION_FILE"',
+        'for path in "$REGISTRY_USAGE_FILE" "$REGISTRY_USAGE_FILE.lock"; do',
+        '  if [ -e "$path" ]; then',
+        '    sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
+        '    sudo chmod 600 "$path"',
+        "  fi",
+        "done",
+        "",
         "create_secret() {",
         '  path="$1"',
         '  if [ ! -s "$path" ]; then',
@@ -806,6 +925,16 @@ def render_remote_deploy_script(
     )
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
+    for unit_name in PERSISTENT_STORAGE_SYSTEMD_UNITS:
+        dropin_dir = f"/etc/systemd/system/{unit_name}.d"
+        script_parts.append(f"sudo install -d -m 0755 {shlex.quote(dropin_dir)}")
+        script_parts.append(
+            _install_root_file_snippet(
+                f"{dropin_dir}/persistent-storage.conf",
+                persistent_storage_dropin,
+                mode="0644",
+            )
+        )
     script_parts.extend(
         [
             "sudo systemctl daemon-reload",

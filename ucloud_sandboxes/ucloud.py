@@ -303,6 +303,28 @@ class UCloudClient:
             raise UCloudError("Unexpected jobs terminate response payload.")
         return response
 
+    def unsuspend_jobs(
+        self,
+        project_id: str,
+        job_ids: list[str] | tuple[str, ...],
+    ) -> dict[str, Any]:
+        """Resume suspended jobs through UCloud's bulk update endpoint."""
+
+        if not job_ids:
+            return {"responses": []}
+        response = self.request_json(
+            "POST",
+            "/api/jobs/unsuspend",
+            project_id=project_id,
+            json_body={
+                "type": "bulk",
+                "items": [{"id": str(job_id)} for job_id in job_ids],
+            },
+        )
+        if not isinstance(response, dict):
+            raise UCloudError("Unexpected jobs unsuspend response payload.")
+        return response
+
     def open_interactive_session(
         self,
         project_id: str,

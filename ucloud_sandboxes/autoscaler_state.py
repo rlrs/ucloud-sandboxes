@@ -16,11 +16,12 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 PROVIDER_OPERATION_LABEL = "ucloud-sandboxes/provider-operation"
 DEPLOYMENT_LABEL = "ucloud-sandboxes/deployment"
 
-OPERATION_KINDS = frozenset({"create", "stop"})
+OPERATION_KINDS = frozenset({"create", "resume", "stop"})
 OPERATION_STATES = frozenset(
     {"prepared", "uncertain", "accepted", "settled", "failed"}
 )
 RECOVERABLE_CREATE_STATES = frozenset({"uncertain"})
+RECOVERABLE_RESUME_STATES = frozenset({"prepared", "uncertain", "accepted"})
 RECOVERABLE_STOP_STATES = frozenset({"uncertain"})
 DRAIN_INTENT_STATES = frozenset({"active", "canceling"})
 
@@ -639,6 +640,75 @@ class AutoscalerStateStore:
                     )
                 )
         return settled
+
+    def reconcile_resume_operations(
+        self,
+        job_states: dict[str, str],
+        *,
+        uncertain_retry_seconds: int = 10,
+        accepted_retry_seconds: int = 30,
+        now: datetime | None = None,
+    ) -> list[ProviderRecovery]:
+        """Confirm or rate-limit replay of idempotent UCloud unsuspend calls."""
+
+        current_time = _normalized_now(now)
+        retries = {
+            "uncertain": max(0, int(uncertain_retry_seconds)),
+            "accepted": max(0, int(accepted_retry_seconds)),
+        }
+        results: list[ProviderRecovery] = []
+        for operation in self.list_operations(
+            kind="resume", states=RECOVERABLE_RESUME_STATES
+        ):
+            job_ids = operation.target_job_ids
+            states = tuple(str(job_states.get(job_id) or "") for job_id in job_ids)
+            if job_ids and all(state == "RUNNING" for state in states):
+                response = dict(operation.response)
+                response["recoveredFromRunningJobInventory"] = True
+                transitioned = self._transition_operation(
+                    operation.operation_id,
+                    expected_states=RECOVERABLE_RESUME_STATES,
+                    new_state="settled",
+                    response=response,
+                    last_error="",
+                    now=current_time,
+                )
+                status = "recovered"
+            elif any(state in {"SUCCESS", "FAILURE", "EXPIRED"} for state in states):
+                transitioned = self._transition_operation(
+                    operation.operation_id,
+                    expected_states=RECOVERABLE_RESUME_STATES,
+                    new_state="failed",
+                    last_error="suspended job became final before it resumed",
+                    now=current_time,
+                )
+                status = "failed"
+            elif job_ids and all(state == "SUSPENDED" for state in states):
+                age = max(0.0, (current_time - operation.updated_at).total_seconds())
+                if operation.state != "prepared" and age >= retries[operation.state]:
+                    transitioned = self._transition_operation(
+                        operation.operation_id,
+                        expected_states={operation.state},
+                        new_state="prepared",
+                        last_error=operation.last_error,
+                        now=current_time,
+                    )
+                    status = "retry"
+                else:
+                    transitioned = operation
+                    status = "waiting"
+            else:
+                transitioned = operation
+                status = "waiting"
+            results.append(
+                ProviderRecovery(
+                    operation_id=transitioned.operation_id,
+                    kind="resume",
+                    status=status,
+                    job_ids=transitioned.target_job_ids,
+                )
+            )
+        return results
 
     def compact_terminal_history(self, *, keep: int = 1000) -> int:
         """Bound settled/failed audit rows; slot state preserves incarnation."""

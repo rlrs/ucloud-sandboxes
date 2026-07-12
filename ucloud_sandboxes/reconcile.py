@@ -225,7 +225,11 @@ def evaluate_builder_scale(
         [node for node in builder_nodes if node.job_id not in unreachable_job_ids],
         now=now,
     )[: max(0, stop_budget - len(unreachable_stop_candidates))]
-    pool_nodes = [node for node in builder_nodes if not node.job.is_final]
+    pool_nodes = [
+        node
+        for node in builder_nodes
+        if not node.job.is_final and not node.job.is_unexpectedly_suspended
+    ]
     ready_nodes = [node for node in pool_nodes if node.is_schedulable]
     provisioning_nodes = [node for node in pool_nodes if node.is_provisioning]
     total_nodes = len(pool_nodes)
@@ -438,7 +442,7 @@ def _incompatible_stop_candidates(
     for node in nodes:
         if node.job.is_final or node.agent_version_compatible:
             continue
-        if node.job.state in {"IN_QUEUE", "SUSPENDED"}:
+        if node.job.state == "IN_QUEUE" or node.job.is_initially_suspended:
             candidates.append(node)
             continue
         if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:

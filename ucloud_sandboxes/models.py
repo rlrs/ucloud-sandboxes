@@ -10,7 +10,7 @@ from .networking import private_network_ids_from_resources
 
 
 FINAL_JOB_STATES = {"SUCCESS", "FAILURE", "EXPIRED"}
-PROVISIONING_JOB_STATES = {"IN_QUEUE", "SUSPENDED", "RUNNING"}
+PROVISIONING_JOB_STATES = {"IN_QUEUE", "RUNNING"}
 CPU_PRODUCT_RE = re.compile(r"(?:^|[-_])(\d+)[-_]vcpu(?:$|[-_])", re.IGNORECASE)
 
 
@@ -320,7 +320,19 @@ class VmJob:
 
     @property
     def is_provisioning_or_running(self) -> bool:
-        return self.state in PROVISIONING_JOB_STATES
+        return self.state in PROVISIONING_JOB_STATES or self.is_initially_suspended
+
+    @property
+    def is_initially_suspended(self) -> bool:
+        """UCloud commonly reports a new VM suspended before its first start."""
+
+        return self.state == "SUSPENDED" and self.started_at is None
+
+    @property
+    def is_unexpectedly_suspended(self) -> bool:
+        """Return whether a VM that previously ran has been powered off by UCloud."""
+
+        return self.state == "SUSPENDED" and self.started_at is not None
 
 @dataclass(frozen=True)
 class NodeHeartbeat:
@@ -437,7 +449,7 @@ class SandboxNode:
 
     @property
     def is_provisioning(self) -> bool:
-        return self.job.state in {"IN_QUEUE", "SUSPENDED"} or (
+        return self.job.state == "IN_QUEUE" or self.job.is_initially_suspended or (
             self.job.state == "RUNNING" and not self.heartbeat_fresh
         )
 

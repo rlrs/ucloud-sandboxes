@@ -41,8 +41,8 @@ For local development, run the relay directly:
 uv run ucloud-sandboxes serve-model-relay \
   --host 0.0.0.0 \
   --port 8092 \
-  --sandbox-bearer-token-file /work/ucloud-sandboxes/state/relay-sandbox-token \
-  --worker-bearer-token-file /work/ucloud-sandboxes/state/relay-worker-token \
+  --sandbox-bearer-token-file /work/data/ucloud-sandboxes/state/relay-sandbox-token \
+  --worker-bearer-token-file /work/data/ucloud-sandboxes/state/relay-worker-token \
   --request-timeout-seconds 7200 \
   --worker-lease-seconds 600 \
   --completed-request-retention-seconds 3600
@@ -56,11 +56,12 @@ Live development relay:
 
 - URL: `https://app-sandboxes-relay.cloud.sdu.dk`
 - UCloud ingress id: `12346842`
-- all-in-one gateway VM job id: `12349450`
+- all-in-one gateway VM job id: `12353689`
 - VM-local port: `8092`
 - token files on the gateway VM:
-  `/work/ucloud-sandboxes/state/relay-sandbox-token` and
-  `/work/ucloud-sandboxes/state/relay-worker-token`
+  `/work/data/ucloud-sandboxes/state/relay-sandbox-token` and
+  `/work/data/ucloud-sandboxes/state/relay-worker-token` after the
+  persistent-state migration is deployed
 
 ## Sandbox Environment
 

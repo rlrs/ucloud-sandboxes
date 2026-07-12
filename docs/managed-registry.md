@@ -3,8 +3,9 @@
 The deployment can host a private Docker registry for builder output. This can
 run on the public control-plane VM or on a dedicated VM attached to the same
 private network. The live deployment uses the all-in-one control-plane VM:
-gateway, relay, registry, registry GC, and autoscaler run on job `12349450`, and
-registry storage is backed by the mounted project drive:
+gateway, relay, registry, registry GC, and autoscaler run together, and registry
+storage is backed by the mounted project drive. Current live job and address
+details are maintained in [deployment-flow.md](deployment-flow.md):
 
 1. Builder nodes build and push
    `ucloud-sandbox-registry:5000/repo/name:tag`.
@@ -71,6 +72,27 @@ long as `UCLOUD_REGISTRY_DATA_DIR` points at the mounted project folder. A
 control-plane VM replacement must attach the same project drive before starting
 the registry, otherwise it will start with an empty registry.
 
+Raw registry blobs and gateway image metadata both live on the project drive in
+the updated deployment. Registry blobs remain under
+`/work/data/ucloud-sandbox-registry/docker-registry`; gateway state, including
+the image-id index and registry-use records, lives under
+`/work/data/ucloud-sandboxes/state`.
+
+The first convergence with this layout stops state-writing services and
+atomically migrates the old `/work/ucloud-sandboxes/state` directory. It refuses
+to merge a non-empty persistent target without the migration marker, preserves
+the original directory as `state.pre-persistent-v1`, and replaces the legacy
+path with a symlink to persistent state for downgrade compatibility. It stages a
+refreshed UCloud session separately so session copying cannot make the target
+appear pre-populated.
+
+Generated systemd drop-ins use `RequiresMountsFor=/work/data` and a `mountpoint`
+preflight. Without those gates, a boot can race the project-drive mount and bind
+a hidden directory on the VM root disk. The inspected 2026-07-12 boot mounted
+`/work/data` two seconds before starting the registry, so that race did not
+cause the observed index loss. Deployed version 0.3.48 still lacks the gates
+until this change is released and converged.
+
 ## Node Init
 
 Builders and sandbox nodes must trust the private registry if it is served over
@@ -97,7 +119,12 @@ ucloud-sandboxes autoscaler-loop \
 The init script writes Docker's `insecure-registries` daemon setting and
 restarts Docker before starting the node agent. It also writes the host alias to
 `/etc/hosts`, so image tags do not need to change when the gateway's private IP
-changes; only the deployment's host-alias value needs updating.
+changes. The mapping is static after initialization: changing the deployment's
+host-alias value affects newly initialized nodes only. Update `/etc/hosts` and
+`/etc/ucloud-sandboxes/node.env` on existing builders and sandbox nodes as well,
+and restart the autoscaler after changing its environment. See the dated
+registry alias incident in [deployment-flow.md](deployment-flow.md) for the
+recovery and validation procedure.
 
 The same init script configures Docker's bridge MTU from the VM default-route
 interface. This matters on UCloud private-network VMs where the host interface
@@ -238,8 +265,8 @@ ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
   --max-age-days 30 \
   --keep-per-repository 0 \
-  --usage-file /work/ucloud-sandboxes/state/registry-usage.json \
-  --image-file /work/ucloud-sandboxes/state/images.json \
+  --usage-file /work/data/ucloud-sandboxes/state/registry-usage.json \
+  --image-file /work/data/ucloud-sandboxes/state/images.json \
   --prune-stale-image-records
 ```
 
@@ -250,8 +277,8 @@ ucloud-sandboxes registry-prune \
   --registry-url http://127.0.0.1:5000 \
   --max-age-days 30 \
   --keep-per-repository 0 \
-  --usage-file /work/ucloud-sandboxes/state/registry-usage.json \
-  --image-file /work/ucloud-sandboxes/state/images.json \
+  --usage-file /work/data/ucloud-sandboxes/state/registry-usage.json \
+  --image-file /work/data/ucloud-sandboxes/state/images.json \
   --prune-stale-image-records \
   --execute
 ```

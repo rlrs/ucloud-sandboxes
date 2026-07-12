@@ -1381,6 +1381,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Terminate planned stop jobs. This is separate because it is destructive.",
     )
     reconcile.add_argument(
+        "--execute-resumes",
+        action="store_true",
+        help="Resume owned VMs that UCloud suspended after they had started.",
+    )
+    reconcile.add_argument(
         "--allow-unlabeled-stops",
         action="store_true",
         help=(
@@ -1486,6 +1491,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--execute-stops",
         action="store_true",
         help="Terminate planned stop jobs. This is separate because it is destructive.",
+    )
+    loop.add_argument(
+        "--execute-resumes",
+        action="store_true",
+        help="Resume owned VMs that UCloud suspended after they had started.",
     )
     loop.add_argument(
         "--allow-unlabeled-stops",
@@ -3072,7 +3082,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             staged_session = stage_file_over_ssh(
                 ssh_command,
                 local_session,
-                plan.remote_session_file,
+                plan.staged_session_file,
                 mode="0600",
                 timeout_seconds=timeout,
                 private_key_file=args.ssh_private_key_file,
@@ -3080,7 +3090,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             result["stagedFiles"].append(
                 {
                     "localPath": str(local_session),
-                    "remotePath": plan.remote_session_file,
+                    "remotePath": plan.staged_session_file,
                     "result": staged_session.to_dict(),
                 }
             )
@@ -3235,7 +3245,7 @@ def reject_mutating_jobs_fixture(
     if execution_requested and getattr(args, "jobs_file", None) is not None:
         raise ValueError(
             "--jobs-file is dry-run only and cannot be combined with "
-            "--execute, --execute-stops, or --execute-init"
+            "--execute, --execute-stops, --execute-resumes, or --execute-init"
         )
 
 
@@ -3244,7 +3254,10 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     if not config.project_id:
         raise ValueError("project id is required via --project or config.project_id.")
     execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+        args.execute
+        or args.execute_stops
+        or getattr(args, "execute_resumes", False)
+        or getattr(args, "execute_init", False)
     )
     if execution_requested:
         raise ValueError(
@@ -3297,7 +3310,10 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     cycle = 0
     observed_vm_keys: dict[str, tuple[object, ...]] = {}
     execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+        args.execute
+        or args.execute_stops
+        or getattr(args, "execute_resumes", False)
+        or getattr(args, "execute_init", False)
     )
     reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
     provider_state = (
@@ -3650,6 +3666,11 @@ def apply_prepared_provider_operations(
         try:
             if submitting.kind == "create":
                 response = client.submit_jobs(project_id, submitting.request)
+            elif submitting.kind == "resume":
+                response = client.unsuspend_jobs(
+                    project_id,
+                    submitting.target_job_ids,
+                )
             else:
                 response = client.terminate_jobs(
                     project_id,
@@ -3676,7 +3697,13 @@ def apply_prepared_provider_operations(
             )
         else:
             response_job_ids = tuple(submitted_job_ids(response))
-            if _provider_response_is_definite_success(
+            if _provider_response_is_definite_rejection(response):
+                operation = provider_state.mark_operation_failed(
+                    submitting.operation_id,
+                    error="UCloud explicitly rejected the provider operation",
+                    response=response,
+                )
+            elif _provider_response_is_definite_success(
                 submitting,
                 response_job_ids,
             ):
@@ -3688,12 +3715,6 @@ def apply_prepared_provider_operations(
                         if submitting.kind == "create"
                         else submitting.target_job_ids
                     ),
-                )
-            elif _provider_response_is_definite_rejection(response):
-                operation = provider_state.mark_operation_failed(
-                    submitting.operation_id,
-                    error="UCloud explicitly rejected the provider operation",
-                    response=response,
                 )
             else:
                 operation = provider_state.mark_operation_uncertain(
@@ -3721,6 +3742,10 @@ def _provider_response_is_definite_success(
 ) -> bool:
     if operation.kind == "create":
         return len(response_job_ids) == 1
+    if operation.kind == "resume":
+        # UCloud's BulkResponse[Empty] proves acceptance with an empty object,
+        # so a non-rejection 2xx response is the strongest synchronous proof.
+        return bool(operation.target_job_ids)
     return bool(operation.target_job_ids) and set(operation.target_job_ids).issubset(
         response_job_ids
     )
@@ -3815,7 +3840,10 @@ def run_reconcile_cycle(
     provider_fence: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
+        args.execute
+        or args.execute_stops
+        or getattr(args, "execute_resumes", False)
+        or getattr(args, "execute_init", False)
     )
     if (
         execution_requested
@@ -3849,6 +3877,7 @@ def run_reconcile_cycle(
     operation_deployment_id = config.deployment_id or config.project_id
     provider_operation_results: list[dict[str, Any]] = []
     create_recovery_results: list[dict[str, Any]] = []
+    resume_recovery_results: list[dict[str, Any]] = []
     stop_recovery_results: list[dict[str, Any]] = []
     create_visibility_guards: list[dict[str, Any]] = []
     blocked_create_roles: set[str] = set()
@@ -3870,6 +3899,21 @@ def run_reconcile_cycle(
             provider_operation_results.append(item)
         observed_job_ids = {job.id for job in jobs if job.id}
         provider_state.confirm_visible_creates(observed_job_ids)
+        for recovery in provider_state.reconcile_resume_operations(
+            {job.id: job.state for job in jobs if job.id},
+        ):
+            operation = provider_state.get_operation(recovery.operation_id)
+            item = {
+                "operationId": recovery.operation_id,
+                "kind": "resume",
+                "role": operation.role if operation is not None else "",
+                "state": recovery.status,
+                "jobIds": list(recovery.job_ids),
+                "source": "inventory-recovery",
+                "error": operation.last_error if operation is not None else "",
+            }
+            resume_recovery_results.append(item)
+            provider_operation_results.append(item)
         final_provider_job_ids = tuple(
             job.id for job in jobs if job.id and job.is_final
         )
@@ -3892,6 +3936,8 @@ def run_reconcile_cycle(
         allowed_kinds: set[str] = set()
         if args.execute:
             allowed_kinds.add("create")
+        if getattr(args, "execute_resumes", False):
+            allowed_kinds.add("resume")
         # Stops are replayed only after this cycle has refreshed every active
         # node drain intent below.
         replay_results = apply_prepared_provider_operations(
@@ -4338,8 +4384,54 @@ def run_reconcile_cycle(
         if intent.job_id not in set(stop_job_ids) | pending_drain_job_ids
     ]
     journaled_create_operations: list[ProviderOperation] = []
+    journaled_resume_operations: list[ProviderOperation] = []
     journaled_stop_operations: list[ProviderOperation] = []
     if execution_authorized and provider_state is not None:
+        if getattr(args, "execute_resumes", False) and config.deployment_id:
+            failed_resume_markers = {
+                (
+                    operation.target_job_ids[0],
+                    str(operation.request.get("lastStartedAt") or ""),
+                )
+                for operation in provider_state.list_operations(
+                    kind="resume", states={"failed"}
+                )
+                if len(operation.target_job_ids) == 1
+            }
+            for role, role_nodes, ownership_label in (
+                ("sandbox", sandbox_nodes, NODE_LABEL),
+                ("builder", builder_nodes, BUILDER_LABEL),
+            ):
+                for node in role_nodes:
+                    if (
+                        not node.job.is_unexpectedly_suspended
+                        or node.job.labels.get(DEPLOYMENT_LABEL)
+                        != config.deployment_id
+                        or node.job.labels.get(ownership_label) != "true"
+                    ):
+                        continue
+                    last_started_at = node.job.started_at.isoformat()
+                    if (node.job_id, last_started_at) in failed_resume_markers:
+                        continue
+                    intent_key = provider_state.allocate_operation_intent_key(
+                        deployment_id=operation_deployment_id,
+                        kind="resume",
+                        base_key=f"{role}:{node.job_id}",
+                    )
+                    journaled_resume_operations.append(
+                        provider_state.prepare_operation(
+                            intent_key=intent_key,
+                            kind="resume",
+                            deployment_id=operation_deployment_id,
+                            role=role,
+                            request={
+                                "type": "bulk",
+                                "items": [{"id": node.job_id}],
+                                "lastStartedAt": last_started_at,
+                            },
+                            target_job_ids=(node.job_id,),
+                        )
+                    )
         if args.execute:
             labeled_sandbox_intents: list[VmCreateIntent] = []
             labeled_builder_intents: list[VmCreateIntent] = []
@@ -4453,6 +4545,11 @@ def run_reconcile_cycle(
         "pendingImageBuilds": builder_pending,
         "activeImageBuilds": active_image_builds,
         "preparedBuilderCount": builder_prepared,
+        "unexpectedlySuspendedJobIds": sorted(
+            node.job_id
+            for node in (*sandbox_nodes, *builder_nodes)
+            if node.job.is_unexpectedly_suspended
+        ),
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
@@ -4481,6 +4578,9 @@ def run_reconcile_cycle(
         ],
         "bootstrapResults": list(completed_bootstrap_results),
         "executeCreates": bool(args.execute and execution_authorized),
+        "executeResumes": bool(
+            getattr(args, "execute_resumes", False) and execution_authorized
+        ),
         "executeStops": bool(args.execute_stops and execution_authorized),
         "executeInit": bool(
             getattr(args, "execute_init", False) and execution_authorized
@@ -4489,9 +4589,12 @@ def run_reconcile_cycle(
         "controllerLockHeld": provider_mutations_allowed,
         "blockedCreateRoles": sorted(blocked_create_roles),
         "createRecoveryResults": create_recovery_results,
+        "resumeRecoveryResults": resume_recovery_results,
         "stopRecoveryResults": stop_recovery_results,
         "createVisibilityGuards": create_visibility_guards,
         "providerOperationResults": provider_operation_results,
+        "resumeResponse": {"operations": []},
+        "resumedJobIds": [],
         "sandboxCapacityOperationSucceeded": False,
         "builderCapacityOperationSucceeded": False,
         "definitelyTerminatedJobIds": [],
@@ -4512,6 +4615,7 @@ def run_reconcile_cycle(
         and provider_state is not None
         and (
             journaled_create_operations
+            or journaled_resume_operations
             or journaled_stop_operations
             or any(
                 operation.kind == "stop"
@@ -4519,12 +4623,19 @@ def run_reconcile_cycle(
             )
         )
     ):
+        planned_allowed_kinds: set[str] = set()
+        if args.execute:
+            planned_allowed_kinds.add("create")
+        if getattr(args, "execute_resumes", False):
+            planned_allowed_kinds.add("resume")
+        if args.execute_stops:
+            planned_allowed_kinds.add("stop")
         planned_results = apply_prepared_provider_operations(
             provider_state,
             get_client(),
             config.project_id,
             source="planned",
-            allowed_kinds={"create", "stop"},
+            allowed_kinds=planned_allowed_kinds,
             allowed_stop_operation_ids={
                 operation.operation_id for operation in journaled_stop_operations
             },
@@ -4579,6 +4690,22 @@ def run_reconcile_cycle(
         if definitely_terminated:
             removed_stop_heartbeats = heartbeat_store.remove(definitely_terminated)
             result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
+    result["resumeResponse"] = {
+        "operations": [
+            item
+            for item in provider_operation_results
+            if item.get("kind") == "resume"
+        ]
+    }
+    result["resumedJobIds"] = sorted(
+        {
+            str(job_id)
+            for item in provider_operation_results
+            if item.get("kind") == "resume"
+            and item.get("state") in {"accepted", "recovered"}
+            for job_id in item.get("jobIds", [])
+        }
+    )
     result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
         provider_operation_results,
         decision.resource_deficit,
@@ -5810,6 +5937,12 @@ def print_reconcile(
         print(f"- {job_id}")
     for job_id in blocked_stop_job_ids:
         print(f"- {job_id} (blocked: missing matching deployment label)")
+    suspended_job_ids = tuple(result.get("unexpectedlySuspendedJobIds", []))
+    print("Resume intents:")
+    if not suspended_job_ids:
+        print("- none")
+    for job_id in suspended_job_ids:
+        print(f"- {job_id}")
     print("Bootstrap intents:")
     bootstrap_intents = result.get("rawBootstrapIntents", [])
     if not bootstrap_intents:
@@ -5835,6 +5968,13 @@ def print_reconcile(
         print(f"Submitted create jobs: {created_label}")
     elif create_intents:
         print("Create dry-run only. Re-run with --execute to submit planned VMs.")
+    resumed_job_ids = tuple(result.get("resumedJobIds", []))
+    if resumed_job_ids:
+        print(f"Accepted resume requests: {', '.join(resumed_job_ids)}")
+    elif suspended_job_ids and not result.get("executeResumes"):
+        print(
+            "Resume dry-run only. Re-run with --execute-resumes to resume suspended VMs."
+        )
     if result.get("stopResponse") is not None:
         print(f"Executed stop requests: {', '.join(stop_job_ids)}")
         if blocked_stop_job_ids:

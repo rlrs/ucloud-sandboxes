@@ -59,21 +59,44 @@ uv run ucloud-sandboxes reconcile \
 `reconcile` is deliberately read-only. To run one mutating production cycle,
 use `autoscaler-loop --once`; it reads pending demand from the routing state and
 uses the same local process lock and provider journal as the recurring service.
-Create, stop, and VM initialization execution remain separate flags:
+Create, resume, stop, and VM initialization execution remain separate flags:
 
 ```bash
 uv run ucloud-sandboxes autoscaler-loop --once \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --private-network-id 12345327 \
-  --route-file /work/ucloud-sandboxes/state/routes.sqlite \
+  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
   --execute
 
 uv run ucloud-sandboxes autoscaler-loop --once \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --private-network-id 12345327 \
-  --route-file /work/ucloud-sandboxes/state/routes.sqlite \
+  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
   --execute-stops
+
+uv run ucloud-sandboxes autoscaler-loop --once \
+  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --deployment-id prod-a \
+  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
+  --execute-resumes
 ```
+
+The deployed recurring service enables `--execute-resumes`. UCloud reports a
+new VM as `SUSPENDED` before its first transition to `RUNNING`; that is normal
+provisioning and is never resumed explicitly. A `SUSPENDED` VM with a non-empty
+`startedAt` previously ran and is treated as an unexpected power-off. The
+autoscaler keeps its routes, assigns it no schedulable or projected capacity,
+and journals an idempotent `/api/jobs/unsuspend` operation. A successful call
+is confirmed only after exhaustive UCloud inventory reports the job `RUNNING`.
+Ambiguous calls retry after 10 seconds and accepted-but-still-suspended jobs
+retry after 30 seconds, preventing a five-second reconcile loop from flooding
+the provider API.
+
+Automatic resume is fail-closed: the job must carry both the matching
+`ucloud-sandboxes/deployment` label and its sandbox or builder ownership label.
+A definite provider rejection is retained for that exact suspension instead of
+being retried indefinitely; normal zero-capacity accounting can provision a
+replacement meanwhile.
 
 Render the UCloud job-submission fragment for attaching a VM job to a private
 network. The resulting `hostname` is the DNS name other jobs in that private
@@ -149,7 +172,7 @@ After the VM is running and the gateway service is listening, activate UCloud's
 VM web forwarding for the public-link target port:
 
 ```bash
-uv run ucloud-sandboxes open-vm-web 12349450 \
+uv run ucloud-sandboxes open-vm-web 12353689 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --port 8090
 ```
@@ -158,7 +181,7 @@ The normal deployment path is now to let the CLI converge the running VM:
 
 ```bash
 uv build
-uv run ucloud-sandboxes deploy-all-in-one 12349450 \
+uv run ucloud-sandboxes deploy-all-in-one 12353689 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --deployment-id live-20260629 \
   --private-network-id 12345327 \
@@ -167,11 +190,12 @@ uv run ucloud-sandboxes deploy-all-in-one 12349450 \
 ```
 
 `deploy-all-in-one` writes the deployment-specific env files, installs the
-packaged systemd units, stages the wheel and UCloud session, generates missing
-tokens and the gateway init SSH key, registers that key with UCloud, restarts
-gateway/relay/registry/autoscaler, and opens the gateway and relay VM web
-ports. Use `--output script` for the exact remote script or omit `--execute` for
-a dry run.
+packaged systemd units, stages the wheel and UCloud session, migrates gateway
+state to `/work/data/ucloud-sandboxes/state`, generates missing tokens and the
+gateway init SSH key, registers that key with UCloud, restarts
+gateway/relay/registry/autoscaler, and opens the gateway and relay VM web ports.
+Use `--output script` for the exact remote script or omit `--execute` for a dry
+run.
 
 Builder capacity is autoscaled separately. Manual builder VM tests should keep
 the VM on the private network and use the builder role so the sandbox
@@ -242,8 +266,8 @@ uv run ucloud-sandboxes init-vm 12345317 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --node-id sandbox-node-12345317 \
   --heartbeat-url http://control-plane:8080/v1/nodes/heartbeat \
-  --init-authorized-key-file /work/ucloud-sandboxes/state/ssh/gateway-init.pub \
-  --ssh-private-key-file /work/ucloud-sandboxes/state/ssh/gateway-init \
+  --init-authorized-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
+  --ssh-private-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init \
   --execute
 ```
 
@@ -254,8 +278,8 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
   --node-id sandbox-node-12345318 \
   --heartbeat-url https://app-sandboxes.cloud.sdu.dk/v1/nodes/heartbeat \
-  --heartbeat-bearer-token-file /work/ucloud-sandboxes/state/heartbeat-token \
-  --heartbeat-bearer-token-source-file /work/ucloud-sandboxes/state/heartbeat-token \
+  --heartbeat-bearer-token-file /work/data/ucloud-sandboxes/state/heartbeat-token \
+  --heartbeat-bearer-token-source-file /work/data/ucloud-sandboxes/state/heartbeat-token \
   --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-<version>-py3-none-any.whl \
   --total-vcpu 2 \
   --total-memory-mb 6144 \
@@ -263,8 +287,8 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --cpu-overcommit 3 \
   --memory-overcommit 1.5 \
   --docker-quota-image-gb 200 \
-  --init-authorized-key-file /work/ucloud-sandboxes/state/ssh/gateway-init.pub \
-  --ssh-private-key-file /work/ucloud-sandboxes/state/ssh/gateway-init \
+  --init-authorized-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
+  --ssh-private-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init \
   --execute
 ```
 
@@ -311,8 +335,8 @@ their first SSH login:
 
 ```bash
 ucloud-sandboxes ensure-ucloud-ssh-key \
-  --session-file /work/ucloud-sandboxes/state/ucloud-session.json \
-  --public-key-file /work/ucloud-sandboxes/state/ssh/gateway-init.pub \
+  --session-file /work/data/ucloud-sandboxes/state/ucloud-session.json \
+  --public-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
   --title "ucloud-sandboxes gateway init"
 ```
 

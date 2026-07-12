@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import sqlite3
+import socket
 from threading import BoundedSemaphore, Event, RLock, Thread
 import time
 from typing import Any
@@ -249,10 +250,18 @@ class _RegistryImageBuildReference:
 
 
 class ProxiedResponse:
-    def __init__(self, status: int, headers: Any, body: bytes) -> None:
+    def __init__(
+        self,
+        status: int,
+        headers: Any,
+        body: bytes,
+        *,
+        transport_error_kind: str = "",
+    ) -> None:
         self.status = status
         self.headers = headers
         self.body = body
+        self.transport_error_kind = transport_error_kind
 
     def json(self) -> dict[str, Any]:
         try:
@@ -3711,13 +3720,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except error.HTTPError as exc:
             return ProxiedResponse(exc.code, exc.headers, exc.read())
         except error.URLError as exc:
-            body = json.dumps({"error": f"node request failed: {exc.reason}"}).encode(
-                "utf-8"
-            )
-            return ProxiedResponse(HTTPStatus.BAD_GATEWAY, {}, body)
+            return _node_transport_error_response(exc.reason)
         except OSError as exc:
-            body = json.dumps({"error": f"node request failed: {exc}"}).encode("utf-8")
-            return ProxiedResponse(HTTPStatus.BAD_GATEWAY, {}, body)
+            return _node_transport_error_response(exc)
 
     def _send_proxied_response(self, response: ProxiedResponse) -> None:
         structured_error = _structured_proxy_error(response)
@@ -5007,7 +5012,54 @@ def _warmup_node_units(
 
 
 def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
+    if response.transport_error_kind == "dns":
+        # DNS lookup failed before an HTTP connection could be established, so
+        # the node cannot have received or persisted this create operation.
+        return False
     return response.status in {408, 425, 429, 500, 502, 503, 504}
+
+
+def _node_transport_error_response(reason: object) -> ProxiedResponse:
+    message = str(reason)
+    lowered = message.lower()
+    if isinstance(reason, socket.gaierror) or any(
+        marker in lowered
+        for marker in (
+            "name resolution",
+            "name or service not known",
+            "nodename nor servname provided",
+        )
+    ):
+        status = HTTPStatus.SERVICE_UNAVAILABLE
+        code = "node_dns_unavailable"
+        error_message = (
+            "sandbox node DNS is temporarily unavailable; its UCloud VM may be "
+            "suspended and resuming"
+        )
+        kind = "dns"
+    elif isinstance(reason, (TimeoutError, socket.timeout)) or "timed out" in lowered:
+        status = HTTPStatus.GATEWAY_TIMEOUT
+        code = "node_request_timeout"
+        error_message = "sandbox node request timed out"
+        kind = "timeout"
+    else:
+        status = HTTPStatus.BAD_GATEWAY
+        code = "node_transport_error"
+        error_message = f"sandbox node request failed: {message}"
+        kind = "transport"
+    body = json.dumps(
+        {
+            "error": error_message,
+            "code": code,
+            "retryable": True,
+        }
+    ).encode("utf-8")
+    return ProxiedResponse(
+        status,
+        {"Content-Type": "application/json"},
+        body,
+        transport_error_kind=kind,
+    )
 
 
 def _node_fork_intent_states(

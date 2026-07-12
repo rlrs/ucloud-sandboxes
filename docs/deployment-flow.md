@@ -55,7 +55,8 @@ sandboxes. The intended rollout flow is:
 8. Start the private Docker registry service on the control-plane VM. Builder
    output must be pushed to a durable registry tag before sandbox nodes can pull
    it.
-9. Run the autoscaler with `--execute` and `--execute-init`.
+9. Run the autoscaler with `--execute`, `--execute-resumes`, and
+   `--execute-init`.
 10. Let the autoscaler submit sandbox-node and builder VMs with matching
    deployment/version labels.
 11. Let the autoscaler run post-boot init over the UCloud-announced SSH command
@@ -205,21 +206,21 @@ uv run ucloud-sandboxes deploy-all-in-one <job-id> \
 Use `--output script` to inspect the exact remote install script. Use
 `--ssh-command 'ssh ...'` if UCloud job updates do not expose the SSH command.
 Use `--no-copy-session` only when the VM already has
-`/work/ucloud-sandboxes/state/ucloud-session.json`.
+`/work/data/ucloud-sandboxes/state/ucloud-session.json`.
 
 ## Live Deployment
 
 Current live all-in-one VM:
 
-- job id: `12349450`
-- name: `ucloud-sandbox-gateway-allinone-20260704-v020`
+- job id: `12353689`
+- name: `ucloud-sandbox-gateway-allinone-20260712-v048`
 - deployment id: `live-20260629`
-- package version: read from the deployed wheel; it must match the `version`
-  returned by both service health endpoints
+- package version: `0.3.48`; it must match the `version` returned by both
+  service health endpoints
 - private network: `12345327`
-- private registry IPv4 observed on the VM: `10.36.121.173`
+- private registry IPv4 observed on the VM: `10.36.128.97`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
-- SSH: resolve with `ucloud jobs ssh 12349450 --print-only`
+- SSH: resolve with `ucloud jobs ssh 12353689 --print-only`
 
 Public links:
 
@@ -244,11 +245,21 @@ project drive. The gateway reaches it as `http://127.0.0.1:5000`; autoscaled
 builder and sandbox nodes reach the same registry over the private network by
 using image tags under `ucloud-sandbox-registry:5000` plus a VM init host alias:
 
-Registry retention is driven by the gateway's persistent
-`/work/ucloud-sandboxes/state/registry-usage.json` file. The scheduled prune
-keeps tags with no usage record and deletes only tags whose last successful
-sandbox creation is older than the configured retention window, 30 days by
-default.
+The deployment stores gateway state under
+`/work/data/ucloud-sandboxes/state` on the attached project drive. During the
+first convergence with this layout, it stops all state writers and atomically
+migrates the previous `/work/ucloud-sandboxes/state` directory if the persistent
+target is empty. A marker makes the migration one-shot; a non-empty unmarked
+target fails closed instead of merging ambiguous state. The original directory
+is retained as `/work/ucloud-sandboxes/state.pre-persistent-v1`, while the old
+`/work/ucloud-sandboxes/state` path becomes a symlink to persistent state so a
+package downgrade continues using current state rather than the stale backup.
+
+This includes `images.json`, `registry-usage.json`, routes, autoscaler journals,
+service credentials, and the gateway SSH bootstrap key. The registry prune
+policy keeps tags with no usage record and deletes only tags whose last
+successful sandbox creation is older than the configured retention window, 30
+days by default.
 
 ```bash
 --init-docker-insecure-registry ucloud-sandbox-registry:5000 \
@@ -261,9 +272,9 @@ Registry data lives at:
 /work/data/ucloud-sandbox-registry/docker-registry
 ```
 
-The registry VM used during earlier tests did not leave a usable persistent
-catalog in that path, so images needed by the one-VM deployment should be
-rebuilt or pushed again under `ucloud-sandbox-registry:5000/...`.
+As of 2026-07-12 this path contains the surviving catalog from earlier gateway
+VMs. Do not infer catalog loss from an empty gateway `images.json`; inspect the
+registry API and this directory separately.
 
 ## Autoscaled Nodes
 
@@ -299,7 +310,75 @@ Builds should use `push=true` and tags under
 `ucloud-sandbox-registry:5000`; sandbox create can then use either the registry
 tag or the recorded image id. If the all-in-one VM is replaced and receives a
 new private IP, keep image tags the same and update only the host alias value in
-the deployment.
+the deployment. The current deployment renders the detected address into
+`/etc/ucloud-sandboxes/autoscaler.env` once during convergence. It does not
+automatically refresh that value after a gateway address change, and existing
+nodes retain their old `/etc/hosts` mapping. Until dynamic registry discovery is
+implemented, a gateway replacement therefore requires updating the autoscaler
+environment and every still-running builder and sandbox node, then restarting
+the autoscaler so future nodes receive the new mapping.
+
+### 2026-07-12 registry alias incident
+
+All 20 observed TMax builds completed their Docker build but failed while
+pushing to `ucloud-sandbox-registry:5000`. Builder job `12353729` still mapped
+the alias to the superseded gateway address `10.36.129.153`, while the live
+registry was reachable at `10.36.128.97`. The UCloud
+`ucloud.dk/serviceipaddress` value was not a working registry path. The failures
+were registry connection timeouts, not Dockerfile, build-context, SDK, or tag
+errors.
+
+The immediate production repair was:
+
+1. Back up and replace the stale alias in the gateway's
+   `/etc/ucloud-sandboxes/autoscaler.env`.
+2. Restart `ucloud-sandbox-autoscaler.service` and inspect its process arguments
+   to confirm `--init-host-alias ucloud-sandbox-registry=10.36.128.97`.
+3. Back up and replace the stale address in `/etc/hosts` and
+   `/etc/ucloud-sandboxes/node.env` on the ready builder and every reachable
+   running sandbox node. Nodes not yet SSH-ready will be initialized from the
+   corrected autoscaler environment.
+4. Verify alias resolution and registry readiness from each repaired node:
+
+   ```bash
+   getent hosts ucloud-sandbox-registry
+   curl -fsS http://ucloud-sandbox-registry:5000/v2/
+   ```
+
+5. Prove the full data path with an actual builder push, a sandbox-node pull,
+   and a gateway manifest lookup. The smoke tag
+   `ucloud-sandbox-registry:5000/codex/status-smoke:registry-alias-fix-20260712`
+   pushed and pulled successfully with digest
+   `sha256:92b1d1cae5f235812184415e63d9b24464116c58d3ba3c460b1eb0247f0f46e3`.
+
+Completed build records are terminal: repairing connectivity does not retry the
+20 failed requests. TMax or the caller must submit those builds again. The
+smoke tag can be removed by normal registry retention. This was a live
+configuration repair only; the code still needs dynamic alias refresh or a
+stable private registry endpoint, plus a registry reachability gate before a
+builder advertises `image-build` readiness.
+
+The same inspection confirmed that the registry blobs were not lost during the
+power cycle. `/work/data` was mounted from the project drive before the registry
+started, the container's `/var/lib/registry` bind mount matched the project-drive
+directory, and 9.3 GiB containing 77 tagged manifests remained, including tags
+dated 2026-06-30 through 2026-07-04. What did not migrate from the replaced
+gateway was `/work/ucloud-sandboxes/state/images.json`, the gateway's image-id
+to registry-tag index. It contained only the two newly successful TMax builds,
+so SDK image-id lookup could appear to have lost the registry even though the
+manifests were still present.
+
+The durability fix implemented after the incident, but not yet deployed at the
+time of this note, does both of the following:
+
+- atomically migrates the entire gateway state directory to
+  `/work/data/ucloud-sandboxes/state`; and
+- installs systemd drop-ins with `RequiresMountsFor=/work/data` plus a
+  `mountpoint` preflight for the gateway, relay, registry, registry maintenance,
+  and autoscaler services.
+
+The 2026-07-12 boot happened in the safe order, but the deployed 0.3.48 units
+did not yet contain those mount gates.
 
 The gateway VM cannot SSH into node VMs through `ssh.cloud.sdu.dk` unless it has
 an accepted private key. The bootstrap path is to generate a dedicated keypair
@@ -342,7 +421,7 @@ Expected current state:
 - gateway health reports `{"ok": true, "service": "control-plane", "version": "<installed-version>"}`
 - relay health reports `{"ok": true, "service": "model-relay", "version": "<installed-version>"}`
 - unauthenticated `GET /v1/sandboxes` returns `401`
-- running-job browse shows only all-in-one job `12349450` for this service when
+- running-job browse shows only all-in-one job `12353689` for this service when
   there is no sandbox or builder demand
 - gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
 - zero demand plus idle timeout produces safe labelled stop intents for sandbox

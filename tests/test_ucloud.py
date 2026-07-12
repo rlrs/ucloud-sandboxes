@@ -34,6 +34,25 @@ class FakeUCloudClient(UCloudClient):
 
 
 class UCloudClientTests(unittest.TestCase):
+    def test_unsuspend_jobs_uses_bulk_update_endpoint(self) -> None:
+        client = FakeUCloudClient()
+
+        client.unsuspend_jobs("project-1", ("job-1", "job-2"))
+
+        self.assertEqual(
+            client.calls[-1],
+            {
+                "method": "POST",
+                "path": "/api/jobs/unsuspend",
+                "project_id": "project-1",
+                "params": None,
+                "json_body": {
+                    "type": "bulk",
+                    "items": [{"id": "job-1"}, {"id": "job-2"}],
+                },
+            },
+        )
+
     def test_session_store_is_private_atomic_and_rejects_invalid_data(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "session.json"

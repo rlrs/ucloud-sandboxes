@@ -84,7 +84,12 @@ class CliTests(unittest.TestCase):
             jobs_file = Path(raw_dir) / "jobs.json"
             jobs_file.write_text('{"items": []}', encoding="utf-8")
             for command in ("reconcile", "autoscaler-loop"):
-                for mutation_flag in ("--execute", "--execute-stops", "--execute-init"):
+                for mutation_flag in (
+                    "--execute",
+                    "--execute-stops",
+                    "--execute-resumes",
+                    "--execute-init",
+                ):
                     with self.subTest(command=command, mutation_flag=mutation_flag):
                         argv = [
                             command,
@@ -273,6 +278,189 @@ class CliTests(unittest.TestCase):
         self.assertEqual(definite_state, "failed")
         self.assertEqual(ambiguous_result[0]["state"], "uncertain")
         self.assertEqual(ambiguous_state, "uncertain")
+
+    @allow_fixture_mutations
+    def test_post_run_suspension_is_resumed_once_and_has_zero_pool_capacity(
+        self,
+    ) -> None:
+        unsuspend_calls: list[tuple[str, ...]] = []
+
+        class ResumeClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def unsuspend_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                unsuspend_calls.append(tuple(job_ids))
+                return {"responses": [{} for _job_id in job_ids]}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "suspended-node",
+                                "owner": {"project": "project-1"},
+                                "createdAt": 1_700_000_000_000,
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-suspended",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {
+                                    "state": "SUSPENDED",
+                                    "startedAt": 1_700_000_100_000,
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(min_nodes=1, max_nodes=2),
+            )
+            args = cli.build_parser().parse_args(
+                [
+                    "autoscaler-loop",
+                    "--project",
+                    "project-1",
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--heartbeats",
+                    str(root / "heartbeats.json"),
+                    "--state-dir",
+                    raw_dir,
+                    "--execute-resumes",
+                    "--no-private-network",
+                    "--max-builder-nodes",
+                    "0",
+                    "--seed-prefix",
+                    "test",
+                    "--once",
+                ]
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            with patch.object(cli, "UCloudClient", ResumeClient):
+                first = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+                second = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                )
+
+        self.assertEqual(unsuspend_calls, [("suspended-node",)])
+        self.assertEqual(first["unexpectedlySuspendedJobIds"], ["suspended-node"])
+        self.assertEqual(first["resumedJobIds"], ["suspended-node"])
+        self.assertEqual(first["rawDecision"].total_nodes, 0)
+        self.assertEqual(first["rawDecision"].creates, 1)
+        self.assertEqual(second["resumeRecoveryResults"][0]["state"], "waiting")
+
+    @allow_fixture_mutations
+    def test_initial_suspension_is_booting_and_is_not_resumed(self) -> None:
+        class ResumeClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def unsuspend_jobs(self, *_args, **_kwargs) -> dict:
+                raise AssertionError("a never-started VM must not be unsuspended")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "booting-node",
+                                "owner": {"project": "project-1"},
+                                "createdAt": 1_700_000_000_000,
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-booting",
+                                    "application": {"name": "vm-ubuntu"},
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "SUSPENDED"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(min_nodes=1, max_nodes=2),
+            )
+            args = cli.build_parser().parse_args(
+                [
+                    "autoscaler-loop",
+                    "--project",
+                    "project-1",
+                    "--jobs-file",
+                    str(jobs_file),
+                    "--heartbeats",
+                    str(root / "heartbeats.json"),
+                    "--state-dir",
+                    raw_dir,
+                    "--execute-resumes",
+                    "--no-private-network",
+                    "--max-builder-nodes",
+                    "0",
+                    "--seed-prefix",
+                    "test",
+                    "--once",
+                ]
+            )
+
+            with patch.object(cli, "UCloudClient", ResumeClient):
+                result = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=AutoscalerStateStore(
+                        root / "autoscaler-state.sqlite"
+                    ),
+                    provider_mutations_allowed=True,
+                )
+
+        self.assertEqual(result["unexpectedlySuspendedJobIds"], [])
+        self.assertEqual(result["rawDecision"].total_nodes, 1)
+        self.assertEqual(result["rawDecision"].provisioning_nodes, 1)
+        self.assertEqual(result["providerOperationResults"], [])
 
     def test_control_plane_parser_accepts_distinct_heartbeat_token_file(self) -> None:
         args = cli.build_parser().parse_args(
@@ -1146,6 +1334,14 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(
             payload["plan"]["dockerHostAlias"], "ucloud-sandbox-registry=10.0.0.5"
+        )
+        self.assertEqual(
+            payload["plan"]["stateDir"],
+            "/work/data/ucloud-sandboxes/state",
+        )
+        self.assertEqual(
+            payload["plan"]["legacyStateDir"],
+            "/work/ucloud-sandboxes/state",
         )
 
     def test_deploy_all_in_one_does_not_infer_registry_from_ucloud_job_label(

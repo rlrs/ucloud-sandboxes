@@ -215,7 +215,7 @@ Current live all-in-one VM:
 - job id: `12353689`
 - name: `ucloud-sandbox-gateway-allinone-20260712-v048`
 - deployment id: `live-20260629`
-- package version: `0.3.48`; it must match the `version` returned by both
+- package version: `0.3.49`; it must match the `version` returned by both
   service health endpoints
 - private network: `12345327`
 - private registry IPv4 observed on the VM: `10.36.128.97`

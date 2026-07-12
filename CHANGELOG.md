@@ -4,6 +4,8 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.49 - 2026-07-12
+
 - Recover autoscaled worker and builder VMs that UCloud suspends after they
   have run. Resume requests use the durable provider-operation journal,
   preserve sandbox routes, are rate-limited and replay-safe, and are confirmed

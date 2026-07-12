@@ -1121,8 +1121,8 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument("--builder-idle-seconds", type=int, default=900)
     deploy_all.add_argument("--max-builder-nodes", type=int, default=1)
     deploy_all.add_argument("--autoscaler-interval-seconds", type=float, default=5.0)
-    deploy_all.add_argument("--cpu-overcommit", type=float, default=2.0)
-    deploy_all.add_argument("--memory-overcommit", type=float, default=1.2)
+    deploy_all.add_argument("--cpu-overcommit", type=float, default=3.0)
+    deploy_all.add_argument("--memory-overcommit", type=float, default=1.5)
     deploy_all.add_argument("--disk-overcommit", type=float, default=1.0)
     deploy_all.add_argument("--docker-quota-image-gb", type=int, default=200)
     deploy_all.add_argument(

@@ -62,8 +62,8 @@ class AllInOneDeployPlan:
     init_retry_seconds: int = 30
     init_timeout_seconds: int = 1800
     autoscaler_interval_seconds: float = 5.0
-    cpu_overcommit: float = 2.0
-    memory_overcommit: float = 1.2
+    cpu_overcommit: float = 3.0
+    memory_overcommit: float = 1.5
     disk_overcommit: float = 1.0
     docker_quota_image_gb: int = 200
     request_timeout_seconds: int = 7200

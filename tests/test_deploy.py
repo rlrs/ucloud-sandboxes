@@ -108,6 +108,8 @@ class DeployTests(unittest.TestCase):
             autoscaler["UCLOUD_BUILDER_PRODUCT_ID"],
             "cpu-amd-zen5-16-vcpu",
         )
+        self.assertEqual(autoscaler["UCLOUD_INIT_CPU_OVERCOMMIT"], "3")
+        self.assertEqual(autoscaler["UCLOUD_INIT_MEMORY_OVERCOMMIT"], "1.5")
         self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             "ucloud-sandbox-registry=10.0.0.5",

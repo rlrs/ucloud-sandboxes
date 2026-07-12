@@ -23,8 +23,8 @@
     "memory_mb": 4096,
     "disk_mb": 20000
   },
-  "cpu_overcommit": 2,
-  "memory_overcommit": 1.2,
+  "cpu_overcommit": 3,
+  "memory_overcommit": 1.5,
   "disk_overcommit": 1.0,
   "labels": {
     "pool": "default"

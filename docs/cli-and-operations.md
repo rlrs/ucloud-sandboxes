@@ -260,13 +260,18 @@ uv run ucloud-sandboxes init-vm 12345318 \
   --total-vcpu 2 \
   --total-memory-mb 6144 \
   --total-disk-mb 250000 \
-  --cpu-overcommit 2 \
-  --memory-overcommit 1.2 \
+  --cpu-overcommit 3 \
+  --memory-overcommit 1.5 \
   --docker-quota-image-gb 200 \
   --init-authorized-key-file /work/ucloud-sandboxes/state/ssh/gateway-init.pub \
   --ssh-private-key-file /work/ucloud-sandboxes/state/ssh/gateway-init \
   --execute
 ```
+
+The overcommit multipliers increase scheduler-visible capacity, not physical
+RAM. Sandbox containers still receive their requested Docker `--memory` limit.
+When `--memory-swap` is omitted Docker can use swap only if the host provides
+it; the standard worker initialization does not currently configure swap.
 
 The heartbeat credential has its own file and is the only bearer credential
 copied to nodes. It is generated independently from `gateway-token`: the

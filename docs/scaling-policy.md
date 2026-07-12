@@ -228,9 +228,16 @@ Until we have measurements, prefer:
 - Two provisioning VMs max.
 - Prepared-capacity signals for known near-term bursts.
 - Standing warm resources only for a measured latency SLO that justifies the cost.
-- CPU overcommit of `2.0` for sandbox nodes.
-- Conservative memory overcommit of `1.2` for sandbox nodes.
+- CPU overcommit of `3.0` for sandbox nodes.
+- Memory overcommit of `1.5` for sandbox nodes.
 - No disk overcommit by default.
+
+Memory overcommit changes placement capacity; it does not increase a sandbox's
+individual Docker `--memory` limit or guarantee backing memory. Standard live
+workers currently have no swap. If simultaneous resident use approaches host
+RAM, the kernel may OOM-kill container processes. Configure and measure a
+deliberate swap or zram policy before treating overcommitted memory as usable
+rather than burst capacity.
 
 The controller records VM lifecycle events into the metrics JSONL stream:
 submission, observed UCloud state changes, init attempt durations, first

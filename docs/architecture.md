@@ -57,10 +57,12 @@ to keep registry storage bounded.
 Sandbox placement is resource-based. Each sandbox request can ask for its own
 `cpus`, `memory_mb`, and `disk_mb`. Nodes report physical resources plus
 overcommit multipliers in their heartbeat, so the control plane can pack small
-and large sandboxes differently. The live sandbox pool currently uses
-`--init-cpu-overcommit 2` and `--init-memory-overcommit 1.2`, with disk left at
-`1.0`. CPU overcommit is the main packing lever; memory overcommit should stay
-modest until pressure and failure behavior are measured under mixed workloads.
+and large sandboxes differently. The live sandbox pool is configured for
+`--init-cpu-overcommit 3` and `--init-memory-overcommit 1.5`, with disk left at
+`1.0`. These multipliers affect placement only. Each container keeps its
+requested CPU and memory cgroup limits, and standard workers currently have no
+swap, so simultaneous resident use above physical RAM can trigger host OOM
+kills.
 
 ## Disk Quotas
 

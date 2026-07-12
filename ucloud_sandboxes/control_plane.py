@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from http import HTTPStatus
@@ -12,7 +13,7 @@ import math
 import os
 from pathlib import Path
 import sqlite3
-from threading import BoundedSemaphore, RLock, Thread
+from threading import BoundedSemaphore, Event, RLock, Thread
 import time
 from typing import Any
 from urllib import error, request
@@ -40,6 +41,7 @@ from .images import (
 )
 from .managed_registry import (
     RegistryClient,
+    RegistryManifestLayers,
     RegistryRequestError,
     RegistryUsageStore,
     canonical_image_digest_ref,
@@ -112,6 +114,119 @@ REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 DEFAULT_METRICS_EVENT_LIMIT = 2000
 FULL_METRICS_EVENT_LIMIT = 10000
 REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
+REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS = 2.0
+REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
+# Treat each additional distinct cold image like 256 MiB of missing transfer.
+# For the observed ~1.1 GiB shared TMax base this spreads after roughly four
+# concurrent related pulls instead of concentrating an entire burst on one node.
+COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
+
+
+class RegistryLayerMetadataCache:
+    """Bounded immutable-manifest cache used by placement scoring."""
+
+    def __init__(self, registry_url: str, *, max_entries: int = 4096) -> None:
+        self.registry_url = registry_url.rstrip("/")
+        self.max_entries = max(1, int(max_entries))
+        self._lock = RLock()
+        self._records: OrderedDict[str, RegistryManifestLayers] = OrderedDict()
+        self._loading: dict[str, Event] = {}
+
+    def get(
+        self,
+        image_ref: str,
+        *,
+        load: bool = False,
+    ) -> RegistryManifestLayers | None:
+        coordinates = self._coordinates(image_ref)
+        if coordinates is None:
+            return None
+        key, repository, digest = coordinates
+        waiter: Event | None = None
+        with self._lock:
+            if key in self._records:
+                record = self._records.pop(key)
+                self._records[key] = record
+                return record
+            if key in self._loading:
+                if load:
+                    waiter = self._loading[key]
+                else:
+                    return None
+            elif not load:
+                return None
+            else:
+                self._loading[key] = Event()
+        if waiter is not None:
+            waiter.wait(REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS)
+            with self._lock:
+                return self._records.get(key)
+        return self._load_one(key, repository, digest)
+
+    def hydrate_async(self, image_refs: tuple[str, ...]) -> None:
+        pending: list[tuple[str, str, str]] = []
+        with self._lock:
+            for image_ref in image_refs:
+                coordinates = self._coordinates(image_ref)
+                if coordinates is None:
+                    continue
+                key, repository, digest = coordinates
+                if key in self._records or key in self._loading:
+                    continue
+                self._loading[key] = Event()
+                pending.append((key, repository, digest))
+        if not pending:
+            return
+        Thread(
+            target=self._hydrate,
+            args=(tuple(pending),),
+            daemon=True,
+            name="registry-layer-metadata",
+        ).start()
+
+    def _hydrate(self, pending: tuple[tuple[str, str, str], ...]) -> None:
+        for key, repository, digest in pending:
+            self._load_one(key, repository, digest)
+
+    def _load_one(
+        self,
+        key: str,
+        repository: str,
+        digest: str,
+    ) -> RegistryManifestLayers | None:
+        record: RegistryManifestLayers | None = None
+        try:
+            record = RegistryClient(
+                self.registry_url,
+                timeout_seconds=REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS,
+            ).manifest_layers(repository, digest)
+        except (OSError, RegistryRequestError, ValueError):
+            record = None
+        finally:
+            waiter: Event | None = None
+            with self._lock:
+                waiter = self._loading.pop(key, None)
+                if record is not None:
+                    self._records[key] = record
+                    while len(self._records) > self.max_entries:
+                        self._records.popitem(last=False)
+            if waiter is not None:
+                waiter.set()
+        return record
+
+    def _coordinates(self, image_ref: str) -> tuple[str, str, str] | None:
+        coordinates = _managed_registry_image_coordinates(
+            image_ref,
+            self.registry_url,
+        )
+        digest = manifest_digest_from_image_ref(image_ref)
+        if coordinates is None or not digest:
+            return None
+        repository, _tag = coordinates
+        key = canonical_image_digest_ref(image_ref)
+        if not key:
+            return None
+        return key, repository, digest
 
 
 class RequestBodyTooLargeError(ValueError):
@@ -182,6 +297,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     registry_status_cache: dict[str, Any] | None
     registry_status_cache_at: float
     registry_status_lock: RLock
+    registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
     max_concurrent_sandbox_creates: int
@@ -390,6 +506,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         heartbeats = self.store.upsert(heartbeat)
         stored_heartbeat = heartbeats.get(heartbeat.job_id, heartbeat)
         record_node_heartbeat(self.metrics_store, stored_heartbeat)
+        if self.registry_layer_cache is not None:
+            self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
         if (
             self.routing_store is not None
             and stored_heartbeat.inventory_complete
@@ -1305,6 +1423,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            if self.registry_layer_cache is not None:
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.sandbox_resolve_layers",
+                    parent_span_id=root.span_id,
+                    attributes={"image": spec.image},
+                ) as span:
+                    manifest = self.registry_layer_cache.get(spec.image, load=True)
+                    span.set_attribute("available", manifest is not None)
+                    if manifest is not None:
+                        span.set_attribute("layer_count", len(manifest.layers))
+                        span.set_attribute("compressed_bytes", manifest.total_size)
+
             with trace_span(
                 self.metrics_store,
                 trace_id,
@@ -1361,6 +1493,35 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 span.set_attribute(
                     "selected_job_id", heartbeat.job_id if heartbeat else ""
                 )
+                if heartbeat is not None and self.registry_layer_cache is not None:
+                    routes = [
+                        item
+                        for item in self.routing_store.sandbox_routes_readonly()
+                        if item.sandbox_id != spec.id
+                    ]
+                    estimate = _image_transfer_estimate(
+                        heartbeat,
+                        spec.image,
+                        routes,
+                        self.registry_layer_cache,
+                    )
+                    if estimate is not None:
+                        span.set_attribute(
+                            "target_layer_count",
+                            estimate["target_layer_count"],
+                        )
+                        span.set_attribute(
+                            "target_compressed_bytes",
+                            estimate["target_compressed_bytes"],
+                        )
+                        span.set_attribute(
+                            "estimated_missing_layer_bytes",
+                            estimate["estimated_missing_layer_bytes"],
+                        )
+                        span.set_attribute(
+                            "estimated_reused_layer_bytes",
+                            estimate["estimated_reused_layer_bytes"],
+                        )
             if heartbeat is None:
                 self.routing_store.upsert_pending(spec.id, spec.requested_resources())
                 demand = self.routing_store.pending_demand()
@@ -2835,13 +2996,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         spread_cold_image = bool(
             image and not image_node_ids and not inflight_image_node_ids
         )
+        layer_cache = getattr(self, "registry_layer_cache", None)
+        target_manifest = (
+            layer_cache.get(image or "")
+            if layer_cache is not None
+            else None
+        )
         return sorted(
             candidates,
             key=lambda heartbeat: (
-                (
-                    _node_cold_image_pressure(heartbeat, routes)
-                    if spread_cold_image
-                    else 0
+                _cold_image_placement_cost(
+                    heartbeat,
+                    routes,
+                    target_manifest,
+                    layer_cache,
+                    spread_cold_image=spread_cold_image,
                 ),
                 _resource_slack(
                     _node_available_resources(heartbeat, routes), requested
@@ -3672,6 +3841,14 @@ def build_server(
     BoundHandler.registry_status_cache = None
     BoundHandler.registry_status_cache_at = 0.0
     BoundHandler.registry_status_lock = RLock()
+    BoundHandler.registry_layer_cache = (
+        RegistryLayerMetadataCache(
+            registry_url,
+            max_entries=REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES,
+        )
+        if registry_url
+        else None
+    )
     BoundHandler.registry_usage_store = registry_usage_store
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
@@ -4412,6 +4589,85 @@ def _node_cold_image_pressure(
     """Count distinct cold images currently being prepared on a node."""
 
     return len(_node_inflight_image_identities(heartbeat, routes))
+
+
+def _node_projected_layer_digests(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+    layer_cache: RegistryLayerMetadataCache,
+) -> set[str]:
+    image_refs = set(heartbeat.cached_images)
+    image_refs.update(
+        identity
+        for route in routes
+        if (route.state or "unknown").lower() in {"creating", "unknown", "running"}
+        and _route_targets_node(route, heartbeat)
+        and (identity := _route_image_identity(route))
+    )
+    layers: set[str] = set()
+    for image_ref in image_refs:
+        manifest = layer_cache.get(image_ref)
+        if manifest is not None:
+            layers.update(layer.digest for layer in manifest.layers)
+    return layers
+
+
+def _image_transfer_estimate(
+    heartbeat: NodeHeartbeat,
+    image: str,
+    routes: list[SandboxRoute],
+    layer_cache: RegistryLayerMetadataCache,
+    *,
+    target_manifest: RegistryManifestLayers | None = None,
+) -> dict[str, int] | None:
+    manifest = target_manifest or layer_cache.get(image)
+    if manifest is None:
+        return None
+    available_layers = _node_projected_layer_digests(
+        heartbeat,
+        routes,
+        layer_cache,
+    )
+    missing_bytes = sum(
+        layer.size
+        for layer in manifest.layers
+        if layer.digest not in available_layers
+    )
+    return {
+        "target_layer_count": len(manifest.layers),
+        "target_compressed_bytes": manifest.total_size,
+        "estimated_missing_layer_bytes": missing_bytes,
+        "estimated_reused_layer_bytes": max(0, manifest.total_size - missing_bytes),
+    }
+
+
+def _cold_image_placement_cost(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+    target_manifest: RegistryManifestLayers | None,
+    layer_cache: RegistryLayerMetadataCache | None,
+    *,
+    spread_cold_image: bool,
+) -> tuple[int, int]:
+    if not spread_cold_image:
+        return (0, 0)
+    pressure = _node_cold_image_pressure(heartbeat, routes)
+    if target_manifest is None or layer_cache is None:
+        return (1, pressure)
+    estimate = _image_transfer_estimate(
+        heartbeat,
+        "",
+        routes,
+        layer_cache,
+        target_manifest=target_manifest,
+    )
+    if estimate is None:
+        return (1, pressure)
+    return (
+        0,
+        estimate["estimated_missing_layer_bytes"]
+        + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
+    )
 
 
 def _nodes_preparing_image(

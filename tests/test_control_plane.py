@@ -34,6 +34,8 @@ from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime, ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import (
+    RegistryLayerDescriptor,
+    RegistryManifestLayers,
     RegistryUsageStore,
 )
 from ucloud_sandboxes.models import (
@@ -971,6 +973,138 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(distinct.node_id, "node-2")
         self.assertIsNotNone(same)
         self.assertEqual(same.node_id, "node-1")
+
+    def test_cold_image_placement_prefers_shared_cached_layers(self) -> None:
+        target = "registry.test/team/target@sha256:" + "b" * 64
+        cached = "registry.test/team/cached@sha256:" + "a" * 64
+        shared_layer = "sha256:" + "1" * 64
+        target_layer = "sha256:" + "2" * 64
+        cached_layer = "sha256:" + "3" * 64
+        manifests = {
+            target: RegistryManifestLayers(
+                repository="team/target",
+                manifest_digest="sha256:" + "b" * 64,
+                layers=(
+                    RegistryLayerDescriptor(shared_layer, 1024 * 1024 * 1024),
+                    RegistryLayerDescriptor(target_layer, 10 * 1024 * 1024),
+                ),
+            ),
+            cached: RegistryManifestLayers(
+                repository="team/cached",
+                manifest_digest="sha256:" + "a" * 64,
+                layers=(
+                    RegistryLayerDescriptor(shared_layer, 1024 * 1024 * 1024),
+                    RegistryLayerDescriptor(cached_layer, 5 * 1024 * 1024),
+                ),
+            ),
+        }
+
+        class FakeLayerCache:
+            def get(self, image: str, *, load: bool = False):
+                del load
+                return manifests.get(image)
+
+        with TemporaryDirectory() as raw_dir:
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            handler.registry_layer_cache = FakeLayerCache()
+            base = NodeHeartbeat(
+                node_id="layer-node",
+                job_id="job-layer",
+                updated_at=utc_now(),
+                active_sandboxes=0,
+                node_url="http://layer-node:8090",
+                agent_version=package_version(),
+                capabilities=("sandbox", "image-cache", "disk-quota"),
+                total_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=8192,
+                    disk_mb=100_000,
+                ),
+                cached_images=(cached,),
+                cached_images_known=True,
+            )
+            candidates = [
+                base,
+                replace(
+                    base,
+                    node_id="packed-node",
+                    job_id="job-packed",
+                    node_url="http://packed-node:8090",
+                    cached_images=(),
+                ),
+            ]
+            handler._ready_sandbox_heartbeats = lambda: candidates
+            handler._nodes_with_image = lambda *_args, **_kwargs: set()
+            handler.routing_store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="already-running",
+                    node_id="packed-node",
+                    job_id="job-packed",
+                    node_url="http://packed-node:8090",
+                    resources=ResourceQuantity(
+                        vcpu=1,
+                        memory_mb=512,
+                        disk_mb=1024,
+                    ),
+                    spec={"image": "busybox:latest"},
+                    state="running",
+                )
+            )
+
+            selected = handler._select_node(
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                image=target,
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.node_id, "layer-node")
+
+    def test_registry_layer_metadata_cache_loads_immutable_manifest_once(self) -> None:
+        digest = "sha256:" + "a" * 64
+        image = f"registry.test:5000/team/image:v1@{digest}"
+        manifest = RegistryManifestLayers(
+            repository="team/image",
+            manifest_digest=digest,
+            layers=(
+                RegistryLayerDescriptor("sha256:" + "1" * 64, 123),
+            ),
+        )
+        cache = control_plane.RegistryLayerMetadataCache(
+            "http://registry.test:5000"
+        )
+        started = Event()
+        release = Event()
+        results: list[RegistryManifestLayers | None] = []
+
+        def load_manifest(_repository: str, _digest: str) -> RegistryManifestLayers:
+            started.set()
+            release.wait(1)
+            return manifest
+
+        with patch.object(
+            control_plane.RegistryClient,
+            "manifest_layers",
+            side_effect=load_manifest,
+        ) as load:
+            first_thread = Thread(
+                target=lambda: results.append(cache.get(image, load=True))
+            )
+            second_thread = Thread(
+                target=lambda: results.append(cache.get(image, load=True))
+            )
+            first_thread.start()
+            self.assertTrue(started.wait(1))
+            second_thread.start()
+            sleep(0.01)
+            release.set()
+            first_thread.join()
+            second_thread.join()
+            cached = cache.get(image, load=True)
+
+        self.assertEqual(results, [manifest, manifest])
+        self.assertEqual(cached, manifest)
+        load.assert_called_once_with("team/image", digest)
 
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):

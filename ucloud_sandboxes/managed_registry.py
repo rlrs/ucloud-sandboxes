@@ -55,6 +55,23 @@ class RegistryTag:
 
 
 @dataclass(frozen=True)
+class RegistryLayerDescriptor:
+    digest: str
+    size: int
+
+
+@dataclass(frozen=True)
+class RegistryManifestLayers:
+    repository: str
+    manifest_digest: str
+    layers: tuple[RegistryLayerDescriptor, ...]
+
+    @property
+    def total_size(self) -> int:
+        return sum(layer.size for layer in self.layers)
+
+
+@dataclass(frozen=True)
 class RegistryImageUsage:
     image_ref: str
     repository: str
@@ -285,6 +302,68 @@ class RegistryClient:
             return digest
         _body, headers = self._json_request(path, headers={"Accept": MANIFEST_ACCEPT})
         return headers.get("Docker-Content-Digest", "")
+
+    def manifest_layers(
+        self,
+        repository: str,
+        reference: str,
+    ) -> RegistryManifestLayers:
+        """Return compressed layer digests and sizes for one Linux/amd64 image."""
+
+        return self._manifest_layers(repository, reference, depth=0)
+
+    def _manifest_layers(
+        self,
+        repository: str,
+        reference: str,
+        *,
+        depth: int,
+    ) -> RegistryManifestLayers:
+        if depth > 1:
+            raise ValueError("registry manifest index nesting is too deep")
+        path = (
+            f"/v2/{_quote_repository(repository)}/manifests/"
+            f"{quote(reference, safe=':')}"
+        )
+        manifest, headers = self._json_request(
+            path,
+            headers={"Accept": MANIFEST_ACCEPT},
+        )
+        raw_layers = manifest.get("layers")
+        if isinstance(raw_layers, list):
+            layers: list[RegistryLayerDescriptor] = []
+            for raw in raw_layers:
+                if not isinstance(raw, dict):
+                    raise ValueError("registry manifest contains an invalid layer")
+                digest = normalize_manifest_digest(str(raw.get("digest") or ""))
+                try:
+                    size = int(raw.get("size"))
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "registry manifest layer size must be an integer"
+                    ) from exc
+                if not digest or size < 0:
+                    raise ValueError("registry manifest contains an invalid layer")
+                layers.append(RegistryLayerDescriptor(digest=digest, size=size))
+            manifest_digest = normalize_manifest_digest(
+                str(headers.get("Docker-Content-Digest") or "")
+            ) or normalize_manifest_digest(reference)
+            if not manifest_digest:
+                raise ValueError("registry manifest response is missing its digest")
+            return RegistryManifestLayers(
+                repository=repository,
+                manifest_digest=manifest_digest,
+                layers=tuple(layers),
+            )
+
+        raw_manifests = manifest.get("manifests")
+        if not isinstance(raw_manifests, list) or not raw_manifests:
+            raise ValueError("registry response is neither an image manifest nor index")
+        selected = _select_linux_amd64_manifest(raw_manifests)
+        digest = normalize_manifest_digest(str(selected.get("digest") or ""))
+        if not digest:
+            raise ValueError("registry manifest index entry is missing its digest")
+        return self._manifest_layers(repository, digest, depth=depth + 1)
 
     def ensure_digest_protection_tag(self, repository: str, digest: str) -> str:
         """Ensure an immutable tag keeps ``digest`` reachable by registry GC."""
@@ -1235,6 +1314,24 @@ def registry_repository_tag_from_image_ref(image_ref: str) -> tuple[str, str] | 
     if not repository:
         return None
     return repository, tag
+
+
+def _select_linux_amd64_manifest(
+    manifests: list[object],
+) -> dict[str, Any]:
+    valid = [item for item in manifests if isinstance(item, dict)]
+    for item in valid:
+        platform = item.get("platform")
+        if not isinstance(platform, dict):
+            continue
+        if (
+            str(platform.get("os") or "").lower() == "linux"
+            and str(platform.get("architecture") or "").lower() == "amd64"
+        ):
+            return item
+    if len(valid) == 1:
+        return valid[0]
+    raise ValueError("registry manifest index has no Linux/amd64 image")
 
 
 def manifest_digest_from_image_ref(image_ref: str) -> str:

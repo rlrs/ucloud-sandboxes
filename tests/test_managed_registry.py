@@ -47,6 +47,94 @@ def _acquire_lease_in_process(
 
 
 class ManagedRegistryTests(unittest.TestCase):
+    def test_registry_client_reads_compressed_manifest_layers(self) -> None:
+        manifest_digest = "sha256:" + "a" * 64
+        first = "sha256:" + "1" * 64
+        second = "sha256:" + "2" * 64
+        client = RegistryClient("http://registry")
+        with patch.object(
+            client,
+            "_json_request",
+            return_value=(
+                {
+                    "schemaVersion": 2,
+                    "layers": [
+                        {"digest": first, "size": 100},
+                        {"digest": second, "size": 250},
+                    ],
+                },
+                {"Docker-Content-Digest": manifest_digest},
+            ),
+        ):
+            result = client.manifest_layers("repo/a", manifest_digest)
+
+        self.assertEqual(result.repository, "repo/a")
+        self.assertEqual(result.manifest_digest, manifest_digest)
+        self.assertEqual(
+            [(layer.digest, layer.size) for layer in result.layers],
+            [(first, 100), (second, 250)],
+        )
+        self.assertEqual(result.total_size, 350)
+
+    def test_registry_client_selects_linux_amd64_manifest_from_index(self) -> None:
+        index_digest = "sha256:" + "a" * 64
+        amd64_digest = "sha256:" + "b" * 64
+        arm64_digest = "sha256:" + "c" * 64
+        layer_digest = "sha256:" + "d" * 64
+        client = RegistryClient("http://registry")
+        with patch.object(
+            client,
+            "_json_request",
+            side_effect=(
+                (
+                    {
+                        "schemaVersion": 2,
+                        "manifests": [
+                            {
+                                "digest": arm64_digest,
+                                "platform": {
+                                    "os": "linux",
+                                    "architecture": "arm64",
+                                },
+                            },
+                            {
+                                "digest": amd64_digest,
+                                "platform": {
+                                    "os": "linux",
+                                    "architecture": "amd64",
+                                },
+                            },
+                        ],
+                    },
+                    {"Docker-Content-Digest": index_digest},
+                ),
+                (
+                    {
+                        "schemaVersion": 2,
+                        "layers": [{"digest": layer_digest, "size": 512}],
+                    },
+                    {"Docker-Content-Digest": amd64_digest},
+                ),
+            ),
+        ) as request_manifest:
+            result = client.manifest_layers("repo/a", index_digest)
+
+        self.assertEqual(result.manifest_digest, amd64_digest)
+        self.assertEqual(result.total_size, 512)
+        self.assertEqual(
+            request_manifest.call_args_list,
+            [
+                call(
+                    f"/v2/repo/a/manifests/{index_digest}",
+                    headers={"Accept": MANIFEST_ACCEPT},
+                ),
+                call(
+                    f"/v2/repo/a/manifests/{amd64_digest}",
+                    headers={"Accept": MANIFEST_ACCEPT},
+                ),
+            ],
+        )
+
     def test_registry_client_creates_digest_protection_tag_from_exact_manifest(
         self,
     ) -> None:

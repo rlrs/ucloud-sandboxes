@@ -6,8 +6,9 @@ This project uses semantic versioning.
 
 ## 0.3.45 - 2026-07-12
 
-- Spread distinct cold-image preparations across ready sandbox nodes while
-  retaining affinity for cached and already in-flight immutable images.
+- Scored cold-image placement by compressed registry-layer overlap, projected
+  in-flight layers, and pull pressure, while retaining exact cached/in-flight
+  image affinity and falling back safely when manifest metadata is unavailable.
 - Distinguished initial image-cache hits, peer-pull waits, and actual Docker
   pulls in gateway traces, including node-reported Docker pull duration.
 

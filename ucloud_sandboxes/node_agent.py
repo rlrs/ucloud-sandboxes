@@ -909,6 +909,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json(payload, status=HTTPStatus.CREATED)
 
     def _pull_image(self) -> None:
+        started = time.monotonic()
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -924,6 +925,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 "image": record.to_dict(),
                 "command": list(result.argv),
                 "exitCode": result.exit_code,
+                "timings": {
+                    "docker_pull_ms": int(
+                        max(0.0, time.monotonic() - started) * 1000
+                    )
+                },
             },
             status=HTTPStatus.CREATED,
         )

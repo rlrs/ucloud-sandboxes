@@ -8,7 +8,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-07-04T12:26:00.935405Z"
+exclude-newer = "2026-07-05T09:53:40.697942Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -595,7 +595,7 @@ wheels = [
 
 [[package]]
 name = "ucloud-sandboxes"
-version = "0.3.44"
+version = "0.3.45"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },

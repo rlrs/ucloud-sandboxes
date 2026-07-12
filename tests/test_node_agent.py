@@ -1192,7 +1192,7 @@ class NodeAgentTests(unittest.TestCase):
             try:
                 host, port = server.server_address
                 base = f"http://{host}:{port}"
-                self._json_request(
+                pulled = self._json_request(
                     f"{base}/v1/images/pull",
                     method="POST",
                     payload={"image": "busybox:latest", "id": "busybox"},
@@ -1212,6 +1212,7 @@ class NodeAgentTests(unittest.TestCase):
                 server.server_close()
 
             self.assertTrue(heartbeat["heartbeat"]["cached_images_known"])
+            self.assertGreaterEqual(pulled["timings"]["docker_pull_ms"], 0)
             self.assertIn("busybox", heartbeat["heartbeat"]["cached_images"])
             self.assertIn("busybox:latest", heartbeat["heartbeat"]["cached_images"])
             self.assertIn(

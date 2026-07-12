@@ -910,6 +910,68 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected.node_id, "both")
 
+    def test_cold_image_placement_spreads_distinct_pulls_and_reuses_inflight(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            base = NodeHeartbeat(
+                node_id="node-1",
+                job_id="job-1",
+                updated_at=utc_now(),
+                active_sandboxes=0,
+                node_url="http://node-1:8090",
+                agent_version=package_version(),
+                capabilities=("sandbox", "image-cache", "disk-quota"),
+                total_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=8192,
+                    disk_mb=100_000,
+                ),
+                cached_images_known=True,
+            )
+            candidates = [
+                base,
+                replace(
+                    base,
+                    node_id="node-2",
+                    job_id="job-2",
+                    node_url="http://node-2:8090",
+                ),
+            ]
+            handler._ready_sandbox_heartbeats = lambda: candidates
+            handler._nodes_with_image = lambda *_args, **_kwargs: set()
+            handler.routing_store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="first",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=ResourceQuantity(
+                        vcpu=1,
+                        memory_mb=512,
+                        disk_mb=1024,
+                    ),
+                    spec={"image": "registry.test/team/a@sha256:" + "a" * 64},
+                    state="creating",
+                )
+            )
+
+            distinct = handler._select_node(
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                image="registry.test/team/b@sha256:" + "b" * 64,
+            )
+            same = handler._select_node(
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                image="registry.test/team/a@sha256:" + "a" * 64,
+            )
+
+        self.assertIsNotNone(distinct)
+        self.assertEqual(distinct.node_id, "node-2")
+        self.assertIsNotNone(same)
+        self.assertEqual(same.node_id, "node-1")
+
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):
             calls: list[str] = []

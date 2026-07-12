@@ -1412,10 +1412,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "image": spec.image,
                 },
             ) as span:
+                initial_cache_hit = self._node_has_image(heartbeat, spec.image)
                 image_response = self._ensure_image_on_node(heartbeat, spec.image)
                 span.set_attribute("cache_hit", image_response is None)
+                span.set_attribute("initial_cache_hit", initial_cache_hit)
+                span.set_attribute(
+                    "waited_for_peer_pull",
+                    not initial_cache_hit and image_response is None,
+                )
+                span.set_attribute("pulled", image_response is not None)
                 if image_response is not None:
                     span.set_attribute("status_code", int(image_response.status))
+                    pull_timings = image_response.json().get("timings")
+                    if isinstance(pull_timings, dict):
+                        span.set_attribute("node_timings", pull_timings)
             if image_response is not None and image_response.status >= 400:
                 self._release_registry_route_reference(route)
                 self.routing_store.delete_sandbox_if_current(
@@ -2801,15 +2811,38 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             candidates,
             probe_uncached=False,
         )
+        inflight_image_node_ids: set[str] = set()
         if image_node_ids:
             candidates = [
                 heartbeat
                 for heartbeat in candidates
                 if heartbeat.node_id in image_node_ids
             ]
+        elif image:
+            inflight_image_node_ids = _nodes_preparing_image(
+                image,
+                candidates,
+                routes,
+            )
+            if inflight_image_node_ids:
+                # Follow an in-flight copy of the exact immutable image instead
+                # of transferring the same layers to another node.
+                candidates = [
+                    heartbeat
+                    for heartbeat in candidates
+                    if heartbeat.node_id in inflight_image_node_ids
+                ]
+        spread_cold_image = bool(
+            image and not image_node_ids and not inflight_image_node_ids
+        )
         return sorted(
             candidates,
             key=lambda heartbeat: (
+                (
+                    _node_cold_image_pressure(heartbeat, routes)
+                    if spread_cold_image
+                    else 0
+                ),
                 _resource_slack(
                     _node_available_resources(heartbeat, routes), requested
                 ),
@@ -4339,6 +4372,61 @@ def _node_reserved_route_resources(
             continue
         resources = resources + route.resources
     return resources
+
+
+def _route_targets_node(route: SandboxRoute, heartbeat: NodeHeartbeat) -> bool:
+    return bool(
+        (route.node_id and route.node_id == heartbeat.node_id)
+        or (route.job_id and route.job_id == heartbeat.job_id)
+        or (
+            route.node_url
+            and heartbeat.node_url
+            and route.node_url.rstrip("/") == heartbeat.node_url.rstrip("/")
+        )
+    )
+
+
+def _route_image_identity(route: SandboxRoute) -> str:
+    image = str(route.spec.get("image") or "").strip()
+    return canonical_image_digest_ref(image) or image
+
+
+def _node_inflight_image_identities(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+) -> set[str]:
+    return {
+        identity
+        for route in routes
+        if (route.state or "unknown").lower() in {"creating", "unknown"}
+        and _route_targets_node(route, heartbeat)
+        and (identity := _route_image_identity(route))
+        and not _heartbeat_has_image(heartbeat, identity)
+    }
+
+
+def _node_cold_image_pressure(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+) -> int:
+    """Count distinct cold images currently being prepared on a node."""
+
+    return len(_node_inflight_image_identities(heartbeat, routes))
+
+
+def _nodes_preparing_image(
+    image: str,
+    heartbeats: list[NodeHeartbeat],
+    routes: list[SandboxRoute],
+) -> set[str]:
+    identity = canonical_image_digest_ref(image) or image.strip()
+    if not identity:
+        return set()
+    return {
+        heartbeat.node_id
+        for heartbeat in heartbeats
+        if identity in _node_inflight_image_identities(heartbeat, routes)
+    }
 
 
 def _image_pull_lock(node_url: str, image: str) -> RLock:

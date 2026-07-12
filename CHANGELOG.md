@@ -4,6 +4,13 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.45 - 2026-07-12
+
+- Spread distinct cold-image preparations across ready sandbox nodes while
+  retaining affinity for cached and already in-flight immutable images.
+- Distinguished initial image-cache hits, peer-pull waits, and actual Docker
+  pulls in gateway traces, including node-reported Docker pull duration.
+
 ## 0.3.44 - 2026-07-11
 
 - Decoupled node-agent protocol compatibility from the gateway package patch

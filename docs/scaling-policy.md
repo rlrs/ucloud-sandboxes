@@ -36,8 +36,8 @@ data:
     "scale_down_idle_seconds": 600,
     "builder_scale_down_idle_seconds": 900,
     "default_node_resources": {
-      "vcpu": 16,
-      "memory_mb": 32768,
+      "vcpu": 32,
+      "memory_mb": 65536,
       "disk_mb": 204800
     }
   }
@@ -45,8 +45,8 @@ data:
 ```
 
 This keeps no idle VM by default, submits at most one new VM per reconciliation
-cycle, and uses a coarse sandbox node shape by default: one 16-vCPU VM with
-roughly 32 GB RAM as the planning fallback and 200 GB advertised Docker
+cycle, and uses a coarse sandbox node shape by default: one 32-vCPU VM with
+roughly 64 GiB RAM as the planning fallback and 200 GB advertised Docker
 writable-layer capacity. The ten-minute idle grace avoids churn after the last
 sandbox exits; set it to `0` for immediate scale-down.
 

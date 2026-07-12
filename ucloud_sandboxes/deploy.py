@@ -51,7 +51,7 @@ class AllInOneDeployPlan:
     registry_private_ip: str = ""
     gateway_private_host: str = ""
     private_network_id: str = ""
-    sandbox_product_id: str = "cpu-amd-zen5-16-vcpu"
+    sandbox_product_id: str = "cpu-amd-zen5-32-vcpu"
     sandbox_disk_gb: int = 250
     sandbox_idle_seconds: int = 600
     builder_product_id: str = "cpu-amd-zen5-16-vcpu"

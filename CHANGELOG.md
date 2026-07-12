@@ -6,6 +6,8 @@ This project uses semantic versioning.
 
 ## 0.3.45 - 2026-07-12
 
+- Doubled the default autoscaled sandbox-node product and provisional capacity
+  model to 32 vCPU and 64 GiB RAM; builder-node sizing remains unchanged.
 - Scored cold-image placement by compressed registry-layer overlap, projected
   in-flight layers, and pull pressure, while retaining exact cached/in-flight
   image affinity and falling back safely when manifest metadata is unavailable.

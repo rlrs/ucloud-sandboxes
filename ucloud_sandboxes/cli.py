@@ -1107,7 +1107,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Newest tags to protect per repository during scheduled prune.",
     )
-    deploy_all.add_argument("--sandbox-product-id", default="cpu-amd-zen5-16-vcpu")
+    deploy_all.add_argument("--sandbox-product-id", default=DEFAULT_VM_PRODUCT_ID)
     deploy_all.add_argument("--sandbox-disk-gb", type=int, default=250)
     deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
     deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)

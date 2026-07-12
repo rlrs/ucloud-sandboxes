@@ -101,6 +101,14 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(autoscaler["UCLOUD_MAX_INIT_PER_CYCLE"], "4")
         self.assertEqual(
+            autoscaler["UCLOUD_SANDBOX_PRODUCT_ID"],
+            "cpu-amd-zen5-32-vcpu",
+        )
+        self.assertEqual(
+            autoscaler["UCLOUD_BUILDER_PRODUCT_ID"],
+            "cpu-amd-zen5-16-vcpu",
+        )
+        self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             "ucloud-sandbox-registry=10.0.0.5",
         )

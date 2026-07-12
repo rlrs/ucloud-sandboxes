@@ -172,7 +172,7 @@ class ScalePolicyTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.creates, 4)
+        self.assertEqual(decision.creates, 2)
         self.assertEqual(
             decision.desired_resources,
             ResourceQuantity(vcpu=100, memory_mb=51200, disk_mb=102400),

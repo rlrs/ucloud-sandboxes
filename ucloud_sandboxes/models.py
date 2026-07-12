@@ -473,8 +473,8 @@ class ScalePolicy:
     builder_scale_down_idle_seconds: int = 900
     heartbeat_ttl_seconds: int = 120
     default_node_resources: ResourceQuantity = ResourceQuantity(
-        vcpu=16.0,
-        memory_mb=32768,
+        vcpu=32.0,
+        memory_mb=65536,
         disk_mb=204800,
     )
     cpu_overcommit: float = 1.0

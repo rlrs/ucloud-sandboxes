@@ -1964,7 +1964,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["activeImageBuilds"], 0)
         self.assertEqual(
             payload["buildWarmSandboxResources"],
-            {"vcpu": 16.0, "memory_mb": 32768, "disk_mb": 204800},
+            {"vcpu": 32.0, "memory_mb": 65536, "disk_mb": 204800},
         )
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
@@ -2109,7 +2109,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(
             policy.schedulable_node_resources,
-            ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800),
+            ResourceQuantity(vcpu=64, memory_mb=78643, disk_mb=204800),
         )
 
     def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:

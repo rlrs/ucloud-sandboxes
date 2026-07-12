@@ -14,7 +14,7 @@ Environment=UCLOUD_STATE_DIR=/work/ucloud-sandboxes/state
 Environment=UCLOUD_SESSION_FILE=/work/ucloud-sandboxes/state/ucloud-session.json
 Environment=UCLOUD_PRIVATE_NETWORK_ID=
 Environment=UCLOUD_AUTOSCALER_INTERVAL_SECONDS=5
-Environment=UCLOUD_SANDBOX_PRODUCT_ID=cpu-amd-zen5-16-vcpu
+Environment=UCLOUD_SANDBOX_PRODUCT_ID=cpu-amd-zen5-32-vcpu
 Environment=UCLOUD_SANDBOX_DISK_GB=250
 Environment=UCLOUD_SANDBOX_IDLE_SECONDS=600
 Environment=UCLOUD_BUILDER_PRODUCT_ID=cpu-amd-zen5-16-vcpu

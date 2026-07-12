@@ -11,6 +11,9 @@ from ucloud_sandboxes.vm_submit import (
 
 
 class VmSubmitTests(unittest.TestCase):
+    def test_default_vm_product_uses_large_sandbox_node(self) -> None:
+        self.assertEqual(VmProductRef().id, "cpu-amd-zen5-32-vcpu")
+
     def test_builds_ucloud_vm_submission_payload(self) -> None:
         options = VmSubmissionOptions(
             name="ucloud-sandbox-node-1",

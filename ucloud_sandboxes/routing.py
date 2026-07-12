@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -16,7 +17,10 @@ from .models import ResourceQuantity, SandboxDemand, parse_iso_datetime, utc_now
 
 _ROUTE_LOCKS_GUARD = RLock()
 _ROUTE_LOCKS: dict[Path, RLock] = {}
+_EXEC_ROUTE_CACHES: dict[Path, OrderedDict[str, ExecRoute]] = {}
+_EXEC_ROUTE_CACHE_SANDBOX_INDEXES: dict[Path, dict[str, set[str]]] = {}
 PENDING_DEMAND_TTL_SECONDS = 300
+EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 
 
 class SandboxRouteConflictError(RuntimeError):
@@ -440,6 +444,8 @@ class RoutingStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = _route_lock(path)
+        self._exec_route_cache = _exec_route_cache(path)
+        self._exec_route_cache_sandbox_index = _exec_route_cache_sandbox_index(path)
         with self._lock:
             self._ensure_db()
 
@@ -473,6 +479,10 @@ class RoutingStore:
                     self._write_prepared_builder(conn, item)
                 for item in state.image_warmups.values():
                     self._write_image_warmup(conn, item)
+            self._exec_route_cache.clear()
+            self._exec_route_cache_sandbox_index.clear()
+            for route in state.exec_sessions.values():
+                self._cache_exec_route_unlocked(route)
 
     def get_sandbox(self, sandbox_id: str) -> SandboxRoute | None:
         with self._lock:
@@ -831,6 +841,7 @@ class RoutingStore:
                 conn.execute(
                     "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                 )
+            self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
             return existing
 
     def reconcile_sandboxes_for_node(
@@ -852,6 +863,7 @@ class RoutingStore:
         reported_ids = {route.sandbox_id for route in routes}
         observed_at_dt = parse_iso_datetime(observed_at)
         with self._lock:
+            removed_sandbox_ids: list[str] = []
             with self._transaction() as conn:
                 # BEGIN IMMEDIATE precedes every read in this method.  A second
                 # RoutingStore (or process) therefore cannot install a newer
@@ -958,6 +970,9 @@ class RoutingStore:
                     conn.execute(
                         "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                     )
+                    removed_sandbox_ids.append(sandbox_id)
+            for sandbox_id in removed_sandbox_ids:
+                self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:
@@ -969,6 +984,7 @@ class RoutingStore:
                 conn.execute(
                     "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                 )
+            self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
         target_ids = tuple(sorted({str(job_id) for job_id in job_ids if str(job_id)}))
@@ -1009,6 +1025,8 @@ class RoutingStore:
                     )
             if not removed:
                 return []
+            for route in removed:
+                self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
 
     def delete_stale_sandboxes(
@@ -1060,12 +1078,21 @@ class RoutingStore:
                     )
             if not removed:
                 return []
+            for route in removed:
+                self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
+            cached = self._exec_route_cache.pop(session_id, None)
+            if cached is not None:
+                self._exec_route_cache[session_id] = cached
+                return cached
             with self._connect() as conn:
-                return self._get_exec_unlocked(conn, session_id)
+                route = self._get_exec_unlocked(conn, session_id)
+            if route is not None:
+                self._cache_exec_route_unlocked(route)
+            return route
 
     def get_pending(self, sandbox_id: str) -> PendingSandboxDemand | None:
         with self._lock:
@@ -1088,6 +1115,39 @@ class RoutingStore:
                     updated_at=now,
                 )
                 self._write_exec(conn, stored)
+            self._cache_exec_route_unlocked(stored)
+
+    def _cache_exec_route_unlocked(self, route: ExecRoute) -> None:
+        previous = self._exec_route_cache.pop(route.session_id, None)
+        if previous is not None:
+            self._remove_exec_route_from_sandbox_index_unlocked(previous)
+        self._exec_route_cache[route.session_id] = route
+        self._exec_route_cache_sandbox_index.setdefault(
+            route.sandbox_id,
+            set(),
+        ).add(route.session_id)
+        while len(self._exec_route_cache) > EXEC_ROUTE_CACHE_MAX_ENTRIES:
+            _, evicted = self._exec_route_cache.popitem(last=False)
+            self._remove_exec_route_from_sandbox_index_unlocked(evicted)
+
+    def _remove_exec_route_from_sandbox_index_unlocked(
+        self,
+        route: ExecRoute,
+    ) -> None:
+        session_ids = self._exec_route_cache_sandbox_index.get(route.sandbox_id)
+        if session_ids is None:
+            return
+        session_ids.discard(route.session_id)
+        if not session_ids:
+            del self._exec_route_cache_sandbox_index[route.sandbox_id]
+
+    def _drop_cached_exec_routes_for_sandbox_unlocked(
+        self,
+        sandbox_id: str,
+    ) -> None:
+        session_ids = self._exec_route_cache_sandbox_index.pop(sandbox_id, set())
+        for session_id in session_ids:
+            self._exec_route_cache.pop(session_id, None)
 
     def upsert_pending(
         self,
@@ -2451,6 +2511,26 @@ def _route_lock(path: Path) -> RLock:
             lock = RLock()
             _ROUTE_LOCKS[key] = lock
         return lock
+
+
+def _exec_route_cache(path: Path) -> OrderedDict[str, ExecRoute]:
+    key = path.resolve()
+    with _ROUTE_LOCKS_GUARD:
+        cache = _EXEC_ROUTE_CACHES.get(key)
+        if cache is None:
+            cache = OrderedDict()
+            _EXEC_ROUTE_CACHES[key] = cache
+        return cache
+
+
+def _exec_route_cache_sandbox_index(path: Path) -> dict[str, set[str]]:
+    key = path.resolve()
+    with _ROUTE_LOCKS_GUARD:
+        index = _EXEC_ROUTE_CACHE_SANDBOX_INDEXES.get(key)
+        if index is None:
+            index = {}
+            _EXEC_ROUTE_CACHE_SANDBOX_INDEXES[key] = index
+        return index
 
 
 def _is_sqlite_file(path: Path) -> bool:

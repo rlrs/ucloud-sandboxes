@@ -60,6 +60,7 @@ from ucloud_sandboxes.sandbox import (
     sandbox_fork_target,
     sandbox_spec_fingerprint,
 )
+from ucloud_sandboxes.sandbox_exec import new_exec_session_id
 
 FORK_PROTOCOL = SandboxForkProtocolSpec(
     version="agent-v1",
@@ -2011,6 +2012,121 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(unauthorized_metrics["status"], 401)
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)
 
+    def test_exec_route_survives_transient_worker_heartbeat_gap(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=raw_path / "node-sandboxes.json",
+                image_file=raw_path / "node-images.json",
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(
+                    vcpu=2,
+                    memory_mb=1024,
+                    disk_mb=1024,
+                ),
+                runtime=DockerGvisorRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                ),
+            )
+            Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                node_host, node_port = node.server_address
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    self.assertEqual(
+                        post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id="job-1",
+                                node_id="node-1",
+                                node_url=f"http://{node_host}:{node_port}",
+                                active_sandboxes=0,
+                                capabilities=(
+                                    "sandbox",
+                                    "image-cache",
+                                    "disk-quota",
+                                ),
+                                total_resources=ResourceQuantity(
+                                    vcpu=2,
+                                    memory_mb=1024,
+                                    disk_mb=1024,
+                                ),
+                            ),
+                        ).status,
+                        200,
+                    )
+                    self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "heartbeat-gap",
+                            "image": "busybox",
+                            "memory_mb": 128,
+                            "disk_mb": 64,
+                        },
+                    )
+                    started = self._json_request(
+                        f"{base}/v1/sandboxes/heartbeat-gap/exec",
+                        method="POST",
+                        payload={"command": ["true"]},
+                    )
+                    session_id = started["session"]["id"]
+                    persisted = RoutingStore(route_file).get_exec(session_id)
+                    gateway.RequestHandlerClass.store.remove(["job-1"])
+
+                    read = self._json_request(f"{base}/v1/exec/{session_id}")
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertIsNotNone(persisted)
+        self.assertEqual(read["session"]["id"], session_id)
+
+    def test_missing_routable_exec_route_is_retryable(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                session_id = new_exec_session_id(
+                    "missing-sandbox",
+                    node_id="missing-node",
+                    job_id="missing-job",
+                )
+                response = self._json_request(
+                    f"http://{host}:{port}/v1/exec/{session_id}",
+                    allow_error=True,
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response["status"], 503)
+        self.assertEqual(response["body"]["error"], "exec route not found")
+        self.assertTrue(response["body"]["retryable"])
+
     def test_multi_node_gateway_places_and_routes_by_resource_fit(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
@@ -2183,7 +2299,11 @@ class ControlPlaneTests(unittest.TestCase):
                 {"job-2"},
             )
             self.assertEqual(exec_read["session"]["id"], session_id)
-            self.assertEqual(exec_routes_after_start, {})
+            self.assertEqual(set(exec_routes_after_start), {session_id})
+            persisted_exec_route = exec_routes_after_start[session_id]
+            self.assertEqual(persisted_exec_route.sandbox_id, "multi-one")
+            self.assertEqual(persisted_exec_route.node_id, "node-2")
+            self.assertEqual(persisted_exec_route.job_id, "job-2")
             self.assertEqual(deleted["deleted"]["spec"]["id"], "multi-one")
             self.assertEqual(second_deleted["deleted"]["spec"]["id"], "multi-two")
             self.assertGreaterEqual(metrics["traces"]["span_count"], 3)

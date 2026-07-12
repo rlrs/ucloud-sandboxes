@@ -330,13 +330,17 @@ class RoutingStoreTests(unittest.TestCase):
 
             removed = store.delete_sandboxes_for_jobs(["job-1"])
             state = store.load()
+            removed_exec = store.get_exec("exec-remove")
+            kept_exec = store.get_exec("exec-keep")
 
         self.assertEqual([route.sandbox_id for route in removed], ["remove-me"])
         self.assertNotIn("remove-me", state.sandboxes)
         self.assertNotIn("remove-me", state.pending)
         self.assertNotIn("exec-remove", state.exec_sessions)
+        self.assertIsNone(removed_exec)
         self.assertIn("keep-me", state.sandboxes)
         self.assertIn("exec-keep", state.exec_sessions)
+        self.assertIsNotNone(kept_exec)
 
     def test_readonly_sandbox_queries_return_current_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:

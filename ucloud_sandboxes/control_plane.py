@@ -2741,16 +2741,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.BAD_GATEWAY,
                     )
                     return
-                if session_route is None:
-                    self.routing_store.upsert_exec(
-                        ExecRoute(
-                            session_id=session_id,
-                            sandbox_id=sandbox_id,
-                            node_id=route.node_id,
-                            job_id=route.job_id,
-                            node_url=route.node_url,
-                        )
+                # Persist every successful start before returning it. Routable
+                # ids let an upgraded gateway recover this mapping, but the
+                # durable route is the fast path and must survive a transient
+                # gap in worker heartbeats.
+                self.routing_store.upsert_exec(
+                    ExecRoute(
+                        session_id=session_id,
+                        sandbox_id=sandbox_id,
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        node_url=route.node_url,
                     )
+                )
         if self.command == "DELETE" and 200 <= response.status < 300:
             deleted = response.json().get("deleted")
             response_generation = _record_generation(deleted)
@@ -2778,8 +2781,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _route_exec_request(self, session_id: str, path: str) -> None:
         session_route = exec_session_route(session_id)
-        route = None
-        if session_route is not None:
+        route = self.routing_store.get_exec(session_id)
+        if route is not None and session_route is not None and (
+            route.sandbox_id != session_route.sandbox_id
+            or route.node_id != session_route.node_id
+            or route.job_id != session_route.job_id
+        ):
+            self._write_json(
+                {"error": "stored exec route does not match session affinity"},
+                status=HTTPStatus.BAD_GATEWAY,
+            )
+            return
+        if route is None and session_route is not None:
             heartbeat = self._heartbeat_for_route(
                 node_id=session_route.node_id,
                 job_id=session_route.job_id,
@@ -2793,15 +2806,22 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     job_id=session_route.job_id,
                     node_url=heartbeat.node_url,
                 )
-            else:
-                # A rolling-upgrade gateway may have persisted the mapping
-                # before it understood routable session ids.
-                route = self.routing_store.get_exec(session_id)
-        else:
-            route = self.routing_store.get_exec(session_id)
+                # Self-heal sessions started by an older gateway during a
+                # rolling upgrade. Subsequent event polls use the cached,
+                # durable route instead of reparsing heartbeat state.
+                self.routing_store.upsert_exec(route)
         if route is None:
+            retryable = session_route is not None
             self._write_json(
-                {"error": "exec route not found"}, status=HTTPStatus.NOT_FOUND
+                {
+                    "error": "exec route not found",
+                    "retryable": retryable,
+                },
+                status=(
+                    HTTPStatus.SERVICE_UNAVAILABLE
+                    if retryable
+                    else HTTPStatus.NOT_FOUND
+                ),
             )
             return
         if session_route is None and self._exec_route_is_proven_stale(route):

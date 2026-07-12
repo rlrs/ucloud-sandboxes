@@ -154,11 +154,13 @@ Events are ordered by `sequence` and use `stream` values:
 - `error`
 
 Current node agents mint opaque session ids that include validated sandbox and
-immutable origin node/job affinity. The gateway can therefore route follow-up
-requests back to the process that owns the session without serializing a second
-exec-route write, even if the sandbox route later changes. Legacy session ids
-retain the persisted mapping fallback. Polling waits on per-session event
-notifications; it does not periodically rescan all active sessions.
+immutable origin node/job affinity. Before returning a successful exec start,
+the gateway writes the exact node URL to `routes.sqlite` and its bounded
+in-memory exec-route cache. Follow-up requests therefore avoid heartbeat-file
+I/O and survive transient worker-heartbeat gaps, while the encoded affinity can
+reconstruct a missing mapping during a rolling upgrade. Legacy session ids use
+the same persisted mapping. Polling waits on per-session event notifications;
+it does not periodically rescan all active sessions.
 
 The optional async node agent also supports a WebSocket exec transport:
 

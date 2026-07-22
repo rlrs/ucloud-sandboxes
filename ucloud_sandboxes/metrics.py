@@ -798,6 +798,11 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
             "memory_used_mb": 0,
             "memory_available_mb": 0,
             "memory_percent": None,
+            "swap_total_mb": 0,
+            "swap_used_mb": 0,
+            "swap_free_mb": 0,
+            "memory_psi_some_avg10": None,
+            "memory_psi_full_avg10": None,
             "load_average_1m": None,
             "load_average_5m": None,
             "load_average_15m": None,
@@ -818,6 +823,16 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
     total_memory = sum(item.memory_total_mb for item in metrics)
     used_memory = sum(item.memory_used_mb for item in metrics)
     available_memory = sum(item.memory_available_mb for item in metrics)
+    psi_some_values = [
+        item.memory_psi_some_avg10
+        for item in metrics
+        if item.memory_psi_some_avg10 is not None
+    ]
+    psi_full_values = [
+        item.memory_psi_full_avg10
+        for item in metrics
+        if item.memory_psi_full_avg10 is not None
+    ]
     return {
         "samples": len(metrics),
         "cpu_vcpu": sum(cpu_vcpu_values) if cpu_vcpu_values else None,
@@ -828,6 +843,11 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
         "memory_percent": (
             (used_memory / total_memory) * 100.0 if total_memory > 0 else None
         ),
+        "swap_total_mb": sum(item.swap_total_mb for item in metrics),
+        "swap_used_mb": sum(item.swap_used_mb for item in metrics),
+        "swap_free_mb": sum(item.swap_free_mb for item in metrics),
+        "memory_psi_some_avg10": _avg(psi_some_values),
+        "memory_psi_full_avg10": _avg(psi_full_values),
         "load_average_1m": _avg(load_1m_values),
         "load_average_5m": _avg(load_5m_values),
         "load_average_15m": _avg(load_15m_values),

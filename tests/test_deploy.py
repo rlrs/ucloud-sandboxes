@@ -1,12 +1,15 @@
-import json
 import io
+import json
 from pathlib import Path
+import re
+import shlex
 import sys
 import subprocess
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
 
+from ucloud_sandboxes.cli import build_parser
 from ucloud_sandboxes.deploy import (
     AllInOneDeployPlan,
     AUTO_REGISTRY_PRIVATE_IP_TOKEN,
@@ -110,7 +113,13 @@ class DeployTests(unittest.TestCase):
             "cpu-amd-zen5-16-vcpu",
         )
         self.assertEqual(autoscaler["UCLOUD_INIT_CPU_OVERCOMMIT"], "3")
-        self.assertEqual(autoscaler["UCLOUD_INIT_MEMORY_OVERCOMMIT"], "1.5")
+        self.assertEqual(autoscaler["UCLOUD_INIT_MEMORY_OVERCOMMIT"], "2")
+        self.assertEqual(autoscaler["UCLOUD_SANDBOX_DISK_GB"], "600")
+        self.assertEqual(autoscaler["UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB"], "440")
+        self.assertEqual(
+            autoscaler["UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB"], "200"
+        )
+        self.assertEqual(autoscaler["UCLOUD_INIT_SWAP_GB"], "96")
         self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             "ucloud-sandbox-registry=10.0.0.5",
@@ -477,6 +486,34 @@ class DeployTests(unittest.TestCase):
             "EnvironmentFile=/etc/ucloud-sandboxes/gateway.env",
             units["ucloud-sandbox-gateway.service"],
         )
+
+    def test_deploy_and_packaged_systemd_units_do_not_drift(self) -> None:
+        units = packaged_systemd_units()
+        deploy_root = Path(__file__).resolve().parents[1] / "deploy" / "systemd"
+
+        for name, packaged_text in units.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    (deploy_root / name).read_text(encoding="utf-8"),
+                    packaged_text,
+                )
+
+    def test_packaged_autoscaler_unit_matches_cli_parser(self) -> None:
+        unit = packaged_systemd_units()["ucloud-sandbox-autoscaler.service"]
+        exec_start = next(
+            line.removeprefix("ExecStart=")
+            for line in unit.splitlines()
+            if line.startswith("ExecStart=")
+        )
+        rendered = re.sub(r"\$\{[^}]+\}", "1", exec_start)
+        argv = shlex.split(rendered)
+
+        args = build_parser().parse_args(argv[1:])
+
+        self.assertEqual(args.command, "autoscaler-loop")
+        self.assertTrue(args.execute_resumes)
+        self.assertEqual(args.init_builder_docker_quota_image_gb, 1)
+        self.assertEqual(args.init_swap_gb, 1)
 
 
 if __name__ == "__main__":

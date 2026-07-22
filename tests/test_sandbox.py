@@ -2487,6 +2487,7 @@ class SandboxRuntimeTests(unittest.TestCase):
         self.assertIn("none", argv)
         self.assertIn("--memory", argv)
         self.assertIn("512m", argv)
+        self.assertEqual(argv[argv.index("--memory-swap") + 1], "1024m")
         self.assertIn("--cpus", argv)
         self.assertIn("1.5", argv)
         self.assertIn("--storage-opt", argv)

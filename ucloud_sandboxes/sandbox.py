@@ -1677,6 +1677,9 @@ class DockerGvisorRuntime:
             argv.extend(["--annotation", f"{key}={value}"])
         if spec.memory_mb is not None:
             argv.extend(["--memory", f"{spec.memory_mb}m"])
+            # Make the intended bounded swap allowance explicit. Docker's
+            # --memory-swap value is the combined memory + swap ceiling.
+            argv.extend(["--memory-swap", f"{spec.memory_mb * 2}m"])
         if spec.cpus is not None:
             argv.extend(["--cpus", _format_float(spec.cpus)])
         disk_quota_enforced = (

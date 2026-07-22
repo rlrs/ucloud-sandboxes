@@ -60,7 +60,7 @@ class AllInOneDeployPlan:
     gateway_private_host: str = ""
     private_network_id: str = ""
     sandbox_product_id: str = "cpu-amd-zen5-32-vcpu"
-    sandbox_disk_gb: int = 250
+    sandbox_disk_gb: int = 600
     sandbox_idle_seconds: int = 600
     builder_product_id: str = "cpu-amd-zen5-16-vcpu"
     builder_disk_gb: int = 250
@@ -71,9 +71,11 @@ class AllInOneDeployPlan:
     init_timeout_seconds: int = 1800
     autoscaler_interval_seconds: float = 5.0
     cpu_overcommit: float = 3.0
-    memory_overcommit: float = 1.5
+    memory_overcommit: float = 2.0
     disk_overcommit: float = 1.0
-    docker_quota_image_gb: int = 200
+    docker_quota_image_gb: int = 440
+    builder_docker_quota_image_gb: int = 200
+    swap_gb: int = 96
     request_timeout_seconds: int = 7200
     worker_lease_seconds: int = 600
     completed_request_retention_seconds: int = 3600
@@ -236,10 +238,21 @@ class AllInOneDeployPlan:
             "init retry seconds": self.init_retry_seconds,
             "init timeout seconds": self.init_timeout_seconds,
             "docker quota image GB": self.docker_quota_image_gb,
+            "builder docker quota image GB": self.builder_docker_quota_image_gb,
+            "swap GB": self.swap_gb,
             "registry keep per repository": self.registry_keep_per_repository,
         }.items():
             if value < 0:
                 raise ValueError(f"{label} cannot be negative.")
+        if self.sandbox_disk_gb < self.docker_quota_image_gb + self.swap_gb + 32:
+            raise ValueError(
+                "sandbox disk must leave at least 32 GB outside the Docker quota "
+                "image and swap file."
+            )
+        if self.builder_disk_gb < self.builder_docker_quota_image_gb + 32:
+            raise ValueError(
+                "builder disk must leave at least 32 GB outside the Docker quota image."
+            )
         if self.registry_retention_days <= 0:
             raise ValueError("registry retention days must be positive.")
         for port_label, port in {
@@ -301,6 +314,9 @@ class AllInOneDeployPlan:
                 "cpuOvercommit": self.cpu_overcommit,
                 "memoryOvercommit": self.memory_overcommit,
                 "diskOvercommit": self.disk_overcommit,
+                "dockerQuotaImageGb": self.docker_quota_image_gb,
+                "builderDockerQuotaImageGb": self.builder_docker_quota_image_gb,
+                "swapGb": self.swap_gb,
             },
         }
 
@@ -396,6 +412,10 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_DOCKER_INSECURE_REGISTRY": plan.docker_insecure_registry,
         "UCLOUD_DOCKER_HOST_ALIAS": plan.docker_host_alias,
         "UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB": str(plan.docker_quota_image_gb),
+        "UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB": str(
+            plan.builder_docker_quota_image_gb
+        ),
+        "UCLOUD_INIT_SWAP_GB": str(plan.swap_gb),
         "UCLOUD_INIT_CPU_OVERCOMMIT": f"{plan.cpu_overcommit:g}",
         "UCLOUD_INIT_MEMORY_OVERCOMMIT": f"{plan.memory_overcommit:g}",
         "UCLOUD_INIT_DISK_OVERCOMMIT": f"{plan.disk_overcommit:g}",

@@ -4,6 +4,21 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+## 0.3.50 - 2026-07-22
+
+- Increased the default sandbox-node envelope to 96 GiB RAM and 440 GiB of
+  schedulable disk, backed by a 600 GB VM disk, 440 GB Docker quota image,
+  2x memory overcommit, and 96 GB of persistent host swap. Builder nodes keep
+  their existing 200 GB Docker quota and do not enable managed swap.
+- Reported host swap usage and Linux memory-pressure PSI in node heartbeats and
+  aggregate metrics. Memory-overcommitted nodes now stop accepting new work at
+  sustained full-memory pressure or when RAM plus free swap lacks a bounded
+  admission headroom.
+- Added explicit per-sandbox Docker swap ceilings and made swap provisioning
+  idempotent and fail closed on unsafe live resizes.
+- Kept the deployment and packaged systemd units byte-identical and verified
+  that the autoscaler CLI accepts the exact arguments emitted by the unit.
+
 ## 0.3.49 - 2026-07-12
 
 - Recover autoscaled worker and builder VMs that UCloud suspends after they

@@ -1112,7 +1112,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Newest tags to protect per repository during scheduled prune.",
     )
     deploy_all.add_argument("--sandbox-product-id", default=DEFAULT_VM_PRODUCT_ID)
-    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=250)
+    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=600)
     deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
     deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)
     deploy_all.add_argument(
@@ -1122,9 +1122,13 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument("--max-builder-nodes", type=int, default=1)
     deploy_all.add_argument("--autoscaler-interval-seconds", type=float, default=5.0)
     deploy_all.add_argument("--cpu-overcommit", type=float, default=3.0)
-    deploy_all.add_argument("--memory-overcommit", type=float, default=1.5)
+    deploy_all.add_argument("--memory-overcommit", type=float, default=2.0)
     deploy_all.add_argument("--disk-overcommit", type=float, default=1.0)
-    deploy_all.add_argument("--docker-quota-image-gb", type=int, default=200)
+    deploy_all.add_argument("--docker-quota-image-gb", type=int, default=440)
+    deploy_all.add_argument(
+        "--builder-docker-quota-image-gb", type=int, default=200
+    )
+    deploy_all.add_argument("--swap-gb", type=int, default=96)
     deploy_all.add_argument(
         "--ssh-key-title",
         help=(
@@ -1751,6 +1755,18 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Sparse XFS image size in GB for autoscaled VM Docker quotas.",
     )
     parser.add_argument(
+        "--init-builder-docker-quota-image-gb",
+        type=int,
+        default=DEFAULT_DOCKER_QUOTA_IMAGE_GB,
+        help="Sparse XFS image size in GB for autoscaled builder Docker quotas.",
+    )
+    parser.add_argument(
+        "--init-swap-gb",
+        type=int,
+        default=0,
+        help="Host swap file size in GB for autoscaled sandbox VMs.",
+    )
+    parser.add_argument(
         "--init-docker-insecure-registry",
         action="append",
         default=[],
@@ -1922,6 +1938,12 @@ def add_vm_init_args(
             "Sparse XFS image size in GB for Docker overlay2 project quotas. "
             "Use 0 to disable quota-backed Docker storage."
         ),
+    )
+    parser.add_argument(
+        "--swap-gb",
+        type=int,
+        default=0,
+        help="Host swap file size in GB. Use 0 to disable managed swap.",
     )
     parser.add_argument(
         "--docker-insecure-registry",
@@ -3039,6 +3061,8 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         memory_overcommit=args.memory_overcommit,
         disk_overcommit=args.disk_overcommit,
         docker_quota_image_gb=args.docker_quota_image_gb,
+        builder_docker_quota_image_gb=args.builder_docker_quota_image_gb,
+        swap_gb=args.swap_gb,
     )
     script = render_remote_deploy_script(plan)
 
@@ -5667,7 +5691,23 @@ def vm_init_options_for_autoscaled_node(
         labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
     token_file = str(getattr(args, "init_heartbeat_bearer_token_file", "") or "")
     docker_quota_image_gb = max(
-        0, int(getattr(args, "init_docker_quota_image_gb", 200))
+        0,
+        int(
+            getattr(
+                args,
+                (
+                    "init_builder_docker_quota_image_gb"
+                    if role == "builder"
+                    else "init_docker_quota_image_gb"
+                ),
+                200,
+            )
+        ),
+    )
+    swap_gb = (
+        0
+        if role == "builder"
+        else max(0, int(getattr(args, "init_swap_gb", 0)))
     )
     total_resources = resources_from_vm_job(
         node.job, config.policy.default_node_resources
@@ -5739,6 +5779,7 @@ def vm_init_options_for_autoscaled_node(
         memory_overcommit=memory_overcommit,
         disk_overcommit=disk_overcommit,
         docker_quota_image_gb=docker_quota_image_gb,
+        swap_gb=swap_gb,
         docker_insecure_registries=tuple(
             getattr(args, "init_docker_insecure_registry", []) or []
         ),
@@ -6401,6 +6442,7 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         memory_overcommit=memory_overcommit,
         disk_overcommit=disk_overcommit,
         docker_quota_image_gb=args.docker_quota_image_gb,
+        swap_gb=0 if args.enable_image_builds else args.swap_gb,
         docker_insecure_registries=tuple(args.docker_insecure_registry or []),
         host_aliases=tuple(args.host_alias or []),
         enable_image_builds=args.enable_image_builds,
@@ -6437,6 +6479,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "memoryOvercommit": options.memory_overcommit,
         "diskOvercommit": options.disk_overcommit,
         "dockerQuotaImageGb": options.docker_quota_image_gb,
+        "swapGb": options.swap_gb,
         "dockerInsecureRegistries": list(options.docker_insecure_registries),
         "hostAliases": list(options.host_aliases),
         "enableImageBuilds": options.enable_image_builds,

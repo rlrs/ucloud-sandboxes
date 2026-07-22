@@ -120,6 +120,7 @@ class VmInitTests(unittest.TestCase):
                 package_spec="git+https://example.invalid/ucloud-sandboxes.git",
                 total_resources=ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=500000),
                 cpu_overcommit=4.0,
+                swap_gb=96,
                 docker_insecure_registries=("gateway:5000",),
                 host_aliases=("ucloud-sandbox-registry=10.36.125.67",),
                 enable_image_builds=True,
@@ -153,6 +154,7 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("run_as_service_user python3 -m venv \"$UCLOUD_VENV_DIR\"", script)
         self.assertNotIn("$SUDO python3 -m venv \"$UCLOUD_VENV_DIR\"", script)
         self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE_GB=200", script)
+        self.assertIn("UCLOUD_SWAP_GB=96", script)
         self.assertIn("UCLOUD_DOCKER_MTU=0", script)
         self.assertIn("UCLOUD_DOCKER_DATA_ROOT=/var/lib/ucloud-sandboxes/docker", script)
         self.assertIn("UCLOUD_DOCKER_QUOTA_IMAGE=/var/lib/ucloud-sandboxes/docker-xfs.img", script)
@@ -169,6 +171,15 @@ class VmInitTests(unittest.TestCase):
             script,
         )
         self.assertIn("truncate -s \"${UCLOUD_DOCKER_QUOTA_IMAGE_GB}G\"", script)
+        self.assertIn('fallocate -l "${UCLOUD_SWAP_GB}G"', script)
+        self.assertIn("mkswap \"$UCLOUD_SWAP_FILE\"", script)
+        self.assertIn("swapon \"$UCLOUD_SWAP_FILE\"", script)
+        self.assertIn("$UCLOUD_SWAP_FILE none swap sw 0 0", script)
+        self.assertIn("refusing an unsafe live resize", script)
+        self.assertLess(
+            script.index("Preparing bounded host swap"),
+            script.index("Preparing XFS/project-quota Docker data root"),
+        )
         self.assertIn("mkfs.xfs -f -m reflink=1", script)
         self.assertIn("mount -o loop,pquota", script)
         self.assertIn('"data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"]', script)
@@ -715,6 +726,16 @@ class VmInitTests(unittest.TestCase):
                     job_id="123",
                     heartbeat_url="https://control.example/v1/nodes/heartbeat",
                     docker_mtu=-1,
+                )
+            )
+
+    def test_rejects_negative_swap_size(self) -> None:
+        with self.assertRaises(ValueError):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="123",
+                    heartbeat_url="https://control.example/v1/nodes/heartbeat",
+                    swap_gb=-1,
                 )
             )
 

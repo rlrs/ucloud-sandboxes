@@ -38,8 +38,8 @@ data:
     "builder_scale_down_idle_seconds": 900,
     "default_node_resources": {
       "vcpu": 32,
-      "memory_mb": 65536,
-      "disk_mb": 204800
+      "memory_mb": 98304,
+      "disk_mb": 450560
     }
   }
 }
@@ -47,7 +47,7 @@ data:
 
 This keeps no idle VM by default, submits at most one new VM per reconciliation
 cycle, and uses a coarse sandbox node shape by default: one 32-vCPU VM with
-roughly 64 GiB RAM as the planning fallback and 200 GB advertised Docker
+96 GiB RAM as the planning fallback and 440 GiB advertised Docker
 writable-layer capacity. The ten-minute idle grace avoids churn after the last
 sandbox exits; set it to `0` for immediate scale-down.
 
@@ -229,15 +229,17 @@ Until we have measurements, prefer:
 - Prepared-capacity signals for known near-term bursts.
 - Standing warm resources only for a measured latency SLO that justifies the cost.
 - CPU overcommit of `3.0` for sandbox nodes.
-- Memory overcommit of `1.5` for sandbox nodes.
+- Memory overcommit of `2.0` for sandbox nodes with 96 GiB of host swap.
 - No disk overcommit by default.
 
 Memory overcommit changes placement capacity; it does not increase a sandbox's
-individual Docker `--memory` limit or guarantee backing memory. Standard live
-workers currently have no swap. If simultaneous resident use approaches host
-RAM, the kernel may OOM-kill container processes. Configure and measure a
-deliberate swap or zram policy before treating overcommitted memory as usable
-rather than burst capacity.
+individual Docker `--memory` limit. The standard 96 GiB worker uses a fixed
+96 GiB swap file and each container receives an explicit combined RAM+swap
+ceiling of twice its requested memory. Node heartbeats expose swap use and
+memory PSI. The gateway stops placing new work on an overcommitted node when
+combined free RAM and swap cannot cover the request (with a 2 GiB minimum
+headroom), or when the 10-second full-memory PSI average reaches 10%. Existing
+containers continue running; this is an admission brake, not an eviction rule.
 
 The controller records VM lifecycle events into the metrics JSONL stream:
 submission, observed UCloud state changes, init attempt durations, first

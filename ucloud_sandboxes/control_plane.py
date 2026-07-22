@@ -4505,7 +4505,34 @@ def _node_can_fit(
         DISK_QUOTA_CAPABILITY,
     ):
         return False
+    if not _node_memory_pressure_allows(heartbeat, requested):
+        return False
     return requested.fits_within(_node_available_resources(heartbeat, routes))
+
+
+def _node_memory_pressure_allows(
+    heartbeat: NodeHeartbeat,
+    requested: ResourceQuantity,
+) -> bool:
+    """Stop adding work to an overcommitted node under real memory pressure."""
+
+    if heartbeat.memory_overcommit <= 1.0 or heartbeat.runtime_metrics is None:
+        return True
+    metrics = heartbeat.runtime_metrics
+    if (
+        metrics.memory_psi_full_avg10 is not None
+        and metrics.memory_psi_full_avg10 >= 10.0
+    ):
+        return False
+    minimum_headroom_mb = max(2048, requested.memory_mb)
+    if metrics.swap_total_mb > 0:
+        return (
+            metrics.memory_available_mb + metrics.swap_free_mb
+            >= minimum_headroom_mb
+        )
+    if metrics.memory_total_mb > 0:
+        return metrics.memory_available_mb >= minimum_headroom_mb
+    return True
 
 
 def _node_available_resources(

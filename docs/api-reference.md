@@ -24,7 +24,7 @@
     "disk_mb": 20000
   },
   "cpu_overcommit": 3,
-  "memory_overcommit": 1.5,
+  "memory_overcommit": 2.0,
   "disk_overcommit": 1.0,
   "labels": {
     "pool": "default"

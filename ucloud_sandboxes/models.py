@@ -231,6 +231,11 @@ class NodeRuntimeMetrics:
     memory_used_mb: int = 0
     memory_available_mb: int = 0
     memory_percent: float | None = None
+    swap_total_mb: int = 0
+    swap_used_mb: int = 0
+    swap_free_mb: int = 0
+    memory_psi_some_avg10: float | None = None
+    memory_psi_full_avg10: float | None = None
     load_average_1m: float | None = None
     load_average_5m: float | None = None
     load_average_15m: float | None = None
@@ -259,6 +264,21 @@ class NodeRuntimeMetrics:
             memory_percent=_optional_float(
                 _first_present(raw, "memory_percent", "memoryPercent")
             ),
+            swap_total_mb=_nonnegative_int(
+                _first_present(raw, "swap_total_mb", "swapTotalMb")
+            ),
+            swap_used_mb=_nonnegative_int(
+                _first_present(raw, "swap_used_mb", "swapUsedMb")
+            ),
+            swap_free_mb=_nonnegative_int(
+                _first_present(raw, "swap_free_mb", "swapFreeMb")
+            ),
+            memory_psi_some_avg10=_optional_float(
+                _first_present(raw, "memory_psi_some_avg10", "memoryPsiSomeAvg10")
+            ),
+            memory_psi_full_avg10=_optional_float(
+                _first_present(raw, "memory_psi_full_avg10", "memoryPsiFullAvg10")
+            ),
             load_average_1m=_optional_float(
                 _first_present(raw, "load_average_1m", "loadAverage1m")
             ),
@@ -280,6 +300,11 @@ class NodeRuntimeMetrics:
             "memory_used_mb": self.memory_used_mb,
             "memory_available_mb": self.memory_available_mb,
             "memory_percent": self.memory_percent,
+            "swap_total_mb": self.swap_total_mb,
+            "swap_used_mb": self.swap_used_mb,
+            "swap_free_mb": self.swap_free_mb,
+            "memory_psi_some_avg10": self.memory_psi_some_avg10,
+            "memory_psi_full_avg10": self.memory_psi_full_avg10,
             "load_average_1m": self.load_average_1m,
             "load_average_5m": self.load_average_5m,
             "load_average_15m": self.load_average_15m,
@@ -487,8 +512,8 @@ class ScalePolicy:
     heartbeat_ttl_seconds: int = 120
     default_node_resources: ResourceQuantity = ResourceQuantity(
         vcpu=32.0,
-        memory_mb=65536,
-        disk_mb=204800,
+        memory_mb=98304,
+        disk_mb=450560,
     )
     cpu_overcommit: float = 1.0
     memory_overcommit: float = 1.0

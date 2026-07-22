@@ -32,6 +32,10 @@ def sample_node_runtime_metrics(
     memory_total_mb = memory.get("MemTotal", 0) // 1024
     memory_available_mb = memory.get("MemAvailable", 0) // 1024
     memory_used_mb = max(0, memory_total_mb - memory_available_mb)
+    swap_total_mb = memory.get("SwapTotal", 0) // 1024
+    swap_free_mb = memory.get("SwapFree", 0) // 1024
+    swap_used_mb = max(0, swap_total_mb - swap_free_mb)
+    memory_pressure = read_proc_pressure(proc_path / "pressure" / "memory")
     memory_percent = (
         (memory_used_mb / memory_total_mb) * 100.0
         if memory_total_mb > 0
@@ -46,6 +50,11 @@ def sample_node_runtime_metrics(
         memory_used_mb=memory_used_mb,
         memory_available_mb=memory_available_mb,
         memory_percent=memory_percent,
+        swap_total_mb=swap_total_mb,
+        swap_used_mb=swap_used_mb,
+        swap_free_mb=swap_free_mb,
+        memory_psi_some_avg10=memory_pressure.get("some"),
+        memory_psi_full_avg10=memory_pressure.get("full"),
         load_average_1m=load[0],
         load_average_5m=load[1],
         load_average_15m=load[2],
@@ -90,6 +99,31 @@ def read_proc_meminfo(path: Path) -> dict[str, int]:
             continue
     if "MemAvailable" not in result and "MemFree" in result:
         result["MemAvailable"] = result["MemFree"]
+    return result
+
+
+def read_proc_pressure(path: Path) -> dict[str, float]:
+    """Read the 10-second Linux PSI averages for a pressure resource."""
+
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    result: dict[str, float] = {}
+    for line in lines:
+        fields = line.split()
+        if not fields:
+            continue
+        sample_type = fields[0]
+        for field in fields[1:]:
+            key, separator, value = field.partition("=")
+            if key != "avg10" or not separator:
+                continue
+            try:
+                result[sample_type] = max(0.0, float(value))
+            except ValueError:
+                pass
+            break
     return result
 
 

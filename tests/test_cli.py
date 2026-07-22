@@ -2161,7 +2161,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["activeImageBuilds"], 0)
         self.assertEqual(
             payload["buildWarmSandboxResources"],
-            {"vcpu": 32.0, "memory_mb": 65536, "disk_mb": 204800},
+            {"vcpu": 32.0, "memory_mb": 98304, "disk_mb": 450560},
         )
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
@@ -2306,7 +2306,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(
             policy.schedulable_node_resources,
-            ResourceQuantity(vcpu=64, memory_mb=78643, disk_mb=204800),
+            ResourceQuantity(vcpu=64, memory_mb=117964, disk_mb=450560),
         )
 
     def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:
@@ -2899,6 +2899,7 @@ class CliTests(unittest.TestCase):
                 memory_overcommit=1.2,
                 disk_overcommit=1.5,
                 docker_quota_image_gb=200,
+                swap_gb=96,
                 docker_insecure_registry=[],
                 host_alias=[],
                 enable_image_builds=True,
@@ -2914,6 +2915,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(options.cpu_overcommit, 1.0)
         self.assertEqual(options.memory_overcommit, 1.0)
         self.assertEqual(options.disk_overcommit, 1.0)
+        self.assertEqual(options.swap_gb, 0)
         self.assertTrue(options.buildx_direct_push)
         self.assertEqual(options.buildx_cache_ref, "gateway:5000/cache/buildkit")
 

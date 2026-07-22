@@ -40,6 +40,7 @@ from ucloud_sandboxes.managed_registry import (
 )
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
+    NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxInventoryEntry,
     utc_now,
@@ -861,6 +862,46 @@ class ControlPlaneTests(unittest.TestCase):
                 replace(heartbeat, capabilities=("sandbox", "disk-quota")),
                 requested,
                 [],
+            )
+        )
+
+    def test_memory_pressure_blocks_new_work_only_on_overcommitted_nodes(self) -> None:
+        requested = ResourceQuantity(vcpu=1, memory_mb=4096, disk_mb=0)
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=450560),
+            memory_overcommit=2.0,
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                memory_total_mb=98304,
+                memory_available_mb=1024,
+                swap_total_mb=98304,
+                swap_free_mb=1024,
+            ),
+        )
+
+        self.assertFalse(control_plane._node_can_fit(heartbeat, requested, []))
+        self.assertFalse(
+            control_plane._node_can_fit(
+                replace(
+                    heartbeat,
+                    runtime_metrics=replace(
+                        heartbeat.runtime_metrics,
+                        memory_available_mb=8192,
+                        swap_free_mb=8192,
+                        memory_psi_full_avg10=10.0,
+                    ),
+                ),
+                requested,
+                [],
+            )
+        )
+        self.assertTrue(
+            control_plane._node_can_fit(
+                replace(heartbeat, memory_overcommit=1.0), requested, []
             )
         )
 

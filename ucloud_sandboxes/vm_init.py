@@ -26,6 +26,7 @@ DEFAULT_SSH_PORT_END = 22999
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 20
 DEFAULT_PACKAGE_SPEC = "ucloud-sandboxes"
 DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
+DEFAULT_SWAP_GB = 0
 DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
@@ -99,6 +100,7 @@ class VmInitOptions:
     memory_overcommit: float = 1.0
     disk_overcommit: float = 1.0
     docker_quota_image_gb: int = DEFAULT_DOCKER_QUOTA_IMAGE_GB
+    swap_gb: int = DEFAULT_SWAP_GB
     docker_mtu: int = DEFAULT_DOCKER_MTU
     docker_insecure_registries: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
@@ -218,6 +220,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_data_root = str(PurePosixPath(docker_storage_dir) / "docker")
     docker_quota_image = str(PurePosixPath(docker_storage_dir) / "docker-xfs.img")
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
+    swap_file = str(PurePosixPath(docker_storage_dir) / "swapfile")
     state_dir = str(PurePosixPath(work_dir) / "state")
     runtime_conformance_file = str(PurePosixPath(state_dir) / "runtime-conformance.json")
     checkpoint_helper = DEFAULT_CHECKPOINT_HELPER
@@ -312,9 +315,11 @@ UCLOUD_CPU_OVERCOMMIT={options.cpu_overcommit}
 UCLOUD_MEMORY_OVERCOMMIT={options.memory_overcommit}
 UCLOUD_DISK_OVERCOMMIT={options.disk_overcommit}
 UCLOUD_DOCKER_QUOTA_IMAGE_GB={options.docker_quota_image_gb}
+UCLOUD_SWAP_GB={options.swap_gb}
 UCLOUD_DOCKER_MTU={options.docker_mtu}
 UCLOUD_DOCKER_QUOTA_IMAGE={shlex.quote(docker_quota_image)}
 UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
+UCLOUD_SWAP_FILE={shlex.quote(swap_file)}
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(list(options.docker_insecure_registries)))}
 UCLOUD_HOST_ALIASES_JSON={shlex.quote(json.dumps(list(options.host_aliases)))}
 UCLOUD_RUNTIME_CONFORMANCE_FILE={shlex.quote(runtime_conformance_file)}
@@ -884,6 +889,37 @@ for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
 done
 log_init_phase "kernel-modules"
 
+if [ "$UCLOUD_SWAP_GB" -gt 0 ]; then
+  echo "Preparing bounded host swap"
+  $SUDO mkdir -p "$(dirname "$UCLOUD_SWAP_FILE")"
+  UCLOUD_EXPECTED_SWAP_BYTES=$((UCLOUD_SWAP_GB * 1024 * 1024 * 1024))
+  if [ -e "$UCLOUD_SWAP_FILE" ]; then
+    UCLOUD_ACTUAL_SWAP_BYTES="$($SUDO stat -c %s "$UCLOUD_SWAP_FILE")"
+    if [ "$UCLOUD_ACTUAL_SWAP_BYTES" -ne "$UCLOUD_EXPECTED_SWAP_BYTES" ]; then
+      echo "Existing swap file has unexpected size; refusing an unsafe live resize" >&2
+      exit 1
+    fi
+  else
+    if ! $SUDO fallocate -l "${{UCLOUD_SWAP_GB}}G" "$UCLOUD_SWAP_FILE"; then
+      $SUDO dd if=/dev/zero of="$UCLOUD_SWAP_FILE" bs=1M \
+        count=$((UCLOUD_SWAP_GB * 1024)) status=progress
+    fi
+  fi
+  $SUDO chmod 0600 "$UCLOUD_SWAP_FILE"
+  if [ "$($SUDO blkid -s TYPE -o value "$UCLOUD_SWAP_FILE" 2>/dev/null || true)" != "swap" ]; then
+    $SUDO mkswap "$UCLOUD_SWAP_FILE"
+  fi
+  if ! $SUDO swapon --show=NAME --noheadings | grep -Fx "$UCLOUD_SWAP_FILE" >/dev/null; then
+    $SUDO swapon "$UCLOUD_SWAP_FILE"
+  fi
+  if ! grep -F "$UCLOUD_SWAP_FILE none swap sw 0 0" /etc/fstab >/dev/null 2>&1; then
+    echo "$UCLOUD_SWAP_FILE none swap sw 0 0" | $SUDO tee -a /etc/fstab >/dev/null
+  fi
+  echo "vm.swappiness=60" | $SUDO tee /etc/sysctl.d/90-ucloud-sandbox-swap.conf >/dev/null
+  $SUDO sysctl -q -p /etc/sysctl.d/90-ucloud-sandbox-swap.conf
+fi
+log_init_phase "swap"
+
 if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   echo "Preparing XFS/project-quota Docker data root"
   if ! grep -qw xfs /proc/filesystems; then
@@ -1275,6 +1311,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("heartbeat interval must be positive.")
     if options.docker_quota_image_gb < 0:
         raise ValueError("docker quota image size cannot be negative.")
+    if options.swap_gb < 0:
+        raise ValueError("swap size cannot be negative.")
     if options.docker_mtu < 0:
         raise ValueError("docker mtu cannot be negative.")
     _validate_service_user(options.service_user)

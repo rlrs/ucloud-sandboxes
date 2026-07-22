@@ -42,7 +42,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.memory_overcommit, 1.2)
         self.assertEqual(config.policy.disk_overcommit, 1.0)
         self.assertEqual(config.policy.schedulable_node_resources.vcpu, 64)
-        self.assertEqual(config.policy.schedulable_node_resources.memory_mb, 78643)
+        self.assertEqual(config.policy.schedulable_node_resources.memory_mb, 117964)
         self.assertEqual(config.gateway_public_link_id, "12345368")
         self.assertEqual(config.gateway_public_link_port, 8090)
         self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.jsonl")

@@ -2,7 +2,7 @@
 
 This project uses semantic versioning.
 
-## Unreleased
+## 0.3.51 - 2026-07-25
 
 - Aggregated saturated sandbox-create admission traces to at most one metrics
   write per second instead of persisting one trace for every rejected retry.

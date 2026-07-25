@@ -115,6 +115,7 @@ SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 DEFAULT_METRICS_EVENT_LIMIT = 500
 FULL_METRICS_EVENT_LIMIT = 10000
+METRICS_RESPONSE_CACHE_TTL_SECONDS = 1.0
 REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
 REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS = 2.0
 REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
@@ -122,6 +123,15 @@ REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
 COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class NodePlacementState:
+    """Per-node route accounting reused throughout one placement decision."""
+
+    available_resources: ResourceQuantity
+    inflight_image_identities: frozenset[str]
+    projected_image_identities: frozenset[str]
 
 
 class RegistryLayerMetadataCache:
@@ -307,6 +317,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     registry_status_cache: dict[str, Any] | None
     registry_status_cache_at: float
     registry_status_lock: RLock
+    metrics_response_cache: bytes | None
+    metrics_response_cache_at: float
+    metrics_response_lock: RLock
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
@@ -380,61 +393,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/metrics":
             try:
-                routing_state = (
-                    self.routing_store.load()
-                    if self.routing_store is not None
-                    else None
+                body = self._metrics_response_bytes(
+                    full=_truthy_query_param(parsed, "full")
+                    or _truthy_query_param(parsed, "detail"),
+                    refresh_registry=_truthy_query_param(
+                        parsed, "refresh_registry"
+                    ),
                 )
             except sqlite3.DatabaseError as exc:
                 self._write_routing_store_unavailable(exc)
                 return
-            full = _truthy_query_param(parsed, "full") or _truthy_query_param(
-                parsed, "detail"
+            self._write_bytes(
+                body,
+                "application/json",
+                headers={"Cache-Control": "no-store"},
             )
-            events = (
-                self.metrics_store.load_events(
-                    max_events=FULL_METRICS_EVENT_LIMIT
-                    if full
-                    else DEFAULT_METRICS_EVENT_LIMIT
-                )
-                if self.metrics_store is not None
-                else []
-            )
-            snapshot = build_metrics_snapshot(
-                self.store.load(),
-                routing_state,
-                events,
-                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-            )
-            builds = self._cached_image_build_records()
-            active_builds = [
-                build
-                for build in builds
-                if build.get("status") not in {"succeeded", "failed"}
-            ]
-            failed_builds = [
-                build for build in builds if build.get("status") == "failed"
-            ]
-            active_build_count = max(
-                len(active_builds),
-                int(
-                    snapshot.get("resources", {})
-                    .get("fresh", {})
-                    .get("active_image_builds")
-                    or 0
-                ),
-            )
-            snapshot.setdefault("images", {}).update(
-                {
-                    "active_builds": active_build_count,
-                    "failed_builds": len(failed_builds),
-                    "builds": builds,
-                }
-            )
-            snapshot["registry"] = self._registry_status_cached(
-                force_refresh=full or _truthy_query_param(parsed, "refresh_registry")
-            )
-            self._write_json(snapshot)
             return
         if parsed.path == "/v1/registry":
             self._write_json({"registry": self._registry_status()})
@@ -813,6 +786,96 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 item.to_dict() for item in self.routing_store.image_warmups()
             ],
         }
+
+    def _metrics_response_bytes(
+        self,
+        *,
+        full: bool,
+        refresh_registry: bool,
+    ) -> bytes:
+        cacheable = not full and not refresh_registry
+        handler_cls = type(self)
+        with handler_cls.metrics_response_lock:
+            now = time.monotonic()
+            if (
+                cacheable
+                and handler_cls.metrics_response_cache is not None
+                and now - handler_cls.metrics_response_cache_at
+                <= METRICS_RESPONSE_CACHE_TTL_SECONDS
+            ):
+                return handler_cls.metrics_response_cache
+
+            routing_state = None
+            exec_session_count = 0
+            if self.routing_store is not None:
+                load_metrics = getattr(self.routing_store, "load_metrics", None)
+                if load_metrics is None:
+                    routing_state = self.routing_store.load()
+                    exec_session_count = len(routing_state.exec_sessions)
+                else:
+                    routing_state, exec_session_count = load_metrics()
+            events = (
+                self.metrics_store.load_events(
+                    max_events=(
+                        FULL_METRICS_EVENT_LIMIT
+                        if full
+                        else DEFAULT_METRICS_EVENT_LIMIT
+                    )
+                )
+                if self.metrics_store is not None
+                else []
+            )
+            snapshot = build_metrics_snapshot(
+                self.store.load(),
+                routing_state,
+                events,
+                heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+                exec_session_count=exec_session_count,
+            )
+            builds = self._cached_image_build_records()
+            active_builds = [
+                build
+                for build in builds
+                if build.get("status") not in {"succeeded", "failed"}
+            ]
+            failed_builds = [
+                build for build in builds if build.get("status") == "failed"
+            ]
+            active_build_count = max(
+                len(active_builds),
+                int(
+                    snapshot.get("resources", {})
+                    .get("fresh", {})
+                    .get("active_image_builds")
+                    or 0
+                ),
+            )
+            snapshot.setdefault("images", {}).update(
+                {
+                    "active_builds": active_build_count,
+                    "failed_builds": len(failed_builds),
+                    "builds": builds,
+                }
+            )
+            snapshot["registry"] = self._registry_status_cached(
+                force_refresh=full or refresh_registry
+            )
+            body = json.dumps(
+                snapshot,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            if cacheable:
+                cached_registry = dict(snapshot.get("registry") or {})
+                cached_registry["cached"] = True
+                snapshot["registry"] = cached_registry
+                handler_cls.metrics_response_cache = json.dumps(
+                    snapshot,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+                handler_cls.metrics_response_cache_at = time.monotonic()
+            return body
 
     def _list_prepared_capacity(self) -> None:
         self._write_json(
@@ -1449,7 +1512,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 parent_span_id=root.span_id,
                 attributes={"image": spec.image},
             ) as span:
-                pending_before = self.routing_store.get_pending(spec.id)
+                pending_before = None
                 try:
                     placement = self._select_and_reserve_node(
                         spec.id,
@@ -1492,44 +1555,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     return
                 heartbeat = placement[0] if placement is not None else None
                 route = placement[1] if placement is not None else None
+                pending_before = placement[2] if placement is not None else None
                 span.set_attribute(
                     "selected_node_id", heartbeat.node_id if heartbeat else ""
                 )
                 span.set_attribute(
                     "selected_job_id", heartbeat.job_id if heartbeat else ""
                 )
-                if heartbeat is not None and self.registry_layer_cache is not None:
-                    routes = [
-                        item
-                        for item in self.routing_store.sandbox_routes_readonly()
-                        if item.sandbox_id != spec.id
-                    ]
-                    estimate = _image_transfer_estimate(
-                        heartbeat,
-                        spec.image,
-                        routes,
-                        self.registry_layer_cache,
-                    )
-                    if estimate is not None:
-                        span.set_attribute(
-                            "target_layer_count",
-                            estimate["target_layer_count"],
-                        )
-                        span.set_attribute(
-                            "target_compressed_bytes",
-                            estimate["target_compressed_bytes"],
-                        )
-                        span.set_attribute(
-                            "estimated_missing_layer_bytes",
-                            estimate["estimated_missing_layer_bytes"],
-                        )
-                        span.set_attribute(
-                            "estimated_reused_layer_bytes",
-                            estimate["estimated_reused_layer_bytes"],
-                        )
             if heartbeat is None:
-                self.routing_store.upsert_pending(spec.id, spec.requested_resources())
-                demand = self.routing_store.pending_demand()
+                _pending, demand = self.routing_store.upsert_pending_with_demand(
+                    spec.id,
+                    spec.requested_resources(),
+                )
                 root.status = "error"
                 root.set_attribute("outcome", "queued_no_ready_node")
                 root.set_attribute(
@@ -1538,10 +1575,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 self._write_json(
                     {
                         "error": "no ready node has resources for sandbox request",
+                        "retryable": True,
                         "pending_resources": demand.pending_resources.to_dict(),
                         "oldest_pending_seconds": demand.oldest_pending_seconds,
                     },
                     status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(
+                            SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS
+                        ),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
                 )
                 return
 
@@ -2980,44 +3024,52 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         required_capabilities: tuple[str, ...] = (),
     ) -> NodeHeartbeat | None:
         routes = list(self.routing_store.sandbox_routes_readonly())
-        candidates = [
-            heartbeat
-            for heartbeat in self._ready_sandbox_heartbeats()
-            if agent_version_is_compatible(heartbeat.agent_version)
-            and all(
+        candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
+        for heartbeat in self._ready_sandbox_heartbeats():
+            if not agent_version_is_compatible(heartbeat.agent_version):
+                continue
+            if not all(
                 has_capability(heartbeat.capabilities, capability)
                 for capability in required_capabilities
-            )
-            and _node_can_fit(heartbeat, requested, routes)
-        ]
-        if not candidates:
+            ):
+                continue
+            placement_state = _node_placement_state(heartbeat, routes)
+            if not _node_can_fit_available(
+                heartbeat,
+                requested,
+                placement_state.available_resources,
+            ):
+                continue
+            candidate_states.append((heartbeat, placement_state))
+        if not candidate_states:
             return None
+        candidates = [heartbeat for heartbeat, _state in candidate_states]
         image_node_ids = self._nodes_with_image(
             image or "",
             candidates,
             probe_uncached=False,
         )
-        inflight_image_node_ids: set[str] = set()
+        image_identity = canonical_image_digest_ref(image or "") or (image or "").strip()
+        inflight_image_node_ids = {
+            heartbeat.node_id
+            for heartbeat, state in candidate_states
+            if image_identity
+            and image_identity in state.inflight_image_identities
+        }
         if image_node_ids:
-            candidates = [
-                heartbeat
-                for heartbeat in candidates
+            candidate_states = [
+                (heartbeat, state)
+                for heartbeat, state in candidate_states
                 if heartbeat.node_id in image_node_ids
             ]
-        elif image:
-            inflight_image_node_ids = _nodes_preparing_image(
-                image,
-                candidates,
-                routes,
-            )
-            if inflight_image_node_ids:
-                # Follow an in-flight copy of the exact immutable image instead
-                # of transferring the same layers to another node.
-                candidates = [
-                    heartbeat
-                    for heartbeat in candidates
-                    if heartbeat.node_id in inflight_image_node_ids
-                ]
+        elif inflight_image_node_ids:
+            # Follow an in-flight copy of the exact immutable image instead
+            # of transferring the same layers to another node.
+            candidate_states = [
+                (heartbeat, state)
+                for heartbeat, state in candidate_states
+                if heartbeat.node_id in inflight_image_node_ids
+            ]
         spread_cold_image = bool(
             image and not image_node_ids and not inflight_image_node_ids
         )
@@ -3027,20 +3079,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if layer_cache is not None
             else None
         )
-        return sorted(
-            candidates,
-            key=lambda heartbeat: (
-                _cold_image_placement_cost(
-                    heartbeat,
-                    routes,
+        return min(
+            candidate_states,
+            key=lambda item: (
+                _cold_image_placement_cost_for_state(
+                    item[1],
                     target_manifest,
                     layer_cache,
                     spread_cold_image=spread_cold_image,
                 ),
                 _resource_slack(
-                    _node_available_resources(heartbeat, routes), requested
+                    item[1].available_resources,
+                    requested,
                 ),
-                heartbeat.node_id,
+                item[0].node_id,
             ),
         )[0]
 
@@ -3052,7 +3104,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         image: str | None = None,
         spec: dict[str, Any],
         spec_hash: str,
-    ) -> tuple[NodeHeartbeat, SandboxRoute] | None:
+    ) -> tuple[
+        NodeHeartbeat,
+        SandboxRoute,
+        PendingSandboxDemand | None,
+    ] | None:
         if not _GATEWAY_SCHEDULING_LOCK.acquire(
             timeout=SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS
         ):
@@ -3073,23 +3129,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 if heartbeat is None:
                     return None
                 now = utc_now()
-                route = self.routing_store.allocate_sandbox_create(
-                    SandboxRoute(
-                        sandbox_id=sandbox_id,
-                        node_id=heartbeat.node_id,
-                        job_id=heartbeat.job_id,
-                        node_url=heartbeat.node_url or "",
-                        resources=requested,
-                        spec=dict(spec),
-                        state="creating",
-                        node_epoch=heartbeat.node_epoch,
-                        activity_epoch=heartbeat.activity_epoch,
-                        created_at=now.isoformat(),
-                        updated_at=now.isoformat(),
-                    ),
-                    spec_hash=spec_hash,
+                route, pending = (
+                    self.routing_store.allocate_sandbox_create_with_pending(
+                        SandboxRoute(
+                            sandbox_id=sandbox_id,
+                            node_id=heartbeat.node_id,
+                            job_id=heartbeat.job_id,
+                            node_url=heartbeat.node_url or "",
+                            resources=requested,
+                            spec=dict(spec),
+                            state="creating",
+                            node_epoch=heartbeat.node_epoch,
+                            activity_epoch=heartbeat.activity_epoch,
+                            created_at=now.isoformat(),
+                            updated_at=now.isoformat(),
+                        ),
+                        spec_hash=spec_hash,
+                    )
                 )
-                return heartbeat, route
+                return heartbeat, route, pending
         finally:
             _GATEWAY_SCHEDULING_LOCK.release()
 
@@ -3862,6 +3920,9 @@ def build_server(
     BoundHandler.registry_status_cache = None
     BoundHandler.registry_status_cache_at = 0.0
     BoundHandler.registry_status_lock = RLock()
+    BoundHandler.metrics_response_cache = None
+    BoundHandler.metrics_response_cache_at = 0.0
+    BoundHandler.metrics_response_lock = RLock()
     BoundHandler.registry_layer_cache = (
         RegistryLayerMetadataCache(
             registry_url,
@@ -4495,6 +4556,18 @@ def _node_can_fit(
     requested: ResourceQuantity,
     routes: list[SandboxRoute],
 ) -> bool:
+    return _node_can_fit_available(
+        heartbeat,
+        requested,
+        _node_available_resources(heartbeat, routes),
+    )
+
+
+def _node_can_fit_available(
+    heartbeat: NodeHeartbeat,
+    requested: ResourceQuantity,
+    available: ResourceQuantity,
+) -> bool:
     if not _has_resource_values(requested):
         return False
     if requested.disk_mb > 0 and not has_capability(
@@ -4504,7 +4577,36 @@ def _node_can_fit(
         return False
     if not _node_memory_pressure_allows(heartbeat, requested):
         return False
-    return requested.fits_within(_node_available_resources(heartbeat, routes))
+    return requested.fits_within(available)
+
+
+def _node_placement_state(
+    heartbeat: NodeHeartbeat,
+    routes: list[SandboxRoute],
+) -> NodePlacementState:
+    node_routes = [
+        route for route in routes if _route_targets_node(route, heartbeat)
+    ]
+    inflight_images = frozenset(
+        identity
+        for route in node_routes
+        if (route.state or "unknown").lower() in {"creating", "unknown"}
+        and (identity := _route_image_identity(route))
+        and not _heartbeat_has_image(heartbeat, identity)
+    )
+    projected_images = set(heartbeat.cached_images)
+    projected_images.update(
+        identity
+        for route in node_routes
+        if (route.state or "unknown").lower()
+        in {"creating", "unknown", "running"}
+        and (identity := _route_image_identity(route))
+    )
+    return NodePlacementState(
+        available_resources=_node_available_resources(heartbeat, node_routes),
+        inflight_image_identities=inflight_images,
+        projected_image_identities=frozenset(projected_images),
+    )
 
 
 def _node_memory_pressure_allows(
@@ -4716,6 +4818,34 @@ def _cold_image_placement_cost(
         0,
         estimate["estimated_missing_layer_bytes"]
         + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
+    )
+
+
+def _cold_image_placement_cost_for_state(
+    state: NodePlacementState,
+    target_manifest: RegistryManifestLayers | None,
+    layer_cache: RegistryLayerMetadataCache | None,
+    *,
+    spread_cold_image: bool,
+) -> tuple[int, int]:
+    if not spread_cold_image:
+        return (0, 0)
+    pressure = len(state.inflight_image_identities)
+    if target_manifest is None or layer_cache is None:
+        return (1, pressure)
+    available_layers: set[str] = set()
+    for image_ref in state.projected_image_identities:
+        manifest = layer_cache.get(image_ref)
+        if manifest is not None:
+            available_layers.update(layer.digest for layer in manifest.layers)
+    missing_bytes = sum(
+        layer.size
+        for layer in target_manifest.layers
+        if layer.digest not in available_layers
+    )
+    return (
+        0,
+        missing_bytes + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
     )
 
 

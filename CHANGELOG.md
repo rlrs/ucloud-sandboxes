@@ -2,6 +2,16 @@
 
 This project uses semantic versioning.
 
+## 0.3.52 - 2026-07-25
+
+- Made no-capacity sandbox creation responses explicitly retryable with
+  `Retry-After`, while combining pending-demand persistence and aggregation in
+  one transaction.
+- Cached per-node placement accounting for each decision and atomically
+  consumed pending demand during allocation, removing redundant route scans.
+- Reduced metrics overhead by using read-only aggregate routing queries,
+  counting exec sessions in SQL, and coalescing compact metrics responses.
+
 ## 0.3.51 - 2026-07-25
 
 - Aggregated saturated sandbox-create admission traces to at most one metrics

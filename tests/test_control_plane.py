@@ -5278,6 +5278,12 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway.server_close()
 
             self.assertEqual(result["status"], 503)
+            self.assertTrue(result["body"]["retryable"])
+            self.assertEqual(result["headers"]["Retry-After"], "2")
+            self.assertEqual(
+                result["headers"]["X-UCloud-Sandbox-Retryable"],
+                "true",
+            )
             self.assertEqual(demand["pending_resources"]["vcpu"], 1.0)
             self.assertEqual(demand["pending_resources"]["memory_mb"], 512)
             self.assertEqual(demand["pending_resources"]["disk_mb"], 1024)
@@ -6232,7 +6238,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 with patch.object(
                     RoutingStore,
-                    "allocate_sandbox_create",
+                    "allocate_sandbox_create_with_pending",
                     side_effect=SandboxRouteConflictError("different spec"),
                 ):
                     response = self._json_request(
@@ -6377,6 +6383,7 @@ class ControlPlaneTests(unittest.TestCase):
             return {
                 "status": exc.code,
                 "body": json.loads(exc.read().decode("utf-8")),
+                "headers": dict(exc.headers),
             }
 
     def _bytes_request(

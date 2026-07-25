@@ -629,6 +629,7 @@ def build_metrics_snapshot(
     events: list[MetricEvent],
     *,
     heartbeat_ttl_seconds: int,
+    exec_session_count: int | None = None,
 ) -> dict[str, Any]:
     now = utc_now()
     heartbeat_items = list(heartbeats.values())
@@ -669,7 +670,9 @@ def build_metrics_snapshot(
         routing_state.sandboxes.values(),
         fresh_sandbox_nodes,
     )
-    pending_sandboxes = list(routing_state.pending.values())
+    pending_sandboxes = [
+        item for item in routing_state.pending.values() if not item.is_expired(now)
+    ]
     prepared_capacity = [
         item for item in routing_state.prepared.values() if not item.is_expired(now)
     ]
@@ -678,7 +681,9 @@ def build_metrics_snapshot(
         for item in routing_state.prepared_builders.values()
         if not item.is_expired(now)
     ]
-    pending_builds = list(routing_state.image_builds.values())
+    pending_builds = [
+        item for item in routing_state.image_builds.values() if not item.is_expired(now)
+    ]
     image_warmups = [
         item for item in routing_state.image_warmups.values() if not item.is_expired(now)
     ]
@@ -736,7 +741,11 @@ def build_metrics_snapshot(
             "items": [item.to_dict() for item in prepared_capacity],
         },
         "exec": {
-            "sessions": len(routing_state.exec_sessions),
+            "sessions": (
+                len(routing_state.exec_sessions)
+                if exec_session_count is None
+                else max(0, int(exec_session_count))
+            ),
         },
         "images": {
             "pending_builds": len(pending_builds),

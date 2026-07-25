@@ -24,6 +24,17 @@ from ucloud_sandboxes.routing import (
 
 
 class MetricsTests(unittest.TestCase):
+    def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
+        snapshot = build_metrics_snapshot(
+            {},
+            RoutingState({}, {}, {}, {}),
+            [],
+            heartbeat_ttl_seconds=120,
+            exec_session_count=2_000,
+        )
+
+        self.assertEqual(snapshot["exec"]["sessions"], 2_000)
+
     def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.jsonl")

@@ -999,6 +999,63 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0].attempts, 2)
 
+    def test_pending_upsert_returns_aggregate_demand_from_same_transaction(
+        self,
+    ) -> None:
+        resources = ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=2048)
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            stored, demand = store.upsert_pending_with_demand(
+                "pending-one",
+                resources,
+            )
+
+        self.assertEqual(stored.sandbox_id, "pending-one")
+        self.assertEqual(stored.attempts, 1)
+        self.assertEqual(demand.pending_resources, resources)
+
+    def test_allocation_returns_and_consumes_pending_demand_atomically(self) -> None:
+        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_pending("pending-one", resources)
+            route, pending = store.allocate_sandbox_create_with_pending(
+                SandboxRoute(
+                    sandbox_id="pending-one",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=resources,
+                    spec={"id": "pending-one", "image": "busybox"},
+                ),
+                spec_hash="hash-one",
+            )
+            after = store.get_pending("pending-one")
+
+        self.assertEqual(route.sandbox_id, "pending-one")
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.sandbox_id if pending else None, "pending-one")
+        self.assertIsNone(after)
+
+    def test_metrics_load_counts_exec_sessions_without_materializing_them(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            for index in range(3):
+                store.upsert_exec(
+                    ExecRoute(
+                        session_id=f"session-{index}",
+                        sandbox_id="sandbox-one",
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node-1:8090",
+                    )
+                )
+
+            state, exec_session_count = store.load_metrics()
+
+        self.assertEqual(exec_session_count, 3)
+        self.assertEqual(state.exec_sessions, {})
+
     def test_failed_create_pending_demand_preserves_incarnation_identity(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "routes.sqlite"

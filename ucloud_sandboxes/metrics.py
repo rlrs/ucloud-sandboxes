@@ -118,34 +118,39 @@ class MetricsStore:
         return event
 
     def load_events(self, *, max_events: int = 1000) -> list[MetricEvent]:
-        with _metrics_file_lock(self.path, self._lock):
-            if max_events > 0:
-                remaining = max_events
-                newest_first = [self.path] + [
-                    self._rotated_path(index)
-                    for index in range(1, self._max_files + 1)
-                ]
-                chunks: list[list[str]] = []
-                for path in newest_first:
-                    if remaining <= 0:
-                        break
-                    if not path.exists():
-                        continue
+        # Metrics are observational and may tolerate an incomplete final line.
+        # Avoid taking the writer lock while reading: on network-backed state
+        # directories a dashboard read can otherwise block every request trace
+        # append for seconds and turn overload telemetry into a lock convoy.
+        if max_events > 0:
+            remaining = max_events
+            newest_first = [self.path] + [
+                self._rotated_path(index)
+                for index in range(1, self._max_files + 1)
+            ]
+            chunks: list[list[str]] = []
+            for path in newest_first:
+                if remaining <= 0:
+                    break
+                try:
                     chunk = _read_recent_lines(path, remaining)
-                    chunks.append(chunk)
-                    remaining -= len(chunk)
-                lines = [line for chunk in reversed(chunks) for line in chunk]
-            else:
-                oldest_first = [
-                    self._rotated_path(index)
-                    for index in range(self._max_files, 0, -1)
-                ] + [self.path]
-                lines = [
-                    line
-                    for path in oldest_first
-                    if path.exists()
-                    for line in _read_recent_lines(path, max_events)
-                ]
+                except OSError:
+                    # Rotation can rename a segment between discovery and open.
+                    continue
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            lines = [line for chunk in reversed(chunks) for line in chunk]
+        else:
+            oldest_first = [
+                self._rotated_path(index)
+                for index in range(self._max_files, 0, -1)
+            ] + [self.path]
+            lines = []
+            for path in oldest_first:
+                try:
+                    lines.extend(_read_recent_lines(path, max_events))
+                except OSError:
+                    continue
         events: list[MetricEvent] = []
         for line in lines:
             if not line.strip():
@@ -239,6 +244,58 @@ class ActiveTraceSpan:
     def set_error(self, error: BaseException | str) -> None:
         self.status = "error"
         self.attributes["error"] = str(error)
+
+
+class GatewayBusyTraceSampler:
+    """Aggregate hot-path gateway admission failures into bounded telemetry."""
+
+    def __init__(
+        self,
+        store: MetricsStore | None,
+        *,
+        min_interval_seconds: float = 1.0,
+    ) -> None:
+        self.store = store
+        self.min_interval_seconds = max(0.0, float(min_interval_seconds))
+        self._lock = RLock()
+        self._last_emit_monotonic: float | None = None
+        self._pending_rejections = 0
+
+    def record(self, *, trace_id: str, max_concurrent_sandbox_creates: int) -> bool:
+        if self.store is None:
+            return False
+        now_monotonic = time.monotonic()
+        with self._lock:
+            self._pending_rejections += 1
+            elapsed = (
+                None
+                if self._last_emit_monotonic is None
+                else now_monotonic - self._last_emit_monotonic
+            )
+            if elapsed is not None and elapsed < self.min_interval_seconds:
+                return False
+            rejected_requests = self._pending_rejections
+            self._pending_rejections = 0
+            self._last_emit_monotonic = now_monotonic
+
+        finished_at = utc_now().isoformat()
+        record_trace_span(
+            self.store,
+            trace_id=trace_id,
+            span_id=uuid4().hex[:16],
+            name="gateway.sandbox_create",
+            started_at=finished_at,
+            finished_at=finished_at,
+            duration_ms=0,
+            status="error",
+            attributes={
+                "outcome": "gateway_busy",
+                "max_concurrent_sandbox_creates": max_concurrent_sandbox_creates,
+                "aggregated_rejections": rejected_requests,
+                "sample_interval_seconds": self.min_interval_seconds,
+            },
+        )
+        return True
 
 
 @contextmanager

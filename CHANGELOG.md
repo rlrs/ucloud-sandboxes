@@ -4,6 +4,12 @@ This project uses semantic versioning.
 
 ## Unreleased
 
+- Aggregated saturated sandbox-create admission traces to at most one metrics
+  write per second instead of persisting one trace for every rejected retry.
+- Made metrics event reads best-effort and non-blocking so dashboard polling
+  cannot hold the metrics writer lock on network-backed state storage, and
+  reduced the default dashboard event window from 2,000 to 500 events.
+
 ## 0.3.50 - 2026-07-22
 
 - Increased the default sandbox-node envelope to 96 GiB RAM and 440 GiB of

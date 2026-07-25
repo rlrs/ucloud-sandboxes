@@ -5,6 +5,7 @@ import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.metrics import (
+    GatewayBusyTraceSampler,
     MetricsStore,
     build_metrics_snapshot,
     record_autoscaler_cycle,
@@ -23,6 +24,29 @@ from ucloud_sandboxes.routing import (
 
 
 class MetricsTests(unittest.TestCase):
+    def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            sampler = GatewayBusyTraceSampler(store, min_interval_seconds=60)
+
+            emitted = [
+                sampler.record(
+                    trace_id=f"busy-{index}",
+                    max_concurrent_sandbox_creates=32,
+                )
+                for index in range(100)
+            ]
+            events = store.load_events()
+
+        self.assertEqual(emitted.count(True), 1)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind, "trace_span")
+        self.assertEqual(events[0].data["attributes"]["outcome"], "gateway_busy")
+        self.assertEqual(
+            events[0].data["attributes"]["max_concurrent_sandbox_creates"],
+            32,
+        )
+
     def test_metrics_state_file_is_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "metrics.jsonl"

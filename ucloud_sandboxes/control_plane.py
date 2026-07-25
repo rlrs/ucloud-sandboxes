@@ -55,6 +55,7 @@ from .managed_registry import (
     registry_summary,
 )
 from .metrics import (
+    GatewayBusyTraceSampler,
     MetricsStore,
     build_metrics_snapshot,
     record_node_heartbeat,
@@ -112,7 +113,7 @@ NODE_DISCOVERY_TOTAL_TIMEOUT_SECONDS = 2.0
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
 SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
-DEFAULT_METRICS_EVENT_LIMIT = 2000
+DEFAULT_METRICS_EVENT_LIMIT = 500
 FULL_METRICS_EVENT_LIMIT = 10000
 REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
 REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS = 2.0
@@ -309,6 +310,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
+    sandbox_create_busy_traces: GatewayBusyTraceSampler
     max_concurrent_sandbox_creates: int
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
@@ -1278,18 +1280,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         try:
             if limiter is not None and not limiter.acquire(blocking=False):
                 trace_id = _request_trace_id(self, "sandbox-create", "admission")
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
-                    "gateway.sandbox_create",
-                    attributes={
-                        "outcome": "gateway_busy",
-                        "max_concurrent_sandbox_creates": (
-                            self.max_concurrent_sandbox_creates
-                        ),
-                    },
-                ) as root:
-                    root.status = "error"
+                self.sandbox_create_busy_traces.record(
+                    trace_id=trace_id,
+                    max_concurrent_sandbox_creates=(
+                        self.max_concurrent_sandbox_creates
+                    ),
+                )
                 self._write_json(
                     {
                         "error": "gateway is busy creating sandboxes; retry shortly",
@@ -3884,6 +3880,7 @@ def build_server(
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
+    BoundHandler.sandbox_create_busy_traces = GatewayBusyTraceSampler(metrics_store)
     return HighBacklogThreadingHTTPServer(
         (host, port),
         BoundHandler,

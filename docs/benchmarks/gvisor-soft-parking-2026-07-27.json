@@ -1,0 +1,126 @@
+{
+  "date": "2026-07-27",
+  "host": {
+    "provider": "UCloud",
+    "job_id": "12360582",
+    "product": "cpu-amd-zen5-32-vcpu",
+    "cpu": "AMD EPYC 9535",
+    "advertised_memory_gib": 96,
+    "usable_memory_gib": 87,
+    "swap_gib": 24,
+    "kernel": "6.8.0-53-generic",
+    "runsc_version": "release-20260721.0",
+    "storage": "local XFS-backed Docker quota image"
+  },
+  "method": {
+    "runtime": "Docker with stock runsc",
+    "parking": "docker pause followed by cgroup-v2 memory.reclaim",
+    "wake": "docker unpause followed by docker exec true",
+    "density_container": "busybox sleep with 128 MiB memory and 256 MiB memory+swap limits",
+    "working_set_container": "python:3.13-alpine with a non-zero mmap",
+    "samples_per_working_set": 1,
+    "notes": [
+      "memory.reclaim returned EAGAIN after making partial progress",
+      "latencies include Docker CLI and daemon overhead",
+      "full_touch_ms includes a correctness-checked 4 KiB page scan"
+    ]
+  },
+  "working_sets": [
+    {
+      "size_mib": 256,
+      "before_pause_current_bytes": 300191744,
+      "after_reclaim_current_bytes": 4976640,
+      "after_reclaim_swap_bytes": 295931904,
+      "pause_ms": 27.568,
+      "reclaim_ms": 283.105,
+      "unpause_ms": 52.021,
+      "first_exec_ms": 108.693,
+      "full_touch_ms": 2140.877
+    },
+    {
+      "size_mib": 1024,
+      "before_pause_current_bytes": 1108660224,
+      "after_reclaim_current_bytes": 7229440,
+      "after_reclaim_swap_bytes": 1101684736,
+      "pause_ms": 31.822,
+      "reclaim_ms": 1018.817,
+      "unpause_ms": 60.54,
+      "first_exec_ms": 118.91,
+      "full_touch_ms": 8490.133
+    },
+    {
+      "size_mib": 4096,
+      "before_pause_current_bytes": 4338540544,
+      "after_reclaim_current_bytes": 13713408,
+      "after_reclaim_swap_bytes": 4324667392,
+      "pause_ms": 29.808,
+      "reclaim_ms": 4393.238,
+      "unpause_ms": 53.765,
+      "first_exec_ms": 123.471,
+      "full_touch_ms": 33011.628
+    }
+  ],
+  "density": {
+    "count": 1000,
+    "resident_pause_wake_24": {
+      "running_current_bytes": 19010691072,
+      "paused_current_bytes": 18967416832,
+      "paused_swap_bytes": 0,
+      "wake_to_first_exec_ms": {
+        "min": 159.628,
+        "mean": 203.914,
+        "p50": 205.557,
+        "p95": 234.812,
+        "p99": 237.972,
+        "max": 237.972
+      },
+      "wake_burst_makespan_ms": 247.178
+    },
+    "reclaimed_pause_wake_24": {
+      "running_current_bytes": 19004145664,
+      "parked_current_bytes": 3379470336,
+      "parked_swap_bytes": 16343220224,
+      "after_wake_current_bytes": 3854118912,
+      "after_wake_swap_bytes": 15969341440,
+      "parked_per_sandbox_current_bytes": {
+        "min": 1945600,
+        "mean": 3379470.336,
+        "p50": 2359296,
+        "p95": 8306688,
+        "p99": 8527872,
+        "max": 8925184
+      },
+      "parked_per_sandbox_swap_bytes": {
+        "min": 11014144,
+        "mean": 16343220.224,
+        "p50": 16713728,
+        "p95": 17477632,
+        "p99": 17829888,
+        "max": 18059264
+      },
+      "wake_to_first_exec_ms": {
+        "min": 2376.696,
+        "mean": 3069.024,
+        "p50": 2927.421,
+        "p95": 4047.582,
+        "p99": 4080.017,
+        "max": 4080.017
+      },
+      "wake_burst_makespan_ms": 4094.438
+    },
+    "reclaimed_pause_wake_1000": {
+      "running_current_bytes": 18944557056,
+      "parked_current_bytes": 3446546432,
+      "parked_swap_bytes": 16312057856,
+      "wake_to_first_exec_ms": {
+        "min": 172.042,
+        "mean": 2675.542,
+        "p50": 1720.721,
+        "p95": 9168.036,
+        "p99": 17016.704,
+        "max": 18916.504
+      },
+      "wake_burst_makespan_ms": 84739.977
+    }
+  }
+}

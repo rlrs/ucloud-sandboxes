@@ -1,0 +1,1088 @@
+diff --git a/pkg/sentry/control/state.go b/pkg/sentry/control/state.go
+index 85c8dda..3e27cf9 100644
+--- a/pkg/sentry/control/state.go
++++ b/pkg/sentry/control/state.go
+@@ -79,6 +79,10 @@ type SaveOpts struct {
+ 	// file.
+ 	AppMFExcludeCommittedZeroPages bool `json:"app_mf_exclude_committed_zero_pages"`
+ 
++	// AppMFExternalBacking indicates that the application MemoryFile's pages
++	// already reside in a persistent backing file.
++	AppMFExternalBacking bool `json:"app_mf_external_backing"`
++
+ 	// HavePagesFile indicates whether the pages file and its corresponding
+ 	// metadata file is provided.
+ 	HavePagesFile bool `json:"have_pages_file"`
+@@ -131,6 +135,7 @@ func ConvertToStateSaveOpts(o *SaveOpts) (*state.SaveOpts, error) {
+ 		Key:                            o.Key,
+ 		Metadata:                       o.Metadata,
+ 		AppMFExcludeCommittedZeroPages: o.AppMFExcludeCommittedZeroPages,
++		AppMFExternalBacking:           o.AppMFExternalBacking,
+ 		Resume:                         o.Resume,
+ 		CudaCheckpointPath:             o.CudaCheckpointPath,
+ 		CudaCheckpointSequential:       o.CudaCheckpointSequential,
+diff --git a/pkg/sentry/kernel/fscheckpoint.go b/pkg/sentry/kernel/fscheckpoint.go
+index 94e7e42..acc1da9 100644
+--- a/pkg/sentry/kernel/fscheckpoint.go
++++ b/pkg/sentry/kernel/fscheckpoint.go
+@@ -86,7 +86,7 @@ func (k *Kernel) FSSave(ctx context.Context, opts *FSSaveOpts) error {
+ 	if opts.ExitAfterSaving {
+ 		defer k.Kill(linux.WaitStatusExit(0)) // consistent with sentry/state.SaveOpts.Save
+ 	}
+-	err := k.quiescePausedAnd(ctx, func() error {
++	err := k.quiescePausedAnd(ctx, true, func() error {
+ 		var (
+ 			asyncPageSaveWg  sync.WaitGroup
+ 			asyncPageSaveErr error
+diff --git a/pkg/sentry/kernel/kernel.go b/pkg/sentry/kernel/kernel.go
+index f963b99..5320cca 100644
+--- a/pkg/sentry/kernel/kernel.go
++++ b/pkg/sentry/kernel/kernel.go
+@@ -666,7 +666,7 @@ func (k *Kernel) Init(args InitKernelArgs) error {
+ 	return nil
+ }
+ 
+-func (k *Kernel) quiescePausedAnd(ctx context.Context, f func() error) error {
++func (k *Kernel) quiescePausedAnd(ctx context.Context, resumeTime bool, f func() error) error {
+ 	// Do not allow other Kernel methods to affect it while it's being saved.
+ 	k.extMu.Lock()
+ 	defer k.extMu.Unlock()
+@@ -677,13 +677,16 @@ func (k *Kernel) quiescePausedAnd(ctx context.Context, f func() error) error {
+ 
+ 	// Stop time.
+ 	k.pauseTimeLocked(ctx)
+-	defer k.resumeTimeLocked(ctx)
+ 
+ 	// Evict all evictable MemoryFile allocations.
+ 	k.mf.StartEvictions()
+ 	k.mf.WaitForEvictions()
+ 
+-	return f()
++	err := f()
++	if resumeTime || err != nil {
++		k.resumeTimeLocked(ctx)
++	}
++	return err
+ }
+ 
+ // +stateify savable
+@@ -714,7 +717,7 @@ func savePrivateMFs(ctx context.Context, w io.Writer, mfsToSave map[checkpoint.R
+ // pagesMetadata, and pagesFile, even if it returns a non-nil error.
+ //
+ // Preconditions: The kernel must be paused throughout the call to SaveTo.
+-func (k *Kernel) SaveTo(ctx context.Context, stateFile, pagesMetadata io.WriteCloser, pagesFile stateio.AsyncWriter, appMFExcludeCommittedZeroPages, resume bool) error {
++func (k *Kernel) SaveTo(ctx context.Context, stateFile, pagesMetadata io.WriteCloser, pagesFile stateio.AsyncWriter, appMFExcludeCommittedZeroPages, appMFExternalBacking, resume bool) error {
+ 	if hostarch.PageSize != 4096 {
+ 		return fmt.Errorf("save is not supported with %dK page size", hostarch.PageSize/1024)
+ 	}
+@@ -733,7 +736,7 @@ func (k *Kernel) SaveTo(ctx context.Context, stateFile, pagesMetadata io.WriteCl
+ 	}
+ 	defer pagesCleanup.Clean()
+ 
+-	return k.quiescePausedAnd(ctx, func() error {
++	return k.quiescePausedAnd(ctx, !appMFExternalBacking, func() error {
+ 		// Discard unsavable mappings, such as those for host file descriptors.
+ 		if err := k.invalidateUnsavableMappings(ctx); err != nil {
+ 			return fmt.Errorf("failed to invalidate unsavable mappings: %v", err)
+@@ -763,7 +766,7 @@ func (k *Kernel) SaveTo(ctx context.Context, stateFile, pagesMetadata io.WriteCl
+ 			mfSaveWg.Add(1)
+ 			go func() {
+ 				defer mfSaveWg.Done()
+-				mfSaveErr = k.saveMemoryFiles(ctx, nil, pagesMetadata, pagesFile, mfsToSave, appMFExcludeCommittedZeroPages) // transfers ownership
++				mfSaveErr = k.saveMemoryFiles(ctx, nil, pagesMetadata, pagesFile, mfsToSave, appMFExcludeCommittedZeroPages, appMFExternalBacking) // transfers ownership
+ 			}()
+ 			pagesCleanup.Release()
+ 			// Defer a Wait() so we wait for k.saveMemoryFiles() to complete even if we
+@@ -817,7 +820,7 @@ func (k *Kernel) SaveTo(ctx context.Context, stateFile, pagesMetadata io.WriteCl
+ 				return mfSaveErr
+ 			}
+ 		} else {
+-			mfSaveErr = k.saveMemoryFiles(ctx, stateFile, nil, nil, mfsToSave, appMFExcludeCommittedZeroPages)
++			mfSaveErr = k.saveMemoryFiles(ctx, stateFile, nil, nil, mfsToSave, appMFExcludeCommittedZeroPages, appMFExternalBacking)
+ 			if mfSaveErr != nil {
+ 				return mfSaveErr
+ 			}
+@@ -846,7 +849,7 @@ func (k *Kernel) BeforeResume(ctx context.Context) {
+ // pagesFile must be non-nil, saveMemoryFiles takes ownership of both
+ // pagesMetadata and pagesFile (even if it returns a non-nil error), and
+ // MemoryFile state will be saved to pagesMetadata and pagesFile.
+-func (k *Kernel) saveMemoryFiles(ctx context.Context, w io.Writer, pagesMetadata io.WriteCloser, pagesFile stateio.AsyncWriter, mfsToSave map[checkpoint.ResourceID]*pgalloc.MemoryFile, appMFExcludeCommittedZeroPages bool) error {
++func (k *Kernel) saveMemoryFiles(ctx context.Context, w io.Writer, pagesMetadata io.WriteCloser, pagesFile stateio.AsyncWriter, mfsToSave map[checkpoint.ResourceID]*pgalloc.MemoryFile, appMFExcludeCommittedZeroPages, appMFExternalBacking bool) error {
+ 	memoryStart := time.Now()
+ 
+ 	pmw := w
+@@ -859,6 +862,7 @@ func (k *Kernel) saveMemoryFiles(ctx context.Context, w io.Writer, pagesMetadata
+ 
+ 	mfOpts := pgalloc.SaveOpts{
+ 		ExcludeCommittedZeroPages: appMFExcludeCommittedZeroPages,
++		ExternalBacking:           appMFExternalBacking,
+ 	}
+ 	var (
+ 		asyncPageSaveWg      sync.WaitGroup
+@@ -888,6 +892,7 @@ func (k *Kernel) saveMemoryFiles(ctx context.Context, w io.Writer, pagesMetadata
+ 	// appMFExcludeCommittedZeroPages is expected to reflect application memory
+ 	// usage behavior, but not necessarily usage of private MemoryFiles.
+ 	mfOpts.ExcludeCommittedZeroPages = false
++	mfOpts.ExternalBacking = false
+ 	if err := savePrivateMFs(ctx, pmw, mfsToSave, &mfOpts); err != nil {
+ 		return err
+ 	}
+diff --git a/pkg/sentry/kernel/kernel_restore.go b/pkg/sentry/kernel/kernel_restore.go
+index 0f548dd..01b81e6 100644
+--- a/pkg/sentry/kernel/kernel_restore.go
++++ b/pkg/sentry/kernel/kernel_restore.go
+@@ -279,18 +279,18 @@ type AsyncMFLoader struct {
+ // If timeline is provided, it will be used to track async page loading.
+ // It takes ownership of the timeline, and will end it when done loading all
+ // pages.
+-func NewAsyncMFLoader(pagesMetadata io.ReadCloser, pagesFile stateio.AsyncReader, mainMF *pgalloc.MemoryFile, timeline *timing.Timeline) *AsyncMFLoader {
++func NewAsyncMFLoader(pagesMetadata io.ReadCloser, pagesFile stateio.AsyncReader, mainMF *pgalloc.MemoryFile, mainMFExternalBacking bool, timeline *timing.Timeline) *AsyncMFLoader {
+ 	mfl := &AsyncMFLoader{
+ 		privateMFsChan: make(chan map[checkpoint.ResourceID]*pgalloc.MemoryFile, 1),
+ 	}
+ 	mfl.mainMFStartWg.Add(1)
+ 	mfl.metadataWg.Add(1)
+ 	mfl.loadWg.Add(1)
+-	go mfl.backgroundGoroutine(pagesMetadata, pagesFile, mainMF, timeline)
++	go mfl.backgroundGoroutine(pagesMetadata, pagesFile, mainMF, mainMFExternalBacking, timeline)
+ 	return mfl
+ }
+ 
+-func (mfl *AsyncMFLoader) backgroundGoroutine(pagesMetadata io.ReadCloser, pagesFile stateio.AsyncReader, mainMF *pgalloc.MemoryFile, timeline *timing.Timeline) {
++func (mfl *AsyncMFLoader) backgroundGoroutine(pagesMetadata io.ReadCloser, pagesFile stateio.AsyncReader, mainMF *pgalloc.MemoryFile, mainMFExternalBacking bool, timeline *timing.Timeline) {
+ 	defer timeline.End()
+ 	defer pagesMetadata.Close()
+ 	cu := cleanup.Make(func() {
+@@ -312,8 +312,9 @@ func (mfl *AsyncMFLoader) backgroundGoroutine(pagesMetadata io.ReadCloser, pages
+ 	cu.Add(apfl.MemoryFilesDone)
+ 
+ 	opts := pgalloc.LoadOpts{
+-		PagesFile: apfl,
+-		Timeline:  timeline,
++		PagesFile:       apfl,
++		Timeline:        timeline,
++		ExternalBacking: mainMFExternalBacking,
+ 	}
+ 	// Note that we depend on opts.PagesFileOffset being carried between
+ 	// LoadFrom calls, so the same opts must be used for all calls.
+@@ -331,6 +332,7 @@ func (mfl *AsyncMFLoader) backgroundGoroutine(pagesMetadata io.ReadCloser, pages
+ 	}
+ 	timeline.Reached("waiting for privateMF info")
+ 	privateMFs := <-mfl.privateMFsChan
++	opts.ExternalBacking = false
+ 	timeline.Reached("received privateMFs info")
+ 	log.Infof("Loading metadata for %d private MemoryFiles", len(privateMFs))
+ 	if err := loadPrivateMemoryFiles(ctx, pagesMetadata, privateMFs, &opts); err != nil {
+diff --git a/pkg/sentry/pgalloc/BUILD b/pkg/sentry/pgalloc/BUILD
+index 32f5a76..2a2ec17 100644
+--- a/pkg/sentry/pgalloc/BUILD
++++ b/pkg/sentry/pgalloc/BUILD
+@@ -207,9 +207,11 @@ go_test(
+     srcs = [
+         "pgalloc_64k_test.go",
+         "pgalloc_test.go",
++        "save_restore_external_test.go",
+     ],
+     library = ":pgalloc",
+     deps = [
++        "//pkg/context",
+         "//pkg/hostarch",
+         "//pkg/sentry/memmap",
+     ],
+diff --git a/pkg/sentry/pgalloc/pgalloc.go b/pkg/sentry/pgalloc/pgalloc.go
+index 43d9c4d..79aa0aa 100644
+--- a/pkg/sentry/pgalloc/pgalloc.go
++++ b/pkg/sentry/pgalloc/pgalloc.go
+@@ -362,6 +362,11 @@ type MemoryFileOpts struct {
+ 	// DiskBackedFile indicates that the MemoryFile is backed by a file on disk.
+ 	DiskBackedFile bool
+ 
++	// PreserveContents prevents NewMemoryFile from truncating the backing file.
++	// This is only valid when the MemoryFile will immediately be restored from
++	// metadata whose page contents already reside in the backing file.
++	PreserveContents bool
++
+ 	// ResourceID is used to reassociate the MemoryFile with its replacement
+ 	// during restore.
+ 	ResourceID checkpoint.ResourceID
+@@ -432,9 +437,14 @@ func NewMemoryFile(file *os.File, opts MemoryFileOpts) (*MemoryFile, error) {
+ 		return nil, fmt.Errorf("invalid MemoryFileOpts.DelayedEviction: %v", opts.DelayedEviction)
+ 	}
+ 
+-	// Truncate the file to 0 bytes first to ensure that it's empty.
+-	if err := file.Truncate(0); err != nil {
+-		return nil, err
++	if opts.PreserveContents && !opts.DiskBackedFile {
++		return nil, fmt.Errorf("MemoryFileOpts.PreserveContents requires DiskBackedFile")
++	}
++	if !opts.PreserveContents {
++		// Truncate the file to 0 bytes first to ensure that it's empty.
++		if err := file.Truncate(0); err != nil {
++			return nil, err
++		}
+ 	}
+ 	f := &MemoryFile{
+ 		opts: opts,
+diff --git a/pkg/sentry/pgalloc/save_restore.go b/pkg/sentry/pgalloc/save_restore.go
+index 163ee5f..4116e9e 100644
+--- a/pkg/sentry/pgalloc/save_restore.go
++++ b/pkg/sentry/pgalloc/save_restore.go
+@@ -93,6 +93,11 @@ type SaveOpts struct {
+ 	// but may instead improve SaveTo() and LoadFrom() time, and checkpoint
+ 	// size, if the application has many committed zero pages.
+ 	ExcludeCommittedZeroPages bool
++
++	// ExternalBacking indicates that page contents already reside in the
++	// MemoryFile's persistent backing file. SaveTo saves allocator metadata
++	// only and does not copy or scan page contents.
++	ExternalBacking bool
+ }
+ 
+ // SaveTo writes f's state to the given stream.
+@@ -115,6 +120,26 @@ func (f *MemoryFile) SaveTo(ctx context.Context, w io.Writer, opts *SaveOpts) er
+ 		panic(fmt.Sprintf("evictions still pending for %d users; call StartEvictions and WaitForEvictions before SaveTo", len(f.evictable)))
+ 	}
+ 
++	if opts.ExternalBacking {
++		if !f.opts.DiskBackedFile {
++			return fmt.Errorf("external backing requires a disk-backed MemoryFile")
++		}
++		timeMetadataStart := gohacks.Nanotime()
++		if _, err := state.Save(ctx, w, &memoryFileSaved{
++			unwasteSmall: &f.unwasteSmall,
++			unwasteHuge:  &f.unwasteHuge,
++			unfreeSmall:  &f.unfreeSmall,
++			unfreeHuge:   &f.unfreeHuge,
++			subreleased:  f.subreleased,
++			memAcct:      &f.memAcct,
++			chunks:       f.chunksLoad(),
++		}); err != nil {
++			return fmt.Errorf("failed to save externally-backed metadata: %w", err)
++		}
++		log.Infof("MemoryFile(%p): saved externally-backed metadata in %s", f, time.Duration(gohacks.Nanotime()-timeMetadataStart))
++		return nil
++	}
++
+ 	// Register this MemoryFile with async page saving if a pages file has been
+ 	// provided.
+ 	var amfs *asyncMemoryFileSave
+@@ -920,6 +945,11 @@ type LoadOpts struct {
+ 	// ownership of this timeline remains in the hands of the caller of
+ 	// LoadFrom.
+ 	Timeline *timing.Timeline
++
++	// ExternalBacking indicates that page contents already reside in the
++	// MemoryFile's persistent backing file. LoadFrom restores allocator
++	// metadata and maps the existing contents without reading page data.
++	ExternalBacking bool
+ }
+ 
+ // LoadFrom loads MemoryFile state from the given stream.
+@@ -939,18 +969,30 @@ func (f *MemoryFile) LoadFrom(ctx context.Context, r io.Reader, opts *LoadOpts)
+ 	if _, err := state.Load(ctx, r, &mfs); err != nil {
+ 		return fmt.Errorf("failed to load metadata: %w", err)
+ 	}
++	chunks := mfs.chunks
++	fileSize := uint64(len(chunks)) * chunkSize
++	if opts.ExternalBacking {
++		if !f.opts.DiskBackedFile || !f.opts.PreserveContents {
++			return fmt.Errorf("external backing requires a preserved disk-backed MemoryFile")
++		}
++		stat, err := f.file.Stat()
++		if err != nil {
++			return fmt.Errorf("failed to stat externally-backed MemoryFile: %w", err)
++		}
++		if uint64(stat.Size()) != fileSize {
++			return fmt.Errorf("externally-backed MemoryFile size is %d, want %d", stat.Size(), fileSize)
++		}
++	}
+ 	f.unwasteSmall.MoveFrom(mfs.unwasteSmall)
+ 	f.unwasteHuge.MoveFrom(mfs.unwasteHuge)
+ 	f.unfreeSmall.MoveFrom(mfs.unfreeSmall)
+ 	f.unfreeHuge.MoveFrom(mfs.unfreeHuge)
+ 	f.subreleased = mfs.subreleased
+ 	f.memAcct.MoveFrom(mfs.memAcct)
+-	chunks := mfs.chunks
+ 	f.chunks.Store(&chunks)
+ 	mfTimeline.Reached("metadata loaded")
+ 	log.Infof("MemoryFile(%p): loaded metadata in %s", f, time.Duration(gohacks.Nanotime()-timeMetadataStart))
+ 
+-	fileSize := uint64(len(chunks)) * chunkSize
+ 	if err := f.file.Truncate(int64(fileSize)); err != nil {
+ 		return fmt.Errorf("failed to truncate MemoryFile: %w", err)
+ 	}
+@@ -994,6 +1036,21 @@ func (f *MemoryFile) LoadFrom(ctx context.Context, r io.Reader, opts *LoadOpts)
+ 	}
+ 	defer madviseWG.Wait()
+ 
++	if opts.ExternalBacking {
++		for maseg := f.memAcct.FirstSegment(); maseg.Ok(); maseg = maseg.NextSegment() {
++			if !maseg.ValuePtr().knownCommitted {
++				continue
++			}
++			amount := maseg.Range().Length()
++			f.knownCommittedBytes += amount
++			if !f.opts.DisableMemoryAccounting {
++				usage.MemoryAccounting.Inc(amount, maseg.ValuePtr().kind, maseg.ValuePtr().memCgID)
++			}
++		}
++		log.Infof("MemoryFile(%p): mapped externally-backed pages (%d known committed bytes)", f, f.knownCommittedBytes)
++		return nil
++	}
++
+ 	// Register this MemoryFile with async page loading if a pages file has
+ 	// been provided.
+ 	var amfl *asyncMemoryFileLoad
+diff --git a/pkg/sentry/pgalloc/save_restore_external_test.go b/pkg/sentry/pgalloc/save_restore_external_test.go
+new file mode 100644
+index 0000000..14ec05b
+--- /dev/null
++++ b/pkg/sentry/pgalloc/save_restore_external_test.go
+@@ -0,0 +1,149 @@
++// Copyright 2026 The gVisor Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     https://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++//go:build !pagesize_64k
++
++package pgalloc
++
++import (
++	"bytes"
++	"os"
++	"testing"
++	"time"
++
++	"gvisor.dev/gvisor/pkg/context"
++	"gvisor.dev/gvisor/pkg/hostarch"
++)
++
++// destroyAndWait models process teardown: hibernation stops the sentry without
++// freeing the allocations whose metadata was just checkpointed.
++func destroyAndWait(t *testing.T, mf *MemoryFile) {
++	t.Helper()
++	mf.Destroy()
++	deadline := time.Now().Add(5 * time.Second)
++	for {
++		mf.mu.Lock()
++		destroyed := mf.file == nil
++		mf.mu.Unlock()
++		if destroyed {
++			return
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("timed out waiting for MemoryFile destruction")
++		}
++		time.Sleep(time.Millisecond)
++	}
++}
++
++func TestExternalBackingSaveRestore(t *testing.T) {
++	backingPath := t.TempDir() + "/memory"
++	backing, err := os.OpenFile(backingPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
++	if err != nil {
++		t.Fatalf("OpenFile: %v", err)
++	}
++	mf, err := NewMemoryFile(backing, MemoryFileOpts{
++		DiskBackedFile: true,
++	})
++	if err != nil {
++		t.Fatalf("NewMemoryFile: %v", err)
++	}
++
++	fr, err := mf.Allocate(3*hostarch.PageSize, AllocOpts{
++		Mode: AllocateAndCommit,
++	})
++	if err != nil {
++		t.Fatalf("Allocate: %v", err)
++	}
++	mapped, err := mf.MapInternal(fr, hostarch.ReadWrite)
++	if err != nil {
++		t.Fatalf("MapInternal: %v", err)
++	}
++	want := bytes.Repeat([]byte{0xa5}, int(fr.Length()))
++	copy(mapped.Head().ToSlice(), want)
++
++	var metadata bytes.Buffer
++	if err := mf.SaveTo(context.Background(), &metadata, &SaveOpts{
++		ExternalBacking: true,
++	}); err != nil {
++		t.Fatalf("SaveTo: %v", err)
++	}
++	if got := metadata.Len(); got >= len(want) {
++		t.Fatalf("metadata-only checkpoint is %d bytes, want less than %d bytes of page contents", got, len(want))
++	}
++	destroyAndWait(t, mf)
++
++	restoredBacking, err := os.OpenFile(backingPath, os.O_RDWR, 0)
++	if err != nil {
++		t.Fatalf("reopening backing file: %v", err)
++	}
++	restored, err := NewMemoryFile(restoredBacking, MemoryFileOpts{
++		DiskBackedFile:   true,
++		PreserveContents: true,
++	})
++	if err != nil {
++		t.Fatalf("NewMemoryFile(preserve): %v", err)
++	}
++	if err := restored.LoadFrom(context.Background(), &metadata, &LoadOpts{
++		ExternalBacking: true,
++	}); err != nil {
++		t.Fatalf("LoadFrom: %v", err)
++	}
++	gotMapped, err := restored.MapInternal(fr, hostarch.Read)
++	if err != nil {
++		t.Fatalf("restored MapInternal: %v", err)
++	}
++	if got := gotMapped.Head().ToSlice(); !bytes.Equal(got, want) {
++		t.Fatalf("restored contents differ: got first bytes %x, want %x", got[:16], want[:16])
++	}
++	destroyAndWait(t, restored)
++}
++
++func TestExternalBackingRestoreRejectsWrongSize(t *testing.T) {
++	backingPath := t.TempDir() + "/memory"
++	backing, err := os.OpenFile(backingPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
++	if err != nil {
++		t.Fatalf("OpenFile: %v", err)
++	}
++	mf, err := NewMemoryFile(backing, MemoryFileOpts{DiskBackedFile: true})
++	if err != nil {
++		t.Fatalf("NewMemoryFile: %v", err)
++	}
++	if _, err := mf.Allocate(hostarch.PageSize, AllocOpts{Mode: AllocateAndCommit}); err != nil {
++		t.Fatalf("Allocate: %v", err)
++	}
++	var metadata bytes.Buffer
++	if err := mf.SaveTo(context.Background(), &metadata, &SaveOpts{ExternalBacking: true}); err != nil {
++		t.Fatalf("SaveTo: %v", err)
++	}
++	destroyAndWait(t, mf)
++
++	if err := os.Truncate(backingPath, chunkSize-hostarch.PageSize); err != nil {
++		t.Fatalf("Truncate: %v", err)
++	}
++	restoredBacking, err := os.OpenFile(backingPath, os.O_RDWR, 0)
++	if err != nil {
++		t.Fatalf("reopening backing file: %v", err)
++	}
++	restored, err := NewMemoryFile(restoredBacking, MemoryFileOpts{
++		DiskBackedFile:   true,
++		PreserveContents: true,
++	})
++	if err != nil {
++		t.Fatalf("NewMemoryFile(preserve): %v", err)
++	}
++	if err := restored.LoadFrom(context.Background(), &metadata, &LoadOpts{ExternalBacking: true}); err == nil {
++		t.Fatalf("LoadFrom succeeded with wrong backing-file size")
++	}
++	destroyAndWait(t, restored)
++}
+diff --git a/pkg/sentry/state/checkpointfiles/checkpointfiles.go b/pkg/sentry/state/checkpointfiles/checkpointfiles.go
+index 890a57a..ad45f9b 100644
+--- a/pkg/sentry/state/checkpointfiles/checkpointfiles.go
++++ b/pkg/sentry/state/checkpointfiles/checkpointfiles.go
+@@ -32,6 +32,10 @@ const (
+ 	// StateFileName is the file in an image-path directory which contains the
+ 	// sentry object graph.
+ 	StateFileName = "checkpoint.img"
++
++	// ApplicationMemoryFileName is the persistent backing file for the main
++	// application MemoryFile in a hibernation checkpoint.
++	ApplicationMemoryFileName = "application_memory.img"
+ )
+ 
+ // Files specific to filesystem checkpoints (see fscheckpoint package for
+diff --git a/pkg/sentry/state/state.go b/pkg/sentry/state/state.go
+index 199d1d3..6f430b1 100644
+--- a/pkg/sentry/state/state.go
++++ b/pkg/sentry/state/state.go
+@@ -65,6 +65,10 @@ type SaveOpts struct {
+ 	// file.
+ 	AppMFExcludeCommittedZeroPages bool
+ 
++	// AppMFExternalBacking indicates that the application MemoryFile's pages
++	// already reside in a persistent backing file.
++	AppMFExternalBacking bool
++
+ 	// Resume indicates if the statefile is used for save-resume.
+ 	Resume bool
+ 
+@@ -118,9 +122,12 @@ func (opts *SaveOpts) Save(ctx context.Context, k *kernel.Kernel, w *watchdog.Wa
+ 	log.Infof("Sandbox save started, pausing all tasks.")
+ 	k.Pause()
+ 	k.ReceiveTaskStates()
++	resumeTasks := true
+ 	defer func() {
+-		k.Unpause()
+-		log.Infof("Tasks resumed after save.")
++		if resumeTasks {
++			k.Unpause()
++			log.Infof("Tasks resumed after save.")
++		}
+ 	}()
+ 
+ 	w.Stop()
+@@ -157,7 +164,7 @@ func (opts *SaveOpts) Save(ctx context.Context, k *kernel.Kernel, w *watchdog.Wa
+ 	} else {
+ 		opts.Destination = nil
+ 		// Save the kernel.
+-		err = k.SaveTo(ctx, wc, opts.PagesMetadata, opts.PagesFile, opts.AppMFExcludeCommittedZeroPages, opts.Resume) // transfers ownership of wc, opts.PagesMetadata, opts.PagesFile
++		err = k.SaveTo(ctx, wc, opts.PagesMetadata, opts.PagesFile, opts.AppMFExcludeCommittedZeroPages, opts.AppMFExternalBacking, opts.Resume) // transfers ownership of wc, opts.PagesMetadata, opts.PagesFile
+ 		opts.PagesMetadata = nil
+ 		opts.PagesFile = nil
+ 	}
+@@ -173,6 +180,11 @@ func (opts *SaveOpts) Save(ctx context.Context, k *kernel.Kernel, w *watchdog.Wa
+ 	}
+ 	if opts.Resume {
+ 		k.BeforeResume(ctx)
++	} else if opts.AppMFExternalBacking && err == nil {
++		// The runsc parent terminates the sentry after the RPC returns. Keep
++		// tasks paused so teardown cannot free or otherwise mutate pages in the
++		// canonical backing file.
++		resumeTasks = false
+ 	} else {
+ 		// Kill the sandbox.
+ 		k.Kill(linux.WaitStatusExit(0))
+diff --git a/runsc/boot/controller.go b/runsc/boot/controller.go
+index 8926433..6534ffc 100644
+--- a/runsc/boot/controller.go
++++ b/runsc/boot/controller.go
+@@ -18,6 +18,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"io"
++	"os"
+ 	"path"
+ 	"strconv"
+ 	"sync"
+@@ -557,11 +558,13 @@ type RestoreOpts struct {
+ 	// 1. checkpoint state file.
+ 	// 2. optional checkpoint pages metadata file.
+ 	// 3. optional checkpoint pages file.
+-	// 4. optional platform device file.
++	// 4. optional persistent application memory file.
++	// 5. optional platform device file.
+ 	urpc.FilePayload
+-	HavePagesFile  bool
+-	HaveDeviceFile bool
+-	Background     bool
++	HavePagesFile             bool
++	HaveApplicationMemoryFile bool
++	HaveDeviceFile            bool
++	Background                bool
+ 
+ 	// If UseCheckpointGofer is true, the first file in FilePayload is a Unix
+ 	// domain socket connected to a URPC server implementing
+@@ -623,8 +626,20 @@ func (cm *containerManager) Restore(o *RestoreOpts, _ *struct{}) (retErr error)
+ 		timer:      timer,
+ 	}
+ 
++	var applicationMemoryFile *os.File
++	if o.HaveApplicationMemoryFile {
++		if !o.HavePagesFile || o.UseCheckpointGofer {
++			return fmt.Errorf("persistent application memory requires local checkpoint page files")
++		}
++		applicationMemoryFD, err := o.ReleaseFD(3)
++		if err != nil {
++			return fmt.Errorf("releasing application memory file: %w", err)
++		}
++		applicationMemoryFile = applicationMemoryFD.ReleaseToFile("application-memory")
++	}
++
+ 	// Create the main MemoryFile.
+-	cm.restorer.mainMF, err = createMemoryFile(cm.l.root.conf.AppHugePages, cm.l.hostTHP)
++	cm.restorer.mainMF, err = createMemoryFile(applicationMemoryFile, o.HaveApplicationMemoryFile, cm.l.root.conf.AppHugePages, cm.l.hostTHP)
+ 	if err != nil {
+ 		return fmt.Errorf("creating memory file: %v", err)
+ 	}
+@@ -632,7 +647,7 @@ func (cm *containerManager) Restore(o *RestoreOpts, _ *struct{}) (retErr error)
+ 
+ 	if o.HavePagesFile {
+ 		// This immediately starts loading the main MemoryFile asynchronously.
+-		cm.restorer.asyncMFLoader = kernel.NewAsyncMFLoader(pagesMetadata, pagesFile, cm.restorer.mainMF, timer.Fork("PagesFileLoader")) // transfers ownership
++		cm.restorer.asyncMFLoader = kernel.NewAsyncMFLoader(pagesMetadata, pagesFile, cm.restorer.mainMF, o.HaveApplicationMemoryFile, timer.Fork("PagesFileLoader")) // transfers ownership
+ 		pagesMetadata = nil
+ 		pagesFile = nil
+ 		timer.Reached("created async MF loader")
+diff --git a/runsc/boot/loader.go b/runsc/boot/loader.go
+index 5a6018c..2958577 100644
+--- a/runsc/boot/loader.go
++++ b/runsc/boot/loader.go
+@@ -402,6 +402,9 @@ type Args struct {
+ 	// GoferFilestoreFDs are FDs to the regular files that will back the tmpfs or
+ 	// overlayfs mount for certain gofer mounts.
+ 	GoferFilestoreFDs []int
++	// ApplicationMemoryFile is the optional regular file backing the main
++	// application MemoryFile. The Loader takes ownership of this file.
++	ApplicationMemoryFile *os.File
+ 	// GoferMountConfs contains information about how the gofer mounts have been
+ 	// configured. The first entry is for rootfs and the following entries are
+ 	// for bind mounts in Spec.Mounts (in the same order).
+@@ -648,7 +651,7 @@ func New(args Args) (*Loader, error) {
+ 	}
+ 
+ 	// Create memory file.
+-	mf, err := createMemoryFile(args.Conf.AppHugePages, args.HostTHP)
++	mf, err := createMemoryFile(args.ApplicationMemoryFile, false, args.Conf.AppHugePages, args.HostTHP)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("creating memory file: %w", err)
+ 	}
+@@ -988,19 +991,26 @@ func createPlatform(conf *config.Config, numCPU int, deviceFile *fd.FD, sandboxI
+ 	})
+ }
+ 
+-func createMemoryFile(appHugePages bool, hostTHP HostTHP) (*pgalloc.MemoryFile, error) {
++func createMemoryFile(applicationMemoryFile *os.File, preserveContents, appHugePages bool, hostTHP HostTHP) (*pgalloc.MemoryFile, error) {
+ 	const memfileName = "runsc-memory"
+-	memfd, err := memutil.CreateMemFD(memfileName, 0)
+-	if err != nil {
+-		return nil, fmt.Errorf("error creating memfd: %w", err)
++	memfile := applicationMemoryFile
++	if memfile == nil {
++		memfd, err := memutil.CreateMemFD(memfileName, 0)
++		if err != nil {
++			return nil, fmt.Errorf("error creating memfd: %w", err)
++		}
++		memfile = os.NewFile(uintptr(memfd), memfileName)
+ 	}
+-	memfile := os.NewFile(uintptr(memfd), memfileName)
+ 
+ 	mfopts := pgalloc.MemoryFileOpts{
+ 		// We can't enable pgalloc.MemoryFileOpts.UseHostMemcgPressure even if
+ 		// there are memory cgroups specified, because at this point we're already
+ 		// in a mount namespace in which the relevant cgroupfs is not visible.
+ 	}
++	if applicationMemoryFile != nil {
++		mfopts.DiskBackedFile = true
++		mfopts.PreserveContents = preserveContents
++	}
+ 	if appHugePages {
+ 		switch hostTHP.ShmemEnabled {
+ 		case "":
+diff --git a/runsc/boot/loader_test.go b/runsc/boot/loader_test.go
+index c2e067d..c9b799d 100644
+--- a/runsc/boot/loader_test.go
++++ b/runsc/boot/loader_test.go
+@@ -628,6 +628,32 @@ func TestMain(m *testing.M) {
+ 	os.Exit(m.Run())
+ }
+ 
++func TestCreateMemoryFileWithDiskBacking(t *testing.T) {
++	backing, err := os.CreateTemp(t.TempDir(), "application-memory-")
++	if err != nil {
++		t.Fatalf("os.CreateTemp: %v", err)
++	}
++	if _, err := backing.WriteString("stale contents"); err != nil {
++		t.Fatalf("writing stale backing contents: %v", err)
++	}
++
++	mf, err := createMemoryFile(backing, false, false, HostTHP{})
++	if err != nil {
++		t.Fatalf("createMemoryFile: %v", err)
++	}
++	defer mf.Destroy()
++	if !mf.IsDiskBacked() {
++		t.Errorf("MemoryFile.IsDiskBacked() = false, want true")
++	}
++	info, err := mf.File().Stat()
++	if err != nil {
++		t.Fatalf("stat backing file: %v", err)
++	}
++	if got := info.Size(); got != 0 {
++		t.Errorf("backing file size = %d, want 0", got)
++	}
++}
++
+ func TestNetworkConfig(t *testing.T) {
+ 	l, cleanup, err := createLoader(testConfig(), testSpec())
+ 	if err != nil {
+diff --git a/runsc/cmd/boot.go b/runsc/cmd/boot.go
+index c50a2d5..04931dc 100644
+--- a/runsc/cmd/boot.go
++++ b/runsc/cmd/boot.go
+@@ -105,6 +105,10 @@ type Boot struct {
+ 	// overlayfs mount for certain gofer mounts.
+ 	goferFilestoreFDs sandboxsetup.IntFlags
+ 
++	// applicationMemoryFD is the optional regular file backing the main
++	// application MemoryFile.
++	applicationMemoryFD int
++
+ 	// goferMountConfs contains information about how the gofer mounts have been
+ 	// configured. The first entry is for rootfs and the following entries are
+ 	// for bind mounts in Spec.Mounts (in the same order).
+@@ -270,6 +274,7 @@ func (b *Boot) SetFlags(f *flag.FlagSet) {
+ 	f.Var(&b.passFDs, "pass-fd", "mapping of host to guest FDs. They must be in M:N format. M is the host and N the guest descriptor.")
+ 	f.IntVar(&b.execFD, "exec-fd", -1, "host file descriptor used for program execution.")
+ 	f.Var(&b.goferFilestoreFDs, "gofer-filestore-fds", "FDs to the regular files that will back the overlayfs or tmpfs mount if a gofer mount is to be overlaid.")
++	f.IntVar(&b.applicationMemoryFD, "application-memory-fd", -1, "optional regular file FD backing the main application MemoryFile.")
+ 	f.Var(&b.goferMountConfs, "gofer-mount-confs", "information about how the gofer mounts have been configured.")
+ 	f.IntVar(&b.userLogFD, "user-log-fd", 0, "file descriptor to write user logs to. 0 means no logging.")
+ 	f.IntVar(&b.startSyncFD, "start-sync-fd", -1, "required FD to used to synchronize sandbox startup")
+@@ -582,30 +587,35 @@ func (b *Boot) Execute(_ context.Context, f *flag.FlagSet, args ...any) subcomma
+ 	linux.SetAFSSyscallPanic(conf.TestOnlyAFSSyscallPanic)
+ 
+ 	// Create the loader.
++	var applicationMemoryFile *os.File
++	if b.applicationMemoryFD >= 0 {
++		applicationMemoryFile = os.NewFile(uintptr(b.applicationMemoryFD), "application memory file")
++	}
+ 	bootArgs := boot.Args{
+-		ID:                  f.Arg(0),
+-		Spec:                spec,
+-		Conf:                conf,
+-		ControllerFD:        b.controllerFD,
+-		Device:              fd.New(b.deviceFD),
+-		GoferFDs:            b.ioFDs.GetArray(),
+-		DevGoferFD:          b.devIoFD,
+-		StdioFDs:            b.stdioFDs.GetArray(),
+-		PassFDs:             b.passFDs.GetArray(),
+-		ExecFD:              b.execFD,
+-		GoferFilestoreFDs:   b.goferFilestoreFDs.GetArray(),
+-		GoferMountConfs:     b.goferMountConfs.GetArray(),
+-		NumCPU:              b.cpuNum,
+-		CPUQuota:            b.cpuQuota,
+-		CPUPeriod:           b.cpuPeriod,
+-		TotalMem:            b.totalMem,
+-		TotalHostMem:        b.totalHostMem,
+-		UserLogFD:           b.userLogFD,
+-		ProductName:         b.productName,
+-		PodInitConfigFD:     b.podInitConfigFD,
+-		SinkFDs:             b.sinkFDs.GetArray(),
+-		ProfileOpts:         profile.MakeOpts(&b.profileFDs, conf.ProfileGCInterval),
+-		NvidiaDriverVersion: nvidiaDriverVersion,
++		ID:                    f.Arg(0),
++		Spec:                  spec,
++		Conf:                  conf,
++		ControllerFD:          b.controllerFD,
++		Device:                fd.New(b.deviceFD),
++		GoferFDs:              b.ioFDs.GetArray(),
++		DevGoferFD:            b.devIoFD,
++		StdioFDs:              b.stdioFDs.GetArray(),
++		PassFDs:               b.passFDs.GetArray(),
++		ExecFD:                b.execFD,
++		GoferFilestoreFDs:     b.goferFilestoreFDs.GetArray(),
++		ApplicationMemoryFile: applicationMemoryFile,
++		GoferMountConfs:       b.goferMountConfs.GetArray(),
++		NumCPU:                b.cpuNum,
++		CPUQuota:              b.cpuQuota,
++		CPUPeriod:             b.cpuPeriod,
++		TotalMem:              b.totalMem,
++		TotalHostMem:          b.totalHostMem,
++		UserLogFD:             b.userLogFD,
++		ProductName:           b.productName,
++		PodInitConfigFD:       b.podInitConfigFD,
++		SinkFDs:               b.sinkFDs.GetArray(),
++		ProfileOpts:           profile.MakeOpts(&b.profileFDs, conf.ProfileGCInterval),
++		NvidiaDriverVersion:   nvidiaDriverVersion,
+ 		NvidiaHostSettings: &nvconf.HostSettings{
+ 			ProcDriverNvidiaParams:       b.procDriverNvidiaParams,
+ 			HaveFabricIMEXManagement:     b.nvidiaFabricIMEXManagementDevMinor >= 0,
+diff --git a/runsc/cmd/checkpoint.go b/runsc/cmd/checkpoint.go
+index b6419d5..a9b8150 100644
+--- a/runsc/cmd/checkpoint.go
++++ b/runsc/cmd/checkpoint.go
+@@ -42,6 +42,7 @@ type Checkpoint struct {
+ 	cudaCheckpointSequential  bool
+ 	saveRestoreExecArgv       string
+ 	saveRestoreExecTimeout    time.Duration
++	hibernate                 bool
+ 
+ 	// direct indicates whether O_DIRECT should be used for writing the
+ 	// checkpoint pages file. It bypasses the kernel page cache. It is beneficial
+@@ -77,6 +78,7 @@ func (c *Checkpoint) SetFlags(f *flag.FlagSet) {
+ 	f.BoolVar(&c.cudaCheckpointSequential, "cuda-checkpoint-sequential", false, "run cuda-checkpoint sequentially in the container")
+ 	f.StringVar(&c.saveRestoreExecArgv, "save-restore-exec-argv", "", "argv (split by spaces) for a save/restore binary that's automatically executed in the sandbox before saving and after restoring. If the execution fails, the save/restore process will fail.")
+ 	f.DurationVar(&c.saveRestoreExecTimeout, "save-restore-exec-timeout", control.DefaultSaveRestoreExecTimeout, "timeout for the binary pointed to by save-restore-exec-argv.")
++	f.BoolVar(&c.hibernate, "hibernate", false, "EXPERIMENTAL: checkpoint allocator metadata while retaining application pages in their persistent backing file")
+ 
+ 	// Unimplemented flags necessary for compatibility with docker.
+ 	var wp string
+@@ -109,6 +111,17 @@ func (c *Checkpoint) Execute(_ context.Context, f *flag.FlagSet, args ...any) su
+ 	if c.imagePath == "" {
+ 		util.Fatalf("image-path flag must be provided")
+ 	}
++	if c.hibernate {
++		if conf.ApplicationMemoryFileDir == "" {
++			util.Fatalf("--hibernate requires --application-memory-file-dir")
++		}
++		if c.leaveRunning {
++			util.Fatalf("--hibernate cannot be combined with --leave-running")
++		}
++		// A separate pages metadata file lets the main MemoryFile omit page
++		// contents while private MemoryFiles continue to use pages.img.
++		c.compression = CheckpointCompression(statefile.CompressionLevelNone)
++	}
+ 
+ 	if err := os.MkdirAll(c.imagePath, 0755); err != nil {
+ 		util.Fatalf("making directories at path provided: %v", err)
+@@ -124,6 +137,7 @@ func (c *Checkpoint) Execute(_ context.Context, f *flag.FlagSet, args ...any) su
+ 		SaveRestoreExecArgv:        c.saveRestoreExecArgv,
+ 		SaveRestoreExecTimeout:     c.saveRestoreExecTimeout,
+ 		SaveRestoreExecContainerID: cont.ID,
++		Hibernate:                  c.hibernate,
+ 	}
+ 
+ 	if err := cont.Checkpoint(conf, c.imagePath, opts); err != nil {
+diff --git a/runsc/config/config.go b/runsc/config/config.go
+index 189e7a2..a584463 100644
+--- a/runsc/config/config.go
++++ b/runsc/config/config.go
+@@ -52,6 +52,11 @@ type Config struct {
+ 	// RootDir is the runtime root directory.
+ 	RootDir string `flag:"root"`
+ 
++	// ApplicationMemoryFileDir, when non-empty, is a host directory in which
++	// runsc creates a regular file to back each sandbox's main application
++	// MemoryFile. This is an experimental UCloud benchmarking option.
++	ApplicationMemoryFileDir string `flag:"application-memory-file-dir"`
++
+ 	// Traceback changes the Go runtime's traceback level.
+ 	Traceback string `flag:"traceback"`
+ 
+@@ -463,6 +468,9 @@ type Config struct {
+ // Config.Override does not validate, so callers must call Validate once they
+ // are done overriding.
+ func (c *Config) Validate() error {
++	if c.ApplicationMemoryFileDir != "" && !filepath.IsAbs(c.ApplicationMemoryFileDir) {
++		return fmt.Errorf("application-memory-file-dir must be absolute, got %q", c.ApplicationMemoryFileDir)
++	}
+ 	if c.Overlay && c.Overlay2.Enabled() {
+ 		// Deprecated flag was used together with flag that replaced it.
+ 		return fmt.Errorf("overlay flag has been replaced with overlay2 flag")
+diff --git a/runsc/config/flags.go b/runsc/config/flags.go
+index 44ee300..4cd9776 100644
+--- a/runsc/config/flags.go
++++ b/runsc/config/flags.go
+@@ -101,6 +101,7 @@ func RegisterFlags(flagSet *flag.FlagSet) {
+ 	// Flags that control sandbox runtime behavior.
+ 	flagSet.String("platform", "systrap", "specifies which platform to use: systrap (default), ptrace, kvm.")
+ 	flagSet.String("platform_device_path", "", "path to a platform-specific device file (e.g. /dev/kvm for KVM platform). If unset, will use a sane platform-specific default.")
++	flagSet.String("application-memory-file-dir", "", "EXPERIMENTAL: if non-empty, back each sandbox's main application MemoryFile with a regular file created in this host directory instead of a memfd.")
+ 	flagSet.String("watchdog-action", "log", "sets what action the watchdog takes when triggered: log (default), panic.")
+ 	flagSet.Int("panic-signal", -1, "register signal handling that panics. Usually set to SIGUSR2(12) to troubleshoot hangs. -1 disables it.")
+ 	flagSet.Bool("profile", false, "prepares the sandbox to use Golang profiler. Note that enabling profiler loosens the seccomp protection added to the sandbox (DO NOT USE IN PRODUCTION).")
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+index 23074cc..2485a09 100644
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -204,6 +204,10 @@ type Sandbox struct {
+ 	// DO NOT access this directly, use getControlSocketPath() instead.
+ 	ControlSocketPath string `json:"controlSocketPath"`
+ 
++	// ApplicationMemoryFilePath is the host path to the experimental regular
++	// file backing the sandbox's main application MemoryFile.
++	ApplicationMemoryFilePath string `json:"applicationMemoryFilePath,omitempty"`
++
+ 	// MountHints provides extra information about container mounts that apply
+ 	// to the entire pod.
+ 	MountHints *boot.PodMountHints `json:"mountHints"`
+@@ -550,6 +554,9 @@ func (s *Sandbox) Restore(conf *config.Config, spec *specs.Spec, cid string, ima
+ 	if err := s.setRestoreOpts(conf, imagePath, direct, &opt); err != nil {
+ 		return err
+ 	}
++	if opt.HaveApplicationMemoryFile && s.ApplicationMemoryFilePath == "" {
++		return fmt.Errorf("hibernation restore requires --application-memory-file-dir")
++	}
+ 
+ 	// If the platform needs a device FD we must pass it in.
+ 	if deviceFile, err := deviceFileForPlatform(conf.Platform, conf.PlatformDevicePath); err != nil {
+@@ -590,6 +597,16 @@ func (s *Sandbox) Restore(conf *config.Config, spec *specs.Spec, cid string, ima
+ 	if err := conn.Call(boot.ContMgrRestore, &opt, nil); err != nil {
+ 		return fmt.Errorf("restoring container %q: %v", cid, err)
+ 	}
++	if opt.HaveApplicationMemoryFile {
++		hibernatedMemoryPath := filepath.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
++		if err := os.Rename(hibernatedMemoryPath, s.ApplicationMemoryFilePath); err != nil {
++			// The running sentry still owns the artifact's open file. Track its
++			// actual path so that destroy and a later hibernation act on the
++			// correct backing file.
++			s.ApplicationMemoryFilePath = hibernatedMemoryPath
++			return fmt.Errorf("moving restored application memory into active storage: %w", err)
++		}
++	}
+ 	s.Restored = true
+ 	return nil
+ }
+@@ -638,6 +655,18 @@ func (s *Sandbox) setRestoreOptsForLocalCheckpointFiles(conf *config.Config, ima
+ 	} else {
+ 		log.Infof("Using single checkpoint file for sandbox %q", s.ID)
+ 	}
++
++	applicationMemoryFileName := path.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
++	if applicationMemoryFile, err := os.OpenFile(applicationMemoryFileName, os.O_RDWR, 0); err == nil {
++		if !opt.HavePagesFile {
++			applicationMemoryFile.Close()
++			return fmt.Errorf("hibernation checkpoint requires separate pages metadata and page files")
++		}
++		opt.FilePayload.Files = append(opt.FilePayload.Files, applicationMemoryFile)
++		opt.HaveApplicationMemoryFile = true
++	} else if !os.IsNotExist(err) {
++		return fmt.Errorf("opening application memory file %q failed: %w", applicationMemoryFileName, err)
++	}
+ 	return nil
+ }
+ 
+@@ -884,6 +913,32 @@ func (s *Sandbox) createSandboxProcess(conf *config.Config, args *Args, startSyn
+ 	donations := donation.Agency{}
+ 	defer donations.Close()
+ 
++	var appMemoryFile *os.File
++	if conf.ApplicationMemoryFileDir != "" {
++		if filepath.Base(s.ID) != s.ID || s.ID == "." || s.ID == ".." {
++			return fmt.Errorf("invalid sandbox ID for application memory file: %q", s.ID)
++		}
++		if err := os.MkdirAll(conf.ApplicationMemoryFileDir, 0700); err != nil {
++			return fmt.Errorf("creating application memory file directory: %w", err)
++		}
++		dirInfo, err := os.Lstat(conf.ApplicationMemoryFileDir)
++		if err != nil {
++			return fmt.Errorf("statting application memory file directory: %w", err)
++		}
++		if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 {
++			return fmt.Errorf("application memory file directory is not a directory")
++		}
++		s.ApplicationMemoryFilePath = filepath.Join(conf.ApplicationMemoryFileDir, s.ID+".memory")
++		appMemoryFile, err = os.OpenFile(
++			s.ApplicationMemoryFilePath,
++			os.O_RDWR|os.O_CREATE|os.O_EXCL,
++			0600,
++		)
++		if err != nil {
++			return fmt.Errorf("creating application memory file: %w", err)
++		}
++	}
++
+ 	// pgalloc.MemoryFile (which provides application memory) sometimes briefly
+ 	// mlock(2)s ranges of memory in order to fault in a large number of pages at
+ 	// a time. Try to make RLIMIT_MEMLOCK unlimited so that it can do so. runsc
+@@ -979,6 +1034,7 @@ func (s *Sandbox) createSandboxProcess(conf *config.Config, args *Args, startSyn
+ 	donations.DonateAndClose("io-fds", args.IOFiles...)
+ 	donations.DonateAndClose("dev-io-fd", args.DevIOFile)
+ 	donations.DonateAndClose("gofer-filestore-fds", args.GoferFilestoreFiles...)
++	donations.DonateAndClose("application-memory-fd", appMemoryFile)
+ 	donations.DonateAndClose("mounts-fd", args.MountsFile)
+ 	donations.Donate("start-sync-fd", startSyncFile)
+ 	if err := donations.DonateLogFile("user-log-fd", args.UserLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, lfOpts); err != nil {
+@@ -1541,6 +1597,11 @@ func (s *Sandbox) destroy() error {
+ 			return fmt.Errorf("waiting sandbox %q stop: %w", s.ID, err)
+ 		}
+ 	}
++	if s.ApplicationMemoryFilePath != "" {
++		if err := os.Remove(s.ApplicationMemoryFilePath); err != nil && !os.IsNotExist(err) {
++			return fmt.Errorf("deleting application memory file %q: %w", s.ApplicationMemoryFilePath, err)
++		}
++	}
+ 
+ 	return nil
+ }
+@@ -1615,6 +1676,7 @@ type CheckpointOpts struct {
+ 	ExcludeCommittedZeroPages bool
+ 	CudaCheckpointPath        string
+ 	CudaCheckpointSequential  bool
++	Hibernate                 bool
+ 
+ 	// Save/restore exec options.
+ 	SaveRestoreExecArgv        string
+@@ -1627,9 +1689,26 @@ type CheckpointOpts struct {
+ func (s *Sandbox) Checkpoint(conf *config.Config, cid string, imagePath string, opts CheckpointOpts) error {
+ 	log.Debugf("Checkpoint sandbox %q, imagePath %q, opts %+v", s.ID, imagePath, opts)
+ 
++	var hibernatedMemoryPath string
++	if opts.Hibernate {
++		if opts.Resume {
++			return fmt.Errorf("hibernation checkpoint cannot leave the sandbox running")
++		}
++		if s.ApplicationMemoryFilePath == "" {
++			return fmt.Errorf("hibernation checkpoint requires persistent application memory")
++		}
++		hibernatedMemoryPath = filepath.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
++		if _, err := os.Lstat(hibernatedMemoryPath); err == nil {
++			return fmt.Errorf("hibernation memory artifact %q already exists", hibernatedMemoryPath)
++		} else if !os.IsNotExist(err) {
++			return fmt.Errorf("checking hibernation memory artifact %q: %w", hibernatedMemoryPath, err)
++		}
++	}
++
+ 	opt := control.SaveOpts{
+ 		Metadata:                       opts.Compression.ToMetadata(),
+ 		AppMFExcludeCommittedZeroPages: opts.ExcludeCommittedZeroPages,
++		AppMFExternalBacking:           opts.Hibernate,
+ 		Resume:                         opts.Resume,
+ 		CudaCheckpointPath:             opts.CudaCheckpointPath,
+ 		CudaCheckpointSequential:       opts.CudaCheckpointSequential,
+@@ -1651,10 +1730,63 @@ func (s *Sandbox) Checkpoint(conf *config.Config, cid string, imagePath string,
+ 	if err := s.call(boot.ContMgrCheckpoint, &opt, nil); err != nil {
+ 		return fmt.Errorf("checkpointing container %q: %w", cid, err)
+ 	}
++	if opts.Hibernate {
++		if err := s.terminateForHibernation(); err != nil {
++			return err
++		}
++		if err := os.Rename(s.ApplicationMemoryFilePath, hibernatedMemoryPath); err != nil {
++			return fmt.Errorf("moving application memory into checkpoint: %w", err)
++		}
++		s.ApplicationMemoryFilePath = ""
++	}
+ 	s.Checkpointed = true
+ 	return nil
+ }
+ 
++// terminateForHibernation stops a quiesced sentry without giving guest-memory
++// teardown an opportunity to mutate its canonical backing file.
++func (s *Sandbox) terminateForHibernation() error {
++	pid := s.Pid.Load()
++	if pid == 0 {
++		return nil
++	}
++	pidfd, pidfdErr := unix.PidfdOpen(int(pid), 0)
++	if pidfdErr == nil {
++		defer unix.Close(pidfd)
++	}
++	if err := unix.Kill(pid, unix.SIGKILL); err != nil && err != unix.ESRCH {
++		return fmt.Errorf("terminating hibernated sandbox %q PID %d: %w", s.ID, pid, err)
++	}
++	if pidfdErr != nil {
++		if err := s.waitForStopped(); err != nil {
++			return fmt.Errorf("waiting for hibernated sandbox %q to stop: %w", s.ID, err)
++		}
++		return nil
++	}
++	for {
++		events := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
++		n, err := unix.Poll(events, int((2 * time.Minute).Milliseconds()))
++		if err == unix.EINTR {
++			continue
++		}
++		if err != nil {
++			return fmt.Errorf("waiting on pidfd for hibernated sandbox %q: %w", s.ID, err)
++		}
++		if n == 0 {
++			return fmt.Errorf("timed out waiting for hibernated sandbox %q to stop", s.ID)
++		}
++		break
++	}
++	if s.child {
++		if err := s.waitForStopped(); err != nil {
++			return fmt.Errorf("reaping hibernated sandbox %q: %w", s.ID, err)
++		}
++	} else {
++		s.Pid.Store(0)
++	}
++	return nil
++}
++
+ func (s *Sandbox) setCheckpointOptsFiles(conf *config.Config, imagePath string, opts CheckpointOpts, opt *control.SaveOpts) error {
+ 	clientSockFile, err := s.maybeStartCheckpointGoferAndGetSocket(conf, s.CgroupJSON.Cgroup, imagePath, "-allow-checkpoint-writes")
+ 	if err != nil {

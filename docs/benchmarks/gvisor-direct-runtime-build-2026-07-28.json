@@ -1,0 +1,25 @@
+{
+  "artifact": "runsc-hibernate-a3cd70d5de7cc33d1f58fb1cfbaba32e2a310794aca8b7e30ba0435baed8888e",
+  "bazel_version": "bazel 8.3.1",
+  "build_config": "opt",
+  "gvisor_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+  "host_architecture": "x86_64",
+  "patch_series_sha256": "4d434f1bc19e87bc62393a25d3142d3bec2393bbf0f5c16467281b2fb1f22c9f",
+  "patched_files_sha256": "d510ee573a64a82ce3f75ca5f1f8c0461f65b13334c11cab7481715fe6f32f09",
+  "patches": [
+    {
+      "name": "0001-disk-backed-main-memory.patch",
+      "sha256": "6bdf87cf565e96b0d65909a56f19a6a8790b10af0f973f22300d4b07bba9d554"
+    },
+    {
+      "name": "0002-quota-owned-memory-directory.patch",
+      "sha256": "65acb8f572ab74e1ea6e3ebd4f29abd1a8e0b7bb354faafa9dbab47a2d75da5c"
+    },
+    {
+      "name": "0003-two-phase-hibernation-capture.patch",
+      "sha256": "495db595700dec88b770a868ed84b2d0b5fa1bf2bd2ab9f511e57816feffe3bd"
+    }
+  ],
+  "runsc_sha256": "a3cd70d5de7cc33d1f58fb1cfbaba32e2a310794aca8b7e30ba0435baed8888e",
+  "schema": 1
+}

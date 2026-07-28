@@ -11,6 +11,10 @@ import time
 import unittest
 from unittest.mock import patch
 
+from ucloud_sandboxes.hibernation import (
+    HibernationDiskLedger,
+    HibernationQuotaError,
+)
 from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.sandbox import (
     CommandResult,
@@ -18,6 +22,7 @@ from ucloud_sandboxes.sandbox import (
     DockerGvisorRuntime,
     FORK_CHILD_SETUP_ALLOWANCE_SECONDS,
     FORK_REQUEST_TIMEOUT_SECONDS,
+    HibernationQuotaHelperClient,
     MAX_FORK_CHECKPOINT_TIMEOUT_SECONDS,
     MAX_FORK_FANOUT,
     MAX_FORK_PROTOCOL_TIMEOUT_SECONDS,
@@ -31,6 +36,7 @@ from ucloud_sandboxes.sandbox import (
     SandboxFilesystemSpec,
     SandboxForkProtocolSpec,
     SandboxForkRuntimeResult,
+    SandboxHibernateUnsupportedError,
     SandboxBusyError,
     SandboxManager,
     SandboxOperation,
@@ -54,6 +60,52 @@ FORK_PROTOCOL = SandboxForkProtocolSpec(
     ready_command=("/usr/local/bin/ucloud-fork-agent", "ready"),
 )
 FORK_NONCE = "a" * 64
+
+
+class RecordingHibernationQuotaBackend:
+    def __init__(self, *, fail_prepare: bool = False) -> None:
+        self.fail_prepare = fail_prepare
+        self.prepared = []
+        self.dropped = []
+
+    def prepare(self, reservation):
+        if reservation not in self.prepared:
+            self.prepared.append(reservation)
+        if self.fail_prepare:
+            raise HibernationQuotaError("injected quota failure")
+        return {
+            "hard_limit_mb": reservation.hibernation_quota_mb,
+            "path": f"/quota/{reservation.sandbox_id}",
+            "project_id": reservation.project_id,
+            "sandbox_generation": reservation.sandbox_generation,
+            "sandbox_id": reservation.sandbox_id,
+            "state": "ready",
+        }
+
+    def drop(self, reservation):
+        self.dropped.append(reservation)
+        return {
+            "project_id": reservation.project_id,
+            "removed": True,
+            "sandbox_generation": reservation.sandbox_generation,
+            "sandbox_id": reservation.sandbox_id,
+            "state": "absent",
+        }
+
+    def inventory(self):
+        dropped = {(item.sandbox_id, item.sandbox_generation) for item in self.dropped}
+        return tuple(
+            {
+                "hard_limit_mb": item.hibernation_quota_mb,
+                "path": f"/quota/{item.sandbox_id}",
+                "project_id": item.project_id,
+                "sandbox_generation": item.sandbox_generation,
+                "sandbox_id": item.sandbox_id,
+                "state": "ready",
+            }
+            for item in self.prepared
+            if (item.sandbox_id, item.sandbox_generation) not in dropped
+        )
 
 
 class ForkCaptureFailureExecutor:
@@ -2508,6 +2560,307 @@ class SandboxRuntimeTests(unittest.TestCase):
         self.assertIn("A=1", argv)
         self.assertIn("B=2", argv)
         self.assertEqual(argv[-4:], ("python:3.12-slim", "python", "-c", "print('ok')"))
+
+    def test_parkable_sandbox_is_fail_closed_and_uses_hibernate_runtime(self) -> None:
+        spec = SandboxSpec(
+            id="parkable",
+            image="busybox",
+            memory_mb=4096,
+            disk_mb=8192,
+            parkable=True,
+        )
+        spec.validate()
+        reservation_mb = 8192 + 5120 + 4096 + 64
+        self.assertEqual(spec.requested_resources().disk_mb, reservation_mb)
+
+        with TemporaryDirectory() as raw_dir:
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                DockerGvisorRuntime(
+                    dry_run=True,
+                    allow_storage_opt_quota=True,
+                ),
+            )
+            with self.assertRaises(SandboxHibernateUnsupportedError):
+                manager.create(spec)
+
+            runtime = DockerGvisorRuntime(
+                dry_run=True,
+                allow_storage_opt_quota=True,
+                hibernate_enabled=True,
+                hibernate_runtime_name="runsc-hibernate-v1",
+            )
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "enabled.json"),
+                runtime,
+                effective_capacity=ResourceQuantity(
+                    memory_mb=8192,
+                    disk_mb=reservation_mb - 1,
+                ),
+            )
+            with self.assertRaises(SandboxCapacityUnavailableError):
+                manager.create(spec)
+
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "admitted.json"),
+                runtime,
+                effective_capacity=ResourceQuantity(
+                    memory_mb=8192,
+                    disk_mb=reservation_mb,
+                ),
+            )
+            record, result = manager.create(spec)
+            self.assertEqual(record.state, "planned")
+            self.assertEqual(
+                result.argv[result.argv.index("--runtime") + 1],
+                "runsc-hibernate-v1",
+            )
+            self.assertIn(
+                (
+                    "dev.gvisor.internal.application-memory-directory="
+                    "parkable.sandbox-0"
+                ),
+                result.argv,
+            )
+
+    def test_parkable_sandbox_requires_bounded_single_owner_lifecycle(self) -> None:
+        with self.assertRaisesRegex(ValueError, "memory_mb"):
+            SandboxSpec(
+                id="park",
+                image="busybox",
+                disk_mb=1024,
+                parkable=True,
+            ).validate()
+        with self.assertRaisesRegex(ValueError, "disk_mb"):
+            SandboxSpec(
+                id="park",
+                image="busybox",
+                memory_mb=1024,
+                parkable=True,
+            ).validate()
+        with self.assertRaisesRegex(ValueError, "cannot be forkable"):
+            SandboxSpec(
+                id="park",
+                image="busybox",
+                memory_mb=1024,
+                disk_mb=1024,
+                parkable=True,
+                forkable=True,
+                fork_protocol=FORK_PROTOCOL,
+            ).validate()
+        with self.assertRaisesRegex(ValueError, "cannot expose SSH"):
+            SandboxSpec(
+                id="park",
+                image="busybox",
+                memory_mb=1024,
+                disk_mb=1024,
+                parkable=True,
+                network="bridge",
+                ssh=SandboxSshSpec(enabled=True, host_port=22000),
+            ).validate()
+
+    def test_parkable_create_and_delete_hold_hard_quota_reservation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            executor = RecordingExecutor()
+            runtime = DockerGvisorRuntime(
+                executor=executor,
+                allow_storage_opt_quota=True,
+                hibernate_enabled=True,
+            )
+            ledger = HibernationDiskLedger(
+                (root / "disk-ledger.json").resolve(),
+                capacity_mb=20_000,
+                safety_headroom_mb=1000,
+            )
+            backend = RecordingHibernationQuotaBackend()
+            manager = SandboxManager(
+                SandboxStore(root / "sandboxes.json"),
+                runtime,
+                effective_capacity=ResourceQuantity(
+                    memory_mb=8192,
+                    disk_mb=20_000,
+                ),
+                hibernation_disk_ledger=ledger,
+                hibernation_quota_backend=backend,
+            )
+            spec = SandboxSpec(
+                id="parkable",
+                image="busybox",
+                memory_mb=1024,
+                disk_mb=2048,
+                parkable=True,
+            )
+            operation = SandboxOperation(
+                operation_id="create:7",
+                generation=7,
+                kind="create",
+                spec_hash=sandbox_spec_fingerprint(spec),
+            )
+            record, _result = manager.create(spec, operation=operation)
+            self.assertEqual(record.state, "running")
+            reservation = ledger.inventory().reservations[0]
+            self.assertEqual(backend.prepared, [reservation])
+            self.assertEqual(reservation.total_mb, 2048 + 2048 + 1024 + 64)
+            self.assertEqual(
+                manager.reconcile_hibernation_storage(),
+                {
+                    "reservations": 1,
+                    "reserved_mb": reservation.total_mb,
+                    "available_mb": 19_000 - reservation.total_mb,
+                },
+            )
+
+            deleted, _result = manager.delete(
+                spec.id,
+                generation=7,
+                operation_id="delete:7",
+            )
+            self.assertIsNotNone(deleted)
+            self.assertEqual(deleted.state, "deleting")
+            self.assertEqual(deleted.spec, record.spec)
+            self.assertEqual(backend.dropped, [reservation])
+            self.assertEqual(ledger.inventory().reservations, ())
+
+    def test_quota_prepare_failure_keeps_planned_intent_and_reservation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            executor = RecordingExecutor()
+            runtime = DockerGvisorRuntime(
+                executor=executor,
+                allow_storage_opt_quota=True,
+                hibernate_enabled=True,
+            )
+            ledger = HibernationDiskLedger(
+                (root / "disk-ledger.json").resolve(),
+                capacity_mb=20_000,
+                safety_headroom_mb=1000,
+            )
+            manager = SandboxManager(
+                SandboxStore(root / "sandboxes.json"),
+                runtime,
+                hibernation_disk_ledger=ledger,
+                hibernation_quota_backend=RecordingHibernationQuotaBackend(
+                    fail_prepare=True
+                ),
+            )
+            spec = SandboxSpec(
+                id="parkable",
+                image="busybox",
+                memory_mb=1024,
+                disk_mb=2048,
+                parkable=True,
+            )
+            operation = SandboxOperation(
+                operation_id="create:7",
+                generation=7,
+                kind="create",
+                spec_hash=sandbox_spec_fingerprint(spec),
+            )
+            with self.assertRaisesRegex(HibernationQuotaError, "injected"):
+                manager.create(spec, operation=operation)
+            self.assertEqual(executor.commands, [])
+            self.assertEqual(
+                manager.store.load()["parkable"].state,
+                "planned",
+            )
+            self.assertEqual(len(ledger.inventory().reservations), 1)
+
+    def test_hibernation_reconcile_refuses_orphan_quota_ownership(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            runtime = DockerGvisorRuntime(
+                executor=RecordingExecutor(),
+                allow_storage_opt_quota=True,
+                hibernate_enabled=True,
+            )
+            ledger = HibernationDiskLedger(
+                (root / "disk-ledger.json").resolve(),
+                capacity_mb=20_000,
+                safety_headroom_mb=1000,
+            )
+            reservation = ledger.reserve(
+                sandbox_id="orphan",
+                sandbox_generation=7,
+                memory_mb=1024,
+                writable_disk_mb=2048,
+            )
+            backend = RecordingHibernationQuotaBackend()
+            backend.prepare(reservation)
+            manager = SandboxManager(
+                SandboxStore(root / "sandboxes.json"),
+                runtime,
+                hibernation_disk_ledger=ledger,
+                hibernation_quota_backend=backend,
+            )
+            with self.assertRaisesRegex(HibernationQuotaError, "incarnations"):
+                manager.reconcile_hibernation_storage()
+            self.assertEqual(ledger.inventory().reservations, (reservation,))
+            self.assertEqual(backend.dropped, [])
+
+    def test_quota_helper_client_rejects_mismatched_response(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            ledger = HibernationDiskLedger(
+                (Path(raw_dir) / "disk-ledger.json").resolve(),
+                capacity_mb=20_000,
+                safety_headroom_mb=1000,
+            )
+            reservation = ledger.reserve(
+                sandbox_id="parkable",
+                sandbox_generation=7,
+                memory_mb=1024,
+                writable_disk_mb=2048,
+            )
+            response = {
+                "hard_limit_mb": reservation.hibernation_quota_mb,
+                "path": "/quota/parkable",
+                "project_id": reservation.project_id + 1,
+                "sandbox_generation": 7,
+                "sandbox_id": "parkable",
+                "state": "ready",
+            }
+            client = HibernationQuotaHelperClient(
+                executor=RecordingExecutor(stdout=json.dumps(response)),
+                sudo=False,
+            )
+            with self.assertRaisesRegex(HibernationQuotaError, "another reservation"):
+                client.prepare(reservation)
+
+    def test_unified_quota_helper_charges_writable_and_hibernation_storage(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            ledger = HibernationDiskLedger(
+                (Path(raw_dir) / "disk-ledger.json").resolve(),
+                capacity_mb=20_000,
+                safety_headroom_mb=1000,
+            )
+            reservation = ledger.reserve(
+                sandbox_id="direct",
+                sandbox_generation=7,
+                memory_mb=1024,
+                writable_disk_mb=2048,
+            )
+            response = {
+                "hard_limit_mb": reservation.total_mb,
+                "path": "/quota/direct.sandbox-7",
+                "project_id": reservation.project_id,
+                "sandbox_generation": 7,
+                "sandbox_id": "direct",
+                "state": "ready",
+            }
+            executor = RecordingExecutor(stdout=json.dumps(response))
+            client = HibernationQuotaHelperClient(
+                executor=executor,
+                sudo=False,
+                include_writable_disk=True,
+            )
+
+            self.assertEqual(client.prepare(reservation), response)
+            self.assertEqual(
+                executor.commands[-1][-1],
+                str(reservation.total_mb),
+            )
 
     def test_disk_request_requires_validated_storage_quota_support(self) -> None:
         runtime = DockerGvisorRuntime(dry_run=True)

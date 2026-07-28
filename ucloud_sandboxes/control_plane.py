@@ -24,6 +24,7 @@ from uuid import uuid4
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
+    HIBERNATE_LOCAL_CAPABILITY,
     has_capability,
 )
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
@@ -3123,7 +3124,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     required_capabilities=(
                         (FORK_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY)
                         if bool(spec.get("forkable"))
-                        else ()
+                        else (
+                            (
+                                HIBERNATE_LOCAL_CAPABILITY,
+                                DISK_QUOTA_CAPABILITY,
+                            )
+                            if bool(spec.get("parkable", spec.get("hibernate")))
+                            else ()
+                        )
                     ),
                 )
                 if heartbeat is None:

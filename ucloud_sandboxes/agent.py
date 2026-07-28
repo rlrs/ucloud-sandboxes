@@ -114,6 +114,8 @@ def build_heartbeat(
     for field_name, factor in overcommit_fields.items():
         if not math.isfinite(factor) or factor < 0:
             raise ValueError(f"{field_name} must be finite and non-negative.")
+    if disk_overcommit > 1.0:
+        raise ValueError("disk_overcommit cannot exceed 1.0.")
     cleaned_node_url = node_url.strip() if node_url else None
     if cleaned_node_url and ("\n" in cleaned_node_url or "\r" in cleaned_node_url):
         raise ValueError("node_url cannot contain newlines.")

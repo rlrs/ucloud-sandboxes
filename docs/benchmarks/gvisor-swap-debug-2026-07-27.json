@@ -1,0 +1,198 @@
+{
+  "date": "2026-07-27",
+  "host": {
+    "provider": "UCloud",
+    "job_id": "12360588",
+    "product": "cpu-amd-zen5-32-vcpu",
+    "cpu": "AMD EPYC 9535",
+    "advertised_memory_gib": 96,
+    "usable_memory_gib": 87,
+    "swap_gib": 24,
+    "swap_file_filesystem": "ext4",
+    "disk": "/dev/vda",
+    "disk_scheduler": "none",
+    "disk_reported_rotational": true,
+    "disk_read_ahead_kib": 128,
+    "kernel": "6.8.0-53-generic",
+    "runsc_version": "release-20260721.0"
+  },
+  "method": {
+    "memory_mapping": "private non-zero anonymous mmap",
+    "touch_pattern": "one byte per 4 KiB page",
+    "reclaim": "cgroup-v2 memory.reclaim while stopped or paused",
+    "memory_size_mib": 1024,
+    "fio_file_size_gib": 8,
+    "notes": [
+      "memory.reclaim returned EAGAIN after making partial progress",
+      "disk counters are /proc/diskstats deltas over the worker's internal scan",
+      "fio used direct I/O on the same virtual disk that backed the swapfile"
+    ]
+  },
+  "fio": [
+    {
+      "name": "sequential_write",
+      "block_size": "1M",
+      "queue_depth": 32,
+      "bandwidth_bytes_per_second": 1771485789,
+      "iops": 1689.420499
+    },
+    {
+      "name": "sequential_read",
+      "block_size": "1M",
+      "queue_depth": 32,
+      "bandwidth_bytes_per_second": 5936374977,
+      "iops": 5661.368348
+    },
+    {
+      "name": "random_read_qd1",
+      "block_size": "4k",
+      "queue_depth": 1,
+      "bandwidth_bytes_per_second": 20862937,
+      "iops": 5093.490651,
+      "latency_ns_mean": 189804.985532,
+      "latency_ns_p99": 448512
+    },
+    {
+      "name": "random_read_qd32",
+      "block_size": "4k",
+      "queue_depth": 32,
+      "bandwidth_bytes_per_second": 485293130,
+      "iops": 118479.768209,
+      "latency_ns_mean": 265287.995759,
+      "latency_ns_p99": 618496
+    }
+  ],
+  "one_gib_sequential_fault_in_default_page_cluster": [
+    {
+      "runtime": "native",
+      "warm_scan_ms": 6.587,
+      "cold_scan_ms": 8642.435,
+      "cold_mib_per_second": 118.485,
+      "major_faults": 32773,
+      "disk_reads": 32773,
+      "disk_read_bytes": 1073741824
+    },
+    {
+      "runtime": "runc",
+      "warm_scan_ms": 8.089,
+      "cold_scan_ms": 7937.662,
+      "cold_mib_per_second": 129.005,
+      "major_faults": 33171,
+      "disk_reads": 33174,
+      "disk_read_bytes": 1075474432
+    },
+    {
+      "runtime": "runsc",
+      "warm_scan_ms": 120.097,
+      "cold_scan_ms": 8420.927,
+      "cold_mib_per_second": 121.602,
+      "major_faults": 33330,
+      "disk_reads": 33340,
+      "disk_read_bytes": 1076686848
+    }
+  ],
+  "sequential_256_mib_page_cluster_sweep": [
+    {
+      "page_cluster": 0,
+      "native_mib_per_second": 33.472,
+      "runc_mib_per_second": 31.382,
+      "runsc_mib_per_second": 32.24,
+      "runsc_major_faults": 66098,
+      "runsc_disk_reads": 66098
+    },
+    {
+      "page_cluster": 3,
+      "native_mib_per_second": 128.873,
+      "runc_mib_per_second": 129.624,
+      "runsc_mib_per_second": 118.979,
+      "runsc_major_faults": 8744,
+      "runsc_disk_reads": 8751
+    },
+    {
+      "page_cluster": 6,
+      "native_mib_per_second": 519.463,
+      "runc_mib_per_second": 476.778,
+      "runsc_mib_per_second": 344.881,
+      "runsc_major_faults": 1567,
+      "runsc_disk_reads": 1601
+    },
+    {
+      "page_cluster": 8,
+      "native_mib_per_second": 726.499,
+      "runc_mib_per_second": 715.281,
+      "runsc_mib_per_second": 523.968,
+      "runsc_major_faults": 758,
+      "runsc_disk_reads": 1096
+    }
+  ],
+  "sparse_one_gib_1024_pages": [
+    {
+      "page_cluster": 3,
+      "runsc_duration_ms": 165.451,
+      "runsc_disk_read_bytes": 6578176
+    },
+    {
+      "page_cluster": 8,
+      "runsc_duration_ms": 191.106,
+      "runsc_disk_read_bytes": 6688768
+    }
+  ],
+  "density_1000_wake_24": {
+    "hot_resident_same_node": {
+      "makespan_ms": 191.183,
+      "p50_ms": 171.56,
+      "p95_ms": 181.129,
+      "max_ms": 186.131
+    },
+    "cold_first_batch_page_cluster_8": {
+      "makespan_ms": 3412.72,
+      "p50_ms": 3073.928,
+      "p95_ms": 3398.118,
+      "max_ms": 3409.064
+    },
+    "cold_repeated_batch_page_cluster_3": {
+      "makespan_ms": 812.755,
+      "p50_ms": 717.666,
+      "p95_ms": 765.514,
+      "max_ms": 801.618
+    },
+    "cold_untouched_sandboxes_after_shared_path_warmup": [
+      {
+        "page_cluster": 3,
+        "makespan_ms": 717.548,
+        "p50_ms": 540.464,
+        "p95_ms": 686.567,
+        "max_ms": 707.772,
+        "disk_read_bytes": 111403008
+      },
+      {
+        "page_cluster": 8,
+        "makespan_ms": 870.332,
+        "p50_ms": 607.557,
+        "p95_ms": 740.451,
+        "max_ms": 863.073,
+        "disk_read_bytes": 121450496
+      }
+    ],
+    "after_host_drop_caches": [
+      {
+        "description": "one untouched reclaimed sandbox used as a serialized canary",
+        "page_cluster": 3,
+        "count": 1,
+        "makespan_ms": 154.013,
+        "p50_ms": 153.524,
+        "disk_read_bytes": 27582464
+      },
+      {
+        "description": "next 24 untouched reclaimed sandboxes immediately after the canary",
+        "page_cluster": 3,
+        "count": 24,
+        "makespan_ms": 253.073,
+        "p50_ms": 227.89,
+        "p95_ms": 236.076,
+        "max_ms": 241.161,
+        "disk_read_bytes": 19066880
+      }
+    ]
+  }
+}

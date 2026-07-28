@@ -31,6 +31,20 @@ from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class NodeAgentTests(unittest.TestCase):
+    def test_server_rejects_disk_overcommit(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            with self.assertRaisesRegex(ValueError, "cannot exceed 1.0"):
+                build_node_agent_server(
+                    "127.0.0.1",
+                    0,
+                    sandbox_file=root / "sandboxes.json",
+                    image_file=root / "images.json",
+                    job_id="job-1",
+                    node_id="node-1",
+                    disk_overcommit=1.01,
+                )
+
     def test_fork_capability_requires_enabled_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

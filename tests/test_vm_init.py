@@ -22,6 +22,39 @@ from ucloud_sandboxes.vm_init import (
 
 
 class VmInitTests(unittest.TestCase):
+    def test_direct_runtime_is_the_exclusive_node_task_owner(self) -> None:
+        script = render_vm_init_script(
+            VmInitOptions(
+                job_id="job-1",
+                heartbeat_url="https://gateway.example/v1/nodes/heartbeat",
+                node_runtime="direct",
+                direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                docker_quota_image_gb=440,
+                total_resources=ResourceQuantity(
+                    vcpu=32,
+                    memory_mb=96 * 1024,
+                    disk_mb=440 * 1024,
+                ),
+                cpu_overcommit=3,
+                memory_overcommit=2,
+            )
+        )
+
+        self.assertIn("serve-direct-node-agent", script)
+        self.assertNotIn("ExecStart=/work/ucloud-sandboxes/bin/ucloud-sandboxes serve-node-agent", script)
+        self.assertIn("User=root", script)
+        self.assertIn("UCLOUD_DIRECT_WRITABLE_DISK_MB=434176", script)
+        self.assertIn("Skipping legacy task conformance", script)
+        self.assertIn("runtime/direct/runsc", script)
+        self.assertIn(
+            'chown -R root:root "$UCLOUD_STATE_DIR/direct-runtime"',
+            script,
+        )
+        self.assertIn(
+            'chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"',
+            script,
+        )
+
     def test_parses_machine_readable_init_phase_timings(self) -> None:
         phases, total = parse_vm_init_phases(
             "noise\n"
@@ -506,6 +539,31 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertIn(
             'visudo -cf "$UCLOUD_CHECKPOINT_SUDOERS_TMP"',
+            script,
+        )
+        self.assertIn(
+            (
+                "UCLOUD_HIBERNATION_QUOTA_HELPER="
+                "/usr/local/libexec/ucloud-sandbox-hibernation-quota"
+            ),
+            script,
+        )
+        self.assertIn(
+            (
+                'UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_DOCKER_DATA_ROOT/'
+                'ucloud-hibernation"'
+            ),
+            script,
+        )
+        self.assertIn(
+            'install -d -m 0700 -o root -g root "$UCLOUD_HIBERNATION_QUOTA_ROOT"',
+            script,
+        )
+        self.assertIn('"xfs_quota": "/usr/sbin/xfs_quota"', script)
+        self.assertIn('"xfs_io": "/usr/sbin/xfs_io"', script)
+        self.assertIn('"findmnt": "/usr/bin/findmnt"', script)
+        self.assertIn(
+            'visudo -cf "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP"',
             script,
         )
         self.assertIn('$SUDO "$UCLOUD_CHECKPOINT_HELPER" gc >/dev/null', script)

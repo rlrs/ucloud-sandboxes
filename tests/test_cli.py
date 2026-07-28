@@ -514,6 +514,81 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(args.checkpoint_helper, "/test/checkpoint-helper")
                 self.assertEqual(args.checkpoint_root, Path("/test/checkpoints"))
 
+    def test_node_agent_parsers_accept_explicit_local_hibernation_options(
+        self,
+    ) -> None:
+        for command in ("serve-node-agent", "serve-async-node-agent"):
+            with self.subTest(command=command):
+                args = cli.build_parser().parse_args(
+                    [
+                        command,
+                        "--enable-local-hibernation",
+                        "--hibernate-runtime-name",
+                        "runsc-hibernate-pinned",
+                        "--expected-hibernate-runtime-fingerprint",
+                        "a" * 64,
+                        "--hibernation-disk-ledger",
+                        "/state/hibernate-ledger.json",
+                        "--hibernation-disk-capacity-mb",
+                        "1900000",
+                        "--hibernation-disk-headroom-mb",
+                        "100000",
+                        "--hibernation-quota-helper",
+                        "/test/quota-helper",
+                    ]
+                )
+
+                self.assertTrue(args.enable_local_hibernation)
+                self.assertEqual(
+                    args.hibernate_runtime_name,
+                    "runsc-hibernate-pinned",
+                )
+                self.assertEqual(
+                    args.hibernation_disk_ledger,
+                    Path("/state/hibernate-ledger.json"),
+                )
+                self.assertEqual(args.hibernation_disk_capacity_mb, 1_900_000)
+                self.assertEqual(args.hibernation_disk_headroom_mb, 100_000)
+
+    def test_local_hibernation_storage_is_fail_closed_and_explicit(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            args = argparse.Namespace(
+                enable_local_hibernation=True,
+                execute_runtime=True,
+                enable_image_builds=False,
+                hibernation_disk_capacity_mb=9_000,
+                hibernation_disk_headroom_mb=1_000,
+                total_disk_mb=10_000,
+                hibernation_disk_ledger=None,
+                hibernation_quota_helper="/test/quota-helper",
+            )
+            runtime = cli.DockerGvisorRuntime(dry_run=False)
+
+            ledger, backend = cli._node_hibernation_storage(
+                args,
+                sandbox_file=root / "sandboxes.json",
+                conformance_capabilities=("hibernate-local-v1",),
+                runtime=runtime,
+            )
+
+            self.assertEqual(
+                ledger.path,
+                root / "hibernation-disk-ledger.json",
+            )
+            self.assertEqual(ledger.capacity_mb, 9_000)
+            self.assertEqual(ledger.safety_headroom_mb, 1_000)
+            self.assertEqual(backend.helper, "/test/quota-helper")
+
+            args.execute_runtime = False
+            with self.assertRaisesRegex(ValueError, "requires --execute-runtime"):
+                cli._node_hibernation_storage(
+                    args,
+                    sandbox_file=root / "sandboxes.json",
+                    conformance_capabilities=("hibernate-local-v1",),
+                    runtime=runtime,
+                )
+
     def test_model_relay_cli_wires_admission_limits(self) -> None:
         args = cli.build_parser().parse_args(
             [

@@ -4,6 +4,15 @@ from ucloud_sandboxes.config import AutoscalerConfig
 
 
 class ConfigTests(unittest.TestCase):
+    def test_disk_overcommit_above_one_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot exceed 1.0"):
+            AutoscalerConfig.from_dict(
+                {
+                    "project_id": "project-1",
+                    "policy": {"disk_overcommit": 1.01},
+                }
+            )
+
     def test_parses_slow_start_policy_fields(self) -> None:
         config = AutoscalerConfig.from_dict(
             {

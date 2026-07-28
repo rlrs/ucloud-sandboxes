@@ -2,6 +2,29 @@
 
 This project uses semantic versioning.
 
+## 0.3.53 - 2026-07-28
+
+- Added the exclusive node-level direct gVisor runtime: one privileged Warden
+  owns OCI rootfs provisioning, runsc lifecycle, durable registry and runtime
+  identity, tool/file leases, idle parking, restore, deletion, and recovery
+  for every sandbox on a node. Docker remains image pull/export
+  infrastructure and no longer owns direct-runtime sandbox tasks.
+- Added the pinned four-patch gVisor hibernation runtime, two-phase
+  quota-backed checkpoints, background restore, restore CPU startup burst,
+  exact XFS project accounting, bounded concurrent restores, and fail-closed
+  compatibility fencing.
+- Integrated direct-only worker bootstrap, bundle-verified runsc delivery,
+  scheduler capabilities/accounting, autoscaler deployment flags, clean-node
+  ownership, and SDK gateway routing without enabling the legacy task runtime
+  on direct nodes.
+- Preserved image-root permissions in overlay upper directories and injected
+  the trusted init binary into quota-accounted rootfs state, allowing the SDK
+  default non-root security profile to create, park, resume, and delete
+  sandboxes under gVisor.
+- Qualified public SDK create, exec, binary file I/O, automatic idle park,
+  stateful wake, delete, and complete ownership cleanup on the live UCloud
+  canary deployment.
+
 ## 0.3.52 - 2026-07-25
 
 - Made no-capacity sandbox creation responses explicitly retryable with

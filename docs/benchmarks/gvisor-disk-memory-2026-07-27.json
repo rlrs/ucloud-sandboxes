@@ -1,0 +1,2479 @@
+{
+  "schema": 1,
+  "started_unix": 1785186704.3983603,
+  "host": {
+    "uname": "Linux j-12360603 6.8.0-53-generic #55-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan 17 15:37:52 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    "memory_total_bytes": 94270529536,
+    "block_device": "vda",
+    "backing_dir": "/mnt/gvisor-xfs/application-memory",
+    "runsc_sha256": "5c76e125bf6e6ce4454b5030caed2ce8da7fd336001335ce8ebae6bb34ad637e",
+    "runsc_version": "runsc version release-20260721.0-dirty\nspec: 1.2.1"
+  },
+  "cases": [
+    {
+      "runtime": "runsc-memfd",
+      "logical_mib": 256,
+      "populated_mib": 256,
+      "memory_limit_mib": 1024,
+      "create_seconds": 0.6092894420000903,
+      "ready": {
+        "raw": "ready logical_pages=65536 populated_pages=65536 checksum=8355840",
+        "logical_pages": 65536,
+        "populated_pages": 65536,
+        "checksum": 8355840
+      },
+      "hot_scan_wall_seconds": 0.11136638600009974,
+      "hot_scan": {
+        "raw": "scan ns=57377490 checksum=8355840 pages=65536 bytes=268435456",
+        "ns": 57377490,
+        "checksum": 8355840,
+        "pages": 65536,
+        "bytes": 268435456
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.03723707600011039,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.46212539800012564,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06324777200006793,
+        "true_seconds": 0.1328324139999495,
+        "ls_seconds": 0.0911817759999849,
+        "scan_wall_seconds": 2.0019624980000117,
+        "scan": {
+          "raw": "scan ns=1924616500 checksum=8355840 pages=65536 bytes=268435456",
+          "ns": 1924616500,
+          "checksum": 8355840,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 16642048,
+          "file": 268713984,
+          "shmem": 268713984,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82418,
+          "pgmajfault": 0,
+          "current": 289034240,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 16642048,
+          "file": 268713984,
+          "shmem": 268713984,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82418,
+          "pgmajfault": 0,
+          "current": 289226752,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82587,
+          "pgmajfault": 125,
+          "current": 4247552,
+          "swap_current": 285433856
+        },
+        "memory_after_scan": {
+          "anon": 4632576,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 3846144,
+          "pgfault": 149867,
+          "pgmajfault": 9362,
+          "current": 278032384,
+          "swap_current": 16560128
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 6,
+          "write_sectors": 240
+        },
+        "block_during_reclaim": {
+          "reads": 125,
+          "read_sectors": 1008,
+          "writes": 1434,
+          "write_sectors": 557792
+        },
+        "block_during_wake": {
+          "reads": 9263,
+          "read_sectors": 534640,
+          "writes": 6,
+          "write_sectors": 200
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.038893208999979834,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.48856416700004957,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06123145599985946,
+        "true_seconds": 0.11651990899986231,
+        "ls_seconds": 0.06806334199995945,
+        "scan_wall_seconds": 2.141815141000052,
+        "scan": {
+          "raw": "scan ns=2059823838 checksum=8355840 pages=65536 bytes=268435456",
+          "ns": 2059823838,
+          "checksum": 8355840,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 4632576,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 3846144,
+          "pgfault": 149867,
+          "pgmajfault": 9362,
+          "current": 278032384,
+          "swap_current": 16560128
+        },
+        "memory_after_flush": {
+          "anon": 4632576,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 3846144,
+          "pgfault": 149867,
+          "pgmajfault": 9362,
+          "current": 278065152,
+          "swap_current": 16560128
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 149904,
+          "pgmajfault": 9381,
+          "current": 3952640,
+          "swap_current": 286777344
+        },
+        "memory_after_scan": {
+          "anon": 3665920,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2621440,
+          "pgfault": 216878,
+          "pgmajfault": 18409,
+          "current": 276566016,
+          "swap_current": 17297408
+        },
+        "block_during_flush": {
+          "reads": 7,
+          "read_sectors": 64,
+          "writes": 6,
+          "write_sectors": 208
+        },
+        "block_during_reclaim": {
+          "reads": 12,
+          "read_sectors": 128,
+          "writes": 1917,
+          "write_sectors": 531072
+        },
+        "block_during_wake": {
+          "reads": 9041,
+          "read_sectors": 531504,
+          "writes": 71,
+          "write_sectors": 856
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=656",
+        "percent": 1,
+        "pages": 656
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.05755562100011957,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.49661008700013554,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07410433500012914,
+        "true_seconds": 0.14209344599998985,
+        "ls_seconds": 0.19918690700001207,
+        "scan_wall_seconds": 2.298798326999986,
+        "scan": {
+          "raw": "scan ns=2208397517 checksum=8355904 pages=65536 bytes=268435456",
+          "ns": 2208397517,
+          "checksum": 8355904,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 3665920,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2621440,
+          "pgfault": 216878,
+          "pgmajfault": 18409,
+          "current": 277516288,
+          "swap_current": 17297408
+        },
+        "memory_after_flush": {
+          "anon": 3665920,
+          "file": 268537856,
+          "shmem": 268537856,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2621440,
+          "pgfault": 216878,
+          "pgmajfault": 18409,
+          "current": 277295104,
+          "swap_current": 17297408
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 217087,
+          "pgmajfault": 18464,
+          "current": 3842048,
+          "swap_current": 287526912
+        },
+        "memory_after_scan": {
+          "anon": 9355264,
+          "file": 268541952,
+          "shmem": 268541952,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 7286784,
+          "pgfault": 286270,
+          "pgmajfault": 28591,
+          "current": 282726400,
+          "swap_current": 18284544
+        },
+        "block_during_flush": {
+          "reads": 3,
+          "read_sectors": 24,
+          "writes": 6,
+          "write_sectors": 264
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 1752,
+          "write_sectors": 530768
+        },
+        "block_during_wake": {
+          "reads": 10151,
+          "read_sectors": 541264,
+          "writes": 6,
+          "write_sectors": 216
+        },
+        "backing_before": null,
+        "backing_parked": null
+      }
+    },
+    {
+      "runtime": "runsc-xfs",
+      "logical_mib": 256,
+      "populated_mib": 256,
+      "memory_limit_mib": 1024,
+      "create_seconds": 0.7627782840002055,
+      "ready": {
+        "raw": "ready logical_pages=65536 populated_pages=65536 checksum=8355840",
+        "logical_pages": 65536,
+        "populated_pages": 65536,
+        "checksum": 8355840
+      },
+      "hot_scan_wall_seconds": 0.11549559300010515,
+      "hot_scan": {
+        "raw": "scan ns=42075913 checksum=8355840 pages=65536 bytes=268435456",
+        "ns": 42075913,
+        "checksum": 8355840,
+        "pages": 65536,
+        "bytes": 268435456
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.052072252000016306,
+        "flush_seconds": 0.06345266599987553,
+        "reclaim": {
+          "seconds": 0.10671303699996315,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07552277000013419,
+        "true_seconds": 0.13580836799997087,
+        "ls_seconds": 0.12347933199998806,
+        "scan_wall_seconds": 0.593809174000171,
+        "scan": {
+          "raw": "scan ns=499744172 checksum=8355840 pages=65536 bytes=268435456",
+          "ns": 499744172,
+          "checksum": 8355840,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 16232448,
+          "file": 269389824,
+          "shmem": 184320,
+          "file_dirty": 104955904,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82306,
+          "pgmajfault": 30,
+          "current": 290058240,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 16232448,
+          "file": 269389824,
+          "shmem": 184320,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82307,
+          "pgmajfault": 30,
+          "current": 290291712,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 82307,
+          "pgmajfault": 30,
+          "current": 4612096,
+          "swap_current": 16416768
+        },
+        "memory_after_scan": {
+          "anon": 4288512,
+          "file": 269557760,
+          "shmem": 45056,
+          "file_dirty": 69632,
+          "file_writeback": 98304,
+          "swapcached": 3055616,
+          "pgfault": 88068,
+          "pgmajfault": 989,
+          "current": 278380544,
+          "swap_current": 16052224
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 118,
+          "write_sectors": 205423
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 89,
+          "write_sectors": 32064
+        },
+        "block_during_wake": {
+          "reads": 3012,
+          "read_sectors": 533048,
+          "writes": 24,
+          "write_sectors": 808
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268587008
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268587008
+        }
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.0502303790001406,
+        "flush_seconds": 0.0033243249999941327,
+        "reclaim": {
+          "seconds": 0.11739430299985543,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07971646999999393,
+        "true_seconds": 0.14724345400009042,
+        "ls_seconds": 0.08583485799999835,
+        "scan_wall_seconds": 0.6088315639999564,
+        "scan": {
+          "raw": "scan ns=525952797 checksum=8355840 pages=65536 bytes=268435456",
+          "ns": 525952797,
+          "checksum": 8355840,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 4288512,
+          "file": 269557760,
+          "shmem": 45056,
+          "file_dirty": 69632,
+          "file_writeback": 98304,
+          "swapcached": 3055616,
+          "pgfault": 88068,
+          "pgmajfault": 989,
+          "current": 278380544,
+          "swap_current": 16052224
+        },
+        "memory_after_flush": {
+          "anon": 4288512,
+          "file": 269557760,
+          "shmem": 45056,
+          "file_dirty": 69632,
+          "file_writeback": 98304,
+          "swapcached": 3055616,
+          "pgfault": 88068,
+          "pgmajfault": 989,
+          "current": 278147072,
+          "swap_current": 16052224
+        },
+        "memory_parked": {
+          "anon": 12288,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 28672,
+          "pgfault": 88104,
+          "pgmajfault": 1015,
+          "current": 4743168,
+          "swap_current": 17367040
+        },
+        "memory_after_scan": {
+          "anon": 3682304,
+          "file": 269135872,
+          "shmem": 45056,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 2400256,
+          "pgfault": 93660,
+          "pgmajfault": 1798,
+          "current": 276770816,
+          "swap_current": 16887808
+        },
+        "block_during_flush": {
+          "reads": 1,
+          "read_sectors": 8,
+          "writes": 13,
+          "write_sectors": 413
+        },
+        "block_during_reclaim": {
+          "reads": 24,
+          "read_sectors": 368,
+          "writes": 546,
+          "write_sectors": 6112
+        },
+        "block_during_wake": {
+          "reads": 2839,
+          "read_sectors": 531312,
+          "writes": 21,
+          "write_sectors": 840
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268607488
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268607488
+        }
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=656",
+        "percent": 1,
+        "pages": 656
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.047308822000104556,
+        "flush_seconds": 0.004880808000052639,
+        "reclaim": {
+          "seconds": 0.11263320700004442,
+          "requested_bytes": 1073741824,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.0674361769999905,
+        "true_seconds": 0.20345318299996507,
+        "ls_seconds": 0.07009639800003242,
+        "scan_wall_seconds": 0.5354432020001241,
+        "scan": {
+          "raw": "scan ns=460796186 checksum=8355904 pages=65536 bytes=268435456",
+          "ns": 460796186,
+          "checksum": 8355904,
+          "pages": 65536,
+          "bytes": 268435456
+        },
+        "memory_before": {
+          "anon": 3989504,
+          "file": 269193216,
+          "shmem": 45056,
+          "file_dirty": 2752512,
+          "file_writeback": 0,
+          "swapcached": 2478080,
+          "pgfault": 94469,
+          "pgmajfault": 1843,
+          "current": 276905984,
+          "swap_current": 16887808
+        },
+        "memory_after_flush": {
+          "anon": 3989504,
+          "file": 269193216,
+          "shmem": 45056,
+          "file_dirty": 2752512,
+          "file_writeback": 0,
+          "swapcached": 2478080,
+          "pgfault": 94469,
+          "pgmajfault": 1843,
+          "current": 277671936,
+          "swap_current": 16887808
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 94475,
+          "pgmajfault": 1847,
+          "current": 4329472,
+          "swap_current": 18583552
+        },
+        "memory_after_scan": {
+          "anon": 8773632,
+          "file": 269176832,
+          "shmem": 49152,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 7245824,
+          "pgfault": 102130,
+          "pgmajfault": 3720,
+          "current": 282513408,
+          "swap_current": 17772544
+        },
+        "block_during_flush": {
+          "reads": 4,
+          "read_sectors": 56,
+          "writes": 18,
+          "write_sectors": 5789
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 499,
+          "write_sectors": 6112
+        },
+        "block_during_wake": {
+          "reads": 3940,
+          "read_sectors": 541224,
+          "writes": 20,
+          "write_sectors": 832
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268599296
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/8d128d3056e0aacb9cbba18f1a0bd0638baecc1225bfb362d6d8fd64cf489cb1.memory",
+          "size": 1073741824,
+          "allocated": 268599296
+        }
+      }
+    },
+    {
+      "runtime": "runsc-memfd",
+      "logical_mib": 1024,
+      "populated_mib": 1024,
+      "memory_limit_mib": 1536,
+      "create_seconds": 1.366287494999824,
+      "ready": {
+        "raw": "ready logical_pages=262144 populated_pages=262144 checksum=33423360",
+        "logical_pages": 262144,
+        "populated_pages": 262144,
+        "checksum": 33423360
+      },
+      "hot_scan_wall_seconds": 0.24769399899992095,
+      "hot_scan": {
+        "raw": "scan ns=192639502 checksum=33423360 pages=262144 bytes=1073741824",
+        "ns": 192639502,
+        "checksum": 33423360,
+        "pages": 262144,
+        "bytes": 1073741824
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.03887003599993477,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 1.7304238910001004,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06136827600016659,
+        "true_seconds": 0.1585004339999614,
+        "ls_seconds": 0.08465619900016463,
+        "scan_wall_seconds": 7.726545774999977,
+        "scan": {
+          "raw": "scan ns=7656941180 checksum=33423360 pages=262144 bytes=1073741824",
+          "ns": 7656941180,
+          "checksum": 33423360,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 18079744,
+          "file": 1074020352,
+          "shmem": 1074020352,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 291842,
+          "pgmajfault": 0,
+          "current": 1099603968,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 18079744,
+          "file": 1074020352,
+          "shmem": 1074020352,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 291842,
+          "pgmajfault": 0,
+          "current": 1099362304,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 291993,
+          "pgmajfault": 106,
+          "current": 7274496,
+          "swap_current": 1092149248
+        },
+        "memory_after_scan": {
+          "anon": 4534272,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1880064,
+          "pgfault": 555834,
+          "pgmajfault": 33983,
+          "current": 1088155648,
+          "swap_current": 15462400
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 6,
+          "write_sectors": 248
+        },
+        "block_during_reclaim": {
+          "reads": 106,
+          "read_sectors": 992,
+          "writes": 5055,
+          "write_sectors": 2133304
+        },
+        "block_during_wake": {
+          "reads": 33939,
+          "read_sectors": 2109120,
+          "writes": 73,
+          "write_sectors": 848
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.037589343000036024,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 1.6636156619999838,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.05932881599983375,
+        "true_seconds": 0.10740698400013571,
+        "ls_seconds": 0.07123524399980852,
+        "scan_wall_seconds": 7.852057478000006,
+        "scan": {
+          "raw": "scan ns=7711635662 checksum=33423360 pages=262144 bytes=1073741824",
+          "ns": 7711635662,
+          "checksum": 33423360,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 4534272,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1880064,
+          "pgfault": 555834,
+          "pgmajfault": 33983,
+          "current": 1088155648,
+          "swap_current": 15462400
+        },
+        "memory_after_flush": {
+          "anon": 4534272,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1880064,
+          "pgfault": 555834,
+          "pgmajfault": 33983,
+          "current": 1088024576,
+          "swap_current": 15462400
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 555969,
+          "pgmajfault": 34077,
+          "current": 7598080,
+          "swap_current": 1093955584
+        },
+        "memory_after_scan": {
+          "anon": 8986624,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1585152,
+          "pgfault": 821571,
+          "pgmajfault": 68330,
+          "current": 1092173824,
+          "swap_current": 12468224
+        },
+        "block_during_flush": {
+          "reads": 6,
+          "read_sectors": 56,
+          "writes": 6,
+          "write_sectors": 264
+        },
+        "block_during_reclaim": {
+          "reads": 87,
+          "read_sectors": 808,
+          "writes": 4993,
+          "write_sectors": 2106703
+        },
+        "block_during_wake": {
+          "reads": 34371,
+          "read_sectors": 2117240,
+          "writes": 17,
+          "write_sectors": 256
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=2622",
+        "percent": 1,
+        "pages": 2622
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.03721351500007586,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 1.8030500219999794,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07595319899996866,
+        "true_seconds": 0.10755938800002696,
+        "ls_seconds": 0.06999913700019533,
+        "scan_wall_seconds": 7.733253581999861,
+        "scan": {
+          "raw": "scan ns=7665920587 checksum=33423460 pages=262144 bytes=1073741824",
+          "ns": 7665920587,
+          "checksum": 33423460,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 8986624,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1585152,
+          "pgfault": 821571,
+          "pgmajfault": 68330,
+          "current": 1091940352,
+          "swap_current": 12468224
+        },
+        "memory_after_flush": {
+          "anon": 8986624,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1585152,
+          "pgfault": 821571,
+          "pgmajfault": 68330,
+          "current": 1091936256,
+          "swap_current": 12337152
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 821863,
+          "pgmajfault": 68421,
+          "current": 7553024,
+          "swap_current": 1095237632
+        },
+        "memory_after_scan": {
+          "anon": 3911680,
+          "file": 1073852416,
+          "shmem": 1073852416,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1478656,
+          "pgfault": 1085543,
+          "pgmajfault": 102052,
+          "current": 1087291392,
+          "swap_current": 18141184
+        },
+        "block_during_flush": {
+          "reads": 4,
+          "read_sectors": 40,
+          "writes": 6,
+          "write_sectors": 240
+        },
+        "block_during_reclaim": {
+          "reads": 78,
+          "read_sectors": 1552,
+          "writes": 5057,
+          "write_sectors": 2115704
+        },
+        "block_during_wake": {
+          "reads": 33662,
+          "read_sectors": 2107584,
+          "writes": 54,
+          "write_sectors": 712
+        },
+        "backing_before": null,
+        "backing_parked": null
+      }
+    },
+    {
+      "runtime": "runsc-xfs",
+      "logical_mib": 1024,
+      "populated_mib": 1024,
+      "memory_limit_mib": 1536,
+      "create_seconds": 1.8866076019999127,
+      "ready": {
+        "raw": "ready logical_pages=262144 populated_pages=262144 checksum=33423360",
+        "logical_pages": 262144,
+        "populated_pages": 262144,
+        "checksum": 33423360
+      },
+      "hot_scan_wall_seconds": 0.21813414499979444,
+      "hot_scan": {
+        "raw": "scan ns=162407802 checksum=33423360 pages=262144 bytes=1073741824",
+        "ns": 162407802,
+        "checksum": 33423360,
+        "pages": 262144,
+        "bytes": 1073741824
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.03868730499993944,
+        "flush_seconds": 0.10332721500003572,
+        "reclaim": {
+          "seconds": 0.3845394079999096,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.05886334699994222,
+        "true_seconds": 0.11545609099994181,
+        "ls_seconds": 0.0947164070000781,
+        "scan_wall_seconds": 1.8461211470000762,
+        "scan": {
+          "raw": "scan ns=1769843920 checksum=33423360 pages=262144 bytes=1073741824",
+          "ns": 1769843920,
+          "checksum": 33423360,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 18657280,
+          "file": 1074778112,
+          "shmem": 184320,
+          "file_dirty": 234999808,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 292214,
+          "pgmajfault": 70,
+          "current": 1101099008,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 18665472,
+          "file": 1074778112,
+          "shmem": 184320,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 292217,
+          "pgmajfault": 70,
+          "current": 1100759040,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 16384,
+          "shmem": 0,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 292217,
+          "pgmajfault": 70,
+          "current": 7315456,
+          "swap_current": 18849792
+        },
+        "memory_after_scan": {
+          "anon": 4390912,
+          "file": 1074831360,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 2981888,
+          "pgfault": 310269,
+          "pgmajfault": 1037,
+          "current": 1087676416,
+          "swap_current": 18427904
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 246,
+          "write_sectors": 459398
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 100,
+          "write_sectors": 36816
+        },
+        "block_during_wake": {
+          "reads": 9180,
+          "read_sectors": 2106040,
+          "writes": 27,
+          "write_sectors": 800
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073909760
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073909760
+        }
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.04841511199992965,
+        "flush_seconds": 0.002100866000091628,
+        "reclaim": {
+          "seconds": 0.3415350190000481,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.059081858000126886,
+        "true_seconds": 0.11618274000011297,
+        "ls_seconds": 0.08421682600010172,
+        "scan_wall_seconds": 1.8573012669999116,
+        "scan": {
+          "raw": "scan ns=1779467989 checksum=33423360 pages=262144 bytes=1073741824",
+          "ns": 1779467989,
+          "checksum": 33423360,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 4390912,
+          "file": 1074831360,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 2981888,
+          "pgfault": 310269,
+          "pgmajfault": 1037,
+          "current": 1087676416,
+          "swap_current": 18427904
+        },
+        "memory_after_flush": {
+          "anon": 4415488,
+          "file": 1074831360,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 2994176,
+          "pgfault": 310276,
+          "pgmajfault": 1043,
+          "current": 1087426560,
+          "swap_current": 18427904
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 310276,
+          "pgmajfault": 1043,
+          "current": 7917568,
+          "swap_current": 20164608
+        },
+        "memory_after_scan": {
+          "anon": 3710976,
+          "file": 1074896896,
+          "shmem": 53248,
+          "file_dirty": 69632,
+          "file_writeback": 0,
+          "swapcached": 2617344,
+          "pgfault": 328192,
+          "pgmajfault": 1906,
+          "current": 1086459904,
+          "swap_current": 19009536
+        },
+        "block_during_flush": {
+          "reads": 6,
+          "read_sectors": 48,
+          "writes": 13,
+          "write_sectors": 446
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 518,
+          "write_sectors": 6224
+        },
+        "block_during_wake": {
+          "reads": 9067,
+          "read_sectors": 2104888,
+          "writes": 96,
+          "write_sectors": 1744
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073913856
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073913856
+        }
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=2622",
+        "percent": 1,
+        "pages": 2622
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.0440939590000653,
+        "flush_seconds": 0.009402434999856268,
+        "reclaim": {
+          "seconds": 0.32953250900004605,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06477641699984815,
+        "true_seconds": 0.13899621899986414,
+        "ls_seconds": 0.1581343029999971,
+        "scan_wall_seconds": 1.859721043000036,
+        "scan": {
+          "raw": "scan ns=1793835851 checksum=33423460 pages=262144 bytes=1073741824",
+          "ns": 1793835851,
+          "checksum": 33423460,
+          "pages": 262144,
+          "bytes": 1073741824
+        },
+        "memory_before": {
+          "anon": 3977216,
+          "file": 1074995200,
+          "shmem": 53248,
+          "file_dirty": 8740864,
+          "file_writeback": 0,
+          "swapcached": 2707456,
+          "pgfault": 330416,
+          "pgmajfault": 1954,
+          "current": 1087053824,
+          "swap_current": 19009536
+        },
+        "memory_after_flush": {
+          "anon": 4022272,
+          "file": 1074769920,
+          "shmem": 53248,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2736128,
+          "pgfault": 330965,
+          "pgmajfault": 1964,
+          "current": 1086832640,
+          "swap_current": 19009536
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 330965,
+          "pgmajfault": 1964,
+          "current": 7733248,
+          "swap_current": 20598784
+        },
+        "memory_after_scan": {
+          "anon": 8892416,
+          "file": 1074814976,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 7204864,
+          "pgfault": 350916,
+          "pgmajfault": 3922,
+          "current": 1091993600,
+          "swap_current": 19898368
+        },
+        "block_during_flush": {
+          "reads": 3,
+          "read_sectors": 24,
+          "writes": 27,
+          "write_sectors": 21518
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 535,
+          "write_sectors": 6168
+        },
+        "block_during_wake": {
+          "reads": 10188,
+          "read_sectors": 2115160,
+          "writes": 26,
+          "write_sectors": 808
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073922048
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/5ac1c9a27e63b5f4f4cf3cfd3a5e566678872e97e1b5bbe788f7c25dcdd31201.memory",
+          "size": 2147483648,
+          "allocated": 1073922048
+        }
+      }
+    },
+    {
+      "runtime": "runsc-memfd",
+      "logical_mib": 4096,
+      "populated_mib": 4096,
+      "memory_limit_mib": 4608,
+      "create_seconds": 5.53011446000005,
+      "ready": {
+        "raw": "ready logical_pages=1048576 populated_pages=1048576 checksum=133693440",
+        "logical_pages": 1048576,
+        "populated_pages": 1048576,
+        "checksum": 133693440
+      },
+      "hot_scan_wall_seconds": 0.800078251000059,
+      "hot_scan": {
+        "raw": "scan ns=725117359 checksum=133693440 pages=1048576 bytes=4294967296",
+        "ns": 725117359,
+        "checksum": 133693440,
+        "pages": 1048576,
+        "bytes": 4294967296
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.05423150699994039,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 7.872624389999828,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07971213099995111,
+        "true_seconds": 0.2834879069998806,
+        "ls_seconds": 0.10788331100002324,
+        "scan_wall_seconds": 33.44458195199991,
+        "scan": {
+          "raw": "scan ns=33342433750 checksum=133693440 pages=1048576 bytes=4294967296",
+          "ns": 33342433750,
+          "checksum": 133693440,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 20307968,
+          "file": 4295245824,
+          "shmem": 4295245824,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130124,
+          "pgmajfault": 0,
+          "current": 4336795648,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 20307968,
+          "file": 4295245824,
+          "shmem": 4295245824,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130124,
+          "pgmajfault": 0,
+          "current": 4336541696,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130271,
+          "pgmajfault": 108,
+          "current": 21532672,
+          "swap_current": 4315615232
+        },
+        "memory_after_scan": {
+          "anon": 9756672,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2953216,
+          "pgfault": 2182691,
+          "pgmajfault": 133477,
+          "current": 4328771584,
+          "swap_current": 12402688
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 6,
+          "write_sectors": 224
+        },
+        "block_during_reclaim": {
+          "reads": 109,
+          "read_sectors": 1024,
+          "writes": 12562,
+          "write_sectors": 8429192
+        },
+        "block_during_wake": {
+          "reads": 133508,
+          "read_sectors": 8413296,
+          "writes": 27,
+          "write_sectors": 530
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.04515362899996944,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 7.318552027000123,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.09437189599998419,
+        "true_seconds": 0.1012273720000394,
+        "ls_seconds": 0.10989609900002506,
+        "scan_wall_seconds": 35.98389544199995,
+        "scan": {
+          "raw": "scan ns=35896587518 checksum=133693440 pages=1048576 bytes=4294967296",
+          "ns": 35896587518,
+          "checksum": 133693440,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 9756672,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2953216,
+          "pgfault": 2182691,
+          "pgmajfault": 133477,
+          "current": 4328771584,
+          "swap_current": 12402688
+        },
+        "memory_after_flush": {
+          "anon": 9756672,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2953216,
+          "pgfault": 2182691,
+          "pgmajfault": 133477,
+          "current": 4328845312,
+          "swap_current": 12402688
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 4096,
+          "swapcached": 4096,
+          "pgfault": 2182819,
+          "pgmajfault": 133510,
+          "current": 21495808,
+          "swap_current": 4317249536
+        },
+        "memory_after_scan": {
+          "anon": 4472832,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2113536,
+          "pgfault": 3233053,
+          "pgmajfault": 265684,
+          "current": 4322861056,
+          "swap_current": 18362368
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 6,
+          "write_sectors": 184
+        },
+        "block_during_reclaim": {
+          "reads": 34,
+          "read_sectors": 344,
+          "writes": 12998,
+          "write_sectors": 8408176
+        },
+        "block_during_wake": {
+          "reads": 132221,
+          "read_sectors": 8400680,
+          "writes": 43,
+          "write_sectors": 646
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=10486",
+        "percent": 1,
+        "pages": 10486
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.04317989000014677,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 7.198183212999993,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07651126299992939,
+        "true_seconds": 0.1102723500000593,
+        "ls_seconds": 0.08043030699991505,
+        "scan_wall_seconds": 34.85665389399992,
+        "scan": {
+          "raw": "scan ns=34771228077 checksum=133693412 pages=1048576 bytes=4294967296",
+          "ns": 34771228077,
+          "checksum": 133693412,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 4472832,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2113536,
+          "pgfault": 3233053,
+          "pgmajfault": 265684,
+          "current": 4322783232,
+          "swap_current": 17838080
+        },
+        "memory_after_flush": {
+          "anon": 4472832,
+          "file": 4295077888,
+          "shmem": 4295077888,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 2113536,
+          "pgfault": 3233053,
+          "pgmajfault": 265684,
+          "current": 4322578432,
+          "swap_current": 17838080
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 3233382,
+          "pgmajfault": 265825,
+          "current": 20795392,
+          "swap_current": 4317360128
+        },
+        "memory_after_scan": {
+          "anon": 4149248,
+          "file": 4295081984,
+          "shmem": 4295081984,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 1646592,
+          "pgfault": 4283539,
+          "pgmajfault": 397798,
+          "current": 4321964032,
+          "swap_current": 18726912
+        },
+        "block_during_flush": {
+          "reads": 3,
+          "read_sectors": 32,
+          "writes": 6,
+          "write_sectors": 224
+        },
+        "block_during_reclaim": {
+          "reads": 70,
+          "read_sectors": 1280,
+          "writes": 13103,
+          "write_sectors": 8398688
+        },
+        "block_during_wake": {
+          "reads": 132036,
+          "read_sectors": 8399920,
+          "writes": 296,
+          "write_sectors": 3648
+        },
+        "backing_before": null,
+        "backing_parked": null
+      }
+    },
+    {
+      "runtime": "runsc-xfs",
+      "logical_mib": 4096,
+      "populated_mib": 4096,
+      "memory_limit_mib": 4608,
+      "create_seconds": 7.169638978999956,
+      "ready": {
+        "raw": "ready logical_pages=1048576 populated_pages=1048576 checksum=133693440",
+        "logical_pages": 1048576,
+        "populated_pages": 1048576,
+        "checksum": 133693440
+      },
+      "hot_scan_wall_seconds": 0.5551263139998355,
+      "hot_scan": {
+        "raw": "scan ns=499906502 checksum=133693440 pages=1048576 bytes=4294967296",
+        "ns": 499906502,
+        "checksum": 133693440,
+        "pages": 1048576,
+        "bytes": 4294967296
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.03689122600007977,
+        "flush_seconds": 0.17514791600001445,
+        "reclaim": {
+          "seconds": 0.6340140770000744,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06679476599992995,
+        "true_seconds": 0.16087481299996398,
+        "ls_seconds": 0.09376100499980566,
+        "scan_wall_seconds": 7.94435012200006,
+        "scan": {
+          "raw": "scan ns=7780383064 checksum=133693440 pages=1048576 bytes=4294967296",
+          "ns": 7780383064,
+          "checksum": 133693440,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 20180992,
+          "file": 4296097792,
+          "shmem": 184320,
+          "file_dirty": 493195264,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130878,
+          "pgmajfault": 331,
+          "current": 4338159616,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 20180992,
+          "file": 4296097792,
+          "shmem": 184320,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130878,
+          "pgmajfault": 331,
+          "current": 4337897472,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 16384,
+          "shmem": 0,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1130879,
+          "pgmajfault": 332,
+          "current": 21499904,
+          "swap_current": 20365312
+        },
+        "memory_after_scan": {
+          "anon": 9957376,
+          "file": 4296011776,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 9084928,
+          "pgfault": 1224887,
+          "pgmajfault": 2223,
+          "current": 4328652800,
+          "swap_current": 19206144
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 399,
+          "write_sectors": 963656
+        },
+        "block_during_reclaim": {
+          "reads": 1,
+          "read_sectors": 64,
+          "writes": 121,
+          "write_sectors": 39776
+        },
+        "block_during_wake": {
+          "reads": 34870,
+          "read_sectors": 8421200,
+          "writes": 188,
+          "write_sectors": 33249
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295122944
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295122944
+        }
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.04016383499993026,
+        "flush_seconds": 0.002107988000034311,
+        "reclaim": {
+          "seconds": 1.4012735040000734,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07545249999998305,
+        "true_seconds": 0.11311429300008058,
+        "ls_seconds": 0.0993904689998999,
+        "scan_wall_seconds": 7.756574201000149,
+        "scan": {
+          "raw": "scan ns=7658236298 checksum=133693440 pages=1048576 bytes=4294967296",
+          "ns": 7658236298,
+          "checksum": 133693440,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 9957376,
+          "file": 4296011776,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 9084928,
+          "pgfault": 1224887,
+          "pgmajfault": 2223,
+          "current": 4328652800,
+          "swap_current": 19206144
+        },
+        "memory_after_flush": {
+          "anon": 9965568,
+          "file": 4296011776,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 9080832,
+          "pgfault": 1224889,
+          "pgmajfault": 2224,
+          "current": 4328644608,
+          "swap_current": 19206144
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 16384,
+          "shmem": 0,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1224890,
+          "pgmajfault": 2225,
+          "current": 21229568,
+          "swap_current": 21688320
+        },
+        "memory_after_scan": {
+          "anon": 4112384,
+          "file": 4295962624,
+          "shmem": 53248,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 3096576,
+          "pgfault": 1316660,
+          "pgmajfault": 3175,
+          "current": 4322095104,
+          "swap_current": 20983808
+        },
+        "block_during_flush": {
+          "reads": 1,
+          "read_sectors": 8,
+          "writes": 13,
+          "write_sectors": 368
+        },
+        "block_during_reclaim": {
+          "reads": 2,
+          "read_sectors": 56,
+          "writes": 1276,
+          "write_sectors": 13808
+        },
+        "block_during_wake": {
+          "reads": 33784,
+          "read_sectors": 8397592,
+          "writes": 115,
+          "write_sectors": 1968
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295122944
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295122944
+        }
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=10486",
+        "percent": 1,
+        "pages": 10486
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.04060939100008909,
+        "flush_seconds": 0.027420887000062066,
+        "reclaim": {
+          "seconds": 1.3005547200000365,
+          "requested_bytes": 4831838208,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06390415799978655,
+        "true_seconds": 0.11864186300022084,
+        "ls_seconds": 0.07452912600001582,
+        "scan_wall_seconds": 8.219366468999851,
+        "scan": {
+          "raw": "scan ns=8139759633 checksum=133693412 pages=1048576 bytes=4294967296",
+          "ns": 8139759633,
+          "checksum": 133693412,
+          "pages": 1048576,
+          "bytes": 4294967296
+        },
+        "memory_before": {
+          "anon": 4431872,
+          "file": 4296187904,
+          "shmem": 53248,
+          "file_dirty": 39489536,
+          "file_writeback": 0,
+          "swapcached": 3174400,
+          "pgfault": 1326413,
+          "pgmajfault": 3243,
+          "current": 4322168832,
+          "swap_current": 20721664
+        },
+        "memory_after_flush": {
+          "anon": 4497408,
+          "file": 4295962624,
+          "shmem": 53248,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 3223552,
+          "pgfault": 1327331,
+          "pgmajfault": 3259,
+          "current": 4322435072,
+          "swap_current": 20721664
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 16384,
+          "shmem": 0,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 1327333,
+          "pgmajfault": 3261,
+          "current": 21581824,
+          "swap_current": 22458368
+        },
+        "memory_after_scan": {
+          "anon": 3960832,
+          "file": 4296015872,
+          "shmem": 57344,
+          "file_dirty": 32768,
+          "file_writeback": 0,
+          "swapcached": 2625536,
+          "pgfault": 1419051,
+          "pgmajfault": 4202,
+          "current": 4321579008,
+          "swap_current": 21594112
+        },
+        "block_during_flush": {
+          "reads": 11,
+          "read_sectors": 88,
+          "writes": 59,
+          "write_sectors": 84432
+        },
+        "block_during_reclaim": {
+          "reads": 3,
+          "read_sectors": 64,
+          "writes": 586,
+          "write_sectors": 6840
+        },
+        "block_during_wake": {
+          "reads": 33765,
+          "read_sectors": 8396800,
+          "writes": 170,
+          "write_sectors": 2696
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295135232
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/03761ec8b8e2f585dddc6e8ee9b9175f7cc7dd2c9d64677da62e25030598f5e1.memory",
+          "size": 5368709120,
+          "allocated": 4295135232
+        }
+      }
+    },
+    {
+      "runtime": "runsc-memfd",
+      "logical_mib": 1024,
+      "populated_mib": 1,
+      "memory_limit_mib": 1536,
+      "create_seconds": 0.3215085099998305,
+      "ready": {
+        "raw": "ready logical_pages=262144 populated_pages=256 checksum=4352",
+        "logical_pages": 262144,
+        "populated_pages": 256,
+        "checksum": 4352
+      },
+      "hot_scan_wall_seconds": 0.061390608000010616,
+      "hot_scan": {
+        "raw": "scan ns=42284 checksum=4352 pages=256 bytes=1048576",
+        "ns": 42284,
+        "checksum": 4352,
+        "pages": 256,
+        "bytes": 1048576
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.049201994999975796,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.03869047100010903,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07132536000017353,
+        "true_seconds": 0.12010191299987127,
+        "ls_seconds": 0.08818603000008807,
+        "scan_wall_seconds": 0.09254222699996717,
+        "scan": {
+          "raw": "scan ns=9783675 checksum=4352 pages=256 bytes=1048576",
+          "ns": 9783675,
+          "checksum": 4352,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 15859712,
+          "file": 1331200,
+          "shmem": 1327104,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 12392,
+          "pgmajfault": 0,
+          "current": 20905984,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 15859712,
+          "file": 1331200,
+          "shmem": 1327104,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 12392,
+          "pgmajfault": 0,
+          "current": 21577728,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 4096,
+          "shmem": 0,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 12538,
+          "pgmajfault": 0,
+          "current": 4050944,
+          "swap_current": 17498112
+        },
+        "memory_after_scan": {
+          "anon": 4509696,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3457024,
+          "pgfault": 14513,
+          "pgmajfault": 987,
+          "current": 9854976,
+          "swap_current": 15986688
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 6,
+          "write_sectors": 232
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 93,
+          "write_sectors": 34176
+        },
+        "block_during_wake": {
+          "reads": 1012,
+          "read_sectors": 11376,
+          "writes": 6,
+          "write_sectors": 200
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.04235901800007014,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.028583966000041983,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06617909899978258,
+        "true_seconds": 0.11907028399991759,
+        "ls_seconds": 0.07594304400004148,
+        "scan_wall_seconds": 0.07630833700000039,
+        "scan": {
+          "raw": "scan ns=7723520 checksum=4352 pages=256 bytes=1048576",
+          "ns": 7723520,
+          "checksum": 4352,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 4509696,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3457024,
+          "pgfault": 14513,
+          "pgmajfault": 987,
+          "current": 9854976,
+          "swap_current": 15986688
+        },
+        "memory_after_flush": {
+          "anon": 4509696,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3457024,
+          "pgfault": 14513,
+          "pgmajfault": 987,
+          "current": 10465280,
+          "swap_current": 15986688
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 4096,
+          "shmem": 0,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 14617,
+          "pgmajfault": 1057,
+          "current": 4132864,
+          "swap_current": 18751488
+        },
+        "memory_after_scan": {
+          "anon": 3612672,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 2535424,
+          "pgfault": 16277,
+          "pgmajfault": 1909,
+          "current": 8990720,
+          "swap_current": 16777216
+        },
+        "block_during_flush": {
+          "reads": 15,
+          "read_sectors": 168,
+          "writes": 6,
+          "write_sectors": 232
+        },
+        "block_during_reclaim": {
+          "reads": 58,
+          "read_sectors": 688,
+          "writes": 560,
+          "write_sectors": 8680
+        },
+        "block_during_wake": {
+          "reads": 860,
+          "read_sectors": 9504,
+          "writes": 6,
+          "write_sectors": 192
+        },
+        "backing_before": null,
+        "backing_parked": null
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=3",
+        "percent": 1,
+        "pages": 3
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.04374035599994386,
+        "flush_seconds": 0.0,
+        "reclaim": {
+          "seconds": 0.024070150999932594,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.07510775199989439,
+        "true_seconds": 0.24022873600006278,
+        "ls_seconds": 0.07159697199995207,
+        "scan_wall_seconds": 0.08653287899983297,
+        "scan": {
+          "raw": "scan ns=8407534 checksum=4526 pages=256 bytes=1048576",
+          "ns": 8407534,
+          "checksum": 4526,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 3612672,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 2535424,
+          "pgfault": 16277,
+          "pgmajfault": 1909,
+          "current": 9310208,
+          "swap_current": 16523264
+        },
+        "memory_after_flush": {
+          "anon": 3612672,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 2535424,
+          "pgfault": 16277,
+          "pgmajfault": 1909,
+          "current": 9740288,
+          "swap_current": 16523264
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 4096,
+          "shmem": 0,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 16427,
+          "pgmajfault": 1952,
+          "current": 4091904,
+          "swap_current": 19300352
+        },
+        "memory_after_scan": {
+          "anon": 3592192,
+          "file": 1155072,
+          "shmem": 1150976,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 2490368,
+          "pgfault": 18082,
+          "pgmajfault": 2756,
+          "current": 9314304,
+          "swap_current": 17416192
+        },
+        "block_during_flush": {
+          "reads": 10,
+          "read_sectors": 88,
+          "writes": 6,
+          "write_sectors": 216
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 482,
+          "write_sectors": 8128
+        },
+        "block_during_wake": {
+          "reads": 811,
+          "read_sectors": 8840,
+          "writes": 6,
+          "write_sectors": 208
+        },
+        "backing_before": null,
+        "backing_parked": null
+      }
+    },
+    {
+      "runtime": "runsc-xfs",
+      "logical_mib": 1024,
+      "populated_mib": 1,
+      "memory_limit_mib": 1536,
+      "create_seconds": 0.3191083609999623,
+      "ready": {
+        "raw": "ready logical_pages=262144 populated_pages=256 checksum=4352",
+        "logical_pages": 262144,
+        "populated_pages": 256,
+        "checksum": 4352
+      },
+      "hot_scan_wall_seconds": 0.07071117300006335,
+      "hot_scan": {
+        "raw": "scan ns=53591 checksum=4352 pages=256 bytes=1048576",
+        "ns": 53591,
+        "checksum": 4352,
+        "pages": 256,
+        "bytes": 1048576
+      },
+      "initial_park": {
+        "label": "initial",
+        "pause_seconds": 0.047645280999859096,
+        "flush_seconds": 0.018235817000004317,
+        "reclaim": {
+          "seconds": 0.03716970100003891,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.0646909190002134,
+        "true_seconds": 0.13939258599998539,
+        "ls_seconds": 0.08596586099997694,
+        "scan_wall_seconds": 0.11458081399996445,
+        "scan": {
+          "raw": "scan ns=42749127 checksum=4352 pages=256 bytes=1048576",
+          "ns": 42749127,
+          "checksum": 4352,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 16502784,
+          "file": 14188544,
+          "shmem": 184320,
+          "file_dirty": 2404352,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 13003,
+          "pgmajfault": 291,
+          "current": 35004416,
+          "swap_current": 0
+        },
+        "memory_after_flush": {
+          "anon": 16502784,
+          "file": 14188544,
+          "shmem": 184320,
+          "file_dirty": 2404352,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 13003,
+          "pgmajfault": 291,
+          "current": 34766848,
+          "swap_current": 0
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 13004,
+          "pgmajfault": 291,
+          "current": 4075520,
+          "swap_current": 16687104
+        },
+        "memory_after_scan": {
+          "anon": 4399104,
+          "file": 1150976,
+          "shmem": 45056,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3272704,
+          "pgfault": 14980,
+          "pgmajfault": 1553,
+          "current": 9736192,
+          "swap_current": 16281600
+        },
+        "block_during_flush": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 275,
+          "write_sectors": 5073
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 90,
+          "write_sectors": 32592
+        },
+        "block_during_wake": {
+          "reads": 1213,
+          "read_sectors": 10592,
+          "writes": 30,
+          "write_sectors": 932
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2408448
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2416640
+        }
+      },
+      "clean_second_park": {
+        "label": "clean-second-park",
+        "pause_seconds": 0.04260916599992015,
+        "flush_seconds": 0.0018435890001455846,
+        "reclaim": {
+          "seconds": 0.018523541999911686,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.059617725999942195,
+        "true_seconds": 0.10992497500001264,
+        "ls_seconds": 0.07333216600000014,
+        "scan_wall_seconds": 0.1332027260000359,
+        "scan": {
+          "raw": "scan ns=57435126 checksum=4352 pages=256 bytes=1048576",
+          "ns": 57435126,
+          "checksum": 4352,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 4399104,
+          "file": 1150976,
+          "shmem": 45056,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3272704,
+          "pgfault": 14980,
+          "pgmajfault": 1553,
+          "current": 9736192,
+          "swap_current": 16281600
+        },
+        "memory_after_flush": {
+          "anon": 4399104,
+          "file": 1150976,
+          "shmem": 45056,
+          "file_dirty": 4096,
+          "file_writeback": 0,
+          "swapcached": 3272704,
+          "pgfault": 14980,
+          "pgmajfault": 1553,
+          "current": 9748480,
+          "swap_current": 16281600
+        },
+        "memory_parked": {
+          "anon": 4096,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 20480,
+          "pgfault": 15045,
+          "pgmajfault": 1597,
+          "current": 4014080,
+          "swap_current": 17735680
+        },
+        "memory_after_scan": {
+          "anon": 3850240,
+          "file": 34074624,
+          "shmem": 45056,
+          "file_dirty": 20480,
+          "file_writeback": 0,
+          "swapcached": 2682880,
+          "pgfault": 16823,
+          "pgmajfault": 2682,
+          "current": 41840640,
+          "swap_current": 17190912
+        },
+        "block_during_flush": {
+          "reads": 3,
+          "read_sectors": 24,
+          "writes": 12,
+          "write_sectors": 306
+        },
+        "block_during_reclaim": {
+          "reads": 44,
+          "read_sectors": 568,
+          "writes": 551,
+          "write_sectors": 6144
+        },
+        "block_during_wake": {
+          "reads": 1059,
+          "read_sectors": 11784,
+          "writes": 25,
+          "write_sectors": 882
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2416640
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2416640
+        }
+      },
+      "dirty_command": {
+        "raw": "dirty percent=1 pages=3",
+        "percent": 1,
+        "pages": 3
+      },
+      "dirty_one_percent_park": {
+        "label": "dirty-one-percent",
+        "pause_seconds": 0.039371951000021,
+        "flush_seconds": 0.002308420999952432,
+        "reclaim": {
+          "seconds": 0.025381874000004245,
+          "requested_bytes": 1610612736,
+          "complete": false,
+          "error": "Resource temporarily unavailable"
+        },
+        "unpause_seconds": 0.06049761799999942,
+        "true_seconds": 0.11450234599988107,
+        "ls_seconds": 0.08448183699988476,
+        "scan_wall_seconds": 0.18884612300007575,
+        "scan": {
+          "raw": "scan ns=57808981 checksum=4526 pages=256 bytes=1048576",
+          "ns": 57808981,
+          "checksum": 4526,
+          "pages": 256,
+          "bytes": 1048576
+        },
+        "memory_before": {
+          "anon": 3850240,
+          "file": 34074624,
+          "shmem": 45056,
+          "file_dirty": 20480,
+          "file_writeback": 0,
+          "swapcached": 2682880,
+          "pgfault": 16823,
+          "pgmajfault": 2682,
+          "current": 42401792,
+          "swap_current": 16928768
+        },
+        "memory_after_flush": {
+          "anon": 3850240,
+          "file": 34074624,
+          "shmem": 45056,
+          "file_dirty": 20480,
+          "file_writeback": 0,
+          "swapcached": 2682880,
+          "pgfault": 16823,
+          "pgmajfault": 2682,
+          "current": 42668032,
+          "swap_current": 16928768
+        },
+        "memory_parked": {
+          "anon": 0,
+          "file": 0,
+          "shmem": 0,
+          "file_dirty": 0,
+          "file_writeback": 0,
+          "swapcached": 0,
+          "pgfault": 17011,
+          "pgmajfault": 2742,
+          "current": 3915776,
+          "swap_current": 18669568
+        },
+        "memory_after_scan": {
+          "anon": 9117696,
+          "file": 34099200,
+          "shmem": 45056,
+          "file_dirty": 16384,
+          "file_writeback": 0,
+          "swapcached": 7172096,
+          "pgfault": 20854,
+          "pgmajfault": 4892,
+          "current": 48312320,
+          "swap_current": 17960960
+        },
+        "block_during_flush": {
+          "reads": 5,
+          "read_sectors": 40,
+          "writes": 18,
+          "write_sectors": 530
+        },
+        "block_during_reclaim": {
+          "reads": 0,
+          "read_sectors": 0,
+          "writes": 538,
+          "write_sectors": 6496
+        },
+        "block_during_wake": {
+          "reads": 2153,
+          "read_sectors": 21264,
+          "writes": 26,
+          "write_sectors": 848
+        },
+        "backing_before": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2445312
+        },
+        "backing_parked": {
+          "path": "/mnt/gvisor-xfs/application-memory/b2373e4539849eec995c119edbae306a3d1c5e8674d2f22803685f7e4379221f.memory",
+          "size": 1073741824,
+          "allocated": 2445312
+        }
+      }
+    }
+  ],
+  "finished_unix": 1785186937.6486657
+}

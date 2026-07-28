@@ -1,0 +1,17 @@
+{
+  "runtimes": {
+    "runsc-memfd": {
+      "path": "/usr/local/bin/runsc-disk",
+      "runtimeArgs": [
+        "--app-huge-pages=false"
+      ]
+    },
+    "runsc-xfs": {
+      "path": "/usr/local/bin/runsc-disk",
+      "runtimeArgs": [
+        "--app-huge-pages=false",
+        "--application-memory-file-dir=/mnt/gvisor-xfs/application-memory"
+      ]
+    }
+  }
+}

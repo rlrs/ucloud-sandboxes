@@ -1,0 +1,82 @@
+{
+  "disk_free_mib": 592459,
+  "disk_total_mib": 594087,
+  "filesystem": 6213591495133397661,
+  "hostname": "j-12360651",
+  "kernel": "6.8.0-53-generic",
+  "samples": [
+    {
+      "allocated_mib": 256,
+      "dirty_ms": 442.774482,
+      "round": 1,
+      "seal_mib_per_second": 2309.9597052794597,
+      "seal_ms": 110.824444,
+      "size_mib": 256
+    },
+    {
+      "allocated_mib": 256,
+      "dirty_ms": 272.369772,
+      "round": 2,
+      "seal_mib_per_second": 2393.5860943419057,
+      "seal_ms": 106.952493,
+      "size_mib": 256
+    },
+    {
+      "allocated_mib": 256,
+      "dirty_ms": 280.971057,
+      "round": 3,
+      "seal_mib_per_second": 2394.434817184855,
+      "seal_ms": 106.914583,
+      "size_mib": 256
+    },
+    {
+      "allocated_mib": 1024,
+      "dirty_ms": 1563.795766,
+      "round": 1,
+      "seal_mib_per_second": 2418.4521950825097,
+      "seal_ms": 423.411305,
+      "size_mib": 1024
+    },
+    {
+      "allocated_mib": 1024,
+      "dirty_ms": 1071.902705,
+      "round": 2,
+      "seal_mib_per_second": 2404.8700403180924,
+      "seal_ms": 425.802635,
+      "size_mib": 1024
+    },
+    {
+      "allocated_mib": 1024,
+      "dirty_ms": 1609.892748,
+      "round": 3,
+      "seal_mib_per_second": 2296.597049169735,
+      "seal_ms": 445.877086,
+      "size_mib": 1024
+    },
+    {
+      "allocated_mib": 4096,
+      "dirty_ms": 6266.071308,
+      "round": 1,
+      "seal_mib_per_second": 2533.279032926073,
+      "seal_ms": 1616.876762,
+      "size_mib": 4096
+    },
+    {
+      "allocated_mib": 4096,
+      "dirty_ms": 5994.5485,
+      "round": 2,
+      "seal_mib_per_second": 2589.5674300519886,
+      "seal_ms": 1581.731355,
+      "size_mib": 4096
+    },
+    {
+      "allocated_mib": 4096,
+      "dirty_ms": 6044.928462,
+      "round": 3,
+      "seal_mib_per_second": 2016.0596913063346,
+      "seal_ms": 2031.685876,
+      "size_mib": 4096
+    }
+  ],
+  "schema": 1
+}

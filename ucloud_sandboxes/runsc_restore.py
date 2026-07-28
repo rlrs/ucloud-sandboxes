@@ -512,6 +512,7 @@ def dispatch(
                 + (
                     "restore",
                     "--detach",
+                    "--background",
                     f"--image-path={intent['checkpoint_path']}",
                 )
                 + arguments[command_index + 1 :]

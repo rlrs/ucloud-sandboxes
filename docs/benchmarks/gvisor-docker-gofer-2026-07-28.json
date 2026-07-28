@@ -1,0 +1,50 @@
+{
+  "conclusion": "failed",
+  "docker": {
+    "containerd_version": "2.2.1-0ubuntu1~24.04.3",
+    "docker_version": "29.1.3-0ubuntu3~24.04.2",
+    "runtime": "runsc-hibernate",
+    "runtime_root": "/var/run/docker/runtime-runc/moby"
+  },
+  "failure": {
+    "bundle_retained": false,
+    "docker_exit_code": 137,
+    "docker_pid_after_hibernate": 0,
+    "docker_state_after_hibernate": "exited",
+    "gofer_retained": false,
+    "reason": "containerd observed the reaped sentry as task exit, stopped the shim and gofer, and removed the OCI bundle",
+    "sentry_retained": false,
+    "shim_retained": false
+  },
+  "host": {
+    "cpu": "AMD EPYC 9535",
+    "job_id": "12360655",
+    "memory_gib": 96,
+    "os": "Ubuntu 24.04",
+    "vcpu": 32
+  },
+  "hibernate": {
+    "application_memory_allocated_512b_blocks": 520,
+    "application_memory_logical_bytes": 1073741824,
+    "checkpoint_bytes": 246911,
+    "elapsed_ms": 30,
+    "pages_bytes": 0,
+    "pages_metadata_bytes": 1700,
+    "project_id": 200004,
+    "project_quota_mb": 384
+  },
+  "restart_control": {
+    "docker_start_succeeded": true,
+    "memory_restored": false,
+    "result": "fresh process state was booted from the retained writable layer"
+  },
+  "resident_fallback": {
+    "gofer_rss_kib": 25592,
+    "guest_working_set_test_mib": 96,
+    "shim_rss_kib": 9984,
+    "sentry_rss_before_guest_working_set_kib": 36864,
+    "total_runtime_floor_kib": 72440
+  },
+  "runsc_sha256": "560c7e19262f10f81d37dbc540dd0851c086b2ab705363a00bbde9ad52ec0b6e",
+  "schema": 1
+}

@@ -6,7 +6,9 @@ import unittest
 from ucloud_sandboxes.capabilities import (
     DISK_QUOTA_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
+    GVISOR_HIBERNATE_PROBE,
     GVISOR_LIVE_FORK_PROBE,
+    HIBERNATE_LOCAL_CAPABILITY,
     RUNTIME_CONFORMANCE_CAPABILITY,
     TMPFS_QUOTA_PROBE,
     conformance_capabilities_from_file,
@@ -166,6 +168,74 @@ class CapabilityTests(unittest.TestCase):
                     path,
                     expected_fork_runtime_fingerprint="b" * 64,
                 )[GVISOR_LIVE_FORK_PROBE]
+            )
+
+    def test_hibernate_requires_exact_expected_runtime_and_disk_probes(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {"name": TMPFS_QUOTA_PROBE, "ok": True},
+                            {
+                                "name": GVISOR_HIBERNATE_PROBE,
+                                "ok": True,
+                                "runtime_fingerprint": RUNTIME_FINGERPRINT,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertNotIn(
+                HIBERNATE_LOCAL_CAPABILITY,
+                conformance_capabilities_from_file(path),
+            )
+            self.assertIn(
+                HIBERNATE_LOCAL_CAPABILITY,
+                conformance_capabilities_from_file(
+                    path,
+                    expected_hibernate_runtime_fingerprint=RUNTIME_FINGERPRINT,
+                ),
+            )
+            self.assertNotIn(
+                HIBERNATE_LOCAL_CAPABILITY,
+                conformance_capabilities_from_file(
+                    path,
+                    expected_hibernate_runtime_fingerprint="b" * 64,
+                ),
+            )
+
+    def test_hibernate_requires_every_quota_probe(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "runtime-conformance.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "results": [
+                            {"name": "storage-opt-quota-enforced", "ok": True},
+                            {
+                                "name": GVISOR_HIBERNATE_PROBE,
+                                "ok": True,
+                                "runtime_fingerprint": RUNTIME_FINGERPRINT,
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.assertNotIn(
+                HIBERNATE_LOCAL_CAPABILITY,
+                conformance_capabilities_from_file(
+                    path,
+                    expected_hibernate_runtime_fingerprint=RUNTIME_FINGERPRINT,
+                ),
             )
 
     def test_skipped_live_probe_does_not_advertise_fork_capability(self) -> None:

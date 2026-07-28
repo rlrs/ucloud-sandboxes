@@ -1,0 +1,56 @@
+{
+  "concurrency": 8,
+  "count": 24,
+  "environment": {
+    "cpu": "32 vCPU AMD Zen 5",
+    "disk": "600 GB root; physically allocated 450 GiB loopback XFS with prjquota",
+    "job_id": "12360789",
+    "memory": "96 GB",
+    "project": "DFM Pretraining"
+  },
+  "image": "busybox:latest",
+  "image_pull_ms": 1081.342,
+  "parked_heartbeat": {
+    "active_sandboxes": 0,
+    "used_resources": {
+      "disk_mb": 32256,
+      "memory_mb": 0,
+      "vcpu": 0
+    }
+  },
+  "phases_ms": {
+    "create": {
+      "max": 873.958,
+      "min": 670.803,
+      "p50": 748.161,
+      "p95": 872.59
+    },
+    "delete": {
+      "max": 304.759,
+      "min": 115.688,
+      "p50": 163.497,
+      "p95": 297.25
+    },
+    "park": {
+      "max": 237.178,
+      "min": 76.607,
+      "p50": 126.356,
+      "p95": 229.093
+    },
+    "wake_exec": {
+      "max": 685.779,
+      "min": 535.83,
+      "p50": 615.544,
+      "p95": 685.758
+    }
+  },
+  "runsc_sha256": "a3cd70d5de7cc33d1f58fb1cfbaba32e2a310794aca8b7e30ba0435baed8888e",
+  "schema": 1,
+  "total_ms": 6500.505,
+  "verification": {
+    "distinct_marker_after_restore": true,
+    "final_artifact_inventory_empty": true,
+    "final_quota_inventory_empty": true,
+    "final_sandbox_inventory_empty": true
+  }
+}

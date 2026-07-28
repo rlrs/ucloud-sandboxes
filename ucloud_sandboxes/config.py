@@ -216,6 +216,11 @@ class AutoscalerConfig:
             or policy.disk_overcommit <= 0
         ):
             raise ValueError("policy overcommit values must all be positive.")
+        if policy.disk_overcommit > 1.0:
+            raise ValueError(
+                "policy.disk_overcommit cannot exceed 1.0 because disk "
+                "reservations must be physically backable."
+            )
         gateway_public_link_port = _config_int(
             "gateway_public_link_port",
             raw.get("gateway_public_link_port", defaults.gateway_public_link_port),

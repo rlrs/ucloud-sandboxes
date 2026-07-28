@@ -1,0 +1,119 @@
+diff --git a/runsc/cmd/checkpoint.go b/runsc/cmd/checkpoint.go
+index a9b8150..3584d7d 100644
+--- a/runsc/cmd/checkpoint.go
++++ b/runsc/cmd/checkpoint.go
+@@ -78,7 +78,7 @@ func (c *Checkpoint) SetFlags(f *flag.FlagSet) {
+ 	f.BoolVar(&c.cudaCheckpointSequential, "cuda-checkpoint-sequential", false, "run cuda-checkpoint sequentially in the container")
+ 	f.StringVar(&c.saveRestoreExecArgv, "save-restore-exec-argv", "", "argv (split by spaces) for a save/restore binary that's automatically executed in the sandbox before saving and after restoring. If the execution fails, the save/restore process will fail.")
+ 	f.DurationVar(&c.saveRestoreExecTimeout, "save-restore-exec-timeout", control.DefaultSaveRestoreExecTimeout, "timeout for the binary pointed to by save-restore-exec-argv.")
+-	f.BoolVar(&c.hibernate, "hibernate", false, "EXPERIMENTAL: checkpoint allocator metadata while retaining application pages in their persistent backing file")
++	f.BoolVar(&c.hibernate, "hibernate", false, "EXPERIMENTAL: capture allocator metadata and persistent application pages, leaving the sandbox quiesced for an external owner to resume or stop")
+ 
+ 	// Unimplemented flags necessary for compatibility with docker.
+ 	var wp string
+diff --git a/runsc/container/container.go b/runsc/container/container.go
+index f0bfbf2..12bd09c 100644
+--- a/runsc/container/container.go
++++ b/runsc/container/container.go
+@@ -825,6 +825,32 @@ func (c *Container) ForwardSignals(pid int32, fgProcess bool) func() {
+ // The statefile will be written to f, the file at the specified image-path.
+ func (c *Container) Checkpoint(conf *config.Config, imagePath string, opts sandbox.CheckpointOpts) error {
+ 	log.Debugf("Checkpoint container, cid: %s", c.ID)
++	if opts.Hibernate {
++		if err := c.Saver.lock(BlockAcquire); err != nil {
++			return err
++		}
++		defer c.Saver.UnlockOrDie()
++
++		if c.Status != Running {
++			return fmt.Errorf("cannot hibernate container %q in state %v", c.ID, c.Status)
++		}
++		if err := c.Sandbox.Checkpoint(conf, c.ID, imagePath, opts); err != nil {
++			return err
++		}
++		c.changeStatus(Paused)
++		if err := c.saveLocked(); err != nil {
++			// A capture is not committed until its paused state is durable.
++			// Roll it back while the sentry is still available.
++			resumeErr := c.Sandbox.Resume(c.ID)
++			c.changeStatus(Running)
++			rollbackSaveErr := c.saveLocked()
++			if resumeErr != nil || rollbackSaveErr != nil {
++				return fmt.Errorf("saving hibernated container metadata: %w (rollback resume: %v; rollback metadata save: %v)", err, resumeErr, rollbackSaveErr)
++			}
++			return fmt.Errorf("saving hibernated container metadata: %w", err)
++		}
++		return nil
++	}
+ 	if err := c.requireStatus("checkpoint", Created, Running, Paused); err != nil {
+ 		return err
+ 	}
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+index 82eb035..f916c93 100644
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -208,6 +208,13 @@ type Sandbox struct {
+ 	// file backing the sandbox's main application MemoryFile.
+ 	ApplicationMemoryFilePath string `json:"applicationMemoryFilePath,omitempty"`
+ 
++	// HibernatedMemoryFilePath is set while a hibernation checkpoint has
++	// quiesced the sentry and moved its application memory backing into the
++	// checkpoint directory. The sentry remains alive until an external owner
++	// either resumes it or terminates it after durably publishing the
++	// checkpoint.
++	HibernatedMemoryFilePath string `json:"hibernatedMemoryFilePath,omitempty"`
++
+ 	// MountHints provides extra information about container mounts that apply
+ 	// to the entire pod.
+ 	MountHints *boot.PodMountHints `json:"mountHints"`
+@@ -1716,6 +1723,9 @@ func (s *Sandbox) Checkpoint(conf *config.Config, cid string, imagePath string,
+ 		if s.ApplicationMemoryFilePath == "" {
+ 			return fmt.Errorf("hibernation checkpoint requires persistent application memory")
+ 		}
++		if s.HibernatedMemoryFilePath != "" {
++			return fmt.Errorf("sandbox already has a captured hibernation checkpoint at %q", s.HibernatedMemoryFilePath)
++		}
+ 		hibernatedMemoryPath = filepath.Join(imagePath, checkpointfiles.ApplicationMemoryFileName)
+ 		if _, err := os.Lstat(hibernatedMemoryPath); err == nil {
+ 			return fmt.Errorf("hibernation memory artifact %q already exists", hibernatedMemoryPath)
+@@ -1750,14 +1760,14 @@ func (s *Sandbox) Checkpoint(conf *config.Config, cid string, imagePath string,
+ 		return fmt.Errorf("checkpointing container %q: %w", cid, err)
+ 	}
+ 	if opts.Hibernate {
+-		if err := s.terminateForHibernation(); err != nil {
+-			return err
+-		}
+ 		if err := os.Rename(s.ApplicationMemoryFilePath, hibernatedMemoryPath); err != nil {
++			if resumeErr := s.call(boot.ContMgrResume, nil, nil); resumeErr != nil {
++				return fmt.Errorf("moving application memory into checkpoint: %w (also failed to resume quiesced sandbox: %v)", err, resumeErr)
++			}
+ 			return fmt.Errorf("moving application memory into checkpoint: %w", err)
+ 		}
+-		s.ApplicationMemoryFilePath = ""
++		s.HibernatedMemoryFilePath = hibernatedMemoryPath
+ 	}
+ 	s.Checkpointed = true
+ 	return nil
+ }
+@@ -2173,9 +2139,21 @@ func (s *Sandbox) Pause(cid string) error {
+ // Resume sends the resume call for a container in the sandbox.
+ func (s *Sandbox) Resume(cid string) error {
+ 	log.Debugf("Resume sandbox %q", s.ID)
++	if s.HibernatedMemoryFilePath != "" {
++		if err := os.Rename(s.HibernatedMemoryFilePath, s.ApplicationMemoryFilePath); err != nil {
++			return fmt.Errorf("moving captured application memory back into active storage: %w", err)
++		}
++	}
+ 	if err := s.call(boot.ContMgrResume, nil, nil); err != nil {
++		if s.HibernatedMemoryFilePath != "" {
++			if renameErr := os.Rename(s.ApplicationMemoryFilePath, s.HibernatedMemoryFilePath); renameErr != nil {
++				return fmt.Errorf("resuming container %q: %w (also failed to return application memory to checkpoint: %v)", cid, err, renameErr)
++			}
++		}
+ 		return fmt.Errorf("resuming container %q: %w", cid, err)
+ 	}
++	s.HibernatedMemoryFilePath = ""
++	s.Checkpointed = false
+ 	return nil
+ }
+ 

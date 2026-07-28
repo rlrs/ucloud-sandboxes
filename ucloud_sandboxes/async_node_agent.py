@@ -13,6 +13,7 @@ from .async_exec import (
 )
 from .deployment import service_health
 from .images import DockerImageRuntime, ImageManager, ImageStore
+from .hibernation import HibernationDiskLedger
 from .models import ResourceQuantity
 from .node_agent import (
     DEFAULT_MAX_JSON_BODY_BYTES,
@@ -27,6 +28,7 @@ from .node_agent import (
 from .sandbox import (
     MAX_FORK_FANOUT,
     DockerGvisorRuntime,
+    HibernationQuotaBackend,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
@@ -120,9 +122,8 @@ async def fork_sandbox(request: web.Request) -> web.Response:
             if not all(isinstance(item, dict) for item in raw_targets_value):
                 raise ValueError("each fork sandbox must be a JSON object")
             raw_targets = list(raw_targets_value)
-            if (
-                not isinstance(raw_operations, list)
-                or len(raw_operations) != len(raw_targets)
+            if not isinstance(raw_operations, list) or len(raw_operations) != len(
+                raw_targets
             ):
                 raise ValueError(
                     "_ucloud_operations must contain one operation per sandbox"
@@ -613,9 +614,7 @@ def _node_control_auth_middleware(
         authorization = request.headers.get("Authorization", "")
         prefix = "Bearer "
         supplied = (
-            authorization[len(prefix) :]
-            if authorization.startswith(prefix)
-            else ""
+            authorization[len(prefix) :] if authorization.startswith(prefix) else ""
         )
         if supplied and hmac.compare_digest(supplied, expected):
             return await handler(request)
@@ -636,6 +635,8 @@ def create_async_node_agent_app(
     ssh_port_range: tuple[int, int] | None = (22000, 22999),
     total_resources: ResourceQuantity | None = None,
     node_control_bearer_token: str | None = None,
+    hibernation_disk_ledger: HibernationDiskLedger | None = None,
+    hibernation_quota_backend: HibernationQuotaBackend | None = None,
 ) -> web.Application:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
@@ -644,11 +645,14 @@ def create_async_node_agent_app(
         runtime or DockerGvisorRuntime(dry_run=True),
         ssh_port_range=ssh_port_range,
         effective_capacity=total_resources,
+        hibernation_disk_ledger=hibernation_disk_ledger,
+        hibernation_quota_backend=hibernation_quota_backend,
     )
     manager.reconcile_checkpoint_storage()
+    manager.reconcile_hibernation_storage()
     app = web.Application(
         client_max_size=DEFAULT_MAX_JSON_BODY_BYTES,
-        middlewares=[_node_control_auth_middleware(node_control_bearer_token)]
+        middlewares=[_node_control_auth_middleware(node_control_bearer_token)],
     )
     app[SANDBOX_MANAGER_KEY] = manager
     app[IMAGE_MANAGER_KEY] = ImageManager(

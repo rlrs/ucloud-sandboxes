@@ -1,0 +1,160 @@
+diff --git a/runsc/cmd/restore.go b/runsc/cmd/restore.go
+index 3e10345..75b5b82 100644
+--- a/runsc/cmd/restore.go
++++ b/runsc/cmd/restore.go
+@@ -57,5 +57,10 @@ type Restore struct {
+ 	// background has no effect.
+ 	background bool
++
++	// cpuStartupBurst starts a newly restored sandbox without its steady-state
++	// CPU quota, then reapplies the exact OCI resources before restore returns.
++	// The caller must not admit work until this command succeeds.
++	cpuStartupBurst bool
+ }
+ 
+ // Name implements subcommands.Command.Name.
+@@ -81,6 +86,7 @@ func (r *Restore) SetFlags(f *flag.FlagSet) {
+ 	f.BoolVar(&r.detach, "detach", false, "detach from the container's process")
+ 	f.BoolVar(&r.direct, "direct", false, "use O_DIRECT for reading checkpoint pages file")
+ 	f.BoolVar(&r.background, "background", false, "allow image loading to continue after restore exits (requires uncompressed checkpoint)")
++	f.BoolVar(&r.cpuStartupBurst, "cpu-startup-burst", false, "temporarily omit the OCI CPU quota while starting a new restore, then reapply all resources before returning")
+ 
+ 	// Unimplemented flags necessary for compatibility with docker.
+ 
+@@ -154,6 +160,7 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 
+ 	log.Debugf("Restore container, cid: %s, rootDir: %q", id, conf.RootDir)
+ 	c, err := r.loadContainer(conf, f, container.LoadOpts{})
++	var steadyStateResources *specs.LinuxResources
+ 	if err != nil {
+ 		if err != os.ErrNotExist {
+ 			return util.Errorf("loading container: %v", err)
+@@ -168,6 +175,9 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 			}
+ 		}
+ 		runArgs.Spec = r.spec
++		if r.cpuStartupBurst {
++			steadyStateResources = removeCPUQuotaForStartup(runArgs.Spec)
++		}
+ 		specutils.LogSpecDebug(runArgs.Spec, conf.OCISeccomp)
+ 
+ 		if c, err = container.New(conf, runArgs); err != nil {
+@@ -180,6 +190,9 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 			c.Destroy()
+ 		})
+ 	} else {
++		if r.cpuStartupBurst {
++			return util.Errorf("cpu-startup-burst requires a new restore candidate")
++		}
+ 		runArgs.Spec = c.Spec
+ 	}
+ 
+@@ -189,6 +202,14 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 		return util.Errorf("starting container: %v", err)
+ 	}
+ 
++	// Restore is not successful, and callers must not admit work, until the
++	// requested steady-state resources are enforced on the live candidate.
++	if steadyStateResources != nil {
++		if err := c.Update(steadyStateResources); err != nil {
++			return util.Errorf("reapplying resources after CPU startup burst: %v", err)
++		}
++	}
++
+ 	// If we allocate a terminal, forward signals to the sandbox process.
+ 	// Otherwise, Ctrl+C will terminate this process and its children,
+ 	// including the terminal.
+@@ -209,3 +230,22 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 
+ 	return subcommands.ExitSuccess
+ }
++
++// removeCPUQuotaForStartup replaces spec's resources with a shallow copy whose
++// CPU quota and burst are absent. It returns the exact original resources so
++// Container.Update can durably reapply them before restore succeeds.
++func removeCPUQuotaForStartup(spec *specs.Spec) *specs.LinuxResources {
++	if spec.Linux == nil || spec.Linux.Resources == nil ||
++		spec.Linux.Resources.CPU == nil ||
++		spec.Linux.Resources.CPU.Quota == nil {
++		return nil
++	}
++	steadyState := spec.Linux.Resources
++	startupResources := *steadyState
++	startupCPU := *steadyState.CPU
++	startupCPU.Quota = nil
++	startupCPU.Burst = nil
++	startupResources.CPU = &startupCPU
++	spec.Linux.Resources = &startupResources
++	return steadyState
++}
+diff --git a/runsc/cmd/restore_test.go b/runsc/cmd/restore_test.go
+new file mode 100644
+index 0000000..72944a4
+--- /dev/null
++++ b/runsc/cmd/restore_test.go
+@@ -0,0 +1,65 @@
++// Copyright 2026 The gVisor Authors.
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++package cmd
++
++import (
++	"testing"
++
++	specs "github.com/opencontainers/runtime-spec/specs-go"
++)
++
++func TestRemoveCPUQuotaForStartup(t *testing.T) {
++	quota := int64(25000)
++	period := uint64(100000)
++	burst := uint64(5000)
++	memory := int64(128 << 20)
++	steadyState := &specs.LinuxResources{
++		CPU: &specs.LinuxCPU{
++			Quota:  &quota,
++			Period: &period,
++			Burst:  &burst,
++		},
++		Memory: &specs.LinuxMemory{Limit: &memory},
++	}
++	spec := &specs.Spec{
++		Linux: &specs.Linux{Resources: steadyState},
++	}
++
++	got := removeCPUQuotaForStartup(spec)
++	if got != steadyState {
++		t.Fatalf("removeCPUQuotaForStartup() returned %p, want %p", got, steadyState)
++	}
++	if spec.Linux.Resources == steadyState {
++		t.Fatal("startup resources alias steady-state resources")
++	}
++	if spec.Linux.Resources.CPU == steadyState.CPU {
++		t.Fatal("startup CPU resources alias steady-state CPU resources")
++	}
++	if spec.Linux.Resources.CPU.Quota != nil {
++		t.Fatalf("startup CPU quota = %v, want nil", *spec.Linux.Resources.CPU.Quota)
++	}
++	if spec.Linux.Resources.CPU.Burst != nil {
++		t.Fatalf("startup CPU burst = %v, want nil", *spec.Linux.Resources.CPU.Burst)
++	}
++	if spec.Linux.Resources.CPU.Period != &period {
++		t.Fatal("startup CPU period changed")
++	}
++	if spec.Linux.Resources.Memory != steadyState.Memory {
++		t.Fatal("non-CPU resources changed")
++	}
++	if steadyState.CPU.Quota != &quota || steadyState.CPU.Burst != &burst {
++		t.Fatal("steady-state CPU resources were mutated")
++	}
++}

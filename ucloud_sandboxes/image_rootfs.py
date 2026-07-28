@@ -1,0 +1,758 @@
+from __future__ import annotations
+
+from contextlib import contextmanager
+from dataclasses import dataclass
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import tarfile
+import tempfile
+import time
+from typing import Any, Iterator, Protocol
+from uuid import uuid4
+
+from .direct_warden import (
+    CommandRunner,
+    DirectSandbox,
+    DirectWardenError,
+    SubprocessCommandRunner,
+)
+
+
+_DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+_SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+_ROOTFS_SCHEMA = 2
+
+
+def _canonical_json(payload: object) -> bytes:
+    return json.dumps(
+        payload,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
+
+
+def _sha256(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+@dataclass(frozen=True)
+class DockerImageConfig:
+    entrypoint: tuple[str, ...] = ()
+    command: tuple[str, ...] = ()
+    env: tuple[str, ...] = ()
+    working_dir: str = ""
+    user: str = ""
+
+    def __post_init__(self) -> None:
+        for label, values in (
+            ("entrypoint", self.entrypoint),
+            ("command", self.command),
+            ("env", self.env),
+        ):
+            if any(not isinstance(value, str) or "\0" in value for value in values):
+                raise ValueError(f"Docker image {label} is invalid")
+        if "\0" in self.working_dir or "\0" in self.user:
+            raise ValueError("Docker image process configuration is invalid")
+
+    @classmethod
+    def from_inspection(cls, raw: object) -> DockerImageConfig:
+        if not isinstance(raw, dict):
+            raise ValueError("Docker image Config is invalid")
+
+        def string_tuple(name: str) -> tuple[str, ...]:
+            value = raw.get(name)
+            if value is None:
+                return ()
+            if not isinstance(value, list) or not all(
+                isinstance(item, str) for item in value
+            ):
+                raise ValueError(f"Docker image Config.{name} is invalid")
+            return tuple(value)
+
+        return cls(
+            entrypoint=string_tuple("Entrypoint"),
+            command=string_tuple("Cmd"),
+            env=string_tuple("Env"),
+            working_dir=str(raw.get("WorkingDir") or ""),
+            user=str(raw.get("User") or ""),
+        )
+
+    @classmethod
+    def from_dict(cls, raw: object) -> DockerImageConfig:
+        if not isinstance(raw, dict) or set(raw) != {
+            "command",
+            "entrypoint",
+            "env",
+            "user",
+            "working_dir",
+        }:
+            raise ValueError("materialized Docker image config is invalid")
+        for name in ("command", "entrypoint", "env"):
+            if not isinstance(raw[name], list):
+                raise ValueError("materialized Docker image config is invalid")
+        return cls(
+            command=tuple(raw["command"]),
+            entrypoint=tuple(raw["entrypoint"]),
+            env=tuple(raw["env"]),
+            user=str(raw["user"]),
+            working_dir=str(raw["working_dir"]),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "command": list(self.command),
+            "entrypoint": list(self.entrypoint),
+            "env": list(self.env),
+            "user": self.user,
+            "working_dir": self.working_dir,
+        }
+
+
+@dataclass(frozen=True)
+class MaterializedRootfs:
+    image_ref: str
+    image_id: str
+    rootfs_identity_sha256: str
+    rootfs: Path
+    image_config: DockerImageConfig
+
+
+class RootfsExtractor(Protocol):
+    def extract(self, archive: Path, destination: Path) -> None: ...
+
+
+class GnuTarRootfsExtractor:
+    """Validate Docker's export stream before privileged GNU tar extraction."""
+
+    def __init__(
+        self,
+        *,
+        runner: CommandRunner | None = None,
+        tar_binary: str = "tar",
+        sync_binary: str = "sync",
+    ) -> None:
+        self.runner = runner or SubprocessCommandRunner()
+        self.tar_binary = tar_binary
+        self.sync_binary = sync_binary
+
+    def extract(self, archive: Path, destination: Path) -> None:
+        self._validate_archive(archive)
+        self._checked(
+            self.tar_binary,
+            "--extract",
+            f"--file={archive}",
+            f"--directory={destination}",
+            "--numeric-owner",
+            "--same-owner",
+            "--same-permissions",
+            "--xattrs",
+            "--delay-directory-restore",
+        )
+        self._checked(self.sync_binary, "-f", str(destination))
+
+    @staticmethod
+    def _validate_archive(archive: Path) -> None:
+        symlinks: set[PurePosixPath] = set()
+        with tarfile.open(archive, mode="r:*") as source:
+            for member in source:
+                path = PurePosixPath(member.name)
+                if (
+                    not member.name
+                    or path.is_absolute()
+                    or ".." in path.parts
+                    or "\\" in member.name
+                ):
+                    raise DirectWardenError(
+                        f"image export contains an unsafe path: {member.name!r}"
+                    )
+                normalized = PurePosixPath(
+                    *(part for part in path.parts if part not in {"", "."})
+                )
+                if not normalized.parts:
+                    continue
+                for parent in normalized.parents:
+                    if parent in symlinks:
+                        raise DirectWardenError(
+                            "image export writes through an archived symlink"
+                        )
+                if member.issym():
+                    symlinks.add(normalized)
+                if member.islnk():
+                    target = PurePosixPath(member.linkname)
+                    if target.is_absolute() or ".." in target.parts:
+                        raise DirectWardenError(
+                            "image export contains an unsafe hard link"
+                        )
+
+    def _checked(self, *argv: str) -> None:
+        result = self.runner.run(argv, timeout=600)
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"rootfs extraction command failed: {result.argv!r}; "
+                f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+            )
+
+
+class DockerRootfsStore:
+    """Use Docker for image resolution/export, never for sandbox tasks."""
+
+    MANIFEST = "manifest.json"
+    COMPLETE = "COMPLETE"
+    EXPORT_LABEL = "dev.ucloud-sandboxes.image-export=true"
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        runner: CommandRunner | None = None,
+        extractor: RootfsExtractor | None = None,
+        docker_binary: str = "docker",
+    ) -> None:
+        if not root.is_absolute():
+            raise ValueError("rootfs store root must be absolute")
+        self.root = root
+        self.runner = runner or SubprocessCommandRunner()
+        self.extractor = extractor or GnuTarRootfsExtractor()
+        self.docker_binary = docker_binary
+        self.images = root / "images"
+        self.locks = root / "locks"
+        for path in (root, self.images, self.locks):
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            self._require_private_directory(path)
+
+    def materialize(self, image_ref: str) -> MaterializedRootfs:
+        image_ref = str(image_ref).strip()
+        if not image_ref or "\0" in image_ref:
+            raise ValueError("image_ref is invalid")
+        inspection = self._checked(
+            self.docker_binary,
+            "image",
+            "inspect",
+            image_ref,
+        )
+        try:
+            raw = json.loads(inspection)
+            image_id = str(raw[0]["Id"])
+            image_config = DockerImageConfig.from_inspection(raw[0].get("Config"))
+        except (
+            IndexError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise DirectWardenError(
+                "docker image inspect returned invalid JSON"
+            ) from exc
+        if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
+            raise DirectWardenError("docker image inspect returned an invalid image ID")
+        digest = image_id[7:]
+        # A node has one Warden. Serializing the uncommon cold-export path makes
+        # it safe for the next Warden process to reap Docker containers orphaned
+        # by a predecessor without racing an export that is still in progress.
+        with self._locked("exports"):
+            self._reconcile_export_containers_locked()
+            with self._locked(digest):
+                existing = self._load_complete(digest, image_ref=image_ref)
+                if existing is not None:
+                    return existing
+                self._discard_pending_exports(digest)
+                try:
+                    return self._export(
+                        digest,
+                        image_id=image_id,
+                        image_ref=image_ref,
+                        image_config=image_config,
+                    )
+                except Exception:
+                    self._discard_pending_exports(digest)
+                    raise
+
+    def reconcile_export_containers(self) -> tuple[str, ...]:
+        """Remove exporter containers orphaned by an earlier Warden process."""
+        with self._locked("exports"):
+            return self._reconcile_export_containers_locked()
+
+    def _reconcile_export_containers_locked(self) -> tuple[str, ...]:
+        listing = self._checked(
+            self.docker_binary,
+            "ps",
+            "--all",
+            f"--filter=label={self.EXPORT_LABEL}",
+            "--format={{.ID}} {{.State}}",
+        )
+        removed: list[str] = []
+        for line in listing.splitlines():
+            fields = line.split()
+            if len(fields) != 2 or not re.fullmatch(r"[0-9a-f]{12,64}", fields[0]):
+                raise DirectWardenError("docker returned invalid exporter inventory")
+            container_id, state = fields
+            if state not in {"created", "exited", "dead"}:
+                raise DirectWardenError(
+                    "refusing to remove an exporter container in state "
+                    f"{state!r}: {container_id}"
+                )
+            self._checked(
+                self.docker_binary,
+                "rm",
+                "--force",
+                "--volumes",
+                container_id,
+            )
+            removed.append(container_id)
+        return tuple(removed)
+
+    def _export(
+        self,
+        digest: str,
+        *,
+        image_id: str,
+        image_ref: str,
+        image_config: DockerImageConfig,
+    ) -> MaterializedRootfs:
+        pending = self.images / f".{digest}.{uuid4().hex}.pending"
+        pending.mkdir(mode=0o700)
+        rootfs = pending / "rootfs"
+        rootfs.mkdir(mode=0o755)
+        archive = pending / "rootfs.tar"
+        container_id = ""
+        try:
+            container_id = self._checked(
+                self.docker_binary,
+                "create",
+                "--network=none",
+                "--entrypoint=/bin/true",
+                f"--label={self.EXPORT_LABEL}",
+                image_id,
+            ).strip()
+            if not re.fullmatch(r"[0-9a-f]{12,64}", container_id):
+                raise DirectWardenError(
+                    "docker create returned an invalid container ID"
+                )
+            self._checked(
+                self.docker_binary,
+                "export",
+                f"--output={archive}",
+                container_id,
+                timeout=600,
+            )
+            self.extractor.extract(archive, rootfs)
+        finally:
+            if container_id:
+                self.runner.run(
+                    (
+                        self.docker_binary,
+                        "rm",
+                        "--force",
+                        "--volumes",
+                        container_id,
+                    ),
+                    timeout=60,
+                )
+        archive.unlink()
+        identity = _sha256(
+            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
+        )
+        manifest = {
+            "created_ns": time.time_ns(),
+            "image_id": image_id,
+            "image_config": image_config.to_dict(),
+            "image_ref": image_ref,
+            "rootfs_identity_sha256": identity,
+            "schema": _ROOTFS_SCHEMA,
+        }
+        self._atomic_write(pending / self.MANIFEST, _canonical_json(manifest) + b"\n")
+        self._atomic_write(
+            pending / self.COMPLETE,
+            _canonical_json(
+                {
+                    "image_id": image_id,
+                    "rootfs_identity_sha256": identity,
+                    "schema": _ROOTFS_SCHEMA,
+                }
+            )
+            + b"\n",
+        )
+        self._fsync_directory(pending)
+        target = self.images / digest
+        try:
+            pending.replace(target)
+        except FileExistsError:
+            shutil.rmtree(pending)
+            existing = self._load_complete(digest, image_ref=image_ref)
+            if existing is None:
+                raise DirectWardenError("concurrent rootfs publication is incomplete")
+            return existing
+        self._fsync_directory(self.images)
+        return MaterializedRootfs(
+            image_ref=image_ref,
+            image_id=image_id,
+            rootfs_identity_sha256=identity,
+            rootfs=target / "rootfs",
+            image_config=image_config,
+        )
+
+    def _load_complete(
+        self,
+        digest: str,
+        *,
+        image_ref: str,
+    ) -> MaterializedRootfs | None:
+        target = self.images / digest
+        if not target.exists():
+            return None
+        self._require_private_directory(target)
+        rootfs = target / "rootfs"
+        self._require_real_directory(rootfs)
+        try:
+            manifest = json.loads((target / self.MANIFEST).read_text(encoding="ascii"))
+            marker = json.loads((target / self.COMPLETE).read_text(encoding="ascii"))
+            image_config = DockerImageConfig.from_dict(manifest.get("image_config"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("materialized rootfs metadata is invalid") from exc
+        except (TypeError, ValueError) as exc:
+            raise DirectWardenError("materialized rootfs image config is invalid") from exc
+        image_id = f"sha256:{digest}"
+        expected_identity = _sha256(
+            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
+        )
+        if (
+            manifest.get("schema") != _ROOTFS_SCHEMA
+            or manifest.get("image_id") != image_id
+            or manifest.get("rootfs_identity_sha256") != expected_identity
+            or marker
+            != {
+                "image_id": image_id,
+                "rootfs_identity_sha256": expected_identity,
+                "schema": _ROOTFS_SCHEMA,
+            }
+        ):
+            raise DirectWardenError("materialized rootfs identity is invalid")
+        return MaterializedRootfs(
+            image_ref=image_ref,
+            image_id=image_id,
+            rootfs_identity_sha256=expected_identity,
+            rootfs=rootfs,
+            image_config=image_config,
+        )
+
+    def _discard_pending_exports(self, digest: str) -> None:
+        pattern = re.compile(rf"\.{re.escape(digest)}\.[0-9a-f]{{32}}\.pending\Z")
+        for path in self.images.iterdir():
+            if pattern.fullmatch(path.name):
+                self._require_private_directory(path)
+                shutil.rmtree(path)
+        self._fsync_directory(self.images)
+
+    def _checked(
+        self,
+        *argv: str,
+        timeout: float = 60,
+    ) -> str:
+        result = self.runner.run(argv, timeout=timeout)
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"image command failed ({result.returncode}): {result.argv!r}; "
+                f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+            )
+        return result.stdout.strip()
+
+    @contextmanager
+    def _locked(self, digest: str) -> Iterator[None]:
+        descriptor = os.open(
+            self.locks / f"{digest}.lock",
+            os.O_RDWR
+            | os.O_CREAT
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+
+    @staticmethod
+    def _atomic_write(path: Path, payload: bytes) -> None:
+        descriptor, raw = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+        )
+        temporary = Path(raw)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(path)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    @staticmethod
+    def _require_real_directory(path: Path) -> None:
+        if not path.is_dir() or path.is_symlink():
+            raise DirectWardenError("rootfs path must be a real directory")
+
+    @classmethod
+    def _require_private_directory(cls, path: Path) -> None:
+        cls._require_real_directory(path)
+        info = path.lstat()
+        if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise DirectWardenError("rootfs store directory must be owned and private")
+
+
+@dataclass(frozen=True)
+class OverlayRootfsLease:
+    sandbox: DirectSandbox
+    image: MaterializedRootfs
+    writable: Path
+    upper: Path
+    work: Path
+    merged: Path
+    writable_owned_by_manager: bool
+
+
+class OverlayRootfsManager:
+    """Create per-sandbox overlay mounts over a shared Docker-exported rootfs."""
+
+    def __init__(
+        self,
+        image_store: DockerRootfsStore,
+        *,
+        writable_root: Path,
+        bundle_root: Path,
+        runner: CommandRunner | None = None,
+        mount_binary: str = "mount",
+        mountpoint_binary: str = "mountpoint",
+        umount_binary: str = "umount",
+        require_precreated_writable: bool = False,
+    ) -> None:
+        self.image_store = image_store
+        self.writable_root = writable_root
+        self.bundle_root = bundle_root
+        self.runner = runner or SubprocessCommandRunner()
+        self.mount_binary = mount_binary
+        self.mountpoint_binary = mountpoint_binary
+        self.umount_binary = umount_binary
+        self.require_precreated_writable = bool(require_precreated_writable)
+        for path in (writable_root, bundle_root):
+            if not path.is_absolute():
+                raise ValueError("overlay roots must be absolute")
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+            DockerRootfsStore._require_private_directory(path)
+
+    def prepare(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_generation: int,
+        image_ref: str,
+        config_template: dict[str, Any],
+        spec_sha256: str | None = None,
+    ) -> OverlayRootfsLease:
+        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 0:
+            raise ValueError("sandbox incarnation is invalid")
+        image = self.image_store.materialize(image_ref)
+        incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
+        writable = self.writable_root / incarnation
+        bundle = self.bundle_root / incarnation
+        if bundle.exists():
+            raise DirectWardenError("overlay sandbox incarnation already exists")
+        writable_owned_by_manager = not self.require_precreated_writable
+        if self.require_precreated_writable:
+            if not writable.exists():
+                raise DirectWardenError(
+                    "quota-owned writable incarnation was not prepared"
+                )
+            DockerRootfsStore._require_private_directory(writable)
+            if any(writable.iterdir()):
+                raise DirectWardenError(
+                    "quota-owned writable incarnation is not empty"
+                )
+        elif writable.exists():
+            raise DirectWardenError("overlay sandbox incarnation already exists")
+        upper = writable / "upper"
+        work = writable / "work"
+        merged = bundle / "rootfs"
+        if writable_owned_by_manager:
+            writable.mkdir(mode=0o700)
+        bundle.mkdir(mode=0o700)
+        for path in (upper, work, merged):
+            path.mkdir(mode=0o700)
+        # Overlayfs exposes the upper directory inode as the mounted root.
+        # Keeping it private would make every non-root OCI user unable to
+        # traverse "/", regardless of the image root's permissions.
+        image_root = image.rootfs.stat()
+        upper_info = upper.stat()
+        if (
+            upper_info.st_uid != image_root.st_uid
+            or upper_info.st_gid != image_root.st_gid
+        ):
+            os.chown(upper, image_root.st_uid, image_root.st_gid)
+        os.chmod(upper, image_root.st_mode & 0o7777)
+        mounted = False
+        try:
+            result = self.runner.run(
+                (
+                    self.mount_binary,
+                    "-t",
+                    "overlay",
+                    "overlay",
+                    "-o",
+                    f"lowerdir={image.rootfs},upperdir={upper},workdir={work}",
+                    str(merged),
+                ),
+                timeout=60,
+            )
+            if result.returncode != 0:
+                raise DirectWardenError(
+                    f"overlay mount failed: {result.stderr or result.stdout}"
+                )
+            mounted = True
+            memory_directory = incarnation
+            config = json.loads(json.dumps(config_template))
+            config.setdefault("root", {})["path"] = "rootfs"
+            config["root"].setdefault("readonly", False)
+            config.setdefault("annotations", {})[
+                "dev.gvisor.internal.application-memory-directory"
+            ] = memory_directory
+            config_path = bundle / "config.json"
+            DockerRootfsStore._atomic_write(
+                config_path,
+                json.dumps(config, indent=2, sort_keys=True).encode("utf-8") + b"\n",
+            )
+            DockerRootfsStore._fsync_directory(bundle)
+        except Exception as exc:
+            if mounted:
+                cleanup = self.runner.run(
+                    (self.umount_binary, str(merged)),
+                    timeout=60,
+                )
+                if cleanup.returncode != 0:
+                    raise DirectWardenError(
+                        "overlay preparation failed and its mount could not be "
+                        f"released: {cleanup.stderr or cleanup.stdout}"
+                    ) from exc
+            shutil.rmtree(bundle, ignore_errors=True)
+            if writable_owned_by_manager:
+                shutil.rmtree(writable, ignore_errors=True)
+            else:
+                shutil.rmtree(upper, ignore_errors=True)
+                shutil.rmtree(work, ignore_errors=True)
+            raise
+        container_id = hashlib.sha256(
+            f"{sandbox_id}:{sandbox_generation}".encode("utf-8")
+        ).hexdigest()
+        sandbox = DirectSandbox(
+            sandbox_id=sandbox_id,
+            sandbox_generation=sandbox_generation,
+            container_id=container_id,
+            spec_sha256=spec_sha256 or _sha256(_canonical_json(config)),
+            rootfs_sha256=image.rootfs_identity_sha256,
+            bundle=bundle,
+            memory_directory=memory_directory,
+        )
+        return OverlayRootfsLease(
+            sandbox=sandbox,
+            image=image,
+            writable=writable,
+            upper=upper,
+            work=work,
+            merged=merged,
+            writable_owned_by_manager=writable_owned_by_manager,
+        )
+
+    def release(self, lease: OverlayRootfsLease) -> None:
+        result = self.runner.run(
+            (self.umount_binary, str(lease.merged)),
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"overlay unmount failed: {result.stderr or result.stdout}"
+            )
+        shutil.rmtree(lease.sandbox.bundle)
+        if lease.writable_owned_by_manager:
+            shutil.rmtree(lease.writable)
+
+    def release_sandbox(self, sandbox: DirectSandbox) -> None:
+        """Release a registered overlay without depending on in-memory lease state."""
+        incarnation = f"{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}"
+        expected_bundle = self.bundle_root / incarnation
+        if sandbox.bundle != expected_bundle:
+            raise DirectWardenError("registered sandbox bundle escaped overlay root")
+        merged = expected_bundle / "rootfs"
+        if expected_bundle.exists():
+            self._unmount_if_mounted(merged)
+            shutil.rmtree(expected_bundle)
+        writable = self.writable_root / incarnation
+        if not self.require_precreated_writable and writable.exists():
+            shutil.rmtree(writable)
+
+    def discard_unregistered(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_generation: int,
+    ) -> None:
+        """Remove overlay state from a create that crashed before registration."""
+        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 0:
+            raise ValueError("sandbox incarnation is invalid")
+        incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
+        bundle = self.bundle_root / incarnation
+        if bundle.exists():
+            self._unmount_if_mounted(bundle / "rootfs")
+            shutil.rmtree(bundle)
+        writable = self.writable_root / incarnation
+        if writable.exists():
+            if self.require_precreated_writable:
+                for name in ("upper", "work"):
+                    path = writable / name
+                    if path.exists():
+                        shutil.rmtree(path)
+            else:
+                shutil.rmtree(writable)
+
+    def _unmount_if_mounted(self, path: Path) -> None:
+        mounted = self.runner.run(
+            (self.mountpoint_binary, "--quiet", str(path)),
+            timeout=60,
+        )
+        if mounted.returncode == 1:
+            return
+        if mounted.returncode != 0:
+            raise DirectWardenError(
+                f"could not inspect overlay mount: {mounted.stderr or mounted.stdout}"
+            )
+        result = self.runner.run(
+            (self.umount_binary, str(path)),
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"overlay unmount failed: {result.stderr or result.stdout}"
+            )

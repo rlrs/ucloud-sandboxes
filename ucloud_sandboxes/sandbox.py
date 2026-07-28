@@ -18,6 +18,12 @@ from threading import Condition, Event, RLock, Thread, local
 import time
 from typing import Any, Callable, ContextManager, Iterator, Protocol, Sequence
 
+from .hibernation import (
+    HibernationDiskLedger,
+    HibernationDiskReservation,
+    HibernationQuotaError,
+    hibernation_disk_reservation_mb,
+)
 from .models import ResourceQuantity, parse_iso_datetime, utc_now
 from .runsc_restore import (
     DEFAULT_RUNTIME_NAME as DEFAULT_FORK_RUNTIME_NAME,
@@ -34,6 +40,9 @@ SANDBOX_GENERATION_LABEL = "ucloud-sandboxes.generation"
 SANDBOX_OPERATION_ID_LABEL = "ucloud-sandboxes.operation-id"
 SANDBOX_SPEC_HASH_LABEL = "ucloud-sandboxes.spec-sha256"
 SANDBOX_RESERVED_LABEL_PREFIX = "ucloud-sandboxes."
+HIBERNATION_MEMORY_DIRECTORY_ANNOTATION = (
+    "dev.gvisor.internal.application-memory-directory"
+)
 DEFAULT_SANDBOX_USER = "1000:1000"
 DEFAULT_PIDS_LIMIT = 256
 SECURITY_VALUE_RE = re.compile(r"^[A-Za-z0-9_.:@/-]+$")
@@ -212,6 +221,10 @@ class SandboxBusyError(SandboxConflictError):
 
 class SandboxForkUnsupportedError(RuntimeError):
     """The node runtime has not passed live-fork conformance."""
+
+
+class SandboxHibernateUnsupportedError(RuntimeError):
+    """The node runtime has not passed local-hibernation conformance."""
 
 
 class SandboxForkCommandTimeoutError(RuntimeError):
@@ -536,6 +549,7 @@ class SandboxSpec:
     network: str = "none"
     ttl_seconds: int | None = None
     forkable: bool = False
+    parkable: bool = False
     fork_protocol: SandboxForkProtocolSpec = SandboxForkProtocolSpec()
     ssh: SandboxSshSpec = SandboxSshSpec()
     security: SandboxSecuritySpec = SandboxSecuritySpec()
@@ -581,6 +595,7 @@ class SandboxSpec:
                 int(raw["ttl_seconds"]) if raw.get("ttl_seconds") is not None else None
             ),
             forkable=bool(raw.get("forkable", False)),
+            parkable=bool(raw.get("parkable", raw.get("hibernate", False))),
             fork_protocol=SandboxForkProtocolSpec.from_dict(raw.get("fork_protocol")),
             ssh=SandboxSshSpec.from_dict(raw.get("ssh", raw.get("ssh_enabled"))),
             security=security,
@@ -632,6 +647,20 @@ class SandboxSpec:
                 "forkable sandboxes cannot expose SSH because direct host-port "
                 "sessions bypass the fork lifecycle barrier."
             )
+        if self.parkable and self.memory_mb is None:
+            raise ValueError("parkable sandboxes require an explicit memory_mb limit.")
+        if self.parkable and self.disk_mb is None:
+            raise ValueError("parkable sandboxes require an explicit disk_mb limit.")
+        if self.parkable and self.forkable:
+            raise ValueError(
+                "parkable sandboxes cannot be forkable in the single-owner "
+                "hibernation format."
+            )
+        if self.parkable and self.ssh.enabled:
+            raise ValueError(
+                "parkable sandboxes cannot expose SSH because direct host-port "
+                "sessions bypass the hibernation lifecycle barrier."
+            )
         self.fork_protocol.validate(required=self.forkable)
         if self.profile not in SANDBOX_PROFILES:
             raise ValueError(
@@ -659,10 +688,22 @@ class SandboxSpec:
         return raw
 
     def requested_resources(self) -> ResourceQuantity:
+        disk_mb = self.disk_mb or 0
+        if self.parkable:
+            # Validation requires both bounds. Keep this defensive so resource
+            # accounting never silently falls back to sparse allocated blocks.
+            if self.memory_mb is None or self.disk_mb is None:
+                raise ValueError(
+                    "parkable sandbox resources require memory_mb and disk_mb"
+                )
+            disk_mb = hibernation_disk_reservation_mb(
+                memory_mb=self.memory_mb,
+                writable_disk_mb=self.disk_mb,
+            )
         return ResourceQuantity(
             vcpu=self.cpus or 0.0,
             memory_mb=self.memory_mb or 0,
-            disk_mb=self.disk_mb or 0,
+            disk_mb=disk_mb,
         )
 
 
@@ -1228,6 +1269,200 @@ class RecordingExecutor:
         )
 
 
+class HibernationQuotaBackend(Protocol):
+    def prepare(
+        self,
+        reservation: HibernationDiskReservation,
+    ) -> dict[str, Any]: ...
+
+    def drop(
+        self,
+        reservation: HibernationDiskReservation,
+    ) -> dict[str, Any]: ...
+
+    def inventory(self) -> tuple[dict[str, Any], ...]: ...
+
+
+class HibernationQuotaHelperClient:
+    def __init__(
+        self,
+        *,
+        executor: CommandExecutor | None = None,
+        helper: str = "/usr/local/libexec/ucloud-sandbox-hibernation-quota",
+        sudo: bool = True,
+        include_writable_disk: bool = False,
+    ) -> None:
+        if not helper.startswith("/") or "\x00" in helper:
+            raise ValueError("hibernation quota helper path must be absolute")
+        self.executor = executor or SubprocessExecutor()
+        self.helper = helper
+        self.sudo = bool(sudo)
+        self.include_writable_disk = bool(include_writable_disk)
+
+    def prepare(
+        self,
+        reservation: HibernationDiskReservation,
+    ) -> dict[str, Any]:
+        return self._run(
+            "prepare",
+            reservation,
+            str(
+                reservation.total_mb
+                if self.include_writable_disk
+                else reservation.hibernation_quota_mb
+            ),
+            expected_state="ready",
+        )
+
+    def drop(
+        self,
+        reservation: HibernationDiskReservation,
+    ) -> dict[str, Any]:
+        return self._run(
+            "drop",
+            reservation,
+            expected_state="absent",
+        )
+
+    def inventory(self) -> tuple[dict[str, Any], ...]:
+        command = (self.helper, "list")
+        if self.sudo:
+            command = ("sudo", "-n", "--", *command)
+        result = self.executor.run(command)
+        if result.exit_code != 0:
+            raise HibernationQuotaError(
+                "hibernation quota helper list failed: "
+                f"{result.stderr.strip() or f'exit {result.exit_code}'}"
+            )
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise HibernationQuotaError(
+                "hibernation quota helper list returned invalid JSON"
+            ) from exc
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"reservations", "version"}
+            or payload.get("version") != 1
+            or not isinstance(payload.get("reservations"), list)
+        ):
+            raise HibernationQuotaError(
+                "hibernation quota helper list returned an invalid schema"
+            )
+        reservations: list[dict[str, Any]] = []
+        identities: set[tuple[str, int]] = set()
+        projects: set[int] = set()
+        for raw in payload["reservations"]:
+            if (
+                not isinstance(raw, dict)
+                or set(raw)
+                != {
+                    "hard_limit_mb",
+                    "path",
+                    "project_id",
+                    "sandbox_generation",
+                    "sandbox_id",
+                    "state",
+                }
+                or raw.get("state") != "ready"
+                or not isinstance(raw.get("sandbox_id"), str)
+                or not isinstance(raw.get("sandbox_generation"), int)
+                or not isinstance(raw.get("project_id"), int)
+                or not isinstance(raw.get("hard_limit_mb"), int)
+                or not isinstance(raw.get("path"), str)
+            ):
+                raise HibernationQuotaError(
+                    "hibernation quota helper list contains an invalid reservation"
+                )
+            identity = (raw["sandbox_id"], raw["sandbox_generation"])
+            if identity in identities or raw["project_id"] in projects:
+                raise HibernationQuotaError(
+                    "hibernation quota helper list contains duplicate ownership"
+                )
+            identities.add(identity)
+            projects.add(raw["project_id"])
+            reservations.append(raw)
+        return tuple(reservations)
+
+    def _run(
+        self,
+        action: str,
+        reservation: HibernationDiskReservation,
+        *extra: str,
+        expected_state: str,
+    ) -> dict[str, Any]:
+        command = (
+            self.helper,
+            action,
+            reservation.sandbox_id,
+            str(reservation.sandbox_generation),
+            str(reservation.project_id),
+            *extra,
+        )
+        if self.sudo:
+            command = ("sudo", "-n", "--", *command)
+        result = self.executor.run(command)
+        if result.exit_code != 0:
+            raise HibernationQuotaError(
+                f"hibernation quota helper {action} failed: "
+                f"{result.stderr.strip() or f'exit {result.exit_code}'}"
+            )
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise HibernationQuotaError(
+                f"hibernation quota helper {action} returned invalid JSON"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise HibernationQuotaError(
+                f"hibernation quota helper {action} returned a non-object"
+            )
+        if (
+            payload.get("sandbox_id") != reservation.sandbox_id
+            or payload.get("sandbox_generation") != reservation.sandbox_generation
+            or payload.get("project_id") != reservation.project_id
+            or payload.get("state") != expected_state
+        ):
+            raise HibernationQuotaError(
+                f"hibernation quota helper {action} returned another reservation"
+            )
+        if action == "prepare":
+            expected_quota_mb = (
+                reservation.total_mb
+                if self.include_writable_disk
+                else reservation.hibernation_quota_mb
+            )
+            if payload.get("hard_limit_mb") != expected_quota_mb:
+                raise HibernationQuotaError(
+                    "hibernation quota helper returned the wrong hard limit"
+                )
+            expected_keys = {
+                "hard_limit_mb",
+                "path",
+                "project_id",
+                "sandbox_generation",
+                "sandbox_id",
+                "state",
+            }
+            if set(payload) != expected_keys or not isinstance(
+                payload.get("path"), str
+            ):
+                raise HibernationQuotaError(
+                    "hibernation quota helper returned an invalid prepare schema"
+                )
+        elif set(payload) != {
+            "project_id",
+            "removed",
+            "sandbox_generation",
+            "sandbox_id",
+            "state",
+        } or not isinstance(payload.get("removed"), bool):
+            raise HibernationQuotaError(
+                "hibernation quota helper returned an invalid drop schema"
+            )
+        return payload
+
+
 class DockerGvisorRuntime:
     def __init__(
         self,
@@ -1240,6 +1475,8 @@ class DockerGvisorRuntime:
         allow_storage_opt_quota: bool = False,
         allow_tmpfs_workspace: bool = False,
         fork_enabled: bool = False,
+        hibernate_enabled: bool = False,
+        hibernate_runtime_name: str = "runsc-hibernate",
         checkpoint_root: Path | None = None,
         checkpoint_helper: str = "/usr/local/libexec/ucloud-sandbox-checkpoint",
         checkpoint_helper_sudo: bool = True,
@@ -1256,6 +1493,8 @@ class DockerGvisorRuntime:
         self.allow_storage_opt_quota = allow_storage_opt_quota
         self.allow_tmpfs_workspace = allow_tmpfs_workspace
         self.fork_enabled = bool(fork_enabled)
+        self.hibernate_enabled = bool(hibernate_enabled)
+        self.hibernate_runtime_name = hibernate_runtime_name
         self.checkpoint_root = checkpoint_root
         self.checkpoint_helper = checkpoint_helper
         self.checkpoint_helper_sudo = checkpoint_helper_sudo
@@ -1268,6 +1507,7 @@ class DockerGvisorRuntime:
         if self.fork_enabled and self.checkpoint_root is None:
             raise ValueError("checkpoint_root is required when live fork is enabled")
         validate_security_value("fork runtime name", self.fork_runtime_name)
+        validate_security_value("hibernate runtime name", self.hibernate_runtime_name)
         if not (
             1
             <= self.fork_command_timeout_seconds
@@ -1635,7 +1875,14 @@ class DockerGvisorRuntime:
                 "--name",
                 self.container_name(spec.id),
                 "--runtime",
-                runtime_override or self.runtime_name,
+                (
+                    runtime_override
+                    or (
+                        self.hibernate_runtime_name
+                        if spec.parkable
+                        else self.runtime_name
+                    )
+                ),
                 "--network",
                 spec.network,
                 "--label",
@@ -1669,6 +1916,14 @@ class DockerGvisorRuntime:
                 ("dev.gvisor.internal.checkpoint.compression", "none"),
             ):
                 argv.extend(["--annotation", f"{key}={value}"])
+        if spec.parkable:
+            incarnation = f"{spec.id}.sandbox-{operation.generation}"
+            argv.extend(
+                [
+                    "--annotation",
+                    f"{HIBERNATION_MEMORY_DIRECTORY_ANNOTATION}={incarnation}",
+                ]
+            )
         for key, value in sorted((extra_annotations or {}).items()):
             if key != RESTORE_CHECKPOINT_ANNOTATION:
                 raise ValueError(f"unsupported internal OCI annotation: {key}")
@@ -3192,6 +3447,8 @@ class SandboxManager:
         ssh_port_range: tuple[int, int] | None = None,
         effective_capacity: ResourceQuantity | None = None,
         lifecycle: SandboxLifecycleCoordinator | None = None,
+        hibernation_disk_ledger: HibernationDiskLedger | None = None,
+        hibernation_quota_backend: HibernationQuotaBackend | None = None,
     ) -> None:
         if effective_capacity is not None and not effective_capacity.is_valid:
             raise ValueError(
@@ -3202,6 +3459,73 @@ class SandboxManager:
         self.ssh_port_range = ssh_port_range
         self.effective_capacity = effective_capacity
         self.lifecycle = lifecycle or SandboxLifecycleCoordinator()
+        self.hibernation_disk_ledger = hibernation_disk_ledger
+        self.hibernation_quota_backend = hibernation_quota_backend
+        if (hibernation_disk_ledger is None) != (hibernation_quota_backend is None):
+            raise ValueError(
+                "hibernation disk ledger and quota backend must be configured "
+                "together"
+            )
+        if (
+            runtime.hibernate_enabled
+            and not runtime.dry_run
+            and hibernation_disk_ledger is None
+        ):
+            raise ValueError(
+                "enabled hibernation requires a durable disk ledger and hard "
+                "quota backend"
+            )
+
+    def reconcile_hibernation_storage(self) -> dict[str, int]:
+        if (
+            self.hibernation_disk_ledger is None
+            or self.hibernation_quota_backend is None
+            or self.runtime.dry_run
+        ):
+            return {
+                "reservations": 0,
+                "reserved_mb": 0,
+                "available_mb": 0,
+            }
+        with _sandbox_create_lock(self.store.path, "hibernation-reconcile"):
+            state = self.store.load_state()
+            expected: list[tuple[str, int]] = []
+            for record in state.records.values():
+                if not record.spec.parkable:
+                    continue
+                if record.spec.memory_mb is None or record.spec.disk_mb is None:
+                    raise HibernationQuotaError(
+                        "parkable sandbox record has unbounded disk resources"
+                    )
+                reservation = self.hibernation_disk_ledger.reserve(
+                    sandbox_id=record.spec.id,
+                    sandbox_generation=record.generation,
+                    memory_mb=record.spec.memory_mb,
+                    writable_disk_mb=record.spec.disk_mb,
+                )
+                self.hibernation_quota_backend.prepare(reservation)
+                expected.append((record.spec.id, record.generation))
+            quota_inventory = self.hibernation_quota_backend.inventory()
+            hard_limits = {
+                int(item["project_id"]): int(item["hard_limit_mb"])
+                for item in quota_inventory
+            }
+            path_projects = {
+                (str(item["sandbox_id"]), int(item["sandbox_generation"])): int(
+                    item["project_id"]
+                )
+                for item in quota_inventory
+            }
+            inventory = self.hibernation_disk_ledger.require_quota_consistency(
+                expected_incarnations=expected,
+                project_hard_limits_mb=hard_limits,
+                path_project_ids=path_projects,
+            )
+            return {
+                "reservations": len(inventory.reservations),
+                "reserved_mb": inventory.reserved_mb,
+                "available_mb": inventory.available_mb,
+            }
 
     def reconcile_checkpoint_storage(self) -> dict[str, int]:
         """Collect only helper state proven unreferenced by durable intents.
@@ -3380,6 +3704,10 @@ class SandboxManager:
             raise SandboxForkUnsupportedError(
                 "forkable sandbox requires a node with fork-local-v1"
             )
+        if spec.parkable and not self.runtime.hibernate_enabled:
+            raise SandboxHibernateUnsupportedError(
+                "parkable sandbox requires a node with hibernate-local-v1"
+            )
         operation = operation or SandboxOperation.legacy_create(spec)
         operation.validate_spec(spec)
         with _sandbox_create_lock(self.store.path, spec.id):
@@ -3512,6 +3840,10 @@ class SandboxManager:
                 store_phase = time.monotonic()
                 self.store.save_state(records, state.tombstones)
                 phases["store_intent_ms"] = _elapsed_ms(store_phase)
+            quota_phase = time.monotonic()
+            self._prepare_hibernation_quota(spec, operation)
+            if spec.parkable:
+                phases["prepare_hibernation_quota_ms"] = _elapsed_ms(quota_phase)
             phase = time.monotonic()
             try:
                 result = self.runtime.create_with_operation(spec, operation)
@@ -4158,6 +4490,59 @@ class SandboxManager:
                 f"effective_capacity={capacity.to_dict()}"
             )
 
+    def _prepare_hibernation_quota(
+        self,
+        spec: SandboxSpec,
+        operation: SandboxOperation,
+    ) -> None:
+        if not spec.parkable or self.runtime.dry_run:
+            return
+        if (
+            self.hibernation_disk_ledger is None
+            or self.hibernation_quota_backend is None
+            or spec.memory_mb is None
+            or spec.disk_mb is None
+        ):
+            raise HibernationQuotaError("parkable sandbox has no hard quota authority")
+        reservation = self.hibernation_disk_ledger.reserve(
+            sandbox_id=spec.id,
+            sandbox_generation=operation.generation,
+            memory_mb=spec.memory_mb,
+            writable_disk_mb=spec.disk_mb,
+        )
+        self.hibernation_quota_backend.prepare(reservation)
+
+    def _drop_hibernation_quota_if_reserved(
+        self,
+        sandbox_id: str,
+        sandbox_generation: int,
+    ) -> None:
+        if (
+            self.hibernation_disk_ledger is None
+            or self.hibernation_quota_backend is None
+            or self.runtime.dry_run
+        ):
+            return
+        reservations = [
+            item
+            for item in self.hibernation_disk_ledger.inventory().reservations
+            if item.sandbox_id == sandbox_id
+        ]
+        if not reservations:
+            return
+        reservation = reservations[0]
+        if reservation.sandbox_generation != sandbox_generation:
+            raise HibernationQuotaError(
+                "cannot delete another sandbox generation's disk quota"
+            )
+        # Drop physical quota ownership first. Releasing logical capacity first
+        # could admit another sandbox while files from this one still exist.
+        self.hibernation_quota_backend.drop(reservation)
+        self.hibernation_disk_ledger.release(
+            sandbox_id=sandbox_id,
+            sandbox_generation=sandbox_generation,
+        )
+
     def delete(
         self,
         sandbox_id: str,
@@ -4315,6 +4700,7 @@ class SandboxManager:
                 else:
                     result = CommandResult(argv=(), exit_code=0)
                     spec_hash = tombstone.spec_hash if tombstone is not None else ""
+            self._drop_hibernation_quota_if_reserved(sandbox_id, generation)
             state.tombstones[sandbox_id] = SandboxTombstone(
                 sandbox_id=sandbox_id,
                 generation=generation,
@@ -4780,6 +5166,11 @@ def sandbox_spec_fingerprints(spec: SandboxSpec) -> set[str]:
         without_forkable = dict(raw)
         without_forkable.pop("forkable", None)
         variants.append(without_forkable)
+    if not spec.parkable:
+        for candidate in tuple(variants):
+            without_parkable = dict(candidate)
+            without_parkable.pop("parkable", None)
+            variants.append(without_parkable)
     if spec.fork_protocol == SandboxForkProtocolSpec():
         for candidate in tuple(variants):
             without_protocol = dict(candidate)

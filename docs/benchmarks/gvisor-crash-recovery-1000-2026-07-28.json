@@ -1,0 +1,73 @@
+{
+  "cases": [
+    {
+      "cycles": 1000,
+      "elapsed_ms": 1488.391,
+      "name": "hibernate-begin-live",
+      "operations_per_second": 671.867
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 1879.001,
+      "name": "hibernate-sentry-dead-before-reap",
+      "operations_per_second": 532.198
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 3447.921,
+      "name": "hibernate-complete-live-before-stop",
+      "operations_per_second": 290.03
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 1775.227,
+      "name": "hibernate-pending-no-complete",
+      "operations_per_second": 563.308
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 4149.788,
+      "name": "hibernate-complete-before-commit",
+      "operations_per_second": 240.976
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 4140.379,
+      "name": "hibernate-committed",
+      "operations_per_second": 241.524
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 4684.041,
+      "name": "restore-before-launch",
+      "operations_per_second": 213.491
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 5727.277,
+      "name": "restore-started-before-identity",
+      "operations_per_second": 174.603
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 5165.8,
+      "name": "restore-candidate-alive",
+      "operations_per_second": 193.581
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 5374.685,
+      "name": "restore-candidate-dead",
+      "operations_per_second": 186.057
+    },
+    {
+      "cycles": 1000,
+      "elapsed_ms": 6016.513,
+      "name": "restore-running-committed",
+      "operations_per_second": 166.209
+    }
+  ],
+  "cycles_per_case": 1000,
+  "schema": 1,
+  "total_restarts": 11000
+}

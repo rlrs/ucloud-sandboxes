@@ -1,0 +1,64 @@
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -913,30 +913,49 @@ func (s *Sandbox) createSandboxProcess(conf *config.Config, args *Args, startSyn
+ 	donations := donation.Agency{}
+ 	defer donations.Close()
+ 
+ 	var appMemoryFile *os.File
+ 	if conf.ApplicationMemoryFileDir != "" {
+-		if filepath.Base(s.ID) != s.ID || s.ID == "." || s.ID == ".." {
+-			return fmt.Errorf("invalid sandbox ID for application memory file: %q", s.ID)
++		const directoryAnnotation = "dev.gvisor.internal.application-memory-directory"
++		var directoryName string
++		if args.Spec != nil && args.Spec.Annotations != nil {
++			directoryName = args.Spec.Annotations[directoryAnnotation]
+ 		}
+-		if err := os.MkdirAll(conf.ApplicationMemoryFileDir, 0700); err != nil {
+-			return fmt.Errorf("creating application memory file directory: %w", err)
++		if directoryName == "" || filepath.Base(directoryName) != directoryName ||
++			directoryName == "." || directoryName == ".." {
++			return fmt.Errorf("missing or invalid %s annotation: %q", directoryAnnotation, directoryName)
+ 		}
+-		dirInfo, err := os.Lstat(conf.ApplicationMemoryFileDir)
++		applicationMemoryDir := filepath.Join(conf.ApplicationMemoryFileDir, directoryName)
++		dirInfo, err := os.Lstat(applicationMemoryDir)
+ 		if err != nil {
+ 			return fmt.Errorf("statting application memory file directory: %w", err)
+ 		}
+ 		if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 {
+ 			return fmt.Errorf("application memory file directory is not a directory")
+ 		}
+-		s.ApplicationMemoryFilePath = filepath.Join(conf.ApplicationMemoryFileDir, s.ID+".memory")
+-		appMemoryFile, err = os.OpenFile(
+-			s.ApplicationMemoryFilePath,
+-			os.O_RDWR|os.O_CREATE|os.O_EXCL,
+-			0600,
++		directoryFD, err := unix.Open(
++			applicationMemoryDir,
++			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW,
++			0,
+ 		)
+ 		if err != nil {
+-			return fmt.Errorf("creating application memory file: %w", err)
++			return fmt.Errorf("opening application memory file directory: %w", err)
+ 		}
++		defer unix.Close(directoryFD)
++		const applicationMemoryFileName = "application_memory.active"
++		applicationMemoryFD, err := unix.Openat(
++			directoryFD,
++			applicationMemoryFileName,
++			unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW,
++			0600,
++		)
++		if err != nil {
++			return fmt.Errorf("creating application memory file: %w", err)
++		}
++		s.ApplicationMemoryFilePath = filepath.Join(
++			applicationMemoryDir,
++			applicationMemoryFileName,
++		)
++		appMemoryFile = os.NewFile(uintptr(applicationMemoryFD), "application-memory")
+ 	}
+ 
+ 	// pgalloc.MemoryFile (which provides application memory) sometimes briefly

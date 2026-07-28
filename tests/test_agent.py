@@ -14,6 +14,13 @@ from ucloud_sandboxes.registry import heartbeat_to_dict
 
 
 class AgentTests(unittest.TestCase):
+    def test_disk_overcommit_is_never_accepted(self) -> None:
+        with self.assertRaisesRegex(ValueError, "cannot exceed 1.0"):
+            build_heartbeat(
+                job_id="job-1",
+                disk_overcommit=1.01,
+            )
+
     def test_detects_job_id_from_environment_mapping(self) -> None:
         self.assertEqual(detect_job_id({"UCLOUD_JOB_ID": "123"}), "123")
         self.assertEqual(detect_job_id({"JOB_ID": "456"}), "456")

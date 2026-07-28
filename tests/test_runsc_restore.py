@@ -113,7 +113,12 @@ class RunscRestoreWrapperTests(unittest.TestCase):
             self.assertIn("restore", restored)
             self.assertNotIn("start", restored)
             self.assertIn("--detach", restored)
+            self.assertIn("--background", restored)
             self.assertIn(f"--image-path={checkpoint}", restored)
+            self.assertLess(
+                restored.index("--background"),
+                restored.index(f"--image-path={checkpoint}"),
+            )
             self.assertFalse(
                 (config.state_root / f"{self.container_id}.json").exists()
             )

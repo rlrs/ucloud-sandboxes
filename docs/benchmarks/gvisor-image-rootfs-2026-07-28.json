@@ -1,0 +1,28 @@
+{
+  "base_allocated_bytes": 417628160,
+  "cached_materialize_ms": 32.06934900003944,
+  "cold_materialize_ms": 321.3414599999851,
+  "exporter_container_leaks": [],
+  "image": "busybox:1.37.0",
+  "image_id": "sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028",
+  "overlay_prepare_ms": 40.13348499984204,
+  "overlay_release_ms": 7.8820339999765565,
+  "overlay_was_mountpoint": true,
+  "root_entries": [
+    ".dockerenv",
+    "bin",
+    "dev",
+    "etc",
+    "home",
+    "lib",
+    "lib64",
+    "proc",
+    "root",
+    "sys",
+    "tmp",
+    "usr",
+    "var"
+  ],
+  "rootfs_identity_sha256": "011ea62acc65e7968f8a4f7569c7c0ea0cae6166a78cebc392ac9b124913eef3",
+  "schema": 1
+}

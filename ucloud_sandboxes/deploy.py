@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path, PurePosixPath
+import re
 import shlex
 import subprocess
 from typing import Any
@@ -47,6 +48,11 @@ class AllInOneDeployPlan:
     project_id: str
     deployment_id: str
     local_wheel: Path
+    sandbox_runtime: str = "legacy"
+    local_direct_runsc: Path | None = None
+    direct_runsc_commit: str = ""
+    direct_disk_headroom_mb: int = 16 * 1024
+    direct_max_concurrent_restores: int = 8
     install_root: str = DEFAULT_INSTALL_ROOT
     project_mount_dir: str = DEFAULT_PROJECT_MOUNT_DIR
     service_user: str = "ucloud"
@@ -109,6 +115,10 @@ class AllInOneDeployPlan:
     @property
     def remote_wheel_path(self) -> str:
         return str(PurePosixPath(self.release_dir) / self.local_wheel.name)
+
+    @property
+    def remote_direct_runsc_path(self) -> str:
+        return str(PurePosixPath(self.release_dir) / "ucloud-direct-runsc")
 
     @property
     def staged_session_file(self) -> str:
@@ -225,6 +235,22 @@ class AllInOneDeployPlan:
         _reject_bad_text("registry private IP", self.registry_private_ip)
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
+        if self.sandbox_runtime not in {"legacy", "direct"}:
+            raise ValueError("sandbox runtime must be either legacy or direct.")
+        if self.sandbox_runtime == "direct":
+            if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
+                raise ValueError(
+                    "direct sandbox runtime requires a local patched runsc binary."
+                )
+            if not re.fullmatch(r"[0-9a-f]{40}", self.direct_runsc_commit):
+                raise ValueError(
+                    "direct sandbox runtime requires an exact 40-character "
+                    "gVisor commit."
+                )
+            if self.direct_disk_headroom_mb < 1:
+                raise ValueError("direct disk headroom must be positive.")
+            if self.direct_max_concurrent_restores < 1:
+                raise ValueError("direct max concurrent restores must be positive.")
         for label, value in {
             "gateway port": self.gateway_port,
             "relay port": self.relay_port,
@@ -271,6 +297,20 @@ class AllInOneDeployPlan:
             "packageVersion": self.package_version,
             "localWheel": str(self.local_wheel),
             "remoteWheelPath": self.remote_wheel_path,
+            "sandboxRuntime": self.sandbox_runtime,
+            "localDirectRunsc": (
+                str(self.local_direct_runsc)
+                if self.local_direct_runsc is not None
+                else None
+            ),
+            "remoteDirectRunscPath": (
+                self.remote_direct_runsc_path
+                if self.sandbox_runtime == "direct"
+                else None
+            ),
+            "directRunscCommit": self.direct_runsc_commit,
+            "directDiskHeadroomMb": self.direct_disk_headroom_mb,
+            "directMaxConcurrentRestores": self.direct_max_concurrent_restores,
             "nodePackageBundlePath": self.node_package_bundle_path,
             "installRoot": self.install_root,
             "stateDir": self.state_dir,
@@ -317,6 +357,7 @@ class AllInOneDeployPlan:
                 "dockerQuotaImageGb": self.docker_quota_image_gb,
                 "builderDockerQuotaImageGb": self.builder_docker_quota_image_gb,
                 "swapGb": self.swap_gb,
+                "nodeRuntime": self.sandbox_runtime,
             },
         }
 
@@ -419,6 +460,14 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_INIT_CPU_OVERCOMMIT": f"{plan.cpu_overcommit:g}",
         "UCLOUD_INIT_MEMORY_OVERCOMMIT": f"{plan.memory_overcommit:g}",
         "UCLOUD_INIT_DISK_OVERCOMMIT": f"{plan.disk_overcommit:g}",
+        "UCLOUD_INIT_NODE_RUNTIME": plan.sandbox_runtime,
+        "UCLOUD_INIT_DIRECT_RUNSC_COMMIT": plan.direct_runsc_commit or ("0" * 40),
+        "UCLOUD_INIT_DIRECT_DISK_HEADROOM_MB": str(
+            plan.direct_disk_headroom_mb
+        ),
+        "UCLOUD_INIT_DIRECT_MAX_CONCURRENT_RESTORES": str(
+            plan.direct_max_concurrent_restores
+        ),
     }
 
 
@@ -482,6 +531,8 @@ def render_remote_deploy_script(
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
+        f"DIRECT_RUNSC={shlex.quote(plan.remote_direct_runsc_path if plan.sandbox_runtime == 'direct' else '')}",
+        f"DIRECT_RUNSC_COMMIT={shlex.quote(plan.direct_runsc_commit)}",
         f"SANDBOX_NODE_PACKAGE_BUNDLE={shlex.quote(plan.sandbox_node_package_bundle_path)}",
         f"BUILDER_NODE_PACKAGE_BUNDLE={shlex.quote(plan.builder_node_package_bundle_path)}",
         f"SERVICE_USER={shlex.quote(plan.service_user)}",
@@ -527,6 +578,7 @@ def render_remote_deploy_script(
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$INSTALL_ROOT"',
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'test -s "$REMOTE_WHEEL"',
+        'if [ -n "$DIRECT_RUNSC" ]; then test -x "$DIRECT_RUNSC"; fi',
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
         "binutils ca-certificates curl docker.io gnupg openssh-client openssl "
@@ -648,6 +700,10 @@ def render_remote_deploy_script(
         '  echo "WARNING: could not build offline Docker/gVisor bundle; cold nodes will use repository fallback" >&2',
         '  rm -rf "$NODE_PACKAGE_WORK/runtime"',
         "fi",
+        'if [ -n "$DIRECT_RUNSC" ] && [ "$RUNTIME_BUNDLE_READY" -ne 1 ]; then',
+        '  echo "Direct runtime deployment requires a complete offline node bundle" >&2',
+        "  exit 1",
+        "fi",
         "build_probe_image_bundle() {",
         '  probe_dir="$NODE_PACKAGE_WORK/runtime/images"',
         '  mkdir -p "$probe_dir"',
@@ -690,7 +746,8 @@ def render_remote_deploy_script(
         '"$RUNTIME_VERSION_ID" "$RUNTIME_CODENAME" "$RUNTIME_ARCHITECTURE" '
         '"$BUNDLE_ROLE" "$BUNDLE_PACKAGES" "$NODE_AGENT_RUNTIME_ARCHIVE" '
         '"$RUNTIME_KERNEL_RELEASE" "$RUNTIME_KERNEL_MODULE_DIR" '
-        "\"$RUNTIME_KERNEL_MODULES\" <<'PY'",
+        '"$RUNTIME_KERNEL_MODULES" "$DIRECT_RUNSC" "$DIRECT_RUNSC_COMMIT" '
+        "<<'PY'",
         "import hashlib",
         "import gzip",
         "import io",
@@ -717,6 +774,8 @@ def render_remote_deploy_script(
         "kernel_release = sys.argv[13]",
         "kernel_module_dir = Path(sys.argv[14])",
         "kernel_load_modules = sys.argv[15].split()",
+        "direct_runsc = Path(sys.argv[16]) if len(sys.argv) > 16 and sys.argv[16] else None",
+        "direct_runsc_commit = sys.argv[17] if len(sys.argv) > 17 else ''",
         "package_file = wheel_dir / wheel.name",
         "if not package_file.is_file():",
         "    raise SystemExit(f'pip download did not retain {wheel.name}')",
@@ -764,6 +823,15 @@ def render_remote_deploy_script(
         "            for module_path in kernel_module_files",
         "        ],",
         "    }",
+        "    if runtime_role == 'sandbox' and direct_runsc is not None:",
+        "        if not direct_runsc.is_file() or len(direct_runsc_commit) != 40:",
+        "            raise SystemExit('direct runsc artifact is invalid')",
+        "        manifest_payload['runtime']['direct_runsc'] = {",
+        "            'commit': direct_runsc_commit,",
+        "            'file': 'runtime/direct/runsc',",
+        "            'sha256': sha256_file(direct_runsc),",
+        "            'size': direct_runsc.stat().st_size,",
+        "        }",
         "    probe_archive = runtime_dir / 'images' / 'runtime-conformance-busybox.tar'",
         "    probe_inspect = runtime_dir / 'images' / 'runtime-conformance-busybox.inspect.json'",
         "    if probe_archive.is_file() and probe_inspect.is_file():",
@@ -823,6 +891,8 @@ def render_remote_deploy_script(
         "                    (path, f'runtime/kernel/{kernel_release}/{path.name}')",
         "                    for path in kernel_module_files",
         "                )",
+        "                if runtime_role == 'sandbox' and direct_runsc is not None:",
+        "                    archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
         "            for path, arcname in archive_paths:",
         "                info = archive.gettarinfo(str(path), arcname=arcname)",
         "                info.uid = info.gid = 0",

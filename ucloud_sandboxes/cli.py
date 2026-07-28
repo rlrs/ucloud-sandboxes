@@ -36,7 +36,9 @@ from .autoscaler_state import (
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
+    GVISOR_HIBERNATE_PROBE,
     GVISOR_LIVE_FORK_PROBE,
+    HIBERNATE_LOCAL_CAPABILITY,
     STORAGE_OPT_QUOTA_PROBE,
     TMPFS_QUOTA_PROBE,
     conformance_capabilities_from_file,
@@ -82,6 +84,7 @@ from .deploy import (
     stage_file_over_ssh,
 )
 from .images import DockerImageRuntime, ImageRecord, ImageStore
+from .hibernation import HibernationDiskLedger
 from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
@@ -156,7 +159,7 @@ from .runtime_probe import (
     DEFAULT_CHECKPOINT_ROOT,
     DockerRuntimeProbe,
 )
-from .sandbox import DockerGvisorRuntime
+from .sandbox import DockerGvisorRuntime, HibernationQuotaHelperClient
 from .ucloud import (
     SessionStore,
     UCloudClient,
@@ -164,7 +167,10 @@ from .ucloud import (
     UCloudHttpError,
 )
 from .vm_init import (
+    DEFAULT_DIRECT_DISK_HEADROOM_MB,
+    DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
+    DEFAULT_HIBERNATION_QUOTA_HELPER,
     VmInitOptions,
     plan_vm_init,
     render_vm_init_script,
@@ -188,6 +194,60 @@ from .vm_submit import (
 
 DEFAULT_BUILDER_PRODUCT_ID = "cpu-amd-zen5-16-vcpu"
 DEFAULT_BUILDER_DISK_GB = 250
+
+
+def add_local_hibernation_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--enable-local-hibernation",
+        action="store_true",
+        help=(
+            "Enable the experimental local hibernation runtime. Requires execute "
+            "mode, an exact conformance fingerprint, and hard disk quota settings."
+        ),
+    )
+    parser.add_argument(
+        "--hibernate-runtime-name",
+        default="runsc-hibernate",
+        help="Docker runtime name for the pinned local-hibernation runsc build.",
+    )
+    parser.add_argument(
+        "--expected-hibernate-runtime-fingerprint",
+        help=(
+            "Required lowercase SHA-256 fingerprint from the exact hibernation "
+            "conformance result."
+        ),
+    )
+    parser.add_argument(
+        "--hibernation-disk-ledger",
+        type=Path,
+        help=(
+            "Crash-durable hard disk reservation ledger. Defaults beside the "
+            "sandbox state file."
+        ),
+    )
+    parser.add_argument(
+        "--hibernation-disk-capacity-mb",
+        type=int,
+        default=0,
+        help=(
+            "Explicit hard disk budget for parkable sandbox reservations. "
+            "Required when local hibernation is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--hibernation-disk-headroom-mb",
+        type=int,
+        default=0,
+        help=(
+            "Disk budget retained outside hibernation reservations. Must be "
+            "positive when local hibernation is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--hibernation-quota-helper",
+        default=DEFAULT_HIBERNATION_QUOTA_HELPER,
+        help="Privileged XFS project-quota helper for hibernation artifacts.",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -499,6 +559,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the conformance file enables local live fork."
         ),
     )
+    add_local_hibernation_args(node_agent)
     node_agent.add_argument(
         "--execute-runtime",
         action="store_true",
@@ -510,6 +571,63 @@ def build_parser() -> argparse.ArgumentParser:
         help="Require this private bearer credential on non-health node routes.",
     )
     node_agent.set_defaults(func=cmd_serve_node_agent)
+
+    direct_node_agent = subparsers.add_parser(
+        "serve-direct-node-agent",
+        help=(
+            "Run the replacement direct-runsc node daemon. This command must "
+            "own a dedicated node and cannot share state with serve-node-agent."
+        ),
+    )
+    add_config_args(direct_node_agent)
+    direct_node_agent.add_argument("--host", default="127.0.0.1")
+    direct_node_agent.add_argument("--port", type=int, default=8090)
+    direct_node_agent.add_argument("--job-id")
+    direct_node_agent.add_argument("--node-id")
+    direct_node_agent.add_argument("--node-url")
+    add_node_version_args(direct_node_agent)
+    add_resource_args(direct_node_agent)
+    direct_node_agent.add_argument("--state-root", type=Path)
+    direct_node_agent.add_argument("--image-file", type=Path)
+    direct_node_agent.add_argument("--quota-root", type=Path, required=True)
+    direct_node_agent.add_argument("--runsc", type=Path, required=True)
+    direct_node_agent.add_argument("--runsc-commit", required=True)
+    direct_node_agent.add_argument(
+        "--init-binary",
+        type=Path,
+        default=Path("/usr/libexec/docker-init"),
+    )
+    direct_node_agent.add_argument(
+        "--quota-helper",
+        type=Path,
+        default=Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
+    )
+    direct_node_agent.add_argument("--docker-binary", default="docker")
+    direct_node_agent.add_argument(
+        "--disk-capacity-mb",
+        type=int,
+        required=True,
+    )
+    direct_node_agent.add_argument(
+        "--disk-headroom-mb",
+        type=int,
+        required=True,
+    )
+    direct_node_agent.add_argument(
+        "--max-concurrent-restores",
+        type=int,
+        default=8,
+    )
+    direct_node_agent.add_argument(
+        "--idle-park-seconds",
+        type=float,
+        default=1.0,
+    )
+    direct_node_agent.add_argument(
+        "--node-control-bearer-token-file",
+        type=Path,
+    )
+    direct_node_agent.set_defaults(func=cmd_serve_direct_node_agent)
 
     async_node_agent = subparsers.add_parser(
         "serve-async-node-agent",
@@ -568,6 +686,7 @@ def build_parser() -> argparse.ArgumentParser:
             "the conformance file enables local live fork."
         ),
     )
+    add_local_hibernation_args(async_node_agent)
     async_node_agent.add_argument(
         "--execute-runtime",
         action="store_true",
@@ -1062,6 +1181,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Built ucloud-sandboxes wheel to install on the gateway VM.",
     )
     deploy_all.add_argument(
+        "--sandbox-runtime",
+        choices=("legacy", "direct"),
+        default="legacy",
+        help="Exclusive sandbox task lifecycle owner installed on worker nodes.",
+    )
+    deploy_all.add_argument(
+        "--direct-runsc",
+        type=Path,
+        help="Locally built patched runsc binary staged into direct worker bundles.",
+    )
+    deploy_all.add_argument(
+        "--direct-runsc-commit",
+        default="",
+        help="Exact gVisor commit used to build --direct-runsc.",
+    )
+    deploy_all.add_argument(
+        "--direct-disk-headroom-mb",
+        type=int,
+        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
+        help="Physical XFS capacity withheld from direct sandbox admission.",
+    )
+    deploy_all.add_argument(
+        "--direct-max-concurrent-restores",
+        type=int,
+        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
+        help="Maximum simultaneous direct-runtime restores per worker node.",
+    )
+    deploy_all.add_argument(
         "--ssh-command",
         help=(
             "SSH command for the gateway VM. If omitted, the command is read from "
@@ -1125,9 +1272,7 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument("--memory-overcommit", type=float, default=2.0)
     deploy_all.add_argument("--disk-overcommit", type=float, default=1.0)
     deploy_all.add_argument("--docker-quota-image-gb", type=int, default=440)
-    deploy_all.add_argument(
-        "--builder-docker-quota-image-gb", type=int, default=200
-    )
+    deploy_all.add_argument("--builder-docker-quota-image-gb", type=int, default=200)
     deploy_all.add_argument("--swap-gb", type=int, default=96)
     deploy_all.add_argument(
         "--ssh-key-title",
@@ -1809,6 +1954,28 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Initialize node-agent without --execute-runtime.",
     )
     parser.add_argument(
+        "--init-node-runtime",
+        default="legacy",
+        help="Sandbox task owner installed on autoscaled nodes: legacy or direct.",
+    )
+    parser.add_argument(
+        "--init-direct-runsc-commit",
+        default="",
+        help="Exact patched gVisor commit required by direct-runtime node bundles.",
+    )
+    parser.add_argument(
+        "--init-direct-disk-headroom-mb",
+        type=int,
+        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
+        help="Physical XFS capacity withheld from direct sandbox admission.",
+    )
+    parser.add_argument(
+        "--init-direct-max-concurrent-restores",
+        type=int,
+        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
+        help="Maximum simultaneous direct-runtime restores per node.",
+    )
+    parser.add_argument(
         "--init-buildx-direct-push",
         action="store_true",
         help="Configure autoscaled builder VMs to push directly with Docker Buildx.",
@@ -1978,6 +2145,29 @@ def add_vm_init_args(
         "--runtime-dry-run",
         action="store_true",
         help="Start node-agent without --execute-runtime.",
+    )
+    parser.add_argument(
+        "--node-runtime",
+        choices=("legacy", "direct"),
+        default="legacy",
+        help="Sandbox task owner installed on this node.",
+    )
+    parser.add_argument(
+        "--direct-runsc-commit",
+        default="",
+        help="Exact patched gVisor commit required by a direct-runtime bundle.",
+    )
+    parser.add_argument(
+        "--direct-disk-headroom-mb",
+        type=int,
+        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
+        help="Physical XFS capacity withheld from direct sandbox admission.",
+    )
+    parser.add_argument(
+        "--direct-max-concurrent-restores",
+        type=int,
+        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
+        help="Maximum simultaneous direct-runtime restores per node.",
     )
     parser.add_argument(
         "--buildx-direct-push",
@@ -2270,12 +2460,80 @@ def _node_runtime_conformance(
     results = conformance_results_from_file(
         path,
         expected_fork_runtime_fingerprint=expected_fingerprint,
+        expected_hibernate_runtime_fingerprint=getattr(
+            args,
+            "expected_hibernate_runtime_fingerprint",
+            None,
+        ),
     )
     capabilities = conformance_capabilities_from_file(
         path,
         expected_fork_runtime_fingerprint=expected_fingerprint,
+        expected_hibernate_runtime_fingerprint=getattr(
+            args,
+            "expected_hibernate_runtime_fingerprint",
+            None,
+        ),
     )
     return capabilities, results
+
+
+def _node_hibernation_storage(
+    args: argparse.Namespace,
+    *,
+    sandbox_file: Path,
+    conformance_capabilities: tuple[str, ...],
+    runtime: DockerGvisorRuntime,
+) -> tuple[HibernationDiskLedger | None, HibernationQuotaHelperClient | None]:
+    if not bool(getattr(args, "enable_local_hibernation", False)):
+        return None, None
+    if not bool(getattr(args, "execute_runtime", False)):
+        raise ValueError(
+            "--enable-local-hibernation requires --execute-runtime; dry-run "
+            "nodes must never advertise a restorable runtime"
+        )
+    if bool(getattr(args, "enable_image_builds", False)):
+        raise ValueError(
+            "--enable-local-hibernation cannot share an image-builder node"
+        )
+    if not has_capability(
+        conformance_capabilities,
+        HIBERNATE_LOCAL_CAPABILITY,
+    ):
+        raise ValueError(
+            "--enable-local-hibernation requires a conformance report whose "
+            f"{GVISOR_HIBERNATE_PROBE}, storage quota, and tmpfs quota probes "
+            "pass with --expected-hibernate-runtime-fingerprint"
+        )
+    capacity_mb = int(getattr(args, "hibernation_disk_capacity_mb", 0))
+    headroom_mb = int(getattr(args, "hibernation_disk_headroom_mb", 0))
+    if capacity_mb < 1:
+        raise ValueError("--hibernation-disk-capacity-mb must be positive")
+    if headroom_mb < 1:
+        raise ValueError("--hibernation-disk-headroom-mb must be positive")
+    if headroom_mb >= capacity_mb:
+        raise ValueError("--hibernation-disk-headroom-mb must be smaller than capacity")
+    total_disk_mb = int(getattr(args, "total_disk_mb", 0))
+    if total_disk_mb < capacity_mb:
+        raise ValueError(
+            "--total-disk-mb must be at least --hibernation-disk-capacity-mb"
+        )
+    ledger_path = getattr(args, "hibernation_disk_ledger", None)
+    if ledger_path is None:
+        ledger_path = sandbox_file.with_name("hibernation-disk-ledger.json")
+    if not ledger_path.is_absolute():
+        ledger_path = ledger_path.absolute()
+    ledger = HibernationDiskLedger(
+        ledger_path,
+        capacity_mb=capacity_mb,
+        safety_headroom_mb=headroom_mb,
+    )
+    quota_backend = HibernationQuotaHelperClient(
+        executor=runtime.executor,
+        helper=str(getattr(args, "hibernation_quota_helper")),
+        sudo=True,
+    )
+    return ledger, quota_backend
 
 
 def cmd_serve_node_agent(args: argparse.Namespace) -> int:
@@ -2303,6 +2561,12 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
             conformance_capabilities,
             FORK_LOCAL_CAPABILITY,
         ),
+        hibernate_enabled=bool(getattr(args, "enable_local_hibernation", False)),
+        hibernate_runtime_name=getattr(
+            args,
+            "hibernate_runtime_name",
+            "runsc-hibernate",
+        ),
         checkpoint_root=getattr(args, "checkpoint_root", None),
         checkpoint_helper=getattr(
             args,
@@ -2310,6 +2574,12 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
             DEFAULT_CHECKPOINT_HELPER,
         ),
         dry_run=not args.execute_runtime,
+    )
+    hibernation_disk_ledger, hibernation_quota_backend = _node_hibernation_storage(
+        args,
+        sandbox_file=sandbox_file,
+        conformance_capabilities=conformance_capabilities,
+        runtime=runtime,
     )
     image_runtime = DockerImageRuntime(
         docker_binary=args.docker_binary,
@@ -2341,6 +2611,8 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
             getattr(args, "node_control_bearer_token_file", None),
             "node control bearer token",
         ),
+        hibernation_disk_ledger=hibernation_disk_ledger,
+        hibernation_quota_backend=hibernation_quota_backend,
     )
     host, port = server.server_address
     mode = "execute" if args.execute_runtime else "dry-run"
@@ -2355,6 +2627,10 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
     print(f"SSH port range: {args.ssh_port_start}-{args.ssh_port_end}")
     print(f"Image builds: {'enabled' if args.enable_image_builds else 'disabled'}")
     print(
+        "Local hibernation: "
+        f"{'enabled' if getattr(args, 'enable_local_hibernation', False) else 'disabled'}"
+    )
+    print(
         "Resources: "
         f"{args.total_vcpu} vCPU, {args.total_memory_mb} MB RAM, "
         f"{args.total_disk_mb} MB disk "
@@ -2367,6 +2643,72 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
         print("Stopping node agent.")
     finally:
         server.server_close()
+    return 0
+
+
+def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
+    from .direct_runtime import build_direct_runtime_service
+    from .node_agent import build_direct_node_agent_server
+
+    config = load_config(args)
+    job_id = args.job_id or detect_job_id()
+    if not job_id:
+        raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
+    if args.disk_overcommit != 1.0:
+        raise ValueError("direct runtime disk_overcommit must be exactly 1.0")
+    state_root = args.state_root or (
+        Path(config.state_dir).expanduser() / "direct-runtime"
+    )
+    image_file = args.image_file or config.image_file()
+    service = build_direct_runtime_service(
+        state_root=state_root.absolute(),
+        quota_root=args.quota_root.absolute(),
+        runsc=args.runsc.absolute(),
+        runsc_commit=args.runsc_commit,
+        init_binary=args.init_binary.absolute(),
+        disk_capacity_mb=args.disk_capacity_mb,
+        disk_headroom_mb=args.disk_headroom_mb,
+        quota_helper=args.quota_helper.absolute(),
+        docker_binary=args.docker_binary,
+        max_concurrent_restores=args.max_concurrent_restores,
+        idle_park_seconds=args.idle_park_seconds,
+    )
+    server = build_direct_node_agent_server(
+        args.host,
+        args.port,
+        service=service,
+        image_file=image_file,
+        job_id=job_id,
+        node_id=args.node_id or default_node_id(job_id),
+        node_url=args.node_url,
+        agent_version=args.agent_version,
+        deployment_id=config.deployment_id,
+        init_version=args.init_version,
+        total_resources=resource_quantity_from_args(args),
+        cpu_overcommit=args.cpu_overcommit,
+        memory_overcommit=args.memory_overcommit,
+        image_runtime=DockerImageRuntime(
+            docker_binary=args.docker_binary,
+            dry_run=False,
+        ),
+        node_control_bearer_token=read_required_token_file(
+            args.node_control_bearer_token_file,
+            "node control bearer token",
+        ),
+    )
+    host, port = server.server_address
+    print(f"Serving direct-runsc node agent on http://{host}:{port}")
+    print(f"Direct state root: {state_root}")
+    print(f"Direct quota root: {args.quota_root}")
+    print(f"Runtime identity: {service.provisioner.identity.digest}")
+    print("Legacy Docker task lifecycle: disabled")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopping direct-runsc node agent.")
+    finally:
+        server.server_close()
+        service.stop()
     return 0
 
 
@@ -2393,6 +2735,12 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
             conformance_capabilities,
             FORK_LOCAL_CAPABILITY,
         ),
+        hibernate_enabled=bool(getattr(args, "enable_local_hibernation", False)),
+        hibernate_runtime_name=getattr(
+            args,
+            "hibernate_runtime_name",
+            "runsc-hibernate",
+        ),
         checkpoint_root=getattr(args, "checkpoint_root", None),
         checkpoint_helper=getattr(
             args,
@@ -2400,6 +2748,12 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
             DEFAULT_CHECKPOINT_HELPER,
         ),
         dry_run=not args.execute_runtime,
+    )
+    hibernation_disk_ledger, hibernation_quota_backend = _node_hibernation_storage(
+        args,
+        sandbox_file=sandbox_file,
+        conformance_capabilities=conformance_capabilities,
+        runtime=runtime,
     )
     app = create_async_node_agent_app(
         sandbox_file=sandbox_file,
@@ -2410,6 +2764,8 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
             getattr(args, "node_control_bearer_token_file", None),
             "node control bearer token",
         ),
+        hibernation_disk_ledger=hibernation_disk_ledger,
+        hibernation_quota_backend=hibernation_quota_backend,
     )
     mode = "execute" if args.execute_runtime else "dry-run"
     print(f"Serving async node agent on http://{args.host}:{args.port}")
@@ -2417,6 +2773,10 @@ def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
     print(f"Sandbox file: {sandbox_file}")
     print(f"Image file: {image_file}")
     print(f"SSH port range: {args.ssh_port_start}-{args.ssh_port_end}")
+    print(
+        "Local hibernation: "
+        f"{'enabled' if getattr(args, 'enable_local_hibernation', False) else 'disabled'}"
+    )
     web.run_app(app, host=args.host, port=args.port, print=None)
     return 0
 
@@ -3037,6 +3397,15 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         project_id=config.project_id,
         deployment_id=config.deployment_id,
         local_wheel=args.wheel.expanduser().resolve(),
+        sandbox_runtime=args.sandbox_runtime,
+        local_direct_runsc=(
+            args.direct_runsc.expanduser().resolve()
+            if args.direct_runsc is not None
+            else None
+        ),
+        direct_runsc_commit=args.direct_runsc_commit,
+        direct_disk_headroom_mb=args.direct_disk_headroom_mb,
+        direct_max_concurrent_restores=args.direct_max_concurrent_restores,
         install_root=args.install_root,
         project_mount_dir=args.project_mount_dir,
         service_user=args.service_user,
@@ -3101,6 +3470,22 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                 "result": staged_wheel.to_dict(),
             }
         )
+        if plan.local_direct_runsc is not None:
+            staged_direct_runsc = stage_file_over_ssh(
+                ssh_command,
+                plan.local_direct_runsc,
+                plan.remote_direct_runsc_path,
+                mode="0755",
+                timeout_seconds=timeout,
+                private_key_file=args.ssh_private_key_file,
+            )
+            result["stagedFiles"].append(
+                {
+                    "localPath": str(plan.local_direct_runsc),
+                    "remotePath": plan.remote_direct_runsc_path,
+                    "result": staged_direct_runsc.to_dict(),
+                }
+            )
         if not args.no_copy_session:
             local_session = Path(config.ucloud_session_file).expanduser()
             staged_session = stage_file_over_ssh(
@@ -4429,8 +4814,7 @@ def run_reconcile_cycle(
                 for node in role_nodes:
                     if (
                         not node.job.is_unexpectedly_suspended
-                        or node.job.labels.get(DEPLOYMENT_LABEL)
-                        != config.deployment_id
+                        or node.job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
                         or node.job.labels.get(ownership_label) != "true"
                     ):
                         continue
@@ -4493,9 +4877,7 @@ def run_reconcile_cycle(
             create_intents = [*sandbox_create_intents, *builder_create_intents]
         if args.execute_stops:
             stop_ids_to_journal = tuple(
-                dict.fromkeys(
-                    [*drain_ready_stop_job_ids, *unreachable_stop_job_ids]
-                )
+                dict.fromkeys([*drain_ready_stop_job_ids, *unreachable_stop_job_ids])
             )
             sandbox_stop_set = set(sandbox_stop_job_ids)
             drain_intents_by_job = {
@@ -4716,9 +5098,7 @@ def run_reconcile_cycle(
             result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
     result["resumeResponse"] = {
         "operations": [
-            item
-            for item in provider_operation_results
-            if item.get("kind") == "resume"
+            item for item in provider_operation_results if item.get("kind") == "resume"
         ]
     }
     result["resumedJobIds"] = sorted(
@@ -5331,9 +5711,7 @@ def _bootstrap_known_hosts_file(
     intent: VmBootstrapIntent,
     args: argparse.Namespace,
 ) -> str | None:
-    private_key_file = str(
-        getattr(args, "init_ssh_private_key_file", "") or ""
-    ).strip()
+    private_key_file = str(getattr(args, "init_ssh_private_key_file", "") or "").strip()
     state_file = str(getattr(args, "init_state_file", "") or "").strip()
     if state_file:
         directory = Path(state_file).expanduser().parent / "ssh-known-hosts"
@@ -5704,11 +6082,7 @@ def vm_init_options_for_autoscaled_node(
             )
         ),
     )
-    swap_gb = (
-        0
-        if role == "builder"
-        else max(0, int(getattr(args, "init_swap_gb", 0)))
-    )
+    swap_gb = 0 if role == "builder" else max(0, int(getattr(args, "init_swap_gb", 0)))
     total_resources = resources_from_vm_job(
         node.job, config.policy.default_node_resources
     )
@@ -5794,6 +6168,36 @@ def vm_init_options_for_autoscaled_node(
             else ""
         ),
         runtime_dry_run=bool(getattr(args, "init_runtime_dry_run", False)),
+        node_runtime=(
+            "legacy"
+            if role == "builder"
+            else str(getattr(args, "init_node_runtime", "legacy"))
+        ),
+        direct_runsc_commit=(
+            ""
+            if role == "builder"
+            else str(getattr(args, "init_direct_runsc_commit", "") or "")
+        ),
+        direct_disk_headroom_mb=max(
+            1,
+            int(
+                getattr(
+                    args,
+                    "init_direct_disk_headroom_mb",
+                    DEFAULT_DIRECT_DISK_HEADROOM_MB,
+                )
+            ),
+        ),
+        direct_max_concurrent_restores=max(
+            1,
+            int(
+                getattr(
+                    args,
+                    "init_direct_max_concurrent_restores",
+                    DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
+                )
+            ),
+        ),
         heartbeat_interval_seconds=max(
             1,
             int(getattr(args, "init_heartbeat_interval_seconds", 20)),
@@ -6449,6 +6853,22 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
         buildx_cache_ref=str(getattr(args, "buildx_cache_ref", "") or ""),
         runtime_dry_run=args.runtime_dry_run,
+        node_runtime=str(getattr(args, "node_runtime", "legacy")),
+        direct_runsc_commit=str(getattr(args, "direct_runsc_commit", "") or ""),
+        direct_disk_headroom_mb=int(
+            getattr(
+                args,
+                "direct_disk_headroom_mb",
+                DEFAULT_DIRECT_DISK_HEADROOM_MB,
+            )
+        ),
+        direct_max_concurrent_restores=int(
+            getattr(
+                args,
+                "direct_max_concurrent_restores",
+                DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
+            )
+        ),
         heartbeat_interval_seconds=args.heartbeat_interval_seconds,
         labels=parse_labels(args.label),
     )
@@ -6484,6 +6904,10 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "hostAliases": list(options.host_aliases),
         "enableImageBuilds": options.enable_image_builds,
         "runtimeDryRun": options.runtime_dry_run,
+        "nodeRuntime": options.node_runtime,
+        "directRunscCommit": options.direct_runsc_commit,
+        "directDiskHeadroomMb": options.direct_disk_headroom_mb,
+        "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,
         "capabilities": list(options.capabilities()),
         "labels": dict(options.labels or {}),

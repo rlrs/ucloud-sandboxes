@@ -411,7 +411,7 @@ class NodeHeartbeat:
         return self.total_resources.scaled(
             cpu=max(0.0, self.cpu_overcommit),
             memory=max(0.0, self.memory_overcommit),
-            disk=max(0.0, self.disk_overcommit),
+            disk=min(1.0, max(0.0, self.disk_overcommit)),
         )
 
     @property
@@ -526,7 +526,7 @@ class ScalePolicy:
         return self.default_node_resources.scaled(
             cpu=max(0.0, self.cpu_overcommit),
             memory=max(0.0, self.memory_overcommit),
-            disk=max(0.0, self.disk_overcommit),
+            disk=min(1.0, max(0.0, self.disk_overcommit)),
         )
 
 

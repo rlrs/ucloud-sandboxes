@@ -16,6 +16,7 @@ from .agent import build_heartbeat
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .deployment import service_health
 from .http_server import HighBacklogThreadingHTTPServer
+from .hibernation import HibernationDiskLedger
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -27,8 +28,14 @@ from .images import (
 from .registry import heartbeat_to_dict
 from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry
 from .runtime_metrics import sample_node_runtime_metrics
-from .capabilities import FORK_LOCAL_CAPABILITY, merge_capabilities
+from .capabilities import (
+    DISK_QUOTA_CAPABILITY,
+    FORK_LOCAL_CAPABILITY,
+    HIBERNATE_LOCAL_CAPABILITY,
+    merge_capabilities,
+)
 from .sandbox import (
+    HibernationQuotaBackend,
     MAX_FORK_FANOUT,
     SandboxBusyError,
     DockerGvisorRuntime,
@@ -248,6 +255,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/park"):
+            self._park_sandbox(parsed.path)
+            return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/forks"):
             self._fork_sandbox(parsed.path)
             return
@@ -266,7 +276,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/images/pull":
             self._pull_image()
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/snapshot"):
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/snapshot"
+        ):
             self._snapshot_sandbox(parsed.path)
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -301,9 +313,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     "token": snapshot.drain.token,
                     "draining": snapshot.drain.draining,
                     "admission_open": snapshot.drain.admission_open,
-                    "drain_activity_epoch": (
-                        snapshot.drain.drain_activity_epoch
-                    ),
+                    "drain_activity_epoch": (snapshot.drain.drain_activity_epoch),
                     "activity_epoch": snapshot.activity.activity_revision,
                     "active_sandboxes": snapshot.activity.active_sandboxes,
                     "reserved_resources": (
@@ -399,9 +409,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             self._write_exception(exc)
             return
         status = (
-            HTTPStatus.OK
-            if manager_timings.get("idempotent")
-            else HTTPStatus.CREATED
+            HTTPStatus.OK if manager_timings.get("idempotent") else HTTPStatus.CREATED
         )
         self._write_json(
             {
@@ -418,9 +426,10 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         )
 
     def _start_exec(self, path: str) -> None:
+        started = time.monotonic()
         prefix = "/v1/sandboxes/"
         suffix = "/exec"
-        sandbox_id = unquote(path[len(prefix):-len(suffix)])
+        sandbox_id = unquote(path[len(prefix) : -len(suffix)])
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -430,7 +439,41 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        self._write_json({"session": session.to_dict()}, status=HTTPStatus.CREATED)
+        consume_manager_timings = getattr(
+            self.manager, "consume_exec_start_timings", None
+        )
+        manager_timings = (
+            consume_manager_timings() if consume_manager_timings is not None else {}
+        )
+        self._write_json(
+            {
+                "session": session.to_dict(),
+                "timings": {
+                    "manager": manager_timings,
+                    "start_ms": _elapsed_ms(started),
+                },
+            },
+            status=HTTPStatus.CREATED,
+        )
+
+    def _park_sandbox(self, path: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix="/park")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("park payload must be a JSON object")
+            operation_id = str(raw.get("operation_id") or "").strip() or None
+            park = getattr(self.manager, "park", None)
+            if park is None:
+                raise RuntimeError("sandbox parking is unavailable on this runtime")
+            record = park(sandbox_id, operation_id=operation_id)
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"sandbox": record.to_dict()})
 
     def _fork_sandbox(self, path: str) -> None:
         started = time.monotonic()
@@ -466,9 +509,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 if not all(isinstance(item, dict) for item in raw_targets_value):
                     raise ValueError("each fork sandbox must be a JSON object")
                 raw_targets = list(raw_targets_value)
-                if (
-                    not isinstance(raw_operations, list)
-                    or len(raw_operations) != len(raw_targets)
+                if not isinstance(raw_operations, list) or len(raw_operations) != len(
+                    raw_targets
                 ):
                     raise ValueError(
                         "_ucloud_operations must contain one operation per sandbox"
@@ -520,14 +562,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
 
             phase = time.monotonic()
             if batch:
-                records, results, manager_timings = (
-                    self.manager.fork_many_with_timings(
-                        source_sandbox_id,
-                        targets,
-                        operations=operations,
-                        source_generation=source_generation,
-                        source_spec_hash=source_spec_hash,
-                    )
+                records, results, manager_timings = self.manager.fork_many_with_timings(
+                    source_sandbox_id,
+                    targets,
+                    operations=operations,
+                    source_generation=source_generation,
+                    source_spec_hash=source_spec_hash,
                 )
             else:
                 record, result, manager_timings = self.manager.fork_with_timings(
@@ -683,7 +723,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         session_id = self._exec_session_id_from_path(path)
         session = self.exec_manager.get(session_id)
         if session is None:
-            self._write_json({"error": "exec session not found"}, status=HTTPStatus.NOT_FOUND)
+            self._write_json(
+                {"error": "exec session not found"}, status=HTTPStatus.NOT_FOUND
+            )
             return
         self._write_json({"session": session.to_dict()})
 
@@ -692,7 +734,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
         after = _int_query(query, "after", 0)
         limit = _int_query(query, "limit", 100)
-        wait_seconds = min(30.0, max(0.0, float((query.get("wait_seconds") or ["0"])[0])))
+        wait_seconds = min(
+            30.0, max(0.0, float((query.get("wait_seconds") or ["0"])[0]))
+        )
         try:
             events = self.exec_manager.events_after(
                 session_id,
@@ -738,7 +782,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     def _sandbox_ssh(self, path: str) -> None:
         prefix = "/v1/sandboxes/"
         suffix = "/ssh"
-        sandbox_id = unquote(path[len(prefix):-len(suffix)])
+        sandbox_id = unquote(path[len(prefix) : -len(suffix)])
         try:
             with self.manager.lifecycle.shared(sandbox_id):
                 record = self.manager.require_activity_sandbox(sandbox_id)
@@ -749,11 +793,15 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         except ValueError:
-            self._write_json({"error": "sandbox not found"}, status=HTTPStatus.NOT_FOUND)
+            self._write_json(
+                {"error": "sandbox not found"}, status=HTTPStatus.NOT_FOUND
+            )
             return
         ssh = record.to_dict().get("ssh")
         if not ssh:
-            self._write_json({"error": "sandbox ssh is not enabled"}, status=HTTPStatus.BAD_REQUEST)
+            self._write_json(
+                {"error": "sandbox ssh is not enabled"}, status=HTTPStatus.BAD_REQUEST
+            )
             return
         self._write_json({"sandboxId": sandbox_id, "ssh": ssh})
 
@@ -898,7 +946,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         image_record = self.image_manager.get_image(build.image_id)
         payload: dict[str, Any] = {
             "build": build.to_dict(),
-            "image": image_record.to_dict() if image_record is not None else build.image,
+            "image": image_record.to_dict()
+            if image_record is not None
+            else build.image,
             "command": list(build.command),
             "exitCode": build.exit_code,
             "timings": timings,
@@ -926,9 +976,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 "command": list(result.argv),
                 "exitCode": result.exit_code,
                 "timings": {
-                    "docker_pull_ms": int(
-                        max(0.0, time.monotonic() - started) * 1000
-                    )
+                    "docker_pull_ms": int(max(0.0, time.monotonic() - started) * 1000)
                 },
             },
             status=HTTPStatus.CREATED,
@@ -943,7 +991,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         prefix = "/v1/sandboxes/"
         suffix = "/snapshot"
-        sandbox_id = unquote(path[len(prefix):-len(suffix)])
+        sandbox_id = unquote(path[len(prefix) : -len(suffix)])
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -972,8 +1020,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     def _exec_session_id_from_path(self, path: str, *, suffix: str = "") -> str:
         prefix = "/v1/exec/"
         if suffix:
-            return unquote(path[len(prefix):-len(suffix)])
-        return unquote(path[len(prefix):])
+            return unquote(path[len(prefix) : -len(suffix)])
+        return unquote(path[len(prefix) :])
 
     def do_DELETE(self) -> None:
         if not self._check_node_control_authorized():
@@ -983,9 +1031,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if not parsed.path.startswith(prefix):
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
-        sandbox_id = unquote(parsed.path[len(prefix):])
+        sandbox_id = unquote(parsed.path[len(prefix) :])
         if not sandbox_id:
-            self._write_json({"error": "sandbox id is required"}, status=HTTPStatus.BAD_REQUEST)
+            self._write_json(
+                {"error": "sandbox id is required"}, status=HTTPStatus.BAD_REQUEST
+            )
             return
         try:
             generation, operation_id = self._delete_operation_headers()
@@ -1035,9 +1085,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         authorization = self.headers.get("Authorization") or ""
         prefix = "Bearer "
         supplied = (
-            authorization[len(prefix) :]
-            if authorization.startswith(prefix)
-            else ""
+            authorization[len(prefix) :] if authorization.startswith(prefix) else ""
         )
         if supplied and hmac.compare_digest(supplied, expected):
             return True
@@ -1154,6 +1202,8 @@ def build_node_agent_server(
     physical_disk_path: Path | None = None,
     node_control_bearer_token: str | None = None,
     build_context_store_dir: Path | None = None,
+    hibernation_disk_ledger: HibernationDiskLedger | None = None,
+    hibernation_quota_backend: HibernationQuotaBackend | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
@@ -1174,6 +1224,11 @@ def build_node_agent_server(
     for name, factor in overcommit.items():
         if not math.isfinite(factor) or factor < 0:
             raise ValueError(f"{name} must be finite and non-negative")
+    if disk_overcommit > 1.0:
+        raise ValueError(
+            "disk_overcommit cannot exceed 1.0 because sandbox disk "
+            "reservations must be physically backable"
+        )
     manager = SandboxManager(
         SandboxStore(sandbox_file),
         runtime or DockerGvisorRuntime(dry_run=True),
@@ -1183,8 +1238,11 @@ def build_node_agent_server(
             memory=memory_overcommit,
             disk=disk_overcommit,
         ),
+        hibernation_disk_ledger=hibernation_disk_ledger,
+        hibernation_quota_backend=hibernation_quota_backend,
     )
     manager.reconcile_checkpoint_storage()
+    manager.reconcile_hibernation_storage()
     exec_manager = ExecSessionManager(
         manager,
         route_node_id=node_id,
@@ -1197,8 +1255,7 @@ def build_node_agent_server(
         admission_store=manager.store,
     )
     build_context_store = BuildContextBlobStore(
-        build_context_store_dir
-        or image_file.parent / f"{image_file.stem}-contexts",
+        build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
         max_blob_bytes=max_file_body_bytes,
         max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
         max_entries=DEFAULT_MAX_BUILD_CONTEXT_ENTRIES,
@@ -1222,16 +1279,22 @@ def build_node_agent_server(
     BoundHandler.cpu_overcommit = cpu_overcommit
     BoundHandler.memory_overcommit = memory_overcommit
     BoundHandler.disk_overcommit = disk_overcommit
-    capabilities = ["image-cache"] if image_builds_enabled else ["sandbox", "image-cache"]
+    capabilities = (
+        ["image-cache"] if image_builds_enabled else ["sandbox", "image-cache"]
+    )
     if image_builds_enabled:
         capabilities.extend(["image-build", "snapshot"])
     merged_capabilities = merge_capabilities(tuple(capabilities), extra_capabilities)
+    unavailable_runtime_capabilities = set()
     if image_builds_enabled or not manager.runtime.fork_enabled:
-        merged_capabilities = tuple(
-            capability
-            for capability in merged_capabilities
-            if capability != FORK_LOCAL_CAPABILITY
-        )
+        unavailable_runtime_capabilities.add(FORK_LOCAL_CAPABILITY)
+    if image_builds_enabled or not manager.runtime.hibernate_enabled:
+        unavailable_runtime_capabilities.add(HIBERNATE_LOCAL_CAPABILITY)
+    merged_capabilities = tuple(
+        capability
+        for capability in merged_capabilities
+        if capability not in unavailable_runtime_capabilities
+    )
     BoundHandler.capabilities = merged_capabilities
     BoundHandler.image_builds_enabled = image_builds_enabled
     BoundHandler.node_epoch = uuid4().hex
@@ -1245,6 +1308,92 @@ def build_node_agent_server(
         runtime_metrics_provider or sample_node_runtime_metrics
     )
     return HighBacklogThreadingHTTPServer((host, port), BoundHandler)
+
+
+def build_direct_node_agent_server(
+    host: str,
+    port: int,
+    *,
+    service: Any,
+    image_file: Path,
+    job_id: str,
+    node_id: str,
+    node_url: str | None = None,
+    agent_version: str = "",
+    deployment_id: str = "",
+    init_version: str = "",
+    total_resources: ResourceQuantity | None = None,
+    cpu_overcommit: float = 1.0,
+    memory_overcommit: float = 1.0,
+    image_runtime: DockerImageRuntime | None = None,
+    node_control_bearer_token: str | None = None,
+    max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
+    max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
+    runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
+) -> HighBacklogThreadingHTTPServer:
+    """Serve a whole node with direct runsc ownership and no legacy task owner."""
+    from .direct_node_adapter import DirectNodeManagerAdapter
+
+    if node_control_bearer_token is not None and not node_control_bearer_token.strip():
+        raise ValueError("node control bearer token cannot be empty")
+    configured_resources = total_resources or ResourceQuantity()
+    if not configured_resources.is_valid:
+        raise ValueError("total_resources cannot contain negative values")
+    if cpu_overcommit < 0 or memory_overcommit < 0:
+        raise ValueError("direct node overcommit factors cannot be negative")
+    service.start()
+    manager = DirectNodeManagerAdapter(service)
+    exec_manager = ExecSessionManager(
+        manager,
+        route_node_id=node_id,
+        route_job_id=job_id,
+    )
+    image_manager = ImageManager(
+        ImageStore(image_file),
+        image_runtime or DockerImageRuntime(dry_run=True),
+    )
+    build_context_store = BuildContextBlobStore(
+        image_file.parent / f"{image_file.stem}-contexts",
+        max_blob_bytes=max_file_body_bytes,
+        max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
+        max_entries=DEFAULT_MAX_BUILD_CONTEXT_ENTRIES,
+        max_age_seconds=DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS,
+    )
+
+    class DirectBoundHandler(NodeAgentHandler):
+        pass
+
+    DirectBoundHandler.manager = manager
+    DirectBoundHandler.exec_manager = exec_manager
+    DirectBoundHandler.image_manager = image_manager
+    DirectBoundHandler.build_context_store = build_context_store
+    DirectBoundHandler.job_id = job_id
+    DirectBoundHandler.node_id = node_id
+    DirectBoundHandler.node_url = node_url
+    DirectBoundHandler.agent_version = agent_version
+    DirectBoundHandler.deployment_id = deployment_id
+    DirectBoundHandler.init_version = init_version
+    DirectBoundHandler.total_resources = configured_resources
+    DirectBoundHandler.cpu_overcommit = cpu_overcommit
+    DirectBoundHandler.memory_overcommit = memory_overcommit
+    DirectBoundHandler.disk_overcommit = 1.0
+    DirectBoundHandler.capabilities = (
+        "sandbox",
+        "image-cache",
+        DISK_QUOTA_CAPABILITY,
+        HIBERNATE_LOCAL_CAPABILITY,
+        "direct-runsc-v1",
+    )
+    DirectBoundHandler.image_builds_enabled = False
+    DirectBoundHandler.node_epoch = uuid4().hex
+    DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
+    DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
+    DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
+    DirectBoundHandler.max_file_body_bytes = max_file_body_bytes
+    DirectBoundHandler.runtime_metrics_provider = staticmethod(
+        runtime_metrics_provider or sample_node_runtime_metrics
+    )
+    return HighBacklogThreadingHTTPServer((host, port), DirectBoundHandler)
 
 
 def sandbox_record_to_dict(record: SandboxRecord) -> dict[str, Any]:
@@ -1318,13 +1467,9 @@ def _fork_request_is_batch(raw: dict[str, Any]) -> bool:
     if batch and single:
         raise ValueError("fork payload cannot contain both sandbox and sandboxes")
     if batch and "_ucloud_operation" in raw:
-        raise ValueError(
-            "batch fork payload cannot contain singular _ucloud_operation"
-        )
+        raise ValueError("batch fork payload cannot contain singular _ucloud_operation")
     if not batch and "_ucloud_operations" in raw:
-        raise ValueError(
-            "single fork payload cannot contain plural _ucloud_operations"
-        )
+        raise ValueError("single fork payload cannot contain plural _ucloud_operations")
     return batch
 
 
@@ -1468,15 +1613,15 @@ def _fork_result_payload(result: SandboxForkRuntimeResult) -> dict[str, Any]:
 def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:
     prefix = "/v1/sandboxes/"
     if suffix:
-        return unquote(path[len(prefix):-len(suffix)])
-    return unquote(path[len(prefix):])
+        return unquote(path[len(prefix) : -len(suffix)])
+    return unquote(path[len(prefix) :])
 
 
 def _build_context_digest_from_path(path: str) -> str | None:
     prefix = "/v1/image-contexts/"
     if not path.startswith(prefix):
         return None
-    digest = unquote(path[len(prefix):])
+    digest = unquote(path[len(prefix) :])
     return digest if digest and "/" not in digest else None
 
 
@@ -1484,7 +1629,7 @@ def _image_build_key_from_path(path: str) -> str | None:
     prefix = "/v1/images/builds/"
     if not path.startswith(prefix):
         return None
-    key = unquote(path[len(prefix):])
+    key = unquote(path[len(prefix) :])
     return key or None
 
 

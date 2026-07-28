@@ -1,0 +1,31 @@
+{
+  "create_ms": {
+    "p50": 155.32130249994225,
+    "p95": 164.804944000025,
+    "p99": 179.65137500004857
+  },
+  "image": "busybox:1.37.0",
+  "park_ms": {
+    "p50": 60.304506000193214,
+    "p95": 65.11923100015338,
+    "p99": 73.23087900022074
+  },
+  "parked_artifact_allocated_bytes": 4461694976,
+  "parked_artifact_logical_bytes": 274947590991,
+  "parked_retained_sentry_pids": [],
+  "running_sentry_rss_per_sandbox_bytes": {
+    "p50": 34996224.0,
+    "p95": 35913728.0,
+    "p99": 36175872.0
+  },
+  "running_sentry_rss_total_bytes": 8971091968,
+  "runsc_sha256": "bd591caabf4aeb18703305eafb449ec679df85f33d6ca6c57df6d9d938a8fa65",
+  "sandboxes": 256,
+  "schema": 1,
+  "verify_ms": {
+    "p50": 15.75056650017359,
+    "p95": 31.909676999930525,
+    "p99": 31.96389000004274
+  },
+  "workload": "stateful-conformance-16mib"
+}

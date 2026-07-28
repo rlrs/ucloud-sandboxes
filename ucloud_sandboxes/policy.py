@@ -332,7 +332,7 @@ def _estimated_node_resources(
     estimated = physical.scaled(
         cpu=max(0.0, policy.cpu_overcommit),
         memory=max(0.0, policy.memory_overcommit),
-        disk=max(0.0, policy.disk_overcommit),
+        disk=min(1.0, max(0.0, policy.disk_overcommit)),
     )
     maximum = policy.schedulable_node_resources
     return ResourceQuantity(

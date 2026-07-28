@@ -3,6 +3,27 @@
 The crash-safe generation, operation-id, inventory, and drain invariants are
 specified in [Distributed sandbox state protocol](distributed-state-protocol.md).
 
+## Runtime ownership
+
+The target sandbox-node runtime is one privileged direct-runsc Warden per node.
+It owns every sandbox task lifecycle on that node. Docker/containerd remain
+image infrastructure and never own a sandbox task.
+
+The direct runtime replaces the legacy Docker-owned task runtime. They are not
+simultaneously active:
+
+- a node deployment has one immutable runtime identity;
+- the node agent refuses a state store created by another runtime identity;
+- scheduling and routing never mix runtime identities within a node;
+- qualification compares dedicated, drained legacy and direct nodes;
+- rollback closes admission and drains a whole direct node on its matching
+  binary; it never resumes a direct-runtime artifact through the legacy path;
+- after production qualification and complete legacy drain, the legacy task
+  runtime and its helpers are removed.
+
+The required production-flow and removal gates are tracked in
+[Direct runtime production qualification](direct-runtime-production-qualification.md).
+
 - UCloud VM jobs are pool nodes.
 - The control plane and VM nodes should be attached to the same UCloud private
   network. VM jobs get a stable private-network hostname, and node heartbeats
@@ -68,7 +89,14 @@ exhausted.
 
 ## Disk Quotas
 
-By default `disk_mb` maps to Docker `--storage-opt size=...` for the container
+The direct-runtime target uses one XFS project per sandbox incarnation. Its
+hard limit covers the writable overlay upper, complete main-memory backing,
+worst-case private page image, and bounded runtime metadata. Shared immutable
+image rootfs data remains outside that project. Logical ledger reservation and
+the physical project hard limit must agree before runsc creation.
+
+The following describes the legacy removal target. `disk_mb` maps to Docker
+`--storage-opt size=...` for the container
 writable layer. VM init creates a sparse XFS image under `/work`, mounts it with
 project quotas, configures Docker to use `overlay2` on that data root, and
 disables the containerd snapshotter path that did not honor this quota. A node
@@ -82,7 +110,12 @@ only enabled when the `tmpfs-quota-enforced` probe passed. Sandboxes also get
 explicit bounded `/tmp` and `/run` tmpfs mounts so common temporary writes do
 not bypass writable-layer quota as an unbounded runtime default.
 
-## Local live fork
+## Legacy local live fork
+
+This section documents the Docker-owned implementation that will be removed.
+Fork is explicitly deferred from the initial direct-runtime release and is not
+a migration blocker. If reintroduced, it will use native Warden artifact
+ownership rather than this Docker checkpoint/restore path.
 
 Forkable sandboxes use gVisor checkpoint/restore rather than the existing
 Docker-image `snapshot` operation. The first production scope is node-local:
@@ -110,8 +143,12 @@ enforces the same rule.
 6. Docker/containerd perform an ordinary start of each already-created
    destination using the root-owned `runsc-restore` OCI runtime wrapper. The
    wrapper durably binds the child ID to its helper-staged image during OCI
-   `create`, then substitutes raw `runsc restore --image-path=...` for OCI
-   `start`. The restored process tree therefore runs under the destination
+   `create`, then substitutes raw
+   `runsc restore --background --image-path=...` for OCI `start`. Because the
+   checkpoint is uncompressed, runsc can return after restoring kernel
+   metadata, load application and file pages in the background, and prioritize
+   pages faulted by the resumed workload. The restored process tree therefore
+   runs under the destination
    container ID and Docker's fresh cgroup/network identity without using
    Docker's unsupported cross-container checkpoint restore API.
 7. The node keeps every child in `restoring` until its bounded workload hook
@@ -124,17 +161,32 @@ cannot choose arbitrary paths. Docker/containerd still own container metadata,
 rootfs, cgroup, network, exec, log, and delete lifecycle. XFS reflinks avoid a
 second physical copy of the memory image during staging. A fan-out request
 captures the source once and stages the same immutable instant into every
-child. Raw runsc restores are synchronous,
-but the node runs up to eight independent child restores concurrently and
+child. Raw runsc restores return after background page loading starts, and the
+node runs up to eight independent child restores concurrently and
 returns results in request order. It stops scheduling queued children after a
 failure while allowing already-running restores to settle into their durable
 intents. Each child ultimately owns its restored memory.
+
+Background restore changes time to first instruction, not total checkpoint
+bytes: stock runsc still scans and saves the checkpointed memory image. A
+successful OCI start means that asynchronous page loading has started, not
+that every page has been read. The staged POSIX files may be unlinked after
+start because runsc retains open descriptors; their blocks remain charged by
+the filesystem until loading completes. A late page-load failure can terminate
+the restored sandbox and is handled as an ordinary post-start runtime failure.
 
 On an exact retry, Docker identity/running inspection uses the same bounded
 worker pool under one wall-clock setup allowance. Nonce readiness checks are
 also parallel and bounded. After the durable `running` commit, checkpoint
 unstaging and artifact release are best-effort under one shared cleanup
 deadline, so cleanup cannot hold the response open indefinitely.
+
+The experimental local-hibernation format is separate from live fork. A
+`parkable` sandbox is single-owner, cannot also be forkable or expose direct
+SSH, and is admitted against requested writable disk plus its complete
+regular-file memory backing and allocator slack. Its strict manifest,
+authority journal, crash transitions, and fail-closed capability contract are
+defined in [hibernation-artifact-v1.md](hibernation-artifact-v1.md).
 
 Fork operations take an exclusive per-sandbox lifecycle lease. Exec and file
 operations hold shared leases, so checkpoint cannot race an attached exec,
@@ -163,5 +215,5 @@ exposes the child's new spec identity and in-sandbox adoption of its Docker
 bridge address, tears down a live socket, excludes a detached OriginExec
 descendant from the child, and can
 checkpoint the resumed source again advertises `fork-local-v1`.
-Cross-node restore, shared copy-on-write process memory, and background page
-loading are separate future runtime features.
+Cross-node restore and shared copy-on-write process memory are separate future
+runtime features.

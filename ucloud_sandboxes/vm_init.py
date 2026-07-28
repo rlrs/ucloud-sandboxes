@@ -14,6 +14,9 @@ from typing import Any
 
 from .checkpoint_helper import render_checkpoint_helper_script
 from .deployment import DEFAULT_INIT_VERSION, package_version
+from .hibernation_quota_helper import (
+    render_hibernation_quota_helper_script,
+)
 from .models import ResourceQuantity, VmJob, vm_job_from_payload
 from .runsc_restore import render_runsc_restore_script
 
@@ -33,9 +36,19 @@ DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
 DEFAULT_CHECKPOINT_HELPER = "/usr/local/libexec/ucloud-sandbox-checkpoint"
 DEFAULT_CHECKPOINT_HELPER_CONFIG = "/etc/ucloud-sandboxes/checkpoint-helper.json"
 DEFAULT_CHECKPOINT_HELPER_SUDOERS = "/etc/sudoers.d/ucloud-sandbox-checkpoint"
+DEFAULT_HIBERNATION_QUOTA_HELPER = "/usr/local/libexec/ucloud-sandbox-hibernation-quota"
+DEFAULT_HIBERNATION_QUOTA_HELPER_CONFIG = (
+    "/etc/ucloud-sandboxes/hibernation-quota-helper.json"
+)
+DEFAULT_HIBERNATION_QUOTA_HELPER_SUDOERS = (
+    "/etc/sudoers.d/ucloud-sandbox-hibernation-quota"
+)
 DEFAULT_RUNSC_RESTORE_WRAPPER = "/usr/local/libexec/ucloud-runsc-restore"
 DEFAULT_RUNSC_RESTORE_CONFIG = "/etc/ucloud-sandboxes/runsc-restore.json"
 DEFAULT_RUNSC_RESTORE_STATE_ROOT = "/run/ucloud-sandboxes/runsc-restore"
+DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
+DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
+DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 SANDBOX_RUNTIME_PACKAGES = (
     "xfsprogs",
     "docker-ce",
@@ -108,6 +121,10 @@ class VmInitOptions:
     buildx_direct_push: bool = False
     buildx_cache_ref: str = ""
     runtime_dry_run: bool = False
+    node_runtime: str = "legacy"
+    direct_runsc_commit: str = ""
+    direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
+    direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
 
@@ -115,7 +132,10 @@ class VmInitOptions:
         return self.node_id or f"ucloud-vm-{self.job_id}"
 
     def advertised_node_url(self) -> str:
-        return self.node_url or f"http://{self.normalized_node_id()}:{self.node_agent_port}"
+        return (
+            self.node_url
+            or f"http://{self.normalized_node_id()}:{self.node_agent_port}"
+        )
 
     def capabilities(self) -> tuple[str, ...]:
         if self.enable_image_builds:
@@ -222,19 +242,26 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     swap_file = str(PurePosixPath(docker_storage_dir) / "swapfile")
     state_dir = str(PurePosixPath(work_dir) / "state")
-    runtime_conformance_file = str(PurePosixPath(state_dir) / "runtime-conformance.json")
+    runtime_conformance_file = str(
+        PurePosixPath(state_dir) / "runtime-conformance.json"
+    )
     checkpoint_helper = DEFAULT_CHECKPOINT_HELPER
     checkpoint_helper_config = DEFAULT_CHECKPOINT_HELPER_CONFIG
     checkpoint_helper_sudoers = DEFAULT_CHECKPOINT_HELPER_SUDOERS
     checkpoint_helper_source = render_checkpoint_helper_script(
         config_path=checkpoint_helper_config
     )
+    hibernation_quota_helper = DEFAULT_HIBERNATION_QUOTA_HELPER
+    hibernation_quota_helper_config = DEFAULT_HIBERNATION_QUOTA_HELPER_CONFIG
+    hibernation_quota_helper_sudoers = DEFAULT_HIBERNATION_QUOTA_HELPER_SUDOERS
+    hibernation_quota_helper_source = render_hibernation_quota_helper_script(
+        config_path=hibernation_quota_helper_config
+    )
     runsc_restore_wrapper = DEFAULT_RUNSC_RESTORE_WRAPPER
     runsc_restore_config = DEFAULT_RUNSC_RESTORE_CONFIG
     runsc_restore_state_root = DEFAULT_RUNSC_RESTORE_STATE_ROOT
-    runsc_restore_source = render_runsc_restore_script(
-        config_path=runsc_restore_config
-    )
+    runsc_restore_source = render_runsc_restore_script(config_path=runsc_restore_config)
+    direct_runsc = DEFAULT_DIRECT_RUNSC
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
@@ -261,7 +288,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     if options.enable_image_builds and options.buildx_cache_ref:
         build_flag += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
     runtime_flag = "" if options.runtime_dry_run else " --execute-runtime"
-    deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}" if options.deployment_id else ""
+    deployment_flag = (
+        " --deployment-id ${UCLOUD_DEPLOYMENT_ID}" if options.deployment_id else ""
+    )
     heartbeat_auth_flag = (
         " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
         if options.heartbeat_bearer_token_file
@@ -272,7 +301,80 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         if options.node_control_bearer_token_file
         else ""
     )
-    version_flags = " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
+    version_flags = (
+        " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
+    )
+    if options.node_runtime == "direct":
+        writable_disk_mb = (
+            options.docker_quota_image_gb * 1024
+            - options.direct_disk_headroom_mb
+        )
+        if writable_disk_mb < 1:
+            raise ValueError(
+                "direct runtime has no writable disk after safety headroom"
+            )
+        direct_agent_command = (
+            f"{agent_bin} serve-direct-node-agent"
+            " --job-id ${UCLOUD_JOB_ID}"
+            " --node-id ${UCLOUD_NODE_ID}"
+            " --node-url ${UCLOUD_NODE_URL}"
+            " --host ${UCLOUD_NODE_AGENT_HOST}"
+            " --port ${UCLOUD_NODE_AGENT_PORT}"
+            f"{deployment_flag}{version_flags}"
+            " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
+            " --image-file ${UCLOUD_STATE_DIR}/images.json"
+            " --quota-root ${UCLOUD_HIBERNATION_QUOTA_ROOT}"
+            " --runsc ${UCLOUD_DIRECT_RUNSC}"
+            " --runsc-commit ${UCLOUD_DIRECT_RUNSC_COMMIT}"
+            " --init-binary ${UCLOUD_DIRECT_INIT_BINARY}"
+            " --quota-helper ${UCLOUD_HIBERNATION_QUOTA_HELPER}"
+            " --disk-capacity-mb ${UCLOUD_DIRECT_DISK_CAPACITY_MB}"
+            " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
+            " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
+            " --idle-park-seconds 1"
+            " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
+            " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
+            " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
+            " --cpu-overcommit ${UCLOUD_CPU_OVERCOMMIT}"
+            " --memory-overcommit ${UCLOUD_MEMORY_OVERCOMMIT}"
+            " --disk-overcommit 1"
+            f"{node_control_auth_flag}"
+        )
+        node_service_user = "root"
+        node_service_group = "root"
+        node_service_supplementary_groups = ""
+        node_service_exec_start_pre = ""
+    else:
+        writable_disk_mb = int(options.total_resources.disk_mb)
+        direct_agent_command = (
+            f"{agent_bin} serve-node-agent"
+            " --job-id ${UCLOUD_JOB_ID}"
+            " --node-id ${UCLOUD_NODE_ID}"
+            " --node-url ${UCLOUD_NODE_URL}"
+            " --host ${UCLOUD_NODE_AGENT_HOST}"
+            " --port ${UCLOUD_NODE_AGENT_PORT}"
+            f"{deployment_flag}{version_flags}"
+            " --sandbox-file ${UCLOUD_STATE_DIR}/sandboxes.json"
+            " --image-file ${UCLOUD_STATE_DIR}/images.json"
+            " --ssh-port-start ${UCLOUD_SSH_PORT_START}"
+            " --ssh-port-end ${UCLOUD_SSH_PORT_END}"
+            " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
+            " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
+            " --total-disk-mb ${UCLOUD_TOTAL_DISK_MB}"
+            " --cpu-overcommit ${UCLOUD_CPU_OVERCOMMIT}"
+            " --memory-overcommit ${UCLOUD_MEMORY_OVERCOMMIT}"
+            " --disk-overcommit ${UCLOUD_DISK_OVERCOMMIT}"
+            " --runtime-conformance-file ${UCLOUD_RUNTIME_CONFORMANCE_FILE}"
+            " --checkpoint-helper ${UCLOUD_CHECKPOINT_HELPER}"
+            " --checkpoint-root ${UCLOUD_CHECKPOINT_ROOT}"
+            f"{build_flag}{runtime_flag}{node_control_auth_flag}"
+        )
+        node_service_user = "$UCLOUD_SERVICE_USER"
+        node_service_group = "$UCLOUD_SERVICE_GROUP"
+        node_service_supplementary_groups = "SupplementaryGroups=docker"
+        node_service_exec_start_pre = (
+            "ExecStartPre=/usr/bin/sudo -n ${UCLOUD_CHECKPOINT_HELPER} gc"
+        )
 
     script = f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -326,9 +428,20 @@ UCLOUD_RUNTIME_CONFORMANCE_FILE={shlex.quote(runtime_conformance_file)}
 UCLOUD_CHECKPOINT_HELPER={shlex.quote(checkpoint_helper)}
 UCLOUD_CHECKPOINT_HELPER_CONFIG={shlex.quote(checkpoint_helper_config)}
 UCLOUD_CHECKPOINT_HELPER_SUDOERS={shlex.quote(checkpoint_helper_sudoers)}
+UCLOUD_HIBERNATION_QUOTA_HELPER={shlex.quote(hibernation_quota_helper)}
+UCLOUD_HIBERNATION_QUOTA_HELPER_CONFIG={shlex.quote(hibernation_quota_helper_config)}
+UCLOUD_HIBERNATION_QUOTA_HELPER_SUDOERS={shlex.quote(hibernation_quota_helper_sudoers)}
 UCLOUD_RUNSC_RESTORE_WRAPPER={shlex.quote(runsc_restore_wrapper)}
 UCLOUD_RUNSC_RESTORE_CONFIG={shlex.quote(runsc_restore_config)}
 UCLOUD_RUNSC_RESTORE_STATE_ROOT={shlex.quote(runsc_restore_state_root)}
+UCLOUD_NODE_RUNTIME={shlex.quote(options.node_runtime)}
+UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
+UCLOUD_DIRECT_RUNSC_COMMIT={shlex.quote(options.direct_runsc_commit)}
+UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
+UCLOUD_DIRECT_DISK_CAPACITY_MB={options.docker_quota_image_gb * 1024}
+UCLOUD_DIRECT_DISK_HEADROOM_MB={options.direct_disk_headroom_mb}
+UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
+UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
 UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
 {authorized_keys_blob}
 UCLOUD_AUTHORIZED_KEYS
@@ -417,6 +530,9 @@ UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 UCLOUD_PREBUILT_AGENT_ARCHIVE=""
 UCLOUD_PREBUILT_AGENT_SHA256=""
 UCLOUD_OFFLINE_KERNEL_MODULE_DIR=""
+UCLOUD_BUNDLED_DIRECT_RUNSC=""
+UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256=""
+UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -453,6 +569,42 @@ PY
   test -f "$UCLOUD_PACKAGE_INSTALL_SPEC"
   UCLOUD_PACKAGE_INSTALL_ARGS=(--no-index --find-links "$UCLOUD_PACKAGE_BUNDLE_DIR/wheels")
   echo "Using offline node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
+  if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+    UCLOUD_DIRECT_RUNSC_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+import json
+from pathlib import Path
+import re
+import sys
+
+runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
+direct = runtime.get("direct_runsc") if isinstance(runtime, dict) else None
+if not isinstance(direct, dict):
+    raise SystemExit("direct runtime binary metadata is absent")
+if direct.get("file") != "runtime/direct/runsc":
+    raise SystemExit("invalid direct runtime binary filename")
+sha256 = str(direct.get("sha256") or "")
+commit = str(direct.get("commit") or "")
+size = direct.get("size")
+if (
+    not re.fullmatch(r"[0-9a-f]{{64}}", sha256)
+    or not re.fullmatch(r"[0-9a-f]{{40}}", commit)
+    or not isinstance(size, int)
+    or size <= 0
+):
+    raise SystemExit("invalid direct runtime binary metadata")
+print(f"{{sha256}}\t{{commit}}\t{{size}}")
+PY
+)"
+    IFS=$'\t' read -r UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256 UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT UCLOUD_BUNDLED_DIRECT_RUNSC_SIZE <<< "$UCLOUD_DIRECT_RUNSC_SPEC"
+    UCLOUD_BUNDLED_DIRECT_RUNSC="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/runsc"
+    test -f "$UCLOUD_BUNDLED_DIRECT_RUNSC"
+    test "$(stat -c %s "$UCLOUD_BUNDLED_DIRECT_RUNSC")" = "$UCLOUD_BUNDLED_DIRECT_RUNSC_SIZE"
+    printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_BUNDLED_DIRECT_RUNSC" | sha256sum --check --status -
+    if [ "$UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT" != "$UCLOUD_DIRECT_RUNSC_COMMIT" ]; then
+      echo "Bundled direct runsc commit does not match deployment configuration" >&2
+      exit 1
+    fi
+  fi
   if [ -d "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime" ]; then
     if python3 - \
       "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
@@ -942,6 +1094,7 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   UCLOUD_DOCKER_DATA_ROOT="$UCLOUD_DOCKER_QUOTA_ROOT"
 fi
 UCLOUD_CHECKPOINT_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-checkpoints"
+UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-hibernation"
 log_init_phase "docker-storage"
 
 if ! grep -qw overlay /proc/filesystems; then
@@ -949,8 +1102,42 @@ if ! grep -qw overlay /proc/filesystems; then
   exit 1
 fi
 
+if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+  # The direct daemon runs as root and is the sole owner of its durable
+  # registry, OCI bundles, and lifecycle journals. The shared bootstrap state
+  # is otherwise owned by the unprivileged service account, so explicitly
+  # restore this subtree after every idempotent init run.
+  $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
+  $SUDO chown -R root:root "$UCLOUD_STATE_DIR/direct-runtime"
+  $SUDO chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"
+  if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
+    echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
+    exit 1
+  fi
+  echo "Installing bundle-verified direct runsc runtime"
+  $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
+  $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
+  printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
+  "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
+  if [ ! -x "$UCLOUD_DIRECT_INIT_BINARY" ]; then
+    for direct_init_candidate in \
+      /usr/libexec/docker/docker-init \
+      /usr/bin/docker-init; do
+      if [ -x "$direct_init_candidate" ]; then
+        UCLOUD_DIRECT_INIT_BINARY="$direct_init_candidate"
+        break
+      fi
+    done
+  fi
+  if [ -z "$UCLOUD_DIRECT_INIT_BINARY" ] || [ ! -x "$UCLOUD_DIRECT_INIT_BINARY" ]; then
+    echo "Direct runtime requires docker-init" >&2
+    exit 1
+  fi
+fi
+log_init_phase "direct-runtime"
+
 RUNSC_PATH="$(command -v runsc)"
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_CHECKPOINT_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
 
 echo "Installing raw runsc restore wrapper"
 $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_RUNSC_RESTORE_WRAPPER")" /etc/ucloud-sandboxes
@@ -996,7 +1183,7 @@ detect_default_route_mtu() {{
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
   UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
 fi
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
 DOCKER_DAEMON_JSON="$(mktemp)"
@@ -1151,6 +1338,42 @@ $SUDO mv -f "$UCLOUD_CHECKPOINT_SUDOERS_TMP" "$UCLOUD_CHECKPOINT_HELPER_SUDOERS"
 $SUDO "$UCLOUD_CHECKPOINT_HELPER" gc >/dev/null
 log_init_phase "checkpoint-helper"
 
+echo "Installing privileged hibernation quota helper"
+$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_HIBERNATION_QUOTA_HELPER")"
+$SUDO install -d -m 0700 -o root -g root "$UCLOUD_HIBERNATION_QUOTA_ROOT"
+UCLOUD_HIBERNATION_QUOTA_HELPER_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_HIBERNATION_QUOTA_HELPER")/.ucloud-hibernation-quota-helper.XXXXXX")"
+$SUDO tee "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP" >/dev/null <<'UCLOUD_HIBERNATION_QUOTA_HELPER_PY'
+{hibernation_quota_helper_source}UCLOUD_HIBERNATION_QUOTA_HELPER_PY
+$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP"
+$SUDO chmod 0755 "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP"
+$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER"
+
+UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.hibernation-quota-helper.XXXXXX")"
+python3 - <<'PY' | $SUDO tee "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP" >/dev/null
+import json
+import os
+
+print(json.dumps({{
+    "version": 1,
+    "mount_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
+    "quota_root": os.environ["UCLOUD_HIBERNATION_QUOTA_ROOT"],
+    "xfs_io": "/usr/sbin/xfs_io",
+    "xfs_quota": "/usr/sbin/xfs_quota",
+    "findmnt": "/usr/bin/findmnt",
+}}, sort_keys=True))
+PY
+$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP"
+$SUDO chmod 0600 "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP"
+$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER_CONFIG"
+
+UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP="$($SUDO mktemp "/etc/sudoers.d/.ucloud-sandbox-hibernation-quota.XXXXXX")"
+printf '%s ALL=(root) NOPASSWD: %s\n' "$UCLOUD_SERVICE_USER" "$UCLOUD_HIBERNATION_QUOTA_HELPER" | $SUDO tee "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" >/dev/null
+$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP"
+$SUDO chmod 0440 "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP"
+$SUDO visudo -cf "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" >/dev/null
+$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER_SUDOERS"
+log_init_phase "hibernation-quota-helper"
+
 if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
   echo "Loading offline busybox conformance image"
   LOADED_PROBE_IMAGE_IDS=""
@@ -1177,15 +1400,20 @@ if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
   fi
 fi
 
-echo "Running runtime conformance probe"
-set +e
-$SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json --probe-live-fork --checkpoint-helper "$UCLOUD_CHECKPOINT_HELPER" --checkpoint-root "$UCLOUD_CHECKPOINT_ROOT" | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
-CONFORMANCE_STATUS=${{PIPESTATUS[0]}}
-set -e
-if [ "$CONFORMANCE_STATUS" -ne 0 ]; then
-  echo "Runtime conformance failed; node will not advertise conformance-derived capabilities"
+if [ "$UCLOUD_NODE_RUNTIME" = legacy ]; then
+  echo "Running runtime conformance probe"
+  set +e
+  $SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json --probe-live-fork --checkpoint-helper "$UCLOUD_CHECKPOINT_HELPER" --checkpoint-root "$UCLOUD_CHECKPOINT_ROOT" | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
+  CONFORMANCE_STATUS=${{PIPESTATUS[0]}}
+  set -e
+  if [ "$CONFORMANCE_STATUS" -ne 0 ]; then
+    echo "Runtime conformance failed; node will not advertise conformance-derived capabilities"
+  fi
+  $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_RUNTIME_CONFORMANCE_FILE" 2>/dev/null || true
+else
+  echo "Skipping legacy task conformance on direct-runtime node"
+  printf '%s\n' '{{"capabilities":[],"directRuntime":true,"results":{{}},"version":1}}' | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
 fi
-$SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_RUNTIME_CONFORMANCE_FILE" 2>/dev/null || true
 log_init_phase "runtime-conformance"
 
 echo "Writing node environment"
@@ -1223,6 +1451,16 @@ UCLOUD_HOST_ALIASES_JSON=$UCLOUD_HOST_ALIASES_JSON
 UCLOUD_RUNTIME_CONFORMANCE_FILE=$UCLOUD_RUNTIME_CONFORMANCE_FILE
 UCLOUD_CHECKPOINT_HELPER=$UCLOUD_CHECKPOINT_HELPER
 UCLOUD_CHECKPOINT_ROOT=$UCLOUD_CHECKPOINT_ROOT
+UCLOUD_HIBERNATION_QUOTA_HELPER=$UCLOUD_HIBERNATION_QUOTA_HELPER
+UCLOUD_HIBERNATION_QUOTA_ROOT=$UCLOUD_HIBERNATION_QUOTA_ROOT
+UCLOUD_NODE_RUNTIME=$UCLOUD_NODE_RUNTIME
+UCLOUD_DIRECT_RUNSC=$UCLOUD_DIRECT_RUNSC
+UCLOUD_DIRECT_RUNSC_COMMIT=$UCLOUD_DIRECT_RUNSC_COMMIT
+UCLOUD_DIRECT_INIT_BINARY=$UCLOUD_DIRECT_INIT_BINARY
+UCLOUD_DIRECT_DISK_CAPACITY_MB=$UCLOUD_DIRECT_DISK_CAPACITY_MB
+UCLOUD_DIRECT_DISK_HEADROOM_MB=$UCLOUD_DIRECT_DISK_HEADROOM_MB
+UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB
+UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES=$UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES
 NODE_ENV
 
 echo "Writing node-agent systemd service"
@@ -1235,13 +1473,13 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=$UCLOUD_SERVICE_USER
-Group=$UCLOUD_SERVICE_GROUP
-SupplementaryGroups=docker
+User={node_service_user}
+Group={node_service_group}
+{node_service_supplementary_groups}
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStartPre=/usr/bin/sudo -n ${{UCLOUD_CHECKPOINT_HELPER}} gc
-ExecStart={agent_bin} serve-node-agent --job-id ${{UCLOUD_JOB_ID}} --node-id ${{UCLOUD_NODE_ID}} --node-url ${{UCLOUD_NODE_URL}} --host ${{UCLOUD_NODE_AGENT_HOST}} --port ${{UCLOUD_NODE_AGENT_PORT}}{deployment_flag}{version_flags} --sandbox-file ${{UCLOUD_STATE_DIR}}/sandboxes.json --image-file ${{UCLOUD_STATE_DIR}}/images.json --ssh-port-start ${{UCLOUD_SSH_PORT_START}} --ssh-port-end ${{UCLOUD_SSH_PORT_END}} --total-vcpu ${{UCLOUD_TOTAL_VCPU}} --total-memory-mb ${{UCLOUD_TOTAL_MEMORY_MB}} --total-disk-mb ${{UCLOUD_TOTAL_DISK_MB}} --cpu-overcommit ${{UCLOUD_CPU_OVERCOMMIT}} --memory-overcommit ${{UCLOUD_MEMORY_OVERCOMMIT}} --disk-overcommit ${{UCLOUD_DISK_OVERCOMMIT}} --runtime-conformance-file ${{UCLOUD_RUNTIME_CONFORMANCE_FILE}} --checkpoint-helper ${{UCLOUD_CHECKPOINT_HELPER}} --checkpoint-root ${{UCLOUD_CHECKPOINT_ROOT}}{build_flag}{runtime_flag}{node_control_auth_flag}
+{node_service_exec_start_pre}
+ExecStart={direct_agent_command}
 Restart=always
 RestartSec=5
 
@@ -1283,6 +1521,19 @@ HEARTBEAT_TIMER
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable ucloud-sandbox-node.service
 $SUDO systemctl restart ucloud-sandbox-node.service
+NODE_AGENT_READY=0
+for _ in $(seq 1 100); do
+  if curl -fsS "http://127.0.0.1:${{UCLOUD_NODE_AGENT_PORT}}/healthz" >/dev/null; then
+    NODE_AGENT_READY=1
+    break
+  fi
+  sleep 0.1
+done
+if [ "$NODE_AGENT_READY" -ne 1 ]; then
+  $SUDO systemctl status ucloud-sandbox-node.service --no-pager -l || true
+  echo "Node agent did not become healthy after service start" >&2
+  exit 1
+fi
 $SUDO systemctl enable --now ucloud-sandbox-heartbeat.timer
 $SUDO systemctl start ucloud-sandbox-heartbeat.service
 
@@ -1309,6 +1560,25 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("ssh port start must be <= ssh port end.")
     if options.heartbeat_interval_seconds < 1:
         raise ValueError("heartbeat interval must be positive.")
+    if options.node_runtime not in {"legacy", "direct"}:
+        raise ValueError("node runtime must be either 'legacy' or 'direct'.")
+    if options.enable_image_builds and options.node_runtime != "legacy":
+        raise ValueError("builder nodes must use the legacy Docker image runtime.")
+    if options.node_runtime == "direct":
+        if not re.fullmatch(r"[0-9a-f]{40}", options.direct_runsc_commit):
+            raise ValueError(
+                "direct runtime requires an exact 40-character runsc commit"
+            )
+        if options.runtime_dry_run:
+            raise ValueError("direct runtime does not support dry-run node service mode.")
+        if options.docker_quota_image_gb < 1:
+            raise ValueError("direct runtime requires quota-backed XFS storage.")
+        if options.disk_overcommit != 1.0:
+            raise ValueError("direct runtime disk overcommit must be exactly 1.0.")
+        if options.direct_disk_headroom_mb < 1:
+            raise ValueError("direct runtime disk headroom must be positive.")
+        if options.direct_max_concurrent_restores < 1:
+            raise ValueError("direct max concurrent restores must be positive.")
     if options.docker_quota_image_gb < 0:
         raise ValueError("docker quota image size cannot be negative.")
     if options.swap_gb < 0:
@@ -1337,13 +1607,12 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         _reject_newline(value_name, value)
     if options.package_sha256 and (
         len(options.package_sha256) != 64
-        or any(character not in "0123456789abcdef" for character in options.package_sha256)
+        or any(
+            character not in "0123456789abcdef" for character in options.package_sha256
+        )
     ):
         raise ValueError("package sha256 must be a lowercase SHA-256 digest.")
-    if (
-        options.node_control_bearer_token_file
-        and not options.node_control_bearer_token
-    ):
+    if options.node_control_bearer_token_file and not options.node_control_bearer_token:
         raise ValueError(
             "node control bearer token is required when its file is configured."
         )
@@ -1494,7 +1763,9 @@ def parse_vm_init_phases(output: str) -> tuple[dict[str, int], int | None]:
 def local_package_spec_path(package_spec: str) -> Path | None:
     if not package_spec:
         return None
-    if "://" in package_spec or package_spec.startswith(("git+", "hg+", "svn+", "bzr+")):
+    if "://" in package_spec or package_spec.startswith(
+        ("git+", "hg+", "svn+", "bzr+")
+    ):
         return None
     path = Path(package_spec).expanduser()
     if not path.is_file():
@@ -1573,8 +1844,8 @@ def stage_vm_init_package_over_ssh(
     package_sha256 = local_package_sha256(local_path)
     probe_command = (
         f"test -f {quoted_path} && "
-        f"test \"$(stat -c %s {quoted_path})\" = {package_size} && "
-        f"test \"$(cat {quoted_marker} 2>/dev/null)\" = {package_sha256}"
+        f'test "$(stat -c %s {quoted_path})" = {package_size} && '
+        f'test "$(cat {quoted_marker} 2>/dev/null)" = {package_sha256}'
     )
     probe = subprocess.run(
         ssh_remote_command(
@@ -1618,7 +1889,7 @@ def stage_vm_init_package_over_ssh(
         f"chmod 755 {quoted_parent} && "
         f"rm -f {quoted_temporary} && "
         f"cat > {quoted_temporary} && "
-        f"test \"$(stat -c %s {quoted_temporary})\" = {package_size} && "
+        f'test "$(stat -c %s {quoted_temporary})" = {package_size} && '
         f"chmod 644 {quoted_temporary} && "
         f"mv {quoted_temporary} {quoted_path} && "
         f"printf '%s\\n' {package_sha256} > {quoted_marker}"

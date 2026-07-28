@@ -1,0 +1,168 @@
+{
+  "concurrency": 24,
+  "count": 24,
+  "image_pull_ms": 1056.115,
+  "parked_heartbeat": {
+    "active_sandboxes": 0,
+    "used_resources": {
+      "disk_mb": 32256,
+      "memory_mb": 0,
+      "vcpu": 0.0
+    }
+  },
+  "phase_makespan_ms": {
+    "create": 1904.254,
+    "delete": 1323.486,
+    "park": 444.728,
+    "wake_exec": 832.998
+  },
+  "phases_ms": {
+    "create": {
+      "max": 1691.167,
+      "min": 1160.975,
+      "p50": 1463.403,
+      "p95": 1650.079
+    },
+    "delete": {
+      "max": 567.831,
+      "min": 417.052,
+      "p50": 485.178,
+      "p95": 537.867
+    },
+    "park": {
+      "max": 437.815,
+      "min": 181.06,
+      "p50": 304.978,
+      "p95": 424.513
+    },
+    "wake_exec": {
+      "client_completion_wait": {
+        "max": 55.885,
+        "min": 51.012,
+        "p50": 51.49,
+        "p95": 55.154
+      },
+      "client_events": {
+        "max": 4.276,
+        "min": 0.61,
+        "p50": 1.075,
+        "p95": 4.264
+      },
+      "client_start_request": {
+        "max": 773.997,
+        "min": 228.569,
+        "p50": 458.496,
+        "p95": 697.777
+      },
+      "client_total": {
+        "max": 825.962,
+        "min": 286.212,
+        "p50": 511.011,
+        "p95": 749.739
+      },
+      "poll_count": {
+        "max": 1,
+        "min": 1,
+        "p50": 1,
+        "p95": 1
+      },
+      "server_exec_lease": {
+        "max": 1.893,
+        "min": 0.124,
+        "p50": 0.769,
+        "p95": 1.774
+      },
+      "server_inspect": {
+        "max": 8.0,
+        "min": 0.194,
+        "p50": 3.125,
+        "p95": 6.924
+      },
+      "server_restore": {
+        "max": 283.189,
+        "min": 177.111,
+        "p50": 202.727,
+        "p95": 282.921
+      },
+      "server_restore_artifact_cleanup": {
+        "max": 71.716,
+        "min": 3.592,
+        "p50": 13.44,
+        "p95": 71.401
+      },
+      "server_restore_begin_restore_journal": {
+        "max": 18.844,
+        "min": 3.067,
+        "p50": 5.078,
+        "p95": 16.991
+      },
+      "server_restore_candidate_fence": {
+        "max": 3.934,
+        "min": 0.065,
+        "p50": 0.355,
+        "p95": 3.854
+      },
+      "server_restore_candidate_journal": {
+        "max": 9.76,
+        "min": 1.575,
+        "p50": 2.7,
+        "p95": 7.255
+      },
+      "server_restore_commit_running_journal": {
+        "max": 9.631,
+        "min": 1.662,
+        "p50": 3.033,
+        "p95": 6.514
+      },
+      "server_restore_queue": {
+        "max": 498.721,
+        "min": 0.004,
+        "p50": 197.325,
+        "p95": 417.403
+      },
+      "server_restore_readiness_exec": {
+        "max": 115.679,
+        "min": 15.795,
+        "p50": 20.373,
+        "p95": 36.317
+      },
+      "server_restore_runsc_restore": {
+        "max": 143.055,
+        "min": 116.286,
+        "p50": 122.269,
+        "p95": 136.707
+      },
+      "server_restore_runsc_state": {
+        "max": 27.458,
+        "min": 11.656,
+        "p50": 16.498,
+        "p95": 22.818
+      },
+      "server_restore_validate_artifact": {
+        "max": 23.986,
+        "min": 0.69,
+        "p50": 8.53,
+        "p95": 23.805
+      },
+      "server_restore_warden_total": {
+        "max": 283.141,
+        "min": 177.04,
+        "p50": 202.673,
+        "p95": 282.638
+      },
+      "server_start": {
+        "max": 729.0,
+        "min": 226.0,
+        "p50": 438.0,
+        "p95": 658.0
+      },
+      "server_total": {
+        "max": 676.048,
+        "min": 207.709,
+        "p50": 393.34,
+        "p95": 602.221
+      }
+    }
+  },
+  "total_ms": 4611.617
+}

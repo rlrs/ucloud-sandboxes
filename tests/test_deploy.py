@@ -24,6 +24,38 @@ from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
 
 class DeployTests(unittest.TestCase):
+    def test_direct_deploy_requires_and_bundles_pinned_runsc(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            wheel = root / "ucloud_sandboxes-0.3.52-py3-none-any.whl"
+            runsc = root / "runsc"
+            wheel.write_bytes(b"wheel")
+            runsc.write_bytes(b"patched-runsc")
+            runsc.chmod(0o755)
+            plan = AllInOneDeployPlan(
+                job_id="job-1",
+                project_id="project-1",
+                deployment_id="prod-direct",
+                local_wheel=wheel,
+                sandbox_runtime="direct",
+                local_direct_runsc=runsc,
+                direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                gateway_private_host="sandbox-gateway-prod",
+                registry_private_ip="10.0.0.5",
+                private_network_id="net-1",
+            )
+
+            env = autoscaler_env(plan)
+            script = render_remote_deploy_script(plan)
+
+        self.assertEqual(env["UCLOUD_INIT_NODE_RUNTIME"], "direct")
+        self.assertEqual(
+            env["UCLOUD_INIT_DIRECT_RUNSC_COMMIT"],
+            "9f653e577965df2ddd13875b5530cd2588661f1c",
+        )
+        self.assertIn("runtime/direct/runsc", script)
+        self.assertIn("DIRECT_RUNSC_COMMIT=", script)
+
     def test_env_rendering_quotes_only_when_needed(self) -> None:
         text = render_env_file({"A": "plain-value", "B": "two words"})
 

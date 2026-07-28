@@ -1,0 +1,282 @@
+{
+  "schema": 1,
+  "created_at_unix": 1785224063.240012,
+  "host": {
+    "uname": "Linux j-12360655 6.8.0-53-generic #55-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan 17 15:37:52 UTC 2025 x86_64",
+    "runsc_sha256": "21b4d7b5be24b4ea0b3b794ed6b32274d92590515d3e3601e505c6d1d8b4ff1d",
+    "runsc_version": "runsc version release-20260721.0-dirty\nspec: 1.2.1",
+    "page_size": 4096
+  },
+  "cases": [
+    {
+      "logical_mib": 256,
+      "populated_mib": 256,
+      "initial_ready_seconds": 0.02539817899969421,
+      "initial_ready": {
+        "logical": 65536,
+        "populated": 65536,
+        "checksum": 8355840
+      },
+      "cycles": [
+        {
+          "cycle": 0,
+          "cold": false,
+          "park_seconds": 0.2461695920001148,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 34603008,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 1073741824,
+              "allocated_bytes": 268533760
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224212,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1068,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": null,
+          "restore_seconds": 0.16449020799973368,
+          "restored_sentry_rss_bytes": 41156608,
+          "first_ready_seconds": 0.02331279200006975,
+          "ready": {
+            "logical": 65536,
+            "populated": 65536,
+            "checksum": 8355840
+          },
+          "scan_response_seconds": 0.09388547000025937,
+          "scan": {
+            "ns": 76251013,
+            "checksum": 8355840,
+            "pages": 65536,
+            "bytes": 268435456
+          }
+        },
+        {
+          "cycle": 1,
+          "cold": true,
+          "park_seconds": 0.05789846099969509,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 41156608,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 1073741824,
+              "allocated_bytes": 268533760
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224566,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1068,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": 6.854309141000158,
+          "restore_seconds": 0.26611491300036505,
+          "restored_sentry_rss_bytes": 39321600,
+          "first_ready_seconds": 0.030152807000376924,
+          "ready": {
+            "logical": 65536,
+            "populated": 65536,
+            "checksum": 8355840
+          },
+          "scan_response_seconds": 0.5584952730000623,
+          "scan": {
+            "ns": 534604078,
+            "checksum": 8355840,
+            "pages": 65536,
+            "bytes": 268435456
+          }
+        },
+        {
+          "cycle": 2,
+          "cold": false,
+          "park_seconds": 0.07293036200007919,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 39321600,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 1073741824,
+              "allocated_bytes": 268533760
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224567,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1068,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": null,
+          "restore_seconds": 0.21500770300008298,
+          "restored_sentry_rss_bytes": 39845888,
+          "first_ready_seconds": 0.0215945909999391,
+          "ready": {
+            "logical": 65536,
+            "populated": 65536,
+            "checksum": 8355840
+          },
+          "scan_response_seconds": 0.08611412700020082,
+          "scan": {
+            "ns": 69802731,
+            "checksum": 8355840,
+            "pages": 65536,
+            "bytes": 268435456
+          }
+        }
+      ]
+    },
+    {
+      "logical_mib": 1024,
+      "populated_mib": 1024,
+      "initial_ready_seconds": 0.022207991999948717,
+      "initial_ready": {
+        "logical": 262144,
+        "populated": 262144,
+        "checksum": 33423360
+      },
+      "cycles": [
+        {
+          "cycle": 0,
+          "cold": false,
+          "park_seconds": 0.7874663479997253,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 36438016,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 2147483648,
+              "allocated_bytes": 1073840128
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224281,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1098,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": null,
+          "restore_seconds": 0.1650339239999994,
+          "restored_sentry_rss_bytes": 40370176,
+          "first_ready_seconds": 0.027083057000254485,
+          "ready": {
+            "logical": 262144,
+            "populated": 262144,
+            "checksum": 33423360
+          },
+          "scan_response_seconds": 0.2591658500000449,
+          "scan": {
+            "ns": 238855122,
+            "checksum": 33423360,
+            "pages": 262144,
+            "bytes": 1073741824
+          }
+        },
+        {
+          "cycle": 1,
+          "cold": true,
+          "park_seconds": 0.11931462099983037,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 40370176,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 2147483648,
+              "allocated_bytes": 1073840128
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224589,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1098,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": 0.33524005600020246,
+          "restore_seconds": 0.318008657000064,
+          "restored_sentry_rss_bytes": 39321600,
+          "first_ready_seconds": 0.02996171599988884,
+          "ready": {
+            "logical": 262144,
+            "populated": 262144,
+            "checksum": 33423360
+          },
+          "scan_response_seconds": 2.092672496999967,
+          "scan": {
+            "ns": 2069859174,
+            "checksum": 33423360,
+            "pages": 262144,
+            "bytes": 1073741824
+          }
+        },
+        {
+          "cycle": 2,
+          "cold": false,
+          "park_seconds": 0.13083325200022955,
+          "parked_process_alive": false,
+          "pre_park_sentry_rss_bytes": 39321600,
+          "artifacts": {
+            "application_memory.img": {
+              "logical_bytes": 2147483648,
+              "allocated_bytes": 1073840128
+            },
+            "checkpoint.img": {
+              "logical_bytes": 224662,
+              "allocated_bytes": 225280
+            },
+            "pages.img": {
+              "logical_bytes": 0,
+              "allocated_bytes": 0
+            },
+            "pages_meta.img": {
+              "logical_bytes": 1098,
+              "allocated_bytes": 4096
+            }
+          },
+          "cache_drop_seconds": null,
+          "restore_seconds": 0.16534181199995146,
+          "restored_sentry_rss_bytes": 39583744,
+          "first_ready_seconds": 0.026341767000303662,
+          "ready": {
+            "logical": 262144,
+            "populated": 262144,
+            "checksum": 33423360
+          },
+          "scan_response_seconds": 0.30084097500002827,
+          "scan": {
+            "ns": 278335604,
+            "checksum": 33423360,
+            "pages": 262144,
+            "bytes": 1073741824
+          }
+        }
+      ]
+    }
+  ]
+}

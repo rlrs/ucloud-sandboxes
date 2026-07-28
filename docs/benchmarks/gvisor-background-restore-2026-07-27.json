@@ -1,0 +1,102 @@
+{
+  "date": "2026-07-27",
+  "host": {
+    "provider": "UCloud",
+    "job_id": "12360569",
+    "product": "cpu-amd-zen5-32-vcpu",
+    "cpu": "AMD EPYC 9535",
+    "advertised_memory_gib": 96,
+    "runsc_version": "release-20260721.0",
+    "storage": "local XFS-backed Docker quota image"
+  },
+  "method": {
+    "samples_per_cell": 1,
+    "checkpoint_compression": "none",
+    "state": "non-zero anonymous memory held by a checkpointed process",
+    "start_ms": "docker start duration",
+    "first_tool_ms": "docker start through completion of the first child docker exec, including one Docker network inspection",
+    "cold_cache": "sync plus host drop_caches=3 after checkpoint sealing"
+  },
+  "samples": [
+    {
+      "dirty_mib": 256,
+      "cache": "warm",
+      "mode": "foreground",
+      "checkpoint_ms": [3569.31, 3618.294],
+      "start_ms": 460.1,
+      "first_exec_ms": 95.833,
+      "start_to_first_exec_complete_ms": 581.508,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 256,
+      "cache": "warm",
+      "mode": "background",
+      "checkpoint_ms": [3800.544, 3627.869],
+      "start_ms": 471.029,
+      "first_exec_ms": 88.71,
+      "start_to_first_exec_complete_ms": 588.708,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 1024,
+      "cache": "warm",
+      "mode": "foreground",
+      "checkpoint_ms": [14411.171, 14968.362],
+      "start_ms": 1116.479,
+      "first_exec_ms": 93.88,
+      "start_to_first_exec_complete_ms": 1239.044,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 1024,
+      "cache": "warm",
+      "mode": "background",
+      "checkpoint_ms": [14163.673, 14038.292],
+      "start_ms": 1056.814,
+      "first_exec_ms": 98.652,
+      "start_to_first_exec_complete_ms": 1184.002,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 4096,
+      "cache": "warm",
+      "mode": "foreground",
+      "checkpoint_ms": [54077.378, 56701.208],
+      "start_ms": 2824.463,
+      "first_exec_ms": 99.582,
+      "start_to_first_exec_complete_ms": 2951.917,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 4096,
+      "cache": "warm",
+      "mode": "background",
+      "checkpoint_ms": [58634.508, 58685.078],
+      "start_ms": 1169.274,
+      "first_exec_ms": 150.477,
+      "start_to_first_exec_complete_ms": 1400.845,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 1024,
+      "cache": "cold",
+      "mode": "foreground",
+      "checkpoint_ms": [13693.257, 13151.093],
+      "start_ms": 2207.031,
+      "first_exec_ms": 97.027,
+      "start_to_first_exec_complete_ms": 2332.531,
+      "correctness_passed": true
+    },
+    {
+      "dirty_mib": 1024,
+      "cache": "cold",
+      "mode": "background",
+      "checkpoint_ms": [14105.476, 13458.855],
+      "start_ms": 589.872,
+      "first_exec_ms": 219.577,
+      "start_to_first_exec_complete_ms": 836.603,
+      "correctness_passed": true
+    }
+  ]
+}

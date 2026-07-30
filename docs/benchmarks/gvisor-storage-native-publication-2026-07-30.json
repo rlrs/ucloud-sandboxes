@@ -1,0 +1,45 @@
+{
+  "date": "2026-07-30",
+  "job_id": "12362112",
+  "project": "DFM",
+  "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+  "agentenv_patch": "runtime/storage_native/agentenv-streaming-dense-export.patch",
+  "result": {
+    "acquire_seconds": 0.03916539400051988,
+    "create_seconds": 0.1287276290004229,
+    "publication_seconds": 0.347773705999316,
+    "reconciliation": {
+      "deleted_orphan_device_ids": [],
+      "terminal_records": [],
+      "volume_count": 1
+    },
+    "release_seconds": 0.0258881139998266,
+    "seal_seconds": 0.03504428999985976,
+    "sealed_allocated_bytes": 67584000,
+    "sealed_file_bytes": 67584000,
+    "source_deleted_before_destination_resume": true,
+    "status": "passed",
+    "upper_mode": "hybridLogStructured",
+    "virtual_size": 1073741824
+  },
+  "remote_resume": {
+    "bytes_served_through_sentinel_reads": 2764983,
+    "range_requests": 14,
+    "registry_cache": "fresh per benchmark"
+  },
+  "sequence": [
+    "create and mount 1-GiB volume",
+    "write and fsync 256-MiB allocation with sentinels",
+    "restart and reconcile UCloud node service",
+    "freeze and seal sparse hybrid layer",
+    "release mount and ublk device",
+    "stream dense layer into Registry v2 without a dense staging file",
+    "commit OCI snapshot manifest",
+    "delete the node-local sealed layer",
+    "delete the complete source volume registration",
+    "verify and acquire the manifest into a separate destination journal",
+    "construct a new destination COW device from the remote raw dense layer",
+    "mount XFS and verify both sentinels",
+    "seal and release a second local delta over the published parent"
+  ]
+}

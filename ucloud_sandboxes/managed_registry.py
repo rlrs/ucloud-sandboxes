@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -312,6 +313,43 @@ class RegistryClient:
 
         return self._manifest_layers(repository, reference, depth=0)
 
+    def manifest_document(
+        self,
+        repository: str,
+        reference: str,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        return self._json_request(
+            (
+                f"/v2/{_quote_repository(repository)}/manifests/"
+                f"{quote(reference, safe=':')}"
+            ),
+            headers={"Accept": MANIFEST_ACCEPT},
+        )
+
+    def blob_bytes(
+        self,
+        repository: str,
+        digest: str,
+        *,
+        max_bytes: int = 16 * 1024 * 1024,
+    ) -> bytes:
+        normalized = _validate_lease_digest(digest)
+        if max_bytes <= 0:
+            raise ValueError("registry blob byte limit must be positive")
+        response = self._request(
+            (
+                f"/v2/{_quote_repository(repository)}/blobs/"
+                f"{quote(normalized, safe=':')}"
+            )
+        )
+        try:
+            payload = response.read(max_bytes + 1)
+        finally:
+            response.close()
+        if len(payload) > max_bytes:
+            raise ValueError("registry blob exceeds the configured byte limit")
+        return payload
+
     def _manifest_layers(
         self,
         repository: str,
@@ -445,6 +483,117 @@ class RegistryClient:
             method="DELETE",
         )
         response.close()
+
+    def blob_exists(self, repository: str, digest: str) -> bool:
+        normalized = _validate_lease_digest(digest)
+        path = (
+            f"/v2/{_quote_repository(repository)}/blobs/"
+            f"{quote(normalized, safe=':')}"
+        )
+        try:
+            response = self._request(path, method="HEAD")
+        except RegistryRequestError as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        response.close()
+        return True
+
+    def start_blob_upload(self, repository: str) -> str:
+        response = self._request(
+            f"/v2/{_quote_repository(repository)}/blobs/uploads/",
+            method="POST",
+            data=b"",
+        )
+        try:
+            return self._upload_location_path(response)
+        finally:
+            response.close()
+
+    def upload_blob_chunk(self, location: str, chunk: bytes) -> str:
+        if not chunk:
+            raise ValueError("registry upload chunk cannot be empty")
+        response = self._request(
+            self._validate_upload_location(location),
+            method="PATCH",
+            headers={"Content-Type": "application/octet-stream"},
+            data=chunk,
+        )
+        try:
+            return self._upload_location_path(response)
+        finally:
+            response.close()
+
+    def finish_blob_upload(self, location: str, digest: str) -> str:
+        normalized = _validate_lease_digest(digest)
+        path = self._validate_upload_location(location)
+        separator = "&" if "?" in path else "?"
+        response = self._request(
+            f"{path}{separator}{urlencode({'digest': normalized})}",
+            method="PUT",
+            headers={"Content-Type": "application/octet-stream"},
+            data=b"",
+        )
+        try:
+            stored = normalize_manifest_digest(
+                str(response.headers.get("Docker-Content-Digest") or "")
+            )
+        finally:
+            response.close()
+        if stored and stored != normalized:
+            raise ValueError("registry stored blob under an unexpected digest")
+        return normalized
+
+    def put_manifest(
+        self,
+        repository: str,
+        reference: str,
+        payload: bytes,
+        *,
+        media_type: str = "application/vnd.oci.image.manifest.v1+json",
+    ) -> str:
+        if not payload:
+            raise ValueError("registry manifest cannot be empty")
+        response = self._request(
+            (
+                f"/v2/{_quote_repository(repository)}/manifests/"
+                f"{quote(reference, safe=':')}"
+            ),
+            method="PUT",
+            headers={"Content-Type": media_type},
+            data=payload,
+        )
+        try:
+            digest = normalize_manifest_digest(
+                str(response.headers.get("Docker-Content-Digest") or "")
+            )
+        finally:
+            response.close()
+        return digest or f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+    def _upload_location_path(self, response: Any) -> str:
+        location = str(response.headers.get("Location") or "")
+        if not location:
+            raise ValueError("registry upload response is missing Location")
+        return self._validate_upload_location(location)
+
+    def _validate_upload_location(self, location: str) -> str:
+        parsed = urlparse(location)
+        if parsed.scheme or parsed.netloc:
+            base = urlparse(self.base_url)
+            if (
+                parsed.scheme.lower() != base.scheme.lower()
+                or parsed.netloc.lower() != base.netloc.lower()
+            ):
+                raise ValueError("registry upload redirected to another origin")
+            path = parsed.path
+            if parsed.query:
+                path += f"?{parsed.query}"
+        else:
+            path = location
+        if not path.startswith("/v2/"):
+            raise ValueError("registry upload Location is outside /v2/")
+        return path
 
     def _json_request(
         self,

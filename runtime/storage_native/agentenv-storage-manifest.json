@@ -1,0 +1,8 @@
+{
+  "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+  "agentenv_repository": "https://github.com/kvcache-ai/AgentENV.git",
+  "artifact": "uvm-ublk-daemon",
+  "cargo_package": "uvm-ublk-daemon",
+  "license": "MIT",
+  "schema": 1
+}

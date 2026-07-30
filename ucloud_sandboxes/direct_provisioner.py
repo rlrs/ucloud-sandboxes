@@ -10,6 +10,8 @@ from .direct_migration import (
     DirectMigrationError,
     MIGRATION_CONNECTION_POLICY_DISCONNECT,
     MIGRATION_CONNECTION_POLICY_NONE,
+    StorageNativeMigration,
+    StorageNativeMigrationStore,
 )
 from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
@@ -31,12 +33,23 @@ from .runtime_identity import (
     NodeRuntimeIdentityStore,
 )
 from .sandbox import HibernationQuotaBackend, SandboxSpec
+from .storage_native_quota import StorageNativeQuotaBackend
+from .storage_native_registry import (
+    PublishedStorageLayer,
+    StorageSnapshotPublication,
+)
 
 
 @dataclass(frozen=True)
 class DirectProvisioningResult:
     registration: DirectSandboxRegistration
     lifecycle_state: HibernationState
+
+
+@dataclass(frozen=True)
+class DirectStorageNativeImportResult:
+    provisioning: DirectProvisioningResult
+    migration: StorageNativeMigration
 
 
 class DirectSandboxProvisioner:
@@ -55,6 +68,7 @@ class DirectSandboxProvisioner:
         warden: DirectRunscWarden,
         network_manager: DirectNetworkManager | None = None,
         migration_archives: DirectMigrationArchiveStore | None = None,
+        storage_migrations: StorageNativeMigrationStore | None = None,
     ) -> None:
         self.identity_store = identity_store
         self.registry = registry
@@ -67,6 +81,9 @@ class DirectSandboxProvisioner:
         self.network_manager = network_manager
         self.migration_archives = (
             migration_archives or DirectMigrationArchiveStore()
+        )
+        self.storage_migrations = storage_migrations or StorageNativeMigrationStore(
+            registry.path.parent / "storage-native-migrations"
         )
         self.identity = NodeRuntimeIdentity.from_fingerprint(
             warden.config.runtime_fingerprint
@@ -267,6 +284,196 @@ class DirectSandboxProvisioner:
             return DirectProvisioningResult(registration, record.state)
         raise DirectRegistryError(
             f"migration import cannot continue from {registration.phase}"
+        )
+
+    def stage_storage_native_import(
+        self,
+        migration: StorageNativeMigration,
+        *,
+        migration_id: str,
+    ) -> DirectStorageNativeImportResult:
+        """Adopt a durable remote snapshot without transferring an archive."""
+
+        if not isinstance(self.quota_backend, StorageNativeQuotaBackend):
+            raise DirectMigrationError(
+                "storage-native migration requires the storage-native quota backend"
+            )
+        portable = migration.manifest
+        if portable.runtime_identity != self.identity:
+            raise DirectMigrationError(
+                "storage-native migration belongs to another runtime identity"
+            )
+        self._validate_spec(portable.spec)
+        image = self.image_store.materialize(portable.spec.image)
+        migration_sha256 = migration.sha256
+        registration = self.registry.plan_import(
+            spec=portable.spec,
+            sandbox_generation=portable.sandbox_generation,
+            operation_id=portable.create_operation_id,
+            runtime_identity_sha256=self.identity.digest,
+            migration_id=migration_id,
+            migration_sha256=migration_sha256,
+        )
+        if registration.phase == "import_planned":
+            try:
+                reservation = self._reserve(
+                    registration,
+                    allow_released_generation=True,
+                )
+            except HibernationCapacityError:
+                self.registry.abort_import_planned(
+                    portable.sandbox_id,
+                    expected_revision=registration.revision,
+                    migration_id=migration_id,
+                    migration_sha256=migration_sha256,
+                    retire=False,
+                )
+                raise
+            prepared = self.quota_backend.prepare_import(
+                reservation,
+                migration.publication,
+                migration_id=migration_id,
+            )
+            quota_path = Path(str(prepared["path"]))
+            if quota_path != self._quota_path(registration):
+                raise DirectRegistryError(
+                    "storage-native import returned another sandbox incarnation"
+                )
+            registration = self.registry.commit_import_quota(
+                registration.sandbox_id,
+                expected_revision=registration.revision,
+                project_id=reservation.project_id,
+                total_mb=reservation.total_mb,
+                quota_path=quota_path,
+            )
+        config = self.oci.build(
+            portable.spec,
+            image,
+            network_namespace_path=self._migration_network_namespace(
+                registration,
+                source_guest_ip=portable.source_guest_ip,
+                connection_policy=portable.connection_policy,
+            ),
+        )
+        if registration.phase == "owned":
+            record = self.warden.inspect(registration.to_direct_sandbox())
+            if record is None:
+                raise DirectRegistryError("activated import has no lifecycle journal")
+            stored = self.storage_migrations.load(migration_id)
+            return DirectStorageNativeImportResult(
+                DirectProvisioningResult(registration, record.state),
+                stored,
+            )
+        if (
+            registration.migration_id != migration_id
+            or registration.migration_sha256 != migration_sha256
+        ):
+            raise DirectRegistryError("destination already owns another migration")
+        if registration.phase == "importing":
+            local_manifest = self.storage_migrations.rebind_mounted_snapshot(
+                migration,
+                expected_runtime_identity=self.identity,
+                expected_runtime=replace(
+                    self.warden.config.runtime_fingerprint,
+                    rootfs_sha256=image.rootfs_identity_sha256,
+                ),
+                artifact_store=self.warden.artifacts,
+                writable_incarnation=Path(registration.quota_path),
+            )
+            lease = self.overlays.prepare(
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation,
+                image_ref=registration.spec.image,
+                config_template=config,
+                spec_sha256=registration.spec_sha256,
+                imported_parked=True,
+            )
+            registration = self.registry.commit_import_rootfs(
+                registration.sandbox_id,
+                expected_revision=registration.revision,
+                image_id=lease.image.image_id,
+                sandbox=lease.sandbox,
+            )
+        if registration.phase == "rootfs_ready" and registration.migration_id:
+            sandbox = registration.to_direct_sandbox()
+            record = self.warden.inspect(sandbox)
+            if record is None:
+                storage_record = self.warden._storage_record(sandbox)
+                if storage_record.get("state") == "published":
+                    self.warden._mount_storage(
+                        sandbox,
+                        operation_id=f"import:{migration_id}:remount",
+                    )
+                    self.overlays.resume_sandbox(sandbox)
+                    self.storage_migrations.rebind_mounted_snapshot(
+                        migration,
+                        expected_runtime_identity=self.identity,
+                        expected_runtime=replace(
+                            self.warden.config.runtime_fingerprint,
+                            rootfs_sha256=image.rootfs_identity_sha256,
+                        ),
+                        artifact_store=self.warden.artifacts,
+                        writable_incarnation=Path(registration.quota_path),
+                    )
+                local_manifest = self.warden.artifacts.load_complete(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                    hibernation_generation=portable.hibernation_generation,
+                )
+                record = self.warden.adopt_parked(sandbox, local_manifest)
+            if record.state != HibernationState.PARKED:
+                raise DirectRegistryError(
+                    "storage-native destination is not durably parked"
+                )
+            published = self.warden.publish_storage_snapshot(
+                sandbox,
+                operation_id=f"import:{migration_id}:publish",
+            )
+            destination_migration = StorageNativeMigration(
+                manifest=portable,
+                publication=self._publication_from_storage_record(published),
+            )
+            self.storage_migrations.save(migration_id, destination_migration)
+            registration = self.registry.commit_import_ready(
+                registration.sandbox_id,
+                expected_revision=registration.revision,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            return DirectStorageNativeImportResult(
+                DirectProvisioningResult(registration, record.state),
+                destination_migration,
+            )
+        if registration.phase == "import_ready":
+            record = self.warden.inspect(registration.to_direct_sandbox())
+            if record is None or record.state != HibernationState.PARKED:
+                raise DirectRegistryError(
+                    "storage-native import-ready sandbox is not durably parked"
+                )
+            return DirectStorageNativeImportResult(
+                DirectProvisioningResult(registration, record.state),
+                self.storage_migrations.load(migration_id),
+            )
+        raise DirectRegistryError(
+            f"storage-native import cannot continue from {registration.phase}"
+        )
+
+    @staticmethod
+    def _publication_from_storage_record(
+        record: dict[str, object],
+    ) -> StorageSnapshotPublication:
+        layers = record.get("published_layers")
+        if not isinstance(layers, list):
+            raise DirectRegistryError(
+                "published storage-native volume has invalid layers"
+            )
+        return StorageSnapshotPublication(
+            manifest_digest=str(record.get("published_manifest_digest") or ""),
+            tag=str(record.get("published_tag") or ""),
+            repository=str(record.get("published_repository") or ""),
+            repo_blob_url=str(record.get("published_repo_blob_url") or ""),
+            virtual_size=int(record.get("virtual_size") or 0),
+            layers=tuple(PublishedStorageLayer.from_dict(layer) for layer in layers),
         )
 
     def activate_import(

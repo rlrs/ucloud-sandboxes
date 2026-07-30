@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import stat
 import subprocess
@@ -27,9 +28,11 @@ from .hibernation import (
 )
 from .runtime_identity import NodeRuntimeIdentity
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint
+from .storage_native_registry import StorageSnapshotPublication
 
 
 DIRECT_MIGRATION_SCHEMA = "direct-parked-migration-v2"
+STORAGE_NATIVE_MIGRATION_SCHEMA = "storage-native-v1"
 DIRECT_MIGRATION_METADATA = "ucloud-migration.json"
 MIGRATION_CONNECTION_POLICY_DISCONNECT = "disconnect"
 MIGRATION_CONNECTION_POLICY_NONE = "none"
@@ -38,6 +41,15 @@ _DIGEST_LENGTH = 64
 
 class DirectMigrationError(RuntimeError):
     pass
+
+
+def _canonical_json(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("ascii")
 
 
 @dataclass(frozen=True)
@@ -289,6 +301,226 @@ class DirectMigrationManifest:
                 for item in manifest.files
             ),
         )
+
+
+@dataclass(frozen=True)
+class StorageNativeMigration:
+    """Portable runtime metadata fenced to one durable block publication."""
+
+    manifest: DirectMigrationManifest
+    publication: StorageSnapshotPublication
+    schema: str = STORAGE_NATIVE_MIGRATION_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+            raise ValueError("unsupported storage-native migration schema")
+        if self.publication.virtual_size <= 0:
+            raise ValueError("storage-native migration has no virtual size")
+
+    @property
+    def sha256(self) -> str:
+        return hashlib.sha256(_canonical_json(self.to_dict())).hexdigest()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manifest": self.manifest.to_dict(),
+            "publication": self.publication.to_dict(),
+            "schema": self.schema,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "StorageNativeMigration":
+        if not isinstance(raw, dict) or set(raw) != {
+            "manifest",
+            "publication",
+            "schema",
+        }:
+            raise ValueError("storage-native migration has an invalid schema")
+        return cls(
+            manifest=DirectMigrationManifest.from_dict(raw["manifest"]),
+            publication=StorageSnapshotPublication.from_dict(raw["publication"]),
+            schema=str(raw["schema"]),
+        )
+
+
+class StorageNativeMigrationStore:
+    """Crash-durable small metadata records for prepared/staged migrations."""
+
+    def __init__(self, root: Path) -> None:
+        if not root.is_absolute():
+            raise ValueError("storage-native migration root must be absolute")
+        self.root = root
+
+    def save(
+        self,
+        migration_id: str,
+        migration: StorageNativeMigration,
+    ) -> StorageNativeMigration:
+        target = self._path(migration_id)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        payload = _canonical_json(migration.to_dict()) + b"\n"
+        if target.exists():
+            existing = self.load(migration_id)
+            if existing.sha256 != migration.sha256:
+                raise DirectMigrationError(
+                    "migration metadata already has another snapshot identity"
+                )
+            return existing
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            dir=target.parent,
+        )
+        temporary = Path(temporary_name)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(target)
+            self._fsync_directory(target.parent)
+        except Exception:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            temporary.unlink(missing_ok=True)
+            raise
+        return migration
+
+    def load(self, migration_id: str) -> StorageNativeMigration:
+        path = self._path(migration_id)
+        try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                raise DirectMigrationError(
+                    "storage-native migration metadata is not a regular file"
+                )
+            payload = path.read_bytes()
+            if len(payload) > 1024 * 1024:
+                raise DirectMigrationError(
+                    "storage-native migration metadata is too large"
+                )
+            return StorageNativeMigration.from_dict(
+                json.loads(payload.decode("ascii"))
+            )
+        except DirectMigrationError:
+            raise
+        except (
+            FileNotFoundError,
+            OSError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as exc:
+            raise DirectMigrationError(
+                "storage-native migration metadata is unavailable"
+            ) from exc
+
+    def discard(self, migration_id: str) -> None:
+        path = self._path(migration_id)
+        path.unlink(missing_ok=True)
+        if path.parent.exists():
+            self._fsync_directory(path.parent)
+
+    def rebind_mounted_snapshot(
+        self,
+        migration: StorageNativeMigration,
+        *,
+        expected_runtime_identity: NodeRuntimeIdentity,
+        expected_runtime: HibernationRuntimeFingerprint,
+        artifact_store: HibernationArtifactStore,
+        writable_incarnation: Path,
+    ) -> HibernationManifest:
+        """Replace source-local file identities after mounting a remote snapshot."""
+
+        portable = migration.manifest
+        if (
+            portable.runtime_identity != expected_runtime_identity
+            or portable.runtime != expected_runtime
+        ):
+            raise HibernationCompatibilityError(
+                "storage-native snapshot belongs to an incompatible runtime"
+            )
+        expected_incarnation = (
+            f"{portable.sandbox_id}.sandbox-{portable.sandbox_generation}"
+        )
+        if (
+            not writable_incarnation.is_absolute()
+            or writable_incarnation.name != expected_incarnation
+            or writable_incarnation.parent != artifact_store.root
+        ):
+            raise DirectMigrationError(
+                "storage-native destination is not the sandbox quota incarnation"
+            )
+        generation = writable_incarnation / (
+            f"hibernate-{portable.hibernation_generation}"
+        )
+        local_files = tuple(
+            HibernationArtifactFile.from_path(
+                generation / item.name,
+                role=item.role,
+            )
+            for item in portable.files
+        )
+        for expected, actual in zip(portable.files, local_files):
+            if actual.logical_bytes != expected.logical_bytes:
+                raise DirectMigrationError(
+                    f"migrated artifact size changed: {actual.name}"
+                )
+        local_manifest = HibernationManifest(
+            sandbox_id=portable.sandbox_id,
+            sandbox_generation=portable.sandbox_generation,
+            hibernation_generation=portable.hibernation_generation,
+            operation_id=portable.park_operation_id,
+            spec_sha256=portable.spec_sha256,
+            container_id=hashlib.sha256(
+                (
+                    f"{portable.sandbox_id}:"
+                    f"{portable.sandbox_generation}"
+                ).encode("utf-8")
+            ).hexdigest(),
+            created_ns=portable.captured_ns,
+            runtime=portable.runtime,
+            files=local_files,
+        )
+        published = artifact_store.load_published_metadata(
+            sandbox_id=portable.sandbox_id,
+            sandbox_generation=portable.sandbox_generation,
+            hibernation_generation=portable.hibernation_generation,
+        )
+        if published.metadata_sha256 == local_manifest.metadata_sha256:
+            local_manifest.validate_files(generation)
+            return local_manifest
+        if published.metadata_sha256 != portable.source_manifest_sha256:
+            raise DirectMigrationError(
+                "mounted snapshot has another hibernation manifest identity"
+            )
+        # COMPLETE is removed first so a crash cannot advertise a manifest
+        # whose source-local inode/device identities no longer authenticate.
+        (generation / artifact_store.COMPLETE_NAME).unlink()
+        (generation / artifact_store.MANIFEST_NAME).unlink()
+        self._fsync_directory(generation)
+        return artifact_store.publish_complete(local_manifest)
+
+    def _path(self, migration_id: str) -> Path:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", migration_id):
+            raise ValueError("migration id contains unsupported characters")
+        return self.root / f"{migration_id}.json"
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,132 @@
+{
+  "environment": {
+    "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+    "cpu": "32 vCPU AMD EPYC 9535",
+    "daemon_sha256": "b3ed831a6882e4849fe8ed67ab9efff9e81b5bb8454099f369628f105b9aeabd",
+    "disk": "600 GB root",
+    "job_id": "12362112",
+    "kernel": "6.8.0-53-generic",
+    "memory": "96 GB",
+    "project": "DFM"
+  },
+  "result": {
+    "enospc_errno": 28,
+    "layer": {
+      "digest": "sha256:fa4ee0df86f5b31b5484599b4f44642f60ed0873f60160ba4394c6a8a5247880",
+      "size": 35725312,
+      "uuid": ""
+    },
+    "phases": {
+      "create_and_format": {
+        "counters": {
+          "daemon_read_bytes": 12288,
+          "daemon_system_ticks": 6,
+          "daemon_user_ticks": 2,
+          "daemon_write_bytes": 34328576,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.10050326099997164
+      },
+      "daemon_start": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 4096,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.05107069700000011
+      },
+      "enospc": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 0,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.0011452589999976226
+      },
+      "freeze_and_seal": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 1,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 184320,
+          "device_read_sectors": 0,
+          "device_write_sectors": 48
+        },
+        "seconds": 0.029290467999999237
+      },
+      "mount_and_populate": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 1388544,
+          "device_read_sectors": 74,
+          "device_write_sectors": 2704
+        },
+        "seconds": 0.055816061999962585
+      },
+      "reconstruct_and_mount": {
+        "counters": {
+          "daemon_read_bytes": 12288,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 24576,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.009418651999965277
+      },
+      "release_initial": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 8192,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.026174674000003506
+      },
+      "release_resumed": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 1,
+          "daemon_user_ticks": 0,
+          "daemon_write_bytes": 151552,
+          "device_read_sectors": 0,
+          "device_write_sectors": 0
+        },
+        "seconds": 0.025969592999956603
+      },
+      "verify_reconstructed": {
+        "counters": {
+          "daemon_read_bytes": 0,
+          "daemon_system_ticks": 0,
+          "daemon_user_ticks": 1,
+          "daemon_write_bytes": 155648,
+          "device_read_sectors": 160,
+          "device_write_sectors": 296
+        },
+        "seconds": 0.023931435000008605
+      }
+    },
+    "schema": 1,
+    "snapshot": {
+      "allocated_bytes": 35725312,
+      "allocated_to_logical_ratio": 0.03327178955078125,
+      "file_bytes": 35725312,
+      "file_to_logical_ratio": 0.03327178955078125,
+      "logical_device_bytes": 1073741824
+    },
+    "status": "passed",
+    "virtual_size": 1073741824
+  },
+  "schema": 1
+}

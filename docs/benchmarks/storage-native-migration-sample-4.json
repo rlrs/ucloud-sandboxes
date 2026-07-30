@@ -1,0 +1,96 @@
+{
+  "create_runtime_seconds": 0.08925926400115713,
+  "create_volume_seconds": 0.12232504299936409,
+  "migration_timings": {
+    "destination_acquire_mount_seconds": 0.050375004999295925,
+    "destination_acquire_range_delta": {
+      "bytes_served": 4407479,
+      "requests": 20
+    },
+    "destination_dense_delta_bytes": 2170880,
+    "destination_layer_count": 2,
+    "destination_publication_seconds": 0.0975236379999842,
+    "destination_rebind_adopt_seconds": 0.13572946100066474,
+    "destination_rebind_range_delta": {
+      "bytes_served": 4407479,
+      "requests": 20
+    },
+    "destination_sealed_file_bytes": 87318528,
+    "source_dense_layer_bytes": 85147648,
+    "source_publication_seconds": 0.41428067900051246
+  },
+  "noop_seconds": 0.015910594000160927,
+  "park_seconds": 0.16436666200024774,
+  "parked_storage": {
+    "accounting_id": 1,
+    "cached_layer_paths": [],
+    "device_id": null,
+    "device_path": "",
+    "error": "",
+    "mount_path": "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun/volumes/warden-benchmark.sandbox-1",
+    "operation_id": "park:1:storage-release",
+    "published_layers": [],
+    "published_manifest_digest": "",
+    "published_repo_blob_url": "",
+    "published_repository": "",
+    "published_tag": "",
+    "revision": 3,
+    "runtime_dir": "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun/storage-runtime/warden-benchmark.sandbox-1/runtime",
+    "runtime_image_config": "",
+    "sandbox_generation": 1,
+    "sandbox_id": "warden-benchmark",
+    "sealed_layer_bytes": 85217280,
+    "sealed_layer_path": "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun/storage-runtime/warden-benchmark.sandbox-1/runtime/layers/revision-2.commit",
+    "sealed_layer_paths": [
+      "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun/storage-runtime/warden-benchmark.sandbox-1/runtime/layers/revision-2.commit"
+    ],
+    "source_image_config": "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun/storage-runtime/warden-benchmark.sandbox-1/source.json",
+    "state": "released",
+    "updated_ns": 1785452963449075839,
+    "virtual_size": 1073741824,
+    "volume_id": "warden-benchmark.sandbox-1"
+  },
+  "registry_phase_deltas": {
+    "explicit_noop": {
+      "bytes_served": 0,
+      "requests": 0
+    },
+    "full_conformance": {
+      "bytes_served": 15466496,
+      "requests": 59
+    },
+    "through_restore_readiness": {
+      "bytes_served": 6054071,
+      "requests": 29
+    }
+  },
+  "registry_range_delta": {
+    "bytes_served": 21520567,
+    "requests": 88
+  },
+  "response": "ok 8590456832",
+  "resume_seconds": 0.19423337699845433,
+  "resume_timings_ms": {
+    "artifact_cleanup": 1.5556890011794167,
+    "begin_restore_journal": 1.4905520001775585,
+    "candidate_fence": 0.07264000123541337,
+    "candidate_journal": 1.715540998702636,
+    "candidate_resume": 15.01589200051967,
+    "commit_running_journal": 1.5625300002284348,
+    "readiness_exec": 15.518422000241117,
+    "restore_image_reflinked": 0.0,
+    "restore_image_stage": 0.019880000763805583,
+    "runsc_restore": 113.85148400040634,
+    "runsc_state": 7.733131000350113,
+    "validate_artifact": 35.62482499910402,
+    "warden_total": 194.22145899989118
+  },
+  "resumed_storage_revision": 6,
+  "schema": 1,
+  "sealed_layer_bytes": 85217280,
+  "source_deleted_before_destination_resume": true,
+  "status": "passed",
+  "test_root": "/home/ucloud/qualification-work/ucloud-storage-native-warden-q6m2jhun",
+  "upper_mode": "hybridLogStructured",
+  "virtual_size": 1073741824
+}

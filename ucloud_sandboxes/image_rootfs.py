@@ -26,6 +26,8 @@ from .direct_warden import (
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _ROOTFS_SCHEMA = 2
+_OVERLAY_METADATA = ".ucloud-overlay.json"
+_OVERLAY_METADATA_SCHEMA = 1
 
 
 def _canonical_json(payload: object) -> bytes:
@@ -668,6 +670,18 @@ class OverlayRootfsManager:
                 config_path,
                 json.dumps(config, indent=2, sort_keys=True).encode("utf-8") + b"\n",
             )
+            DockerRootfsStore._atomic_write(
+                bundle / _OVERLAY_METADATA,
+                _canonical_json(
+                    {
+                        "image_id": image.image_id,
+                        "lowerdir": str(image.rootfs),
+                        "rootfs_identity_sha256": image.rootfs_identity_sha256,
+                        "schema": _OVERLAY_METADATA_SCHEMA,
+                    }
+                )
+                + b"\n",
+            )
             DockerRootfsStore._fsync_directory(bundle)
         except Exception as exc:
             if mounted:
@@ -736,6 +750,82 @@ class OverlayRootfsManager:
         if not self.require_precreated_writable and writable.exists():
             shutil.rmtree(writable)
 
+    def park_sandbox(self, sandbox: DirectSandbox) -> None:
+        """Detach the nested overlay while preserving its durable bundle."""
+        bundle, writable, merged = self._sandbox_paths(sandbox)
+        if bundle.exists():
+            self._unmount_if_mounted(merged)
+        work = writable / "work"
+        if work.exists():
+            DockerRootfsStore._require_real_directory(work)
+            shutil.rmtree(work)
+
+    def resume_sandbox(self, sandbox: DirectSandbox) -> None:
+        """Reconstruct the overlay mount after its writable volume is mounted."""
+        bundle, writable, merged = self._sandbox_paths(sandbox)
+        DockerRootfsStore._require_private_directory(bundle)
+        DockerRootfsStore._require_private_directory(writable)
+        upper = writable / "upper"
+        work = writable / "work"
+        DockerRootfsStore._require_real_directory(upper)
+        work.mkdir(mode=0o700, exist_ok=True)
+        DockerRootfsStore._require_private_directory(work)
+        DockerRootfsStore._require_real_directory(merged)
+        mounted = self.runner.run(
+            (self.mountpoint_binary, "--quiet", str(merged)),
+            timeout=60,
+        )
+        if mounted.returncode == 0:
+            return
+        if mounted.returncode not in {1, 32}:
+            raise DirectWardenError(
+                f"could not inspect overlay mount: {mounted.stderr or mounted.stdout}"
+            )
+        metadata_path = bundle / _OVERLAY_METADATA
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="ascii"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DirectWardenError(
+                "overlay bundle metadata is invalid"
+            ) from exc
+        if (
+            not isinstance(metadata, dict)
+            or set(metadata)
+            != {
+                "image_id",
+                "lowerdir",
+                "rootfs_identity_sha256",
+                "schema",
+            }
+            or metadata.get("schema") != _OVERLAY_METADATA_SCHEMA
+            or metadata.get("rootfs_identity_sha256") != sandbox.rootfs_sha256
+        ):
+            raise DirectWardenError("overlay bundle metadata changed")
+        try:
+            lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
+            lower.relative_to(self.image_store.images.resolve(strict=True))
+        except (OSError, ValueError) as exc:
+            raise DirectWardenError(
+                "overlay lower escaped the immutable image store"
+            ) from exc
+        DockerRootfsStore._require_real_directory(lower)
+        result = self.runner.run(
+            (
+                self.mount_binary,
+                "-t",
+                "overlay",
+                "overlay",
+                "-o",
+                f"lowerdir={lower},upperdir={upper},workdir={work}",
+                str(merged),
+            ),
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"overlay remount failed: {result.stderr or result.stdout}"
+            )
+
     def discard_unregistered(
         self,
         *,
@@ -765,7 +855,7 @@ class OverlayRootfsManager:
             (self.mountpoint_binary, "--quiet", str(path)),
             timeout=60,
         )
-        if mounted.returncode == 1:
+        if mounted.returncode in {1, 32}:
             return
         if mounted.returncode != 0:
             raise DirectWardenError(
@@ -779,3 +869,16 @@ class OverlayRootfsManager:
             raise DirectWardenError(
                 f"overlay unmount failed: {result.stderr or result.stdout}"
             )
+
+    def _sandbox_paths(
+        self,
+        sandbox: DirectSandbox,
+    ) -> tuple[Path, Path, Path]:
+        incarnation = (
+            f"{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}"
+        )
+        bundle = self.bundle_root / incarnation
+        if sandbox.bundle != bundle:
+            raise DirectWardenError("registered sandbox bundle escaped overlay root")
+        writable = self.writable_root / incarnation
+        return bundle, writable, bundle / "rootfs"

@@ -32,6 +32,7 @@ from .hibernation import (
     hibernation_process_identity_matches,
     linux_process_start_time_ticks,
 )
+from .storage_native_daemon import StorageNativeNodeClient
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -118,6 +119,12 @@ class ProcessHandle(Protocol):
 
 class ProcessFencer(Protocol):
     def open(self, pid: int, start_time_ticks: int) -> ProcessHandle: ...
+
+
+class RootfsMountLifecycle(Protocol):
+    def park_sandbox(self, sandbox: "DirectSandbox") -> None: ...
+
+    def resume_sandbox(self, sandbox: "DirectSandbox") -> None: ...
 
 
 class LinuxPidfdHandle:
@@ -301,12 +308,26 @@ class DirectRunscWarden:
         *,
         runner: CommandRunner | None = None,
         fencer: ProcessFencer | None = None,
+        storage: StorageNativeNodeClient | None = None,
+        rootfs_lifecycle: RootfsMountLifecycle | None = None,
     ) -> None:
         self.config = config
         self.runner = runner or SubprocessCommandRunner()
         self.fencer = fencer or LinuxPidfdFencer(proc_root=config.proc_root)
+        self.storage = storage
+        self.rootfs_lifecycle = rootfs_lifecycle
+        if (storage is None) != (rootfs_lifecycle is None):
+            raise ValueError(
+                "storage-native Warden requires a rootfs mount lifecycle"
+            )
         self.journals = HibernationJournalStore(config.journal_root)
-        self.artifacts = HibernationArtifactStore(config.artifact_root)
+        self.artifacts = HibernationArtifactStore(
+            config.artifact_root,
+            preserve_incarnation_roots=(
+                storage is not None
+                and config.artifact_root == config.memory_root
+            ),
+        )
         self._ensure_roots()
 
     def create(self, sandbox: DirectSandbox, *, operation_id: str) -> HibernationRecord:
@@ -402,6 +423,107 @@ class DirectRunscWarden:
         with self._locked(sandbox):
             return self._journal(sandbox).load()
 
+    def load_parked_manifest(self, sandbox: DirectSandbox) -> HibernationManifest:
+        """Load portable checkpoint metadata without mounting parked storage."""
+        with self._locked(sandbox):
+            parked = self._require_state(sandbox, HibernationState.PARKED)
+            path = self._parked_manifest_path(sandbox)
+            try:
+                info = path.lstat()
+                if (
+                    not path.is_file()
+                    or path.is_symlink()
+                    or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o077
+                ):
+                    raise DirectWardenError(
+                        "parked manifest control copy is not private"
+                    )
+                payload = path.read_bytes()
+                if len(payload) > 1024 * 1024:
+                    raise DirectWardenError(
+                        "parked manifest control copy is too large"
+                    )
+                manifest = HibernationManifest.from_dict(
+                    json.loads(payload.decode("ascii"))
+                )
+            except DirectWardenError:
+                raise
+            except (
+                FileNotFoundError,
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                raise DirectWardenError(
+                    "parked manifest control copy is unavailable"
+                ) from exc
+            manifest.require_compatible(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                spec_sha256=sandbox.spec_sha256,
+                runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+            )
+            if (
+                manifest.hibernation_generation
+                != parked.hibernation_generation
+                or manifest.metadata_sha256 != parked.manifest_sha256
+            ):
+                raise DirectWardenError(
+                    "parked manifest control copy changed identity"
+                )
+            return manifest
+
+    def publish_storage_snapshot(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_id: str,
+    ) -> dict[str, object]:
+        if self.storage is None:
+            raise DirectWardenError("storage-native service is not configured")
+        with self._locked(sandbox):
+            lifecycle = self._require_state(sandbox, HibernationState.PARKED)
+            if lifecycle.state != HibernationState.PARKED:
+                raise DirectWardenError(
+                    "only a parked sandbox can publish storage authority"
+                )
+            record = self._storage_record(sandbox)
+            if record.get("state") == "published":
+                return record
+            if record.get("state") == "mounted":
+                assert self.rootfs_lifecycle is not None
+                self.rootfs_lifecycle.park_sandbox(sandbox)
+                record = self._seal_storage(
+                    sandbox,
+                    operation_id=f"{operation_id}:seal",
+                )
+            if record.get("state") == "sealed":
+                record = self._release_storage(
+                    sandbox,
+                    operation_id=f"{operation_id}:release",
+                )
+            if record.get("state") != "released":
+                raise DirectWardenError(
+                    f"storage-native volume is {record.get('state')}, "
+                    "not publishable"
+                )
+            result = self.storage.publish_snapshot(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                volume_id=sandbox.memory_directory,
+                operation_id=operation_id,
+                expected_revision=int(record["revision"]),
+            )
+            raw = result.get("record")
+            if not isinstance(raw, dict) or raw.get("state") != "published":
+                raise DirectWardenError(
+                    "storage-native publication returned an invalid record"
+                )
+            return raw
+
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""
         with self._locked(sandbox):
@@ -443,7 +565,9 @@ class DirectRunscWarden:
                 # A deterministic container ID from an interrupted earlier
                 # import must not survive underneath newly adopted authority.
                 self._best_effort_delete(sandbox)
-            return journal.initialize_parked(published)
+            parked = journal.initialize_parked(published)
+            self._persist_parked_manifest(sandbox, published)
+            return parked
 
     def park(
         self,
@@ -484,6 +608,7 @@ class DirectRunscWarden:
                         )
                     manifest = self._manifest(sandbox, hibernating, generation)
                     manifest = self.artifacts.publish_complete(manifest)
+                    self._persist_parked_manifest(sandbox, manifest)
                 except Exception:
                     if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
                         raise
@@ -508,6 +633,20 @@ class DirectRunscWarden:
                     "--force",
                     sandbox.container_id,
                 )
+                if self.storage is not None:
+                    # runsc delete removes its filestore from the merged rootfs.
+                    # Do this before detaching the overlay so that the sealed
+                    # layer contains the final, cleaned-up filesystem state.
+                    assert self.rootfs_lifecycle is not None
+                    self.rootfs_lifecycle.park_sandbox(sandbox)
+                    self._seal_storage(
+                        sandbox,
+                        operation_id=f"{operation_id}:storage-seal",
+                    )
+                    self._release_storage(
+                        sandbox,
+                        operation_id=f"{operation_id}:storage-release",
+                    )
                 return journal.commit_parked(
                     manifest,
                     operation_id=operation_id,
@@ -529,6 +668,13 @@ class DirectRunscWarden:
             phase = time.monotonic()
             journal = self._journal(sandbox)
             parked = self._require_state(sandbox, HibernationState.PARKED)
+            if self.storage is not None:
+                self._mount_storage(
+                    sandbox,
+                    operation_id=f"{operation_id}:storage-mount",
+                )
+                assert self.rootfs_lifecycle is not None
+                self.rootfs_lifecycle.resume_sandbox(sandbox)
             manifest = self.artifacts.load_complete(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
@@ -670,6 +816,18 @@ class DirectRunscWarden:
         """Finish or roll back an interrupted lifecycle transition."""
         with self._locked(sandbox):
             journal = self._journal(sandbox)
+            durable = journal.load()
+            if (
+                self.storage is not None
+                and durable is not None
+                and durable.state != HibernationState.RUNNING
+            ):
+                self._mount_storage(
+                    sandbox,
+                    operation_id=f"reconcile:{durable.revision}:storage-mount",
+                )
+                assert self.rootfs_lifecycle is not None
+                self.rootfs_lifecycle.resume_sandbox(sandbox)
             result = HibernationReconciler(
                 journal,
                 self.artifacts,
@@ -715,11 +873,18 @@ class DirectRunscWarden:
                     "--force",
                     sandbox.container_id,
                 )
-                return journal.commit_parked(
+                parked = journal.commit_parked(
                     manifest,
                     operation_id=record.operation_id,
                     expected_revision=pending.revision,
                 )
+                self._persist_parked_manifest(sandbox, manifest)
+                if self.storage is not None:
+                    self._release_parked_storage(
+                        sandbox,
+                        operation_seed=f"reconcile:{parked.revision}",
+                    )
+                return parked
 
             if result.action == HibernationRecoveryAction.RESUME_OR_RETRY_HIBERNATE:
                 if record.sentry_pid is None or record.sentry_start_time_ticks is None:
@@ -770,10 +935,16 @@ class DirectRunscWarden:
                     sandbox,
                     allow_consumed_main_memory=True,
                 )
-                return journal.rollback_restore(
+                parked = journal.rollback_restore(
                     operation_id=record.operation_id,
                     expected_revision=record.revision,
                 )
+                if self.storage is not None:
+                    self._release_parked_storage(
+                        sandbox,
+                        operation_seed=f"reconcile:{parked.revision}",
+                    )
+                return parked
 
             if result.action == HibernationRecoveryAction.VERIFY_CANDIDATE:
                 if (
@@ -859,6 +1030,14 @@ class DirectRunscWarden:
                 finally:
                     candidate.close()
 
+            if (
+                self.storage is not None
+                and record.state == HibernationState.PARKED
+            ):
+                self._release_parked_storage(
+                    sandbox,
+                    operation_seed=f"reconcile:{record.revision}",
+                )
             return record
 
     def delete(self, sandbox: DirectSandbox) -> None:
@@ -868,6 +1047,11 @@ class DirectRunscWarden:
             record = journal.load()
             if record is None:
                 return
+            if self.storage is not None and record.state != HibernationState.RUNNING:
+                self._mount_storage(
+                    sandbox,
+                    operation_id=f"delete:{record.revision}:storage-mount",
+                )
             # Deletion can be replayed after a crash that already reaped the
             # sentry but did not remove the journal. Reconcile the durable
             # authority first so a dead exact PID becomes recovery-owned
@@ -977,6 +1161,7 @@ class DirectRunscWarden:
                 expected_revision=record.revision,
                 processes_confirmed_dead=True,
             )
+            self._parked_manifest_path(sandbox).unlink(missing_ok=True)
 
     def discard_unjournaled(self, sandbox: DirectSandbox) -> None:
         """Fence an interrupted create before it acquired durable Warden state."""
@@ -1612,11 +1797,210 @@ class DirectRunscWarden:
             timeout=self.config.command_timeout_seconds,
         )
 
+    def _storage_record(self, sandbox: DirectSandbox) -> dict[str, object]:
+        if self.storage is None:
+            raise DirectWardenError("storage-native service is not configured")
+        result = self.storage.get_volume(sandbox.memory_directory)
+        raw = result.get("record")
+        if not isinstance(raw, dict):
+            raise DirectWardenError(
+                "storage-native service returned an invalid volume record"
+            )
+        if (
+            raw.get("sandbox_id") != sandbox.sandbox_id
+            or raw.get("sandbox_generation") != sandbox.sandbox_generation
+            or raw.get("volume_id") != sandbox.memory_directory
+            or Path(str(raw.get("mount_path") or ""))
+            != self._active_memory_root(sandbox)
+        ):
+            raise DirectWardenError(
+                "storage-native volume does not own this sandbox incarnation"
+            )
+        return raw
+
+    def _mount_storage(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_id: str,
+    ) -> dict[str, object]:
+        assert self.storage is not None
+        record = self._storage_record(sandbox)
+        state = record.get("state")
+        if state == "mounted":
+            return record
+        if state == "sealed":
+            released = self.storage.release_runtime(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                volume_id=sandbox.memory_directory,
+                operation_id=f"{operation_id}:release-sealed",
+                expected_revision=int(record["revision"]),
+            )
+            raw_released = released.get("record")
+            if not isinstance(raw_released, dict):
+                raise DirectWardenError(
+                    "storage-native release returned an invalid record"
+                )
+            record = raw_released
+            state = record.get("state")
+        if state in {"released", "published"}:
+            mounted = self.storage.mount_snapshot_cow(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                volume_id=sandbox.memory_directory,
+                operation_id=f"{operation_id}:acquire",
+                expected_revision=int(record["revision"]),
+            )
+            raw_mounted = mounted.get("record")
+            if not isinstance(raw_mounted, dict):
+                raise DirectWardenError(
+                    "storage-native acquire returned an invalid record"
+                )
+            return raw_mounted
+        raise DirectWardenError(
+            f"storage-native volume is {state}, not resumable"
+        )
+
+    def _seal_storage(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_id: str,
+    ) -> dict[str, object]:
+        assert self.storage is not None
+        record = self._storage_record(sandbox)
+        if record.get("state") == "sealed":
+            return record
+        if record.get("state") != "mounted":
+            raise DirectWardenError(
+                f"storage-native volume is {record.get('state')}, not sealable"
+            )
+        sealed = self.storage.freeze_and_seal(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            volume_id=sandbox.memory_directory,
+            operation_id=operation_id,
+            expected_revision=int(record["revision"]),
+        )
+        raw = sealed.get("record")
+        if not isinstance(raw, dict):
+            raise DirectWardenError(
+                "storage-native seal returned an invalid record"
+            )
+        return raw
+
+    def _release_storage(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_id: str,
+    ) -> dict[str, object]:
+        assert self.storage is not None
+        record = self._storage_record(sandbox)
+        if record.get("state") in {"released", "published"}:
+            return record
+        if record.get("state") != "sealed":
+            raise DirectWardenError(
+                f"storage-native volume is {record.get('state')}, not releasable"
+            )
+        released = self.storage.release_runtime(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            volume_id=sandbox.memory_directory,
+            operation_id=operation_id,
+            expected_revision=int(record["revision"]),
+        )
+        raw = released.get("record")
+        if not isinstance(raw, dict):
+            raise DirectWardenError(
+                "storage-native release returned an invalid record"
+            )
+        return raw
+
+    def _release_parked_storage(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_seed: str,
+    ) -> None:
+        record = self._storage_record(sandbox)
+        if record.get("state") == "mounted":
+            assert self.rootfs_lifecycle is not None
+            self.rootfs_lifecycle.park_sandbox(sandbox)
+            self._seal_storage(
+                sandbox,
+                operation_id=f"{operation_seed}:storage-seal",
+            )
+        self._release_storage(
+            sandbox,
+            operation_id=f"{operation_seed}:storage-release",
+        )
+
     def _journal(self, sandbox: DirectSandbox) -> HibernationJournal:
         return self.journals.journal(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
         )
+
+    def _parked_manifest_path(self, sandbox: DirectSandbox) -> Path:
+        return (
+            self.config.runtime_root
+            / "parked-manifests"
+            / f"{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}.json"
+        )
+
+    def _persist_parked_manifest(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> None:
+        manifest.require_compatible(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            spec_sha256=sandbox.spec_sha256,
+            runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+        )
+        target = self._parked_manifest_path(sandbox)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        payload = (
+            json.dumps(
+                manifest.to_dict(),
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("ascii")
+            + b"\n"
+        )
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            dir=target.parent,
+        )
+        temporary = Path(temporary_name)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.replace(target)
+            directory = os.open(
+                target.parent,
+                os.O_RDONLY
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_DIRECTORY", 0),
+            )
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except Exception:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            temporary.unlink(missing_ok=True)
+            raise
 
     def _require_state(
         self,
@@ -1667,6 +2051,7 @@ class DirectRunscWarden:
         for path in (
             self.config.runtime_root,
             self.config.runtime_root / "warden-locks",
+            self.config.runtime_root / "parked-manifests",
             self.config.memory_root,
             self.config.bundle_root,
             self.config.journal_root,

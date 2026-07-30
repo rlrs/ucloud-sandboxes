@@ -48,6 +48,11 @@ class SandboxRoute:
     delete_operation_id: str = ""
     node_epoch: str = ""
     activity_epoch: int = 0
+    storage_schema: str = ""
+    snapshot_manifest_digest: str = ""
+    snapshot_repository: str = ""
+    snapshot_tag: str = ""
+    storage_snapshot: dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     updated_at: str = ""
 
@@ -79,6 +84,26 @@ class SandboxRoute:
             activity_epoch=_nonnegative_int(
                 raw.get("activity_epoch") or raw.get("activityEpoch")
             ),
+            storage_schema=_string(
+                raw.get("storage_schema") or raw.get("storageSchema")
+            )
+            or "",
+            snapshot_manifest_digest=_string(
+                raw.get("snapshot_manifest_digest")
+                or raw.get("snapshotManifestDigest")
+            )
+            or "",
+            snapshot_repository=_string(
+                raw.get("snapshot_repository") or raw.get("snapshotRepository")
+            )
+            or "",
+            snapshot_tag=_string(
+                raw.get("snapshot_tag") or raw.get("snapshotTag")
+            )
+            or "",
+            storage_snapshot=_object(
+                raw.get("storage_snapshot") or raw.get("storageSnapshot")
+            ),
             created_at=_string(raw.get("created_at") or raw.get("createdAt")) or "",
             updated_at=_string(raw.get("updated_at") or raw.get("updatedAt")) or "",
         )
@@ -98,6 +123,11 @@ class SandboxRoute:
             "delete_operation_id": self.delete_operation_id,
             "node_epoch": self.node_epoch,
             "activity_epoch": self.activity_epoch,
+            "snapshot_manifest_digest": self.snapshot_manifest_digest,
+            "snapshot_repository": self.snapshot_repository,
+            "snapshot_tag": self.snapshot_tag,
+            "storage_snapshot": dict(self.storage_snapshot),
+            "storage_schema": self.storage_schema,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -157,6 +187,10 @@ class SandboxMigration:
     spec_hash: str
     archive_sha256: str = ""
     archive_token: str = ""
+    storage_schema: str = ""
+    snapshot_sha256: str = ""
+    storage_snapshot: dict[str, Any] = field(default_factory=dict)
+    source_fenced: bool = False
     created_at: str = ""
     updated_at: str = ""
     error: str = ""
@@ -165,6 +199,10 @@ class SandboxMigration:
         return {
             "archive_sha256": self.archive_sha256,
             "archive_token": self.archive_token,
+            "snapshot_sha256": self.snapshot_sha256,
+            "storage_schema": self.storage_schema,
+            "storage_snapshot": self.storage_snapshot,
+            "source_fenced": self.source_fenced,
             "create_operation_id": self.create_operation_id,
             "created_at": self.created_at,
             "destination_job_id": self.destination_job_id,
@@ -564,7 +602,10 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, created_at, updated_at
+                               node_epoch, activity_epoch, storage_schema,
+                               snapshot_manifest_digest, snapshot_repository,
+                               snapshot_tag, storage_snapshot_json,
+                               created_at, updated_at
                         FROM sandboxes
                         ORDER BY sandbox_id
                         """
@@ -579,6 +620,11 @@ class RoutingStore:
         *,
         expected_states: Iterable[str],
         state: str,
+        storage_schema: str | None = None,
+        snapshot_manifest_digest: str | None = None,
+        snapshot_repository: str | None = None,
+        snapshot_tag: str | None = None,
+        storage_snapshot: dict[str, Any] | None = None,
     ) -> SandboxRoute | None:
         """Change only the state of the exact routed sandbox incarnation."""
 
@@ -606,6 +652,31 @@ class RoutingStore:
                 stored = replace(
                     current,
                     state=cleaned_state,
+                    storage_schema=(
+                        current.storage_schema
+                        if storage_schema is None
+                        else storage_schema
+                    ),
+                    snapshot_manifest_digest=(
+                        current.snapshot_manifest_digest
+                        if snapshot_manifest_digest is None
+                        else snapshot_manifest_digest
+                    ),
+                    snapshot_repository=(
+                        current.snapshot_repository
+                        if snapshot_repository is None
+                        else snapshot_repository
+                    ),
+                    snapshot_tag=(
+                        current.snapshot_tag
+                        if snapshot_tag is None
+                        else snapshot_tag
+                    ),
+                    storage_snapshot=(
+                        current.storage_snapshot
+                        if storage_snapshot is None
+                        else dict(storage_snapshot)
+                    ),
                     updated_at=utc_now().isoformat(),
                 )
                 self._write_sandbox(conn, stored)
@@ -652,6 +723,28 @@ class RoutingStore:
                             route.activity_epoch,
                             existing.activity_epoch if existing is not None else 0,
                         )
+                    ),
+                    storage_schema=route.storage_schema
+                    or (existing.storage_schema if existing is not None else ""),
+                    snapshot_manifest_digest=route.snapshot_manifest_digest
+                    or (
+                        existing.snapshot_manifest_digest
+                        if existing is not None
+                        else ""
+                    ),
+                    snapshot_repository=route.snapshot_repository
+                    or (
+                        existing.snapshot_repository
+                        if existing is not None
+                        else ""
+                    ),
+                    snapshot_tag=route.snapshot_tag
+                    or (existing.snapshot_tag if existing is not None else ""),
+                    storage_snapshot=dict(route.storage_snapshot)
+                    or (
+                        dict(existing.storage_snapshot)
+                        if existing is not None
+                        else {}
                     ),
                     created_at=route.created_at
                     or (existing.created_at if existing else now),
@@ -1081,7 +1174,9 @@ class RoutingStore:
                            destination_node_id, destination_job_id,
                            destination_node_url, generation,
                            create_operation_id, spec_hash, archive_sha256,
-                           archive_token, created_at, updated_at, error
+                           archive_token, storage_schema, snapshot_sha256,
+                           storage_snapshot_json, source_fenced,
+                           created_at, updated_at, error
                     FROM sandbox_migrations
                     {where}
                     ORDER BY created_at, migration_id
@@ -1097,6 +1192,10 @@ class RoutingStore:
         phase: str,
         archive_sha256: str | None = None,
         archive_token: str | None = None,
+        storage_schema: str | None = None,
+        snapshot_sha256: str | None = None,
+        storage_snapshot: dict[str, Any] | None = None,
+        source_fenced: bool | None = None,
         error: str | None = None,
     ) -> SandboxMigration | None:
         expected = set(expected_phases)
@@ -1122,6 +1221,26 @@ class RoutingStore:
                         archive_token
                         if archive_token is not None
                         else existing.archive_token
+                    ),
+                    storage_schema=(
+                        storage_schema
+                        if storage_schema is not None
+                        else existing.storage_schema
+                    ),
+                    snapshot_sha256=(
+                        snapshot_sha256
+                        if snapshot_sha256 is not None
+                        else existing.snapshot_sha256
+                    ),
+                    storage_snapshot=(
+                        dict(storage_snapshot)
+                        if storage_snapshot is not None
+                        else existing.storage_snapshot
+                    ),
+                    source_fenced=(
+                        bool(source_fenced)
+                        if source_fenced is not None
+                        else existing.source_fenced
                     ),
                     error=error if error is not None else existing.error,
                     updated_at=utc_now().isoformat(),
@@ -1167,6 +1286,24 @@ class RoutingStore:
                     or bool(current.delete_operation_id)
                 ):
                     return None
+                snapshot_manifest_digest = ""
+                snapshot_repository = ""
+                snapshot_tag = ""
+                if migration.storage_schema:
+                    publication = migration.storage_snapshot.get("publication")
+                    if not isinstance(publication, dict):
+                        return None
+                    snapshot_manifest_digest = str(
+                        publication.get("manifest_digest") or ""
+                    )
+                    if not snapshot_manifest_digest:
+                        return None
+                    snapshot_repository = str(
+                        publication.get("repository") or ""
+                    )
+                    snapshot_tag = str(publication.get("tag") or "")
+                    if not snapshot_repository or not snapshot_tag:
+                        return None
                 now = utc_now().isoformat()
                 route = replace(
                     current,
@@ -1176,6 +1313,15 @@ class RoutingStore:
                     state="parked",
                     node_epoch="",
                     activity_epoch=0,
+                    storage_schema=migration.storage_schema,
+                    snapshot_manifest_digest=snapshot_manifest_digest,
+                    snapshot_repository=snapshot_repository,
+                    snapshot_tag=snapshot_tag,
+                    storage_snapshot=(
+                        dict(migration.storage_snapshot)
+                        if migration.storage_schema
+                        else {}
+                    ),
                     updated_at=now,
                 )
                 self._write_sandbox(conn, route)
@@ -1288,6 +1434,48 @@ class RoutingStore:
                         # Activity counters are scoped to a node epoch.  Do not
                         # carry the old epoch's high water into a proven restart.
                         activity_epoch=max(route.activity_epoch, activity_epoch),
+                        storage_schema=route.storage_schema
+                        or (
+                            existing.storage_schema
+                            if existing is not None
+                            else ""
+                        ),
+                        snapshot_manifest_digest=(
+                            route.snapshot_manifest_digest
+                            or (
+                                existing.snapshot_manifest_digest
+                                if existing is not None
+                                and route.state.lower() == "parked"
+                                else ""
+                            )
+                        ),
+                        snapshot_repository=(
+                            route.snapshot_repository
+                            or (
+                                existing.snapshot_repository
+                                if existing is not None
+                                and route.state.lower() == "parked"
+                                else ""
+                            )
+                        ),
+                        snapshot_tag=(
+                            route.snapshot_tag
+                            or (
+                                existing.snapshot_tag
+                                if existing is not None
+                                and route.state.lower() == "parked"
+                                else ""
+                            )
+                        ),
+                        storage_snapshot=(
+                            dict(route.storage_snapshot)
+                            or (
+                                dict(existing.storage_snapshot)
+                                if existing is not None
+                                and route.state.lower() == "parked"
+                                else {}
+                            )
+                        ),
                         created_at=route.created_at
                         or (existing.created_at if existing else observed_at),
                         updated_at=observed_at,
@@ -1383,7 +1571,10 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, created_at, updated_at
+                               node_epoch, activity_epoch, storage_schema,
+                               snapshot_manifest_digest, snapshot_repository,
+                               snapshot_tag, storage_snapshot_json,
+                               created_at, updated_at
                         FROM sandboxes
                         WHERE job_id = ?
                         ORDER BY sandbox_id
@@ -1430,7 +1621,10 @@ class RoutingStore:
                     SELECT sandbox_id, node_id, job_id, node_url,
                            resources_json, spec_json, state, generation,
                            create_operation_id, spec_hash, delete_operation_id,
-                           node_epoch, activity_epoch, created_at, updated_at
+                           node_epoch, activity_epoch, storage_schema,
+                           snapshot_manifest_digest, snapshot_repository,
+                           snapshot_tag, storage_snapshot_json,
+                           created_at, updated_at
                     FROM sandboxes
                     ORDER BY sandbox_id
                     """
@@ -2231,6 +2425,11 @@ class RoutingStore:
                     delete_operation_id TEXT NOT NULL DEFAULT '',
                     node_epoch TEXT NOT NULL DEFAULT '',
                     activity_epoch INTEGER NOT NULL DEFAULT 0,
+                    storage_schema TEXT NOT NULL DEFAULT '',
+                    snapshot_manifest_digest TEXT NOT NULL DEFAULT '',
+                    snapshot_repository TEXT NOT NULL DEFAULT '',
+                    snapshot_tag TEXT NOT NULL DEFAULT '',
+                    storage_snapshot_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
@@ -2249,6 +2448,11 @@ class RoutingStore:
                 ("delete_operation_id", "TEXT NOT NULL DEFAULT ''"),
                 ("node_epoch", "TEXT NOT NULL DEFAULT ''"),
                 ("activity_epoch", "INTEGER NOT NULL DEFAULT 0"),
+                ("storage_schema", "TEXT NOT NULL DEFAULT ''"),
+                ("snapshot_manifest_digest", "TEXT NOT NULL DEFAULT ''"),
+                ("snapshot_repository", "TEXT NOT NULL DEFAULT ''"),
+                ("snapshot_tag", "TEXT NOT NULL DEFAULT ''"),
+                ("storage_snapshot_json", "TEXT NOT NULL DEFAULT '{}'"),
             ):
                 self._ensure_column(conn, "sandboxes", column, definition)
             conn.execute(
@@ -2297,12 +2501,28 @@ class RoutingStore:
                     spec_hash TEXT NOT NULL,
                     archive_sha256 TEXT NOT NULL DEFAULT '',
                     archive_token TEXT NOT NULL DEFAULT '',
+                    storage_schema TEXT NOT NULL DEFAULT '',
+                    snapshot_sha256 TEXT NOT NULL DEFAULT '',
+                    storage_snapshot_json TEXT NOT NULL DEFAULT '{}',
+                    source_fenced INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     error TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
+            for column, definition in (
+                ("storage_schema", "TEXT NOT NULL DEFAULT ''"),
+                ("snapshot_sha256", "TEXT NOT NULL DEFAULT ''"),
+                ("storage_snapshot_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("source_fenced", "INTEGER NOT NULL DEFAULT 0"),
+            ):
+                self._ensure_column(
+                    conn,
+                    "sandbox_migrations",
+                    column,
+                    definition,
+                )
             conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS
@@ -2442,7 +2662,10 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, created_at, updated_at
+                               node_epoch, activity_epoch, storage_schema,
+                               snapshot_manifest_digest, snapshot_repository,
+                               snapshot_tag, storage_snapshot_json,
+                               created_at, updated_at
                         FROM sandboxes
                         ORDER BY sandbox_id
                         """
@@ -2555,7 +2778,9 @@ class RoutingStore:
             """
             SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                    generation, create_operation_id, spec_hash, delete_operation_id,
-                   node_epoch, activity_epoch, created_at, updated_at
+                   node_epoch, activity_epoch, storage_schema,
+                   snapshot_manifest_digest, snapshot_repository,
+                   snapshot_tag, storage_snapshot_json, created_at, updated_at
             FROM sandboxes
             WHERE sandbox_id = ?
             """,
@@ -2591,6 +2816,8 @@ class RoutingStore:
                    destination_node_id, destination_job_id,
                    destination_node_url, generation, create_operation_id,
                    spec_hash, archive_sha256, archive_token,
+                   storage_schema, snapshot_sha256, storage_snapshot_json,
+                   source_fenced,
                    created_at, updated_at, error
             FROM sandbox_migrations
             WHERE migration_id = ?
@@ -2720,9 +2947,11 @@ class RoutingStore:
             INSERT INTO sandboxes (
                 sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                 generation, create_operation_id, spec_hash, delete_operation_id,
-                node_epoch, activity_epoch, created_at, updated_at
+                node_epoch, activity_epoch, storage_schema,
+                snapshot_manifest_digest, snapshot_repository, snapshot_tag,
+                storage_snapshot_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(sandbox_id) DO UPDATE SET
                 node_id = excluded.node_id,
                 job_id = excluded.job_id,
@@ -2736,6 +2965,11 @@ class RoutingStore:
                 delete_operation_id = excluded.delete_operation_id,
                 node_epoch = excluded.node_epoch,
                 activity_epoch = excluded.activity_epoch,
+                storage_schema = excluded.storage_schema,
+                snapshot_manifest_digest = excluded.snapshot_manifest_digest,
+                snapshot_repository = excluded.snapshot_repository,
+                snapshot_tag = excluded.snapshot_tag,
+                storage_snapshot_json = excluded.storage_snapshot_json,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at
             """,
@@ -2753,6 +2987,11 @@ class RoutingStore:
                 route.delete_operation_id,
                 route.node_epoch,
                 max(0, route.activity_epoch),
+                route.storage_schema,
+                route.snapshot_manifest_digest,
+                route.snapshot_repository,
+                route.snapshot_tag,
+                _object_json(route.storage_snapshot),
                 route.created_at,
                 route.updated_at,
             ),
@@ -2807,9 +3046,11 @@ class RoutingStore:
                 destination_node_id, destination_job_id,
                 destination_node_url, generation, create_operation_id,
                 spec_hash, archive_sha256, archive_token,
+                storage_schema, snapshot_sha256, storage_snapshot_json,
+                source_fenced,
                 created_at, updated_at, error
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(migration_id) DO UPDATE SET
                 sandbox_id = excluded.sandbox_id,
                 phase = excluded.phase,
@@ -2824,6 +3065,10 @@ class RoutingStore:
                 spec_hash = excluded.spec_hash,
                 archive_sha256 = excluded.archive_sha256,
                 archive_token = excluded.archive_token,
+                storage_schema = excluded.storage_schema,
+                snapshot_sha256 = excluded.snapshot_sha256,
+                storage_snapshot_json = excluded.storage_snapshot_json,
+                source_fenced = excluded.source_fenced,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at,
                 error = excluded.error
@@ -2843,6 +3088,15 @@ class RoutingStore:
                 migration.spec_hash,
                 migration.archive_sha256,
                 migration.archive_token,
+                migration.storage_schema,
+                migration.snapshot_sha256,
+                json.dumps(
+                    migration.storage_snapshot,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                int(migration.source_fenced),
                 migration.created_at,
                 migration.updated_at,
                 migration.error,
@@ -3197,6 +3451,11 @@ def _sandbox_route_from_row(row: sqlite3.Row) -> SandboxRoute:
         delete_operation_id=str(row["delete_operation_id"] or ""),
         node_epoch=str(row["node_epoch"] or ""),
         activity_epoch=_nonnegative_int(row["activity_epoch"]),
+        storage_schema=str(row["storage_schema"] or ""),
+        snapshot_manifest_digest=str(row["snapshot_manifest_digest"] or ""),
+        snapshot_repository=str(row["snapshot_repository"] or ""),
+        snapshot_tag=str(row["snapshot_tag"] or ""),
+        storage_snapshot=_object_from_json(row["storage_snapshot_json"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )
@@ -3230,6 +3489,10 @@ def _sandbox_migration_from_row(row: sqlite3.Row) -> SandboxMigration:
         spec_hash=str(row["spec_hash"]),
         archive_sha256=str(row["archive_sha256"]),
         archive_token=str(row["archive_token"]),
+        storage_schema=str(row["storage_schema"]),
+        snapshot_sha256=str(row["snapshot_sha256"]),
+        storage_snapshot=_object(json.loads(str(row["storage_snapshot_json"]))),
+        source_fenced=bool(row["source_fenced"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         error=str(row["error"]),

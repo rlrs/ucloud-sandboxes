@@ -1,0 +1,18 @@
+{
+  "acquire_seconds": 0.024342178000097192,
+  "create_seconds": 0.11924036000027627,
+  "reconciliation": {
+    "deleted_orphan_device_ids": [],
+    "terminal_records": [],
+    "volume_count": 1
+  },
+  "release_seconds": 0.03778509699986898,
+  "schema": 1,
+  "seal_seconds": 0.03699631700010286,
+  "sealed_allocated_bytes": 67584000,
+  "sealed_file_bytes": 67584000,
+  "status": "passed",
+  "test_root": "/home/ucloud/qualification-work/ucloud-storage-native-service-02000c_a",
+  "upper_mode": "hybridLogStructured",
+  "virtual_size": 1073741824
+}

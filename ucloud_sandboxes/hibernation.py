@@ -502,11 +502,18 @@ class HibernationArtifactStore:
     COMPLETE_NAME = "COMPLETE"
     LOCK_NAME = ".store.lock"
 
-    def __init__(self, root: Path, *, owner_uid: int | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        owner_uid: int | None = None,
+        preserve_incarnation_roots: bool = False,
+    ) -> None:
         if not root.is_absolute():
             raise ValueError("hibernation artifact root must be absolute")
         self.root = root
         self.owner_uid = os.geteuid() if owner_uid is None else int(owner_uid)
+        self.preserve_incarnation_roots = bool(preserve_incarnation_roots)
 
     def prepare_generation(
         self,
@@ -965,6 +972,8 @@ class HibernationArtifactStore:
             self._remove_empty_incarnation(generation.parent)
 
     def _remove_empty_incarnation(self, incarnation: Path) -> None:
+        if self.preserve_incarnation_roots:
+            return
         try:
             incarnation.rmdir()
         except OSError as exc:

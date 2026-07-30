@@ -1,0 +1,273 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 4778ad8..b605b3b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -8282,6 +8282,7 @@ version = "0.1.0"
+ dependencies = [
+  "agentenv-observability",
+  "anyhow",
++ "async-trait",
+  "clap",
+  "dashmap",
+  "io-uring",
+@@ -8292,6 +8293,7 @@ dependencies = [
+  "reqwest 0.13.3",
+  "serde",
+  "serde_json",
++ "sha2 0.10.9",
+  "storage-util",
+  "tempfile",
+  "tokio",
+diff --git a/storage/ublk-daemon/Cargo.toml b/storage/ublk-daemon/Cargo.toml
+index 6973626..681dc8b 100644
+--- a/storage/ublk-daemon/Cargo.toml
++++ b/storage/ublk-daemon/Cargo.toml
+@@ -12,6 +12,7 @@ agentenv-observability = { path = "../../crates/observability" }
+ linux-cap = { path = "../../crates/linux-cap" }
+ 
+ anyhow = "1.0"
++async-trait = "0.1.88"
+ clap = { version = "4.5.38", features = ["derive"] }
+ dashmap = "6.1.0"
+ io-uring = "0.7.9"
+@@ -19,6 +20,7 @@ libc = "0.2.174"
+ nix = { version = "0.30.1", features = ["process", "signal", "resource"] }
+ serde = { version = "1.0", features = ["derive"] }
+ serde_json = "1.0"
++sha2 = "0.10.9"
+ toml = "0.9.11"
+ tokio = { version = "1.44.2", features = ["full"] }
+ tracing = "0.1.41"
+diff --git a/storage/overlaybd/src/image/image_file.rs b/storage/overlaybd/src/image/image_file.rs
+index 84b0ae3..b0e10a4 100644
+--- a/storage/overlaybd/src/image/image_file.rs
++++ b/storage/overlaybd/src/image/image_file.rs
+@@ -660,8 +660,18 @@ impl ImageFile {
+         let remote_file = image_service
+             .open_remote_blob_with_size(&url, (layer.size != 0).then_some(layer.size))
+             .await?;
+-        let tar_file = new_tar_file_adaptor(remote_file).await?;
+-        let switch_file = new_switch_file(tar_file, false, Some(&url)).await?;
++        let layer_file = match new_tar_file_adaptor(remote_file.clone()).await {
++            Ok(tar_file) => tar_file,
++            Err(error) => {
++                warn!(
++                    layer_index = index,
++                    %error,
++                    "remote lower is not tar-wrapped; trying raw dense overlaybd"
++                );
++                remote_file
++            }
++        };
++        let switch_file = new_switch_file(layer_file, false, Some(&url)).await?;
+         let download = Self::prepare_bk_download(
+             image_service,
+             download_cfg,
+diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
+index f44d235..1242b85 100644
+--- a/storage/ublk-daemon/src/protocol.rs
++++ b/storage/ublk-daemon/src/protocol.rs
+@@ -52,6 +52,12 @@ pub enum DaemonRequest {
+         dev_id: u32,
+         output_layer_path: PathBuf,
+     },
++    /// Dense-export one sealed sparse/hybrid layer to a caller-owned Unix
++    /// stream. This avoids a temporary dense file on the sandbox node.
++    ExportDenseLayer {
++        source_layer_path: PathBuf,
++        stream_socket_path: PathBuf,
++    },
+     /// Query daemon capabilities (e.g., dynamic resize support).
+     GetFeatures,
+     /// Report that the sandbox owning a memory-snapshot device finished
+@@ -131,6 +137,10 @@ pub enum DaemonResponse {
+     RestackSnapshotCreated {
+         descriptor: Option<LayerDescriptor>,
+     },
++    DenseLayerExported {
++        digest: String,
++        size: u64,
++    },
+     Ok,
+     TerminalError {
+         message: String,
+@@ -538,6 +548,26 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn request_export_dense_layer_round_trip() {
++        let req = DaemonRequest::ExportDenseLayer {
++            source_layer_path: PathBuf::from("/snapshots/layer0"),
++            stream_socket_path: PathBuf::from("/run/ucloud/export.sock"),
++        };
++        let json = serde_json::to_string(&req).unwrap();
++        let decoded: DaemonRequest = serde_json::from_str(&json).unwrap();
++        match decoded {
++            DaemonRequest::ExportDenseLayer {
++                source_layer_path,
++                stream_socket_path,
++            } => {
++                assert_eq!(source_layer_path, PathBuf::from("/snapshots/layer0"));
++                assert_eq!(stream_socket_path, PathBuf::from("/run/ucloud/export.sock"));
++            }
++            _ => panic!("unexpected variant"),
++        }
++    }
++
+     #[test]
+     fn request_shutdown_round_trip() {
+         let req = DaemonRequest::Shutdown;
+@@ -597,6 +627,21 @@ mod tests {
+         ));
+     }
+ 
++    #[test]
++    fn response_dense_layer_exported_round_trip() {
++        let resp = DaemonResponse::DenseLayerExported {
++            digest: "sha256:abc".to_string(),
++            size: 123,
++        };
++        let json = serde_json::to_string(&resp).unwrap();
++        let decoded: DaemonResponse = serde_json::from_str(&json).unwrap();
++        assert!(matches!(
++            decoded,
++            DaemonResponse::DenseLayerExported { digest, size }
++                if digest == "sha256:abc" && size == 123
++        ));
++    }
++
+     // ── Wire protocol edge case tests ──────────────────────────────────
+ 
+     #[tokio::test]
+diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+index 1707e90..88b6767 100644
+--- a/storage/ublk-daemon/src/server.rs
++++ b/storage/ublk-daemon/src/server.rs
+@@ -5,15 +5,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
+ use std::sync::Arc;
+ use std::time::Duration;
+ 
+ use anyhow::{bail, Context, Result};
++use async_trait::async_trait;
+ use dashmap::mapref::entry::Entry;
+ use dashmap::DashMap;
+ use overlaybd::config::{ImageConfig, UpperConfig, UpperMode};
++use overlaybd::dense_export::{self, DenseLayerDigest};
+ use overlaybd::helper::prepare_runtime_upper;
+ use overlaybd::image_file::ImageFile;
+ use overlaybd::image_service::ImageService;
+ use overlaybd::RestackSnapshotTerminalFailure;
+-use tokio::net::UnixListener;
++use storage_util::{CompactBuffer, CompactWriter};
++use tokio::io::AsyncWriteExt;
++use tokio::net::{UnixListener, UnixStream};
+ use tokio::sync::{Mutex, Notify, RwLock};
+ use warm_pool::{PoolConfig, PoolMaintenanceAction, WarmPool};
+ 
+@@ -40,6 +44,56 @@ enum ManagedDevice {
+     },
+ }
+ 
++const DENSE_EXPORT_BUFFER_SIZE: usize = 8 * 1024 * 1024;
++
++struct UnixStreamCompactWriter {
++    stream: Mutex<UnixStream>,
++    digest: Mutex<DenseLayerDigest>,
++}
++
++impl UnixStreamCompactWriter {
++    fn new(stream: UnixStream) -> Arc<Self> {
++        Arc::new(Self {
++            stream: Mutex::new(stream),
++            digest: Mutex::new(DenseLayerDigest::default()),
++        })
++    }
++
++    async fn finish(&self) -> Result<dense_export::DenseLayerDescriptor> {
++        self.stream.lock().await.shutdown().await?;
++        Ok(self.digest.lock().await.descriptor())
++    }
++
++    async fn write_bytes(&self, offset: u64, data: &[u8]) -> Result<()> {
++        self.digest.lock().await.absorb(offset, data)?;
++        self.stream.lock().await.write_all(data).await?;
++        Ok(())
++    }
++}
++
++#[async_trait]
++impl CompactWriter for UnixStreamCompactWriter {
++    async fn alloc_buffer(&self) -> Result<Box<dyn CompactBuffer>> {
++        Ok(Box::new(vec![0u8; DENSE_EXPORT_BUFFER_SIZE]))
++    }
++
++    fn buffer_size(&self) -> usize {
++        DENSE_EXPORT_BUFFER_SIZE
++    }
++
++    async fn write(&self, buf: Box<dyn CompactBuffer>, offset: u64, len: usize) -> Result<()> {
++        let data = AsRef::<[u8]>::as_ref(buf.as_ref());
++        if len > data.len() {
++            bail!("dense export write length exceeds buffer");
++        }
++        self.write_bytes(offset, &data[..len]).await
++    }
++
++    async fn write_all_at(&self, data: &[u8], offset: u64) -> Result<()> {
++        self.write_bytes(offset, data).await
++    }
++}
++
+ // ── Pooled device wrapper ───────────────────────────────────────────────────
+ 
+ /// A warm ublk device ready for reuse.
+@@ -534,6 +588,10 @@ async fn handle_connection(
+             dev_id,
+             output_layer_path,
+         } => handle_restack_snapshot(&devices, &pool_state, dev_id, &output_layer_path).await,
++        DaemonRequest::ExportDenseLayer {
++            source_layer_path,
++            stream_socket_path,
++        } => handle_export_dense_layer(&source_layer_path, &stream_socket_path).await,
+         DaemonRequest::GetFeatures => handle_get_features(&pool_state),
+         DaemonRequest::NotifySandboxReady { device_key } => {
+             tracing::info!(
+@@ -1046,6 +1104,37 @@ async fn handle_restack_snapshot(
+     Ok(DaemonResponse::RestackSnapshotCreated { descriptor })
+ }
+ 
++async fn handle_export_dense_layer(
++    source_layer_path: &Path,
++    stream_socket_path: &Path,
++) -> Result<DaemonResponse> {
++    if !source_layer_path.is_absolute() || !stream_socket_path.is_absolute() {
++        bail!("dense export paths must be absolute");
++    }
++    let stream = UnixStream::connect(stream_socket_path)
++        .await
++        .with_context(|| {
++            format!(
++                "connect dense export stream socket {}",
++                stream_socket_path.display()
++            )
++        })?;
++    let writer = UnixStreamCompactWriter::new(stream);
++    dense_export::write_dense_layer_to(source_layer_path, writer.clone())
++        .await
++        .with_context(|| {
++            format!(
++                "dense-export overlaybd layer {}",
++                source_layer_path.display()
++            )
++        })?;
++    let descriptor = writer.finish().await?;
++    Ok(DaemonResponse::DenseLayerExported {
++        digest: descriptor.digest,
++        size: descriptor.size,
++    })
++}
++
+ // ── Pool handlers ───────────────────────────────────────────────────────────
+ 
+ fn handle_get_features(pool_state: &Option<Arc<PoolState>>) -> Result<DaemonResponse> {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -19,6 +20,11 @@ from uuid import uuid4
 from .agent import build_heartbeat
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .deployment import service_health
+from .direct_migration import (
+    DIRECT_MIGRATION_SCHEMA,
+    STORAGE_NATIVE_MIGRATION_SCHEMA,
+    StorageNativeMigration,
+)
 from .http_server import HighBacklogThreadingHTTPServer
 from .hibernation import HibernationDiskLedger
 from .images import (
@@ -178,14 +184,15 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         if parsed.path == "/v1/sandboxes":
+            records = sorted(
+                self.manager.list(),
+                key=lambda item: item.spec.id,
+            )
             self._write_json(
                 {
                     "sandboxes": [
-                        record.to_dict()
-                        for record in sorted(
-                            self.manager.list(),
-                            key=lambda item: item.spec.id,
-                        )
+                        self._sandbox_inventory_payload(record)
+                        for record in records
                     ]
                 }
             )
@@ -514,17 +521,71 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if not isinstance(raw, dict):
                 raise ValueError("park payload must be a JSON object")
             operation_id = str(raw.get("operation_id") or "").strip() or None
+            background = bool(raw.get("background", False))
             park = getattr(self.manager, "park", None)
             if park is None:
                 raise RuntimeError("sandbox parking is unavailable on this runtime")
-            record = park(sandbox_id, operation_id=operation_id)
+            park_arguments: dict[str, Any] = {"operation_id": operation_id}
+            if background:
+                park_arguments["background"] = True
+            record = park(sandbox_id, **park_arguments)
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        self._write_json({"sandbox": record.to_dict()})
+        payload: dict[str, Any] = {"sandbox": record.to_dict()}
+        try:
+            service = getattr(self.manager, "service", None)
+            warden = getattr(service, "warden", None)
+            if getattr(warden, "storage", None) is not None:
+                if (
+                    background
+                    and service.storage_native_publication_pending(sandbox_id)
+                ):
+                    payload["publication"] = "pending"
+                    self._write_json(payload, status=HTTPStatus.ACCEPTED)
+                    return
+                snapshot = service.describe_storage_native_snapshot(sandbox_id)
+                payload["storage_schema"] = "storage-native-v1"
+                payload["snapshot_sha256"] = snapshot.sha256
+                payload["storage_snapshot"] = snapshot.to_dict()
+                payload["snapshot_manifest_digest"] = (
+                    snapshot.publication.manifest_digest
+                )
+                payload["snapshot_repository"] = snapshot.publication.repository
+                payload["snapshot_tag"] = snapshot.publication.tag
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json(payload)
+
+    def _sandbox_inventory_payload(self, record: Any) -> dict[str, Any]:
+        payload = record.to_dict()
+        if str(payload.get("state") or "").lower() != "parked":
+            return payload
+        service = getattr(self.manager, "service", None)
+        warden = getattr(service, "warden", None)
+        if service is None or getattr(warden, "storage", None) is None:
+            return payload
+        try:
+            snapshot = service.describe_storage_native_snapshot(record.spec.id)
+        except (RuntimeError, ValueError):
+            return payload
+        payload.update(
+            {
+                "snapshot_manifest_digest": (
+                    snapshot.publication.manifest_digest
+                ),
+                "snapshot_repository": snapshot.publication.repository,
+                "snapshot_sha256": snapshot.sha256,
+                "snapshot_tag": snapshot.publication.tag,
+                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "storage_snapshot": snapshot.to_dict(),
+            }
+        )
+        return payload
 
     def _wake_sandbox(self, path: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix="/wake")
@@ -558,16 +619,48 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if not isinstance(raw, dict):
                 raise ValueError("migration payload must be a JSON object")
             migration_id = str(raw.get("migration_id") or "").strip()
+            requested_format = str(raw.get("format") or "").strip()
             service = self._direct_service()
-            archive = service.prepare_move(
-                sandbox_id,
-                migration_id=migration_id,
-            )
-            archive_token = self._migration_archive_token(
-                sandbox_id=sandbox_id,
-                migration_id=migration_id,
-                migration_sha256=archive.sha256,
-            )
+            if getattr(service.warden, "storage", None) is not None:
+                if requested_format == DIRECT_MIGRATION_SCHEMA:
+                    archive = service.prepare_storage_native_v2_export(
+                        sandbox_id,
+                        migration_id=migration_id,
+                    )
+                    archive_token = self._migration_archive_token(
+                        sandbox_id=sandbox_id,
+                        migration_id=migration_id,
+                        migration_sha256=archive.sha256,
+                    )
+                else:
+                    migration = service.prepare_storage_native_move(
+                        sandbox_id,
+                        migration_id=migration_id,
+                    )
+                    self._write_json(
+                        {
+                            "migration": {
+                                "migration_id": migration_id,
+                                "sandbox_id": sandbox_id,
+                                "snapshot_sha256": migration.sha256,
+                                "storage_schema": (
+                                    STORAGE_NATIVE_MIGRATION_SCHEMA
+                                ),
+                                "storage_snapshot": migration.to_dict(),
+                            }
+                        }
+                    )
+                    return
+            else:
+                archive = service.prepare_move(
+                    sandbox_id,
+                    migration_id=migration_id,
+                )
+                archive_token = self._migration_archive_token(
+                    sandbox_id=sandbox_id,
+                    migration_id=migration_id,
+                    migration_sha256=archive.sha256,
+                )
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -632,6 +725,37 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 raise ValueError("migration payload must be a JSON object")
             sandbox_id = str(raw.get("sandbox_id") or "").strip()
             migration_id = str(raw.get("migration_id") or "").strip()
+            storage_schema = str(raw.get("storage_schema") or "").strip()
+            if storage_schema:
+                if storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+                    raise ValueError("unsupported migration storage schema")
+                migration = StorageNativeMigration.from_dict(
+                    raw.get("storage_snapshot")
+                )
+                if migration.manifest.sandbox_id != sandbox_id:
+                    raise ValueError(
+                        "storage-native migration belongs to another sandbox"
+                    )
+                expected_sha256 = str(
+                    raw.get("snapshot_sha256") or ""
+                ).strip()
+                if migration.sha256 != expected_sha256:
+                    raise ValueError(
+                        "storage-native migration digest does not match"
+                    )
+                result, destination = self._direct_service().stage_storage_native_import(
+                    migration,
+                    migration_id=migration_id,
+                )
+                self._write_json(
+                    {
+                        "sandbox": result.to_dict(),
+                        "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                        "storage_snapshot": destination.to_dict(),
+                    },
+                    status=HTTPStatus.CREATED,
+                )
+                return
             migration_sha256 = str(raw.get("archive_sha256") or "").strip()
             archive_token = str(raw.get("archive_token") or "").strip()
             source_url = str(raw.get("source_url") or "").strip()
@@ -1720,22 +1844,60 @@ def build_direct_node_agent_server(
     DirectBoundHandler.cpu_overcommit = cpu_overcommit
     DirectBoundHandler.memory_overcommit = memory_overcommit
     DirectBoundHandler.disk_overcommit = 1.0
-    DirectBoundHandler.capabilities = (
+    direct_capabilities = [
         "sandbox",
         "image-cache",
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
         "direct-runsc-v1",
         "sandbox-migrate-v2",
-    )
+    ]
+    if getattr(service.warden, "storage", None) is not None:
+        direct_capabilities.extend(
+            (
+                "storage-native-v1",
+                "sandbox-migrate-storage-native-v1",
+            )
+        )
+    DirectBoundHandler.capabilities = tuple(direct_capabilities)
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.node_epoch = uuid4().hex
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
     DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
     DirectBoundHandler.max_file_body_bytes = max_file_body_bytes
+    host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
+
+    def direct_runtime_metrics() -> NodeRuntimeMetrics | None:
+        metrics = host_runtime_metrics()
+        storage = getattr(service.warden, "storage", None)
+        if metrics is None or storage is None:
+            return metrics
+        try:
+            raw = storage.get_metrics()
+        except (OSError, RuntimeError):
+            return metrics
+        mib = 1024 * 1024
+        return replace(
+            metrics,
+            storage_hard_capacity_mb=(
+                int(raw.get("hard_capacity_bytes", 0)) // mib
+            ),
+            storage_hard_reserved_mb=(
+                int(raw.get("hard_reserved_bytes", 0)) // mib
+            ),
+            storage_cache_mb=int(raw.get("cache_bytes", 0)) // mib,
+            storage_active_operations=int(raw.get("active_operations", 0)),
+            storage_waiting_operations=int(raw.get("waiting_operations", 0)),
+            storage_max_concurrent_operations=int(
+                raw.get("max_concurrent_operations", 0)
+            ),
+            storage_published_volumes=int(raw.get("published_volumes", 0)),
+            storage_error_volumes=int(raw.get("error_volumes", 0)),
+        )
+
     DirectBoundHandler.runtime_metrics_provider = staticmethod(
-        runtime_metrics_provider or sample_node_runtime_metrics
+        direct_runtime_metrics
     )
     return HighBacklogThreadingHTTPServer((host, port), DirectBoundHandler)
 

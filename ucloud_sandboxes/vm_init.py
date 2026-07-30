@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
 import hashlib
 import json
+from functools import lru_cache
 from pathlib import Path
 from pathlib import PurePosixPath
 import re
@@ -48,6 +48,20 @@ DEFAULT_RUNSC_RESTORE_WRAPPER = "/usr/local/libexec/ucloud-runsc-restore"
 DEFAULT_RUNSC_RESTORE_CONFIG = "/etc/ucloud-sandboxes/runsc-restore.json"
 DEFAULT_RUNSC_RESTORE_STATE_ROOT = "/run/ucloud-sandboxes/runsc-restore"
 DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
+DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
+DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET = (
+    "/run/ucloud-sandboxes/storage-native/backend.sock"
+)
+DEFAULT_STORAGE_NATIVE_SERVICE_SOCKET = (
+    "/run/ucloud-sandboxes/storage-native/service.sock"
+)
+DEFAULT_STORAGE_NATIVE_ROOT = "/var/lib/ucloud-sandboxes/storage-native"
+DEFAULT_STORAGE_NATIVE_CACHE_ROOT = "/var/lib/ucloud-sandboxes/storage-native-cache"
+DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
+DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
+PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = (
+    "f41abb21324f6b0520abf34b7720aa260ddd10eb"
+)
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 SANDBOX_RUNTIME_PACKAGES = (
@@ -65,6 +79,7 @@ BUILDER_RUNTIME_PACKAGES = (
 RUNTIME_KERNEL_MODULES = (
     "xfs",
     "overlay",
+    "ublk_drv",
     "bridge",
     "br_netfilter",
     "veth",
@@ -126,6 +141,9 @@ class VmInitOptions:
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
+    storage_native_registry_url: str = ""
+    storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
+    storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
@@ -239,6 +257,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     work_dir = _clean_posix_path(options.work_dir)
     venv_dir = str(PurePosixPath(work_dir) / "venv")
     agent_bin = str(PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes")
+    storage_agent_bin = str(
+        PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes-storage"
+    )
     docker_storage_dir = _clean_posix_path(DEFAULT_DOCKER_STORAGE_DIR)
     docker_data_root = str(PurePosixPath(docker_storage_dir) / "docker")
     docker_quota_image = str(PurePosixPath(docker_storage_dir) / "docker-xfs.img")
@@ -265,8 +286,20 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     runsc_restore_state_root = DEFAULT_RUNSC_RESTORE_STATE_ROOT
     runsc_restore_source = render_runsc_restore_script(config_path=runsc_restore_config)
     direct_runsc = DEFAULT_DIRECT_RUNSC
+    storage_native_backend = DEFAULT_STORAGE_NATIVE_BACKEND
+    storage_native_backend_socket = DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET
+    storage_native_service_socket = DEFAULT_STORAGE_NATIVE_SERVICE_SOCKET
+    storage_native_root = DEFAULT_STORAGE_NATIVE_ROOT
+    storage_native_cache_root = DEFAULT_STORAGE_NATIVE_CACHE_ROOT
+    storage_native_backend_config = (
+        "/etc/ucloud-sandboxes/storage-native-backend.json"
+    )
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
+    storage_backend_service = (
+        "/etc/systemd/system/ucloud-storage-native-backend.service"
+    )
+    storage_service = "/etc/systemd/system/ucloud-storage-native.service"
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
     heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
     authorized_keys_blob = "\n".join(options.init_authorized_keys)
@@ -309,12 +342,16 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     )
     if options.node_runtime == "direct":
         writable_disk_mb = (
-            options.docker_quota_image_gb * 1024
+            int(options.total_resources.disk_mb)
+            - options.docker_quota_image_gb * 1024
+            - options.swap_gb * 1024
+            - options.storage_native_cache_gb * 1024
             - options.direct_disk_headroom_mb
         )
         if writable_disk_mb < 1:
             raise ValueError(
-                "direct runtime has no writable disk after safety headroom"
+                "direct runtime has no guaranteed writable disk after Docker, "
+                "swap, storage cache, and safety headroom"
             )
         direct_network_allow_flags = "".join(
             " --direct-network-allow-tcp "
@@ -340,6 +377,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --quota-helper ${UCLOUD_HIBERNATION_QUOTA_HELPER}"
             " --disk-capacity-mb ${UCLOUD_DIRECT_DISK_CAPACITY_MB}"
             " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
+            " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
             " --idle-park-seconds 0"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
@@ -354,6 +392,17 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_group = "root"
         node_service_supplementary_groups = ""
         node_service_exec_start_pre = ""
+        node_service_wants = (
+            "network-online.target docker.service "
+            "ucloud-storage-native.service"
+        )
+        node_service_after = (
+            "network-online.target docker.service "
+            "ucloud-storage-native.service"
+        )
+        node_service_requires = (
+            "docker.service ucloud-storage-native.service"
+        )
     else:
         writable_disk_mb = int(options.total_resources.disk_mb)
         direct_agent_command = (
@@ -385,6 +434,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_exec_start_pre = (
             "ExecStartPre=/usr/bin/sudo -n ${UCLOUD_CHECKPOINT_HELPER} gc"
         )
+        node_service_wants = "network-online.target docker.service"
+        node_service_after = "network-online.target docker.service"
+        node_service_requires = "docker.service"
 
     script = f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -408,6 +460,7 @@ UCLOUD_SERVICE_USER={shlex.quote(options.service_user)}
 UCLOUD_WORK_DIR={shlex.quote(work_dir)}
 UCLOUD_VENV_DIR={shlex.quote(venv_dir)}
 UCLOUD_AGENT_BIN={shlex.quote(agent_bin)}
+UCLOUD_STORAGE_AGENT_BIN={shlex.quote(storage_agent_bin)}
 UCLOUD_STATE_DIR={shlex.quote(state_dir)}
 UCLOUD_DOCKER_DATA_ROOT={shlex.quote(docker_data_root)}
 UCLOUD_PACKAGE_SPEC={shlex.quote(options.package_spec)}
@@ -449,10 +502,20 @@ UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
 UCLOUD_DIRECT_RUNSC_COMMIT={shlex.quote(options.direct_runsc_commit)}
 UCLOUD_DIRECT_NETWORK={shlex.quote(options.direct_network)}
 UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
-UCLOUD_DIRECT_DISK_CAPACITY_MB={options.docker_quota_image_gb * 1024}
+UCLOUD_DIRECT_DISK_CAPACITY_MB={writable_disk_mb}
 UCLOUD_DIRECT_DISK_HEADROOM_MB={options.direct_disk_headroom_mb}
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
+UCLOUD_STORAGE_NATIVE_BACKEND={shlex.quote(storage_native_backend)}
+UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)}
+UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET={shlex.quote(storage_native_service_socket)}
+UCLOUD_STORAGE_NATIVE_ROOT={shlex.quote(storage_native_root)}
+UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
+UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG={shlex.quote(storage_native_backend_config)}
+UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
+UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
+UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
+UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES={writable_disk_mb * 1024 * 1024}
 UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
 {authorized_keys_blob}
 UCLOUD_AUTHORIZED_KEYS
@@ -544,6 +607,10 @@ UCLOUD_OFFLINE_KERNEL_MODULE_DIR=""
 UCLOUD_BUNDLED_DIRECT_RUNSC=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT=""
+UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND=""
+UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256=""
+UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST=""
+UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE=""
 if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
   && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
   UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
@@ -615,6 +682,80 @@ PY
       echo "Bundled direct runsc commit does not match deployment configuration" >&2
       exit 1
     fi
+    UCLOUD_STORAGE_NATIVE_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" "$UCLOUD_PACKAGE_BUNDLE_DIR" "$UCLOUD_ARCHITECTURE" <<'PY'
+import json
+import hashlib
+from pathlib import Path
+import re
+import sys
+
+bundle_manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+bundle_dir = Path(sys.argv[2])
+architecture = sys.argv[3]
+runtime = bundle_manifest.get("runtime")
+storage = runtime.get("storage_native") if isinstance(runtime, dict) else None
+if not isinstance(storage, dict):
+    raise SystemExit("storage-native backend metadata is absent")
+expected_files = {{
+    "file": "runtime/storage-native/backend",
+    "manifest_file": "runtime/storage-native/build-manifest.json",
+    "license_file": "runtime/storage-native/LICENSE",
+}}
+for key, expected in expected_files.items():
+    if storage.get(key) != expected:
+        raise SystemExit(f"invalid storage-native {{key}}")
+for key in ("sha256", "manifest_sha256", "license_sha256"):
+    if not re.fullmatch(r"[0-9a-f]{{64}}", str(storage.get(key) or "")):
+        raise SystemExit(f"invalid storage-native {{key}}")
+if storage.get("agentenv_commit") != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:
+    raise SystemExit("storage-native backend is not the pinned AgentEnv commit")
+host_arch = str(storage.get("host_architecture") or "")
+accepted_arches = {{"amd64": {{"x86_64"}}, "arm64": {{"aarch64"}}}}
+if host_arch not in accepted_arches.get(architecture, set()):
+    raise SystemExit("storage-native backend architecture does not match this VM")
+if not isinstance(storage.get("size"), int) or storage["size"] <= 0:
+    raise SystemExit("invalid storage-native backend size")
+paths = {{key: bundle_dir / value for key, value in expected_files.items()}}
+for key, path in paths.items():
+    if not path.is_file():
+        raise SystemExit(f"missing storage-native {{key}}")
+if paths["file"].stat().st_size != storage["size"]:
+    raise SystemExit("storage-native backend size mismatch")
+def digest(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+if digest(paths["file"]) != storage["sha256"]:
+    raise SystemExit("storage-native backend checksum mismatch")
+if digest(paths["manifest_file"]) != storage["manifest_sha256"]:
+    raise SystemExit("storage-native build manifest checksum mismatch")
+if digest(paths["license_file"]) != storage["license_sha256"]:
+    raise SystemExit("storage-native license checksum mismatch")
+build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
+if (
+    build.get("schema") != 1
+    or build.get("agentenv_commit") != storage["agentenv_commit"]
+    or build.get("artifact_sha256") != storage["sha256"]
+    or build.get("host_architecture") != host_arch
+    or build.get("license") != "MIT"
+    or build.get("patch") != "agentenv-streaming-dense-export.patch"
+    or not re.fullmatch(r"[0-9a-f]{{64}}", str(build.get("patch_sha256") or ""))
+):
+    raise SystemExit("storage-native build manifest provenance mismatch")
+print(
+    f"{{storage['sha256']}}\t"
+    f"{{paths['file']}}\t{{paths['manifest_file']}}\t{{paths['license_file']}}"
+)
+PY
+)"
+    IFS=$'\t' read -r \
+      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256 \
+      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND \
+      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST \
+      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE \
+      <<< "$UCLOUD_STORAGE_NATIVE_SPEC"
   fi
   if [ -d "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime" ]; then
     if python3 - \
@@ -1106,6 +1247,9 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
 fi
 UCLOUD_CHECKPOINT_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-checkpoints"
 UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-hibernation"
+if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+  UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_STORAGE_NATIVE_ROOT/mounts"
+fi
 log_init_phase "docker-storage"
 
 if ! grep -qw overlay /proc/filesystems; then
@@ -1125,11 +1269,56 @@ if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
     echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
     exit 1
   fi
+  if [ -z "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" ]; then
+    echo "Direct runtime requires a bundle-verified storage-native backend" >&2
+    exit 1
+  fi
   echo "Installing bundle-verified direct runsc runtime"
   $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
   $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
   printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
   "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
+  echo "Installing bundle-verified storage-native backend"
+  $SUDO install -m 0755 -o root -g root \
+    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" "$UCLOUD_STORAGE_NATIVE_BACKEND"
+  printf '%s  %s\n' \
+    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256" \
+    "$UCLOUD_STORAGE_NATIVE_BACKEND" | sha256sum --check --status -
+  $SUDO install -d -m 0755 -o root -g root \
+    /usr/share/doc/ucloud-sandboxes/storage-native
+  $SUDO install -m 0644 -o root -g root \
+    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST" \
+    /usr/share/doc/ucloud-sandboxes/storage-native/build-manifest.json
+  $SUDO install -m 0644 -o root -g root \
+    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE" \
+    /usr/share/doc/ucloud-sandboxes/storage-native/LICENSE
+  $SUDO install -d -m 0700 -o root -g root \
+    "$UCLOUD_STORAGE_NATIVE_ROOT" \
+    "$UCLOUD_STORAGE_NATIVE_ROOT/runtime" \
+    "$UCLOUD_STORAGE_NATIVE_ROOT/mounts" \
+    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT"
+  UCLOUD_STORAGE_NATIVE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.storage-native-backend.XXXXXX")"
+  python3 - "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT" "$UCLOUD_STORAGE_NATIVE_CACHE_GB" <<'PY' \
+    | $SUDO tee "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP" >/dev/null
+import json
+import sys
+
+print(json.dumps({{
+    "cacheConfig": {{
+        "cacheDir": sys.argv[1],
+        "cacheSizeGB": int(sys.argv[2]),
+        "cacheType": "file",
+        "refillSize": 262144,
+    }},
+    "download": {{"enable": False}},
+    "nrIoRings": 4,
+    "registryFsVersion": "v2",
+}}, sort_keys=True))
+PY
+  $SUDO chown root:root "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP"
+  $SUDO chmod 0600 "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP"
+  $SUDO mv -f \
+    "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP" "$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG"
   if [ ! -x "$UCLOUD_DIRECT_INIT_BINARY" ]; then
     for direct_init_candidate in \
       /usr/libexec/docker/docker-init \
@@ -1295,6 +1484,11 @@ if [ -n "$UCLOUD_PREBUILT_AGENT_ARCHIVE" ]; then
     "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_AGENT_LAUNCHER"
   $SUDO install -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_AGENT_LAUNCHER" "$UCLOUD_AGENT_BIN"
   rm -f "$UCLOUD_AGENT_LAUNCHER"
+  UCLOUD_STORAGE_AGENT_LAUNCHER="$(mktemp)"
+  printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.storage_native_service "$@"\n' \
+    "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_STORAGE_AGENT_LAUNCHER"
+  $SUDO install -m 0755 -o root -g root "$UCLOUD_STORAGE_AGENT_LAUNCHER" "$UCLOUD_STORAGE_AGENT_BIN"
+  rm -f "$UCLOUD_STORAGE_AGENT_LAUNCHER"
 else
   echo "Preassembled runtime unavailable; installing ucloud-sandboxes into a virtual environment"
   if [ -d "$UCLOUD_VENV_DIR" ]; then
@@ -1312,6 +1506,7 @@ else
   fi
   $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
   $SUDO ln -sfn "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" "$UCLOUD_AGENT_BIN"
+  $SUDO ln -sfn "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes-storage" "$UCLOUD_STORAGE_AGENT_BIN"
 fi
 log_init_phase "python-package"
 
@@ -1472,15 +1667,70 @@ UCLOUD_DIRECT_DISK_CAPACITY_MB=$UCLOUD_DIRECT_DISK_CAPACITY_MB
 UCLOUD_DIRECT_DISK_HEADROOM_MB=$UCLOUD_DIRECT_DISK_HEADROOM_MB
 UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES=$UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES
+UCLOUD_STORAGE_NATIVE_BACKEND=$UCLOUD_STORAGE_NATIVE_BACKEND
+UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET=$UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET
+UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET=$UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET
+UCLOUD_STORAGE_NATIVE_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT
+UCLOUD_STORAGE_NATIVE_CACHE_ROOT=$UCLOUD_STORAGE_NATIVE_CACHE_ROOT
+UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG
+UCLOUD_STORAGE_NATIVE_CACHE_GB=$UCLOUD_STORAGE_NATIVE_CACHE_GB
+UCLOUD_STORAGE_NATIVE_REGISTRY_URL=$UCLOUD_STORAGE_NATIVE_REGISTRY_URL
+UCLOUD_STORAGE_NATIVE_REPOSITORY=$UCLOUD_STORAGE_NATIVE_REPOSITORY
+UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES=$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES
 NODE_ENV
+
+if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+  echo "Writing storage-native backend and service units"
+  $SUDO tee {shlex.quote(storage_backend_service)} >/dev/null <<STORAGE_BACKEND_SERVICE
+[Unit]
+Description=UCloud storage-native ublk backend
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=ucloud-sandboxes/storage-native
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/sbin/modprobe ublk_drv
+ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --metrics-listen-addr ""
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+STORAGE_BACKEND_SERVICE
+
+  $SUDO tee {shlex.quote(storage_service)} >/dev/null <<STORAGE_SERVICE
+[Unit]
+Description=UCloud storage-native node service
+Wants=network-online.target
+After=network-online.target ucloud-storage-native-backend.service
+Requires=ucloud-storage-native-backend.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile={env_file}
+WorkingDirectory={work_dir}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.json --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+STORAGE_SERVICE
+fi
 
 echo "Writing node-agent systemd service"
 $SUDO tee {shlex.quote(node_service)} >/dev/null <<NODE_SERVICE
 [Unit]
 Description=UCloud sandbox node agent
-Wants=network-online.target docker.service
-After=network-online.target docker.service
-Requires=docker.service
+Wants={node_service_wants}
+After={node_service_after}
+Requires={node_service_requires}
 
 [Service]
 Type=simple
@@ -1530,6 +1780,12 @@ WantedBy=timers.target
 HEARTBEAT_TIMER
 
 $SUDO systemctl daemon-reload
+if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+  $SUDO systemctl enable ucloud-storage-native-backend.service
+  $SUDO systemctl enable ucloud-storage-native.service
+  $SUDO systemctl restart ucloud-storage-native-backend.service
+  $SUDO systemctl restart ucloud-storage-native.service
+fi
 $SUDO systemctl enable ucloud-sandbox-node.service
 $SUDO systemctl restart ucloud-sandbox-node.service
 NODE_AGENT_READY=0
@@ -1593,7 +1849,25 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         if options.runtime_dry_run:
             raise ValueError("direct runtime does not support dry-run node service mode.")
         if options.docker_quota_image_gb < 1:
-            raise ValueError("direct runtime requires quota-backed XFS storage.")
+            raise ValueError(
+                "direct runtime requires bounded Docker image infrastructure."
+            )
+        if not re.fullmatch(r"https?://[^/\s]+", options.storage_native_registry_url):
+            raise ValueError(
+                "direct runtime requires an HTTP(S) storage-native Registry origin"
+            )
+        if (
+            not options.storage_native_repository
+            or options.storage_native_repository.startswith("/")
+            or options.storage_native_repository.endswith("/")
+            or not re.fullmatch(
+                r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
+                options.storage_native_repository,
+            )
+        ):
+            raise ValueError("invalid storage-native repository")
+        if options.storage_native_cache_gb < 1:
+            raise ValueError("storage-native cache size must be positive.")
         if options.disk_overcommit != 1.0:
             raise ValueError("direct runtime disk overcommit must be exactly 1.0.")
         if options.cpu_overcommit != 1.0 or options.memory_overcommit != 1.0:
@@ -1602,6 +1876,18 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             )
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")
+        guaranteed_mb = (
+            int(options.total_resources.disk_mb)
+            - options.docker_quota_image_gb * 1024
+            - options.swap_gb * 1024
+            - options.storage_native_cache_gb * 1024
+            - options.direct_disk_headroom_mb
+        )
+        if guaranteed_mb < 1:
+            raise ValueError(
+                "direct runtime physical disk cannot guarantee Docker, swap, "
+                "cache, headroom, and one writable MiB"
+            )
         if options.direct_max_concurrent_restores < 1:
             raise ValueError("direct max concurrent restores must be positive.")
     if options.docker_quota_image_gb < 0:
@@ -1628,6 +1914,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "work dir": options.work_dir,
         "package spec": options.package_spec,
         "package sha256": options.package_sha256,
+        "storage-native registry URL": options.storage_native_registry_url,
+        "storage-native repository": options.storage_native_repository,
     }.items():
         _reject_newline(value_name, value)
     if options.package_sha256 and (

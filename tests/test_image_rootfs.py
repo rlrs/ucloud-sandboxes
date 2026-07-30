@@ -22,6 +22,8 @@ class FakeRunner:
         self.commands: list[tuple[str, ...]] = []
         self.fail_export = False
         self.exporter_inventory = ""
+        self.mounted: set[str] = set()
+        self.not_mounted_returncode = 1
 
     def run(self, argv, *, timeout):
         del timeout
@@ -61,6 +63,19 @@ class FakeRunner:
                 )
             )
             output.write_bytes(b"fake tar")
+        if command[0] == "mount":
+            self.mounted.add(command[-1])
+        elif command[0] == "mountpoint":
+            return CommandResult(
+                command,
+                (
+                    0
+                    if command[-1] in self.mounted
+                    else self.not_mounted_returncode
+                ),
+            )
+        elif command[0] == "umount":
+            self.mounted.discard(command[-1])
         return CommandResult(command, 0)
 
 
@@ -188,6 +203,16 @@ class ImageRootfsTests(unittest.TestCase):
                 lease.upper.stat().st_mode & 0o7777,
                 lease.image.rootfs.stat().st_mode & 0o7777,
             )
+
+            manager.park_sandbox(lease.sandbox)
+            self.assertNotIn(str(lease.merged), runner.mounted)
+            runner.not_mounted_returncode = 32
+            manager.resume_sandbox(lease.sandbox)
+            self.assertIn(str(lease.merged), runner.mounted)
+            mounts = [
+                command for command in runner.commands if command[0] == "mount"
+            ]
+            self.assertEqual(len(mounts), 2)
 
             manager.release(lease)
             self.assertFalse(lease.sandbox.bundle.exists())

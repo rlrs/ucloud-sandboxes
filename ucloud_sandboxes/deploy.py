@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from importlib import resources
+import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -11,6 +13,9 @@ from typing import Any
 from .deployment import package_version
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
+    DEFAULT_STORAGE_NATIVE_CACHE_GB,
+    DEFAULT_STORAGE_NATIVE_REPOSITORY,
+    PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
     RUNTIME_KERNEL_MODULES,
     SANDBOX_RUNTIME_PACKAGES,
     ssh_init_command,
@@ -43,6 +48,64 @@ PERSISTENT_STORAGE_SYSTEMD_UNITS = (
 
 
 @dataclass(frozen=True)
+class StorageNativeBuildArtifacts:
+    backend: Path
+    manifest: Path
+    license: Path
+    metadata: dict[str, Any]
+
+
+def storage_native_build_artifacts(
+    manifest_path: Path,
+) -> StorageNativeBuildArtifacts:
+    manifest = manifest_path.resolve()
+    if not manifest.is_file():
+        raise ValueError(f"storage-native build manifest not found: {manifest}")
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("invalid storage-native build manifest JSON") from exc
+    if not isinstance(payload, dict) or payload.get("schema") != 1:
+        raise ValueError("unsupported storage-native build manifest")
+    artifact_name = str(payload.get("artifact") or "")
+    if (
+        not artifact_name
+        or Path(artifact_name).name != artifact_name
+        or artifact_name in {".", ".."}
+    ):
+        raise ValueError("invalid storage-native backend artifact name")
+    backend = manifest.parent / artifact_name
+    license_path = manifest.parent / f"{artifact_name}.LICENSE"
+    if not backend.is_file() or not license_path.is_file():
+        raise ValueError(
+            "storage-native backend binary and license must be beside its manifest"
+        )
+    expected_digest = str(payload.get("artifact_sha256") or "")
+    if (
+        payload.get("agentenv_commit")
+        != PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
+        or payload.get("cargo_package") != "uvm-ublk-daemon"
+        or payload.get("license") != "MIT"
+        or payload.get("host_architecture") not in {"x86_64", "aarch64"}
+        or payload.get("patch") != "agentenv-streaming-dense-export.patch"
+        or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(payload.get("patch_sha256") or ""),
+        )
+    ):
+        raise ValueError("storage-native backend provenance is not pinned")
+    if _sha256_file(backend) != expected_digest:
+        raise ValueError("storage-native backend digest does not match its manifest")
+    return StorageNativeBuildArtifacts(
+        backend=backend,
+        manifest=manifest,
+        license=license_path,
+        metadata=payload,
+    )
+
+
+@dataclass(frozen=True)
 class AllInOneDeployPlan:
     job_id: str
     project_id: str
@@ -51,6 +114,9 @@ class AllInOneDeployPlan:
     sandbox_runtime: str = "legacy"
     local_direct_runsc: Path | None = None
     direct_runsc_commit: str = ""
+    local_storage_native_manifest: Path | None = None
+    storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
+    storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
     install_root: str = DEFAULT_INSTALL_ROOT
@@ -66,7 +132,7 @@ class AllInOneDeployPlan:
     gateway_private_host: str = ""
     private_network_id: str = ""
     sandbox_product_id: str = "cpu-amd-zen5-32-vcpu"
-    sandbox_disk_gb: int = 600
+    sandbox_disk_gb: int = 2000
     sandbox_idle_seconds: int = 600
     builder_product_id: str = "cpu-amd-zen5-16-vcpu"
     builder_disk_gb: int = 250
@@ -119,6 +185,24 @@ class AllInOneDeployPlan:
     @property
     def remote_direct_runsc_path(self) -> str:
         return str(PurePosixPath(self.release_dir) / "ucloud-direct-runsc")
+
+    @property
+    def remote_storage_native_backend_path(self) -> str:
+        return str(PurePosixPath(self.release_dir) / "storage-native-backend")
+
+    @property
+    def remote_storage_native_manifest_path(self) -> str:
+        return str(
+            PurePosixPath(self.release_dir) / "storage-native-build-manifest.json"
+        )
+
+    @property
+    def remote_storage_native_license_path(self) -> str:
+        return str(PurePosixPath(self.release_dir) / "storage-native-LICENSE")
+
+    @property
+    def storage_native_registry_url(self) -> str:
+        return f"http://{self.registry_alias}:{self.registry_port}"
 
     @property
     def staged_session_file(self) -> str:
@@ -258,6 +342,19 @@ class AllInOneDeployPlan:
                     "direct sandbox runtime requires an exact 40-character "
                     "gVisor commit."
                 )
+            if self.local_storage_native_manifest is None:
+                raise ValueError(
+                    "direct sandbox runtime requires a pinned storage-native "
+                    "backend build manifest."
+                )
+            storage_native_build_artifacts(self.local_storage_native_manifest)
+            if self.storage_native_cache_gb < 1:
+                raise ValueError("storage-native cache size must be positive.")
+            if not re.fullmatch(
+                r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
+                self.storage_native_repository,
+            ):
+                raise ValueError("invalid storage-native repository.")
             if self.direct_disk_headroom_mb < 1:
                 raise ValueError("direct disk headroom must be positive.")
             if self.direct_max_concurrent_restores < 1:
@@ -286,6 +383,18 @@ class AllInOneDeployPlan:
                 "sandbox disk must leave at least 32 GB outside the Docker quota "
                 "image and swap file."
             )
+        if self.sandbox_runtime == "direct":
+            reserved_mb = (
+                self.docker_quota_image_gb * 1024
+                + self.swap_gb * 1024
+                + self.storage_native_cache_gb * 1024
+                + self.direct_disk_headroom_mb
+            )
+            if self.sandbox_disk_gb * 1024 <= reserved_mb:
+                raise ValueError(
+                    "direct sandbox disk must exceed the bounded Docker image, "
+                    "swap, storage cache, and safety headroom."
+                )
         if self.builder_disk_gb < self.builder_docker_quota_image_gb + 32:
             raise ValueError(
                 "builder disk must leave at least 32 GB outside the Docker quota image."
@@ -320,6 +429,14 @@ class AllInOneDeployPlan:
                 else None
             ),
             "directRunscCommit": self.direct_runsc_commit,
+            "localStorageNativeManifest": (
+                str(self.local_storage_native_manifest)
+                if self.local_storage_native_manifest is not None
+                else None
+            ),
+            "storageNativeCacheGb": self.storage_native_cache_gb,
+            "storageNativeRepository": self.storage_native_repository,
+            "storageNativeRegistryUrl": self.storage_native_registry_url,
             "directDiskHeadroomMb": self.direct_disk_headroom_mb,
             "directMaxConcurrentRestores": self.direct_max_concurrent_restores,
             "nodePackageBundlePath": self.node_package_bundle_path,
@@ -369,6 +486,8 @@ class AllInOneDeployPlan:
                 "dockerQuotaImageGb": self.docker_quota_image_gb,
                 "builderDockerQuotaImageGb": self.builder_docker_quota_image_gb,
                 "swapGb": self.swap_gb,
+                "storageNativeCacheGb": self.storage_native_cache_gb,
+                "storageNativeRepository": self.storage_native_repository,
                 "nodeRuntime": self.sandbox_runtime,
             },
         }
@@ -489,6 +608,15 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_INIT_DIRECT_MAX_CONCURRENT_RESTORES": str(
             plan.direct_max_concurrent_restores
         ),
+        "UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL": (
+            plan.storage_native_registry_url
+        ),
+        "UCLOUD_INIT_STORAGE_NATIVE_REPOSITORY": (
+            plan.storage_native_repository
+        ),
+        "UCLOUD_INIT_STORAGE_NATIVE_CACHE_GB": str(
+            plan.storage_native_cache_gb
+        ),
     }
 
 
@@ -515,6 +643,11 @@ def render_remote_deploy_script(
     units: dict[str, str] | None = None,
 ) -> str:
     plan.validate()
+    storage_artifacts = (
+        storage_native_build_artifacts(plan.local_storage_native_manifest)
+        if plan.local_storage_native_manifest is not None
+        else None
+    )
     unit_texts = units if units is not None else packaged_systemd_units()
     env_files = {
         "/etc/ucloud-sandboxes/gateway.env": render_env_file(gateway_env(plan)),
@@ -554,6 +687,9 @@ def render_remote_deploy_script(
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
         f"DIRECT_RUNSC={shlex.quote(plan.remote_direct_runsc_path if plan.sandbox_runtime == 'direct' else '')}",
         f"DIRECT_RUNSC_COMMIT={shlex.quote(plan.direct_runsc_commit)}",
+        f"STORAGE_NATIVE_BACKEND={shlex.quote(plan.remote_storage_native_backend_path if storage_artifacts is not None else '')}",
+        f"STORAGE_NATIVE_MANIFEST={shlex.quote(plan.remote_storage_native_manifest_path if storage_artifacts is not None else '')}",
+        f"STORAGE_NATIVE_LICENSE={shlex.quote(plan.remote_storage_native_license_path if storage_artifacts is not None else '')}",
         f"SANDBOX_NODE_PACKAGE_BUNDLE={shlex.quote(plan.sandbox_node_package_bundle_path)}",
         f"BUILDER_NODE_PACKAGE_BUNDLE={shlex.quote(plan.builder_node_package_bundle_path)}",
         f"SERVICE_USER={shlex.quote(plan.service_user)}",
@@ -600,10 +736,15 @@ def render_remote_deploy_script(
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'test -s "$REMOTE_WHEEL"',
         'if [ -n "$DIRECT_RUNSC" ]; then test -x "$DIRECT_RUNSC"; fi',
+        'if [ -n "$STORAGE_NATIVE_BACKEND" ]; then',
+        '  test -x "$STORAGE_NATIVE_BACKEND"',
+        '  test -s "$STORAGE_NATIVE_MANIFEST"',
+        '  test -s "$STORAGE_NATIVE_LICENSE"',
+        "fi",
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
         "binutils ca-certificates curl docker.io gnupg openssh-client openssl "
-        "python3-venv",
+        'python3-venv "linux-modules-extra-$(uname -r)"',
         "",
         'if [ ! -x "$VENV_DIR/bin/python" ]; then',
         '  python3 -m venv "$VENV_DIR"',
@@ -750,6 +891,10 @@ def render_remote_deploy_script(
         '    rm -rf "$NODE_PACKAGE_WORK/runtime-builder"',
         "  fi",
         "fi",
+        'if [ -n "$STORAGE_NATIVE_BACKEND" ] && [ "$RUNTIME_BUNDLE_READY" -ne 1 ]; then',
+        '  echo "Direct storage-native nodes require a complete offline runtime bundle" >&2',
+        "  exit 1",
+        "fi",
         "for BUNDLE_ROLE in sandbox builder; do",
         '  if [ "$BUNDLE_ROLE" = builder ]; then',
         '    BUNDLE_TARGET="$BUILDER_NODE_PACKAGE_BUNDLE"',
@@ -768,6 +913,8 @@ def render_remote_deploy_script(
         '"$BUNDLE_ROLE" "$BUNDLE_PACKAGES" "$NODE_AGENT_RUNTIME_ARCHIVE" '
         '"$RUNTIME_KERNEL_RELEASE" "$RUNTIME_KERNEL_MODULE_DIR" '
         '"$RUNTIME_KERNEL_MODULES" "$DIRECT_RUNSC" "$DIRECT_RUNSC_COMMIT" '
+        '"$STORAGE_NATIVE_BACKEND" "$STORAGE_NATIVE_MANIFEST" '
+        '"$STORAGE_NATIVE_LICENSE" '
         "<<'PY'",
         "import hashlib",
         "import gzip",
@@ -797,6 +944,9 @@ def render_remote_deploy_script(
         "kernel_load_modules = sys.argv[15].split()",
         "direct_runsc = Path(sys.argv[16]) if len(sys.argv) > 16 and sys.argv[16] else None",
         "direct_runsc_commit = sys.argv[17] if len(sys.argv) > 17 else ''",
+        "storage_backend = Path(sys.argv[18]) if len(sys.argv) > 18 and sys.argv[18] else None",
+        "storage_manifest = Path(sys.argv[19]) if len(sys.argv) > 19 and sys.argv[19] else None",
+        "storage_license = Path(sys.argv[20]) if len(sys.argv) > 20 and sys.argv[20] else None",
         "package_file = wheel_dir / wheel.name",
         "if not package_file.is_file():",
         "    raise SystemExit(f'pip download did not retain {wheel.name}')",
@@ -852,6 +1002,31 @@ def render_remote_deploy_script(
         "            'file': 'runtime/direct/runsc',",
         "            'sha256': sha256_file(direct_runsc),",
         "            'size': direct_runsc.stat().st_size,",
+        "        }",
+        "        if storage_backend is None or storage_manifest is None or storage_license is None:",
+        "            raise SystemExit('storage-native build artifacts are absent')",
+        "        if not all(path.is_file() for path in (storage_backend, storage_manifest, storage_license)):",
+        "            raise SystemExit('storage-native build artifact is missing')",
+        "        storage_build = json.loads(storage_manifest.read_text(encoding='utf-8'))",
+        f"        if storage_build.get('agentenv_commit') != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:",
+        "            raise SystemExit('storage-native AgentEnv commit is not pinned')",
+        "        if storage_build.get('schema') != 1 or storage_build.get('license') != 'MIT':",
+        "            raise SystemExit('invalid storage-native build provenance')",
+        "        if storage_build.get('patch') != 'agentenv-streaming-dense-export.patch':",
+        "            raise SystemExit('invalid storage-native compatibility patch')",
+        "        storage_digest = sha256_file(storage_backend)",
+        "        if storage_build.get('artifact_sha256') != storage_digest:",
+        "            raise SystemExit('storage-native backend digest mismatch')",
+        "        manifest_payload['runtime']['storage_native'] = {",
+        "            'agentenv_commit': storage_build['agentenv_commit'],",
+        "            'file': 'runtime/storage-native/backend',",
+        "            'host_architecture': storage_build.get('host_architecture'),",
+        "            'license_file': 'runtime/storage-native/LICENSE',",
+        "            'license_sha256': sha256_file(storage_license),",
+        "            'manifest_file': 'runtime/storage-native/build-manifest.json',",
+        "            'manifest_sha256': sha256_file(storage_manifest),",
+        "            'sha256': storage_digest,",
+        "            'size': storage_backend.stat().st_size,",
         "        }",
         "    probe_archive = runtime_dir / 'images' / 'runtime-conformance-busybox.tar'",
         "    probe_inspect = runtime_dir / 'images' / 'runtime-conformance-busybox.inspect.json'",
@@ -914,6 +1089,11 @@ def render_remote_deploy_script(
         "                )",
         "                if runtime_role == 'sandbox' and direct_runsc is not None:",
         "                    archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
+        "                    archive_paths.extend((",
+        "                        (storage_backend, 'runtime/storage-native/backend'),",
+        "                        (storage_manifest, 'runtime/storage-native/build-manifest.json'),",
+        "                        (storage_license, 'runtime/storage-native/LICENSE'),",
+        "                    ))",
         "            for path, arcname in archive_paths:",
         "                info = archive.gettarinfo(str(path), arcname=arcname)",
         "                info.uid = info.gid = 0",
@@ -1204,6 +1384,14 @@ def _systemd_env_quote(value: str) -> str:
         return value
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _reject_bad_env_key(key: str) -> None:

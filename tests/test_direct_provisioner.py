@@ -3,7 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
-from threading import Thread
+from threading import Event, Thread
 from urllib import request
 import hashlib
 import json
@@ -527,6 +527,52 @@ class DirectProvisionerTests(unittest.TestCase):
                 HibernationState.RUNNING.value,
             )
             self.assertEqual(runner.calls[-1][1], b"\0binary")
+
+    def test_storage_native_background_park_does_not_wait_for_publication(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, warden = self.make(root)
+            publication_started = Event()
+            allow_publication = Event()
+            warden.storage = object()
+
+            def publish_storage_snapshot(
+                _sandbox,
+                *,
+                operation_id,
+            ):
+                self.assertEqual(operation_id, "park:test:publish")
+                publication_started.set()
+                if not allow_publication.wait(timeout=5):
+                    raise TimeoutError("test did not release publication")
+                return {"state": "published"}
+
+            warden.publish_storage_snapshot = publish_storage_snapshot
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = service.create(self.spec())
+
+            parked = service.park(
+                created.spec.id,
+                operation_id="park:test",
+                background=True,
+            )
+
+            self.assertEqual(parked.state, HibernationState.PARKED.value)
+            self.assertTrue(publication_started.wait(timeout=1))
+            self.assertTrue(
+                service.storage_native_publication_pending(created.spec.id)
+            )
+            allow_publication.set()
+            for thread in tuple(service._publication_threads.values()):
+                thread.join(timeout=5)
+            self.assertFalse(
+                service.storage_native_publication_pending(created.spec.id)
+            )
 
     def test_service_quarantines_dead_running_sentry_on_read(self) -> None:
         with TemporaryDirectory() as raw:

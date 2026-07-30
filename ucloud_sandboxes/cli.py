@@ -173,6 +173,8 @@ from .vm_init import (
     DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
     DEFAULT_HIBERNATION_QUOTA_HELPER,
+    DEFAULT_STORAGE_NATIVE_CACHE_GB,
+    DEFAULT_STORAGE_NATIVE_REPOSITORY,
     VmInitOptions,
     plan_vm_init,
     render_vm_init_script,
@@ -593,6 +595,14 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument("--state-root", type=Path)
     direct_node_agent.add_argument("--image-file", type=Path)
     direct_node_agent.add_argument("--quota-root", type=Path, required=True)
+    direct_node_agent.add_argument(
+        "--storage-native-socket",
+        type=Path,
+        help=(
+            "Root-only node-storage service socket. When set, the direct "
+            "runtime uses storage-native-v1 volumes instead of XFS project quotas."
+        ),
+    )
     direct_node_agent.add_argument("--runsc", type=Path, required=True)
     direct_node_agent.add_argument("--runsc-commit", required=True)
     direct_node_agent.add_argument(
@@ -1245,6 +1255,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exact gVisor commit used to build --direct-runsc.",
     )
     deploy_all.add_argument(
+        "--storage-native-manifest",
+        type=Path,
+        help=(
+            "Build manifest emitted beside the pinned storage-native backend "
+            "binary and license by runtime/storage_native/build_pinned.sh."
+        ),
+    )
+    deploy_all.add_argument(
+        "--storage-native-cache-gb",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
+        help="Maximum disposable lazy-block cache per storage-native worker.",
+    )
+    deploy_all.add_argument(
+        "--storage-native-repository",
+        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
+        help="Private Registry repository for durable sandbox snapshots.",
+    )
+    deploy_all.add_argument(
         "--direct-disk-headroom-mb",
         type=int,
         default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
@@ -1307,7 +1336,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Newest tags to protect per repository during scheduled prune.",
     )
     deploy_all.add_argument("--sandbox-product-id", default=DEFAULT_VM_PRODUCT_ID)
-    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=600)
+    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=2000)
     deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
     deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)
     deploy_all.add_argument(
@@ -2034,6 +2063,22 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Exact patched gVisor commit required by direct-runtime node bundles.",
     )
     parser.add_argument(
+        "--init-storage-native-registry-url",
+        default="",
+        help="Private Registry origin used for durable storage-native snapshots.",
+    )
+    parser.add_argument(
+        "--init-storage-native-repository",
+        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
+        help="Registry repository used for durable storage-native snapshots.",
+    )
+    parser.add_argument(
+        "--init-storage-native-cache-gb",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
+        help="Maximum disposable block cache per storage-native node.",
+    )
+    parser.add_argument(
         "--init-direct-network",
         choices=("none", "sandbox"),
         default="none",
@@ -2246,6 +2291,22 @@ def add_vm_init_args(
         "--direct-runsc-commit",
         default="",
         help="Exact patched gVisor commit required by a direct-runtime bundle.",
+    )
+    parser.add_argument(
+        "--storage-native-registry-url",
+        default="",
+        help="Private Registry origin used for durable storage-native snapshots.",
+    )
+    parser.add_argument(
+        "--storage-native-repository",
+        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
+        help="Registry repository used for durable storage-native snapshots.",
+    )
+    parser.add_argument(
+        "--storage-native-cache-gb",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
+        help="Maximum disposable block cache on this storage-native node.",
     )
     parser.add_argument(
         "--direct-network",
@@ -2787,6 +2848,11 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
                 str(args.idle_park_seconds),
             )
         ),
+        storage_native_socket=(
+            args.storage_native_socket.absolute()
+            if args.storage_native_socket is not None
+            else None
+        ),
     )
     server = build_direct_node_agent_server(
         args.host,
@@ -2815,6 +2881,10 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     print(f"Serving direct-runsc node agent on http://{host}:{port}")
     print(f"Direct state root: {state_root}")
     print(f"Direct quota root: {args.quota_root}")
+    print(
+        "Storage-native volumes: "
+        f"{args.storage_native_socket if args.storage_native_socket else 'disabled'}"
+    )
     print(f"Runtime identity: {service.provisioner.identity.digest}")
     print("Legacy Docker task lifecycle: disabled")
     try:
@@ -3608,6 +3678,13 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             else None
         ),
         direct_runsc_commit=args.direct_runsc_commit,
+        local_storage_native_manifest=(
+            args.storage_native_manifest.expanduser().resolve()
+            if args.storage_native_manifest is not None
+            else None
+        ),
+        storage_native_cache_gb=args.storage_native_cache_gb,
+        storage_native_repository=args.storage_native_repository,
         direct_disk_headroom_mb=args.direct_disk_headroom_mb,
         direct_max_concurrent_restores=args.direct_max_concurrent_restores,
         install_root=args.install_root,
@@ -3690,6 +3767,44 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     "result": staged_direct_runsc.to_dict(),
                 }
             )
+        if plan.local_storage_native_manifest is not None:
+            from .deploy import storage_native_build_artifacts
+
+            storage_artifacts = storage_native_build_artifacts(
+                plan.local_storage_native_manifest
+            )
+            for local_path, remote_path, mode in (
+                (
+                    storage_artifacts.backend,
+                    plan.remote_storage_native_backend_path,
+                    "0755",
+                ),
+                (
+                    storage_artifacts.manifest,
+                    plan.remote_storage_native_manifest_path,
+                    "0644",
+                ),
+                (
+                    storage_artifacts.license,
+                    plan.remote_storage_native_license_path,
+                    "0644",
+                ),
+            ):
+                staged_storage_file = stage_file_over_ssh(
+                    ssh_command,
+                    local_path,
+                    remote_path,
+                    mode=mode,
+                    timeout_seconds=timeout,
+                    private_key_file=args.ssh_private_key_file,
+                )
+                result["stagedFiles"].append(
+                    {
+                        "localPath": str(local_path),
+                        "remotePath": remote_path,
+                        "result": staged_storage_file.to_dict(),
+                    }
+                )
         if not args.no_copy_session:
             local_session = Path(config.ucloud_session_file).expanduser()
             staged_session = stage_file_over_ssh(
@@ -6306,6 +6421,7 @@ def _direct_stop_set_has_evacuation_capacity(
 ) -> bool:
     stop_set = set(stop_job_ids)
     parked_shapes: list[int] = []
+    storage_native_only = True
     for job_id in stop_job_ids:
         routes = routes_by_job.get(job_id, ())
         if not routes:
@@ -6324,6 +6440,11 @@ def _direct_stop_set_has_evacuation_capacity(
         for route in routes:
             if route.resources.disk_mb <= 0:
                 return False
+            storage_native_only = storage_native_only and bool(
+                "storage-native-v1" in heartbeat.capabilities
+                and route.storage_schema == "storage-native-v1"
+                and route.snapshot_manifest_digest
+            )
             parked_shapes.append(route.resources.disk_mb)
     if not parked_shapes:
         return True
@@ -6339,6 +6460,22 @@ def _direct_stop_set_has_evacuation_capacity(
         and "sandbox-migrate-v2" in heartbeat.capabilities
         and heartbeat.free_resources.disk_mb > 0
     ]
+    if storage_native_only:
+        storage_native_free_disk = [
+            heartbeat.free_resources.disk_mb
+            for node in nodes
+            if node.job_id not in stop_set
+            and node.is_ready
+            and (heartbeat := node.heartbeat) is not None
+            and heartbeat.admission_open
+            and not heartbeat.draining
+            and "storage-native-v1" in heartbeat.capabilities
+            and "sandbox-migrate-storage-native-v1" in heartbeat.capabilities
+        ]
+        return bool(
+            storage_native_free_disk
+            and max(parked_shapes) <= max(storage_native_free_disk)
+        )
     for disk_mb in sorted(parked_shapes, reverse=True):
         candidates = [
             (free_disk, index)
@@ -6545,10 +6682,19 @@ def vm_init_options_for_autoscaled_node(
         ),
     )
     swap_gb = 0 if role == "builder" else max(0, int(getattr(args, "init_swap_gb", 0)))
+    node_runtime = (
+        "legacy"
+        if role == "builder"
+        else str(getattr(args, "init_node_runtime", "legacy"))
+    )
     total_resources = resources_from_vm_job(
         node.job, config.policy.default_node_resources
     )
-    if docker_quota_image_gb > 0 and total_resources.disk_mb > 0:
+    if (
+        docker_quota_image_gb > 0
+        and total_resources.disk_mb > 0
+        and node_runtime != "direct"
+    ):
         total_resources = replace(
             total_resources,
             disk_mb=min(total_resources.disk_mb, docker_quota_image_gb * 1024),
@@ -6564,11 +6710,6 @@ def vm_init_options_for_autoscaled_node(
     disk_overcommit = _node_capacity_factor(
         getattr(args, "init_disk_overcommit", None),
         config.policy.disk_overcommit,
-    )
-    node_runtime = (
-        "legacy"
-        if role == "builder"
-        else str(getattr(args, "init_node_runtime", "legacy"))
     )
     if role == "builder" or node_runtime == "direct":
         cpu_overcommit = 1.0
@@ -6652,6 +6793,31 @@ def vm_init_options_for_autoscaled_node(
             else tuple(
                 getattr(args, "init_direct_network_allow_tcp", ()) or ()
             )
+        ),
+        storage_native_registry_url=(
+            ""
+            if role == "builder"
+            else str(
+                getattr(args, "init_storage_native_registry_url", "") or ""
+            )
+        ),
+        storage_native_repository=str(
+            getattr(
+                args,
+                "init_storage_native_repository",
+                DEFAULT_STORAGE_NATIVE_REPOSITORY,
+            )
+            or DEFAULT_STORAGE_NATIVE_REPOSITORY
+        ),
+        storage_native_cache_gb=max(
+            1,
+            int(
+                getattr(
+                    args,
+                    "init_storage_native_cache_gb",
+                    DEFAULT_STORAGE_NATIVE_CACHE_GB,
+                )
+            ),
         ),
         direct_disk_headroom_mb=max(
             1,
@@ -7354,6 +7520,24 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         direct_network_allow_tcp=tuple(
             getattr(args, "direct_network_allow_tcp", ()) or ()
         ),
+        storage_native_registry_url=str(
+            getattr(args, "storage_native_registry_url", "") or ""
+        ),
+        storage_native_repository=str(
+            getattr(
+                args,
+                "storage_native_repository",
+                DEFAULT_STORAGE_NATIVE_REPOSITORY,
+            )
+            or DEFAULT_STORAGE_NATIVE_REPOSITORY
+        ),
+        storage_native_cache_gb=int(
+            getattr(
+                args,
+                "storage_native_cache_gb",
+                DEFAULT_STORAGE_NATIVE_CACHE_GB,
+            )
+        ),
         direct_disk_headroom_mb=int(
             getattr(
                 args,
@@ -7407,6 +7591,9 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directRunscCommit": options.direct_runsc_commit,
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
+        "storageNativeRegistryUrl": options.storage_native_registry_url,
+        "storageNativeRepository": options.storage_native_repository,
+        "storageNativeCacheGb": options.storage_native_cache_gb,
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,

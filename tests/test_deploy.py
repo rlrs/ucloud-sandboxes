@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -33,6 +34,35 @@ class DeployTests(unittest.TestCase):
             wheel.write_bytes(b"wheel")
             runsc.write_bytes(b"patched-runsc")
             runsc.chmod(0o755)
+            backend_bytes = b"pinned-storage-native-backend"
+            backend_digest = hashlib.sha256(backend_bytes).hexdigest()
+            backend = root / f"uvm-ublk-daemon-{backend_digest}"
+            backend.write_bytes(backend_bytes)
+            backend.chmod(0o755)
+            (root / f"{backend.name}.LICENSE").write_text(
+                "MIT\n",
+                encoding="utf-8",
+            )
+            storage_manifest = root / f"{backend.name}.manifest.json"
+            storage_manifest.write_text(
+                json.dumps(
+                    {
+                        "agentenv_commit": (
+                            "f41abb21324f6b0520abf34b7720aa260ddd10eb"
+                        ),
+                        "artifact": backend.name,
+                        "artifact_sha256": backend_digest,
+                        "cargo_package": "uvm-ublk-daemon",
+                        "host_architecture": "x86_64",
+                        "license": "MIT",
+                        "patch": "agentenv-streaming-dense-export.patch",
+                        "patch_sha256": "a" * 64,
+                        "schema": 1,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             plan = AllInOneDeployPlan(
                 job_id="job-1",
                 project_id="project-1",
@@ -41,6 +71,7 @@ class DeployTests(unittest.TestCase):
                 sandbox_runtime="direct",
                 local_direct_runsc=runsc,
                 direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                local_storage_native_manifest=storage_manifest,
                 gateway_private_host="sandbox-gateway-prod",
                 registry_private_ip="10.0.0.5",
                 private_network_id="net-1",
@@ -160,7 +191,7 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(autoscaler["UCLOUD_INIT_CPU_OVERCOMMIT"], "3")
         self.assertEqual(autoscaler["UCLOUD_INIT_MEMORY_OVERCOMMIT"], "2")
-        self.assertEqual(autoscaler["UCLOUD_SANDBOX_DISK_GB"], "600")
+        self.assertEqual(autoscaler["UCLOUD_SANDBOX_DISK_GB"], "2000")
         self.assertEqual(autoscaler["UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB"], "440")
         self.assertEqual(
             autoscaler["UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB"], "200"

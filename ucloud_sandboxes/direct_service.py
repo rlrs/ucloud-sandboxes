@@ -12,10 +12,18 @@ from uuid import uuid4
 import re
 
 from .direct_provisioner import DirectSandboxProvisioner
-from .direct_migration import DirectMigrationArchive
+from .direct_migration import (
+    DirectMigrationArchive,
+    DirectMigrationManifest,
+    StorageNativeMigration,
+)
 from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
-from .hibernation import HibernationState
+from .hibernation import (
+    HibernationArtifactFile,
+    HibernationManifest,
+    HibernationState,
+)
 from .models import ResourceQuantity
 from .sandbox import (
     SandboxAdmissionClosedError,
@@ -168,6 +176,9 @@ class DirectSandboxService:
         self._activity_guard = threading.Lock()
         self._stop_event = threading.Event()
         self._parking_thread: threading.Thread | None = None
+        self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
+        self._publication_errors: dict[tuple[str, int], BaseException] = {}
+        self._publication_guard = threading.Lock()
 
     def configure_active_capacity(self, capacity: ResourceQuantity) -> None:
         """Install the hard CPU/RAM wake-admission ceiling for this node."""
@@ -261,7 +272,11 @@ class DirectSandboxService:
             self._last_activity.pop(key, None)
 
     def park(
-        self, sandbox_id: str, *, operation_id: str | None = None
+        self,
+        sandbox_id: str,
+        *,
+        operation_id: str | None = None,
+        background: bool = False,
     ) -> SandboxRecord:
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
@@ -275,6 +290,20 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
+                if getattr(self.warden, "storage", None) is not None:
+                    publication_id = (
+                        operation_id or f"park-publish:{uuid4().hex}"
+                    )
+                    if background:
+                        self._start_storage_publication(
+                            registration,
+                            operation_id=publication_id,
+                        )
+                    else:
+                        self.warden.publish_storage_snapshot(
+                            sandbox,
+                            operation_id=publication_id,
+                        )
                 return self._record(registration)
             if record.state != HibernationState.RUNNING:
                 record = self.warden.reconcile(sandbox)
@@ -282,11 +311,67 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     f"direct sandbox cannot park from {record.state.value}"
                 )
+            park_operation_id = operation_id or f"park:{uuid4().hex}"
             self.warden.park(
                 sandbox,
-                operation_id=operation_id or f"park:{uuid4().hex}",
+                operation_id=park_operation_id,
             )
+            if getattr(self.warden, "storage", None) is not None:
+                if background:
+                    self._start_storage_publication(
+                        registration,
+                        operation_id=f"{park_operation_id}:publish",
+                    )
+                else:
+                    self.warden.publish_storage_snapshot(
+                        sandbox,
+                        operation_id=f"{park_operation_id}:publish",
+                    )
             return self._record(registration)
+
+    def storage_native_publication_pending(self, sandbox_id: str) -> bool:
+        registration = self._require_registration(sandbox_id)
+        key = (sandbox_id, registration.sandbox_generation)
+        with self._publication_guard:
+            thread = self._publication_threads.get(key)
+            return bool(thread is not None and thread.is_alive())
+
+    def _start_storage_publication(
+        self,
+        registration: DirectSandboxRegistration,
+        *,
+        operation_id: str,
+    ) -> None:
+        key = (
+            registration.sandbox_id,
+            registration.sandbox_generation,
+        )
+        with self._publication_guard:
+            existing = self._publication_threads.get(key)
+            if existing is not None and existing.is_alive():
+                return
+            self._publication_errors.pop(key, None)
+
+            def publish() -> None:
+                try:
+                    self.warden.publish_storage_snapshot(
+                        registration.to_direct_sandbox(),
+                        operation_id=operation_id,
+                    )
+                except BaseException as exc:
+                    with self._publication_guard:
+                        self._publication_errors[key] = exc
+
+            thread = threading.Thread(
+                target=publish,
+                name=(
+                    "ucloud-storage-publisher-"
+                    f"{registration.sandbox_id}-{registration.sandbox_generation}"
+                ),
+                daemon=True,
+            )
+            self._publication_threads[key] = thread
+            thread.start()
 
     def wake(
         self,
@@ -383,6 +468,238 @@ class DirectSandboxService:
             )
             return exported
 
+    def prepare_storage_native_move(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+    ) -> StorageNativeMigration:
+        """Publish a parked source and fence its portable metadata."""
+
+        if self.warden.storage is None:
+            raise DirectWardenError("storage-native migration is not configured")
+        existing = self.provisioner.registry.get(sandbox_id)
+        if existing is not None and existing.phase == "moving_out":
+            return self.prepared_storage_native_move(
+                sandbox_id,
+                migration_id=migration_id,
+            )
+        registration = self._require_registration(sandbox_id)
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            migration = self._storage_native_snapshot_locked(registration)
+            self.provisioner.storage_migrations.save(migration_id, migration)
+            self.provisioner.registry.begin_move_out(
+                sandbox_id,
+                expected_revision=registration.revision,
+                migration_id=migration_id,
+                migration_sha256=migration.sha256,
+            )
+            return migration
+
+    def prepare_storage_native_v2_export(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        archive_path: Path | None = None,
+    ) -> DirectMigrationArchive:
+        """Materialize rollback archive through a disposable COW mount."""
+
+        if self.warden.storage is None:
+            raise DirectWardenError("storage-native export is not configured")
+        existing = self.provisioner.registry.get(sandbox_id)
+        if existing is not None and existing.phase == "moving_out":
+            return self.prepared_move_archive(
+                sandbox_id,
+                migration_id=migration_id,
+            )
+        registration = self._require_registration(sandbox_id)
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            sandbox = registration.to_direct_sandbox()
+            source_manifest = self.warden.load_parked_manifest(sandbox)
+            archive_path = archive_path or self.migration_archive_path(
+                migration_id
+            )
+            source_guest_ip: str | None = None
+            if registration.spec.network != "none":
+                network_manager = self.provisioner.network_manager
+                if network_manager is None:
+                    raise DirectWardenError(
+                        "networked export has no source network manager"
+                    )
+                network_lease = network_manager.lease(
+                    registration.sandbox_id,
+                    registration.sandbox_generation,
+                )
+                if network_lease is None:
+                    raise DirectWardenError(
+                        "networked export has no durable source network lease"
+                    )
+                source_guest_ip = network_lease.guest_ip
+            mounted = self.warden._mount_storage(
+                sandbox,
+                operation_id=f"export:{migration_id}:mount",
+            )
+            try:
+                mounted_metadata = self.warden.artifacts.load_published_metadata(
+                    sandbox_id=registration.sandbox_id,
+                    sandbox_generation=registration.sandbox_generation,
+                    hibernation_generation=(
+                        source_manifest.hibernation_generation
+                    ),
+                )
+                if (
+                    mounted_metadata.metadata_sha256
+                    != source_manifest.metadata_sha256
+                ):
+                    raise DirectWardenError(
+                        "mounted rollback snapshot changed manifest identity"
+                    )
+                generation = (
+                    Path(registration.quota_path)
+                    / f"hibernate-{source_manifest.hibernation_generation}"
+                )
+                local_files = tuple(
+                    HibernationArtifactFile.from_path(
+                        generation / item.name,
+                        role=item.role,
+                    )
+                    for item in source_manifest.files
+                )
+                if any(
+                    expected.name != actual.name
+                    or expected.role != actual.role
+                    or expected.logical_bytes != actual.logical_bytes
+                    for expected, actual in zip(
+                        source_manifest.files,
+                        local_files,
+                        strict=True,
+                    )
+                ):
+                    raise DirectWardenError(
+                        "mounted rollback snapshot changed checkpoint files"
+                    )
+                local_manifest = HibernationManifest(
+                    sandbox_id=source_manifest.sandbox_id,
+                    sandbox_generation=source_manifest.sandbox_generation,
+                    hibernation_generation=(
+                        source_manifest.hibernation_generation
+                    ),
+                    operation_id=source_manifest.operation_id,
+                    spec_sha256=source_manifest.spec_sha256,
+                    container_id=source_manifest.container_id,
+                    created_ns=source_manifest.created_ns,
+                    runtime=source_manifest.runtime,
+                    files=local_files,
+                )
+                exported = self.provisioner.migration_archives.export(
+                    registration=registration,
+                    local_manifest=local_manifest,
+                    runtime_identity=self.provisioner.identity,
+                    writable_incarnation=Path(registration.quota_path),
+                    archive_path=archive_path,
+                    source_guest_ip=source_guest_ip,
+                )
+            finally:
+                record = self.warden._storage_record(sandbox)
+                if record.get("state") == "mounted":
+                    self.warden.storage.discard_mounted_cow(
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                        volume_id=sandbox.memory_directory,
+                        operation_id=f"export:{migration_id}:discard",
+                        expected_revision=int(record["revision"]),
+                    )
+            if mounted.get("state") != "mounted":
+                raise DirectWardenError(
+                    "rollback export did not mount published authority"
+                )
+            self.provisioner.registry.begin_move_out(
+                sandbox_id,
+                expected_revision=registration.revision,
+                migration_id=migration_id,
+                migration_sha256=exported.sha256,
+            )
+            return exported
+
+    def describe_storage_native_snapshot(
+        self,
+        sandbox_id: str,
+    ) -> StorageNativeMigration:
+        """Return a complete portable descriptor for durable parked authority."""
+
+        if self.warden.storage is None:
+            raise DirectWardenError("storage-native snapshots are not configured")
+        registration = self._require_registration(sandbox_id)
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            return self._storage_native_snapshot_locked(registration)
+
+    def _storage_native_snapshot_locked(
+        self,
+        registration: DirectSandboxRegistration,
+    ) -> StorageNativeMigration:
+        sandbox = registration.to_direct_sandbox()
+        lifecycle = self.warden.inspect(sandbox)
+        if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+            raise DirectWardenError(
+                "only an already parked sandbox has a storage snapshot"
+            )
+        local_manifest = self.warden.load_parked_manifest(sandbox)
+        source_guest_ip: str | None = None
+        if registration.spec.network != "none":
+            network_manager = self.provisioner.network_manager
+            if network_manager is None:
+                raise DirectWardenError(
+                    "networked snapshot has no source network manager"
+                )
+            network_lease = network_manager.lease(
+                registration.sandbox_id,
+                registration.sandbox_generation,
+            )
+            if network_lease is None:
+                raise DirectWardenError(
+                    "networked snapshot has no durable source network lease"
+                )
+            source_guest_ip = network_lease.guest_ip
+        portable = DirectMigrationManifest.from_local(
+            registration,
+            local_manifest,
+            runtime_identity=self.provisioner.identity,
+            source_guest_ip=source_guest_ip,
+        )
+        storage = self.warden._storage_record(sandbox)
+        if storage.get("state") != "published":
+            raise DirectWardenError(
+                "storage-native snapshot is not durably published"
+            )
+        return StorageNativeMigration(
+            manifest=portable,
+            publication=self.provisioner._publication_from_storage_record(
+                storage
+            ),
+        )
+
+    def prepared_storage_native_move(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+    ) -> StorageNativeMigration:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if (
+            registration is None
+            or registration.phase != "moving_out"
+            or registration.migration_id != migration_id
+            or not registration.migration_sha256
+        ):
+            raise DirectWardenError("source does not own this prepared migration")
+        migration = self.provisioner.storage_migrations.load(migration_id)
+        if migration.sha256 != registration.migration_sha256:
+            raise DirectWardenError(
+                "prepared storage-native migration changed identity"
+            )
+        return migration
+
     def migration_archive_path(self, migration_id: str) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", migration_id):
             raise ValueError("migration id contains unsupported characters")
@@ -443,6 +760,7 @@ class DirectSandboxService:
                 migration_sha256=migration_sha256,
             )
             self._discard_migration_archive(migration_id)
+            self.provisioner.storage_migrations.discard(migration_id)
             return self._record(registration)
 
     def activate_import(
@@ -485,6 +803,7 @@ class DirectSandboxService:
             self._locks.pop(key, None)
         with self._activity_guard:
             self._last_activity.pop(key, None)
+        self.provisioner.storage_migrations.discard(migration_id)
 
     def stage_import(
         self,
@@ -499,6 +818,21 @@ class DirectSandboxService:
             migration_id=migration_id,
         )
         return self._record(result.registration)
+
+    def stage_storage_native_import(
+        self,
+        migration: StorageNativeMigration,
+        *,
+        migration_id: str,
+    ) -> tuple[SandboxRecord, StorageNativeMigration]:
+        result = self.provisioner.stage_storage_native_import(
+            migration,
+            migration_id=migration_id,
+        )
+        return (
+            self._record(result.provisioning.registration),
+            result.migration,
+        )
 
     def finalize_moved_source(
         self,
@@ -522,6 +856,7 @@ class DirectSandboxService:
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self._discard_migration_archive(migration_id)
+        self.provisioner.storage_migrations.discard(migration_id)
 
     def _discard_migration_archive(self, migration_id: str) -> None:
         path = self.migration_archive_path(migration_id)
@@ -599,6 +934,11 @@ class DirectSandboxService:
                             registration.to_direct_sandbox(),
                             operation_id=f"idle-park:{uuid4().hex}",
                         )
+                        if self.warden.storage is not None:
+                            self._start_storage_publication(
+                                registration,
+                                operation_id=f"idle-publish:{uuid4().hex}",
+                            )
                 except DirectWardenError:
                     # Reconciliation and node health expose persistent failures;
                     # one failed background park must not kill the daemon.

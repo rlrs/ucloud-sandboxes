@@ -1,0 +1,149 @@
+{
+  "enospc_errno": 28,
+  "gvisor": {
+    "checkpoint_artifacts": {
+      "application_memory.img": {
+        "allocated_bytes": 17145856,
+        "file_bytes": 1073741824
+      },
+      "checkpoint.img": {
+        "allocated_bytes": 270336,
+        "file_bytes": 269679
+      },
+      "pages.img": {
+        "allocated_bytes": 0,
+        "file_bytes": 0
+      },
+      "pages_meta.img": {
+        "allocated_bytes": 4096,
+        "file_bytes": 2003
+      }
+    },
+    "initial_response": "ok 4295489536",
+    "park_seconds": 0.03045356699999502,
+    "restore": {
+      "conformance_read_bytes": 16744448,
+      "conformance_seconds": 0.04239636200009045,
+      "noop_read_bytes": 147456,
+      "noop_seconds": 0.01475836800000252,
+      "response": "ok 8590456832",
+      "restore_read_bytes": 475136,
+      "restore_seconds": 0.16481436200001554
+    }
+  },
+  "gvisor_network_namespace": "ucloud-storage-native-24908",
+  "layer": null,
+  "phases": {
+    "create_and_format": {
+      "counters": {
+        "daemon_read_bytes": 12288,
+        "daemon_system_ticks": 5,
+        "daemon_user_ticks": 1,
+        "daemon_write_bytes": 34312192,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.07785771600015323
+    },
+    "daemon_start": {
+      "counters": {
+        "daemon_read_bytes": 692224,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 4096,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.0509441379999771
+    },
+    "enospc": {
+      "counters": {
+        "daemon_read_bytes": 20480,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 81920,
+        "device_read_sectors": 24,
+        "device_write_sectors": 160
+      },
+      "seconds": 0.0032049209999058803
+    },
+    "freeze_and_seal": {
+      "counters": {
+        "daemon_read_bytes": 4096,
+        "daemon_system_ticks": 1,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 573440,
+        "device_read_sectors": 0,
+        "device_write_sectors": 864
+      },
+      "seconds": 0.03151844199987863
+    },
+    "mount_and_populate": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 2,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 18411520,
+        "device_read_sectors": 2162,
+        "device_write_sectors": 36416
+      },
+      "seconds": 0.43994448199987346
+    },
+    "reconstruct_and_mount": {
+      "counters": {
+        "daemon_read_bytes": 12288,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 24576,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.00872255900003438
+    },
+    "release_initial": {
+      "counters": {
+        "daemon_read_bytes": 0,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 8192,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.03830016599999908
+    },
+    "release_resumed": {
+      "counters": {
+        "daemon_read_bytes": 4096,
+        "daemon_system_ticks": 0,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 106496,
+        "device_read_sectors": 0,
+        "device_write_sectors": 0
+      },
+      "seconds": 0.042306046000021524
+    },
+    "verify_reconstructed": {
+      "counters": {
+        "daemon_read_bytes": 17518592,
+        "daemon_system_ticks": 2,
+        "daemon_user_ticks": 0,
+        "daemon_write_bytes": 335872,
+        "device_read_sectors": 34080,
+        "device_write_sectors": 632
+      },
+      "seconds": 0.4082816879999882
+    }
+  },
+  "schema": 2,
+  "snapshot": {
+    "allocated_bytes": 52969472,
+    "allocated_to_logical_ratio": 0.0493316650390625,
+    "file_bytes": 52969472,
+    "file_to_logical_ratio": 0.0493316650390625,
+    "logical_device_bytes": 1073741824
+  },
+  "status": "passed",
+  "test_root": "/home/ucloud/qualification-work/ucloud-storage-native-iq494h0m",
+  "upper_mode": "hybridLogStructured",
+  "virtual_size": 1073741824
+}

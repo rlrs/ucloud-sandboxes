@@ -246,8 +246,13 @@ class DirectNodeManagerAdapter:
         sandbox_id: str,
         *,
         operation_id: str | None = None,
+        background: bool = False,
     ) -> SandboxRecord:
-        return self.service.park(sandbox_id, operation_id=operation_id)
+        return self.service.park(
+            sandbox_id,
+            operation_id=operation_id,
+            background=background,
+        )
 
     def wake(
         self,
@@ -373,7 +378,19 @@ class DirectNodeManagerAdapter:
                 if registration is not None and registration.quota_total_mb is not None
                 else record.spec.disk_mb or 0
             )
-            resources = ResourceQuantity(disk_mb=quota_disk)
+            disk_charged = True
+            if getattr(self.service.warden, "storage", None) is not None:
+                if registration is None:
+                    raise RuntimeError(
+                        "direct activity has no storage-native registration"
+                    )
+                storage = self.service.warden._storage_record(
+                    registration.to_direct_sandbox()
+                )
+                disk_charged = storage.get("state") != "published"
+            resources = ResourceQuantity(
+                disk_mb=quota_disk if disk_charged else 0
+            )
             if record.state == "running":
                 resources = replace(
                     resources,
@@ -385,7 +402,7 @@ class DirectNodeManagerAdapter:
                 reserved = reserved + ResourceQuantity(
                     vcpu=record.spec.cpus or 0,
                     memory_mb=record.spec.memory_mb or 0,
-                    disk_mb=quota_disk,
+                    disk_mb=quota_disk if disk_charged else 0,
                 )
             else:
                 used = used + resources

@@ -1,0 +1,69 @@
+{
+  "date": "2026-07-30",
+  "job_id": "12362112",
+  "project": "DFM",
+  "source": {
+    "allocated_bytes": 85319680,
+    "logical_bytes": 85319680,
+    "path_kind": "real storage-native Warden sealed hybrid layer",
+    "virtual_volume_bytes": 1073741824
+  },
+  "output": {
+    "allocated_bytes": 85250048,
+    "logical_bytes": 85250048
+  },
+  "runs": [
+    {
+      "input_blocks_512": 169936,
+      "max_rss_kib": 4608,
+      "output_blocks_512": 166504,
+      "system_seconds": 0.31,
+      "user_seconds": 0.06,
+      "wall_seconds": 0.41
+    },
+    {
+      "input_blocks_512": 170568,
+      "max_rss_kib": 4352,
+      "output_blocks_512": 166504,
+      "system_seconds": 0.34,
+      "user_seconds": 0.05,
+      "wall_seconds": 0.44
+    },
+    {
+      "input_blocks_512": 170824,
+      "max_rss_kib": 4352,
+      "output_blocks_512": 166504,
+      "system_seconds": 0.31,
+      "user_seconds": 0.06,
+      "wall_seconds": 0.45
+    }
+  ],
+  "streaming_validation": {
+    "backend_descriptor": {
+      "digest": "sha256:bec7654df99069d864707e64044557d7a798dbc9ab3da0fc0558cd52a4b303f0",
+      "size": 85250048
+    },
+    "cold_cache_elapsed_seconds": 0.2505283150003379,
+    "consumer_max_rss_kib": 32768,
+    "consumer_output_blocks_512": 8,
+    "streamed_bytes": 85250048,
+    "temporary_dense_bytes": 0,
+    "warm_cache_elapsed_seconds": 0.1484803789999205
+  },
+  "remote_raw_lower_validation": {
+    "bytes_served_before_mount_and_inventory": 4509696,
+    "create_device_seconds": 0.09572263799964276,
+    "file_count": 6,
+    "mount_seconds": 0.026332559999900695,
+    "range_requests": 18,
+    "result": "pass",
+    "top_level": [
+      "hibernate-1",
+      "upper",
+      "work"
+    ]
+  },
+  "temporary_output_note": "The benchmark used a temporary dense output file to establish conversion cost. Production uses the selected Unix-stream exporter and eliminates output_blocks_512.",
+  "tool": "AgentEnv overlaybd::dense_export::write_dense_layer_to",
+  "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb"
+}

@@ -30,6 +30,10 @@ from .capabilities import (
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_compatible, service_health
+from .direct_migration import (
+    STORAGE_NATIVE_MIGRATION_SCHEMA,
+    StorageNativeMigration,
+)
 from .hibernation import hibernation_disk_reservation_mb
 from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
@@ -897,6 +901,28 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> NodeHeartbeat | None:
         routes = self.routing_store.sandbox_routes_readonly()
         active_migrations = self.routing_store.sandbox_migrations(active_only=True)
+        ready_heartbeats = self._ready_sandbox_heartbeats()
+        source_heartbeat = next(
+            (
+                heartbeat
+                for heartbeat in ready_heartbeats
+                if heartbeat.node_id == source.node_id
+                or (
+                    source.node_url
+                    and heartbeat.node_url
+                    and heartbeat.node_url.rstrip("/")
+                    == source.node_url.rstrip("/")
+                )
+            ),
+            None,
+        )
+        source_storage_native = bool(
+            source.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
+            or (
+                source_heartbeat is not None
+                and "storage-native-v1" in source_heartbeat.capabilities
+            )
+        )
         reservations: dict[str, int] = {}
         routes_by_id = {route.sandbox_id: route for route in routes}
         for migration in active_migrations:
@@ -910,12 +936,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 + route.resources.disk_mb
             )
         candidates: list[NodeHeartbeat] = []
-        for heartbeat in self._ready_sandbox_heartbeats():
+        for heartbeat in ready_heartbeats:
             if (
                 heartbeat.node_id == source.node_id
                 or "sandbox-migrate-v2" not in heartbeat.capabilities
                 or (requested_node_id and heartbeat.node_id != requested_node_id)
             ):
+                continue
+            destination_storage_native = (
+                "storage-native-v1" in heartbeat.capabilities
+            )
+            if destination_storage_native != source_storage_native:
                 continue
             available = _node_available_resources(heartbeat, routes)
             available = replace(
@@ -931,6 +962,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 else ResourceQuantity(disk_mb=source.resources.disk_mb)
             )
             if requested.disk_mb <= 0 or not requested.fits_within(available):
+                continue
+            if not _node_storage_pressure_allows(heartbeat, requested):
                 continue
             if not _node_memory_pressure_allows(heartbeat, requested):
                 continue
@@ -988,6 +1021,35 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         measured = timings_ms if timings_ms is not None else {}
         assert self.routing_store is not None
         if migration.phase == "planned":
+            route_snapshot: StorageNativeMigration | None = None
+            source_route = self.routing_store.get_sandbox_readonly(
+                migration.sandbox_id
+            )
+            if (
+                source_route is not None
+                and source_route.state.lower() == "parked"
+                and source_route.storage_schema
+                == STORAGE_NATIVE_MIGRATION_SCHEMA
+                and source_route.storage_snapshot
+            ):
+                try:
+                    candidate = StorageNativeMigration.from_dict(
+                        source_route.storage_snapshot
+                    )
+                    if (
+                        candidate.manifest.sandbox_id
+                        != migration.sandbox_id
+                        or candidate.manifest.sandbox_generation
+                        != migration.generation
+                        or candidate.publication.manifest_digest
+                        != source_route.snapshot_manifest_digest
+                    ):
+                        raise ValueError(
+                            "routed snapshot does not match the migration source"
+                        )
+                    route_snapshot = candidate
+                except ValueError:
+                    route_snapshot = None
             phase_started = time.monotonic()
             response = self._proxy_request(
                 migration.source_node_url,
@@ -1004,66 +1066,193 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             measured["prepare_export"] = _precise_elapsed_ms(phase_started)
             if response.status >= 400:
-                return self._record_migration_error(migration, response)
-            prepared = response.json().get("migration")
-            if not isinstance(prepared, dict):
-                return self._record_migration_error(
-                    migration,
-                    error_message="source returned invalid migration metadata",
+                if response.status < 500 or route_snapshot is None:
+                    return self._record_migration_error(migration, response)
+                migration = (
+                    self.routing_store.advance_sandbox_migration(
+                        migration.migration_id,
+                        expected_phases={"planned"},
+                        phase="prepared",
+                        storage_schema=STORAGE_NATIVE_MIGRATION_SCHEMA,
+                        snapshot_sha256=route_snapshot.sha256,
+                        storage_snapshot=route_snapshot.to_dict(),
+                        source_fenced=False,
+                        error="",
+                    )
+                    or migration
                 )
-            migration = (
-                self.routing_store.advance_sandbox_migration(
-                    migration.migration_id,
-                    expected_phases={"planned"},
-                    phase="prepared",
-                    archive_sha256=str(prepared.get("archive_sha256") or ""),
-                    archive_token=str(prepared.get("archive_token") or ""),
-                    error="",
-                )
-                or migration
-            )
+            else:
+                prepared = response.json().get("migration")
+                if not isinstance(prepared, dict):
+                    return self._record_migration_error(
+                        migration,
+                        error_message="source returned invalid migration metadata",
+                    )
+                storage_schema = str(prepared.get("storage_schema") or "")
+                if storage_schema:
+                    try:
+                        if storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+                            raise ValueError("unsupported migration storage schema")
+                        storage_snapshot = StorageNativeMigration.from_dict(
+                            prepared.get("storage_snapshot")
+                        )
+                        snapshot_sha256 = str(
+                            prepared.get("snapshot_sha256") or ""
+                        )
+                        if storage_snapshot.sha256 != snapshot_sha256:
+                            raise ValueError(
+                                "source snapshot digest does not match metadata"
+                            )
+                    except ValueError as exc:
+                        return self._record_migration_error(
+                            migration,
+                            error_message=f"source returned invalid snapshot: {exc}",
+                        )
+                    migration = (
+                        self.routing_store.advance_sandbox_migration(
+                            migration.migration_id,
+                            expected_phases={"planned"},
+                            phase="prepared",
+                            storage_schema=storage_schema,
+                            snapshot_sha256=snapshot_sha256,
+                            storage_snapshot=storage_snapshot.to_dict(),
+                            source_fenced=True,
+                            error="",
+                        )
+                        or migration
+                    )
+                else:
+                    migration = (
+                        self.routing_store.advance_sandbox_migration(
+                            migration.migration_id,
+                            expected_phases={"planned"},
+                            phase="prepared",
+                            archive_sha256=str(
+                                prepared.get("archive_sha256") or ""
+                            ),
+                            archive_token=str(
+                                prepared.get("archive_token") or ""
+                            ),
+                            source_fenced=True,
+                            error="",
+                        )
+                        or migration
+                    )
         if migration.phase == "prepared":
             phase_started = time.monotonic()
-            archive_path = (
-                f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
-                "/migration/archive"
-            )
-            source_url = (
-                migration.source_node_url.rstrip("/")
-                + archive_path
-                + "?migration_id="
-                + quote(migration.migration_id, safe="")
-            )
+            if migration.storage_schema:
+                import_payload = {
+                    "migration_id": migration.migration_id,
+                    "sandbox_id": migration.sandbox_id,
+                    "snapshot_sha256": migration.snapshot_sha256,
+                    "storage_schema": migration.storage_schema,
+                    "storage_snapshot": migration.storage_snapshot,
+                }
+            else:
+                archive_path = (
+                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                    "/migration/archive"
+                )
+                source_url = (
+                    migration.source_node_url.rstrip("/")
+                    + archive_path
+                    + "?migration_id="
+                    + quote(migration.migration_id, safe="")
+                )
+                import_payload = {
+                    "archive_sha256": migration.archive_sha256,
+                    "archive_token": migration.archive_token,
+                    "migration_id": migration.migration_id,
+                    "sandbox_id": migration.sandbox_id,
+                    "source_url": source_url,
+                }
             response = self._proxy_request(
                 migration.destination_node_url,
                 "/v1/migrations/import",
                 method="POST",
-                body=json.dumps(
-                    {
-                        "archive_sha256": migration.archive_sha256,
-                        "archive_token": migration.archive_token,
-                        "migration_id": migration.migration_id,
-                        "sandbox_id": migration.sandbox_id,
-                        "source_url": source_url,
-                    }
-                ).encode("utf-8"),
+                body=json.dumps(import_payload).encode("utf-8"),
                 extra_headers={"Content-Type": "application/json"},
                 timeout_seconds=3600,
             )
             measured["transfer_and_stage"] = _precise_elapsed_ms(phase_started)
             if response.status >= 400:
                 return self._record_migration_error(migration, response)
+            destination_snapshot: dict[str, Any] | None = None
+            if migration.storage_schema:
+                try:
+                    response_body = response.json()
+                    if (
+                        str(response_body.get("storage_schema") or "")
+                        != migration.storage_schema
+                    ):
+                        raise ValueError(
+                            "destination changed the storage schema"
+                        )
+                    parsed_destination = StorageNativeMigration.from_dict(
+                        response_body.get("storage_snapshot")
+                    )
+                    if (
+                        parsed_destination.manifest
+                        != StorageNativeMigration.from_dict(
+                            migration.storage_snapshot
+                        ).manifest
+                    ):
+                        raise ValueError(
+                            "destination changed portable migration metadata"
+                        )
+                    destination_snapshot = parsed_destination.to_dict()
+                except ValueError as exc:
+                    return self._record_migration_error(
+                        migration,
+                        error_message=(
+                            f"destination returned invalid snapshot: {exc}"
+                        ),
+                    )
             migration = (
                 self.routing_store.advance_sandbox_migration(
                     migration.migration_id,
                     expected_phases={"prepared"},
                     phase="staged",
+                    storage_snapshot=destination_snapshot,
                     error="",
                 )
                 or migration
             )
         if migration.phase == "staged":
             phase_started = time.monotonic()
+            source_route = self.routing_store.get_sandbox_readonly(
+                migration.sandbox_id
+            )
+            if migration.storage_schema:
+                try:
+                    destination_publication = StorageNativeMigration.from_dict(
+                        migration.storage_snapshot
+                    ).publication
+                    if source_route is None:
+                        raise ValueError("source route disappeared")
+                    destination_route = replace(
+                        source_route,
+                        node_id=migration.destination_node_id,
+                        job_id=migration.destination_job_id,
+                        node_url=migration.destination_node_url,
+                    )
+                    self._ensure_registry_snapshot_reference(
+                        destination_route,
+                        repository=destination_publication.repository,
+                        tag=destination_publication.tag,
+                        digest=destination_publication.manifest_digest,
+                    )
+                except (
+                    RegistryImageReferenceUnavailable,
+                    ValueError,
+                ) as exc:
+                    return self._record_migration_error(
+                        migration,
+                        error_message=(
+                            "destination snapshot reference could not be "
+                            f"persisted: {exc}"
+                        ),
+                    )
             routed = self.routing_store.route_sandbox_migration(migration.migration_id)
             measured["route_commit"] = _precise_elapsed_ms(phase_started)
             if routed is None:
@@ -1072,6 +1261,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     error_message="sandbox route changed before migration commit",
                 )
             migration, _route = routed
+            if (
+                source_route is not None
+                and source_route.snapshot_manifest_digest
+            ):
+                self._release_registry_snapshot_reference(source_route)
         if migration.phase == "routed":
             phase_started = time.monotonic()
             response = self._proxy_request(
@@ -1083,7 +1277,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 method="POST",
                 body=json.dumps(
                     {
-                        "archive_sha256": migration.archive_sha256,
+                        "archive_sha256": (
+                            migration.snapshot_sha256
+                            if migration.storage_schema
+                            else migration.archive_sha256
+                        ),
                         "migration_id": migration.migration_id,
                     }
                 ).encode("utf-8"),
@@ -1104,6 +1302,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
         if migration.phase == "activated":
             phase_started = time.monotonic()
+            if migration.storage_schema and not migration.source_fenced:
+                measured["finalize_source"] = 0.0
+                migration = (
+                    self.routing_store.advance_sandbox_migration(
+                        migration.migration_id,
+                        expected_phases={"activated"},
+                        phase="complete",
+                        error="",
+                    )
+                    or migration
+                )
+                measured["protocol_total"] = _precise_elapsed_ms(advance_started)
+                return migration
             response = self._proxy_request(
                 migration.source_node_url,
                 (
@@ -1113,7 +1324,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 method="POST",
                 body=json.dumps(
                     {
-                        "archive_sha256": migration.archive_sha256,
+                        "archive_sha256": (
+                            migration.snapshot_sha256
+                            if migration.storage_schema
+                            else migration.archive_sha256
+                        ),
                         "migration_id": migration.migration_id,
                     }
                 ).encode("utf-8"),
@@ -1185,7 +1400,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         payload = json.dumps(
             {
-                "archive_sha256": migration.archive_sha256,
+                "archive_sha256": (
+                    migration.snapshot_sha256
+                    if migration.storage_schema
+                    else migration.archive_sha256
+                ),
                 "migration_id": migration.migration_id,
             }
         ).encode("utf-8")
@@ -2804,6 +3023,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raise RegistryImageReferenceUnavailable(
                 "registry route image reference could not be persisted"
             ) from exc
+        if (
+            route.snapshot_repository
+            and route.snapshot_tag
+            and route.snapshot_manifest_digest
+        ):
+            self._ensure_registry_snapshot_reference(
+                route,
+                repository=route.snapshot_repository,
+                tag=route.snapshot_tag,
+                digest=route.snapshot_manifest_digest,
+            )
 
     def _begin_registry_image_build_reference(
         self,
@@ -2873,6 +3103,59 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 route_generation=route.generation,
             ),
         )
+        self._release_registry_snapshot_reference(route)
+
+    def _ensure_registry_snapshot_reference(
+        self,
+        route: SandboxRoute,
+        *,
+        repository: str,
+        tag: str,
+        digest: str,
+    ) -> None:
+        store = self.registry_usage_store
+        if store is None:
+            return
+        if not repository or not tag or not digest:
+            raise RegistryImageReferenceUnavailable(
+                "snapshot registry identity is incomplete"
+            )
+        try:
+            with _REGISTRY_LEASE_COORDINATION_LOCK:
+                store.acquire_reference(
+                    repository,
+                    tag,
+                    _registry_snapshot_reference_owner(
+                        route,
+                        deployment_id=self.deployment_id,
+                    ),
+                    digest=digest,
+                )
+        except (OSError, TypeError, ValueError) as exc:
+            raise RegistryImageReferenceUnavailable(
+                "snapshot registry reference could not be persisted"
+            ) from exc
+
+    def _release_registry_snapshot_reference(self, route: SandboxRoute) -> None:
+        store = self.registry_usage_store
+        if (
+            store is None
+            or not route.snapshot_repository
+            or not route.snapshot_tag
+        ):
+            return
+        try:
+            with _REGISTRY_LEASE_COORDINATION_LOCK:
+                store.release_lease(
+                    route.snapshot_repository,
+                    route.snapshot_tag,
+                    _registry_snapshot_reference_owner(
+                        route,
+                        deployment_id=self.deployment_id,
+                    ),
+                )
+        except (OSError, TypeError, ValueError):
+            return
 
     def _release_registry_image_build_reference(
         self,
@@ -3408,8 +3691,92 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         node_url=route.node_url,
                     )
                 )
+        if (
+            lifecycle_action == "park"
+            and response.status == HTTPStatus.ACCEPTED
+        ):
+            self._send_proxied_response(response)
+            return
         if lifecycle_action and 200 <= response.status < 300:
             target_state = "running" if lifecycle_action == "wake" else "parked"
+            lifecycle_response = response.json()
+            storage_schema: str | None = None
+            snapshot_manifest_digest: str | None = None
+            snapshot_repository: str | None = None
+            snapshot_tag: str | None = None
+            storage_snapshot: dict[str, Any] | None = None
+            if lifecycle_action == "park":
+                supplied_schema = str(
+                    lifecycle_response.get("storage_schema") or ""
+                )
+                supplied_manifest = str(
+                    lifecycle_response.get("snapshot_manifest_digest") or ""
+                )
+                supplied_repository = str(
+                    lifecycle_response.get("snapshot_repository") or ""
+                )
+                supplied_tag = str(
+                    lifecycle_response.get("snapshot_tag") or ""
+                )
+                supplied_snapshot = lifecycle_response.get("storage_snapshot")
+                supplied_snapshot_sha256 = str(
+                    lifecycle_response.get("snapshot_sha256") or ""
+                )
+                if supplied_schema or supplied_manifest:
+                    try:
+                        parsed_snapshot = StorageNativeMigration.from_dict(
+                            supplied_snapshot
+                        )
+                        if (
+                            supplied_schema != STORAGE_NATIVE_MIGRATION_SCHEMA
+                            or parsed_snapshot.sha256
+                            != supplied_snapshot_sha256
+                            or parsed_snapshot.manifest.sandbox_id
+                            != route.sandbox_id
+                            or parsed_snapshot.manifest.sandbox_generation
+                            != route.generation
+                            or parsed_snapshot.publication.manifest_digest
+                            != supplied_manifest
+                            or parsed_snapshot.publication.repository
+                            != supplied_repository
+                            or parsed_snapshot.publication.tag != supplied_tag
+                        ):
+                            raise ValueError(
+                                "park descriptor does not match the routed sandbox"
+                            )
+                    except ValueError:
+                        self._write_json(
+                            {
+                                "error": (
+                                    "node returned invalid durable park metadata"
+                                )
+                            },
+                            status=HTTPStatus.BAD_GATEWAY,
+                        )
+                        return
+                    storage_schema = supplied_schema
+                    storage_snapshot = parsed_snapshot.to_dict()
+                    snapshot_manifest_digest = supplied_manifest
+                    snapshot_repository = supplied_repository
+                    snapshot_tag = supplied_tag
+                    try:
+                        self._ensure_registry_snapshot_reference(
+                            route,
+                            repository=supplied_repository,
+                            tag=supplied_tag,
+                            digest=supplied_manifest,
+                        )
+                    except RegistryImageReferenceUnavailable as exc:
+                        self._write_registry_lease_unavailable(exc)
+                        return
+            else:
+                # Once a parked snapshot is resumed, new live writes make its
+                # descriptor stale. Keep only the node's storage schema.
+                storage_schema = route.storage_schema
+                storage_snapshot = {}
+                snapshot_manifest_digest = ""
+                snapshot_repository = ""
+                snapshot_tag = ""
             expected_states = (
                 {"waking", "running"}
                 if lifecycle_action == "wake"
@@ -3419,8 +3786,22 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 route,
                 expected_states=expected_states,
                 state=target_state,
+                storage_schema=storage_schema,
+                snapshot_manifest_digest=snapshot_manifest_digest,
+                snapshot_repository=snapshot_repository,
+                snapshot_tag=snapshot_tag,
+                storage_snapshot=storage_snapshot,
             )
             if updated is not None:
+                if (
+                    route.snapshot_manifest_digest
+                    and (
+                        route.snapshot_manifest_digest
+                        != updated.snapshot_manifest_digest
+                        or route.snapshot_tag != updated.snapshot_tag
+                    )
+                ):
+                    self._release_registry_snapshot_reference(route)
                 route = updated
         if self.command == "DELETE" and 200 <= response.status < 300:
             deleted = response.json().get("deleted")
@@ -4997,6 +5378,30 @@ def _route_with_sandbox_record(
     spec = record.get("spec")
     spec = dict(spec) if isinstance(spec, dict) else dict(route.spec)
     generation = _record_generation(record)
+    storage_schema = str(record.get("storage_schema") or "")
+    storage_snapshot: dict[str, Any] = {}
+    snapshot_manifest_digest = ""
+    snapshot_repository = ""
+    snapshot_tag = ""
+    if storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA:
+        try:
+            parsed_snapshot = StorageNativeMigration.from_dict(
+                record.get("storage_snapshot")
+            )
+            if (
+                parsed_snapshot.sha256
+                != str(record.get("snapshot_sha256") or "")
+                or parsed_snapshot.manifest.sandbox_id != route.sandbox_id
+            ):
+                raise ValueError("inventory snapshot identity does not match")
+            storage_snapshot = parsed_snapshot.to_dict()
+            snapshot_manifest_digest = (
+                parsed_snapshot.publication.manifest_digest
+            )
+            snapshot_repository = parsed_snapshot.publication.repository
+            snapshot_tag = parsed_snapshot.publication.tag
+        except ValueError:
+            storage_schema = ""
     return SandboxRoute(
         sandbox_id=route.sandbox_id,
         node_id=route.node_id,
@@ -5013,6 +5418,11 @@ def _route_with_sandbox_record(
         delete_operation_id=route.delete_operation_id,
         node_epoch=route.node_epoch,
         activity_epoch=route.activity_epoch,
+        storage_schema=storage_schema,
+        snapshot_manifest_digest=snapshot_manifest_digest,
+        snapshot_repository=snapshot_repository,
+        snapshot_tag=snapshot_tag,
+        storage_snapshot=storage_snapshot,
         created_at=route.created_at,
         updated_at=route.updated_at,
     )
@@ -5451,6 +5861,8 @@ def _node_can_fit_available(
         return False
     if not _node_memory_pressure_allows(heartbeat, requested):
         return False
+    if not _node_storage_pressure_allows(heartbeat, requested):
+        return False
     return requested.fits_within(available)
 
 
@@ -5500,6 +5912,30 @@ def _node_memory_pressure_allows(
     if metrics.memory_total_mb > 0:
         return metrics.memory_available_mb >= minimum_headroom_mb
     return True
+
+
+def _node_storage_pressure_allows(
+    heartbeat: NodeHeartbeat,
+    requested: ResourceQuantity,
+) -> bool:
+    """Use daemon authority, rather than route counts, for writable admission."""
+
+    if "storage-native-v1" not in heartbeat.capabilities:
+        return True
+    metrics = heartbeat.runtime_metrics
+    if metrics is None or metrics.storage_hard_capacity_mb <= 0:
+        return False
+    if metrics.storage_error_volumes > 0:
+        return False
+    maximum = metrics.storage_max_concurrent_operations
+    if maximum > 0 and metrics.storage_waiting_operations >= maximum:
+        return False
+    hard_available = max(
+        0,
+        metrics.storage_hard_capacity_mb
+        - metrics.storage_hard_reserved_mb,
+    )
+    return requested.disk_mb <= hard_available
 
 
 def _node_available_resources(
@@ -5573,13 +6009,25 @@ def _node_reserved_route_resources(
             if (route.state or "unknown").lower() == "waking" and (
                 matching_inventory.state or "unknown"
             ).lower() == "parked":
-                # The heartbeat already charges this sandbox's hard disk.
-                # Reserve only the compute delta until a later heartbeat
-                # observes the resumed runtime.
+                storage_disk = (
+                    route.resources.disk_mb
+                    if route.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
+                    and bool(route.snapshot_manifest_digest)
+                    else 0
+                )
+                # Legacy parked inventory already charges disk. A published
+                # storage-native inventory does not, so waking must reserve it.
                 resources = resources + ResourceQuantity(
                     vcpu=route.resources.vcpu,
                     memory_mb=route.resources.memory_mb,
+                    disk_mb=storage_disk,
                 )
+            continue
+        if (
+            (route.state or "unknown").lower() == "parked"
+            and route.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
+            and route.snapshot_manifest_digest
+        ):
             continue
         resources = resources + route.resources
     return resources
@@ -5914,6 +6362,25 @@ def _registry_route_reference_owner(
         "image": str(route.spec.get("image") or ""),
     }
     return _registry_operation_lease_owner("sandbox-route", identity)
+
+
+def _registry_snapshot_reference_owner(
+    route: SandboxRoute,
+    *,
+    deployment_id: str,
+) -> str:
+    return _registry_operation_lease_owner(
+        "sandbox-snapshot",
+        {
+            "version": 1,
+            "deployment_id": deployment_id,
+            "sandbox_id": route.sandbox_id,
+            "generation": route.generation,
+            "create_operation_id": route.create_operation_id,
+            "node_id": route.node_id,
+            "job_id": route.job_id,
+        },
+    )
 
 
 def _registry_operation_lease_owner(kind: str, identity: object) -> str:

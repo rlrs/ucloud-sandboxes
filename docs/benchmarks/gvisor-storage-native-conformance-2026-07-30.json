@@ -1,0 +1,67 @@
+{
+  "environment": {
+    "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+    "conformance_workload_sha256": "6fe3fd0febbdddf1e15fe1d6e45119606517524e56ef95c986208b0e5e3e60f7",
+    "cpu": "32 vCPU AMD EPYC 9535",
+    "daemon_sha256": "b3ed831a6882e4849fe8ed67ab9efff9e81b5bb8454099f369628f105b9aeabd",
+    "disk": "600 GB root",
+    "job_id": "12362112",
+    "kernel": "6.8.0-53-generic",
+    "memory": "96 GB",
+    "project": "DFM",
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1"
+  },
+  "result": {
+    "gvisor": {
+      "checkpoint_artifacts": {
+        "application_memory.img": {
+          "allocated_bytes": 17145856,
+          "file_bytes": 1073741824
+        },
+        "checkpoint.img": {
+          "allocated_bytes": 270336,
+          "file_bytes": 269330
+        },
+        "pages.img": {
+          "allocated_bytes": 0,
+          "file_bytes": 0
+        },
+        "pages_meta.img": {
+          "allocated_bytes": 4096,
+          "file_bytes": 1921
+        }
+      },
+      "initial_response": "ok 4295489536",
+      "park_seconds": 0.030408832000034636,
+      "restore": {
+        "conformance_read_bytes": 16699392,
+        "conformance_seconds": 0.045220050000011724,
+        "noop_read_bytes": 102400,
+        "noop_seconds": 0.01672115600001689,
+        "response": "ok 8590456832",
+        "restore_read_bytes": 565248,
+        "restore_seconds": 0.21535557199990762
+      }
+    },
+    "layer": {
+      "digest": "sha256:b39b874182db703ced9832892fd33857287150c760e15abd9177732b8d83a877",
+      "size": 53383168
+    },
+    "phases": {
+      "create_and_format_seconds": 0.08252690599999823,
+      "freeze_and_seal_seconds": 0.02853962799997589,
+      "mount_populate_and_park_seconds": 0.41941247199997633,
+      "reconstruct_and_mount_seconds": 0.009638938999955826,
+      "release_initial_seconds": 0.0395534660000294,
+      "release_resumed_seconds": 0.03345719399999325,
+      "verify_reconstructed_seconds": 1.6009480950000352
+    },
+    "snapshot": {
+      "allocated_bytes": 53383168,
+      "allocated_to_logical_ratio": 0.049716949462890625,
+      "logical_device_bytes": 1073741824
+    },
+    "status": "passed"
+  },
+  "schema": 1
+}

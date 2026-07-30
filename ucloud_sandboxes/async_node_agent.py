@@ -361,13 +361,17 @@ async def park_sandbox(request: web.Request) -> web.Response:
         if not isinstance(raw, dict):
             raise ValueError("park payload must be a JSON object")
         operation_id = str(raw.get("operation_id") or "").strip() or None
+        background = bool(raw.get("background", False))
         park = getattr(manager, "park", None)
         if park is None:
             raise RuntimeError("sandbox parking is unavailable on this runtime")
+        park_arguments: dict[str, object] = {"operation_id": operation_id}
+        if background:
+            park_arguments["background"] = True
         record = await asyncio.to_thread(
             park,
             request.match_info["sandbox_id"],
-            operation_id=operation_id,
+            **park_arguments,
         )
     except RuntimeError as exc:
         raise web.HTTPServiceUnavailable(text=str(exc)) from exc

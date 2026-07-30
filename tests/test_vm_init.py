@@ -31,11 +31,12 @@ class VmInitTests(unittest.TestCase):
                 direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
                 direct_network="sandbox",
                 direct_network_allow_tcp=("10.36.136.151:8092",),
+                storage_native_registry_url="http://ucloud-sandbox-registry:5000",
                 docker_quota_image_gb=440,
                 total_resources=ResourceQuantity(
                     vcpu=32,
                     memory_mb=96 * 1024,
-                    disk_mb=440 * 1024,
+                    disk_mb=600 * 1024,
                 ),
                 cpu_overcommit=1,
                 memory_overcommit=1,
@@ -49,7 +50,7 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertNotIn("ExecStart=/work/ucloud-sandboxes/bin/ucloud-sandboxes serve-node-agent", script)
         self.assertIn("User=root", script)
-        self.assertIn("UCLOUD_DIRECT_WRITABLE_DISK_MB=434176", script)
+        self.assertIn("UCLOUD_DIRECT_WRITABLE_DISK_MB=114688", script)
         self.assertIn("Skipping legacy task conformance", script)
         self.assertIn("runtime/direct/runsc", script)
         self.assertIn(
@@ -69,6 +70,9 @@ class VmInitTests(unittest.TestCase):
                     heartbeat_url="https://gateway.example/v1/nodes/heartbeat",
                     node_runtime="direct",
                     direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                    storage_native_registry_url=(
+                        "http://ucloud-sandbox-registry:5000"
+                    ),
                     docker_quota_image_gb=440,
                     cpu_overcommit=3,
                     memory_overcommit=2,

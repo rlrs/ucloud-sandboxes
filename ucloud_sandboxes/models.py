@@ -239,6 +239,14 @@ class NodeRuntimeMetrics:
     load_average_1m: float | None = None
     load_average_5m: float | None = None
     load_average_15m: float | None = None
+    storage_hard_capacity_mb: int = 0
+    storage_hard_reserved_mb: int = 0
+    storage_cache_mb: int = 0
+    storage_active_operations: int = 0
+    storage_waiting_operations: int = 0
+    storage_max_concurrent_operations: int = 0
+    storage_published_volumes: int = 0
+    storage_error_volumes: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -288,6 +296,58 @@ class NodeRuntimeMetrics:
             load_average_15m=_optional_float(
                 _first_present(raw, "load_average_15m", "loadAverage15m")
             ),
+            storage_hard_capacity_mb=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_hard_capacity_mb",
+                    "storageHardCapacityMb",
+                )
+            ),
+            storage_hard_reserved_mb=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_hard_reserved_mb",
+                    "storageHardReservedMb",
+                )
+            ),
+            storage_cache_mb=_nonnegative_int(
+                _first_present(raw, "storage_cache_mb", "storageCacheMb")
+            ),
+            storage_active_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_active_operations",
+                    "storageActiveOperations",
+                )
+            ),
+            storage_waiting_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_waiting_operations",
+                    "storageWaitingOperations",
+                )
+            ),
+            storage_max_concurrent_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_max_concurrent_operations",
+                    "storageMaxConcurrentOperations",
+                )
+            ),
+            storage_published_volumes=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_published_volumes",
+                    "storagePublishedVolumes",
+                )
+            ),
+            storage_error_volumes=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_error_volumes",
+                    "storageErrorVolumes",
+                )
+            ),
         )
 
     def to_dict(self) -> dict[str, float | int | str | None]:
@@ -308,6 +368,16 @@ class NodeRuntimeMetrics:
             "load_average_1m": self.load_average_1m,
             "load_average_5m": self.load_average_5m,
             "load_average_15m": self.load_average_15m,
+            "storage_hard_capacity_mb": self.storage_hard_capacity_mb,
+            "storage_hard_reserved_mb": self.storage_hard_reserved_mb,
+            "storage_cache_mb": self.storage_cache_mb,
+            "storage_active_operations": self.storage_active_operations,
+            "storage_waiting_operations": self.storage_waiting_operations,
+            "storage_max_concurrent_operations": (
+                self.storage_max_concurrent_operations
+            ),
+            "storage_published_volumes": self.storage_published_volumes,
+            "storage_error_volumes": self.storage_error_volumes,
         }
 
 

@@ -16,6 +16,7 @@ from ucloud_sandboxes.direct_warden import (
 )
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactFile,
+    HibernationAuthority,
     HibernationFileRole,
     HibernationManifest,
     HibernationRecoveryAction,
@@ -189,6 +190,92 @@ class FakeRunsc:
         self.status = "running"
 
 
+class FakeStorage:
+    def __init__(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_generation: int,
+        volume_id: str,
+        mount_path: Path,
+    ) -> None:
+        self.events: list[str] = []
+        self.fail_next_mount = False
+        self.fail_next_release = False
+        self.fail_next_seal = False
+        self.record = {
+            "mount_path": str(mount_path),
+            "revision": 1,
+            "sandbox_generation": sandbox_generation,
+            "sandbox_id": sandbox_id,
+            "state": "mounted",
+            "volume_id": volume_id,
+        }
+
+    def get_volume(self, volume_id: str):
+        if volume_id != self.record["volume_id"]:
+            raise AssertionError("wrong volume")
+        return {"record": dict(self.record)}
+
+    def freeze_and_seal(self, **kwargs):
+        if self.fail_next_seal:
+            self.fail_next_seal = False
+            raise OSError("injected storage seal failure")
+        if self.record["state"] != "mounted":
+            raise AssertionError("seal requires mounted storage")
+        if kwargs["expected_revision"] != self.record["revision"]:
+            raise AssertionError("stale seal")
+        self.events.append("seal")
+        self.record["revision"] += 1
+        self.record["state"] = "sealed"
+        return {"record": dict(self.record)}
+
+    def release_runtime(self, **kwargs):
+        if self.fail_next_release:
+            self.fail_next_release = False
+            raise OSError("injected storage release failure")
+        if self.record["state"] != "sealed":
+            raise AssertionError("release requires sealed storage")
+        if kwargs["expected_revision"] != self.record["revision"]:
+            raise AssertionError("stale release")
+        self.events.append("release")
+        self.record["revision"] += 1
+        self.record["state"] = "released"
+        return {"record": dict(self.record)}
+
+    def mount_snapshot_cow(self, **kwargs):
+        if self.fail_next_mount:
+            self.fail_next_mount = False
+            raise OSError("injected storage mount failure")
+        if self.record["state"] != "released":
+            raise AssertionError("mount requires released storage")
+        if kwargs["expected_revision"] != self.record["revision"]:
+            raise AssertionError("stale mount")
+        self.events.append("mount")
+        self.record["revision"] += 1
+        self.record["state"] = "mounted"
+        return {"record": dict(self.record)}
+
+
+class FakeRootfsLifecycle:
+    def __init__(self, events: list[str]) -> None:
+        self.events = events
+        self.fail_next_park = False
+        self.fail_next_resume = False
+
+    def park_sandbox(self, _sandbox) -> None:
+        if self.fail_next_park:
+            self.fail_next_park = False
+            raise OSError("injected rootfs park failure")
+        self.events.append("rootfs-park")
+
+    def resume_sandbox(self, _sandbox) -> None:
+        if self.fail_next_resume:
+            self.fail_next_resume = False
+            raise OSError("injected rootfs resume failure")
+        self.events.append("rootfs-resume")
+
+
 class DirectRunscWardenTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = TemporaryDirectory()
@@ -258,6 +345,39 @@ class DirectRunscWardenTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
+    def _use_storage_native(
+        self,
+    ) -> tuple[FakeStorage, FakeRootfsLifecycle, Path]:
+        self.config = replace(
+            self.config,
+            memory_root=self.config.artifact_root,
+            restore_reflink=False,
+            restore_start_paused=True,
+            remove_memory_directory_on_delete=False,
+        )
+        incarnation = self.config.memory_root / self.memory_directory
+        incarnation.mkdir(mode=0o700, parents=True)
+        self.runner = FakeRunsc(
+            self.proc_root,
+            self.config.memory_root,
+            self.memory_directory,
+        )
+        storage = FakeStorage(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            volume_id=self.memory_directory,
+            mount_path=incarnation,
+        )
+        rootfs = FakeRootfsLifecycle(storage.events)
+        self.warden = DirectRunscWarden(
+            self.config,
+            runner=self.runner,
+            fencer=self.fencer,
+            storage=storage,
+            rootfs_lifecycle=rootfs,
+        )
+        return storage, rootfs, incarnation
+
     def test_reflink_restore_requires_paused_handoff(self) -> None:
         with self.assertRaisesRegex(ValueError, "hard-quota safety"):
             replace(self.config, restore_start_paused=False)
@@ -300,6 +420,143 @@ class DirectRunscWardenTests(unittest.TestCase):
                 / "application_memory.active"
             ).is_file()
         )
+
+    def test_storage_native_park_releases_and_resume_mounts_new_cow(self) -> None:
+        storage, _rootfs, incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(
+            storage.events,
+            ["rootfs-park", "seal", "release"],
+        )
+        self.assertEqual(storage.record["state"], "released")
+        portable = self.warden.load_parked_manifest(self.sandbox)
+        self.assertEqual(portable.metadata_sha256, parked.manifest_sha256)
+
+        running = self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        self.assertEqual(running.state, HibernationState.RUNNING)
+        self.assertEqual(
+            storage.events,
+            [
+                "rootfs-park",
+                "seal",
+                "release",
+                "mount",
+                "rootfs-resume",
+            ],
+        )
+        self.assertEqual(storage.record["state"], "mounted")
+        self.assertTrue(incarnation.is_dir())
+
+    def test_storage_native_reconcile_finishes_failed_seal(self) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        storage.fail_next_seal = True
+
+        with self.assertRaisesRegex(OSError, "seal failure"):
+            self.warden.park(self.sandbox, operation_id="park:1")
+
+        interrupted = self.warden.inspect(self.sandbox)
+        self.assertIsNotNone(interrupted)
+        self.assertEqual(interrupted.state, HibernationState.HIBERNATING)
+        self.assertEqual(interrupted.authority, HibernationAuthority.PENDING)
+        self.assertEqual(storage.record["state"], "mounted")
+        self.assertEqual(self.runner.status, "absent")
+
+        parked = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "released")
+        self.assertEqual(
+            storage.events,
+            [
+                "rootfs-park",
+                "rootfs-resume",
+                "rootfs-park",
+                "seal",
+                "release",
+            ],
+        )
+
+    def test_storage_native_reconcile_finishes_failed_rootfs_detach(self) -> None:
+        storage, rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        rootfs.fail_next_park = True
+
+        with self.assertRaisesRegex(OSError, "rootfs park failure"):
+            self.warden.park(self.sandbox, operation_id="park:1")
+
+        parked = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "released")
+        self.assertEqual(
+            storage.events,
+            ["rootfs-resume", "rootfs-park", "seal", "release"],
+        )
+
+    def test_storage_native_reconcile_finishes_failed_release(self) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        storage.fail_next_release = True
+
+        with self.assertRaisesRegex(OSError, "release failure"):
+            self.warden.park(self.sandbox, operation_id="park:1")
+
+        self.assertEqual(storage.record["state"], "sealed")
+        parked = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "released")
+        self.assertEqual(
+            storage.events,
+            [
+                "rootfs-park",
+                "seal",
+                "release",
+                "mount",
+                "rootfs-resume",
+                "rootfs-park",
+                "seal",
+                "release",
+            ],
+        )
+
+    def test_storage_native_resume_retries_failed_acquire(self) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        storage.fail_next_mount = True
+
+        with self.assertRaisesRegex(OSError, "mount failure"):
+            self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        parked = self.warden.inspect(self.sandbox)
+        self.assertIsNotNone(parked)
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "released")
+        running = self.warden.resume(self.sandbox, operation_id="wake:2")
+        self.assertEqual(running.state, HibernationState.RUNNING)
+
+    def test_storage_native_resume_retries_failed_rootfs_remount(self) -> None:
+        storage, rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        rootfs.fail_next_resume = True
+
+        with self.assertRaisesRegex(OSError, "rootfs resume failure"):
+            self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        parked = self.warden.inspect(self.sandbox)
+        self.assertIsNotNone(parked)
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "mounted")
+        running = self.warden.resume(self.sandbox, operation_id="wake:2")
+        self.assertEqual(running.state, HibernationState.RUNNING)
 
     def test_restore_cpu_startup_burst_is_explicit(self) -> None:
         self.warden = DirectRunscWarden(

@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 import hashlib
 import io
 import json
+import shutil
 import tarfile
 import time
 import unittest
@@ -13,6 +14,8 @@ from ucloud_sandboxes.direct_migration import (
     DirectMigrationError,
     DirectMigrationManifest,
     PortableArtifactFile,
+    StorageNativeMigration,
+    StorageNativeMigrationStore,
 )
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistration
 from ucloud_sandboxes.hibernation import (
@@ -24,6 +27,10 @@ from ucloud_sandboxes.hibernation import (
 )
 from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentity
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
+from ucloud_sandboxes.storage_native_registry import (
+    PublishedStorageLayer,
+    StorageSnapshotPublication,
+)
 
 
 class DirectMigrationTests(unittest.TestCase):
@@ -234,6 +241,75 @@ class DirectMigrationTests(unittest.TestCase):
                     writable_incarnation=destination_root / source.name,
                 )
             self.assertFalse((destination_root / source.name).exists())
+
+    def test_storage_snapshot_metadata_is_durable_and_rebound_locally(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            source_root = root / "source"
+            destination_root = root / "destination"
+            source_root.mkdir()
+            destination_root.mkdir()
+            registration, source_manifest, identity, source = self.make_source(
+                source_root
+            )
+            portable = DirectMigrationManifest.from_local(
+                registration,
+                source_manifest,
+                runtime_identity=identity,
+                source_guest_ip=None,
+            )
+            migration = StorageNativeMigration(
+                manifest=portable,
+                publication=StorageSnapshotPublication(
+                    manifest_digest="sha256:" + "1" * 64,
+                    tag="snapshot",
+                    repository="snapshots",
+                    repo_blob_url="https://registry/v2/snapshots/blobs",
+                    virtual_size=4096,
+                    layers=(
+                        PublishedStorageLayer(
+                            digest="sha256:" + "2" * 64,
+                            size=4096,
+                        ),
+                    ),
+                ),
+            )
+            store = StorageNativeMigrationStore(root / "migration-metadata")
+            self.assertEqual(store.save("move:1", migration), migration)
+            self.assertEqual(store.load("move:1"), migration)
+
+            destination = destination_root / source.name
+            shutil.copytree(source, destination, symlinks=True)
+            rebound = store.rebind_mounted_snapshot(
+                migration,
+                expected_runtime_identity=identity,
+                expected_runtime=self.runtime(),
+                artifact_store=HibernationArtifactStore(destination_root),
+                writable_incarnation=destination,
+            )
+
+            self.assertNotEqual(
+                rebound.metadata_sha256,
+                source_manifest.metadata_sha256,
+            )
+            self.assertEqual(
+                HibernationArtifactStore(destination_root).load_complete(
+                    sandbox_id="sandbox",
+                    sandbox_generation=7,
+                    hibernation_generation=3,
+                ),
+                rebound,
+            )
+            self.assertEqual(
+                store.rebind_mounted_snapshot(
+                    migration,
+                    expected_runtime_identity=identity,
+                    expected_runtime=self.runtime(),
+                    artifact_store=HibernationArtifactStore(destination_root),
+                    writable_incarnation=destination,
+                ),
+                rebound,
+            )
 
     def test_rejects_archive_member_outside_portable_inventory(self) -> None:
         with TemporaryDirectory() as raw:

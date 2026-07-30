@@ -157,8 +157,8 @@ traffic and mounting the project storage drive used by the local registry:
 
 ```bash
 uv run ucloud-sandboxes submit-vm \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id live-20260629 \
+  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
+  --deployment-id direct-20260730 \
   --role gateway \
   --private-network-id 12345327 \
   --public-link-id 12345368 \
@@ -168,12 +168,16 @@ uv run ucloud-sandboxes submit-vm \
   --output json
 ```
 
+`--role gateway` defaults to `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB). Sandbox
+nodes retain the `cpu-amd-zen5-32-vcpu` default. An explicit `--product-id`
+still overrides either role-aware default.
+
 After the VM is running and the gateway service is listening, activate UCloud's
 VM web forwarding for the public-link target port:
 
 ```bash
-uv run ucloud-sandboxes open-vm-web 12353689 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+uv run ucloud-sandboxes open-vm-web 12361919 \
+  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
   --port 8090
 ```
 
@@ -181,11 +185,23 @@ The normal deployment path is now to let the CLI converge the running VM:
 
 ```bash
 uv build
-uv run ucloud-sandboxes deploy-all-in-one 12353689 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id live-20260629 \
+uv run ucloud-sandboxes deploy-all-in-one 12361919 \
+  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
+  --deployment-id direct-20260730 \
   --private-network-id 12345327 \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --sandbox-runtime direct \
+  --direct-runsc /path/to/pinned/ucloud-direct-runsc \
+  --direct-runsc-commit 9f653e577965df2ddd13875b5530cd2588661f1c \
+  --sandbox-product-id cpu-amd-zen5-32-vcpu \
+  --sandbox-disk-gb 2000 \
+  --docker-quota-image-gb 1800 \
+  --direct-disk-headroom-mb 16384 \
+  --swap-gb 96 \
+  --cpu-overcommit 1 \
+  --memory-overcommit 1 \
+  --disk-overcommit 1 \
+  --max-builder-nodes 0 \
   --execute
 ```
 
@@ -196,6 +212,10 @@ gateway init SSH key, registers that key with UCloud, restarts
 gateway/relay/registry/autoscaler, and opens the gateway and relay VM web ports.
 Use `--output script` for the exact remote script or omit `--execute` for a dry
 run.
+
+The production compute is charged to project `DFM`; the existing network,
+ingresses, and drive remain owned by `DFM Pretraining` and are attached
+cross-project by resource ID.
 
 Builder capacity is autoscaled separately. Manual builder VM tests should keep
 the VM on the private network and use the builder role so the sandbox

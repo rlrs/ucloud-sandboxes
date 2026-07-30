@@ -35,14 +35,15 @@ the sandbox nodes and bind one public link to its gateway HTTP port. Gateway to
 node traffic then stays on private-network hostnames such as
 `http://sandbox-node-...:8090`.
 
-The live `DFM Pretraining` project currently has this gateway link:
+`DFM Pretraining` owns this gateway link, while the bound gateway job consumes
+DFM compute through UCloud's cross-project resource permissions:
 
 ```text
 id: 12345368
 domain: app-sandboxes.cloud.sdu.dk
 product: ucloud/u1-publiclink/u1-publiclink
 state: READY
-bound job: 12353689
+bound job: 12361919
 bound port: 8090
 ```
 
@@ -80,14 +81,14 @@ the link as bound while the public endpoint returns `449`.
 
 Current smoke-test shape:
 
-- gateway VM job `12353689` runs `serve-control-plane --host 0.0.0.0 --port 8090`
+- gateway VM job `12361919` runs `serve-control-plane --host 0.0.0.0 --port 8090`
   with `/work/data/ucloud-sandboxes/state/heartbeats.json` and
   `/work/data/ucloud-sandboxes/state/routes.sqlite` after the persistent-state
   migration is deployed
 - gateway route lookups are served from an in-memory index; `routes.sqlite` is
   a write-through recovery and pending-demand database shared with the
   autoscaler
-- gateway VM job `12353689` also runs `autoscaler-loop` as a systemd service
+- gateway VM job `12361919` also runs `autoscaler-loop` as a systemd service
   with create execution, label-gated stop execution, a 5-second reconcile
   interval, a 600-second sandbox idle grace, and a 900-second builder idle
   grace enabled

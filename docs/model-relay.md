@@ -4,22 +4,31 @@ The sandbox does not need SSH for PRIME/verifiers or mini-SWE-agent control.
 The normal path is:
 
 ```text
-UCloud sandbox -> public relay <- LUMI worker
+UCloud sandbox -> public relay <- model/Verifiers worker
                          |
                   both sides outbound
 ```
 
-The sandbox sends OpenAI-compatible HTTP requests to the public relay. A worker
+The sandbox sends OpenAI-compatible HTTP requests to the relay. A worker
 running near the model endpoint keeps an outbound long-poll connection to the
 relay, receives request envelopes, calls local inference, then posts the model
 response back to the relay.
 
 ## Run the Relay
 
-The relay is part of this service package. It can run on the same public
-gateway/control-plane VM as the autoscaler, or on any other public host
-reachable from both UCloud sandboxes and LUMI workers. For first tests, run it
-on the UCloud gateway VM and expose it with a UCloud public link.
+The relay is part of this service package. The standard deployment runs it on
+the gateway/control-plane VM and exposes it through a UCloud ingress because
+model workers may be outside the UCloud private network. Worker/control
+endpoints use a deployment bearer token. Generic tunnel callers use a
+per-registration capability embedded in the SDK-generated URL, leaving
+`Authorization` available for the upstream Verifiers session.
+
+An internal-only deployment still requires authorization. Sandbox workloads
+are untrusted members of that network, so network reachability must not grant
+permission to poll, complete, or unregister another sandbox's requests. The
+registration-scoped capability is the only relay credential an arbitrary
+harness needs; the worker and gateway bearer tokens remain confined to trusted
+control-plane processes.
 
 In the standard all-in-one deployment, `deploy-all-in-one` writes
 `/etc/ucloud-sandboxes/relay.env`, installs the relay unit, creates the sandbox
@@ -43,25 +52,28 @@ uv run ucloud-sandboxes serve-model-relay \
   --port 8092 \
   --sandbox-bearer-token-file /work/data/ucloud-sandboxes/state/relay-sandbox-token \
   --worker-bearer-token-file /work/data/ucloud-sandboxes/state/relay-worker-token \
+  --state-path /work/data/ucloud-sandboxes/state/model-relay.sqlite3 \
+  --gateway-url http://127.0.0.1:8090 \
+  --gateway-bearer-token-file /work/data/ucloud-sandboxes/state/gateway-token \
   --request-timeout-seconds 7200 \
   --worker-lease-seconds 600 \
   --completed-request-retention-seconds 3600
 ```
 
-Use the sandbox bearer token as the sandbox's `OPENAI_API_KEY`. Use the worker
-bearer token for `/register_rollout`, `/worker/poll`, `/worker/respond`, and
-`/worker/error`.
+Use the worker bearer token for `/register_rollout`, `/worker/poll`,
+`/worker/respond`, and `/worker/error`. Direct OpenAI relay clients use the
+sandbox bearer token. General tunnels use their registration-scoped URL and
+preserve `Authorization` for the upstream protocol.
 
 Live development relay:
 
 - URL: `https://app-sandboxes-relay.cloud.sdu.dk`
 - UCloud ingress id: `12346842`
-- all-in-one gateway VM job id: `12353689`
+- all-in-one gateway VM job id: `12361919`
 - VM-local port: `8092`
 - token files on the gateway VM:
   `/work/data/ucloud-sandboxes/state/relay-sandbox-token` and
-  `/work/data/ucloud-sandboxes/state/relay-worker-token` after the
-  persistent-state migration is deployed
+  `/work/data/ucloud-sandboxes/state/relay-worker-token`
 
 ## Sandbox Environment
 
@@ -112,11 +124,17 @@ traffic to:
 https://relay.example.org/tunnels/<tunnel-id>/<upstream-path>
 ```
 
-Use `X-UCloud-Relay-Token: <sandbox-token>` for relay authentication. This
-dedicated header is important when the upstream service needs its own
-`Authorization` header; the relay strips its own credential and forwards the
-upstream credential unchanged. Legacy OpenAI clients may continue using
-`Authorization: Bearer <sandbox-token>`.
+`register_sandbox_tunnel` returns a URL shaped as:
+
+```text
+https://relay.example.org/tunnels/<tunnel-id>/_relay/<registration-token>/
+```
+
+The capability is scoped to that registration incarnation and becomes invalid
+when the tunnel is replaced or unregistered. Calls through it preserve the
+upstream `Authorization` header unchanged. The shared
+`X-UCloud-Relay-Token` header remains available for direct/manual clients but
+is not required by arbitrary harnesses using the capability URL.
 
 Workers use the same long-poll, lease, renewal, and fenced-response protocol as
 model calls. A tunnel request envelope adds `tunnel_id`, `body_base64`, and
@@ -127,7 +145,25 @@ request/response bodies are preserved.
 
 This implementation is buffered HTTP. Request and response bodies are limited
 to 32 MiB each. Hop-by-hop headers are removed. WebSockets, streaming/SSE, HTTP
-trailers, and raw TCP are not implemented by this protocol.
+trailers, and raw TCP are not implemented by this protocol. An SSE body can be
+transported as buffered bytes, but it is not delivered token-by-token.
+
+For Verifiers v1, use one tunnel registration per sandbox generation and include
+trusted registration metadata:
+
+```json
+{
+  "tunnel_id": "vf-run-001-sandbox-007",
+  "metadata": {
+    "sandbox_id": "sandbox-007",
+    "sandbox_generation": 3
+  }
+}
+```
+
+That binding lets the relay park exactly that generation after durable request
+acceptance and wake its current placement after committing the response. See
+[Verifiers v1 and Parked Sandboxes](verifiers-v1.md) for the complete contract.
 
 ## Worker API
 
@@ -285,15 +321,26 @@ The relay uses explicit request leases:
 - workers can long-poll batches with `limit=N`
 - global, per-rollout, and queued-byte admission limits bound relay work;
   exhausted admission returns `429` with `Retry-After`
-- canceled or disconnected callers remove their pending request
+- a disconnected caller does not cancel accepted work; its byte-identical retry
+  reattaches and receives the committed response without resampling
+- `X-UCloud-Relay-Request-Id` supplies an explicit stable attempt identity;
+  otherwise an implicit fingerprint becomes reattachable after disconnect,
+  relay restart, or a migration transport-epoch change, so normal identical
+  calls remain distinct
+- park records the gateway's durable transport epoch and wake compares it after
+  any autoscaler or wake-triggered relocation; an epoch change publishes the
+  retry identity before the migrated harness resumes
+- SQLite/WAL durably stores registrations, pending/leased requests, exact
+  completed response bytes, and lifecycle notification state
+- trusted per-sandbox registration metadata enables generation-fenced park and
+  wake notifications through the gateway
 
-Relay state is deliberately process-local. Run one relay process per endpoint;
-all admission, claim, cancellation, and response transitions are serialized by
-that process. A restart drops registrations and active requests along with the
-client TCP connections they served, so workers must register again and callers
-must retry. Deployments that require multi-process or multi-host HA need a
-transactional server-backed broker plus a caller idempotency/re-attachment
-contract; a local queue cannot preserve an already-open HTTP request.
+Run one relay process per SQLite journal. All admission, claim, response, and
+notification transitions are serialized by that process. A restart drops live
+TCP connections but restores registrations and requests from the journal;
+callers retry and reattach. SQLite provides single-host crash durability, not
+multi-process or multi-host HA. That later requires a transactional
+server-backed broker with the same idempotency and reattachment contract.
 
 Worker execution remains at-least-once: after a lease expires, a replacement
 worker may start the request while the original computation is still running.

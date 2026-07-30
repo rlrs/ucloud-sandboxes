@@ -68,6 +68,10 @@ from the prepared count. This keeps the reservation alive through slow VM
 boots without double-counting the sandboxes it was created for. Unclaimed
 units expire at the TTL or can be canceled with `DELETE
 /v1/capacity/prepare/<id>`.
+For parkable sandboxes, the prepare request must also set `parkable: true`.
+The gateway converts writable `disk_mb` to the full hard hibernation
+reservation before recording demand, keeping both autoscaling and the later
+exact claim aligned with sandbox admission.
 If the prepare payload includes `image`, the gateway also tries to pull that
 image onto enough ready sandbox-node capacity for the requested sandbox count.
 If no suitable node is ready yet, the gateway records a transient image warmup
@@ -219,6 +223,62 @@ present or while the one-shot build signal is waiting to be consumed. The goal i
 to avoid scaling sandbox nodes to zero while a builder is preparing an image that
 will likely be launched shortly afterward.
 
+## Direct-runtime placement, wake, and evacuation
+
+The direct runtime has no fixed CPU or memory overcommit. Each node advertises
+physical CPU and RAM, and both node-side wake admission and gateway placement
+enforce that hard active ceiling. Parked sandboxes retain only their exact hard
+disk reservation on their current node. Disk is never overallocated.
+
+This produces two independent capacity questions:
+
+1. Can the sandbox's lifetime disk reservation remain on this node?
+2. When it becomes active, can its CPU and memory shape fit on one ready node?
+
+The first answer determines durable placement. The second is re-evaluated on
+wake. A parked sandbox stays local when its CPU/RAM delta fits. Otherwise the
+gateway migrates its opaque parked state to a ready node that fits the complete
+active shape, atomically switches the route, and only then forwards the tool or
+file request. The node independently rejects a restore beyond its hard active
+ceiling, so stale heartbeats or simultaneous requests cannot silently
+overcommit it.
+
+Failed create, wake, and migration placement attempts persist individual
+request shapes as pending demand. The autoscaler bin-packs those shapes against
+per-node free resources; it does not rely only on aggregate free CPU, memory,
+and disk, which can claim capacity exists when it is fragmented across
+different nodes.
+
+Closing admission and selecting placement can race. A node that has durably
+closed its admission gate returns the structured, retryable
+`node_admission_closed` error before provisioning begins. The gateway treats
+that response as definitive rather than ambiguous: it removes the provisional
+route, restores the exact request shape as pending demand, and allows the SDK
+retry to select another node. Timeouts and generic 5xx responses remain
+identity-fenced because the original create may have reached provisioning.
+
+Scale-down is evacuation rather than an empty-container check:
+
+1. persist a drain incarnation and close node admission;
+2. migrate parked inventory, bounded by `--max-migrations-per-cycle`;
+3. wait for running sandboxes to become idle and park, then migrate them;
+4. require a fresh complete empty inventory and zero resource ownership;
+5. journal and execute the provider stop.
+
+Before drain begins, the autoscaler bin-packs every parked disk shape on the
+candidate across ready nodes that will remain after the same stop batch. It
+blocks the stop if the shapes do not fit. In particular, the last disk-owning
+node remains: starting a replacement and copying the same parked state sideways
+would not reduce capacity and would otherwise cause perpetual scale-down churn.
+Explicit relocation and stranded-wake requests can still record disk-only
+pending demand so a destination node is started. The autoscaler derives the
+gateway base from `--init-heartbeat-url`, or accepts `--gateway-control-url`
+explicitly.
+Movement is deliberately limited to evacuation, disk-pressure repair, and
+stranded wakes. It is not part of the normal idle loop: the measured cost ranges
+from milliseconds for empty state to seconds for hundreds of MiB of resident
+state.
+
 ## Initial operating stance
 
 Until we have measurements, prefer:
@@ -228,12 +288,13 @@ Until we have measurements, prefer:
 - Two provisioning VMs max.
 - Prepared-capacity signals for known near-term bursts.
 - Standing warm resources only for a measured latency SLO that justifies the cost.
-- CPU overcommit of `3.0` for sandbox nodes.
-- Memory overcommit of `2.0` for sandbox nodes with 96 GiB of host swap.
+- CPU and memory overcommit of `1.0` for direct-runtime sandbox nodes.
 - No disk overcommit by default.
 
-Memory overcommit changes placement capacity; it does not increase a sandbox's
-individual Docker `--memory` limit. The standard 96 GiB worker uses a fixed
+The legacy runtime can retain its historical fixed overcommit policy while it
+is being removed. Memory overcommit changes placement capacity; it does not
+increase a sandbox's individual Docker `--memory` limit. The standard 96 GiB
+worker uses a fixed
 96 GiB swap file and each container receives an explicit combined RAM+swap
 ceiling of twice its requested memory. Node heartbeats expose swap use and
 memory PSI. The gateway stops placing new work on an overcommitted node when

@@ -194,9 +194,13 @@ directories are removed after the tracked build. The legacy
 `context_archive_base64` build field remains accepted for older SDKs.
 
 `POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
-and optional `image`. Each prepared unit remains until a matching sandbox
-allocation atomically claims it or its TTL expires; provider acceptance alone
-does not consume it. If `image` is supplied, the gateway also creates a
+and optional `image` and `parkable`. Set `parkable: true` when the future
+sandboxes will be parkable; the gateway then expands the caller's writable
+`disk_mb` into the same hard checkpoint reservation used during sandbox
+creation, so each sandbox can claim its prepared unit exactly. Each prepared
+unit remains until a matching sandbox allocation atomically claims it or its
+TTL expires; provider acceptance alone does not consume it. If `image` is
+supplied, the gateway also creates a
 transient image warmup work item with the same prepare id and TTL. Warmup runs
 in the background as sandbox nodes heartbeat, and completes once cached node
 capacity can fit the requested sandbox count. The response includes
@@ -459,6 +463,32 @@ state, and return `"cached": false`.
 When the gateway receives a non-JSON error response from an upstream node, such
 as an HTML `503 Job is unavailable` page, it returns structured JSON with the
 original status, `retryable`, upstream content type, and a short body preview.
+
+`POST /v1/sandboxes/<id>/migration` relocates an already parked direct-runtime
+sandbox. The optional JSON fields are `migration_id` for idempotent retry and
+`destination_node_id` for an operator-selected destination. Without a
+destination, the gateway selects a ready migration-capable node with enough
+hard disk capacity. The durable phase journal is returned as `migration`; a
+retry continues the existing phase rather than starting a second transfer.
+`DELETE` on the same path with `?migration_id=<id>` may cancel only before the
+atomic route commit. After commit, retries always drive activation and source
+cleanup forward.
+
+For a networked sandbox, migration is deliberately a reconnect boundary. The
+portable manifest records the source guest IP and the destination must allocate
+a different guest IP. This makes gVisor reject the old TCP route during restore
+instead of reviving a connection whose host NAT state remained on the source
+node. Successful park and wake responses carry an opaque transport epoch
+derived from committed route handoffs. Relay-integrated clients use an epoch
+change to retry the same durable request and receive its already-committed
+response without another model sample. Same-node park/wake retains its guest IP
+and remains connection-transparent.
+
+Normal SDK tool, file, and SSH requests do not need to call this endpoint. If a
+parked sandbox's current owner lacks active CPU/RAM headroom, the gateway
+performs the same relocation before forwarding the wake-causing request. A
+`503` response with `retryable: true` and `pending_resources` means no current
+node can fit the complete placement; the autoscaler has received that demand.
 
 SSH-enabled sandboxes must use `"network": "bridge"`. The node agent binds SSH
 to localhost on the VM by default; external access should go through the

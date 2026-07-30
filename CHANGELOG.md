@@ -2,6 +2,146 @@
 
 This project uses semantic versioning.
 
+## 0.3.64 - 2026-07-30
+
+- Added gateway-observed timings for every migration protocol phase:
+  source prepare/export, transfer and destination staging, the atomic route
+  commit, destination activation, source finalization, and total protocol time.
+  The live qualification now reports these separately instead of describing
+  the whole protocol as route handoff.
+
+## 0.3.63 - 2026-07-30
+
+- Made a sandbox-create race with node draining explicitly retryable. A node
+  now reports its closed admission gate as a definitive rejection, allowing
+  the gateway to remove the provisional route, restore pending demand, and
+  place the retry on another node instead of pinning it to the draining node.
+- Hardened the live SDK/Verifiers migration qualification so route ownership is
+  read from gateway node metadata and worker failures immediately fail the run
+  rather than leaving a parked harness waiting for its full timeout.
+
+## 0.3.62 - 2026-07-30
+
+- Required a migration destination to materialize the sandbox base image
+  before the source enters its fenced `moving_out` phase. This also covers
+  relay-triggered wake relocation after the original node has disappeared.
+- Put authenticated migration metadata first in new archives and reused the
+  parsed manifest during import. Destination admission no longer decompresses
+  the multi-gigabyte logical checkpoint repeatedly before extraction.
+- Extracted only the authenticated metadata, exact checkpoint inventory, and
+  writable upper tree from migration archives before publishing destination
+  ownership.
+
+## 0.3.61 - 2026-07-30
+
+- Added a deployment-configured direct-network egress policy for internal
+  infrastructure. Sandboxes can reach the exact model-relay IPv4 address and
+  TCP port while the broad RFC1918, link-local, loopback, and carrier-grade NAT
+  denies remain in force.
+- Propagated the auto-detected gateway address and relay port through the
+  autoscaler and VM initializer into the single-owner direct-runtime daemon.
+
+## 0.3.60 - 2026-07-30
+
+- Added relay-driven production parking for Verifiers v1 without a guest
+  sidecar: durable acceptance parks the exact sandbox generation and committed
+  response delivery waits for wake.
+- Preserved same-node relay TCP connections across gVisor checkpoint/restore
+  with `allow-connected-on-save`, while retaining stable request IDs and
+  idempotent reattachment for migration or transport failures.
+- Made networked cross-node migration an explicit reconnect boundary without a
+  larger gVisor patch: migration archives carry the source guest IP and require
+  destinations to allocate a different one, so gVisor closes rather than
+  incorrectly reviving TCP through a different host NAT.
+- Added durable park/wake transport epochs. A route handoff makes the relay
+  publish the accepted request's retry identity before resuming the migrated
+  harness, including when autoscaler evacuation happened before wake. The
+  same logical retry receives the committed bytes without resampling, while
+  ordinary identical calls remain distinct.
+- Rebuilt isolated sandbox veth, address, MTU, and route state before restore,
+  fixing restored sandboxes that previously came up with loopback only.
+- Disabled host-API inactivity parking in production; parking is now an
+  explicit relay or client lifecycle decision.
+- Reconciled dead restored sentries instead of continuing to advertise them as
+  running.
+- Qualified the public SDK, production relay, pinned Verifiers `NullHarness`,
+  and worker-local interception server through a real
+  `running -> parked -> waking -> running` cycle with one model generation and
+  one trace turn.
+
+## 0.3.59 - 2026-07-30
+
+- Added a fifth, narrow gVisor patch for restore-start-paused and replay-safe
+  resume.
+- Made XFS reflink restore hard-quota safe: the Warden durably journals a
+  paused candidate, removes the authoritative checkpoint generation, and only
+  then allows guest execution.
+- Added recovery for crashes on either side of the source-ownership transfer,
+  preserving the sole candidate once rollback is no longer possible.
+- Selected the single-owner paused handoff for production linear restore. It
+  consumes and reuses the checkpoint inode, can return it on failure, never
+  duplicates hard-quota usage, and avoids the cold page-cache penalty measured
+  for a reflinked memory image. Reflink/prefetch remains an optional future
+  fork primitive.
+- Replaced the all-in-one installer's fixed two-second startup delay with
+  bounded health polling, preventing healthy gateway deployments from being
+  reported failed while services are still becoming ready.
+- Distinguished an executing stop that is waiting for node drain proof from a
+  dry-run stop in autoscaler operator output.
+- Cut production over to the direct-only `0.3.59` gateway on DFM compute while
+  retaining the established production gateway, relay, private-network, and
+  persistent-drive resources. A public SDK scale-from-zero create, exec,
+  binary file I/O, idle park, stateful wake, delete, and quota cleanup passed
+  against `app-sandboxes.cloud.sdu.dk`.
+- Resized the always-on production gateway from the sandbox worker's 32-vCPU
+  product to the 2-vCPU/6-GiB product, and made `submit-vm --role gateway`
+  choose that smaller product by default while worker nodes remain 32-vCPU.
+
+## 0.3.58 - 2026-07-28
+
+- Authenticated autoscaler-driven drain evacuation against token-protected
+  gateways, using the existing gateway credential only for the internal
+  migration request.
+- Distinguished hard-disk evacuation-capacity blocks from ownership-label
+  blocks in human-readable autoscaler output.
+
+## 0.3.57 - 2026-07-28
+
+- Prevented no-net-gain direct-runtime scale-down: a parked disk owner can
+  enter drain only when all of its disk shapes fit on ready nodes that remain
+  after the same stop batch. The last disk-owning node is retained instead of
+  starting a replacement and copying identical state sideways.
+- Exposed evacuation-capacity-blocked stop candidates separately in autoscaler
+  reconciliation output.
+
+## 0.3.56 - 2026-07-28
+
+- Made the direct OCI runtime pre-create the configured workspace without
+  following image symlinks and make it writable inside the sandbox mount
+  namespace, restoring SDK file API compatibility for default non-root users.
+- Made quota-backed workspace tmpfs mounts explicitly mode `1777` for the same
+  non-root compatibility contract.
+
+## 0.3.55 - 2026-07-28
+
+- Added portable direct-runtime parked-state migration with digest validation,
+  source fencing, direct node-to-node transfer, atomic gateway route handoff,
+  same-generation return fencing, and restart-safe phase retry.
+- Changed direct-runtime scaling to physical CPU/RAM and hard physical disk:
+  parked sandboxes consume disk only, wake placement reserves active compute,
+  fragmented pending shapes are bin-packed per node, and node-side restore
+  admission independently prevents active overcommit.
+- Made direct-runtime scale-down evacuate parked inventory from a
+  drain-admission-closed node before accepting the existing empty-node stop
+  proof.
+
+## 0.3.54 - 2026-07-28
+
+- Made capacity preparation parkable-aware so the gateway expands writable
+  disk into the same hard checkpoint reservation used by sandbox creation,
+  preventing successfully created parkable sandboxes from leaving phantom
+  prepared demand behind.
+
 ## 0.3.53 - 2026-07-28
 
 - Added the exclusive node-level direct gVisor runtime: one privileged Warden

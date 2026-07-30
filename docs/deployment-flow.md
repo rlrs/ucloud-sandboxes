@@ -64,6 +64,14 @@ sandboxes. The intended rollout flow is:
    `--init-authorized-key-file`, and `--init-ssh-private-key-file`.
 12. Wait for matching heartbeats before scheduling sandboxes to those nodes.
 13. Drain old/mismatched nodes, then scale them down only after they are idle.
+14. Before changing production traffic, run the SDK/Verifiers qualification
+    against an isolated gateway and relay with an empty worker pool. Require a
+    fresh source and a distinct fresh destination, actual relay-driven parking,
+    route handoff, transport reset, request reattachment, exactly one model
+    call, and successful harness completion.
+15. Treat the production rollout as a separate, explicit decision. Re-run
+    health/version checks and the same qualification through the production
+    URLs before deprecating the previous runtime.
 
 ## Credentials
 
@@ -212,15 +220,22 @@ Use `--no-copy-session` only when the VM already has
 
 Current live all-in-one VM:
 
-- job id: `12353689`
-- name: `ucloud-sandbox-gateway-allinone-20260712-v048`
-- deployment id: `live-20260629`
-- package version: `0.3.49`; it must match the `version` returned by both
+- job id: `12361919`
+- name: `ucloud-sandbox-gateway-direct-20260730-prod-2vcpu`
+- deployment id: `direct-20260730`
+- package version: `0.3.59`; it must match the `version` returned by both
   service health endpoints
+- gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
+  `cpu-amd-zen5-32-vcpu`
+- compute project: `DFM` (`5530ccd4-2828-4031-9275-d51aa231cc01`)
 - private network: `12345327`
-- private registry IPv4 observed on the VM: `10.36.128.97`
+- private registry IPv4 observed on the VM: `10.36.106.217`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
-- SSH: resolve with `ucloud jobs ssh 12353689 --print-only`
+- SSH: resolve with `ucloud jobs ssh 12361919 --print-only`
+
+The private network, persistent drive, and ingresses remain resources of
+`DFM Pretraining`, but UCloud attaches them to the DFM-funded gateway job. This
+keeps the production domains and private node network unchanged.
 
 Public links:
 
@@ -398,8 +413,8 @@ only the builder bundle contains Buildx. Neither bundle installs the distro
 `python3-pip`, compiler toolchain, or Docker Compose because the bundled wheel
 closure installs into `python3-venv` without them.
 
-The live all-in-one gateway key has been registered in UCloud as SSH key id
-`3212` with title `ucloud-sandboxes gateway init 2026-07-04 allinone`.
+The persistent all-in-one gateway key is registered in UCloud as SSH key id
+`3236` with title `ucloud-sandboxes gateway init live-20260629`.
 
 ## Verify
 
@@ -410,7 +425,7 @@ curl -fsS https://app-sandboxes.cloud.sdu.dk/healthz
 curl -fsS https://app-sandboxes-relay.cloud.sdu.dk/healthz
 curl -i https://app-sandboxes.cloud.sdu.dk/v1/sandboxes
 ucloud jobs browse \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
+  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
   --filter-state RUNNING \
   --no-include-application \
   --output json
@@ -421,7 +436,7 @@ Expected current state:
 - gateway health reports `{"ok": true, "service": "control-plane", "version": "<installed-version>"}`
 - relay health reports `{"ok": true, "service": "model-relay", "version": "<installed-version>"}`
 - unauthenticated `GET /v1/sandboxes` returns `401`
-- running-job browse shows only all-in-one job `12353689` for this service when
+- running-job browse shows only all-in-one job `12361919` for this service when
   there is no sandbox or builder demand
 - gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
 - zero demand plus idle timeout produces safe labelled stop intents for sandbox

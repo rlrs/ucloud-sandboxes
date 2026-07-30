@@ -63,8 +63,11 @@ those workloads need:
 ## Model Relay
 
 The model relay is part of this service package, but SDK helpers and worker
-client usage live in the SDK docs. The service deployment must expose the relay
-publicly and configure separate sandbox and worker bearer tokens.
+client usage live in the SDK docs. The production ingress authenticates
+worker/control operations separately. Generic sandbox tunnels use
+registration-scoped capability URLs, so harness credentials are preserved
+end-to-end without sharing the deployment-wide sandbox token with arbitrary
+harnesses.
 
 See [model-relay.md](model-relay.md) for relay deployment, lease behavior, and
 worker-side protocol details.

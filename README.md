@@ -34,6 +34,8 @@ under `docs/`, not in this overview.
   persistence, tagging, pruning, and GC.
 - [Model relay](docs/model-relay.md): outbound-only OpenAI-compatible relay for
   sandboxes that need to reach model workers behind outbound-only networking.
+- [Verifiers v1 and parked sandboxes](docs/verifiers-v1.md): no-sidecar relay,
+  park/wake, retry, streaming, and detached-harness lifecycle contract.
 - [Routing gateway](docs/routing-gateway.md): gateway and exec/SSH routing
   design, performance expectations, and concurrency notes.
 - [Scaling policy](docs/scaling-policy.md): scale-to-zero policy, prepare

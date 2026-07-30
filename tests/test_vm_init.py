@@ -29,18 +29,24 @@ class VmInitTests(unittest.TestCase):
                 heartbeat_url="https://gateway.example/v1/nodes/heartbeat",
                 node_runtime="direct",
                 direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                direct_network="sandbox",
+                direct_network_allow_tcp=("10.36.136.151:8092",),
                 docker_quota_image_gb=440,
                 total_resources=ResourceQuantity(
                     vcpu=32,
                     memory_mb=96 * 1024,
                     disk_mb=440 * 1024,
                 ),
-                cpu_overcommit=3,
-                memory_overcommit=2,
+                cpu_overcommit=1,
+                memory_overcommit=1,
             )
         )
 
         self.assertIn("serve-direct-node-agent", script)
+        self.assertIn(
+            "--direct-network-allow-tcp 10.36.136.151:8092",
+            script,
+        )
         self.assertNotIn("ExecStart=/work/ucloud-sandboxes/bin/ucloud-sandboxes serve-node-agent", script)
         self.assertIn("User=root", script)
         self.assertIn("UCLOUD_DIRECT_WRITABLE_DISK_MB=434176", script)
@@ -54,6 +60,20 @@ class VmInitTests(unittest.TestCase):
             'chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"',
             script,
         )
+
+    def test_direct_runtime_rejects_fixed_compute_overcommit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "CPU and memory overcommit"):
+            render_vm_init_script(
+                VmInitOptions(
+                    job_id="job-1",
+                    heartbeat_url="https://gateway.example/v1/nodes/heartbeat",
+                    node_runtime="direct",
+                    direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
+                    docker_quota_image_gb=440,
+                    cpu_overcommit=3,
+                    memory_overcommit=2,
+                )
+            )
 
     def test_parses_machine_readable_init_phase_timings(self) -> None:
         phases, total = parse_vm_init_phases(

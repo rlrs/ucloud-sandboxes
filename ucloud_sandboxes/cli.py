@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
@@ -12,7 +13,7 @@ import sys
 from threading import Event
 import time
 from typing import Any, Callable, Iterable
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
@@ -109,6 +110,7 @@ from .model_relay import (
     DEFAULT_MAX_INFLIGHT_BYTES,
     DEFAULT_MAX_INFLIGHT_REQUESTS,
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
+    RelayRequest,
     create_model_relay_app,
 )
 from .models import (
@@ -178,6 +180,7 @@ from .vm_init import (
     stage_vm_init_package_over_ssh,
 )
 from .vm_submit import (
+    DEFAULT_GATEWAY_VM_PRODUCT_ID,
     DEFAULT_VM_APPLICATION_NAME,
     DEFAULT_VM_APPLICATION_VERSION,
     DEFAULT_VM_DISK_GB,
@@ -621,7 +624,31 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument(
         "--idle-park-seconds",
         type=float,
-        default=1.0,
+        default=0.0,
+        help=(
+            "Optional host-API inactivity heuristic. Disabled by default because "
+            "it cannot observe work executing inside the sandbox; production "
+            "parking should be requested explicitly by the relay or client."
+        ),
+    )
+    direct_node_agent.add_argument(
+        "--network",
+        choices=("none", "sandbox"),
+        default=os.environ.get("UCLOUD_DIRECT_NETWORK", "none"),
+        help=(
+            "Node-wide gVisor network mode. sandbox uses node-owned isolated "
+            "network namespaces, veth links, and NAT."
+        ),
+    )
+    direct_node_agent.add_argument(
+        "--direct-network-allow-tcp",
+        action="append",
+        default=[],
+        metavar="IPV4:PORT",
+        help=(
+            "Allow sandbox egress to one exact private TCP service before the "
+            "RFC1918 deny rules. Repeat for multiple infrastructure services."
+        ),
     )
     direct_node_agent.add_argument(
         "--node-control-bearer-token-file",
@@ -717,6 +744,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--worker-bearer-token-file",
         type=Path,
         help="Require this bearer token for worker register/poll/respond routes.",
+    )
+    model_relay.add_argument(
+        "--state-path",
+        type=Path,
+        help="Absolute path to the crash-durable SQLite relay journal.",
+    )
+    model_relay.add_argument(
+        "--gateway-url",
+        help=(
+            "Gateway control URL used to park a sandbox after durable acceptance "
+            "and wake it after committing the worker response."
+        ),
+    )
+    model_relay.add_argument(
+        "--gateway-bearer-token-file",
+        type=Path,
+        help="Bearer token used for relay park/wake requests to the gateway.",
     )
     model_relay.add_argument(
         "--max-inflight-requests",
@@ -1069,8 +1113,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     submit_vm.add_argument(
         "--product-id",
-        default=DEFAULT_VM_PRODUCT_ID,
-        help="UCloud VM product id.",
+        default=None,
+        help=(
+            "UCloud VM product id. Defaults to "
+            f"{DEFAULT_GATEWAY_VM_PRODUCT_ID} for --role gateway and "
+            f"{DEFAULT_VM_PRODUCT_ID} otherwise."
+        ),
     )
     submit_vm.add_argument(
         "--product-category",
@@ -1617,6 +1665,28 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument("--product-category", default=DEFAULT_VM_PRODUCT_CATEGORY)
     loop.add_argument("--product-provider", default=DEFAULT_VM_PRODUCT_PROVIDER)
     loop.add_argument("--disk-gb", type=int, default=DEFAULT_VM_DISK_GB)
+    loop.add_argument(
+        "--gateway-control-url",
+        default="",
+        help=(
+            "Gateway base URL used to evacuate parked direct-runtime sandboxes "
+            "from draining nodes. Defaults to the base of --init-heartbeat-url."
+        ),
+    )
+    loop.add_argument(
+        "--gateway-control-bearer-token-file",
+        type=Path,
+        help=(
+            "Gateway bearer token used for authenticated drain-evacuation "
+            "migration requests."
+        ),
+    )
+    loop.add_argument(
+        "--max-migrations-per-cycle",
+        type=int,
+        default=2,
+        help="Maximum parked-sandbox evacuations started by one autoscaler cycle.",
+    )
     add_builder_autoscale_args(loop)
     add_vm_bootstrap_args(loop)
     loop.add_argument("--time-hours", type=int, default=1)
@@ -1964,6 +2034,26 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Exact patched gVisor commit required by direct-runtime node bundles.",
     )
     parser.add_argument(
+        "--init-direct-network",
+        choices=("none", "sandbox"),
+        default="none",
+        help="Node-wide gVisor network mode for autoscaled direct-runtime nodes.",
+    )
+    parser.add_argument(
+        "--init-direct-network-allow-tcp",
+        action="append",
+        default=(
+            [os.environ["UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP"]]
+            if os.environ.get("UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP")
+            else []
+        ),
+        metavar="IPV4:PORT",
+        help=(
+            "Exact private TCP service made reachable from autoscaled direct "
+            "sandboxes. Repeat for multiple services."
+        ),
+    )
+    parser.add_argument(
         "--init-direct-disk-headroom-mb",
         type=int,
         default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
@@ -2156,6 +2246,22 @@ def add_vm_init_args(
         "--direct-runsc-commit",
         default="",
         help="Exact patched gVisor commit required by a direct-runtime bundle.",
+    )
+    parser.add_argument(
+        "--direct-network",
+        choices=("none", "sandbox"),
+        default="none",
+        help="Node-wide gVisor network mode for this initialized direct-runtime node.",
+    )
+    parser.add_argument(
+        "--direct-network-allow-tcp",
+        action="append",
+        default=[],
+        metavar="IPV4:PORT",
+        help=(
+            "Exact private TCP service made reachable from direct sandboxes. "
+            "Repeat for multiple services."
+        ),
     )
     parser.add_argument(
         "--direct-disk-headroom-mb",
@@ -2656,6 +2762,8 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
     if args.disk_overcommit != 1.0:
         raise ValueError("direct runtime disk_overcommit must be exactly 1.0")
+    if args.cpu_overcommit != 1.0 or args.memory_overcommit != 1.0:
+        raise ValueError("direct runtime CPU and memory overcommit must be exactly 1.0")
     state_root = args.state_root or (
         Path(config.state_dir).expanduser() / "direct-runtime"
     )
@@ -2670,8 +2778,15 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         disk_headroom_mb=args.disk_headroom_mb,
         quota_helper=args.quota_helper.absolute(),
         docker_binary=args.docker_binary,
+        network=args.network,
+        network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
         max_concurrent_restores=args.max_concurrent_restores,
-        idle_park_seconds=args.idle_park_seconds,
+        idle_park_seconds=float(
+            os.environ.get(
+                "UCLOUD_DIRECT_IDLE_PARK_SECONDS",
+                str(args.idle_park_seconds),
+            )
+        ),
     )
     server = build_direct_node_agent_server(
         args.host,
@@ -2792,6 +2907,40 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         args.worker_bearer_token_file,
         "worker bearer token",
     )
+    gateway_bearer_token = read_required_token_file(
+        args.gateway_bearer_token_file,
+        "gateway bearer token",
+    )
+    gateway_url = str(args.gateway_url or "").strip().rstrip("/")
+    if bool(gateway_url) != bool(gateway_bearer_token):
+        raise ValueError(
+            "gateway-url and gateway-bearer-token-file must be configured together"
+        )
+    if gateway_url:
+        parsed_gateway = urlparse(gateway_url)
+        if parsed_gateway.scheme not in {"http", "https"} or not parsed_gateway.netloc:
+            raise ValueError("gateway URL is invalid")
+    if args.state_path is not None and not args.state_path.is_absolute():
+        raise ValueError("relay state path must be absolute")
+
+    async def accepted_notifier(relay_request: RelayRequest) -> str | None:
+        return await asyncio.to_thread(
+            _post_gateway_sandbox_lifecycle,
+            gateway_url,
+            gateway_bearer_token,
+            relay_request,
+            action="park",
+        )
+
+    async def result_notifier(relay_request: RelayRequest) -> str | None:
+        return await asyncio.to_thread(
+            _post_gateway_sandbox_lifecycle,
+            gateway_url,
+            gateway_bearer_token,
+            relay_request,
+            action="wake",
+        )
+
     for name in (
         "max_inflight_requests",
         "max_inflight_requests_per_rollout",
@@ -2812,14 +2961,69 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         max_inflight_requests=args.max_inflight_requests,
         max_inflight_requests_per_rollout=(args.max_inflight_requests_per_rollout),
         max_inflight_bytes=args.max_inflight_bytes,
+        state_path=args.state_path,
+        accepted_notifier=accepted_notifier if gateway_url else None,
+        result_notifier=result_notifier if gateway_url else None,
     )
     print(f"Serving model relay on http://{args.host}:{args.port}")
     print(f"Sandbox auth: {'required' if sandbox_bearer_token else 'disabled'}")
     print(f"Worker auth: {'required' if worker_bearer_token else 'disabled'}")
     print(f"Request timeout: {max(0.1, args.request_timeout_seconds):g}s")
     print(f"Worker lease: {max(0.001, args.worker_lease_seconds):g}s")
+    print(f"Durable state: {args.state_path or 'disabled'}")
+    print(f"Sandbox lifecycle notifications: {gateway_url or 'disabled'}")
     web.run_app(app, host=args.host, port=args.port, print=None)
     return 0
+
+
+def _post_gateway_sandbox_lifecycle(
+    gateway_url: str,
+    bearer_token: str | None,
+    relay_request: RelayRequest,
+    *,
+    action: str,
+) -> str | None:
+    if action not in {"park", "wake"}:
+        raise ValueError("unsupported relay sandbox lifecycle action")
+    if relay_request.sandbox_id is None:
+        return
+    if relay_request.sandbox_generation is None:
+        raise ValueError("relay sandbox lifecycle binding has no generation")
+    url = (
+        f"{gateway_url}/v1/sandboxes/"
+        f"{quote(relay_request.sandbox_id, safe='')}/{action}"
+    )
+    payload = json.dumps(
+        {
+            "generation": relay_request.sandbox_generation,
+            "operation_id": f"relay-{action}:{relay_request.request_id}",
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    lifecycle_request = Request(
+        url,
+        data=payload,
+        headers=headers,
+        method="POST",
+    )
+
+    class RejectLifecycleRedirects(HTTPRedirectHandler):
+        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    with build_opener(RejectLifecycleRedirects()).open(
+        lifecycle_request,
+        timeout=600.0,
+    ) as response:
+        response.read(1024 * 1024 + 1)
+        transport_epoch = response.headers.get(
+            "X-UCloud-Sandbox-Transport-Epoch",
+            "",
+        ).strip()
+        return transport_epoch or None
 
 
 def cmd_render_vm_init_script(args: argparse.Namespace) -> int:
@@ -3968,6 +4172,75 @@ def _post_node_drain(
         return decoded
 
 
+def _gateway_base_url(
+    explicit_url: str,
+    heartbeat_url: str,
+) -> str:
+    explicit_url = str(explicit_url or "").strip().rstrip("/")
+    if explicit_url:
+        parsed = urlparse(explicit_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("gateway control URL is invalid")
+        return explicit_url
+    heartbeat_url = str(heartbeat_url or "").strip()
+    parsed = urlparse(heartbeat_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    suffix = "/v1/nodes/heartbeat"
+    path = parsed.path.rstrip("/")
+    if not path.endswith(suffix):
+        return ""
+    prefix = path[: -len(suffix)].rstrip("/")
+    return f"{parsed.scheme}://{parsed.netloc}{prefix}"
+
+
+def _post_gateway_sandbox_migration(
+    gateway_url: str,
+    sandbox_id: str,
+    *,
+    bearer_token: str | None = None,
+    timeout_seconds: float = 3600.0,
+) -> dict[str, Any]:
+    parsed = urlparse(str(gateway_url).strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("gateway control URL is invalid")
+    url = (
+        f"{str(gateway_url).rstrip('/')}/v1/sandboxes/"
+        f"{quote(sandbox_id, safe='')}/migration"
+    )
+    request_headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    if bearer_token is not None:
+        bearer_token = bearer_token.strip()
+        if not bearer_token:
+            raise ValueError("gateway control bearer token cannot be empty")
+        request_headers["Authorization"] = f"Bearer {bearer_token}"
+    request = Request(
+        url,
+        data=b"{}",
+        headers=request_headers,
+        method="POST",
+    )
+
+    class RejectGatewayRedirects(HTTPRedirectHandler):
+        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    with build_opener(RejectGatewayRedirects()).open(
+        request,
+        timeout=timeout_seconds,
+    ) as response:
+        body = response.read(1024 * 1024 + 1)
+        if len(body) > 1024 * 1024:
+            raise ValueError("gateway migration response exceeds 1 MiB")
+        decoded = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(decoded, dict):
+            raise ValueError("gateway migration response must be a JSON object")
+        return decoded
+
+
 def _drain_response_acknowledges(
     response: dict[str, Any],
     *,
@@ -4545,9 +4818,17 @@ def run_reconcile_cycle(
     create_intents = [*sandbox_create_intents, *builder_create_intents]
     requested_sandbox_stop_job_ids = stop_job_ids_from_decision(decision)
     requested_builder_stop_job_ids = stop_job_ids_from_decision(builder_decision)
-    sandbox_stop_job_ids, blocked_sandbox_stop_job_ids = partition_safe_stop_job_ids(
+    (
+        sandbox_stop_job_ids_with_evacuation_capacity,
+        blocked_evacuation_stop_job_ids,
+    ) = partition_evacuatable_direct_stop_job_ids(
         sandbox_nodes,
         requested_sandbox_stop_job_ids,
+        route_reservations or {},
+    )
+    sandbox_stop_job_ids, blocked_sandbox_stop_job_ids = partition_safe_stop_job_ids(
+        sandbox_nodes,
+        sandbox_stop_job_ids_with_evacuation_capacity,
         deployment_id=config.deployment_id,
         allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=NODE_LABEL,
@@ -4566,6 +4847,7 @@ def run_reconcile_cycle(
     stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
     blocked_stop_job_ids = (
         *blocked_sandbox_stop_job_ids,
+        *blocked_evacuation_stop_job_ids,
         *blocked_builder_stop_job_ids,
     )
     if drain_workflow_enabled:
@@ -4602,11 +4884,29 @@ def run_reconcile_cycle(
     unreachable_stop_job_id_set = set(unreachable_stop_job_ids)
     active_drain_intents: list[DrainIntent] = []
     drain_results: list[dict[str, Any]] = []
+    evacuation_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
     canceled_drain_job_ids: list[str] = []
+    remaining_migration_budget = max(
+        0,
+        int(getattr(args, "max_migrations_per_cycle", 2)),
+    )
+    migration_gateway_url = ""
+    migration_gateway_error = ""
+    try:
+        migration_gateway_url = _gateway_base_url(
+            getattr(args, "gateway_control_url", ""),
+            getattr(args, "init_heartbeat_url", ""),
+        )
+    except ValueError as exc:
+        migration_gateway_error = str(exc)
     node_control_bearer_token = read_required_token_file(
         getattr(args, "node_control_bearer_token_file", None),
         "node control bearer token",
+    )
+    gateway_control_bearer_token = read_required_token_file(
+        getattr(args, "gateway_control_bearer_token_file", None),
+        "gateway control bearer token",
     )
     if drain_workflow_enabled:
         nodes_by_job_id = {node.job_id: node for node in nodes}
@@ -4674,6 +4974,59 @@ def run_reconcile_cycle(
                     # intent remains in its current direction and a canceling
                     # intent can never authorize a provider stop.
                     error = str(exc)
+            drain_acknowledged = bool(
+                intent.state == "active"
+                and not error
+                and _drain_response_acknowledges(
+                    response,
+                    token=intent.token,
+                    draining=True,
+                )
+            )
+            if (
+                drain_acknowledged
+                and intent.role == "sandbox"
+                and heartbeat is not None
+                and "sandbox-migrate-v2" in heartbeat.capabilities
+                and remaining_migration_budget > 0
+            ):
+                parked_routes = [
+                    route
+                    for route in (route_reservations or {}).get(intent.job_id, ())
+                    if (route.state or "unknown").lower() == "parked"
+                ]
+                for route in parked_routes[:remaining_migration_budget]:
+                    evacuation_error = migration_gateway_error
+                    migration_payload: dict[str, Any] = {}
+                    if not evacuation_error and not migration_gateway_url:
+                        evacuation_error = (
+                            "gateway control URL is required for direct-runtime "
+                            "drain evacuation"
+                        )
+                    if not evacuation_error:
+                        try:
+                            migration_payload = _post_gateway_sandbox_migration(
+                                migration_gateway_url,
+                                route.sandbox_id,
+                                bearer_token=gateway_control_bearer_token,
+                            )
+                        except Exception as exc:
+                            # Migration is journaled by the gateway. An ambiguous
+                            # request is safe to retry in a later autoscaler cycle.
+                            evacuation_error = str(exc)
+                    evacuation_results.append(
+                        {
+                            "jobId": intent.job_id,
+                            "sandboxId": route.sandbox_id,
+                            "gatewayUrl": migration_gateway_url,
+                            "requestSucceeded": not evacuation_error,
+                            "migration": migration_payload.get("migration", {}),
+                            "error": evacuation_error,
+                        }
+                    )
+                    remaining_migration_budget -= 1
+                    if remaining_migration_budget <= 0:
+                        break
             cancellation_acknowledged = False
             ready = False
             if intent.state == "canceling":
@@ -4968,6 +5321,7 @@ def run_reconcile_cycle(
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
+        "blockedEvacuationStopJobIds": list(blocked_evacuation_stop_job_ids),
         "drainingJobIds": sorted(active_drain_job_ids),
         "cancelingDrainJobIds": sorted(canceling_drain_job_ids),
         "canceledDrainJobIds": sorted(canceled_drain_job_ids),
@@ -4977,6 +5331,7 @@ def run_reconcile_cycle(
             _drain_intent_to_dict(intent) for intent in pending_drain_intents
         ],
         "drainResults": drain_results,
+        "evacuationResults": evacuation_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "removedStoppedHeartbeats": [],
         "bootstrapIntents": [
@@ -5869,6 +6224,12 @@ def policy_with_cli_overrides(
         "memory_overcommit": getattr(args, "init_memory_overcommit", None),
         "disk_overcommit": getattr(args, "init_disk_overcommit", None),
     }
+    if str(getattr(args, "init_node_runtime", "legacy")) == "direct":
+        capacity_factors = {
+            "cpu_overcommit": 1.0,
+            "memory_overcommit": 1.0,
+            "disk_overcommit": 1.0,
+        }
     factor_updates: dict[str, float] = {}
     for field_name, raw_value in capacity_factors.items():
         if raw_value is None:
@@ -5907,6 +6268,90 @@ def sandbox_route_reservations(
     }
 
 
+def partition_evacuatable_direct_stop_job_ids(
+    nodes: list[SandboxNode],
+    requested_job_ids: tuple[str, ...],
+    routes_by_job: dict[str, tuple[SandboxRoute, ...]],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Do not replace a last disk-owning node merely to stop the old one.
+
+    A direct node with parked routes can scale down only when all of those
+    disk-only shapes fit on ready nodes that will remain after the same stop
+    batch. Otherwise migration would create replacement demand and preserve
+    the node count while needlessly copying every parked sandbox.
+    """
+    if not requested_job_ids:
+        return (), ()
+    nodes_by_job_id = {node.job_id: node for node in nodes}
+    remaining = list(dict.fromkeys(requested_job_ids))
+    blocked: list[str] = []
+    while remaining and not _direct_stop_set_has_evacuation_capacity(
+        nodes,
+        nodes_by_job_id,
+        tuple(remaining),
+        routes_by_job,
+    ):
+        # Preserve the policy's highest-priority stop and progressively keep
+        # later candidates as possible evacuation destinations.
+        blocked.append(remaining.pop())
+    blocked.reverse()
+    return tuple(remaining), tuple(blocked)
+
+
+def _direct_stop_set_has_evacuation_capacity(
+    nodes: list[SandboxNode],
+    nodes_by_job_id: dict[str, SandboxNode],
+    stop_job_ids: tuple[str, ...],
+    routes_by_job: dict[str, tuple[SandboxRoute, ...]],
+) -> bool:
+    stop_set = set(stop_job_ids)
+    parked_shapes: list[int] = []
+    for job_id in stop_job_ids:
+        routes = routes_by_job.get(job_id, ())
+        if not routes:
+            continue
+        node = nodes_by_job_id.get(job_id)
+        heartbeat = node.heartbeat if node is not None else None
+        if not (
+            node is not None
+            and node.heartbeat_fresh
+            and heartbeat is not None
+            and heartbeat.inventory_complete
+            and "sandbox-migrate-v2" in heartbeat.capabilities
+            and all((route.state or "unknown").lower() == "parked" for route in routes)
+        ):
+            return False
+        for route in routes:
+            if route.resources.disk_mb <= 0:
+                return False
+            parked_shapes.append(route.resources.disk_mb)
+    if not parked_shapes:
+        return True
+
+    destination_free_disk = [
+        heartbeat.free_resources.disk_mb
+        for node in nodes
+        if node.job_id not in stop_set
+        and node.is_ready
+        and (heartbeat := node.heartbeat) is not None
+        and heartbeat.admission_open
+        and not heartbeat.draining
+        and "sandbox-migrate-v2" in heartbeat.capabilities
+        and heartbeat.free_resources.disk_mb > 0
+    ]
+    for disk_mb in sorted(parked_shapes, reverse=True):
+        candidates = [
+            (free_disk, index)
+            for index, free_disk in enumerate(destination_free_disk)
+            if disk_mb <= free_disk
+        ]
+        if not candidates:
+            return False
+        _free_disk, destination_index = max(candidates)
+        destination_free_disk[destination_index] -= disk_mb
+    return True
+
+
 def apply_route_reservations_to_heartbeats(
     heartbeats: dict[str, NodeHeartbeat],
     routes_by_job: dict[str, tuple[SandboxRoute, ...]],
@@ -5940,16 +6385,33 @@ def apply_route_reservations_to_nodes(
 ) -> list[SandboxNode]:
     """Keep route ownership visible even when a job has no heartbeat record."""
 
-    return [
-        replace(
-            node,
-            active_sandboxes=max(
-                node.active_sandboxes,
-                len(routes_by_job.get(node.job_id, ())),
-            ),
+    reconciled: list[SandboxNode] = []
+    for node in nodes:
+        heartbeat = node.heartbeat
+        owns_movable_inventory = bool(
+            node.heartbeat_fresh
+            and heartbeat is not None
+            and heartbeat.inventory_complete
+            and "sandbox-migrate-v2" in heartbeat.capabilities
         )
-        for node in nodes
-    ]
+        reconciled.append(
+            replace(
+                node,
+                # Direct-runtime parked ownership is disk inventory, not active
+                # compute. A fresh complete inventory can therefore enter the
+                # evacuation drain workflow. Missing/stale/legacy observations
+                # retain the old conservative route-count fence.
+                active_sandboxes=(
+                    node.active_sandboxes
+                    if owns_movable_inventory
+                    else max(
+                        node.active_sandboxes,
+                        len(routes_by_job.get(node.job_id, ())),
+                    )
+                ),
+            )
+        )
+    return reconciled
 
 
 def _heartbeat_inventory_contains_route(
@@ -6103,7 +6565,12 @@ def vm_init_options_for_autoscaled_node(
         getattr(args, "init_disk_overcommit", None),
         config.policy.disk_overcommit,
     )
-    if role == "builder":
+    node_runtime = (
+        "legacy"
+        if role == "builder"
+        else str(getattr(args, "init_node_runtime", "legacy"))
+    )
+    if role == "builder" or node_runtime == "direct":
         cpu_overcommit = 1.0
         memory_overcommit = 1.0
         disk_overcommit = 1.0
@@ -6168,15 +6635,23 @@ def vm_init_options_for_autoscaled_node(
             else ""
         ),
         runtime_dry_run=bool(getattr(args, "init_runtime_dry_run", False)),
-        node_runtime=(
-            "legacy"
-            if role == "builder"
-            else str(getattr(args, "init_node_runtime", "legacy"))
-        ),
+        node_runtime=node_runtime,
         direct_runsc_commit=(
             ""
             if role == "builder"
             else str(getattr(args, "init_direct_runsc_commit", "") or "")
+        ),
+        direct_network=(
+            "none"
+            if role == "builder"
+            else str(getattr(args, "init_direct_network", "none"))
+        ),
+        direct_network_allow_tcp=(
+            ()
+            if role == "builder"
+            else tuple(
+                getattr(args, "init_direct_network_allow_tcp", ()) or ()
+            )
         ),
         direct_disk_headroom_mb=max(
             1,
@@ -6376,12 +6851,16 @@ def print_reconcile(
     print("Stop intents:")
     requested_stop_job_ids = tuple(result.get("requestedStopJobIds", []))
     blocked_stop_job_ids = tuple(result.get("blockedStopJobIds", []))
+    blocked_evacuation_job_ids = set(result.get("blockedEvacuationStopJobIds", []))
     if not requested_stop_job_ids:
         print("- none")
     for job_id in stop_job_ids:
         print(f"- {job_id}")
     for job_id in blocked_stop_job_ids:
-        print(f"- {job_id} (blocked: missing matching deployment label)")
+        if job_id in blocked_evacuation_job_ids:
+            print(f"- {job_id} (blocked: no net-gain evacuation destination)")
+        else:
+            print(f"- {job_id} (blocked: missing matching deployment label)")
     suspended_job_ids = tuple(result.get("unexpectedlySuspendedJobIds", []))
     print("Resume intents:")
     if not suspended_job_ids:
@@ -6427,19 +6906,32 @@ def print_reconcile(
     elif requested_stop_job_ids:
         if blocked_stop_job_ids:
             if result.get("executeStops"):
-                print(
-                    "No stop requests executed. Blocked jobs require matching "
-                    "--deployment-id or --allow-unlabeled-stops."
-                )
+                if set(blocked_stop_job_ids) == blocked_evacuation_job_ids:
+                    print(
+                        "No stop requests executed. Parked disk state has no "
+                        "net-gain evacuation destination."
+                    )
+                else:
+                    print(
+                        "No stop requests executed. Some jobs lack a matching "
+                        "deployment label or evacuation destination."
+                    )
             else:
                 print(
                     "Stop dry-run only. Blocked jobs require matching --deployment-id "
                     "or --allow-unlabeled-stops."
                 )
         else:
-            print(
-                "Stop dry-run only. Re-run with --execute-stops to terminate planned jobs."
-            )
+            if result.get("executeStops"):
+                print(
+                    "Stop request is waiting for drain proof; no provider stop "
+                    "was submitted this cycle."
+                )
+            else:
+                print(
+                    "Stop dry-run only. Re-run with --execute-stops to terminate "
+                    "planned jobs."
+                )
 
 
 def vm_job_to_dict(job: VmJob) -> dict[str, Any]:
@@ -6667,6 +7159,9 @@ def vm_submission_options_from_args(
     if ssh_requested and ssh_disabled:
         raise ValueError("--ssh and --no-ssh cannot be used together.")
     file_mounts = tuple(file_mounts_from_args(args))
+    product_id = args.product_id or (
+        DEFAULT_GATEWAY_VM_PRODUCT_ID if role == "gateway" else DEFAULT_VM_PRODUCT_ID
+    )
 
     return (
         VmSubmissionOptions(
@@ -6676,7 +7171,7 @@ def vm_submission_options_from_args(
             public_link_id=public_link_id,
             public_link_port=public_link_port,
             product=VmProductRef(
-                id=args.product_id,
+                id=product_id,
                 category=args.product_category,
                 provider=args.product_provider,
             ),
@@ -6855,6 +7350,10 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         runtime_dry_run=args.runtime_dry_run,
         node_runtime=str(getattr(args, "node_runtime", "legacy")),
         direct_runsc_commit=str(getattr(args, "direct_runsc_commit", "") or ""),
+        direct_network=str(getattr(args, "direct_network", "none") or "none"),
+        direct_network_allow_tcp=tuple(
+            getattr(args, "direct_network_allow_tcp", ()) or ()
+        ),
         direct_disk_headroom_mb=int(
             getattr(
                 args,
@@ -6906,6 +7405,8 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "runtimeDryRun": options.runtime_dry_run,
         "nodeRuntime": options.node_runtime,
         "directRunscCommit": options.direct_runsc_commit,
+        "directNetwork": options.direct_network,
+        "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,

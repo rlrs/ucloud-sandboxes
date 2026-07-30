@@ -31,7 +31,9 @@ from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
+    SandboxInventoryEntry,
     SandboxNode,
+    ScaleDecision,
     ScalePolicy,
     VmJob,
     utc_now,
@@ -73,6 +75,36 @@ class FailingProbe:
 
 
 class CliTests(unittest.TestCase):
+    def test_executing_stop_waiting_for_drain_is_not_reported_as_dry_run(
+        self,
+    ) -> None:
+        output = io.StringIO()
+        decision = ScaleDecision(
+            actions=(),
+            ready_nodes=1,
+            provisioning_nodes=0,
+            total_nodes=1,
+            reasons=("idle node exceeds min_nodes=0",),
+        )
+        with redirect_stdout(output):
+            cli.print_reconcile(
+                AutoscalerConfig(project_id="project-1"),
+                [],
+                decision,
+                Path("/tmp/heartbeats.json"),
+                [],
+                (),
+                {
+                    "requestedStopJobIds": ["job-1"],
+                    "blockedStopJobIds": [],
+                    "executeStops": True,
+                    "rawBootstrapIntents": [],
+                },
+            )
+
+        self.assertIn("waiting for drain proof", output.getvalue())
+        self.assertNotIn("Stop dry-run only", output.getvalue())
+
     def test_mutating_reconcile_commands_reject_jobs_fixture_before_provider_calls(
         self,
     ) -> None:
@@ -737,7 +769,7 @@ class CliTests(unittest.TestCase):
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
-            product_id="cpu-amd-zen5-2-vcpu",
+            product_id=None,
             product_category="cpu-amd-zen5",
             state="RUNNING",
             private_network_ids=("net-1",),
@@ -867,7 +899,7 @@ class CliTests(unittest.TestCase):
             hostname=None,
             name=None,
             label=[],
-            product_id="cpu-amd-zen5-2-vcpu",
+            product_id=None,
             product_category="cpu-amd-zen5",
             product_provider="ucloud",
             app_name="vm-ubuntu",
@@ -885,6 +917,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(options.public_link_id, "12345368")
         self.assertEqual(options.public_link_port, 8090)
+        self.assertEqual(options.product.id, "cpu-amd-zen5-2-vcpu")
         self.assertEqual(options.hostname, "sandbox-gateway-gateway")
         self.assertEqual(options.name, "ucloud-sandbox-gateway-gateway")
         self.assertNotIn("ucloud-sandboxes/node", options.job_item()["labels"])
@@ -919,7 +952,7 @@ class CliTests(unittest.TestCase):
             hostname=None,
             name=None,
             label=[],
-            product_id="cpu-amd-zen5-2-vcpu",
+            product_id=None,
             product_category="cpu-amd-zen5",
             product_provider="ucloud",
             app_name="vm-ubuntu",
@@ -967,7 +1000,7 @@ class CliTests(unittest.TestCase):
             hostname=None,
             name=None,
             label=[],
-            product_id="cpu-amd-zen5-2-vcpu",
+            product_id=None,
             product_category="cpu-amd-zen5",
             product_provider="ucloud",
             app_name="vm-ubuntu",
@@ -984,6 +1017,7 @@ class CliTests(unittest.TestCase):
         options, _seed = vm_submission_options_from_args(args, config)
 
         self.assertIsNone(options.public_link_id)
+        self.assertEqual(options.product.id, "cpu-amd-zen5-32-vcpu")
         self.assertEqual(
             options.job_item()["resources"],
             [{"type": "private_network", "id": "12345327"}],
@@ -1778,7 +1812,7 @@ class CliTests(unittest.TestCase):
                             memory_mb=6144,
                             disk_mb=51200,
                         ),
-                    )
+                    ),
                 }
             )
             command = [
@@ -2474,6 +2508,318 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(reconciled[0].active_sandboxes, 1)
+
+    def test_fresh_movable_parked_inventory_is_not_active_compute(self) -> None:
+        job = VmJob(
+            id="job-1",
+            project_id="project-1",
+            name="ucloud-sandbox-node-1",
+            application_name="vm-ubuntu",
+            application_version="24.04",
+            product_id="cpu",
+            product_category="cpu",
+            state="RUNNING",
+        )
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            capabilities=("disk-quota", "sandbox-migrate-v2"),
+            inventory_complete=True,
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id="sandbox-1",
+                    state="parked",
+                ),
+            ),
+            used_resources=ResourceQuantity(disk_mb=8192),
+        )
+        node = SandboxNode(
+            job=job,
+            heartbeat=heartbeat,
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+        )
+        route = SandboxRoute(
+            sandbox_id="sandbox-1",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            state="parked",
+        )
+
+        reconciled = cli.apply_route_reservations_to_nodes(
+            [node],
+            {"job-1": (route,)},
+        )
+
+        self.assertEqual(reconciled[0].active_sandboxes, 0)
+        self.assertTrue(reconciled[0].is_idle)
+
+    @allow_fixture_mutations
+    def test_direct_runtime_drain_evacuates_parked_inventory(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            },
+                            {
+                                "id": "destination",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-destination",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            route = SandboxRoute(
+                sandbox_id="parked-one",
+                node_id="node-owned",
+                job_id="owned",
+                node_url="http://node-owned:8090",
+                resources=ResourceQuantity(
+                    vcpu=1,
+                    memory_mb=1024,
+                    disk_mb=8192,
+                ),
+                state="parked",
+            )
+            heartbeat_file = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_file).save(
+                {
+                    "owned": NodeHeartbeat(
+                        node_id="node-owned",
+                        job_id="owned",
+                        updated_at=utc_now(),
+                        active_sandboxes=0,
+                        idle_since=utc_now() - timedelta(minutes=10),
+                        node_url=route.node_url,
+                        agent_version=package_version(),
+                        capabilities=("disk-quota", "sandbox-migrate-v2"),
+                        total_resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=6144,
+                            disk_mb=51200,
+                        ),
+                        used_resources=ResourceQuantity(disk_mb=8192),
+                        inventory_complete=True,
+                        inventory=(
+                            SandboxInventoryEntry(
+                                sandbox_id=route.sandbox_id,
+                                state="parked",
+                                resources=route.resources,
+                            ),
+                        ),
+                    ),
+                    "destination": NodeHeartbeat(
+                        node_id="node-destination",
+                        job_id="destination",
+                        updated_at=utc_now(),
+                        # Keep this ready node out of the scale-down candidate
+                        # set while it remains a valid evacuation destination.
+                        active_sandboxes=1,
+                        node_url="http://node-destination:8090",
+                        agent_version=package_version(),
+                        capabilities=("disk-quota", "sandbox-migrate-v2"),
+                        total_resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=6144,
+                            disk_mb=51200,
+                        ),
+                        used_resources=ResourceQuantity(),
+                        inventory_complete=True,
+                    ),
+                }
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(
+                    max_stop_per_cycle=1,
+                    scale_down_idle_seconds=0,
+                ),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                heartbeats=heartbeat_file,
+                include_job=[],
+                all_vm_jobs=False,
+                execute=False,
+                execute_stops=True,
+                execute_init=False,
+                allow_unlabeled_stops=False,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+                gateway_control_url="http://gateway.internal:8080",
+                gateway_control_bearer_token_file=root / "gateway-token",
+                init_heartbeat_url="",
+                max_migrations_per_cycle=2,
+            )
+            args.gateway_control_bearer_token_file.write_text(
+                "gateway-secret\n",
+                encoding="utf-8",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+            migrations: list[tuple[str, str]] = []
+
+            def post_drain(
+                _url: str,
+                token: str,
+                *,
+                draining: bool = True,
+                bearer_token: str | None = None,
+            ) -> dict:
+                del bearer_token
+                return {
+                    "drain": {
+                        "token": token,
+                        "draining": draining,
+                        "admission_open": not draining,
+                    }
+                }
+
+            def post_migration(
+                gateway_url: str,
+                sandbox_id: str,
+                *,
+                bearer_token: str | None = None,
+            ) -> dict:
+                migrations.append((gateway_url, sandbox_id, bearer_token))
+                return {
+                    "migration": {
+                        "migration_id": "migration-1",
+                        "phase": "complete",
+                    }
+                }
+
+            class UnusedUCloudClient:
+                def __init__(self, _session_store) -> None:
+                    pass
+
+            with patch.object(
+                cli,
+                "_post_node_drain",
+                side_effect=post_drain,
+            ), patch.object(
+                cli,
+                "_post_gateway_sandbox_migration",
+                side_effect=post_migration,
+            ), patch.object(
+                cli,
+                "UCloudClient",
+                UnusedUCloudClient,
+            ):
+                result = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                    route_reservations={"owned": (route,)},
+                )
+
+        self.assertEqual(
+            migrations,
+            [("http://gateway.internal:8080", "parked-one", "gateway-secret")],
+            result,
+        )
+        self.assertEqual(result["drainingJobIds"], ["owned"])
+        self.assertFalse(result["drainResults"][0]["heartbeatReady"])
+        self.assertTrue(result["evacuationResults"][0]["requestSucceeded"])
+        self.assertEqual(result["drainReadyStopJobIds"], [])
+
+    def test_last_direct_disk_owner_is_not_replaced_just_to_scale_down(self) -> None:
+        route = SandboxRoute(
+            sandbox_id="parked-one",
+            node_id="node-owned",
+            job_id="owned",
+            node_url="http://node-owned:8090",
+            resources=ResourceQuantity(disk_mb=8192),
+            state="parked",
+        )
+        heartbeat = NodeHeartbeat(
+            node_id="node-owned",
+            job_id="owned",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            capabilities=("disk-quota", "sandbox-migrate-v2"),
+            total_resources=ResourceQuantity(disk_mb=51200),
+            used_resources=route.resources,
+            inventory_complete=True,
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    state="parked",
+                    resources=route.resources,
+                ),
+            ),
+        )
+        owner = SandboxNode(
+            job=VmJob(
+                id="owned",
+                project_id="project-1",
+                name="ucloud-sandbox-node-owned",
+                application_name="vm-ubuntu",
+                application_version="24.04",
+                product_id="cpu",
+                product_category="cpu",
+                state="RUNNING",
+            ),
+            heartbeat=heartbeat,
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+        )
+
+        allowed, blocked = cli.partition_evacuatable_direct_stop_job_ids(
+            [owner],
+            ("owned",),
+            {"owned": (route,)},
+        )
+
+        self.assertEqual(allowed, ())
+        self.assertEqual(blocked, ("owned",))
 
     def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
         demand = SandboxDemand(

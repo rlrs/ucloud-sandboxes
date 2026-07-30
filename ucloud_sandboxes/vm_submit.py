@@ -15,7 +15,10 @@ from .networking import (
 
 DEFAULT_VM_APPLICATION_NAME = "vm-ubuntu"
 DEFAULT_VM_APPLICATION_VERSION = "24.04"
+# Sandbox nodes are deliberately large; the always-on gateway is control-plane
+# infrastructure and should not inherit the worker-node product.
 DEFAULT_VM_PRODUCT_ID = "cpu-amd-zen5-32-vcpu"
+DEFAULT_GATEWAY_VM_PRODUCT_ID = "cpu-amd-zen5-2-vcpu"
 DEFAULT_VM_PRODUCT_CATEGORY = "cpu-amd-zen5"
 DEFAULT_VM_PRODUCT_PROVIDER = "ucloud"
 DEFAULT_VM_DISK_GB = 250

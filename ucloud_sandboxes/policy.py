@@ -8,6 +8,7 @@ from .models import (
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
+    SandboxPlacementRequest,
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
@@ -75,6 +76,12 @@ def evaluate_scale(
         desired_resources,
         projected_free_resources,
     )
+    placement_nodes = _nodes_for_unplaced_requests(
+        capacity_nodes,
+        demand.placement_requests,
+        policy,
+        now=now,
+    )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
 
@@ -126,20 +133,32 @@ def evaluate_scale(
             if reason:
                 reasons.append(f"cannot satisfy min_nodes={policy.min_nodes}: {reason}")
 
-    if _has_resource_demand(desired_resources) and _has_resource_deficit(
-        resource_deficit
+    if placement_nodes > 0 or (
+        _has_resource_demand(desired_resources)
+        and _has_resource_deficit(resource_deficit)
     ):
-        needed_nodes = _nodes_for_resource_deficit(resource_deficit, policy)
+        deficit_nodes = (
+            _nodes_for_resource_deficit(resource_deficit, policy)
+            if _has_resource_deficit(resource_deficit)
+            else 0
+        )
+        needed_nodes = max(deficit_nodes, placement_nodes)
         create_count = min(
             needed_nodes,
             _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
         )
         if create_count > 0:
-            reason = (
-                "projected free resources "
-                f"{_resource_label(projected_free_resources)} below desired "
-                f"{_resource_label(desired_resources)}"
-            )
+            if placement_nodes > deficit_nodes:
+                reason = (
+                    f"{placement_nodes} additional node(s) required because "
+                    "pending sandbox shapes do not fit any single projected node"
+                )
+            else:
+                reason = (
+                    "projected free resources "
+                    f"{_resource_label(projected_free_resources)} below desired "
+                    f"{_resource_label(desired_resources)}"
+                )
             actions.append(
                 ScaleAction(kind="create", count=create_count, reason=reason)
             )
@@ -158,7 +177,11 @@ def evaluate_scale(
                 )
 
     planned_creates = _planned_creates(actions)
-    if planned_creates == 0 and not _has_resource_deficit(resource_deficit):
+    if (
+        planned_creates == 0
+        and not _has_resource_deficit(resource_deficit)
+        and placement_nodes == 0
+    ):
         excess_nodes = total_nodes - policy.min_nodes
         stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
         if excess_nodes > 0 and stop_budget > 0:
@@ -297,6 +320,93 @@ def _projected_free_resources(
                 oldest_pending_seconds,
             )
     return total
+
+
+def _nodes_for_unplaced_requests(
+    nodes: list[SandboxNode],
+    requests: tuple[SandboxPlacementRequest, ...],
+    policy: ScalePolicy,
+    *,
+    now: datetime,
+) -> int:
+    """Bin-pack accepted request shapes so aggregate free space cannot lie."""
+
+    if not requests:
+        return 0
+    del now
+    bins: list[tuple[str, ResourceQuantity]] = []
+    for node in nodes:
+        if node.job.is_final:
+            continue
+        if node.heartbeat is not None and node.is_schedulable:
+            bins.append(
+                (
+                    node.job_id,
+                    _security_adjusted_resources(
+                        node, node.heartbeat.free_resources
+                    ),
+                )
+            )
+        elif node.is_provisioning:
+            # A queued node is a real future placement bin. Aggregate capacity
+            # remains weighted separately, but starting another identical VM
+            # cannot repair fragmentation any sooner.
+            bins.append(
+                (
+                    node.job_id,
+                    _security_adjusted_resources(
+                        node,
+                        _estimated_node_resources(node, policy),
+                    ),
+                )
+            )
+    default_bin = policy.schedulable_node_resources
+
+    def pressure(
+        placement: SandboxPlacementRequest,
+    ) -> tuple[float, int, float]:
+        request = placement.resources
+        ratios = (
+            request.vcpu / default_bin.vcpu if default_bin.vcpu > 0 else 0.0,
+            request.memory_mb / default_bin.memory_mb
+            if default_bin.memory_mb > 0
+            else 0.0,
+            request.disk_mb / default_bin.disk_mb
+            if default_bin.disk_mb > 0
+            else 0.0,
+        )
+        return max(ratios), request.memory_mb + request.disk_mb, request.vcpu
+
+    missing = 0
+    for placement in sorted(requests, key=pressure, reverse=True):
+        requested = placement.resources
+        excluded = set(placement.excluded_job_ids)
+        fitting = [
+            (index, job_id, available)
+            for index, (job_id, available) in enumerate(bins)
+            if job_id not in excluded and requested.fits_within(available)
+        ]
+        if fitting:
+            index, job_id, available = min(
+                fitting,
+                key=lambda item: (
+                    item[2].disk_mb - requested.disk_mb,
+                    item[2].memory_mb - requested.memory_mb,
+                    item[2].vcpu - requested.vcpu,
+                ),
+            )
+            bins[index] = (job_id, _subtract_resources(available, requested))
+            continue
+        missing += 1
+        bins.append(
+            (
+                "",
+                _subtract_resources(default_bin, requested)
+                if requested.fits_within(default_bin)
+                else ResourceQuantity(),
+            )
+        )
+    return missing
 
 
 def _weighted_estimated_node_resources(

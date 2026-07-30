@@ -20,10 +20,62 @@ from ucloud_sandboxes.routing import (
     RoutingStore,
     SandboxRoute,
     SandboxRouteConflictError,
+    sandbox_demand_from_routing_state,
 )
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_wake_state_change_is_exact_route_compare_and_swap(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                )
+            )
+
+            waking = store.set_sandbox_state_if_current(
+                route,
+                expected_states={"parked"},
+                state="waking",
+            )
+            stale = store.set_sandbox_state_if_current(
+                route,
+                expected_states={"parked"},
+                state="waking",
+            )
+
+        self.assertIsNotNone(waking)
+        self.assertEqual(waking.state, "waking")
+        self.assertIsNone(stale)
+
+    def test_migration_pending_shape_excludes_source_job(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                )
+            )
+            resources = ResourceQuantity(disk_mb=8192)
+            store.upsert_pending("__migration__:sandbox-1", resources)
+
+            demand = sandbox_demand_from_routing_state(store.load())
+
+        self.assertEqual(demand.placement_requests[0].resources, resources)
+        self.assertEqual(
+            demand.placement_requests[0].excluded_job_ids,
+            ("job-1",),
+        )
+
     def test_routing_database_is_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:
             route_file = Path(raw_dir) / "routes.sqlite"
@@ -150,6 +202,119 @@ class RoutingStoreTests(unittest.TestCase):
                 store.finalize_sandbox_create(replace(reserved, state="running"))
             )
             self.assertIsNone(store.get_sandbox("fork-child"))
+
+    def test_parked_migration_moves_only_the_exact_current_route(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            source = store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="moving-one",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=ResourceQuantity(
+                        vcpu=1,
+                        memory_mb=1024,
+                        disk_mb=4096,
+                    ),
+                    spec={"id": "moving-one", "image": "busybox"},
+                ),
+                spec_hash="spec-hash",
+                create_operation_id="create-one",
+            )
+            source = store.finalize_sandbox_create(
+                replace(source, state="parked")
+            )
+            assert source is not None
+            store.upsert_exec(
+                ExecRoute(
+                    session_id="old-exec",
+                    sandbox_id=source.sandbox_id,
+                    node_id=source.node_id,
+                    job_id=source.job_id,
+                    node_url=source.node_url,
+                )
+            )
+
+            moved = store.move_sandbox_if_current(
+                source,
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination:8090/",
+                destination_node_epoch="destination-epoch",
+                destination_activity_epoch=7,
+            )
+            stale_replay = store.move_sandbox_if_current(
+                source,
+                destination_node_id="other-node",
+                destination_job_id="other-job",
+                destination_node_url="http://other:8090",
+            )
+            state = store.load()
+
+        self.assertIsNotNone(moved)
+        assert moved is not None
+        self.assertEqual(moved.node_id, "destination-node")
+        self.assertEqual(moved.node_url, "http://destination:8090")
+        self.assertEqual(moved.state, "parked")
+        self.assertEqual(moved.generation, source.generation)
+        self.assertEqual(moved.create_operation_id, source.create_operation_id)
+        self.assertIsNone(stale_replay)
+        self.assertNotIn("old-exec", state.exec_sessions)
+
+    def test_migration_journal_and_route_switch_commit_atomically(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            store = RoutingStore(path)
+            source = store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="journaled-move",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=ResourceQuantity(memory_mb=1024, disk_mb=4096),
+                    spec={"id": "journaled-move", "image": "busybox"},
+                ),
+                spec_hash="spec-hash",
+                create_operation_id="create-operation",
+            )
+            source = store.finalize_sandbox_create(
+                replace(source, state="parked")
+            )
+            assert source is not None
+            migration = store.begin_sandbox_migration(
+                source,
+                migration_id="migration-one",
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination:8090",
+            )
+            migration = store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={"planned"},
+                phase="prepared",
+                archive_sha256="a" * 64,
+                archive_token="token",
+            )
+            assert migration is not None
+            migration = store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={"prepared"},
+                phase="staged",
+            )
+            assert migration is not None
+
+            routed = store.route_sandbox_migration(migration.migration_id)
+            replayed = RoutingStore(path).route_sandbox_migration(
+                migration.migration_id
+            )
+
+        self.assertIsNotNone(routed)
+        self.assertIsNotNone(replayed)
+        assert routed is not None and replayed is not None
+        self.assertEqual(routed[0].phase, "routed")
+        self.assertEqual(routed[1].node_id, "destination-node")
+        self.assertEqual(replayed, routed)
 
     def test_reconcile_sandboxes_for_node_removes_missing_node_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:

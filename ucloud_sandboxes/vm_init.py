@@ -14,6 +14,7 @@ from typing import Any
 
 from .checkpoint_helper import render_checkpoint_helper_script
 from .deployment import DEFAULT_INIT_VERSION, package_version
+from .direct_network import DirectNetworkTcpEgress
 from .hibernation_quota_helper import (
     render_hibernation_quota_helper_script,
 )
@@ -123,6 +124,8 @@ class VmInitOptions:
     runtime_dry_run: bool = False
     node_runtime: str = "legacy"
     direct_runsc_commit: str = ""
+    direct_network: str = "none"
+    direct_network_allow_tcp: tuple[str, ...] = ()
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
@@ -313,6 +316,11 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             raise ValueError(
                 "direct runtime has no writable disk after safety headroom"
             )
+        direct_network_allow_flags = "".join(
+            " --direct-network-allow-tcp "
+            + shlex.quote(endpoint)
+            for endpoint in options.direct_network_allow_tcp
+        )
         direct_agent_command = (
             f"{agent_bin} serve-direct-node-agent"
             " --job-id ${UCLOUD_JOB_ID}"
@@ -326,12 +334,14 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --quota-root ${UCLOUD_HIBERNATION_QUOTA_ROOT}"
             " --runsc ${UCLOUD_DIRECT_RUNSC}"
             " --runsc-commit ${UCLOUD_DIRECT_RUNSC_COMMIT}"
+            " --network ${UCLOUD_DIRECT_NETWORK}"
+            f"{direct_network_allow_flags}"
             " --init-binary ${UCLOUD_DIRECT_INIT_BINARY}"
             " --quota-helper ${UCLOUD_HIBERNATION_QUOTA_HELPER}"
             " --disk-capacity-mb ${UCLOUD_DIRECT_DISK_CAPACITY_MB}"
             " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
-            " --idle-park-seconds 1"
+            " --idle-park-seconds 0"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
@@ -437,6 +447,7 @@ UCLOUD_RUNSC_RESTORE_STATE_ROOT={shlex.quote(runsc_restore_state_root)}
 UCLOUD_NODE_RUNTIME={shlex.quote(options.node_runtime)}
 UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
 UCLOUD_DIRECT_RUNSC_COMMIT={shlex.quote(options.direct_runsc_commit)}
+UCLOUD_DIRECT_NETWORK={shlex.quote(options.direct_network)}
 UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
 UCLOUD_DIRECT_DISK_CAPACITY_MB={options.docker_quota_image_gb * 1024}
 UCLOUD_DIRECT_DISK_HEADROOM_MB={options.direct_disk_headroom_mb}
@@ -1569,12 +1580,26 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "direct runtime requires an exact 40-character runsc commit"
             )
+        if options.direct_network not in {"none", "sandbox"}:
+            raise ValueError(
+                "direct runtime network must be either 'none' or 'sandbox'."
+            )
+        for endpoint in options.direct_network_allow_tcp:
+            DirectNetworkTcpEgress.parse(endpoint)
+        if options.direct_network == "none" and options.direct_network_allow_tcp:
+            raise ValueError(
+                "direct network TCP egress requires sandbox networking."
+            )
         if options.runtime_dry_run:
             raise ValueError("direct runtime does not support dry-run node service mode.")
         if options.docker_quota_image_gb < 1:
             raise ValueError("direct runtime requires quota-backed XFS storage.")
         if options.disk_overcommit != 1.0:
             raise ValueError("direct runtime disk overcommit must be exactly 1.0.")
+        if options.cpu_overcommit != 1.0 or options.memory_overcommit != 1.0:
+            raise ValueError(
+                "direct runtime CPU and memory overcommit must be exactly 1.0."
+            )
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")
         if options.direct_max_concurrent_restores < 1:

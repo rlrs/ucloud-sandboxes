@@ -16,6 +16,7 @@ from ucloud_sandboxes.deploy import (
     autoscaler_env,
     gateway_env,
     packaged_systemd_units,
+    relay_env,
     registry_env,
     render_env_file,
     render_remote_deploy_script,
@@ -77,6 +78,7 @@ class DeployTests(unittest.TestCase):
             )
 
             gateway = gateway_env(plan)
+            relay = relay_env(plan)
             autoscaler = autoscaler_env(plan)
             registry = registry_env(plan)
             script = render_remote_deploy_script(plan)
@@ -91,6 +93,18 @@ class DeployTests(unittest.TestCase):
             "/work/data/ucloud-sandboxes/state/node-control-token",
         )
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
+        self.assertEqual(
+            relay["UCLOUD_RELAY_SANDBOX_TOKEN_FILE"],
+            "/work/data/ucloud-sandboxes/state/relay-sandbox-token",
+        )
+        self.assertEqual(
+            relay["UCLOUD_RELAY_WORKER_TOKEN_FILE"],
+            "/work/data/ucloud-sandboxes/state/relay-worker-token",
+        )
+        self.assertIn(
+            "create_secret /work/data/ucloud-sandboxes/state/relay-sandbox-token",
+            script,
+        )
         self.assertEqual(registry["UCLOUD_REGISTRY_RETENTION_DAYS"], "30")
         self.assertEqual(registry["UCLOUD_REGISTRY_KEEP_PER_REPOSITORY"], "0")
         self.assertEqual(
@@ -194,7 +208,11 @@ class DeployTests(unittest.TestCase):
         self.assertIn(
             "systemctl enable --now ucloud-sandbox-registry-prune.timer", script
         )
-        self.assertIn("curl -fsS http://127.0.0.1:8090/healthz", script)
+        self.assertIn(
+            "wait_for_http gateway http://127.0.0.1:8090/healthz", script
+        )
+        self.assertIn('while [ "$attempt" -le 30 ]; do', script)
+        self.assertNotIn("sleep 2\ncurl -fsS", script)
         self.assertIn(
             "create_secret /work/data/ucloud-sandboxes/state/gateway-token",
             script,
@@ -453,10 +471,19 @@ class DeployTests(unittest.TestCase):
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
             f"ucloud-sandbox-registry={AUTO_REGISTRY_PRIVATE_IP_TOKEN}",
         )
+        self.assertEqual(
+            autoscaler["UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP"],
+            f"{AUTO_REGISTRY_PRIVATE_IP_TOKEN}:8092",
+        )
         self.assertIn("detect_registry_private_ip() {", script)
         self.assertIn("REGISTRY_PRIVATE_IP=''", script)
         self.assertIn(
             f"UCLOUD_DOCKER_HOST_ALIAS=ucloud-sandbox-registry={AUTO_REGISTRY_PRIVATE_IP_TOKEN}",
+            script,
+        )
+        self.assertIn(
+            "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP="
+            f"{AUTO_REGISTRY_PRIVATE_IP_TOKEN}:8092",
             script,
         )
         self.assertIn(
@@ -537,15 +564,21 @@ class DeployTests(unittest.TestCase):
             for line in unit.splitlines()
             if line.startswith("ExecStart=")
         )
-        rendered = re.sub(r"\$\{[^}]+\}", "1", exec_start)
+        rendered = exec_start.replace(
+            "${UCLOUD_INIT_DIRECT_NETWORK}",
+            "sandbox",
+        )
+        rendered = re.sub(r"\$\{[^}]+\}", "1", rendered)
         argv = shlex.split(rendered)
 
         args = build_parser().parse_args(argv[1:])
 
         self.assertEqual(args.command, "autoscaler-loop")
         self.assertTrue(args.execute_resumes)
+        self.assertEqual(args.gateway_control_bearer_token_file, Path("1"))
         self.assertEqual(args.init_builder_docker_quota_image_gb, 1)
         self.assertEqual(args.init_swap_gb, 1)
+        self.assertEqual(args.init_direct_network, "sandbox")
 
 
 if __name__ == "__main__":

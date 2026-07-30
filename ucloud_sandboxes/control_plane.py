@@ -30,6 +30,7 @@ from .capabilities import (
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_compatible, service_health
+from .hibernation import hibernation_disk_reservation_mb
 from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
     DockerImageRuntime,
@@ -113,6 +114,8 @@ NODE_RECOVERY_PROXY_TIMEOUT_SECONDS = 5
 NODE_DISCOVERY_TOTAL_TIMEOUT_SECONDS = 2.0
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
 SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
+SANDBOX_TRANSPORT_RESET_HEADER = "X-UCloud-Sandbox-Transport-Reset"
+SANDBOX_TRANSPORT_EPOCH_HEADER = "X-UCloud-Sandbox-Transport-Epoch"
 REGISTRY_METRICS_TIMEOUT_SECONDS = 1.5
 DEFAULT_METRICS_EVENT_LIMIT = 500
 FULL_METRICS_EVENT_LIMIT = 10000
@@ -124,6 +127,50 @@ REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
 COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
+
+
+def _migration_pending_demand_id(sandbox_id: str) -> str:
+    return f"__migration__:{sandbox_id}"
+
+
+def _wake_pending_demand_id(sandbox_id: str) -> str:
+    return f"__wake__:{sandbox_id}"
+
+
+def _sandbox_request_wakes(path: str, method: str) -> bool:
+    normalized = urlparse(path).path
+    return bool(
+        (method == "POST" and normalized.endswith("/exec"))
+        or (method == "POST" and normalized.endswith("/wake"))
+        or (method in {"GET", "PUT"} and normalized.endswith("/files"))
+        or (method == "GET" and normalized.endswith("/ssh"))
+    )
+
+
+def _sandbox_transport_epoch(
+    route: SandboxRoute,
+    migrations: list[Any],
+) -> str:
+    """Hash every committed route handoff for this sandbox incarnation."""
+
+    committed = sorted(
+        migration.migration_id
+        for migration in migrations
+        if migration.sandbox_id == route.sandbox_id
+        and migration.generation == route.generation
+        and migration.create_operation_id == route.create_operation_id
+        and migration.phase in {"routed", "activated", "complete"}
+    )
+    return hashlib.sha256(
+        "\0".join(
+            (
+                route.sandbox_id,
+                str(route.generation),
+                route.create_operation_id,
+                *committed,
+            )
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -397,9 +444,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 body = self._metrics_response_bytes(
                     full=_truthy_query_param(parsed, "full")
                     or _truthy_query_param(parsed, "detail"),
-                    refresh_registry=_truthy_query_param(
-                        parsed, "refresh_registry"
-                    ),
+                    refresh_registry=_truthy_query_param(parsed, "refresh_registry"),
                 )
             except sqlite3.DatabaseError as exc:
                 self._write_routing_store_unavailable(exc)
@@ -718,6 +763,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if path == "/v1/images/pull" and self.command == "POST":
             self._route_image_pull()
             return True
+        migration_sandbox_id = _sandbox_migration_id_from_path(path)
+        if migration_sandbox_id is not None and self.command == "POST":
+            self._migrate_sandbox_on_node(migration_sandbox_id)
+            return True
+        if migration_sandbox_id is not None and self.command == "DELETE":
+            self._cancel_sandbox_migration(migration_sandbox_id)
+            return True
         sandbox_id = _sandbox_id_from_path(path)
         if sandbox_id is not None:
             self._route_sandbox_request(sandbox_id, path)
@@ -727,6 +779,472 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._route_exec_request(session_id, path)
             return True
         return False
+
+    def _migrate_sandbox_on_node(self, sandbox_id: str) -> None:
+        if self.routing_store is None:
+            self._write_json(
+                {"error": "routing state unavailable"},
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("migration payload must be a JSON object")
+            migration_id = str(
+                raw.get("migration_id") or f"migration-{uuid4().hex}"
+            ).strip()
+            requested_destination = str(raw.get("destination_node_id") or "").strip()
+            migration = self.routing_store.get_sandbox_migration(migration_id)
+            if migration is not None and migration.sandbox_id != sandbox_id:
+                raise SandboxRouteConflictError(
+                    "migration id belongs to another sandbox"
+                )
+            if migration is None:
+                with _GATEWAY_SCHEDULING_LOCK:
+                    migration = self.routing_store.get_sandbox_migration(migration_id)
+                    if migration is not None and migration.sandbox_id != sandbox_id:
+                        raise SandboxRouteConflictError(
+                            "migration id belongs to another sandbox"
+                        )
+                    if migration is None:
+                        source = self.routing_store.get_sandbox_readonly(sandbox_id)
+                        if source is None:
+                            self._write_json(
+                                {"error": "sandbox route not found"},
+                                status=HTTPStatus.NOT_FOUND,
+                            )
+                            return
+                        destination = self._select_migration_destination(
+                            source,
+                            requested_node_id=requested_destination,
+                        )
+                        if destination is None:
+                            _pending, demand = (
+                                self.routing_store.upsert_pending_with_demand(
+                                    _migration_pending_demand_id(sandbox_id),
+                                    ResourceQuantity(disk_mb=source.resources.disk_mb),
+                                    failure_reason=(
+                                        "migration_destination_unavailable"
+                                    ),
+                                )
+                            )
+                            self._write_json(
+                                {
+                                    "error": (
+                                        "no ready destination has disk capacity "
+                                        "for parked sandbox migration"
+                                    ),
+                                    "retryable": True,
+                                    "pending_resources": (
+                                        demand.pending_resources.to_dict()
+                                    ),
+                                },
+                                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                            )
+                            return
+                        if not self._prepare_migration_destination_image(
+                            source,
+                            destination,
+                        ):
+                            return
+                        migration = self.routing_store.begin_sandbox_migration(
+                            source,
+                            migration_id=migration_id,
+                            destination_node_id=destination.node_id,
+                            destination_job_id=destination.job_id,
+                            destination_node_url=destination.node_url or "",
+                        )
+            assert migration is not None
+            self.routing_store.clear_pending(_migration_pending_demand_id(sandbox_id))
+            migration_timings_ms: dict[str, float] = {}
+            migration = self._advance_sandbox_migration(
+                migration,
+                timings_ms=migration_timings_ms,
+            )
+        except (SandboxRouteConflictError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except sqlite3.DatabaseError as exc:
+            self._write_routing_store_unavailable(exc)
+            return
+        if migration.phase != "complete":
+            self._write_json(
+                {
+                    "error": migration.error or "sandbox migration is incomplete",
+                    "migration": migration.to_dict(),
+                    "retryable": True,
+                    "timings_ms": migration_timings_ms,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        route = self.routing_store.get_sandbox_readonly(sandbox_id)
+        self._write_json(
+            {
+                "migration": migration.to_dict(),
+                "sandbox": route.to_dict() if route is not None else None,
+                "timings_ms": migration_timings_ms,
+            }
+        )
+
+    def _select_migration_destination(
+        self,
+        source: SandboxRoute,
+        *,
+        requested_node_id: str,
+        require_active_resources: bool = False,
+    ) -> NodeHeartbeat | None:
+        routes = self.routing_store.sandbox_routes_readonly()
+        active_migrations = self.routing_store.sandbox_migrations(active_only=True)
+        reservations: dict[str, int] = {}
+        routes_by_id = {route.sandbox_id: route for route in routes}
+        for migration in active_migrations:
+            if migration.phase in {"routed", "activated"}:
+                continue
+            route = routes_by_id.get(migration.sandbox_id)
+            if route is None:
+                continue
+            reservations[migration.destination_node_id] = (
+                reservations.get(migration.destination_node_id, 0)
+                + route.resources.disk_mb
+            )
+        candidates: list[NodeHeartbeat] = []
+        for heartbeat in self._ready_sandbox_heartbeats():
+            if (
+                heartbeat.node_id == source.node_id
+                or "sandbox-migrate-v2" not in heartbeat.capabilities
+                or (requested_node_id and heartbeat.node_id != requested_node_id)
+            ):
+                continue
+            available = _node_available_resources(heartbeat, routes)
+            available = replace(
+                available,
+                disk_mb=max(
+                    0,
+                    available.disk_mb - reservations.get(heartbeat.node_id, 0),
+                ),
+            )
+            requested = (
+                source.resources
+                if require_active_resources
+                else ResourceQuantity(disk_mb=source.resources.disk_mb)
+            )
+            if requested.disk_mb <= 0 or not requested.fits_within(available):
+                continue
+            if not _node_memory_pressure_allows(heartbeat, requested):
+                continue
+            candidates.append(heartbeat)
+        if not candidates:
+            return None
+        image = str(source.spec.get("image") or "")
+        return min(
+            candidates,
+            key=lambda heartbeat: (
+                0 if _heartbeat_has_image(heartbeat, image) else 1,
+                reservations.get(heartbeat.node_id, 0),
+                -_node_available_resources(heartbeat, routes).disk_mb,
+                heartbeat.node_id,
+            ),
+        )
+
+    def _prepare_migration_destination_image(
+        self,
+        source: SandboxRoute,
+        destination: NodeHeartbeat,
+    ) -> bool:
+        image = str(source.spec.get("image") or "").strip()
+        image_response = self._ensure_image_on_node(destination, image)
+        if image_response is None or image_response.status < 400:
+            return True
+        image_error = image_response.json()
+        self._write_json(
+            {
+                "error": (
+                    "migration destination could not prepare the sandbox image"
+                ),
+                "retryable": True,
+                "image": image,
+                "node_id": destination.node_id,
+                "node_error": image_error.get("error") or image_error,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(
+                    SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                ),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+        return False
+
+    def _advance_sandbox_migration(
+        self,
+        migration,
+        *,
+        timings_ms: dict[str, float] | None = None,
+    ):
+        advance_started = time.monotonic()
+        measured = timings_ms if timings_ms is not None else {}
+        assert self.routing_store is not None
+        if migration.phase == "planned":
+            phase_started = time.monotonic()
+            response = self._proxy_request(
+                migration.source_node_url,
+                (
+                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                    "/migration/prepare"
+                ),
+                method="POST",
+                body=json.dumps({"migration_id": migration.migration_id}).encode(
+                    "utf-8"
+                ),
+                extra_headers={"Content-Type": "application/json"},
+                timeout_seconds=3600,
+            )
+            measured["prepare_export"] = _precise_elapsed_ms(phase_started)
+            if response.status >= 400:
+                return self._record_migration_error(migration, response)
+            prepared = response.json().get("migration")
+            if not isinstance(prepared, dict):
+                return self._record_migration_error(
+                    migration,
+                    error_message="source returned invalid migration metadata",
+                )
+            migration = (
+                self.routing_store.advance_sandbox_migration(
+                    migration.migration_id,
+                    expected_phases={"planned"},
+                    phase="prepared",
+                    archive_sha256=str(prepared.get("archive_sha256") or ""),
+                    archive_token=str(prepared.get("archive_token") or ""),
+                    error="",
+                )
+                or migration
+            )
+        if migration.phase == "prepared":
+            phase_started = time.monotonic()
+            archive_path = (
+                f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                "/migration/archive"
+            )
+            source_url = (
+                migration.source_node_url.rstrip("/")
+                + archive_path
+                + "?migration_id="
+                + quote(migration.migration_id, safe="")
+            )
+            response = self._proxy_request(
+                migration.destination_node_url,
+                "/v1/migrations/import",
+                method="POST",
+                body=json.dumps(
+                    {
+                        "archive_sha256": migration.archive_sha256,
+                        "archive_token": migration.archive_token,
+                        "migration_id": migration.migration_id,
+                        "sandbox_id": migration.sandbox_id,
+                        "source_url": source_url,
+                    }
+                ).encode("utf-8"),
+                extra_headers={"Content-Type": "application/json"},
+                timeout_seconds=3600,
+            )
+            measured["transfer_and_stage"] = _precise_elapsed_ms(phase_started)
+            if response.status >= 400:
+                return self._record_migration_error(migration, response)
+            migration = (
+                self.routing_store.advance_sandbox_migration(
+                    migration.migration_id,
+                    expected_phases={"prepared"},
+                    phase="staged",
+                    error="",
+                )
+                or migration
+            )
+        if migration.phase == "staged":
+            phase_started = time.monotonic()
+            routed = self.routing_store.route_sandbox_migration(migration.migration_id)
+            measured["route_commit"] = _precise_elapsed_ms(phase_started)
+            if routed is None:
+                return self._record_migration_error(
+                    migration,
+                    error_message="sandbox route changed before migration commit",
+                )
+            migration, _route = routed
+        if migration.phase == "routed":
+            phase_started = time.monotonic()
+            response = self._proxy_request(
+                migration.destination_node_url,
+                (
+                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                    "/migration/activate"
+                ),
+                method="POST",
+                body=json.dumps(
+                    {
+                        "archive_sha256": migration.archive_sha256,
+                        "migration_id": migration.migration_id,
+                    }
+                ).encode("utf-8"),
+                extra_headers={"Content-Type": "application/json"},
+                timeout_seconds=3600,
+            )
+            measured["activate_destination"] = _precise_elapsed_ms(phase_started)
+            if response.status >= 400:
+                return self._record_migration_error(migration, response)
+            migration = (
+                self.routing_store.advance_sandbox_migration(
+                    migration.migration_id,
+                    expected_phases={"routed"},
+                    phase="activated",
+                    error="",
+                )
+                or migration
+            )
+        if migration.phase == "activated":
+            phase_started = time.monotonic()
+            response = self._proxy_request(
+                migration.source_node_url,
+                (
+                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                    "/migration/finalize"
+                ),
+                method="POST",
+                body=json.dumps(
+                    {
+                        "archive_sha256": migration.archive_sha256,
+                        "migration_id": migration.migration_id,
+                    }
+                ).encode("utf-8"),
+                extra_headers={"Content-Type": "application/json"},
+                timeout_seconds=3600,
+            )
+            measured["finalize_source"] = _precise_elapsed_ms(phase_started)
+            if response.status >= 400:
+                return self._record_migration_error(migration, response)
+            migration = (
+                self.routing_store.advance_sandbox_migration(
+                    migration.migration_id,
+                    expected_phases={"activated"},
+                    phase="complete",
+                    error="",
+                )
+                or migration
+            )
+        measured["protocol_total"] = _precise_elapsed_ms(advance_started)
+        return migration
+
+    def _record_migration_error(
+        self,
+        migration,
+        response: ProxiedResponse | None = None,
+        *,
+        error_message: str = "",
+    ):
+        detail = error_message
+        if response is not None:
+            payload = response.json()
+            detail = str(payload.get("error") or "").strip()
+            if not detail:
+                detail = f"node migration request returned HTTP {response.status}"
+        return (
+            self.routing_store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={migration.phase},
+                phase=migration.phase,
+                error=detail,
+            )
+            or migration
+        )
+
+    def _cancel_sandbox_migration(self, sandbox_id: str) -> None:
+        assert self.routing_store is not None
+        query = parse_qs(urlparse(self.path).query, keep_blank_values=True)
+        migration_id = (query.get("migration_id") or [""])[0].strip()
+        migration = self.routing_store.get_sandbox_migration(migration_id)
+        if migration is None or migration.sandbox_id != sandbox_id:
+            self._write_json(
+                {"error": "sandbox migration not found"},
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+        if migration.phase in {"routed", "activated"}:
+            self._write_json(
+                {
+                    "error": (
+                        "migration routing is already committed; retry the "
+                        "migration to finish it"
+                    )
+                },
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+        if migration.phase == "complete":
+            self._write_json({"migration": migration.to_dict()})
+            return
+        payload = json.dumps(
+            {
+                "archive_sha256": migration.archive_sha256,
+                "migration_id": migration.migration_id,
+            }
+        ).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if migration.phase in {"prepared", "staged"}:
+            destination = self._proxy_request(
+                migration.destination_node_url,
+                (
+                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                    "/migration/abort-import"
+                ),
+                method="POST",
+                body=payload,
+                extra_headers=headers,
+                timeout_seconds=3600,
+            )
+            if destination.status >= 400:
+                migration = self._record_migration_error(migration, destination)
+                self._write_json(
+                    {
+                        "error": migration.error,
+                        "migration": migration.to_dict(),
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                )
+                return
+        source = self._proxy_request(
+            migration.source_node_url,
+            (
+                f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                "/migration/abort"
+            ),
+            method="POST",
+            body=payload,
+            extra_headers=headers,
+            timeout_seconds=3600,
+        )
+        if source.status >= 400:
+            migration = self._record_migration_error(migration, source)
+            self._write_json(
+                {
+                    "error": migration.error,
+                    "migration": migration.to_dict(),
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        migration = (
+            self.routing_store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={migration.phase},
+                phase="complete",
+                error="cancelled before route commit",
+            )
+            or migration
+        )
+        self._write_json({"migration": migration.to_dict()})
 
     def _registry_usage_health_error(self) -> str:
         store = self.registry_usage_store
@@ -1535,9 +2053,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         },
                         status=HTTPStatus.SERVICE_UNAVAILABLE,
                         headers={
-                            "Retry-After": str(
-                                SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS
-                            ),
+                            "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
                             "X-UCloud-Sandbox-Retryable": "true",
                         },
                     )
@@ -1582,9 +2098,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     },
                     status=HTTPStatus.SERVICE_UNAVAILABLE,
                     headers={
-                        "Retry-After": str(
-                            SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS
-                        ),
+                        "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
                         "X-UCloud-Sandbox-Retryable": "true",
                     },
                 )
@@ -1727,7 +2241,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 root.status = "error"
                 root.set_attribute("outcome", "node_create_failed")
                 root.set_attribute("status_code", int(response.status))
-                if _node_create_may_still_be_running(response):
+                if _node_create_may_still_be_running(
+                    response
+                ) and not _node_create_definitively_rejected(response):
                     root.set_attribute("kept_durable_route", True)
                 else:
                     self._release_registry_route_reference(route)
@@ -1736,6 +2252,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         generation=route.generation,
                         create_operation_id=route.create_operation_id,
                     )
+                    if _node_create_definitively_rejected(response):
+                        self._persist_failed_sandbox_demand(
+                            spec,
+                            route,
+                            failure_reason="node_admission_closed",
+                        )
             self._send_proxied_response(response)
 
     def _fork_sandbox_on_node(self, source_sandbox_id: str) -> None:
@@ -2204,8 +2726,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
         ):
             return
-        # The original create may have completed even when this replay did not.
-        # Keep the durable route for another identical replay or delete fence.
+        if _node_create_definitively_rejected(response):
+            self._release_registry_route_reference(route)
+            self.routing_store.delete_sandbox_if_current(
+                spec.id,
+                generation=route.generation,
+                create_operation_id=route.create_operation_id,
+            )
+            self._persist_failed_sandbox_demand(
+                spec,
+                route,
+                failure_reason="node_admission_closed",
+            )
+        # Ambiguous failures retain the identity fence for another identical
+        # replay. A closed admission gate is synchronous and definitive, so its
+        # route was removed above and the request can be placed elsewhere.
         self._send_proxied_response(response)
 
     def _record_registry_image_used(self, image_ref: str) -> None:
@@ -2758,6 +3293,75 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
+        normalized_path = urlparse(path).path
+        transport_reset = False
+        lifecycle_action = (
+            "wake"
+            if self.command == "POST" and normalized_path.endswith("/wake")
+            else (
+                "park"
+                if self.command == "POST" and normalized_path.endswith("/park")
+                else ""
+            )
+        )
+        if lifecycle_action:
+            try:
+                lifecycle_payload = json.loads((body or b"{}").decode("utf-8"))
+                if not isinstance(lifecycle_payload, dict):
+                    raise ValueError("sandbox lifecycle payload must be an object")
+                raw_generation = lifecycle_payload.get("generation")
+                if lifecycle_action == "wake" and raw_generation is None:
+                    raise ValueError("wake generation is required")
+                if (
+                    raw_generation is not None
+                    and int(raw_generation) != route.generation
+                ):
+                    self._write_json(
+                        {
+                            "error": (
+                                f"{lifecycle_action} generation does not own "
+                                "the current sandbox route"
+                            ),
+                            "retryable": False,
+                        },
+                        status=HTTPStatus.CONFLICT,
+                    )
+                    return
+            except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                self._write_json(
+                    {"error": str(exc)},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+        if (route.state or "unknown").lower() == "parked" and _sandbox_request_wakes(
+            path, self.command
+        ):
+            with _GATEWAY_SCHEDULING_LOCK:
+                current = self.routing_store.get_sandbox_readonly(sandbox_id)
+                if current is None:
+                    self._write_json(
+                        {"error": "sandbox route not found"},
+                        status=HTTPStatus.NOT_FOUND,
+                    )
+                    return
+                if (current.state or "unknown").lower() == "parked":
+                    previous_owner = (
+                        current.node_id,
+                        current.job_id,
+                        current.node_url,
+                    )
+                    route = self._ensure_parked_sandbox_wake_placement(current)
+                    if route is None:
+                        return
+                    transport_reset = previous_owner != (
+                        route.node_id,
+                        route.job_id,
+                        route.node_url,
+                    )
+                else:
+                    route = current
+
         extra_headers: dict[str, str] | None = None
         if self.command == "DELETE" and route.generation > 0:
             route = self.routing_store.prepare_sandbox_delete(sandbox_id) or route
@@ -2804,6 +3408,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         node_url=route.node_url,
                     )
                 )
+        if lifecycle_action and 200 <= response.status < 300:
+            target_state = "running" if lifecycle_action == "wake" else "parked"
+            expected_states = (
+                {"waking", "running"}
+                if lifecycle_action == "wake"
+                else {"running", "waking", "parked"}
+            )
+            updated = self.routing_store.set_sandbox_state_if_current(
+                route,
+                expected_states=expected_states,
+                state=target_state,
+            )
+            if updated is not None:
+                route = updated
         if self.command == "DELETE" and 200 <= response.status < 300:
             deleted = response.json().get("deleted")
             response_generation = _record_generation(deleted)
@@ -2827,15 +3445,168 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             if removed is not None:
                 self._release_registry_route_reference(removed)
-        self._send_proxied_response(response)
+        response_headers: dict[str, str] | None = None
+        if lifecycle_action:
+            response_headers = {
+                SANDBOX_TRANSPORT_EPOCH_HEADER: _sandbox_transport_epoch(
+                    route,
+                    self.routing_store.sandbox_migrations(active_only=False),
+                )
+            }
+            if transport_reset:
+                response_headers[SANDBOX_TRANSPORT_RESET_HEADER] = "true"
+        self._send_proxied_response(
+            response,
+            extra_headers=response_headers,
+        )
+
+    def _ensure_parked_sandbox_wake_placement(
+        self,
+        route: SandboxRoute,
+    ) -> SandboxRoute | None:
+        """Keep a parked sandbox local only when its active shape still fits."""
+
+        routes = self._placement_routes()
+        source_heartbeat = self._heartbeat_for_route(
+            node_id=route.node_id,
+            job_id=route.job_id,
+            node_url=route.node_url,
+        )
+        active_request = ResourceQuantity(
+            vcpu=route.resources.vcpu,
+            memory_mb=route.resources.memory_mb,
+        )
+        ready_source_ids = {
+            heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
+        }
+        if (
+            source_heartbeat is not None
+            and source_heartbeat.node_id in ready_source_ids
+            and _node_can_fit_available(
+                source_heartbeat,
+                active_request,
+                _node_available_resources(source_heartbeat, routes),
+            )
+        ):
+            self.routing_store.clear_pending(_wake_pending_demand_id(route.sandbox_id))
+            return self._mark_sandbox_waking(route)
+
+        active_migration = next(
+            (
+                migration
+                for migration in self.routing_store.sandbox_migrations(active_only=True)
+                if migration.sandbox_id == route.sandbox_id
+            ),
+            None,
+        )
+        if active_migration is None:
+            destination = self._select_migration_destination(
+                route,
+                requested_node_id="",
+                require_active_resources=True,
+            )
+            if destination is None:
+                _pending, demand = self.routing_store.upsert_pending_with_demand(
+                    _wake_pending_demand_id(route.sandbox_id),
+                    route.resources,
+                    failure_reason="wake_destination_unavailable",
+                )
+                self._write_json(
+                    {
+                        "error": (
+                            "parked sandbox has no node with active CPU, memory, "
+                            "and disk capacity"
+                        ),
+                        "retryable": True,
+                        "pending_resources": demand.pending_resources.to_dict(),
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(
+                            SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                        ),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return None
+            if not self._prepare_migration_destination_image(
+                route,
+                destination,
+            ):
+                return None
+            active_migration = self.routing_store.begin_sandbox_migration(
+                route,
+                migration_id=f"wake-{uuid4().hex}",
+                destination_node_id=destination.node_id,
+                destination_job_id=destination.job_id,
+                destination_node_url=destination.node_url or "",
+            )
+        migration = self._advance_sandbox_migration(active_migration)
+        if migration.phase != "complete":
+            self._write_json(
+                {
+                    "error": (
+                        migration.error or "parked sandbox relocation is incomplete"
+                    ),
+                    "migration": migration.to_dict(),
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": str(SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS),
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return None
+        self.routing_store.clear_pending(_wake_pending_demand_id(route.sandbox_id))
+        destination_route = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+        return (
+            self._mark_sandbox_waking(destination_route)
+            if destination_route is not None
+            else None
+        )
+
+    def _mark_sandbox_waking(
+        self,
+        route: SandboxRoute,
+    ) -> SandboxRoute | None:
+        waking = self.routing_store.set_sandbox_state_if_current(
+            route,
+            expected_states={"parked"},
+            state="waking",
+        )
+        if waking is not None:
+            return waking
+        current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+        if current is not None and (current.state or "unknown").lower() in {
+            "waking",
+            "running",
+        }:
+            return current
+        self._write_json(
+            {
+                "error": "sandbox route changed during wake admission",
+                "retryable": True,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": str(SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS),
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+        return None
 
     def _route_exec_request(self, session_id: str, path: str) -> None:
         session_route = exec_session_route(session_id)
         route = self.routing_store.get_exec(session_id)
-        if route is not None and session_route is not None and (
-            route.sandbox_id != session_route.sandbox_id
-            or route.node_id != session_route.node_id
-            or route.job_id != session_route.job_id
+        if (
+            route is not None
+            and session_route is not None
+            and (
+                route.sandbox_id != session_route.sandbox_id
+                or route.node_id != session_route.node_id
+                or route.job_id != session_route.job_id
+            )
         ):
             self._write_json(
                 {"error": "stored exec route does not match session affinity"},
@@ -2981,6 +3752,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         return _heartbeat_proves_route_absent(
             heartbeat,
+            sandbox_id=route.sandbox_id,
             route_created_at=route.created_at,
             route_updated_at=route.updated_at,
             heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
@@ -3024,7 +3796,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         image: str | None = None,
         required_capabilities: tuple[str, ...] = (),
     ) -> NodeHeartbeat | None:
-        routes = list(self.routing_store.sandbox_routes_readonly())
+        routes = self._placement_routes()
         candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
         for heartbeat in self._ready_sandbox_heartbeats():
             if not agent_version_is_compatible(heartbeat.agent_version):
@@ -3050,12 +3822,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             candidates,
             probe_uncached=False,
         )
-        image_identity = canonical_image_digest_ref(image or "") or (image or "").strip()
+        image_identity = (
+            canonical_image_digest_ref(image or "") or (image or "").strip()
+        )
         inflight_image_node_ids = {
             heartbeat.node_id
             for heartbeat, state in candidate_states
-            if image_identity
-            and image_identity in state.inflight_image_identities
+            if image_identity and image_identity in state.inflight_image_identities
         }
         if image_node_ids:
             candidate_states = [
@@ -3076,9 +3849,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         layer_cache = getattr(self, "registry_layer_cache", None)
         target_manifest = (
-            layer_cache.get(image or "")
-            if layer_cache is not None
-            else None
+            layer_cache.get(image or "") if layer_cache is not None else None
         )
         return min(
             candidate_states,
@@ -3097,6 +3868,36 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ),
         )[0]
 
+    def _placement_routes(self) -> list[SandboxRoute]:
+        """Include in-flight destination imports in normal node admission."""
+
+        routes = list(self.routing_store.sandbox_routes_readonly())
+        routes_by_id = {route.sandbox_id: route for route in routes}
+        for migration in self.routing_store.sandbox_migrations(active_only=True):
+            if migration.phase in {"routed", "activated"}:
+                continue
+            source = routes_by_id.get(migration.sandbox_id)
+            if source is None:
+                continue
+            # Before route commit the destination may already be allocating
+            # quota and restoring metadata, while its heartbeat still has no
+            # observation. Reserve the complete shape briefly; this is more
+            # conservative than the parked steady state and prevents a create
+            # racing an import into the same capacity.
+            routes.append(
+                replace(
+                    source,
+                    sandbox_id=f"__migration__:{migration.migration_id}",
+                    node_id=migration.destination_node_id,
+                    job_id=migration.destination_job_id,
+                    node_url=migration.destination_node_url,
+                    state="creating",
+                    node_epoch="",
+                    activity_epoch=0,
+                )
+            )
+        return routes
+
     def _select_and_reserve_node(
         self,
         sandbox_id: str,
@@ -3105,11 +3906,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         image: str | None = None,
         spec: dict[str, Any],
         spec_hash: str,
-    ) -> tuple[
-        NodeHeartbeat,
-        SandboxRoute,
-        PendingSandboxDemand | None,
-    ] | None:
+    ) -> (
+        tuple[
+            NodeHeartbeat,
+            SandboxRoute,
+            PendingSandboxDemand | None,
+        ]
+        | None
+    ):
         if not _GATEWAY_SCHEDULING_LOCK.acquire(
             timeout=SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS
         ):
@@ -3786,20 +4590,43 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except OSError as exc:
             return _node_transport_error_response(exc)
 
-    def _send_proxied_response(self, response: ProxiedResponse) -> None:
+    def _send_proxied_response(
+        self,
+        response: ProxiedResponse,
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         structured_error = _structured_proxy_error(response)
         if structured_error is not None:
             self._write_json(structured_error, status=response.status)
             return
         self.send_response(response.status)
-        self._copy_response_headers(response.headers, len(response.body))
+        self._copy_response_headers(
+            response.headers,
+            len(response.body),
+            extra_headers=extra_headers,
+        )
         self.end_headers()
         self.wfile.write(response.body)
 
-    def _copy_response_headers(self, headers: Any, content_length: int) -> None:
+    def _copy_response_headers(
+        self,
+        headers: Any,
+        content_length: int,
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        overridden = {key.lower() for key in (extra_headers or {})}
         for key, value in headers.items():
-            if key.lower() in {"connection", "transfer-encoding", "content-length"}:
+            if key.lower() in {
+                "connection",
+                "transfer-encoding",
+                "content-length",
+                *overridden,
+            }:
                 continue
+            self.send_header(key, value)
+        for key, value in (extra_headers or {}).items():
             self.send_header(key, value)
         self.send_header("Content-Length", str(content_length))
 
@@ -4009,6 +4836,18 @@ def _sandbox_fork_source_from_path(path: str) -> str | None:
     return source_id
 
 
+def _sandbox_migration_id_from_path(path: str) -> str | None:
+    prefix = "/v1/sandboxes/"
+    suffix = "/migration"
+    if not path.startswith(prefix) or not path.endswith(suffix):
+        return None
+    encoded = path[len(prefix) : -len(suffix)]
+    sandbox_id = unquote(encoded)
+    if not sandbox_id or "/" in sandbox_id:
+        return None
+    return sandbox_id
+
+
 def _build_context_digest_from_path(path: str) -> str | None:
     prefix = "/v1/image-contexts/"
     if not path.startswith(prefix):
@@ -4095,7 +4934,23 @@ def _prepared_resources_from_payload(raw: dict[str, Any]) -> ResourceQuantity:
             raise ValueError(f"{label} must be numeric.") from exc
         if not math.isfinite(parsed) or parsed < 0:
             raise ValueError(f"{label} must be non-negative and finite.")
-    return ResourceQuantity.from_dict(resources)
+    prepared = ResourceQuantity.from_dict(resources)
+    parkable = raw.get("parkable", raw.get("hibernate", False))
+    if not isinstance(parkable, bool):
+        raise ValueError("parkable must be a boolean.")
+    if not parkable:
+        return prepared
+    if prepared.memory_mb <= 0:
+        raise ValueError("parkable prepared capacity requires memory_mb.")
+    if prepared.disk_mb <= 0:
+        raise ValueError("parkable prepared capacity requires disk_mb.")
+    return replace(
+        prepared,
+        disk_mb=hibernation_disk_reservation_mb(
+            memory_mb=prepared.memory_mb,
+            writable_disk_mb=prepared.disk_mb,
+        ),
+    )
 
 
 def _validate_prepared_resources(resources: ResourceQuantity) -> None:
@@ -4493,6 +5348,7 @@ def _route_only_sandbox_record(
     cached_state = route.state or "unknown"
     route_absent = _heartbeat_proves_route_absent(
         heartbeat,
+        sandbox_id=route.sandbox_id,
         route_created_at=route.created_at,
         route_updated_at=route.updated_at,
         heartbeat_ttl_seconds=heartbeat_ttl_seconds,
@@ -4543,6 +5399,7 @@ def _node_metadata(heartbeat: NodeHeartbeat) -> dict[str, Any]:
 def _heartbeat_proves_route_absent(
     heartbeat: NodeHeartbeat | None,
     *,
+    sandbox_id: str | None = None,
     route_created_at: str,
     route_updated_at: str,
     heartbeat_ttl_seconds: int,
@@ -4550,6 +5407,15 @@ def _heartbeat_proves_route_absent(
     if heartbeat is None:
         return False
     if not heartbeat.is_fresh(utc_now(), heartbeat_ttl_seconds):
+        return False
+    if (
+        sandbox_id is not None
+        and heartbeat.inventory_complete
+        and any(item.sandbox_id == sandbox_id for item in heartbeat.inventory)
+    ):
+        # Parked sandboxes consume no active CPU/RAM and therefore correctly
+        # report active_sandboxes=0. A complete inventory entry is stronger
+        # evidence than that aggregate counter.
         return False
     if heartbeat.active_sandboxes != 0:
         return False
@@ -4592,9 +5458,7 @@ def _node_placement_state(
     heartbeat: NodeHeartbeat,
     routes: list[SandboxRoute],
 ) -> NodePlacementState:
-    node_routes = [
-        route for route in routes if _route_targets_node(route, heartbeat)
-    ]
+    node_routes = [route for route in routes if _route_targets_node(route, heartbeat)]
     inflight_images = frozenset(
         identity
         for route in node_routes
@@ -4606,8 +5470,7 @@ def _node_placement_state(
     projected_images.update(
         identity
         for route in node_routes
-        if (route.state or "unknown").lower()
-        in {"creating", "unknown", "running"}
+        if (route.state or "unknown").lower() in {"creating", "unknown", "running"}
         and (identity := _route_image_identity(route))
     )
     return NodePlacementState(
@@ -4633,10 +5496,7 @@ def _node_memory_pressure_allows(
         return False
     minimum_headroom_mb = max(2048, requested.memory_mb)
     if metrics.swap_total_mb > 0:
-        return (
-            metrics.memory_available_mb + metrics.swap_free_mb
-            >= minimum_headroom_mb
-        )
+        return metrics.memory_available_mb + metrics.swap_free_mb >= minimum_headroom_mb
     if metrics.memory_total_mb > 0:
         return metrics.memory_available_mb >= minimum_headroom_mb
     return True
@@ -4693,18 +5553,33 @@ def _node_reserved_route_resources(
         if identity in seen_routes:
             continue
         seen_routes.add(identity)
-        if any(
-            item.sandbox_id == route.sandbox_id
-            and item.generation == route.generation
-            and (
-                route.generation == 0
-                or (
-                    item.spec_hash == route.spec_hash
-                    and item.operation_id == route.create_operation_id
+        matching_inventory = next(
+            (
+                item
+                for item in heartbeat.inventory
+                if item.sandbox_id == route.sandbox_id
+                and item.generation == route.generation
+                and (
+                    route.generation == 0
+                    or (
+                        item.spec_hash == route.spec_hash
+                        and item.operation_id == route.create_operation_id
+                    )
                 )
-            )
-            for item in heartbeat.inventory
-        ):
+            ),
+            None,
+        )
+        if matching_inventory is not None:
+            if (route.state or "unknown").lower() == "waking" and (
+                matching_inventory.state or "unknown"
+            ).lower() == "parked":
+                # The heartbeat already charges this sandbox's hard disk.
+                # Reserve only the compute delta until a later heartbeat
+                # observes the resumed runtime.
+                resources = resources + ResourceQuantity(
+                    vcpu=route.resources.vcpu,
+                    memory_mb=route.resources.memory_mb,
+                )
             continue
         resources = resources + route.resources
     return resources
@@ -4788,9 +5663,7 @@ def _image_transfer_estimate(
         layer_cache,
     )
     missing_bytes = sum(
-        layer.size
-        for layer in manifest.layers
-        if layer.digest not in available_layers
+        layer.size for layer in manifest.layers if layer.digest not in available_layers
     )
     return {
         "target_layer_count": len(manifest.layers),
@@ -5179,6 +6052,19 @@ def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
         # the node cannot have received or persisted this create operation.
         return False
     return response.status in {408, 425, 429, 500, 502, 503, 504}
+
+
+def _precise_elapsed_ms(started: float) -> float:
+    return round(max(0.0, (time.monotonic() - started) * 1000), 3)
+
+
+def _node_create_definitively_rejected(response: ProxiedResponse) -> bool:
+    """A closed admission gate proves this create never reached provisioning."""
+
+    return (
+        response.status == HTTPStatus.SERVICE_UNAVAILABLE
+        and response.json().get("error_code") == "node_admission_closed"
+    )
 
 
 def _node_transport_error_response(reason: object) -> ProxiedResponse:

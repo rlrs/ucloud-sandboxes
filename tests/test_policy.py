@@ -6,6 +6,7 @@ from ucloud_sandboxes.models import (
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
+    SandboxPlacementRequest,
     ScalePolicy,
     VmJob,
     utc_now,
@@ -127,6 +128,78 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 1)
         self.assertEqual(decision.resource_deficit.vcpu, 3.0)
         self.assertEqual(decision.resource_deficit.memory_mb, 7000)
+
+    def test_creates_when_aggregate_free_resources_are_fragmented(self) -> None:
+        requested = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
+        decision = evaluate_scale(
+            [
+                node(
+                    "cpu-disk",
+                    total_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=8192,
+                        disk_mb=16384,
+                    ),
+                    used_resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=8192,
+                        disk_mb=8192,
+                    ),
+                ),
+                node(
+                    "memory",
+                    total_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=8192,
+                        disk_mb=16384,
+                    ),
+                    used_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=4096,
+                        disk_mb=16384,
+                    ),
+                ),
+            ],
+            SandboxDemand(
+                pending_resources=requested,
+                placement_requests=(
+                    SandboxPlacementRequest(resources=requested),
+                ),
+            ),
+            ScalePolicy(max_nodes=3, max_create_per_cycle=1),
+        )
+
+        self.assertEqual(decision.resource_deficit, ResourceQuantity())
+        self.assertEqual(decision.creates, 1)
+        self.assertIn("do not fit", decision.reasons[-1])
+
+    def test_relocation_demand_excludes_the_current_owner(self) -> None:
+        requested = ResourceQuantity(disk_mb=8192)
+        decision = evaluate_scale(
+            [
+                node(
+                    "source",
+                    total_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=8192,
+                        disk_mb=16384,
+                    ),
+                )
+            ],
+            SandboxDemand(
+                pending_resources=requested,
+                placement_requests=(
+                    SandboxPlacementRequest(
+                        resources=requested,
+                        excluded_job_ids=("source",),
+                    ),
+                ),
+            ),
+            ScalePolicy(max_nodes=2, max_create_per_cycle=1),
+        )
+
+        self.assertEqual(decision.resource_deficit, ResourceQuantity())
+        self.assertEqual(decision.creates, 1)
 
     def test_default_policy_bursts_large_backlog_without_waiting_for_one_node(
         self,

@@ -13,6 +13,7 @@ import hashlib
 from pathlib import Path
 import sqlite3
 import tarfile
+from types import SimpleNamespace
 from urllib import error, request
 from urllib.parse import quote
 import unittest
@@ -156,6 +157,50 @@ class FileRuntime(DockerGvisorRuntime):
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_transport_epoch_changes_only_after_committed_route_handoff(
+        self,
+    ) -> None:
+        route = SandboxRoute(
+            sandbox_id="sandbox-1",
+            node_id="source",
+            job_id="source-job",
+            node_url="http://source:8090",
+            generation=7,
+            create_operation_id="create:7",
+        )
+        migration = {
+            "migration_id": "move:7",
+            "sandbox_id": route.sandbox_id,
+            "generation": route.generation,
+            "create_operation_id": route.create_operation_id,
+        }
+        baseline = control_plane._sandbox_transport_epoch(route, [])
+        staged = control_plane._sandbox_transport_epoch(
+            route,
+            [SimpleNamespace(**migration, phase="staged")],
+        )
+        routed = control_plane._sandbox_transport_epoch(
+            route,
+            [SimpleNamespace(**migration, phase="routed")],
+        )
+        returned = control_plane._sandbox_transport_epoch(
+            route,
+            [
+                SimpleNamespace(**migration, phase="complete"),
+                SimpleNamespace(
+                    **{
+                        **migration,
+                        "migration_id": "move:return",
+                    },
+                    phase="routed",
+                ),
+            ],
+        )
+
+        self.assertEqual(staged, baseline)
+        self.assertNotEqual(routed, baseline)
+        self.assertNotEqual(returned, routed)
+
     def test_fork_proxy_timeout_matches_bounded_runtime_budget(self) -> None:
         self.assertEqual(
             control_plane.FORK_PROXY_TIMEOUT_SECONDS,
@@ -905,6 +950,144 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_waking_route_reserves_compute_delta_without_double_charging_disk(
+        self,
+    ) -> None:
+        resources = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            node_url="http://node-1:8090",
+            used_resources=ResourceQuantity(disk_mb=resources.disk_mb),
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id="sandbox-1",
+                    state="parked",
+                    resources=resources,
+                ),
+            ),
+            inventory_complete=True,
+        )
+        route = SandboxRoute(
+            sandbox_id="sandbox-1",
+            node_id="node-1",
+            job_id="job-1",
+            node_url=heartbeat.node_url or "",
+            resources=resources,
+            state="waking",
+        )
+
+        reserved = control_plane._node_reserved_route_resources(
+            heartbeat,
+            [route],
+        )
+
+        self.assertEqual(
+            reserved,
+            ResourceQuantity(vcpu=2, memory_mb=4096),
+        )
+
+    def test_failed_parked_wake_records_full_relocation_demand(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            resources = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
+            route = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=resources,
+                    state="parked",
+                )
+            )
+            heartbeats = HeartbeatStore(root / "heartbeats.json")
+            heartbeats.upsert(
+                NodeHeartbeat(
+                    node_id="node-1",
+                    job_id="job-1",
+                    updated_at=utc_now(),
+                    active_sandboxes=1,
+                    node_url=route.node_url,
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "sandbox-migrate-v2",
+                    ),
+                    total_resources=resources,
+                    used_resources=resources,
+                    inventory=(
+                        SandboxInventoryEntry(
+                            sandbox_id=route.sandbox_id,
+                            state="parked",
+                            resources=resources,
+                        ),
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.store = heartbeats
+            handler.heartbeat_ttl_seconds = 120
+            written: list[tuple[dict, object, dict | None]] = []
+            handler._write_json = lambda payload, *, status, headers=None: written.append(
+                (payload, status, headers)
+            )
+
+            selected = handler._ensure_parked_sandbox_wake_placement(route)
+            pending = {
+                item.sandbox_id: item
+                for item in routing.pending_sandboxes()
+            }
+
+        self.assertIsNone(selected)
+        demand_id = control_plane._wake_pending_demand_id(route.sandbox_id)
+        self.assertEqual(pending[demand_id].resources, resources)
+        self.assertEqual(written[0][1], 503)
+        self.assertTrue(written[0][0]["retryable"])
+
+    def test_inflight_import_reserves_destination_for_normal_placement(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            routing = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            source = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=4096,
+                        disk_mb=8192,
+                    ),
+                    state="parked",
+                )
+            )
+            routing.begin_sandbox_migration(
+                source,
+                migration_id="migration-1",
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination:8090",
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+
+            routes = handler._placement_routes()
+
+        reservation = next(
+            route
+            for route in routes
+            if route.sandbox_id == "__migration__:migration-1"
+        )
+        self.assertEqual(reservation.node_id, "destination-node")
+        self.assertEqual(reservation.resources, source.resources)
+        self.assertEqual(reservation.state, "creating")
+
     def test_forkable_placement_requires_fork_and_disk_capabilities(self) -> None:
         with TemporaryDirectory() as raw_dir:
             handler = object.__new__(control_plane.ControlPlaneHandler)
@@ -1637,6 +1820,40 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(record["state"], "unknown")
         self.assertTrue(record["route_only"])
         self.assertEqual(record["node"]["active_sandboxes"], 0)
+
+    def test_gateway_keeps_parked_route_visible_from_complete_inventory(
+        self,
+    ) -> None:
+        route = SandboxRoute(
+            sandbox_id="parked-one",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+            spec={"id": "parked-one", "image": "busybox"},
+            state="parked",
+        )
+        heartbeat = build_heartbeat(
+            job_id="job-1",
+            node_id="node-1",
+            node_url=route.node_url,
+            active_sandboxes=0,
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    state="parked",
+                ),
+            ),
+            inventory_complete=True,
+        )
+
+        record = control_plane._route_only_sandbox_record(
+            route,
+            heartbeat,
+        )
+
+        self.assertEqual(record["state"], "parked")
+        self.assertEqual(record["cached_state"], "parked")
 
     def test_gateway_does_not_proxy_exec_to_proven_stale_route(self) -> None:
         class ListingNode(BaseHTTPRequestHandler):
@@ -3262,6 +3479,104 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNotNone(route)
         assert route is not None
         self.assertEqual(route.state, "running")
+
+    def test_closed_node_admission_requeues_create_without_pinning_route(
+        self,
+    ) -> None:
+        class ClosedAdmissionNode(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                self._write_json({"sandboxes": []})
+
+            def do_POST(self) -> None:
+                self._write_json(
+                    {
+                        "error": "direct node admission is closed",
+                        "error_code": "node_admission_closed",
+                        "retryable": True,
+                    },
+                    status=503,
+                )
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(
+                self, payload: dict[str, object], *, status: int = 200
+            ) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), ClosedAdmissionNode)
+            Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                node_host, node_port = node.server_address
+                image = "busybox"
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    base = f"http://{host}:{port}"
+                    self.assertEqual(
+                        post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id="job-1",
+                                node_id="node-1",
+                                node_url=f"http://{node_host}:{node_port}",
+                                capabilities=(
+                                    "sandbox",
+                                    "image-cache",
+                                    "disk-quota",
+                                ),
+                                cached_images=(image,),
+                                total_resources=ResourceQuantity(
+                                    vcpu=4,
+                                    memory_mb=4096,
+                                    disk_mb=8192,
+                                ),
+                            ),
+                        ).status,
+                        200,
+                    )
+                    created = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "drain-race",
+                            "image": image,
+                            "cpus": 1,
+                            "memory_mb": 512,
+                        },
+                        allow_error=True,
+                    )
+                    state = RoutingStore(route_file).load()
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(created["status"], 503)
+        self.assertTrue(created["body"]["retryable"])
+        self.assertEqual(created["body"]["error_code"], "node_admission_closed")
+        self.assertNotIn("drain-race", state.sandboxes)
+        self.assertEqual(
+            state.pending["drain-race"].failure_reason,
+            "node_admission_closed",
+        )
 
     def test_registry_lease_failure_blocks_sandbox_create_and_image_pull_dispatch(
         self,
@@ -5346,6 +5661,71 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(demand_after_delete["prepared_resources"]["vcpu"], 0.0)
         self.assertEqual(demand_after_delete["prepared"], [])
 
+    def test_gateway_normalizes_parkable_prepared_capacity_for_exact_claim(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=route_file,
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                prepared = self._json_request(
+                    f"{base}/v1/capacity/prepare",
+                    method="POST",
+                    payload={
+                        "id": "parkable-eval",
+                        "count": 1,
+                        "cpus": 0.25,
+                        "memory_mb": 128,
+                        "disk_mb": 64,
+                        "parkable": True,
+                        "ttl_seconds": 600,
+                    },
+                )
+                spec = SandboxSpec.from_dict(
+                    {
+                        "id": "parkable-one",
+                        "image": "busybox",
+                        "cpus": 0.25,
+                        "memory_mb": 128,
+                        "disk_mb": 64,
+                        "parkable": True,
+                    }
+                )
+                resources = spec.requested_resources()
+                store = RoutingStore(route_file)
+                store.allocate_sandbox_create(
+                    SandboxRoute(
+                        sandbox_id=spec.id,
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url="http://node-1:8090",
+                        resources=resources,
+                        spec=spec.to_dict(),
+                    ),
+                    spec_hash="parkable-spec",
+                )
+                remaining = store.prepared_capacity()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(
+            prepared["prepare"]["resources"],
+            {"vcpu": 0.25, "memory_mb": 128, "disk_mb": 1280},
+        )
+        self.assertEqual(resources.disk_mb, 1280)
+        self.assertEqual(remaining, [])
+
     def test_gateway_pins_managed_registry_image_before_capacity_warmup(self) -> None:
         digest = "sha256:" + "d" * 64
 
@@ -6007,6 +6387,12 @@ class ControlPlaneTests(unittest.TestCase):
                     payload={"count": 1, "cpus": "NaN", "memory_mb": 1024},
                     allow_error=True,
                 )
+                parkable_without_memory = self._json_request(
+                    f"{base}/v1/capacity/prepare",
+                    method="POST",
+                    payload={"count": 1, "disk_mb": 64, "parkable": True},
+                    allow_error=True,
+                )
                 demand = self._json_request(f"{base}/v1/demand")
             finally:
                 gateway.shutdown()
@@ -6018,6 +6404,11 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("vcpu must be non-negative", negative["body"]["error"])
         self.assertEqual(non_finite["status"], 400)
         self.assertIn("vcpu must be non-negative", non_finite["body"]["error"])
+        self.assertEqual(parkable_without_memory["status"], 400)
+        self.assertIn(
+            "parkable prepared capacity requires memory_mb",
+            parkable_without_memory["body"]["error"],
+        )
         self.assertEqual(demand["prepared_resources"]["vcpu"], 0.0)
 
     def test_gateway_prepares_builder_capacity_as_expiring_demand_signal(self) -> None:
@@ -6358,6 +6749,208 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(chunked, 400)
         self.assertEqual(missing_length, 400)
         self.assertEqual(oversized, 400)
+
+    def test_gateway_commits_journaled_parked_migration_between_nodes(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        def node_handler(role: str):
+            class MigrationNode(BaseHTTPRequestHandler):
+                def do_POST(self) -> None:
+                    length = int(self.headers.get("Content-Length") or 0)
+                    raw = json.loads(self.rfile.read(length) or b"{}")
+                    calls.append((role, self.path))
+                    if self.path.endswith("/migration/prepare"):
+                        payload = {
+                            "migration": {
+                                "archive_sha256": "a" * 64,
+                                "archive_token": "archive-token",
+                                "migration_id": raw["migration_id"],
+                                "sandbox_id": "moving-one",
+                            }
+                        }
+                    elif self.path == "/v1/images/pull":
+                        payload = {"image": {"tag": raw["image"]}}
+                    elif self.path == "/v1/migrations/import":
+                        self.assert_source_url(raw["source_url"])
+                        payload = {"sandbox": {"state": "import_ready"}}
+                    elif self.path.endswith("/migration/activate"):
+                        payload = {"sandbox": {"state": "parked"}}
+                    elif self.path.endswith("/migration/finalize"):
+                        payload = {"ok": True}
+                    else:
+                        self.send_error(404)
+                        return
+                    body = json.dumps(payload).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+
+                @staticmethod
+                def assert_source_url(source_url: str) -> None:
+                    if (
+                        "/v1/sandboxes/moving-one/migration/archive"
+                        not in source_url
+                    ):
+                        raise AssertionError("gateway supplied the wrong source URL")
+
+                def log_message(self, format: str, *args: object) -> None:
+                    del format, args
+
+            return MigrationNode
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            source_node = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                node_handler("source"),
+            )
+            destination_node = ThreadingHTTPServer(
+                ("127.0.0.1", 0),
+                node_handler("destination"),
+            )
+            source_thread = Thread(target=source_node.serve_forever, daemon=True)
+            destination_thread = Thread(
+                target=destination_node.serve_forever,
+                daemon=True,
+            )
+            source_thread.start()
+            destination_thread.start()
+            source_host, source_port = source_node.server_address
+            destination_host, destination_port = destination_node.server_address
+            source_url = f"http://{source_host}:{source_port}"
+            destination_url = f"http://{destination_host}:{destination_port}"
+            heartbeat_store = HeartbeatStore(root / "heartbeats.json")
+            total = ResourceQuantity(vcpu=32, memory_mb=96_000, disk_mb=50_000)
+            heartbeat_store.upsert(
+                build_heartbeat(
+                    job_id="source-job",
+                    node_id="source-node",
+                    node_url=source_url,
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "sandbox-migrate-v2",
+                    ),
+                    total_resources=total,
+                    used_resources=ResourceQuantity(disk_mb=4096),
+                    inventory_complete=True,
+                )
+            )
+            heartbeat_store.upsert(
+                build_heartbeat(
+                    job_id="destination-job",
+                    node_id="destination-node",
+                    node_url=destination_url,
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "sandbox-migrate-v2",
+                    ),
+                    total_resources=total,
+                    cached_images=(),
+                    inventory_complete=True,
+                )
+            )
+            route_file = root / "routes.sqlite"
+            routing = RoutingStore(route_file)
+            route = routing.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="moving-one",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url=source_url,
+                    resources=ResourceQuantity(
+                        vcpu=1,
+                        memory_mb=1024,
+                        disk_mb=4096,
+                    ),
+                    spec={"id": "moving-one", "image": "busybox"},
+                ),
+                spec_hash="spec-hash",
+                create_operation_id="create-operation",
+            )
+            routing.finalize_sandbox_create(replace(route, state="parked"))
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_store.path,
+                routing_file=route_file,
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                gateway_host, gateway_port = gateway.server_address
+                result = self._json_request(
+                    (
+                        f"http://{gateway_host}:{gateway_port}"
+                        "/v1/sandboxes/moving-one/migration"
+                    ),
+                    method="POST",
+                    payload={
+                        "destination_node_id": "destination-node",
+                        "migration_id": "gateway-migration",
+                    },
+                )
+                stored_route = RoutingStore(route_file).get_sandbox_readonly(
+                    "moving-one"
+                )
+                stored_migration = RoutingStore(route_file).get_sandbox_migration(
+                    "gateway-migration"
+                )
+            finally:
+                gateway.shutdown()
+                source_node.shutdown()
+                destination_node.shutdown()
+                gateway.server_close()
+                source_node.server_close()
+                destination_node.server_close()
+                gateway_thread.join(timeout=1)
+                source_thread.join(timeout=1)
+                destination_thread.join(timeout=1)
+
+        self.assertEqual(result["migration"]["phase"], "complete")
+        self.assertIsNotNone(stored_route)
+        self.assertIsNotNone(stored_migration)
+        assert stored_route is not None and stored_migration is not None
+        self.assertEqual(stored_route.node_id, "destination-node")
+        self.assertEqual(stored_migration.phase, "complete")
+        self.assertEqual(
+            set(result["timings_ms"]),
+            {
+                "activate_destination",
+                "finalize_source",
+                "prepare_export",
+                "protocol_total",
+                "route_commit",
+                "transfer_and_stage",
+            },
+        )
+        self.assertGreaterEqual(result["timings_ms"]["route_commit"], 0)
+        self.assertGreaterEqual(
+            result["timings_ms"]["protocol_total"] + 0.01,
+            sum(
+                result["timings_ms"][key]
+                for key in (
+                    "activate_destination",
+                    "finalize_source",
+                    "prepare_export",
+                    "route_commit",
+                    "transfer_and_stage",
+                )
+            ),
+        )
+        self.assertEqual(
+            calls,
+            [
+                ("destination", "/v1/images/pull"),
+                ("source", "/v1/sandboxes/moving-one/migration/prepare"),
+                ("destination", "/v1/migrations/import"),
+                ("destination", "/v1/sandboxes/moving-one/migration/activate"),
+                ("source", "/v1/sandboxes/moving-one/migration/finalize"),
+            ],
+        )
 
     def _json_request(
         self,

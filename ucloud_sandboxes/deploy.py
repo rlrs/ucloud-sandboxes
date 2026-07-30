@@ -167,6 +167,10 @@ class AllInOneDeployPlan:
         return str(PurePosixPath(self.state_dir) / "relay-worker-token")
 
     @property
+    def relay_state_file(self) -> str:
+        return str(PurePosixPath(self.state_dir) / "model-relay.sqlite3")
+
+    @property
     def init_ssh_private_key_file(self) -> str:
         return str(PurePosixPath(self.state_dir) / "ssh" / "gateway-init")
 
@@ -209,6 +213,13 @@ class AllInOneDeployPlan:
     def docker_host_alias(self) -> str:
         registry_private_ip = self.registry_private_ip or AUTO_REGISTRY_PRIVATE_IP_TOKEN
         return f"{self.registry_alias}={registry_private_ip}"
+
+    @property
+    def direct_network_relay_endpoint(self) -> str:
+        gateway_private_ip = (
+            self.registry_private_ip or AUTO_REGISTRY_PRIVATE_IP_TOKEN
+        )
+        return f"{gateway_private_ip}:{self.relay_port}"
 
     def validate(self) -> None:
         for label, value in {
@@ -340,6 +351,7 @@ class AllInOneDeployPlan:
             "nodeControlTokenFile": self.node_control_token_file,
             "relaySandboxTokenFile": self.relay_sandbox_token_file,
             "relayWorkerTokenFile": self.relay_worker_token_file,
+            "relayStateFile": self.relay_state_file,
             "initSshPrivateKeyFile": self.init_ssh_private_key_file,
             "initAuthorizedKeyFile": self.init_authorized_key_file,
             "autoscaler": {
@@ -399,6 +411,9 @@ def relay_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_RELAY_PORT": str(plan.relay_port),
         "UCLOUD_RELAY_SANDBOX_TOKEN_FILE": plan.relay_sandbox_token_file,
         "UCLOUD_RELAY_WORKER_TOKEN_FILE": plan.relay_worker_token_file,
+        "UCLOUD_RELAY_STATE_PATH": plan.relay_state_file,
+        "UCLOUD_RELAY_GATEWAY_URL": f"http://127.0.0.1:{plan.gateway_port}",
+        "UCLOUD_RELAY_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
         "UCLOUD_RELAY_REQUEST_TIMEOUT_SECONDS": str(plan.request_timeout_seconds),
         "UCLOUD_RELAY_WORKER_LEASE_SECONDS": str(plan.worker_lease_seconds),
         "UCLOUD_RELAY_COMPLETED_REQUEST_RETENTION_SECONDS": str(
@@ -462,6 +477,12 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_INIT_DISK_OVERCOMMIT": f"{plan.disk_overcommit:g}",
         "UCLOUD_INIT_NODE_RUNTIME": plan.sandbox_runtime,
         "UCLOUD_INIT_DIRECT_RUNSC_COMMIT": plan.direct_runsc_commit or ("0" * 40),
+        "UCLOUD_INIT_DIRECT_NETWORK": (
+            "sandbox" if plan.sandbox_runtime == "direct" else "none"
+        ),
+        "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP": (
+            plan.direct_network_relay_endpoint
+        ),
         "UCLOUD_INIT_DIRECT_DISK_HEADROOM_MB": str(
             plan.direct_disk_headroom_mb
         ),
@@ -1038,13 +1059,24 @@ def render_remote_deploy_script(
             "sudo systemctl restart ucloud-sandbox-gateway.service",
             "sudo systemctl restart ucloud-sandbox-relay.service",
             "sudo systemctl restart ucloud-sandbox-autoscaler.service",
-            "sleep 2",
-            f"curl -fsS http://127.0.0.1:{plan.gateway_port}/healthz",
-            "printf '\\n'",
-            f"curl -fsS http://127.0.0.1:{plan.relay_port}/healthz",
-            "printf '\\n'",
-            f"curl -fsS http://127.0.0.1:{plan.registry_port}/v2/_catalog",
-            "printf '\\n'",
+            "wait_for_http() {",
+            '  name="$1"',
+            '  url="$2"',
+            "  attempt=1",
+            "  while [ \"$attempt\" -le 30 ]; do",
+            '    if curl -fsS "$url"; then',
+            "      printf '\\n'",
+            "      return 0",
+            "    fi",
+            "    sleep 1",
+            "    attempt=$((attempt + 1))",
+            "  done",
+            '  printf "Timed out waiting for %s at %s\\n" "$name" "$url" >&2',
+            "  return 1",
+            "}",
+            f"wait_for_http gateway http://127.0.0.1:{plan.gateway_port}/healthz",
+            f"wait_for_http relay http://127.0.0.1:{plan.relay_port}/healthz",
+            f"wait_for_http registry http://127.0.0.1:{plan.registry_port}/v2/_catalog",
         ]
     )
     return "\n".join(script_parts) + "\n"

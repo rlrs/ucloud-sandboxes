@@ -12,7 +12,13 @@ from threading import RLock
 from typing import Any, Iterable, Iterator
 from uuid import uuid4
 
-from .models import ResourceQuantity, SandboxDemand, parse_iso_datetime, utc_now
+from .models import (
+    ResourceQuantity,
+    SandboxDemand,
+    SandboxPlacementRequest,
+    parse_iso_datetime,
+    utc_now,
+)
 
 
 _ROUTE_LOCKS_GUARD = RLock()
@@ -131,6 +137,48 @@ class ExecRoute:
             "job_id": self.job_id,
             "node_url": self.node_url,
             "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class SandboxMigration:
+    migration_id: str
+    sandbox_id: str
+    phase: str
+    source_node_id: str
+    source_job_id: str
+    source_node_url: str
+    destination_node_id: str
+    destination_job_id: str
+    destination_node_url: str
+    generation: int
+    create_operation_id: str
+    spec_hash: str
+    archive_sha256: str = ""
+    archive_token: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "archive_sha256": self.archive_sha256,
+            "archive_token": self.archive_token,
+            "create_operation_id": self.create_operation_id,
+            "created_at": self.created_at,
+            "destination_job_id": self.destination_job_id,
+            "destination_node_id": self.destination_node_id,
+            "destination_node_url": self.destination_node_url,
+            "error": self.error,
+            "generation": self.generation,
+            "migration_id": self.migration_id,
+            "phase": self.phase,
+            "sandbox_id": self.sandbox_id,
+            "source_job_id": self.source_job_id,
+            "source_node_id": self.source_node_id,
+            "source_node_url": self.source_node_url,
+            "spec_hash": self.spec_hash,
             "updated_at": self.updated_at,
         }
 
@@ -525,6 +573,44 @@ class RoutingStore:
                 if route is not None
             ]
 
+    def set_sandbox_state_if_current(
+        self,
+        route: SandboxRoute,
+        *,
+        expected_states: Iterable[str],
+        state: str,
+    ) -> SandboxRoute | None:
+        """Change only the state of the exact routed sandbox incarnation."""
+
+        expected = {
+            str(item or "unknown").strip().lower() for item in expected_states
+        }
+        cleaned_state = str(state).strip()
+        if not expected or not cleaned_state:
+            raise ValueError("expected and destination sandbox states are required")
+        with self._lock:
+            with self._transaction() as conn:
+                current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if (
+                    current is None
+                    or (current.state or "unknown").lower() not in expected
+                    or current.generation != route.generation
+                    or current.create_operation_id != route.create_operation_id
+                    or current.spec_hash != route.spec_hash
+                    or current.node_id != route.node_id
+                    or current.job_id != route.job_id
+                    or current.node_url.rstrip("/") != route.node_url.rstrip("/")
+                    or bool(current.delete_operation_id)
+                ):
+                    return None
+                stored = replace(
+                    current,
+                    state=cleaned_state,
+                    updated_at=utc_now().isoformat(),
+                )
+                self._write_sandbox(conn, stored)
+            return stored
+
     def upsert_sandbox(self, route: SandboxRoute) -> SandboxRoute:
         with self._lock:
             now = utc_now().isoformat()
@@ -839,6 +925,275 @@ class RoutingStore:
                 )
                 self._write_sandbox(conn, stored)
             return stored
+
+    def move_sandbox_if_current(
+        self,
+        source: SandboxRoute,
+        *,
+        destination_node_id: str,
+        destination_job_id: str,
+        destination_node_url: str,
+        destination_node_epoch: str = "",
+        destination_activity_epoch: int = 0,
+    ) -> SandboxRoute | None:
+        """Atomically move one exact sandbox incarnation to another node.
+
+        The sandbox generation and create identity do not change during a
+        parked migration. A stale coordinator therefore cannot redirect a
+        replacement incarnation or move a route that has already gone
+        elsewhere.
+        """
+
+        cleaned_url = destination_node_url.strip().rstrip("/")
+        if (
+            not destination_node_id.strip()
+            or not destination_job_id.strip()
+            or not cleaned_url
+        ):
+            raise ValueError("destination node identity is required")
+        with self._lock:
+            now = utc_now().isoformat()
+            with self._transaction() as conn:
+                existing = self._get_sandbox_unlocked(conn, source.sandbox_id)
+                if (
+                    existing is None
+                    or existing.generation != source.generation
+                    or existing.create_operation_id != source.create_operation_id
+                    or existing.spec_hash != source.spec_hash
+                    or existing.node_id != source.node_id
+                    or existing.job_id != source.job_id
+                    or existing.node_url.rstrip("/") != source.node_url.rstrip("/")
+                    or bool(existing.delete_operation_id)
+                ):
+                    return None
+                stored = replace(
+                    existing,
+                    node_id=destination_node_id.strip(),
+                    job_id=destination_job_id.strip(),
+                    node_url=cleaned_url,
+                    state="parked",
+                    node_epoch=destination_node_epoch.strip(),
+                    activity_epoch=max(0, destination_activity_epoch),
+                    updated_at=now,
+                )
+                self._write_sandbox(conn, stored)
+                conn.execute(
+                    "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                    (source.sandbox_id,),
+                )
+            self._drop_cached_exec_routes_for_sandbox_unlocked(source.sandbox_id)
+            return stored
+
+    def begin_sandbox_migration(
+        self,
+        source: SandboxRoute,
+        *,
+        migration_id: str,
+        destination_node_id: str,
+        destination_job_id: str,
+        destination_node_url: str,
+    ) -> SandboxMigration:
+        cleaned_id = migration_id.strip()
+        cleaned_destination_url = destination_node_url.strip().rstrip("/")
+        if (
+            not cleaned_id
+            or not destination_node_id.strip()
+            or not destination_job_id.strip()
+            or not cleaned_destination_url
+        ):
+            raise ValueError("migration and destination identities are required")
+        with self._lock:
+            now = utc_now().isoformat()
+            with self._transaction() as conn:
+                existing_migration = self._get_sandbox_migration_unlocked(
+                    conn,
+                    cleaned_id,
+                )
+                if existing_migration is not None:
+                    return existing_migration
+                active = conn.execute(
+                    """
+                    SELECT migration_id FROM sandbox_migrations
+                    WHERE sandbox_id = ? AND phase != 'complete'
+                    """,
+                    (source.sandbox_id,),
+                ).fetchone()
+                if active is not None:
+                    raise SandboxRouteConflictError(
+                        "sandbox already has an active migration"
+                    )
+                current = self._get_sandbox_unlocked(conn, source.sandbox_id)
+                if (
+                    current is None
+                    or current.generation != source.generation
+                    or current.create_operation_id != source.create_operation_id
+                    or current.spec_hash != source.spec_hash
+                    or current.node_id != source.node_id
+                    or current.job_id != source.job_id
+                    or current.node_url.rstrip("/") != source.node_url.rstrip("/")
+                    or bool(current.delete_operation_id)
+                ):
+                    raise SandboxRouteConflictError(
+                        "sandbox route changed before migration began"
+                    )
+                migration = SandboxMigration(
+                    migration_id=cleaned_id,
+                    sandbox_id=source.sandbox_id,
+                    phase="planned",
+                    source_node_id=source.node_id,
+                    source_job_id=source.job_id,
+                    source_node_url=source.node_url.rstrip("/"),
+                    destination_node_id=destination_node_id.strip(),
+                    destination_job_id=destination_job_id.strip(),
+                    destination_node_url=cleaned_destination_url,
+                    generation=source.generation,
+                    create_operation_id=source.create_operation_id,
+                    spec_hash=source.spec_hash,
+                    created_at=now,
+                    updated_at=now,
+                )
+                self._write_sandbox_migration(conn, migration)
+            return migration
+
+    def get_sandbox_migration(
+        self,
+        migration_id: str,
+    ) -> SandboxMigration | None:
+        with self._connect() as conn:
+            return self._get_sandbox_migration_unlocked(
+                conn,
+                migration_id.strip(),
+            )
+
+    def sandbox_migrations(
+        self,
+        *,
+        active_only: bool = False,
+    ) -> list[SandboxMigration]:
+        where = "WHERE phase != 'complete'" if active_only else ""
+        with self._connect() as conn:
+            return [
+                _sandbox_migration_from_row(row)
+                for row in conn.execute(
+                    f"""
+                    SELECT migration_id, sandbox_id, phase,
+                           source_node_id, source_job_id, source_node_url,
+                           destination_node_id, destination_job_id,
+                           destination_node_url, generation,
+                           create_operation_id, spec_hash, archive_sha256,
+                           archive_token, created_at, updated_at, error
+                    FROM sandbox_migrations
+                    {where}
+                    ORDER BY created_at, migration_id
+                    """
+                )
+            ]
+
+    def advance_sandbox_migration(
+        self,
+        migration_id: str,
+        *,
+        expected_phases: Iterable[str],
+        phase: str,
+        archive_sha256: str | None = None,
+        archive_token: str | None = None,
+        error: str | None = None,
+    ) -> SandboxMigration | None:
+        expected = set(expected_phases)
+        if not expected or not phase.strip():
+            raise ValueError("migration phases are required")
+        with self._lock:
+            with self._transaction() as conn:
+                existing = self._get_sandbox_migration_unlocked(
+                    conn,
+                    migration_id.strip(),
+                )
+                if existing is None or existing.phase not in expected:
+                    return None
+                stored = replace(
+                    existing,
+                    phase=phase.strip(),
+                    archive_sha256=(
+                        archive_sha256
+                        if archive_sha256 is not None
+                        else existing.archive_sha256
+                    ),
+                    archive_token=(
+                        archive_token
+                        if archive_token is not None
+                        else existing.archive_token
+                    ),
+                    error=error if error is not None else existing.error,
+                    updated_at=utc_now().isoformat(),
+                )
+                self._write_sandbox_migration(conn, stored)
+            return stored
+
+    def route_sandbox_migration(
+        self,
+        migration_id: str,
+    ) -> tuple[SandboxMigration, SandboxRoute] | None:
+        """Atomically commit destination routing and the migration journal."""
+
+        with self._lock:
+            with self._transaction() as conn:
+                migration = self._get_sandbox_migration_unlocked(
+                    conn,
+                    migration_id.strip(),
+                )
+                if migration is None:
+                    return None
+                current = self._get_sandbox_unlocked(conn, migration.sandbox_id)
+                if migration.phase == "routed":
+                    if (
+                        current is not None
+                        and current.node_id == migration.destination_node_id
+                        and current.node_url.rstrip("/")
+                        == migration.destination_node_url.rstrip("/")
+                    ):
+                        return migration, current
+                    return None
+                if migration.phase != "staged" or current is None:
+                    return None
+                if (
+                    current.generation != migration.generation
+                    or current.create_operation_id
+                    != migration.create_operation_id
+                    or current.spec_hash != migration.spec_hash
+                    or current.node_id != migration.source_node_id
+                    or current.job_id != migration.source_job_id
+                    or current.node_url.rstrip("/")
+                    != migration.source_node_url.rstrip("/")
+                    or bool(current.delete_operation_id)
+                ):
+                    return None
+                now = utc_now().isoformat()
+                route = replace(
+                    current,
+                    node_id=migration.destination_node_id,
+                    job_id=migration.destination_job_id,
+                    node_url=migration.destination_node_url,
+                    state="parked",
+                    node_epoch="",
+                    activity_epoch=0,
+                    updated_at=now,
+                )
+                self._write_sandbox(conn, route)
+                conn.execute(
+                    "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                    (migration.sandbox_id,),
+                )
+                migration = replace(
+                    migration,
+                    phase="routed",
+                    updated_at=now,
+                    error="",
+                )
+                self._write_sandbox_migration(conn, migration)
+            self._drop_cached_exec_routes_for_sandbox_unlocked(
+                migration.sandbox_id
+            )
+            return migration, route
 
     def delete_sandbox_if_current(
         self,
@@ -1927,6 +2282,37 @@ class RoutingStore:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS sandbox_migrations (
+                    migration_id TEXT PRIMARY KEY,
+                    sandbox_id TEXT NOT NULL,
+                    phase TEXT NOT NULL,
+                    source_node_id TEXT NOT NULL,
+                    source_job_id TEXT NOT NULL,
+                    source_node_url TEXT NOT NULL,
+                    destination_node_id TEXT NOT NULL,
+                    destination_job_id TEXT NOT NULL,
+                    destination_node_url TEXT NOT NULL,
+                    generation INTEGER NOT NULL,
+                    create_operation_id TEXT NOT NULL,
+                    spec_hash TEXT NOT NULL,
+                    archive_sha256 TEXT NOT NULL DEFAULT '',
+                    archive_token TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    error TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS
+                    sandbox_migrations_active_sandbox
+                ON sandbox_migrations (sandbox_id)
+                WHERE phase != 'complete'
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS pending (
                     sandbox_id TEXT PRIMARY KEY,
                     resources_json TEXT NOT NULL,
@@ -2193,6 +2579,26 @@ class RoutingStore:
         ).fetchone()
         return _exec_route_from_row(row) if row is not None else None
 
+    def _get_sandbox_migration_unlocked(
+        self,
+        conn: sqlite3.Connection,
+        migration_id: str,
+    ) -> SandboxMigration | None:
+        row = conn.execute(
+            """
+            SELECT migration_id, sandbox_id, phase,
+                   source_node_id, source_job_id, source_node_url,
+                   destination_node_id, destination_job_id,
+                   destination_node_url, generation, create_operation_id,
+                   spec_hash, archive_sha256, archive_token,
+                   created_at, updated_at, error
+            FROM sandbox_migrations
+            WHERE migration_id = ?
+            """,
+            (migration_id,),
+        ).fetchone()
+        return _sandbox_migration_from_row(row) if row is not None else None
+
     def _get_pending_unlocked(
         self,
         conn: sqlite3.Connection,
@@ -2385,6 +2791,61 @@ class RoutingStore:
                 route.node_url,
                 route.created_at,
                 route.updated_at,
+            ),
+        )
+
+    def _write_sandbox_migration(
+        self,
+        conn: sqlite3.Connection,
+        migration: SandboxMigration,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO sandbox_migrations (
+                migration_id, sandbox_id, phase,
+                source_node_id, source_job_id, source_node_url,
+                destination_node_id, destination_job_id,
+                destination_node_url, generation, create_operation_id,
+                spec_hash, archive_sha256, archive_token,
+                created_at, updated_at, error
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(migration_id) DO UPDATE SET
+                sandbox_id = excluded.sandbox_id,
+                phase = excluded.phase,
+                source_node_id = excluded.source_node_id,
+                source_job_id = excluded.source_job_id,
+                source_node_url = excluded.source_node_url,
+                destination_node_id = excluded.destination_node_id,
+                destination_job_id = excluded.destination_job_id,
+                destination_node_url = excluded.destination_node_url,
+                generation = excluded.generation,
+                create_operation_id = excluded.create_operation_id,
+                spec_hash = excluded.spec_hash,
+                archive_sha256 = excluded.archive_sha256,
+                archive_token = excluded.archive_token,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at,
+                error = excluded.error
+            """,
+            (
+                migration.migration_id,
+                migration.sandbox_id,
+                migration.phase,
+                migration.source_node_id,
+                migration.source_job_id,
+                migration.source_node_url,
+                migration.destination_node_id,
+                migration.destination_job_id,
+                migration.destination_node_url,
+                migration.generation,
+                migration.create_operation_id,
+                migration.spec_hash,
+                migration.archive_sha256,
+                migration.archive_token,
+                migration.created_at,
+                migration.updated_at,
+                migration.error,
             ),
         )
 
@@ -2608,11 +3069,25 @@ def sandbox_demand_from_routing_state(
         now = utc_now()
     pending_total = ResourceQuantity()
     prepared_total = ResourceQuantity()
+    placement_requests: list[SandboxPlacementRequest] = []
     oldest_pending_seconds = 0
     for item in state.pending.values():
         if item.is_expired(now):
             continue
         pending_total = pending_total + item.resources
+        excluded_job_ids: tuple[str, ...] = ()
+        for prefix in ("__migration__:", "__wake__:"):
+            if item.sandbox_id.startswith(prefix):
+                route = state.sandboxes.get(item.sandbox_id[len(prefix) :])
+                if route is not None and route.job_id:
+                    excluded_job_ids = (route.job_id,)
+                break
+        placement_requests.append(
+            SandboxPlacementRequest(
+                resources=item.resources,
+                excluded_job_ids=excluded_job_ids,
+            )
+        )
         created_at = parse_iso_datetime(item.created_at)
         if created_at is not None:
             oldest_pending_seconds = max(
@@ -2623,6 +3098,10 @@ def sandbox_demand_from_routing_state(
         if item.is_expired(now):
             continue
         prepared_total = prepared_total + item.total_resources
+        placement_requests.extend(
+            SandboxPlacementRequest(resources=item.resources)
+            for _ in range(item.count)
+        )
         created_at = parse_iso_datetime(item.created_at)
         if created_at is not None:
             oldest_pending_seconds = max(
@@ -2633,6 +3112,7 @@ def sandbox_demand_from_routing_state(
         pending_resources=pending_total,
         prepared_resources=prepared_total,
         oldest_pending_seconds=max(0, oldest_pending_seconds),
+        placement_requests=tuple(placement_requests),
     )
 
 
@@ -2731,6 +3211,28 @@ def _exec_route_from_row(row: sqlite3.Row) -> ExecRoute:
         node_url=str(row["node_url"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+    )
+
+
+def _sandbox_migration_from_row(row: sqlite3.Row) -> SandboxMigration:
+    return SandboxMigration(
+        migration_id=str(row["migration_id"]),
+        sandbox_id=str(row["sandbox_id"]),
+        phase=str(row["phase"]),
+        source_node_id=str(row["source_node_id"]),
+        source_job_id=str(row["source_job_id"]),
+        source_node_url=str(row["source_node_url"]),
+        destination_node_id=str(row["destination_node_id"]),
+        destination_job_id=str(row["destination_job_id"]),
+        destination_node_url=str(row["destination_node_url"]),
+        generation=max(0, int(row["generation"])),
+        create_operation_id=str(row["create_operation_id"]),
+        spec_hash=str(row["spec_hash"]),
+        archive_sha256=str(row["archive_sha256"]),
+        archive_token=str(row["archive_token"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+        error=str(row["error"]),
     )
 
 

@@ -5,10 +5,15 @@ import base64
 import binascii
 from collections import deque
 from dataclasses import dataclass, field
+import hashlib
+import hmac
 import json
+import os
+from pathlib import Path
 import re
+import sqlite3
 import time
-from typing import Any
+from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from aiohttp import web
@@ -20,6 +25,7 @@ JsonObject = dict[str, Any]
 ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
 REGISTRATION_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
+IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,127}$")
 DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
 DEFAULT_WORKER_LEASE_SECONDS = 600.0
@@ -33,6 +39,7 @@ DEFAULT_MAX_WORKERS = 4096
 MAX_RELAY_BODY_BYTES = 32 * 1024**2
 MAX_WORKER_RESPONSE_BYTES = 32 * 1024**2
 RELAY_TOKEN_HEADER = "X-UCloud-Relay-Token"
+RELAY_REQUEST_ID_HEADER = "X-UCloud-Relay-Request-Id"
 TUNNEL_HTTP_METHODS = frozenset(
     {"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"}
 )
@@ -41,6 +48,14 @@ WORKER_TOKEN_KEY = web.AppKey("model_relay_worker_token", str | None)
 POLL_TIMEOUT_KEY = web.AppKey("model_relay_poll_timeout", float)
 REQUEST_TIMEOUT_KEY = web.AppKey("model_relay_request_timeout", float)
 LEASE_SECONDS_KEY = web.AppKey("model_relay_worker_lease_seconds", float)
+RESULT_NOTIFIER_KEY = web.AppKey(
+    "model_relay_result_notifier",
+    Callable[["RelayRequest"], Awaitable[str | None]] | None,
+)
+ACCEPTED_NOTIFIER_KEY = web.AppKey(
+    "model_relay_accepted_notifier",
+    Callable[["RelayRequest"], Awaitable[str | None]] | None,
+)
 
 
 @dataclass
@@ -71,6 +86,16 @@ class RelayRequest:
     leased_by: str | None = None
     delivery_count: int = 0
     state: str = "pending"
+    idempotency_key: str | None = None
+    request_digest: str = ""
+    sandbox_id: str | None = None
+    sandbox_generation: int | None = None
+    completed_at: float | None = None
+    completed_response: RelayWorkerResponse | None = None
+    wake_notified_at: float | None = None
+    accepted_notified_at: float | None = None
+    parked_transport_epoch: str | None = None
+    reattachable: bool = False
 
     def envelope(self) -> JsonObject:
         return {
@@ -92,6 +117,12 @@ class RelayRequest:
             "lease_expires_at": self.lease_expires_at,
             "leased_by": self.leased_by,
             "delivery_count": self.delivery_count,
+            "idempotency_key": self.idempotency_key,
+            "sandbox_id": self.sandbox_id,
+            "sandbox_generation": self.sandbox_generation,
+            "reattachable": self.reattachable,
+            "accepted_notified_at": self.accepted_notified_at,
+            "parked_transport_epoch": self.parked_transport_epoch,
         }
 
 
@@ -99,12 +130,137 @@ class RelayRequest:
 class RelayRespondResult:
     request_id: str
     duplicate: bool = False
+    request: RelayRequest | None = None
+
+
+class RelaySqliteStore:
+    """Crash-durable single-process relay journal.
+
+    Rows are independent so a response commit rewrites only one bounded request
+    rather than a process-wide queue snapshot. The relay still has one writer;
+    SQLite/WAL is not presented as a multi-host broker.
+    """
+
+    VERSION = 1
+
+    def __init__(self, path: Path) -> None:
+        if not path.is_absolute():
+            raise ValueError("relay state path must be absolute")
+        self.path = path
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._connection = sqlite3.connect(path, isolation_level=None)
+        os.chmod(path, 0o600)
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("PRAGMA synchronous=FULL")
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_rollouts (
+                rollout_id TEXT PRIMARY KEY,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_requests (
+                request_id TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                expires_at REAL,
+                completed_at REAL,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        version = self._connection.execute(
+            "SELECT value FROM relay_meta WHERE key = 'version'"
+        ).fetchone()
+        if version is None:
+            self._connection.execute(
+                "INSERT INTO relay_meta(key, value) VALUES ('version', ?)",
+                (str(self.VERSION),),
+            )
+        elif int(version[0]) != self.VERSION:
+            raise ValueError("relay state database has an unsupported version")
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def load_rollouts(self) -> list[JsonObject]:
+        return [
+            _json_mapping(row[0])
+            for row in self._connection.execute(
+                "SELECT payload FROM relay_rollouts ORDER BY rollout_id"
+            )
+        ]
+
+    def load_requests(self) -> list[JsonObject]:
+        return [
+            _json_mapping(row[0])
+            for row in self._connection.execute(
+                "SELECT payload FROM relay_requests ORDER BY request_id"
+            )
+        ]
+
+    def save_rollout(self, record: JsonObject) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO relay_rollouts(rollout_id, payload) VALUES (?, ?)
+            ON CONFLICT(rollout_id) DO UPDATE SET payload = excluded.payload
+            """,
+            (
+                str(record["rollout_id"]),
+                json.dumps(record, ensure_ascii=False, separators=(",", ":")),
+            ),
+        )
+
+    def delete_rollout(self, rollout_id: str) -> None:
+        self._connection.execute(
+            "DELETE FROM relay_rollouts WHERE rollout_id = ?",
+            (rollout_id,),
+        )
+
+    def save_request(self, request: RelayRequest) -> None:
+        payload = _persisted_request_payload(request)
+        self._connection.execute(
+            """
+            INSERT INTO relay_requests(
+                request_id, state, expires_at, completed_at, payload
+            ) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(request_id) DO UPDATE SET
+                state = excluded.state,
+                expires_at = excluded.expires_at,
+                completed_at = excluded.completed_at,
+                payload = excluded.payload
+            """,
+            (
+                request.request_id,
+                request.state,
+                request.expires_at,
+                request.completed_at,
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            ),
+        )
+
+    def delete_request(self, request_id: str) -> None:
+        self._connection.execute(
+            "DELETE FROM relay_requests WHERE request_id = ?",
+            (request_id,),
+        )
 
 
 class ModelRelayState:
     def __init__(
         self,
         *,
+        state_path: Path | None = None,
         request_timeout_seconds: float = DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS,
         completed_request_retention_seconds: float = DEFAULT_COMPLETED_REQUEST_RETENTION_SECONDS,
         worker_retention_seconds: float = DEFAULT_WORKER_RETENTION_SECONDS,
@@ -119,8 +275,11 @@ class ModelRelayState:
         self._rollouts: dict[str, JsonObject] = {}
         self._pending: dict[str, deque[RelayRequest]] = {}
         self._requests: dict[str, RelayRequest] = {}
-        self._completed: dict[str, tuple[float, str]] = {}
+        self._completed: dict[str, RelayRequest] = {}
+        self._idempotency: dict[tuple[str, str, str], str] = {}
         self._workers: dict[tuple[str, str], JsonObject] = {}
+        self._store = RelaySqliteStore(state_path) if state_path is not None else None
+        self._loaded = state_path is None
         self._inflight_bytes = 0
         self._rollout_inflight_counts: dict[str, int] = {}
         self._max_inflight_requests = max(1, max_inflight_requests)
@@ -150,6 +309,12 @@ class ModelRelayState:
             "empty_polls": 0,
             "admission_rejected": 0,
             "canceled": 0,
+            "reattached": 0,
+            "restored_requests": 0,
+            "wake_notifications": 0,
+            "detached_callers": 0,
+            "transport_resets": 0,
+            "accepted_notifications": 0,
         }
         self._timers: dict[str, float] = {
             "queue_wait_seconds_total": 0.0,
@@ -164,6 +329,7 @@ class ModelRelayState:
     ) -> JsonObject:
         validate_rollout_id(rollout_id)
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._prune_workers_locked(now)
@@ -184,6 +350,8 @@ class ModelRelayState:
                 "registered_at": time.time(),
             }
             self._rollouts[rollout_id] = record
+            if self._store is not None:
+                self._store.save_rollout(record)
             self._pending.setdefault(rollout_id, deque())
             self._condition.notify_all()
             return dict(record)
@@ -197,6 +365,7 @@ class ModelRelayState:
         validate_rollout_id(rollout_id)
         validate_registration_token(registration_token)
         async with self._condition:
+            self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
             if current is None:
                 return False
@@ -206,6 +375,8 @@ class ModelRelayState:
             )
             existed = True
             self._rollouts.pop(rollout_id, None)
+            if self._store is not None:
+                self._store.delete_rollout(rollout_id)
             self._cancel_rollout_incarnation_locked(
                 rollout_id,
                 registration_token,
@@ -215,8 +386,28 @@ class ModelRelayState:
             self._condition.notify_all()
             return existed
 
+    async def require_current_registration(
+        self,
+        rollout_id: str,
+        registration_token: str,
+    ) -> None:
+        """Authorize a caller against one exact tunnel incarnation."""
+
+        validate_rollout_id(rollout_id)
+        if not REGISTRATION_TOKEN_RE.fullmatch(registration_token):
+            raise web.HTTPUnauthorized(text="invalid tunnel access token")
+        async with self._condition:
+            self._ensure_loaded_locked()
+            current = self._rollouts.get(rollout_id)
+            if current is None or not hmac.compare_digest(
+                str(current["registration_token"]),
+                registration_token,
+            ):
+                raise web.HTTPUnauthorized(text="invalid tunnel access token")
+
     async def list_rollouts(self) -> list[JsonObject]:
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._prune_workers_locked(now)
@@ -234,6 +425,7 @@ class ModelRelayState:
         validate_registration_token(registration_token)
         validate_worker_id(worker_id)
         async with self._condition:
+            self._ensure_loaded_locked()
             self._prune_workers_locked(time.time())
             self._require_current_registration_locked(
                 rollout_id,
@@ -262,6 +454,8 @@ class ModelRelayState:
         headers: dict[str, str],
         method: str = "POST",
         body_bytes: bytes | None = None,
+        idempotency_key: str | None = None,
+        defer_idempotency_until_disconnect: bool = False,
     ) -> RelayRequest:
         validate_rollout_id(rollout_id)
         method = method.upper()
@@ -280,24 +474,73 @@ class ModelRelayState:
                 max_size=MAX_RELAY_BODY_BYTES,
                 actual_size=len(body_bytes),
             )
+        if idempotency_key is not None:
+            validate_idempotency_key(idempotency_key)
         loop = asyncio.get_running_loop()
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._expire_requests_locked(now)
             if rollout_id not in self._rollouts:
                 raise web.HTTPNotFound(text=f"rollout is not registered: {rollout_id}")
+            identity_headers = {
+                key: value
+                for key, value in headers.items()
+                if key.lower()
+                not in {
+                    "baggage",
+                    "traceparent",
+                    "tracestate",
+                    "x-correlation-id",
+                    "x-request-id",
+                    "x-stainless-read-timeout",
+                    "x-stainless-retry-count",
+                }
+            }
             metadata_bytes = json.dumps(
                 {
                     "endpoint": endpoint,
                     "method": method,
-                    "headers": headers,
+                    # Retry and tracing headers may legitimately change when
+                    # an SDK recreates a request after migration. They do not
+                    # change the logical upstream operation.
+                    "headers": identity_headers,
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
             payload_bytes = len(body_bytes) + len(metadata_bytes)
+            request_digest = hashlib.sha256(
+                b"\0".join(
+                    (
+                        rollout_id.encode("utf-8"),
+                        endpoint.encode("utf-8"),
+                        method.encode("ascii"),
+                        metadata_bytes,
+                        body_bytes,
+                    )
+                )
+            ).hexdigest()
+            registration = self._rollouts[rollout_id]
+            registration_token = str(registration["registration_token"])
+            if idempotency_key is not None:
+                identity = (rollout_id, registration_token, idempotency_key)
+                existing_id = self._idempotency.get(identity)
+                existing = self._requests.get(existing_id or "") or self._completed.get(
+                    existing_id or ""
+                )
+                if existing is not None:
+                    if existing.request_digest != request_digest:
+                        raise web.HTTPConflict(
+                            text=(
+                                "idempotency key was already used for a different "
+                                "relay request"
+                            )
+                        )
+                    self._counters["reattached"] += 1
+                    return existing
             rollout_inflight = self._rollout_inflight_counts.get(rollout_id, 0)
             rejection_reason = ""
             if len(self._requests) >= self._max_inflight_requests:
@@ -316,9 +559,7 @@ class ModelRelayState:
             request = RelayRequest(
                 request_id=uuid4().hex,
                 rollout_id=rollout_id,
-                registration_token=str(
-                    self._rollouts[rollout_id]["registration_token"]
-                ),
+                registration_token=registration_token,
                 endpoint=endpoint,
                 method=method,
                 body=_copy_json_value(body),
@@ -328,14 +569,69 @@ class ModelRelayState:
                 future=loop.create_future(),
                 expires_at=created_at + self._request_timeout_seconds,
                 payload_bytes=payload_bytes,
+                idempotency_key=idempotency_key,
+                request_digest=request_digest,
+                sandbox_id=_registration_sandbox_id(registration),
+                sandbox_generation=_registration_sandbox_generation(registration),
+                reattachable=(
+                    idempotency_key is not None
+                    and not defer_idempotency_until_disconnect
+                ),
             )
             self._pending.setdefault(rollout_id, deque()).append(request)
             self._requests[request.request_id] = request
             self._inflight_bytes += payload_bytes
             self._rollout_inflight_counts[rollout_id] = rollout_inflight + 1
+            if idempotency_key is not None and request.reattachable:
+                self._idempotency[(rollout_id, registration_token, idempotency_key)] = (
+                    request.request_id
+                )
+            if self._store is not None:
+                self._store.save_request(request)
             self._counters["enqueued"] += 1
             self._condition.notify_all()
             return request
+
+    async def mark_caller_detached(self, request_id: str) -> None:
+        """Keep accepted work alive and let an identical retry reattach."""
+
+        await self._mark_request_reattachable(
+            request_id,
+            counter="detached_callers",
+        )
+
+    async def mark_transport_reset(self, request_id: str) -> None:
+        """Publish retry identity before migration severs the saved socket."""
+
+        await self._mark_request_reattachable(
+            request_id,
+            counter="transport_resets",
+        )
+
+    async def _mark_request_reattachable(
+        self,
+        request_id: str,
+        *,
+        counter: str,
+    ) -> None:
+        async with self._condition:
+            self._ensure_loaded_locked()
+            request = self._requests.get(request_id) or self._completed.get(request_id)
+            if request is None:
+                return
+            request.reattachable = request.idempotency_key is not None
+            if request.reattachable:
+                assert request.idempotency_key is not None
+                self._idempotency[
+                    (
+                        request.rollout_id,
+                        request.registration_token,
+                        request.idempotency_key,
+                    )
+                ] = request.request_id
+            self._counters[counter] += 1
+            if self._store is not None:
+                self._store.save_request(request)
 
     async def poll(
         self,
@@ -355,6 +651,7 @@ class ModelRelayState:
         lease_seconds = max(0.001, lease_seconds)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
         async with self._condition:
+            self._ensure_loaded_locked()
             self._prune_completed_locked(time.time())
             self._prune_workers_locked(time.time())
             self._require_current_registration_locked(
@@ -395,6 +692,9 @@ class ModelRelayState:
                             worker_id=worker_id,
                         )
                         requests = [request]
+                    if self._store is not None:
+                        for request in requests:
+                            self._store.save_request(request)
                     return requests
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -422,6 +722,7 @@ class ModelRelayState:
             validate_worker_id(worker_id)
         lease_seconds = max(0.001, lease_seconds)
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._expire_requests_locked(now)
@@ -452,6 +753,8 @@ class ModelRelayState:
                     metadata=None,
                 )
             request.lease_expires_at = now + lease_seconds
+            if self._store is not None:
+                self._store.save_request(request)
             self._counters["lease_renewed"] += 1
             self._condition.notify_all()
             return request
@@ -464,9 +767,11 @@ class ModelRelayState:
         response: RelayWorkerResponse,
         lease_id: str | None,
         error: bool = False,
+        defer_delivery: bool = False,
     ) -> RelayRespondResult:
         validate_registration_token(registration_token)
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._expire_requests_locked(now)
@@ -476,7 +781,11 @@ class ModelRelayState:
                     registration_token,
                 )
                 self._counters["duplicate_responses"] += 1
-                return RelayRespondResult(request_id=request_id, duplicate=True)
+                return RelayRespondResult(
+                    request_id=request_id,
+                    duplicate=True,
+                    request=self._completed[request_id],
+                )
             request = self._requests.get(request_id)
             if request is None:
                 raise web.HTTPNotFound(text=f"request not found: {request_id}")
@@ -496,9 +805,9 @@ class ModelRelayState:
             self._remove_pending_locked(request_id, request.rollout_id)
             request.state = "completed"
             self._remember_completed_locked(
-                request_id,
-                now,
-                request.registration_token,
+                request,
+                completed_at=now,
+                response=response,
             )
             self._counters["completed"] += 1
             if error or response.status >= 400:
@@ -508,9 +817,28 @@ class ModelRelayState:
                 self._timers["worker_processing_seconds_total"] += (
                     now - request.delivered_at
                 )
-            _set_response(request.future, response)
+            if not defer_delivery:
+                _set_response(request.future, response)
+            if self._store is not None:
+                self._store.save_request(request)
             self._condition.notify_all()
-            return RelayRespondResult(request_id=request_id)
+            return RelayRespondResult(request_id=request_id, request=request)
+
+    async def release_completed_response(self, request_id: str) -> None:
+        """Allow the sandbox-facing HTTP handler to deliver a committed result.
+
+        Lifecycle-bound worker routes defer this until the wake callback has
+        completed. The response is already durable, so this operation is
+        intentionally idempotent for retried worker commits.
+        """
+
+        async with self._condition:
+            self._ensure_loaded_locked()
+            request = self._completed.get(request_id)
+            if request is None or request.completed_response is None:
+                raise web.HTTPNotFound(text=f"request not found: {request_id}")
+            _set_response(request.future, request.completed_response)
+            self._condition.notify_all()
 
     async def cancel_request(
         self,
@@ -520,21 +848,24 @@ class ModelRelayState:
         reason: str = "canceled",
     ) -> RelayWorkerResponse | None:
         async with self._condition:
+            self._ensure_loaded_locked()
             request = self._pop_request_locked(request_id)
             if request is None:
                 return None
             self._remove_pending_locked(request_id, request.rollout_id)
             request.state = "completed"
             self._remember_completed_locked(
-                request_id,
-                time.time(),
-                request.registration_token,
+                request,
+                completed_at=time.time(),
+                response=response,
             )
             if reason == "timeout":
                 self._counters["timed_out"] += 1
             else:
                 self._counters["canceled"] += 1
             _set_response(request.future, response)
+            if self._store is not None:
+                self._store.save_request(request)
             self._condition.notify_all()
             return response
 
@@ -544,6 +875,8 @@ class ModelRelayState:
         *,
         timeout_seconds: float,
     ) -> RelayWorkerResponse:
+        if request.completed_response is not None and request.future.done():
+            return request.completed_response
         return await asyncio.wait_for(
             asyncio.shield(request.future),
             timeout=timeout_seconds,
@@ -551,6 +884,7 @@ class ModelRelayState:
 
     async def stats(self) -> JsonObject:
         async with self._condition:
+            self._ensure_loaded_locked()
             now = time.time()
             self._prune_completed_locked(now)
             self._prune_workers_locked(now)
@@ -602,6 +936,123 @@ class ModelRelayState:
                 },
             }
 
+    async def mark_wake_notified(self, request_id: str) -> None:
+        async with self._condition:
+            self._ensure_loaded_locked()
+            request = self._completed.get(request_id)
+            if request is None:
+                raise web.HTTPNotFound(text=f"request not found: {request_id}")
+            if request.wake_notified_at is None:
+                request.wake_notified_at = time.time()
+                self._counters["wake_notifications"] += 1
+                if self._store is not None:
+                    self._store.save_request(request)
+
+    async def mark_accepted_notified(
+        self,
+        request_id: str,
+        *,
+        transport_epoch: str | None = None,
+    ) -> None:
+        async with self._condition:
+            self._ensure_loaded_locked()
+            request = self._requests.get(request_id) or self._completed.get(request_id)
+            if request is None:
+                raise web.HTTPNotFound(text=f"request not found: {request_id}")
+            if request.accepted_notified_at is None:
+                request.accepted_notified_at = time.time()
+                request.parked_transport_epoch = transport_epoch
+                self._counters["accepted_notifications"] += 1
+                if self._store is not None:
+                    self._store.save_request(request)
+
+    def close(self) -> None:
+        if self._store is not None:
+            self._store.close()
+            self._store = None
+
+    def _ensure_loaded_locked(self) -> None:
+        if self._loaded:
+            return
+        assert self._store is not None
+        loop = asyncio.get_running_loop()
+        for record in self._store.load_rollouts():
+            rollout_id = str(record.get("rollout_id") or "")
+            validate_rollout_id(rollout_id)
+            self._rollouts[rollout_id] = record
+            self._pending.setdefault(rollout_id, deque())
+        for payload in self._store.load_requests():
+            request = _request_from_persisted_payload(payload, loop=loop)
+            # Every non-terminal caller connection was destroyed by this relay
+            # restart. A lifecycle-bound completed response also remains
+            # replayable because its sandbox was parked before delivery.
+            if request.state != "completed" and request.idempotency_key is not None:
+                request.reattachable = True
+            elif (
+                request.state == "completed"
+                and request.sandbox_id is not None
+                and request.accepted_notified_at is not None
+                and request.idempotency_key is not None
+            ):
+                request.reattachable = True
+            if request.idempotency_key is not None and request.reattachable:
+                self._idempotency[
+                    (
+                        request.rollout_id,
+                        request.registration_token,
+                        request.idempotency_key,
+                    )
+                ] = request.request_id
+            if request.state == "completed":
+                if request.completed_response is None:
+                    raise ValueError(
+                        "completed relay request is missing its persisted response"
+                    )
+                _set_response(request.future, request.completed_response)
+                self._completed[request.request_id] = request
+                self._store.save_request(request)
+                continue
+            current_registration = self._rollouts.get(request.rollout_id)
+            if (
+                current_registration is None
+                or str(current_registration.get("registration_token") or "")
+                != request.registration_token
+            ):
+                # A rollout deletion and request cancellation are separate
+                # durable row updates. A replacement registration can likewise
+                # land before its old requests are terminally rewritten.
+                # Recover either stranded row instead of exposing it to a new
+                # registration incarnation.
+                response = RelayWorkerResponse(
+                    410,
+                    _openai_error(
+                        "rollout registration is no longer available",
+                        "relay_rollout_closed",
+                    ),
+                )
+                self._remember_completed_locked(
+                    request,
+                    completed_at=time.time(),
+                    response=response,
+                )
+                _set_response(request.future, response)
+                self._store.save_request(request)
+                continue
+            self._requests[request.request_id] = request
+            self._inflight_bytes += request.payload_bytes
+            self._rollout_inflight_counts[request.rollout_id] = (
+                self._rollout_inflight_counts.get(request.rollout_id, 0) + 1
+            )
+            if request.state == "pending":
+                self._pending.setdefault(request.rollout_id, deque()).append(request)
+            self._store.save_request(request)
+            self._counters["restored_requests"] += 1
+        self._loaded = True
+        now = time.time()
+        self._prune_completed_locked(now)
+        self._expire_requests_locked(now)
+        self._requeue_expired_leases_locked(now)
+
     def _pop_request_locked(self, request_id: str) -> RelayRequest | None:
         request = self._requests.pop(request_id, None)
         if request is None:
@@ -644,8 +1095,8 @@ class ModelRelayState:
         request_id: str,
         registration_token: str,
     ) -> None:
-        _completed_at, request_registration_token = self._completed[request_id]
-        if request_registration_token != registration_token:
+        request = self._completed[request_id]
+        if request.registration_token != registration_token:
             raise web.HTTPConflict(
                 text="request belongs to a different rollout registration"
             )
@@ -679,12 +1130,14 @@ class ModelRelayState:
             self._pop_request_locked(request_id)
             request.state = "completed"
             self._remember_completed_locked(
-                request_id,
-                now,
-                registration_token,
+                request,
+                completed_at=now,
+                response=response,
             )
             self._counters["unregister_canceled"] += 1
             _set_response(request.future, response)
+            if self._store is not None:
+                self._store.save_request(request)
         queue = self._pending.get(rollout_id)
         if queue is not None:
             kept = deque(
@@ -765,6 +1218,8 @@ class ModelRelayState:
             request.leased_by = None
             self._pending.setdefault(request.rollout_id, deque()).appendleft(request)
             self._counters["lease_expired"] += 1
+            if self._store is not None:
+                self._store.save_request(request)
         if expired:
             self._condition.notify_all()
 
@@ -785,12 +1240,14 @@ class ModelRelayState:
             self._remove_pending_locked(request.request_id, request.rollout_id)
             request.state = "completed"
             self._remember_completed_locked(
-                request.request_id,
-                now,
-                request.registration_token,
+                request,
+                completed_at=now,
+                response=response,
             )
             self._counters["timed_out"] += 1
             _set_response(request.future, response)
+            if self._store is not None:
+                self._store.save_request(request)
         self._condition.notify_all()
 
     def _next_lease_expiry_locked(self) -> float | None:
@@ -803,26 +1260,53 @@ class ModelRelayState:
 
     def _prune_completed_locked(self, now: float) -> None:
         cutoff = now - self._completed_request_retention_seconds
-        for request_id, (completed_at, _registration_token) in list(
-            self._completed.items()
-        ):
-            if completed_at < cutoff:
+        for request_id, request in list(self._completed.items()):
+            if (request.completed_at or 0.0) < cutoff:
                 self._completed.pop(request_id, None)
+                if request.idempotency_key is not None and request.reattachable:
+                    self._idempotency.pop(
+                        (
+                            request.rollout_id,
+                            request.registration_token,
+                            request.idempotency_key,
+                        ),
+                        None,
+                    )
+                if self._store is not None:
+                    self._store.delete_request(request_id)
 
     def _remember_completed_locked(
         self,
-        request_id: str,
+        request: RelayRequest,
+        *,
         completed_at: float,
-        registration_token: str,
+        response: RelayWorkerResponse,
     ) -> None:
         self._prune_completed_locked(completed_at)
         while len(self._completed) >= self._max_completed_requests:
             oldest = min(
                 self._completed,
-                key=lambda item: (self._completed[item][0], item),
+                key=lambda item: (
+                    self._completed[item].completed_at or 0.0,
+                    item,
+                ),
             )
-            self._completed.pop(oldest, None)
-        self._completed[request_id] = (completed_at, registration_token)
+            evicted = self._completed.pop(oldest)
+            if evicted.idempotency_key is not None and evicted.reattachable:
+                self._idempotency.pop(
+                    (
+                        evicted.rollout_id,
+                        evicted.registration_token,
+                        evicted.idempotency_key,
+                    ),
+                    None,
+                )
+            if self._store is not None:
+                self._store.delete_request(oldest)
+        request.completed_at = completed_at
+        request.completed_response = response
+        request.state = "completed"
+        self._completed[request.request_id] = request
 
     def _prune_workers_locked(self, now: float) -> None:
         cutoff = now - self._worker_retention_seconds
@@ -860,11 +1344,15 @@ def create_model_relay_app(
     max_inflight_bytes: int = DEFAULT_MAX_INFLIGHT_BYTES,
     max_completed_requests: int = DEFAULT_MAX_COMPLETED_REQUESTS,
     max_workers: int = DEFAULT_MAX_WORKERS,
+    state_path: Path | None = None,
+    accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
+    result_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     state: ModelRelayState | None = None,
 ) -> web.Application:
     # Base64 expands worker response bodies by 4/3 inside the JSON control API.
     app = web.Application(client_max_size=48 * 1024**2)
     app[STATE_KEY] = state or ModelRelayState(
+        state_path=state_path,
         request_timeout_seconds=request_timeout_seconds,
         completed_request_retention_seconds=completed_request_retention_seconds,
         worker_retention_seconds=worker_retention_seconds,
@@ -879,6 +1367,13 @@ def create_model_relay_app(
     app[POLL_TIMEOUT_KEY] = worker_poll_timeout_seconds
     app[REQUEST_TIMEOUT_KEY] = request_timeout_seconds
     app[LEASE_SECONDS_KEY] = worker_lease_seconds
+    app[ACCEPTED_NOTIFIER_KEY] = accepted_notifier
+    app[RESULT_NOTIFIER_KEY] = result_notifier
+
+    async def close_state(_app: web.Application) -> None:
+        _app[STATE_KEY].close()
+
+    app.on_cleanup.append(close_state)
 
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/v1/relay/stats", relay_stats)
@@ -900,6 +1395,16 @@ def create_model_relay_app(
         openai_chat_completions,
     )
     app.router.add_post("/rollouts/{rollout_id}/v1/responses", openai_responses)
+    app.router.add_route(
+        "*",
+        "/tunnels/{tunnel_id}/_relay/{tunnel_token}",
+        tunnel_http_proxy,
+    )
+    app.router.add_route(
+        "*",
+        "/tunnels/{tunnel_id}/_relay/{tunnel_token}/{tunnel_path:.*}",
+        tunnel_http_proxy,
+    )
     app.router.add_route("*", "/tunnels/{tunnel_id}", tunnel_http_proxy)
     app.router.add_route(
         "*",
@@ -1058,7 +1563,11 @@ async def worker_respond(request: web.Request) -> web.Response:
         registration_token=registration_token,
         lease_id=lease_id,
         response=RelayWorkerResponse(status=status, body=body, headers=headers),
+        defer_delivery=request.app[RESULT_NOTIFIER_KEY] is not None,
     )
+    await _notify_result(request, result)
+    if request.app[RESULT_NOTIFIER_KEY] is not None:
+        await _state(request).release_completed_response(result.request_id)
     return web.json_response(
         {
             "ok": True,
@@ -1087,7 +1596,11 @@ async def worker_error(request: web.Request) -> web.Response:
             body=_openai_error(message, "relay_worker_error"),
         ),
         error=True,
+        defer_delivery=request.app[RESULT_NOTIFIER_KEY] is not None,
     )
+    await _notify_result(request, result)
+    if request.app[RESULT_NOTIFIER_KEY] is not None:
+        await _state(request).release_completed_response(result.request_id)
     return web.json_response(
         {
             "ok": True,
@@ -1106,11 +1619,18 @@ async def openai_responses(request: web.Request) -> web.Response:
 
 
 async def tunnel_http_proxy(request: web.Request) -> web.Response:
-    _require_sandbox_token(request)
     if request.method not in TUNNEL_HTTP_METHODS:
         raise web.HTTPMethodNotAllowed(request.method, sorted(TUNNEL_HTTP_METHODS))
     tunnel_id = str(request.match_info.get("tunnel_id") or "")
     validate_rollout_id(tunnel_id)
+    tunnel_token = request.match_info.get("tunnel_token")
+    if tunnel_token is None:
+        _require_sandbox_token(request)
+    else:
+        await _state(request).require_current_registration(
+            tunnel_id,
+            str(tunnel_token),
+        )
     endpoint = _tunnel_endpoint(request)
     body_bytes = await request.read()
     if len(body_bytes) > MAX_RELAY_BODY_BYTES:
@@ -1118,6 +1638,7 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
             max_size=MAX_RELAY_BODY_BYTES,
             actual_size=len(body_bytes),
         )
+    explicit_request_id = request.headers.get(RELAY_REQUEST_ID_HEADER)
     relay_request = await _state(request).enqueue(
         rollout_id=tunnel_id,
         endpoint=endpoint,
@@ -1125,7 +1646,18 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
         body=_decode_tunnel_json(request.content_type, body_bytes),
         body_bytes=body_bytes,
         headers=_forward_headers(request),
+        idempotency_key=(
+            explicit_request_id
+            or _implicit_idempotency_key(
+                request,
+                rollout_id=tunnel_id,
+                endpoint=endpoint,
+                body_bytes=body_bytes,
+            )
+        ),
+        defer_idempotency_until_disconnect=explicit_request_id is None,
     )
+    await _notify_accepted(request, relay_request)
     response = await _wait_for_worker_response(
         request,
         relay_request,
@@ -1146,17 +1678,30 @@ async def _openai_proxy(request: web.Request, *, endpoint: str) -> web.Response:
             status=400,
         )
     rollout_id = _rollout_id_from_request(request)
+    body_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    explicit_request_id = request.headers.get(RELAY_REQUEST_ID_HEADER)
     relay_request = await _state(request).enqueue(
         rollout_id=rollout_id,
         endpoint=endpoint,
         body=payload,
-        body_bytes=json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8"),
+        body_bytes=body_bytes,
         headers=_forward_headers(request),
+        idempotency_key=(
+            explicit_request_id
+            or _implicit_idempotency_key(
+                request,
+                rollout_id=rollout_id,
+                endpoint=endpoint,
+                body_bytes=body_bytes,
+            )
+        ),
+        defer_idempotency_until_disconnect=explicit_request_id is None,
     )
+    await _notify_accepted(request, relay_request)
     response = await _wait_for_worker_response(
         request,
         relay_request,
@@ -1207,21 +1752,64 @@ async def _wait_for_worker_response(
         )
         response = persisted or timeout_response
     except asyncio.CancelledError:
-        cancel_response = RelayWorkerResponse(
-            499,
-            _relay_error(
-                "relay request was canceled",
-                "relay_canceled",
-                openai=openai_errors,
-            ),
-        )
-        await _state(request).cancel_request(
-            request_id=relay_request.request_id,
-            response=cancel_response,
-            reason="client_canceled",
-        )
+        # A parked or migrated sandbox necessarily loses this TCP connection.
+        # The durable request remains claimable and the next byte-identical
+        # retry reattaches to it instead of sampling again.
+        await _state(request).mark_caller_detached(relay_request.request_id)
         raise
     return response
+
+
+async def _notify_accepted(
+    request: web.Request,
+    relay_request: RelayRequest,
+) -> None:
+    notifier = request.app[ACCEPTED_NOTIFIER_KEY]
+    if notifier is None or relay_request.sandbox_id is None:
+        return
+    if relay_request.accepted_notified_at is not None:
+        return
+    try:
+        transport_epoch = await notifier(relay_request)
+    except Exception:
+        # Parking is an optimization. Once the request has been durably
+        # accepted, failure to park must not turn it into a model-call failure.
+        return
+    await _state(request).mark_accepted_notified(
+        relay_request.request_id,
+        transport_epoch=transport_epoch,
+    )
+
+
+async def _notify_result(
+    request: web.Request,
+    result: RelayRespondResult,
+) -> None:
+    relay_request = result.request
+    notifier = request.app[RESULT_NOTIFIER_KEY]
+    if (
+        notifier is None
+        or relay_request is None
+        or relay_request.sandbox_id is None
+        or relay_request.wake_notified_at is not None
+    ):
+        return
+    try:
+        wake_transport_epoch = await notifier(relay_request)
+    except Exception as exc:
+        # The result is already committed. A 503 makes the worker retry its
+        # idempotent response POST, which re-attempts only the wake notification.
+        raise web.HTTPServiceUnavailable(
+            text=f"model response committed but sandbox wake failed: {exc}",
+            headers={"Retry-After": "1"},
+        ) from exc
+    if (
+        relay_request.parked_transport_epoch is not None
+        and wake_transport_epoch is not None
+        and relay_request.parked_transport_epoch != wake_transport_epoch
+    ):
+        await _state(request).mark_transport_reset(relay_request.request_id)
+    await _state(request).mark_wake_notified(relay_request.request_id)
 
 
 def _state(request: web.Request) -> ModelRelayState:
@@ -1393,14 +1981,16 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
         "proxy-authorization",
         "transfer-encoding",
         RELAY_TOKEN_HEADER.lower(),
+        RELAY_REQUEST_ID_HEADER.lower(),
         "x-ucloud-sandbox-token",
     }
     expected = request.app[SANDBOX_TOKEN_KEY]
     relay_header = request.headers.get(RELAY_TOKEN_HEADER) or ""
-    relay_header_authenticated = expected is None or relay_header in {
-        expected,
-        f"Bearer {expected}",
-    }
+    relay_header_authenticated = (
+        request.match_info.get("tunnel_token") is not None
+        or expected is None
+        or relay_header in {expected, f"Bearer {expected}"}
+    )
     if not relay_header_authenticated:
         # Backward-compatible OpenAI clients use Authorization for relay auth;
         # never leak that credential to the worker-local upstream.
@@ -1474,8 +2064,12 @@ def _tunnel_endpoint(request: web.Request) -> str:
     # Work from raw_path rather than match_info so percent-encoding, repeated
     # query parameters, and literal '+' characters reach the upstream exactly.
     raw_path, separator, raw_query = request.raw_path.partition("?")
-    path_parts = raw_path.split("/", 3)
-    tunnel_path = path_parts[3] if len(path_parts) == 4 else ""
+    if request.match_info.get("tunnel_token") is None:
+        path_parts = raw_path.split("/", 3)
+        tunnel_path = path_parts[3] if len(path_parts) == 4 else ""
+    else:
+        path_parts = raw_path.split("/", 5)
+        tunnel_path = path_parts[5] if len(path_parts) == 6 else ""
     endpoint = f"/{tunnel_path}"
     return f"{endpoint}?{raw_query}" if separator else endpoint
 
@@ -1511,6 +2105,221 @@ def _copy_json_value(value: object) -> object:
     if value is None:
         return None
     return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def validate_idempotency_key(value: str) -> None:
+    if not IDEMPOTENCY_KEY_RE.fullmatch(value):
+        raise web.HTTPBadRequest(
+            text=(
+                "relay request id must be 1-128 characters of letters, digits, "
+                "_, ., :, @, / or - and start with a letter or digit"
+            )
+        )
+
+
+def _implicit_idempotency_key(
+    request: web.Request,
+    *,
+    rollout_id: str,
+    endpoint: str,
+    body_bytes: bytes,
+) -> str:
+    """Fingerprint a disconnected HTTP attempt without coalescing normal calls.
+
+    The state does not publish this fingerprint until its original handler is
+    cancelled. Thus two intentional, identical calls remain distinct, while a
+    retry after checkpoint-induced TCP loss can reattach.
+    """
+
+    authorization = request.headers.get("Authorization", "")
+    api_key = request.headers.get("X-Api-Key", "")
+    digest = hashlib.sha256(
+        b"\0".join(
+            (
+                rollout_id.encode("utf-8"),
+                request.method.encode("ascii"),
+                endpoint.encode("utf-8"),
+                authorization.encode("utf-8"),
+                api_key.encode("utf-8"),
+                body_bytes,
+            )
+        )
+    ).hexdigest()
+    return f"auto/{digest}"
+
+
+def _registration_sandbox_id(record: JsonObject) -> str | None:
+    metadata = record.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    raw = metadata.get("sandbox_id") or metadata.get("sandboxId")
+    value = str(raw or "").strip()
+    return value or None
+
+
+def _registration_sandbox_generation(record: JsonObject) -> int | None:
+    metadata = record.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    raw = metadata.get("sandbox_generation")
+    if raw is None:
+        raw = metadata.get("sandboxGeneration")
+    if raw is None:
+        return None
+    try:
+        generation = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(
+            text="sandbox_generation registration metadata must be an integer"
+        ) from exc
+    if generation < 1:
+        raise web.HTTPBadRequest(
+            text="sandbox_generation registration metadata must be positive"
+        )
+    return generation
+
+
+def _json_mapping(raw: str) -> JsonObject:
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError("persisted relay row must contain a JSON object")
+    return value
+
+
+def _encoded_body(value: object) -> JsonObject:
+    if isinstance(value, bytes):
+        return {
+            "encoding": "base64",
+            "value": base64.b64encode(value).decode("ascii"),
+        }
+    return {"encoding": "json", "value": value}
+
+
+def _decoded_body(value: object) -> object:
+    if not isinstance(value, dict):
+        raise ValueError("persisted relay body is invalid")
+    encoding = value.get("encoding")
+    if encoding == "json":
+        return value.get("value")
+    if encoding == "base64":
+        raw = value.get("value")
+        if not isinstance(raw, str):
+            raise ValueError("persisted base64 relay body is invalid")
+        return base64.b64decode(raw.encode("ascii"), validate=True)
+    raise ValueError("persisted relay body has an unknown encoding")
+
+
+def _persisted_request_payload(request: RelayRequest) -> JsonObject:
+    response = request.completed_response
+    return {
+        "request_id": request.request_id,
+        "rollout_id": request.rollout_id,
+        "registration_token": request.registration_token,
+        "endpoint": request.endpoint,
+        "method": request.method,
+        "body": request.body,
+        "body_bytes": base64.b64encode(request.body_bytes).decode("ascii"),
+        "headers": request.headers,
+        "created_at": request.created_at,
+        "expires_at": request.expires_at,
+        "payload_bytes": request.payload_bytes,
+        "delivered_at": request.delivered_at,
+        "first_delivered_at": request.first_delivered_at,
+        "lease_id": request.lease_id,
+        "lease_expires_at": request.lease_expires_at,
+        "leased_by": request.leased_by,
+        "delivery_count": request.delivery_count,
+        "state": request.state,
+        "idempotency_key": request.idempotency_key,
+        "request_digest": request.request_digest,
+        "sandbox_id": request.sandbox_id,
+        "sandbox_generation": request.sandbox_generation,
+        "completed_at": request.completed_at,
+        "completed_response": (
+            None
+            if response is None
+            else {
+                "status": response.status,
+                "body": _encoded_body(response.body),
+                "headers": response.headers,
+            }
+        ),
+        "wake_notified_at": request.wake_notified_at,
+        "accepted_notified_at": request.accepted_notified_at,
+        "parked_transport_epoch": request.parked_transport_epoch,
+        "reattachable": request.reattachable,
+    }
+
+
+def _request_from_persisted_payload(
+    payload: JsonObject,
+    *,
+    loop: asyncio.AbstractEventLoop,
+) -> RelayRequest:
+    raw_response = payload.get("completed_response")
+    response = None
+    if raw_response is not None:
+        if not isinstance(raw_response, dict):
+            raise ValueError("persisted relay response is invalid")
+        response = RelayWorkerResponse(
+            status=int(raw_response["status"]),
+            body=_decoded_body(raw_response["body"]),
+            headers=_string_mapping(raw_response.get("headers")),
+        )
+    raw_body_bytes = payload.get("body_bytes")
+    if not isinstance(raw_body_bytes, str):
+        raise ValueError("persisted relay request body is invalid")
+    return RelayRequest(
+        request_id=str(payload["request_id"]),
+        rollout_id=str(payload["rollout_id"]),
+        registration_token=str(payload["registration_token"]),
+        endpoint=str(payload["endpoint"]),
+        method=str(payload["method"]),
+        body=payload.get("body"),
+        body_bytes=base64.b64decode(
+            raw_body_bytes.encode("ascii"),
+            validate=True,
+        ),
+        headers=_string_mapping(payload.get("headers")),
+        created_at=float(payload["created_at"]),
+        future=loop.create_future(),
+        expires_at=_optional_float(payload.get("expires_at")),
+        payload_bytes=int(payload.get("payload_bytes") or 0),
+        delivered_at=_optional_float(payload.get("delivered_at")),
+        first_delivered_at=_optional_float(payload.get("first_delivered_at")),
+        lease_id=_optional_string(payload.get("lease_id")),
+        lease_expires_at=_optional_float(payload.get("lease_expires_at")),
+        leased_by=_optional_string(payload.get("leased_by")),
+        delivery_count=int(payload.get("delivery_count") or 0),
+        state=str(payload.get("state") or "pending"),
+        idempotency_key=_optional_string(payload.get("idempotency_key")),
+        request_digest=str(payload.get("request_digest") or ""),
+        sandbox_id=_optional_string(payload.get("sandbox_id")),
+        sandbox_generation=(
+            int(payload["sandbox_generation"])
+            if payload.get("sandbox_generation") is not None
+            else None
+        ),
+        completed_at=_optional_float(payload.get("completed_at")),
+        completed_response=response,
+        wake_notified_at=_optional_float(payload.get("wake_notified_at")),
+        accepted_notified_at=_optional_float(payload.get("accepted_notified_at")),
+        parked_transport_epoch=_optional_string(
+            payload.get("parked_transport_epoch")
+        ),
+        reattachable=bool(payload.get("reattachable")),
+    )
+
+
+def _optional_float(value: object) -> float | None:
+    return None if value is None else float(value)
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    result = str(value)
+    return result or None
 
 
 def _set_response(

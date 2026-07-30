@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from pathlib import Path
+import tempfile
 import time
 from typing import Any, AsyncIterator
 import unittest
@@ -218,6 +220,263 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disconnected_call_reattaches_without_duplicate_work(self) -> None:
+        state = ModelRelayState()
+        token = str((await state.register_rollout("reattach"))["registration_token"])
+        original = await state.enqueue(
+            rollout_id="reattach",
+            endpoint="/v1/chat/completions",
+            method="POST",
+            body={"model": "m"},
+            body_bytes=b'{"model":"m"}',
+            headers={},
+            idempotency_key="auto/request-fingerprint",
+            defer_idempotency_until_disconnect=True,
+        )
+        await state.mark_caller_detached(original.request_id)
+        retried = await state.enqueue(
+            rollout_id="reattach",
+            endpoint="/v1/chat/completions",
+            method="POST",
+            body={"model": "m"},
+            body_bytes=b'{"model":"m"}',
+            headers={},
+            idempotency_key="auto/request-fingerprint",
+            defer_idempotency_until_disconnect=True,
+        )
+        delivery = (
+            await state.poll(
+                rollout_id="reattach",
+                registration_token=token,
+                timeout_seconds=0,
+            )
+        )[0]
+        await state.respond(
+            request_id=delivery.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+        )
+
+        self.assertIs(retried, original)
+        self.assertEqual(
+            (await state.wait_for_response(retried, timeout_seconds=1)).body,
+            {"ok": True},
+        )
+        stats = await state.stats()
+        self.assertEqual(stats["counters"]["detached_callers"], 1)
+        self.assertEqual(stats["counters"]["reattached"], 1)
+        self.assertEqual(stats["counters"]["enqueued"], 1)
+
+    async def test_sqlite_journal_restores_exact_completed_response(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            token = str(
+                (
+                    await state.register_rollout(
+                        "durable",
+                        {"sandbox_id": "sandbox-7", "sandbox_generation": 3},
+                    )
+                )["registration_token"]
+            )
+            request = await state.enqueue(
+                rollout_id="durable",
+                endpoint="/v1/responses",
+                method="POST",
+                body={"model": "m"},
+                body_bytes=b'{"model":"m"}',
+                headers={"Content-Type": "application/json"},
+                idempotency_key="request-7",
+            )
+            delivery = (
+                await state.poll(
+                    rollout_id="durable",
+                    registration_token=token,
+                    timeout_seconds=0,
+                )
+            )[0]
+            await state.respond(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(
+                    206,
+                    b"exact-response-bytes",
+                    {"Content-Type": "text/event-stream"},
+                ),
+            )
+            state.close()
+
+            restored = ModelRelayState(state_path=state_path)
+            replay = await restored.enqueue(
+                rollout_id="durable",
+                endpoint="/v1/responses",
+                method="POST",
+                body={"model": "m"},
+                body_bytes=b'{"model":"m"}',
+                headers={"Content-Type": "application/json"},
+                idempotency_key="request-7",
+            )
+            response = await restored.wait_for_response(replay, timeout_seconds=1)
+            restored.close()
+
+        self.assertEqual(replay.request_id, request.request_id)
+        self.assertEqual(replay.sandbox_id, "sandbox-7")
+        self.assertEqual(replay.sandbox_generation, 3)
+        self.assertEqual(
+            (response.status, response.body, response.headers),
+            (
+                206,
+                b"exact-response-bytes",
+                {"Content-Type": "text/event-stream"},
+            ),
+        )
+
+    async def test_relay_restart_makes_inflight_request_reattachable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            await state.register_rollout("restart-inflight")
+            request = await state.enqueue(
+                rollout_id="restart-inflight",
+                endpoint="/v1/chat/completions",
+                method="POST",
+                body={"model": "m"},
+                body_bytes=b'{"model":"m"}',
+                headers={},
+                idempotency_key="auto/restart-fingerprint",
+                defer_idempotency_until_disconnect=True,
+            )
+            state.close()
+
+            restored = ModelRelayState(state_path=state_path)
+            replay = await restored.enqueue(
+                rollout_id="restart-inflight",
+                endpoint="/v1/chat/completions",
+                method="POST",
+                body={"model": "m"},
+                body_bytes=b'{"model":"m"}',
+                headers={},
+                idempotency_key="auto/restart-fingerprint",
+                defer_idempotency_until_disconnect=True,
+            )
+            stats = await restored.stats()
+            restored.close()
+
+        self.assertEqual(replay.request_id, request.request_id)
+        self.assertEqual(stats["counters"]["reattached"], 1)
+        self.assertEqual(stats["inflight"], 1)
+
+    async def test_lifecycle_notifications_use_registered_sandbox_generation(
+        self,
+    ) -> None:
+        accepted: list[tuple[str, int | None]] = []
+        completed: list[tuple[str, int | None]] = []
+
+        async def notify_accepted(request) -> str:
+            accepted.append((str(request.sandbox_id), request.sandbox_generation))
+            return "placement-before-migration"
+
+        async def notify_result(request) -> str:
+            completed.append((str(request.sandbox_id), request.sandbox_generation))
+            return "placement-after-migration"
+
+        async with relay_app(
+            request_timeout_seconds=5,
+            accepted_notifier=notify_accepted,
+            result_notifier=notify_result,
+        ) as relay:
+            _status, registration = await relay.request(
+                "POST",
+                "/v1/tunnels/register",
+                expected=201,
+                json={
+                    "tunnel_id": "lifecycle",
+                    "metadata": {
+                        "sandbox_id": "sandbox-9",
+                        "sandbox_generation": 4,
+                    },
+                },
+            )
+            token = registration["rollout"]["registration_token"]
+            caller = asyncio.create_task(
+                relay.request_bytes(
+                    "POST",
+                    "/tunnels/lifecycle/v1/chat/completions",
+                    json={"model": "m"},
+                    headers={
+                        "Traceparent": "00-before",
+                        "X-Stainless-Retry-Count": "0",
+                    },
+                )
+            )
+            delivery = (await relay.poll("lifecycle", token))["request"]
+            await relay.respond_bytes(
+                delivery,
+                token,
+                b'{"ok":true}',
+                headers={"Content-Type": "application/json"},
+            )
+            await caller
+            replay_status, replay_body, _replay_headers = await relay.request_bytes(
+                "POST",
+                "/tunnels/lifecycle/v1/chat/completions",
+                json={"model": "m"},
+                headers={
+                    "Traceparent": "00-after",
+                    "X-Stainless-Retry-Count": "1",
+                },
+            )
+            stats = await relay.stats()
+
+        self.assertEqual(accepted, [("sandbox-9", 4)])
+        self.assertEqual(completed, [("sandbox-9", 4)])
+        self.assertEqual((replay_status, replay_body), (200, b'{"ok":true}'))
+        self.assertEqual(stats["counters"]["accepted_notifications"], 1)
+        self.assertEqual(stats["counters"]["wake_notifications"], 1)
+        self.assertEqual(stats["counters"]["transport_resets"], 1)
+        self.assertEqual(stats["counters"]["reattached"], 1)
+        self.assertEqual(stats["counters"]["enqueued"], 1)
+
+    async def test_lifecycle_response_delivery_waits_for_explicit_release(
+        self,
+    ) -> None:
+        state = ModelRelayState()
+        token = str(
+            (
+                await state.register_rollout(
+                    "deferred-delivery",
+                    metadata={
+                        "sandbox_id": "sandbox-1",
+                        "sandbox_generation": 1,
+                    },
+                )
+            )["registration_token"]
+        )
+        relay_request, delivery = await enqueue_and_poll(
+            state,
+            "deferred-delivery",
+            token,
+        )
+        await state.respond(
+            request_id=delivery.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+            defer_delivery=True,
+        )
+
+        with self.assertRaises(asyncio.TimeoutError):
+            await state.wait_for_response(relay_request, timeout_seconds=0.001)
+
+        await state.release_completed_response(relay_request.request_id)
+        response = await state.wait_for_response(
+            relay_request,
+            timeout_seconds=1,
+        )
+        self.assertEqual(response.body, {"ok": True})
+
     async def test_reregister_fences_every_operation_from_prior_incarnation(
         self,
     ) -> None:
@@ -524,9 +783,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             client_task = asyncio.create_task(
                 relay.request_bytes(
                     "PUT",
-                    "/tunnels/tunnel-1/api/a%2Fb%20c?x=1&x=2&literal=one+two",
+                    f"/tunnels/tunnel-1/_relay/{token}/"
+                    "api/a%2Fb%20c?x=1&x=2&literal=one+two",
                     headers={
-                        "X-UCloud-Relay-Token": "sandbox-token",
                         "Authorization": "Bearer upstream-secret",
                         "Content-Type": "application/octet-stream",
                         "X-Custom": "safe",

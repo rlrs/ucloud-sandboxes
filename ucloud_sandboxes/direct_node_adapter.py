@@ -53,9 +53,7 @@ class DirectNodeStateStore:
             "drain": drain.to_dict(),
             "version": self.VERSION,
         }
-        encoded = (
-            json.dumps(payload, indent=2, sort_keys=True) + "\n"
-        ).encode("utf-8")
+        encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
         with self._lock:
             self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             descriptor, raw_temporary = tempfile.mkstemp(
@@ -161,9 +159,7 @@ class DirectLifecycleAdapter:
         finally:
             lock = self.owner._pop_activity_lock(sandbox_id)
             if lock is not None:
-                registration = self.owner.service.provisioner.registry.get(
-                    sandbox_id
-                )
+                registration = self.owner.service.provisioner.registry.get(sandbox_id)
                 if registration is not None:
                     self.owner.service.mark_activity(
                         sandbox_id,
@@ -234,9 +230,7 @@ class DirectNodeManagerAdapter:
         del operation_id
         record = self.service.get(sandbox_id)
         if record is not None and record.generation != generation:
-            raise SandboxConflictError(
-                "delete generation does not own direct sandbox"
-            )
+            raise SandboxConflictError("delete generation does not own direct sandbox")
         self.service.delete(sandbox_id, generation=generation if record else None)
         return record, CommandResult(("direct-warden", "delete", sandbox_id), 0)
 
@@ -254,6 +248,19 @@ class DirectNodeManagerAdapter:
         operation_id: str | None = None,
     ) -> SandboxRecord:
         return self.service.park(sandbox_id, operation_id=operation_id)
+
+    def wake(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int | None = None,
+        operation_id: str | None = None,
+    ) -> SandboxRecord:
+        return self.service.wake(
+            sandbox_id,
+            generation=generation,
+            operation_id=operation_id,
+        )
 
     def require_activity_sandbox(self, sandbox_id: str) -> SandboxRecord:
         record = self.service.get(sandbox_id)
@@ -299,15 +306,11 @@ class DirectNodeManagerAdapter:
 
     def fork_with_timings(self, *args, **kwargs):
         del args, kwargs
-        raise SandboxForkUnsupportedError(
-            "fork is deferred from the direct runtime"
-        )
+        raise SandboxForkUnsupportedError("fork is deferred from the direct runtime")
 
     def fork_many_with_timings(self, *args, **kwargs):
         del args, kwargs
-        raise SandboxForkUnsupportedError(
-            "fork is deferred from the direct runtime"
-        )
+        raise SandboxForkUnsupportedError("fork is deferred from the direct runtime")
 
     def snapshot(self, *args, **kwargs):
         del args, kwargs
@@ -387,10 +390,7 @@ class DirectNodeManagerAdapter:
             else:
                 used = used + resources
         revision = max(
-            (
-                item.revision
-                for item in self.service.provisioner.registry.list()
-            ),
+            (item.revision for item in self.service.provisioner.registry.list()),
             default=0,
         )
         activity = SandboxActivitySnapshot(

@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import select
 import signal
+import stat
 import subprocess
 import tempfile
 import time
@@ -42,6 +43,9 @@ _ACTIVE_APPLICATION_MEMORY = "application_memory.active"
 _CHECKPOINT_STATE = "checkpoint.img"
 _PAGES_METADATA = "pages_meta.img"
 _PRIVATE_PAGES = "pages.img"
+_RESTORE_IMAGE = ".restore-image"
+_RESTORE_SOURCE = ".source.json"
+_FICLONE = 0x40049409
 
 
 class DirectWardenError(RuntimeError):
@@ -221,6 +225,15 @@ class DirectRunscWardenConfig:
     stop_timeout_seconds: float = 30.0
     restore_background: bool = True
     restore_cpu_startup_burst: bool = False
+    # A reflink restore is only quota-safe when the restored guest cannot dirty
+    # shared extents until the authoritative checkpoint generation is gone.
+    restore_reflink: bool = False
+    # A reflink has a distinct inode and therefore a cold page-cache identity.
+    # Ask the kernel to begin reading the candidate's main-memory image while
+    # runsc restores allocator metadata.
+    restore_prefetch_memory: bool = False
+    restore_start_paused: bool = False
+    allow_connected_on_save: bool = True
     readiness_command: tuple[str, ...] = ("/bin/true",)
     remove_memory_directory_on_delete: bool = True
 
@@ -240,6 +253,12 @@ class DirectRunscWardenConfig:
             raise ValueError("Warden timeouts must be positive")
         if not self.readiness_command:
             raise ValueError("readiness_command cannot be empty")
+        if self.restore_reflink and not self.restore_start_paused:
+            raise ValueError(
+                "restore_reflink requires restore_start_paused for hard-quota safety"
+            )
+        if self.restore_prefetch_memory and not self.restore_reflink:
+            raise ValueError("restore_prefetch_memory requires restore_reflink")
 
 
 @dataclass(frozen=True)
@@ -362,10 +381,7 @@ class DirectRunscWarden:
             raise ValueError("direct exec user must be numeric uid or uid:gid")
         environment = env or {}
         for key, value in environment.items():
-            if (
-                not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
-                or "\0" in value
-            ):
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) or "\0" in value:
                 raise ValueError("direct exec environment is invalid")
         with self._locked(sandbox):
             record = self._require_state(sandbox, HibernationState.RUNNING)
@@ -385,6 +401,49 @@ class DirectRunscWarden:
         """Read one incarnation's durable lifecycle state under its fence."""
         with self._locked(sandbox):
             return self._journal(sandbox).load()
+
+    def running_process_alive(self, sandbox: DirectSandbox) -> bool:
+        """Prove that a RUNNING journal still owns the recorded sentry."""
+        with self._locked(sandbox):
+            record = self._journal(sandbox).load()
+            return bool(
+                record is not None
+                and record.state == HibernationState.RUNNING
+                and hibernation_process_identity_matches(
+                    record.sentry_pid,
+                    record.sentry_start_time_ticks,
+                    proc_root=self.config.proc_root,
+                )
+            )
+
+    def adopt_parked(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> HibernationRecord:
+        """Adopt a destination-local migration artifact without starting runsc."""
+        with self._locked(sandbox):
+            manifest.require_compatible(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                spec_sha256=sandbox.spec_sha256,
+                runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+            )
+            published = self.artifacts.load_complete(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                hibernation_generation=manifest.hibernation_generation,
+            )
+            if published.metadata_sha256 != manifest.metadata_sha256:
+                raise DirectWardenError(
+                    "migrated generation changed before Warden adoption"
+                )
+            journal = self._journal(sandbox)
+            if journal.load() is None:
+                # A deterministic container ID from an interrupted earlier
+                # import must not survive underneath newly adopted authority.
+                self._best_effort_delete(sandbox)
+            return journal.initialize_parked(published)
 
     def park(
         self,
@@ -488,8 +547,16 @@ class DirectRunscWarden:
                 expected_revision=parked.revision,
             )
             timings["begin_restore_journal"] = (time.monotonic() - phase) * 1000
+            phase = time.monotonic()
+            restore_image, restore_reflinked = self._prepare_restore_image(
+                sandbox,
+                manifest,
+            )
+            timings["restore_image_stage"] = (time.monotonic() - phase) * 1000
+            timings["restore_image_reflinked"] = float(restore_reflinked)
             candidate: ProcessHandle | None = None
             restore_started = False
+            source_dropped = False
             candidate_record: HibernationRecord | None = None
             try:
                 restore_flags = ["--detach"]
@@ -497,20 +564,24 @@ class DirectRunscWarden:
                     restore_flags.append("--background")
                 if self.config.restore_cpu_startup_burst:
                     restore_flags.append("--cpu-startup-burst")
+                if self.config.restore_start_paused:
+                    restore_flags.append("--start-paused")
                 phase = time.monotonic()
                 self._checked(
                     *self._common(),
                     "restore",
                     *restore_flags,
-                    f"--image-path={self.artifacts.generation_path(sandbox_id=sandbox.sandbox_id, sandbox_generation=sandbox.sandbox_generation, hibernation_generation=parked.hibernation_generation)}",
+                    f"--image-path={restore_image}",
                     f"--bundle={sandbox.bundle}",
                     sandbox.container_id,
                 )
                 timings["runsc_restore"] = (time.monotonic() - phase) * 1000
                 restore_started = True
                 phase = time.monotonic()
-                pid, ticks = self._state_identity(sandbox)
+                pid, ticks, status = self._state_identity_status(sandbox)
                 timings["runsc_state"] = (time.monotonic() - phase) * 1000
+                if self.config.restore_start_paused and status != "paused":
+                    raise DirectWardenError("runsc restore candidate was not paused")
                 phase = time.monotonic()
                 candidate = self.fencer.open(pid, ticks)
                 timings["candidate_fence"] = (time.monotonic() - phase) * 1000
@@ -522,6 +593,20 @@ class DirectRunscWarden:
                     candidate_start_time_ticks=ticks,
                 )
                 timings["candidate_journal"] = (time.monotonic() - phase) * 1000
+                if restore_reflinked:
+                    phase = time.monotonic()
+                    self._drop_restore_source(sandbox, manifest)
+                    source_dropped = True
+                    timings["restore_source_drop"] = (time.monotonic() - phase) * 1000
+                if self.config.restore_start_paused:
+                    phase = time.monotonic()
+                    self._ensure_candidate_running(
+                        sandbox,
+                        expected_pid=pid,
+                        expected_start_time_ticks=ticks,
+                        known_status=status,
+                    )
+                    timings["candidate_resume"] = (time.monotonic() - phase) * 1000
                 phase = time.monotonic()
                 self._checked(
                     *self._state_prefix(),
@@ -531,14 +616,24 @@ class DirectRunscWarden:
                 )
                 timings["readiness_exec"] = (time.monotonic() - phase) * 1000
             except Exception:
-                self._rollback_restore(
-                    sandbox,
-                    journal=journal,
-                    restoring=restoring,
-                    manifest=manifest,
-                    candidate=candidate,
-                    restore_started=restore_started,
-                )
+                if not source_dropped and self._restore_source_is_complete(
+                    sandbox, restoring
+                ):
+                    self._rollback_restore(
+                        sandbox,
+                        journal=journal,
+                        restoring=restoring,
+                        manifest=manifest,
+                        candidate=candidate,
+                        restore_started=restore_started,
+                        restore_reflinked=restore_reflinked,
+                    )
+                else:
+                    _LOG.exception(
+                        "restore source was dropped for %s; preserving the "
+                        "fenced candidate for reconciliation",
+                        sandbox.sandbox_id,
+                    )
                 raise
             finally:
                 if candidate is not None:
@@ -552,14 +647,15 @@ class DirectRunscWarden:
                 sentry_start_time_ticks=ticks,
             )
             timings["commit_running_journal"] = (time.monotonic() - phase) * 1000
-            # The new backend now owns the canonical memory inode. Cleanup is
-            # ancillary after RUNNING commits: final delete retries failures,
-            # rather than reporting a failed wake while a live backend exists.
+            # Cleanup is ancillary after RUNNING commits. The quota-relevant
+            # source generation was already durably dropped while a reflinked
+            # candidate was paused.
             phase = time.monotonic()
             try:
-                self.artifacts.delete_published(
+                self._finalize_restore_artifacts(
+                    sandbox,
                     manifest,
-                    allow_consumed_main_memory=True,
+                    restore_reflinked=restore_reflinked,
                 )
             except Exception:
                 _LOG.exception(
@@ -584,6 +680,12 @@ class DirectRunscWarden:
                 ),
             ).reconcile()
             record = result.record
+            if (
+                result.action == HibernationRecoveryAction.ADOPT_RUNNING
+                and record.state == HibernationState.RUNNING
+            ):
+                self._cleanup_running_restore_artifacts(sandbox, record)
+                return record
 
             if result.action == HibernationRecoveryAction.FINISH_PUBLISHED_GENERATION:
                 if record.sentry_pid is None or record.sentry_start_time_ticks is None:
@@ -663,6 +765,11 @@ class DirectRunscWarden:
                 )
 
             if result.action == HibernationRecoveryAction.RETRY_RESTORE:
+                self._best_effort_delete(sandbox)
+                self._discard_restore_image(
+                    sandbox,
+                    allow_consumed_main_memory=True,
+                )
                 return journal.rollback_restore(
                     operation_id=record.operation_id,
                     expected_revision=record.revision,
@@ -674,37 +781,80 @@ class DirectRunscWarden:
                     or record.candidate_start_time_ticks is None
                 ):
                     raise DirectWardenError("restore candidate has no process identity")
-                manifest = self.artifacts.load_published_metadata(
-                    sandbox_id=sandbox.sandbox_id,
-                    sandbox_generation=sandbox.sandbox_generation,
-                    hibernation_generation=record.hibernation_generation,
+                manifest: HibernationManifest | None = None
+                if self._restore_source_is_complete(sandbox, record):
+                    manifest = self.artifacts.load_published_metadata(
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                        hibernation_generation=record.hibernation_generation,
+                    )
+                restore_reflinked = (
+                    self._restore_image_source_digest(sandbox) == record.manifest_sha256
                 )
                 candidate = self.fencer.open(
                     record.candidate_pid,
                     record.candidate_start_time_ticks,
                 )
                 try:
+                    if restore_reflinked:
+                        if manifest is not None:
+                            self._drop_restore_source(sandbox, manifest)
+                        else:
+                            self._finish_dropped_restore_source(sandbox, record)
+                    self._ensure_candidate_running(
+                        sandbox,
+                        expected_pid=record.candidate_pid,
+                        expected_start_time_ticks=(record.candidate_start_time_ticks),
+                    )
                     self._checked(
                         *self._state_prefix(),
                         "exec",
                         sandbox.container_id,
                         *self.config.readiness_command,
                     )
-                    return journal.commit_running(
+                    running = journal.commit_running(
                         operation_id=record.operation_id,
                         expected_revision=record.revision,
                         sentry_pid=record.candidate_pid,
                         sentry_start_time_ticks=record.candidate_start_time_ticks,
                     )
+                    try:
+                        if manifest is None:
+                            self._discard_restore_image(
+                                sandbox,
+                                allow_consumed_main_memory=True,
+                            )
+                        else:
+                            self._finalize_restore_artifacts(
+                                sandbox,
+                                manifest,
+                                restore_reflinked=restore_reflinked,
+                            )
+                    except Exception:
+                        _LOG.exception(
+                            "could not finalize reconciled restore for %s",
+                            sandbox.sandbox_id,
+                        )
+                    return running
                 except Exception:
-                    self._rollback_restore(
-                        sandbox,
-                        journal=journal,
-                        restoring=record,
-                        manifest=manifest,
-                        candidate=candidate,
-                        restore_started=True,
-                    )
+                    if manifest is not None and self._restore_source_is_complete(
+                        sandbox, record
+                    ):
+                        self._rollback_restore(
+                            sandbox,
+                            journal=journal,
+                            restoring=record,
+                            manifest=manifest,
+                            candidate=candidate,
+                            restore_started=True,
+                            restore_reflinked=restore_reflinked,
+                        )
+                    else:
+                        _LOG.exception(
+                            "restore source was dropped for %s; preserving the "
+                            "candidate for the next reconciliation",
+                            sandbox.sandbox_id,
+                        )
                     raise
                 finally:
                     candidate.close()
@@ -722,15 +872,19 @@ class DirectRunscWarden:
             # sentry but did not remove the journal. Reconcile the durable
             # authority first so a dead exact PID becomes recovery-owned
             # cleanup rather than an unrecoverable fencing error.
-            record = HibernationReconciler(
-                journal,
-                self.artifacts,
-                runtime_sha256=self._runtime_fingerprint(sandbox).digest,
-                proc_root=self.config.proc_root,
-                candidate_identity_resolver=lambda _record: (
-                    self._candidate_identity_or_none(sandbox)
-                ),
-            ).reconcile().record
+            record = (
+                HibernationReconciler(
+                    journal,
+                    self.artifacts,
+                    runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+                    proc_root=self.config.proc_root,
+                    candidate_identity_resolver=lambda _record: (
+                        self._candidate_identity_or_none(sandbox)
+                    ),
+                )
+                .reconcile()
+                .record
+            )
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
@@ -769,9 +923,7 @@ class DirectRunscWarden:
                     sandbox.container_id,
                 )
 
-            unified_storage = (
-                self.config.memory_root == self.config.artifact_root
-            )
+            unified_storage = self.config.memory_root == self.config.artifact_root
             for item in self.artifacts.inventory_incarnation(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
@@ -781,6 +933,7 @@ class DirectRunscWarden:
                         "work",
                         _APPLICATION_MEMORY,
                         _ACTIVE_APPLICATION_MEMORY,
+                        _RESTORE_IMAGE,
                     )
                     if unified_storage
                     else ()
@@ -802,11 +955,14 @@ class DirectRunscWarden:
                     manifest,
                     allow_consumed_main_memory=(
                         record.state == HibernationState.RUNNING
-                        or item.hibernation_generation
-                        != record.hibernation_generation
+                        or item.hibernation_generation != record.hibernation_generation
                     ),
                 )
 
+            self._discard_restore_image(
+                sandbox,
+                allow_consumed_main_memory=True,
+            )
             active_memory = self._active_memory_root(sandbox)
             if active_memory.exists() and self.config.remove_memory_directory_on_delete:
                 try:
@@ -876,23 +1032,28 @@ class DirectRunscWarden:
         manifest: HibernationManifest,
         candidate: ProcessHandle | None,
         restore_started: bool,
+        restore_reflinked: bool,
     ) -> None:
         generation = self.artifacts.generation_path(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
             hibernation_generation=restoring.hibernation_generation,
         )
-        active_memory = self._active_memory_root(sandbox) / _APPLICATION_MEMORY
+        active_memory = self._active_memory_root(sandbox) / _ACTIVE_APPLICATION_MEMORY
         if not restore_started:
+            if restore_reflinked:
+                self._discard_restore_image(sandbox)
             journal.rollback_restore(
                 operation_id=restoring.operation_id,
                 expected_revision=restoring.revision,
             )
             return
+        opened_candidate = False
         if candidate is None:
             try:
                 pid, ticks = self._state_identity(sandbox)
                 candidate = self.fencer.open(pid, ticks)
+                opened_candidate = True
             except Exception as exc:
                 raise DirectWardenError(
                     "cannot prove the restore candidate is fenced"
@@ -900,7 +1061,7 @@ class DirectRunscWarden:
         try:
             if candidate is not None and candidate.alive():
                 candidate.terminate(timeout=self.config.stop_timeout_seconds)
-            if (
+            if not restore_reflinked and (
                 active_memory.exists()
                 and not (generation / _APPLICATION_MEMORY).exists()
             ):
@@ -908,8 +1069,14 @@ class DirectRunscWarden:
                     manifest,
                     active_root=active_memory.parent,
                     file_name=active_memory.name,
+                    artifact_name=_APPLICATION_MEMORY,
                 )
             self._best_effort_delete(sandbox)
+            if restore_reflinked:
+                self._discard_restore_image(
+                    sandbox,
+                    allow_consumed_main_memory=True,
+                )
             current = journal.load()
             if current is None:
                 raise DirectWardenError("restore journal disappeared")
@@ -919,8 +1086,403 @@ class DirectRunscWarden:
                 candidate_reaped=True,
             )
         finally:
-            if candidate is not None:
+            if opened_candidate and candidate is not None:
                 candidate.close()
+
+    def _restore_source_is_complete(
+        self,
+        sandbox: DirectSandbox,
+        record: HibernationRecord,
+    ) -> bool:
+        generation = self.artifacts.generation_path(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            hibernation_generation=record.hibernation_generation,
+        )
+        return os.path.lexists(generation / self.artifacts.COMPLETE_NAME)
+
+    def _drop_restore_source(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> None:
+        """Durably remove checkpoint authority before a CoW guest can run."""
+        generation = self.artifacts.generation_path(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            hibernation_generation=manifest.hibernation_generation,
+        )
+        if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
+            self.artifacts.delete_published(manifest)
+            return
+        if os.path.lexists(generation):
+            # delete_published removes COMPLETE first. A crash after that point
+            # leaves a pending generation which can only be finished, never
+            # treated as a restorable checkpoint again.
+            self.artifacts.discard_pending(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                hibernation_generation=manifest.hibernation_generation,
+            )
+
+    def _finish_dropped_restore_source(
+        self,
+        sandbox: DirectSandbox,
+        record: HibernationRecord,
+    ) -> None:
+        generation = self.artifacts.generation_path(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            hibernation_generation=record.hibernation_generation,
+        )
+        if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
+            raise DirectWardenError(
+                "restore source is still complete but its manifest was not loaded"
+            )
+        if os.path.lexists(generation):
+            self.artifacts.discard_pending(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                hibernation_generation=record.hibernation_generation,
+            )
+
+    def _ensure_candidate_running(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        expected_pid: int,
+        expected_start_time_ticks: int,
+        known_status: str | None = None,
+    ) -> None:
+        status = known_status
+        if status is None:
+            pid, ticks, status = self._state_identity_status(sandbox)
+            if (pid, ticks) != (expected_pid, expected_start_time_ticks):
+                raise DirectWardenError(
+                    "restore candidate identity changed before resume"
+                )
+        if status == "paused":
+            self._checked(
+                *self._state_prefix(),
+                "resume",
+                sandbox.container_id,
+            )
+            pid, ticks, status = self._state_identity_status(sandbox)
+            if (pid, ticks) != (expected_pid, expected_start_time_ticks):
+                raise DirectWardenError(
+                    "restore candidate identity changed while resuming"
+                )
+        if status != "running":
+            raise DirectWardenError(
+                f"restore candidate did not become running: {status}"
+            )
+
+    def _restore_image_path(self, sandbox: DirectSandbox) -> Path:
+        return self._active_memory_root(sandbox) / _RESTORE_IMAGE
+
+    def _prepare_restore_image(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> tuple[Path, bool]:
+        generation = self.artifacts.generation_path(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            hibernation_generation=manifest.hibernation_generation,
+        )
+        if not self.config.restore_reflink:
+            return generation, False
+        restore_image = self._restore_image_path(sandbox)
+        self._discard_restore_image(
+            sandbox,
+            allow_consumed_main_memory=True,
+        )
+        restore_image.mkdir(mode=0o700)
+        self._fsync_directory(restore_image.parent)
+        try:
+            for item in manifest.files:
+                self._reflink_file(
+                    generation / item.name,
+                    restore_image / item.name,
+                )
+            if self.config.restore_prefetch_memory:
+                self._prefetch_file(restore_image / _APPLICATION_MEMORY)
+            marker = {
+                "files": [item.name for item in manifest.files],
+                "metadata_sha256": manifest.metadata_sha256,
+                "version": 1,
+            }
+            self._atomic_private_json(
+                restore_image / _RESTORE_SOURCE,
+                marker,
+            )
+            self._fsync_directory(restore_image)
+        except Exception:
+            self._discard_restore_image(
+                sandbox,
+                allow_consumed_main_memory=True,
+            )
+            _LOG.warning(
+                "reflink restore staging unavailable for %s; consuming the "
+                "single-owner generation",
+                sandbox.sandbox_id,
+                exc_info=True,
+            )
+            return generation, False
+        return restore_image, True
+
+    def _restore_image_matches(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> bool:
+        marker_path = self._restore_image_path(sandbox) / _RESTORE_SOURCE
+        try:
+            raw = marker_path.read_bytes()
+            if len(raw) > 1024 * 1024:
+                return False
+            marker = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        return marker == {
+            "files": [item.name for item in manifest.files],
+            "metadata_sha256": manifest.metadata_sha256,
+            "version": 1,
+        }
+
+    def _restore_image_source_digest(
+        self,
+        sandbox: DirectSandbox,
+    ) -> str | None:
+        marker_path = self._restore_image_path(sandbox) / _RESTORE_SOURCE
+        if not os.path.lexists(marker_path):
+            return None
+        try:
+            raw = marker_path.read_bytes()
+            if len(raw) > 1024 * 1024:
+                raise DirectWardenError("restore source marker is too large")
+            marker = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("restore source marker is invalid") from exc
+        if (
+            not isinstance(marker, dict)
+            or set(marker) != {"files", "metadata_sha256", "version"}
+            or marker.get("version") != 1
+            or not isinstance(marker.get("files"), list)
+            or not all(
+                isinstance(name, str)
+                and name
+                in {
+                    _APPLICATION_MEMORY,
+                    _CHECKPOINT_STATE,
+                    _PAGES_METADATA,
+                    _PRIVATE_PAGES,
+                }
+                for name in marker["files"]
+            )
+            or len(set(marker["files"])) != len(marker["files"])
+            or not isinstance(marker.get("metadata_sha256"), str)
+            or not _DIGEST.fullmatch(marker["metadata_sha256"])
+        ):
+            raise DirectWardenError("restore source marker is invalid")
+        return marker["metadata_sha256"]
+
+    def _discard_restore_image(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        allow_consumed_main_memory: bool = False,
+    ) -> None:
+        restore_image = self._restore_image_path(sandbox)
+        if not os.path.lexists(restore_image):
+            return
+        if not restore_image.is_dir() or restore_image.is_symlink():
+            raise DirectWardenError("restore image must be a real directory")
+        allowed = {
+            _APPLICATION_MEMORY,
+            _CHECKPOINT_STATE,
+            _PAGES_METADATA,
+            _PRIVATE_PAGES,
+            _RESTORE_SOURCE,
+        }
+        actual = set(os.listdir(restore_image))
+        unexpected = actual - allowed
+        if unexpected:
+            raise DirectWardenError(
+                f"restore image contains unexpected entries: {sorted(unexpected)}"
+            )
+        if (
+            not allow_consumed_main_memory
+            and _RESTORE_SOURCE in actual
+            and _APPLICATION_MEMORY not in actual
+        ):
+            raise DirectWardenError(
+                "restore image memory was consumed before candidate fencing"
+            )
+        directory_fd = os.open(
+            restore_image,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            for name in actual:
+                entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                if not stat.S_ISREG(entry.st_mode):
+                    raise DirectWardenError(
+                        "restore image contains a non-regular entry"
+                    )
+            for name in sorted(actual):
+                os.unlink(name, dir_fd=directory_fd)
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+        restore_image.rmdir()
+        self._fsync_directory(restore_image.parent)
+
+    def _finalize_restore_artifacts(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+        *,
+        restore_reflinked: bool,
+    ) -> None:
+        if restore_reflinked:
+            self._drop_restore_source(sandbox, manifest)
+            self._discard_restore_image(
+                sandbox,
+                allow_consumed_main_memory=True,
+            )
+            return
+        self.artifacts.delete_published(
+            manifest,
+            allow_consumed_main_memory=True,
+        )
+
+    def _cleanup_running_restore_artifacts(
+        self,
+        sandbox: DirectSandbox,
+        record: HibernationRecord,
+    ) -> None:
+        """Finish ancillary cleanup after a crash past RUNNING commit."""
+        self._discard_restore_image(
+            sandbox,
+            allow_consumed_main_memory=True,
+        )
+        unified_storage = self.config.memory_root == self.config.artifact_root
+        for item in self.artifacts.inventory_incarnation(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            ignored_entries=(
+                (
+                    "upper",
+                    "work",
+                    _APPLICATION_MEMORY,
+                    _ACTIVE_APPLICATION_MEMORY,
+                    _RESTORE_IMAGE,
+                )
+                if unified_storage
+                else ()
+            ),
+        ):
+            if item.hibernation_generation > record.hibernation_generation:
+                raise DirectWardenError(
+                    "restore artifact generation is ahead of running journal"
+                )
+            if item.state != "complete":
+                raise DirectWardenError(
+                    "running sandbox owns an incomplete restore generation"
+                )
+            manifest = self.artifacts.load_published_metadata(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                hibernation_generation=item.hibernation_generation,
+            )
+            self.artifacts.delete_published(
+                manifest,
+                allow_consumed_main_memory=True,
+            )
+
+    @staticmethod
+    def _reflink_file(source: Path, target: Path) -> None:
+        source_fd = os.open(
+            source,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        target_fd = -1
+        try:
+            source_info = os.fstat(source_fd)
+            if not stat.S_ISREG(source_info.st_mode):
+                raise DirectWardenError("reflink source must be a regular file")
+            target_fd = os.open(
+                target,
+                os.O_RDWR
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+            fcntl.ioctl(target_fd, _FICLONE, source_fd)
+            os.fsync(target_fd)
+        finally:
+            if target_fd >= 0:
+                os.close(target_fd)
+            os.close(source_fd)
+
+    @staticmethod
+    def _prefetch_file(path: Path) -> None:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            os.posix_fadvise(descriptor, 0, 0, os.POSIX_FADV_WILLNEED)
+        finally:
+            os.close(descriptor)
+
+    @staticmethod
+    def _atomic_private_json(path: Path, payload: object) -> None:
+        descriptor, raw_path = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+        )
+        temporary = Path(raw_path)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(
+                    json.dumps(
+                        payload,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("ascii")
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def _manifest(
         self,
@@ -970,7 +1532,10 @@ class DirectRunscWarden:
             rootfs_sha256=sandbox.rootfs_sha256,
         )
 
-    def _state_identity(self, sandbox: DirectSandbox) -> tuple[int, int]:
+    def _state_identity_status(
+        self,
+        sandbox: DirectSandbox,
+    ) -> tuple[int, int, str]:
         result = self._checked(
             *self._state_prefix(),
             "state",
@@ -991,6 +1556,10 @@ class DirectRunscWarden:
             )
         except (ProcessLookupError, ValueError) as exc:
             raise DirectWardenError("cannot read sentry process identity") from exc
+        return pid, ticks, status
+
+    def _state_identity(self, sandbox: DirectSandbox) -> tuple[int, int]:
+        pid, ticks, _status = self._state_identity_status(sandbox)
         return pid, ticks
 
     def _candidate_identity_or_none(
@@ -1003,13 +1572,16 @@ class DirectRunscWarden:
             return None
 
     def _common(self) -> tuple[str, ...]:
-        return (
+        command = [
             str(self.config.runsc),
             f"--root={self.config.runtime_root}",
             f"--platform={self.config.platform}",
             f"--network={self.config.network}",
             f"--application-memory-file-dir={self.config.memory_root}",
-        )
+        ]
+        if self.config.allow_connected_on_save:
+            command.append("--allow-connected-on-save=true")
+        return tuple(command)
 
     def _state_prefix(self) -> tuple[str, ...]:
         return (

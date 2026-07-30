@@ -394,6 +394,20 @@ class HibernationTests(unittest.TestCase):
             self.assertEqual(resumed.hibernation_generation, 1)
             self.assertEqual(resumed.manifest_sha256, "")
 
+    def test_journal_can_begin_with_imported_parked_authority(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            manifest = self._manifest(root)
+            journal = HibernationJournal((root / "journal.json").resolve())
+
+            parked = journal.initialize_parked(manifest)
+            replay = journal.initialize_parked(manifest)
+
+            self.assertEqual(parked, replay)
+            self.assertEqual(parked.state, HibernationState.PARKED)
+            self.assertEqual(parked.authority, HibernationAuthority.PARKED)
+            self.assertEqual(parked.manifest_sha256, manifest.metadata_sha256)
+
     def test_journal_never_aborts_after_sentry_reap(self) -> None:
         with TemporaryDirectory() as raw_dir:
             journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
@@ -522,6 +536,7 @@ class HibernationTests(unittest.TestCase):
             root = Path(raw_dir)
             path = (root / "journal.json").resolve()
             path.write_text("{not-json", encoding="utf-8")
+            path.chmod(0o600)
             with self.assertRaisesRegex(Exception, "journal is invalid"):
                 HibernationJournal(path).load()
 

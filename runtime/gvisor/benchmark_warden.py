@@ -17,6 +17,7 @@ from ucloud_sandboxes.direct_warden import (
     DirectRunscWarden,
     DirectRunscWardenConfig,
     DirectSandbox,
+    DirectWardenError,
     SubprocessCommandRunner,
 )
 from ucloud_sandboxes.hibernation import HibernationRuntimeFingerprint
@@ -121,6 +122,27 @@ def main() -> int:
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--image")
     parser.add_argument("--conformance-workload", type=Path)
+    parser.add_argument("--memory-workload", type=Path)
+    parser.add_argument(
+        "--paused-handoff-workload",
+        type=Path,
+        help=(
+            "Run a guest counter and prove it cannot advance during the "
+            "paused source-ownership handoff."
+        ),
+    )
+    parser.add_argument(
+        "--populated-mb",
+        type=int,
+        default=256,
+        help="Resident memory populated by --memory-workload.",
+    )
+    parser.add_argument(
+        "--python-memory-mb",
+        type=int,
+        default=0,
+        help="Populate anonymous memory using python3 from the selected image.",
+    )
     parser.add_argument(
         "--omit-resources",
         action="store_true",
@@ -135,6 +157,24 @@ def main() -> int:
         "--cpu-startup-burst",
         action="store_true",
         help="Pass the qualified custom restore CPU-startup-burst flag.",
+    )
+    parser.add_argument(
+        "--no-restore-reflink",
+        action="store_true",
+        help="A/B diagnostic: consume the single-owner checkpoint on restore.",
+    )
+    parser.add_argument(
+        "--no-restore-prefetch",
+        action="store_true",
+        help="A/B diagnostic: do not prefetch a reflinked main-memory image.",
+    )
+    parser.add_argument(
+        "--start-paused-without-reflink",
+        action="store_true",
+        help=(
+            "Consume the single-owner checkpoint but keep the restored "
+            "candidate paused until its identity is durably fenced."
+        ),
     )
     parser.add_argument("--state-root", type=Path, required=True)
     parser.add_argument(
@@ -172,8 +212,26 @@ def main() -> int:
         parser.error("--cpus must be positive")
     if args.cpu_burst_us is not None and args.cpu_burst_us < 0:
         parser.error("--cpu-burst-us cannot be negative")
+    if args.start_paused_without_reflink and not args.no_restore_reflink:
+        parser.error("--start-paused-without-reflink requires --no-restore-reflink")
     if (args.bundle is None) == (args.image is None):
         parser.error("exactly one of --bundle or --image is required")
+    workload_count = sum(
+        (
+            args.conformance_workload is not None,
+            args.memory_workload is not None,
+            args.paused_handoff_workload is not None,
+            args.python_memory_mb > 0,
+        )
+    )
+    if workload_count > 1:
+        parser.error("conformance and memory workloads are mutually exclusive")
+    if args.memory_workload is not None and not (
+        1 <= args.populated_mb < args.memory_mb
+    ):
+        parser.error("--populated-mb must be positive and below --memory-mb")
+    if args.python_memory_mb < 0 or args.python_memory_mb >= args.memory_mb:
+        parser.error("--python-memory-mb must be below --memory-mb")
 
     overlays = None
     lease = None
@@ -192,40 +250,68 @@ def main() -> int:
         if args.quota_root is not None
         else (args.state_root / "artifacts").resolve()
     )
-    tool_command = (
-        ("/conformance-workload", "client")
-        if args.conformance_workload is not None
-        else ("/bin/true",)
-    )
-    initial_command = (
-        ("/conformance-workload", "server")
-        if args.conformance_workload is not None
-        else ("/bin/sleep", "86400")
-    )
-    if args.bundle is None:
-        image_store = DockerRootfsStore(
-            (args.state_root / "image-cache").resolve()
+    paused_probe_source = (
+        writable_root / "warden-benchmark.sandbox-1" / "upper" / "paused-handoff-probe"
+    ).resolve()
+    if args.conformance_workload is not None:
+        tool_command = ("/conformance-workload", "client")
+        initial_command = ("/conformance-workload", "server")
+    elif args.memory_workload is not None:
+        tool_command = ("/memory-workload", "client", "scan")
+        initial_command = (
+            "/memory-workload",
+            "server",
+            str(args.populated_mb),
+            str(args.populated_mb),
         )
-        image = image_store.materialize(args.image)
-        config = DirectOciConfigBuilder().build(
-            SandboxSpec(
-                id="warden-benchmark",
-                image=args.image,
-                command=initial_command,
-                memory_mb=args.memory_mb,
-                cpus=args.cpus,
-                disk_mb=args.disk_mb,
-                network="none" if args.network == "none" else "bridge",
-                parkable=True,
-                security=SandboxSecuritySpec(
-                    user="0:0",
-                    cap_drop=(),
-                    init=False,
-                    no_new_privileges=False,
-                ),
+    elif args.paused_handoff_workload is not None:
+        tool_command = ("/bin/true",)
+        initial_command = ("/paused-handoff-workload",)
+    elif args.python_memory_mb > 0:
+        tool_command = ("/bin/true",)
+        initial_command = (
+            "python3",
+            "-c",
+            (
+                f"x=bytearray({args.python_memory_mb}*1024*1024);"
+                "[(x.__setitem__(i,(i//4096)%251)) "
+                "for i in range(0,len(x),4096)];"
+                "import time;time.sleep(86400)"
             ),
-            image,
         )
+    else:
+        tool_command = ("/bin/true",)
+        initial_command = ("/bin/sleep", "86400")
+    if args.bundle is None:
+        image_store = DockerRootfsStore((args.state_root / "image-cache").resolve())
+        image = image_store.materialize(args.image)
+        oci = DirectOciConfigBuilder()
+        spec = SandboxSpec(
+            id="warden-benchmark",
+            image=args.image,
+            command=initial_command,
+            memory_mb=args.memory_mb,
+            cpus=args.cpus,
+            disk_mb=args.disk_mb,
+            network="none" if args.network == "none" else "bridge",
+            parkable=True,
+            security=SandboxSecuritySpec(
+                user="0:0",
+                cap_drop=(),
+                init=False,
+                no_new_privileges=False,
+            ),
+        )
+        config = oci.build(spec, image)
+        if args.paused_handoff_workload is not None:
+            config["mounts"].append(
+                {
+                    "destination": "/handoff-probe",
+                    "options": ["bind", "rw", "nosuid", "nodev"],
+                    "source": str(paused_probe_source),
+                    "type": "bind",
+                }
+            )
         if args.cpu_burst_us is not None:
             config["linux"]["resources"]["cpu"]["burst"] = args.cpu_burst_us
         if args.omit_resources:
@@ -241,18 +327,28 @@ def main() -> int:
             image_ref=args.image,
             config_template=config,
         )
+        if args.paused_handoff_workload is not None:
+            paused_probe_source.mkdir(mode=0o700)
+            (lease.merged / "handoff-probe").mkdir(mode=0o755)
+        oci.prepare_workspace(lease.merged, spec=spec)
         if args.conformance_workload is not None:
             target = lease.merged / "conformance-workload"
             shutil.copyfile(args.conformance_workload, target)
+            target.chmod(0o755)
+        if args.memory_workload is not None:
+            target = lease.merged / "memory-workload"
+            shutil.copyfile(args.memory_workload, target)
+            target.chmod(0o755)
+        if args.paused_handoff_workload is not None:
+            target = lease.merged / "paused-handoff-workload"
+            shutil.copyfile(args.paused_handoff_workload, target)
             target.chmod(0o755)
         bundle = lease.sandbox.bundle
         rootfs_sha256 = lease.image.rootfs_identity_sha256
     else:
         bundle = args.bundle
         rootfs_sha256 = tree_fingerprint(bundle / "rootfs")
-    config_payload = json.loads(
-        (bundle / "config.json").read_text(encoding="utf-8")
-    )
+    config_payload = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
     spec_sha256 = canonical_sha256(config_payload)
     runsc_sha256 = sha256_file(args.runsc)
     cpu_features_sha256 = hashlib.sha256(
@@ -275,6 +371,14 @@ def main() -> int:
                 "platform": "systrap",
                 "restore_background": True,
                 "restore_cpu_startup_burst": args.cpu_startup_burst,
+                "restore_memory_prefetch": (
+                    not args.no_restore_reflink and not args.no_restore_prefetch
+                ),
+                "restore_reflink": not args.no_restore_reflink,
+                "restore_start_paused": (
+                    not args.no_restore_reflink
+                    or args.start_paused_without_reflink
+                ),
             }
         ),
         rootfs_sha256=rootfs_sha256,
@@ -293,10 +397,61 @@ def main() -> int:
             readiness_command=("/bin/true",),
             restore_background=not args.foreground_restore,
             restore_cpu_startup_burst=args.cpu_startup_burst,
+            restore_reflink=not args.no_restore_reflink,
+            restore_prefetch_memory=(
+                not args.no_restore_reflink and not args.no_restore_prefetch
+            ),
+            restore_start_paused=(
+                not args.no_restore_reflink
+                or args.start_paused_without_reflink
+            ),
             remove_memory_directory_on_delete=args.quota_root is None,
         ),
         runner=timing_runner,
     )
+    paused_handoff_probes: list[dict[str, int]] = []
+    if args.paused_handoff_workload is not None:
+        if lease is None:
+            raise RuntimeError("paused handoff probe requires --image")
+        counter_path = paused_probe_source / "counter"
+        original_ensure_candidate_running = warden._ensure_candidate_running
+
+        def probe_paused_candidate(
+            item: DirectSandbox,
+            *,
+            expected_pid: int,
+            expected_start_time_ticks: int,
+            known_status: str | None = None,
+        ) -> None:
+            before = int.from_bytes(counter_path.read_bytes(), "little")
+            time.sleep(0.25)
+            held = int.from_bytes(counter_path.read_bytes(), "little")
+            if held != before:
+                raise RuntimeError(
+                    "guest counter advanced while restore candidate was paused"
+                )
+            original_ensure_candidate_running(
+                item,
+                expected_pid=expected_pid,
+                expected_start_time_ticks=expected_start_time_ticks,
+                known_status=known_status,
+            )
+            deadline = time.monotonic() + 2.0
+            resumed = held
+            while resumed == held and time.monotonic() < deadline:
+                time.sleep(0.01)
+                resumed = int.from_bytes(counter_path.read_bytes(), "little")
+            if resumed == held:
+                raise RuntimeError("guest counter did not advance after resume")
+            paused_handoff_probes.append(
+                {
+                    "before": before,
+                    "held": held,
+                    "resumed": resumed,
+                }
+            )
+
+        warden._ensure_candidate_running = probe_paused_candidate
     sandbox = (
         lease.sandbox
         if lease is not None
@@ -313,11 +468,28 @@ def main() -> int:
 
     running = None
     create_ms = 0.0
+    workload_ready_ms = 0.0
     samples: list[dict[str, object]] = []
     try:
         created_started = time.monotonic()
         running = warden.create(sandbox, operation_id="create:1")
         create_ms = (time.monotonic() - created_started) * 1000
+        if args.memory_workload is not None or args.conformance_workload is not None:
+            readiness_started = time.monotonic()
+            deadline = readiness_started + (
+                120.0 if args.memory_workload is not None else 5.0
+            )
+            while True:
+                try:
+                    warden.exec(sandbox, tool_command)
+                    workload_ready_ms = (
+                        time.monotonic() - readiness_started
+                    ) * 1000
+                    break
+                except DirectWardenError:
+                    if time.monotonic() >= deadline:
+                        raise
+                    time.sleep(0.05)
         for cycle in range(args.cycles):
             before = warden.exec(
                 sandbox,
@@ -343,9 +515,11 @@ def main() -> int:
 
             started = time.monotonic()
             command_start = len(timing_runner.events)
+            resume_timings: dict[str, float] = {}
             running = warden.resume(
                 sandbox,
                 operation_id=f"wake:{cycle + 1}",
+                timings=resume_timings,
             )
             resume_ms = (time.monotonic() - started) * 1000
             restored_cpu_max = process_cpu_max(int(running.sentry_pid))
@@ -367,6 +541,7 @@ def main() -> int:
                     "restored_sentry_pid": running.sentry_pid,
                     "resume_ms": resume_ms,
                     "resume_commands": resume_commands,
+                    "resume_phases_ms": resume_timings,
                     "resume_residual_ms": resume_ms
                     - sum(float(item["elapsed_ms"]) for item in resume_commands),
                     "verify_ms": verify_ms,
@@ -386,10 +561,23 @@ def main() -> int:
         "schema": 1,
         "cycles": args.cycles,
         "create_ms": create_ms,
+        "workload_ready_ms": workload_ready_ms,
         "workload": (
             "stateful-conformance-16mib"
             if args.conformance_workload is not None
-            else "busybox-sleep"
+            else (
+                f"memory-workload-{args.populated_mb}mib"
+                if args.memory_workload is not None
+                else (
+                    "paused-handoff-counter"
+                    if args.paused_handoff_workload is not None
+                    else (
+                        f"python-memory-{args.python_memory_mb}mib"
+                        if args.python_memory_mb > 0
+                        else "busybox-sleep"
+                    )
+                )
+            )
         ),
         "host": {
             "runsc_sha256": runsc_sha256,
@@ -404,6 +592,7 @@ def main() -> int:
             "verify_p50_ms": statistics.median(verify),
             "verify_p95_ms": percentile(verify, 0.95),
         },
+        "paused_handoff_probes": paused_handoff_probes,
         "samples": samples,
     }
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"

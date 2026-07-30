@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,6 +15,9 @@ from ucloud_sandboxes.direct_warden import (
     DirectWardenError,
 )
 from ucloud_sandboxes.hibernation import (
+    HibernationArtifactFile,
+    HibernationFileRole,
+    HibernationManifest,
     HibernationRecoveryAction,
     HibernationRuntimeFingerprint,
     HibernationState,
@@ -85,6 +90,7 @@ class FakeRunsc:
         self.ticks = 1000
         self.checkpoint: Path | None = None
         self.fail_readiness = False
+        self.before_resume = None
         self.commands: list[tuple[str, ...]] = []
 
     def run(self, argv, *, timeout):
@@ -125,18 +131,26 @@ class FakeRunsc:
                 )
             )
             self.checkpoint = image
-            active = self.memory_root / self.memory_directory / "application_memory.img"
-            active.write_bytes(b"memory")
-            active.replace(image / active.name)
+            active = (
+                self.memory_root / self.memory_directory / "application_memory.active"
+            )
+            if not active.exists():
+                active.write_bytes(b"memory")
+            active.replace(image / "application_memory.img")
             (image / "checkpoint.img").write_bytes(b"kernel")
             (image / "pages_meta.img").write_bytes(b"metadata")
             (image / "pages.img").write_bytes(b"private")
             self.status = "paused"
         elif verb == "resume":
+            if self.before_resume is not None:
+                self.before_resume()
             assert self.checkpoint is not None
             captured = self.checkpoint / "application_memory.img"
-            active = self.memory_root / self.memory_directory / captured.name
-            captured.replace(active)
+            active = (
+                self.memory_root / self.memory_directory / "application_memory.active"
+            )
+            if captured.exists():
+                captured.replace(active)
             self.status = "running"
         elif verb == "restore":
             image = Path(
@@ -148,13 +162,19 @@ class FakeRunsc:
             )
             self.checkpoint = image
             captured = image / "application_memory.img"
-            active = self.memory_root / self.memory_directory / captured.name
+            active = (
+                self.memory_root / self.memory_directory / "application_memory.active"
+            )
             captured.replace(active)
             self._start_process()
+            if "--start-paused" in command:
+                self.status = "paused"
         elif verb == "exec" and self.fail_readiness:
             return CommandResult(command, 1, stderr="injected readiness failure")
         elif verb == "delete":
-            active = self.memory_root / self.memory_directory / "application_memory.img"
+            active = (
+                self.memory_root / self.memory_directory / "application_memory.active"
+            )
             try:
                 active.unlink()
             except FileNotFoundError:
@@ -178,6 +198,8 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.bundle_root = self.root / "bundles"
         self.bundle = self.bundle_root / "sandbox"
         self.bundle.mkdir(parents=True)
+        self.bundle_root.chmod(0o700)
+        self.bundle.chmod(0o700)
         self.memory_directory = "sandbox-memory"
         (self.bundle / "config.json").write_text(
             json.dumps(
@@ -208,6 +230,8 @@ class DirectRunscWardenTests(unittest.TestCase):
             artifact_root=(self.root / "artifacts").resolve(),
             runtime_fingerprint=self.runtime,
             proc_root=self.proc_root.resolve(),
+            restore_reflink=True,
+            restore_start_paused=True,
         )
         self.runner = FakeRunsc(
             self.proc_root,
@@ -220,6 +244,7 @@ class DirectRunscWardenTests(unittest.TestCase):
             runner=self.runner,
             fencer=self.fencer,
         )
+        self.warden._reflink_file = shutil.copyfile
         self.sandbox = DirectSandbox(
             sandbox_id="sandbox-1",
             sandbox_generation=1,
@@ -232,6 +257,10 @@ class DirectRunscWardenTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def test_reflink_restore_requires_paused_handoff(self) -> None:
+        with self.assertRaisesRegex(ValueError, "hard-quota safety"):
+            replace(self.config, restore_start_paused=False)
 
     def test_two_phase_park_and_new_backend_resume(self) -> None:
         running = self.warden.create(self.sandbox, operation_id="create:1")
@@ -261,15 +290,14 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.assertEqual(self.warden.artifacts.inventory(), ())
         self.assertFalse(
             (
-                self.config.artifact_root
-                / f"{self.sandbox.sandbox_id}.sandbox-1"
+                self.config.artifact_root / f"{self.sandbox.sandbox_id}.sandbox-1"
             ).exists()
         )
         self.assertTrue(
             (
                 self.config.memory_root
                 / self.memory_directory
-                / "application_memory.img"
+                / "application_memory.active"
             ).is_file()
         )
 
@@ -287,6 +315,61 @@ class DirectRunscWardenTests(unittest.TestCase):
             command for command in self.runner.commands if "restore" in command
         )
         self.assertIn("--cpu-startup-burst", restore)
+
+    def test_connected_sockets_are_preserved_across_checkpoint_restore(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        lifecycle_commands = [
+            command
+            for command in self.runner.commands
+            if any(verb in command for verb in ("create", "checkpoint", "restore"))
+        ]
+        self.assertTrue(lifecycle_commands)
+        for command in lifecycle_commands:
+            self.assertIn("--allow-connected-on-save=true", command)
+
+    def test_adopts_migrated_parked_generation_without_create(self) -> None:
+        generation = self.warden.artifacts.prepare_generation(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=4,
+        )
+        payloads = {
+            HibernationFileRole.MAIN_MEMORY: "application_memory.img",
+            HibernationFileRole.KERNEL_STATE: "checkpoint.img",
+            HibernationFileRole.ALLOCATOR_METADATA: "pages_meta.img",
+        }
+        for role, name in payloads.items():
+            (generation / name).write_bytes(role.value.encode("ascii"))
+        manifest = HibernationManifest(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=4,
+            operation_id="park:migrated",
+            spec_sha256=self.sandbox.spec_sha256,
+            container_id=self.sandbox.container_id,
+            created_ns=1,
+            runtime=self.runtime,
+            files=tuple(
+                HibernationArtifactFile.from_path(
+                    generation / name,
+                    role=role,
+                )
+                for role, name in payloads.items()
+            ),
+        )
+        manifest = self.warden.artifacts.publish_complete(manifest)
+
+        parked = self.warden.adopt_parked(self.sandbox, manifest)
+
+        self.assertEqual(parked.state, HibernationState.PARKED)
+        self.assertFalse(any("create" in command for command in self.runner.commands))
+        active_root = self.config.memory_root / self.memory_directory
+        active_root.mkdir(parents=True, exist_ok=True)
+        restored = self.warden.resume(self.sandbox, operation_id="wake:migrated")
+        self.assertEqual(restored.state, HibernationState.RUNNING)
 
     def test_streaming_exec_lease_builds_flags_under_lifecycle_fence(self) -> None:
         self.warden.create(self.sandbox, operation_id="create:1")
@@ -315,8 +398,8 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.warden.create(self.sandbox, operation_id="create:1")
         self.warden.park(self.sandbox, operation_id="park:1")
         with patch.object(
-            self.warden.artifacts,
-            "delete_published",
+            self.warden,
+            "_finalize_restore_artifacts",
             side_effect=OSError("injected cleanup failure"),
         ):
             restored = self.warden.resume(self.sandbox, operation_id="wake:1")
@@ -392,7 +475,7 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.assertEqual(self.runner.status, "running")
         self.assertFalse(generation.exists())
 
-    def test_failed_restore_reaps_candidate_and_returns_memory_to_generation(
+    def test_failed_readiness_after_source_drop_preserves_candidate_for_recovery(
         self,
     ) -> None:
         self.warden.create(self.sandbox, operation_id="create:1")
@@ -402,6 +485,38 @@ class DirectRunscWardenTests(unittest.TestCase):
             self.warden.resume(self.sandbox, operation_id="wake:1")
         record = self.warden._journal(self.sandbox).load()
         self.assertIsNotNone(record)
+        self.assertEqual(record.state, HibernationState.RESTORING)
+        generation = self.warden.artifacts.generation_path(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+        self.assertFalse(generation.exists())
+        self.assertEqual(self.runner.status, "running")
+        self.runner.fail_readiness = False
+
+        reconciled = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(reconciled.state, HibernationState.RUNNING)
+        self.assertFalse(
+            (
+                self.config.memory_root / self.memory_directory / ".restore-image"
+            ).exists()
+        )
+
+    def test_failure_before_source_drop_reaps_candidate_and_rolls_back(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        with patch.object(
+            self.warden,
+            "_drop_restore_source",
+            side_effect=OSError("injected pre-handoff failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "pre-handoff"):
+                self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        record = self.warden._journal(self.sandbox).load()
+        self.assertIsNotNone(record)
         self.assertEqual(record.state, HibernationState.PARKED)
         generation = self.warden.artifacts.generation_path(
             sandbox_id=self.sandbox.sandbox_id,
@@ -409,6 +524,284 @@ class DirectRunscWardenTests(unittest.TestCase):
             hibernation_generation=parked.hibernation_generation,
         )
         self.assertTrue((generation / "application_memory.img").is_file())
+        self.assertTrue((generation / "COMPLETE").is_file())
+
+    def test_reconcile_finishes_source_drop_before_resuming_candidate(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        generation = self.warden.artifacts.generation_path(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+
+        def interrupt_after_complete_unlink(_manifest) -> None:
+            (generation / "COMPLETE").unlink()
+            descriptor = os.open(generation, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            raise OSError("injected crash after ownership transfer began")
+
+        with patch.object(
+            self.warden.artifacts,
+            "delete_published",
+            side_effect=interrupt_after_complete_unlink,
+        ):
+            with self.assertRaisesRegex(OSError, "ownership transfer"):
+                self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        record = self.warden._journal(self.sandbox).load()
+        self.assertIsNotNone(record)
+        self.assertEqual(record.state, HibernationState.RESTORING)
+        self.assertEqual(self.runner.status, "paused")
+        self.assertTrue(generation.exists())
+        self.assertFalse((generation / "COMPLETE").exists())
+
+        reconciled = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(reconciled.state, HibernationState.RUNNING)
+        self.assertEqual(self.runner.status, "running")
+        self.assertFalse(generation.exists())
+
+    def test_restore_reflink_stages_immutable_generation(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        generation = self.warden.artifacts.generation_path(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+        original = (generation / "application_memory.img").stat()
+        timings: dict[str, float] = {}
+
+        def assert_paused_handoff() -> None:
+            record = self.warden._journal(self.sandbox).load()
+            self.assertIsNotNone(record)
+            self.assertEqual(record.state, HibernationState.RESTORING)
+            self.assertEqual(record.authority.value, "candidate")
+            self.assertEqual(self.runner.status, "paused")
+            self.assertFalse(generation.exists())
+
+        self.runner.before_resume = assert_paused_handoff
+
+        self.warden.resume(
+            self.sandbox,
+            operation_id="wake:1",
+            timings=timings,
+        )
+
+        restore = next(
+            command for command in self.runner.commands if "restore" in command
+        )
+        image_path = next(
+            Path(item.split("=", 1)[1])
+            for item in restore
+            if item.startswith("--image-path=")
+        )
+        self.assertEqual(image_path.name, ".restore-image")
+        self.assertIn("--start-paused", restore)
+        self.assertEqual(timings["restore_image_reflinked"], 1.0)
+        self.assertFalse(generation.exists())
+        active = (
+            self.config.memory_root
+            / self.memory_directory
+            / "application_memory.active"
+        )
+        self.assertTrue(active.is_file())
+        self.assertNotEqual(active.stat().st_ino, original.st_ino)
+
+    def test_single_owner_restore_stays_paused_until_candidate_is_fenced(
+        self,
+    ) -> None:
+        self.config = replace(
+            self.config,
+            restore_reflink=False,
+            restore_start_paused=True,
+        )
+        self.warden = DirectRunscWarden(
+            self.config,
+            runner=self.runner,
+            fencer=self.fencer,
+        )
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        generation = self.warden.artifacts.generation_path(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+
+        def assert_paused_single_owner_handoff() -> None:
+            record = self.warden._journal(self.sandbox).load()
+            self.assertIsNotNone(record)
+            self.assertEqual(record.state, HibernationState.RESTORING)
+            self.assertEqual(record.authority.value, "candidate")
+            self.assertEqual(self.runner.status, "paused")
+            self.assertTrue((generation / "COMPLETE").is_file())
+            self.assertFalse((generation / "application_memory.img").exists())
+            self.assertTrue(
+                (
+                    self.config.memory_root
+                    / self.memory_directory
+                    / "application_memory.active"
+                ).is_file()
+            )
+
+        self.runner.before_resume = assert_paused_single_owner_handoff
+
+        self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        restore = next(
+            command for command in self.runner.commands if "restore" in command
+        )
+        self.assertIn("--start-paused", restore)
+        self.assertFalse(generation.exists())
+        self.assertEqual(self.runner.status, "running")
+
+    def test_single_owner_readiness_failure_returns_memory_to_checkpoint(
+        self,
+    ) -> None:
+        self.config = replace(
+            self.config,
+            restore_reflink=False,
+            restore_start_paused=True,
+        )
+        self.warden = DirectRunscWarden(
+            self.config,
+            runner=self.runner,
+            fencer=self.fencer,
+        )
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        self.runner.fail_readiness = True
+
+        with self.assertRaisesRegex(DirectWardenError, "readiness failure"):
+            self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        record = self.warden._journal(self.sandbox).load()
+        self.assertIsNotNone(record)
+        self.assertEqual(record.state, HibernationState.PARKED)
+        generation = self.warden.artifacts.generation_path(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+        self.assertTrue((generation / "application_memory.img").is_file())
+        self.assertTrue((generation / "COMPLETE").is_file())
+        self.assertEqual(self.runner.status, "absent")
+
+    def test_restore_reflink_falls_back_to_single_owner_generation(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        timings: dict[str, float] = {}
+        with patch.object(
+            self.warden,
+            "_reflink_file",
+            side_effect=OSError("reflink unsupported"),
+        ):
+            self.warden.resume(
+                self.sandbox,
+                operation_id="wake:1",
+                timings=timings,
+            )
+
+        restore = next(
+            command for command in self.runner.commands if "restore" in command
+        )
+        image_path = next(
+            Path(item.split("=", 1)[1])
+            for item in restore
+            if item.startswith("--image-path=")
+        )
+        self.assertEqual(image_path.name, "hibernate-1")
+        self.assertEqual(timings["restore_image_reflinked"], 0.0)
+        self.assertTrue(
+            (
+                self.config.memory_root
+                / self.memory_directory
+                / "application_memory.active"
+            ).is_file()
+        )
+
+    def test_reconcile_adopts_reflink_restore_candidate_and_cleans_source(
+        self,
+    ) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        manifest = self.warden.artifacts.load_complete(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+        journal = self.warden._journal(self.sandbox)
+        restoring = journal.begin_restore(
+            operation_id="wake:1",
+            expected_revision=parked.revision,
+        )
+        restore_image, reflinked = self.warden._prepare_restore_image(
+            self.sandbox,
+            manifest,
+        )
+        self.assertTrue(reflinked)
+        self.warden._checked(
+            *self.warden._common(),
+            "restore",
+            "--detach",
+            "--background",
+            "--start-paused",
+            f"--image-path={restore_image}",
+            f"--bundle={self.sandbox.bundle}",
+            self.sandbox.container_id,
+        )
+        pid, ticks = self.warden._state_identity(self.sandbox)
+        journal.mark_candidate_started(
+            operation_id="wake:1",
+            expected_revision=restoring.revision,
+            candidate_pid=pid,
+            candidate_start_time_ticks=ticks,
+        )
+
+        reconciled = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(reconciled.state, HibernationState.RUNNING)
+        self.assertFalse(restore_image.exists())
+        self.assertEqual(self.warden.artifacts.inventory(), ())
+
+    def test_reconcile_discards_staged_image_before_restore_started(self) -> None:
+        self.warden.create(self.sandbox, operation_id="create:1")
+        parked = self.warden.park(self.sandbox, operation_id="park:1")
+        manifest = self.warden.artifacts.load_complete(
+            sandbox_id=self.sandbox.sandbox_id,
+            sandbox_generation=self.sandbox.sandbox_generation,
+            hibernation_generation=parked.hibernation_generation,
+        )
+        journal = self.warden._journal(self.sandbox)
+        journal.begin_restore(
+            operation_id="wake:1",
+            expected_revision=parked.revision,
+        )
+        restore_image, reflinked = self.warden._prepare_restore_image(
+            self.sandbox,
+            manifest,
+        )
+        self.assertTrue(reflinked)
+
+        reconciled = self.warden.reconcile(self.sandbox)
+
+        self.assertEqual(reconciled.state, HibernationState.PARKED)
+        self.assertFalse(restore_image.exists())
+        self.assertTrue(
+            (
+                self.warden.artifacts.generation_path(
+                    sandbox_id=self.sandbox.sandbox_id,
+                    sandbox_generation=self.sandbox.sandbox_generation,
+                    hibernation_generation=parked.hibernation_generation,
+                )
+                / "COMPLETE"
+            ).is_file()
+        )
 
     def test_delete_removes_running_backend_artifacts_and_journal(self) -> None:
         self.warden.create(self.sandbox, operation_id="create:1")
@@ -453,6 +846,7 @@ class DirectRunscWardenTests(unittest.TestCase):
             / f"{self.sandbox.sandbox_id}.sandbox-{self.sandbox.sandbox_generation}"
         )
         incarnation.mkdir(parents=True)
+        incarnation.chmod(0o700)
         (incarnation / "upper").mkdir(mode=0o700)
         (incarnation / "work").mkdir(mode=0o700)
         active_memory = incarnation / "application_memory.active"

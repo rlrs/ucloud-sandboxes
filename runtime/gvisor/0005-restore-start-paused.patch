@@ -1,0 +1,330 @@
+diff --git a/runsc/boot/controller.go b/runsc/boot/controller.go
+index 6534ffc6f..552fc6396 100644
+--- a/runsc/boot/controller.go
++++ b/runsc/boot/controller.go
+@@ -565,6 +565,7 @@ type RestoreOpts struct {
+ 	HaveApplicationMemoryFile bool
+ 	HaveDeviceFile            bool
+ 	Background                bool
++	StartPaused               bool
+ 
+ 	// If UseCheckpointGofer is true, the first file in FilePayload is a Unix
+ 	// domain socket connected to a URPC server implementing
+@@ -621,9 +622,10 @@ func (cm *containerManager) Restore(o *RestoreOpts, _ *struct{}) (retErr error)
+ 	timer.Reached("got restore readers")
+ 
+ 	cm.restorer = &restorer{
+-		cm:         cm,
+-		background: o.Background,
+-		timer:      timer,
++		cm:          cm,
++		background:  o.Background,
++		startPaused: o.StartPaused,
++		timer:       timer,
+ 	}
+ 
+ 	var applicationMemoryFile *os.File
+@@ -920,7 +922,12 @@ func (cm *containerManager) Pause(_, _ *struct{}) error {
+ 
+ // Resume resumes all tasks.
+ func (cm *containerManager) Resume(_, _ *struct{}) error {
+-	cm.l.k.Unpause()
++	// The resume RPC may have succeeded even if runsc crashed before persisting
++	// the container's Running status. Make replay safe instead of decrementing
++	// the external stop count below zero on the recovery attempt.
++	if cm.l.k.IsPaused() {
++		cm.l.k.Unpause()
++	}
+ 	return control.PostResume(cm.l.k, nil)
+ }
+ 
+diff --git a/runsc/boot/restore.go b/runsc/boot/restore.go
+index cb880671c..ed9a3dec8 100644
+--- a/runsc/boot/restore.go
++++ b/runsc/boot/restore.go
+@@ -269,6 +269,10 @@ type restorer struct {
+ 	// restorer.restore() returns.
+ 	background bool
+ 
++	// startPaused keeps restored task goroutines under an external kernel stop
++	// after Kernel.Start. A later ContMgrResume releases exactly this stop.
++	startPaused bool
++
+ 	// mainMF is the main MemoryFile of the sandbox.
+ 	// It is created as soon as possible, and may be restored to as soon as
+ 	// the first container is restored, which is earlier than when the sandbox's
+@@ -488,6 +492,13 @@ func (r *restorer) restore(l *Loader) error {
+ 	if err := l.k.LoadFrom(ctx, r.stateFile, r.asyncMFLoader, nil, l, time.NewCalibratedClocks(), &vfs.CompleteRestoreOptions{}, r.timer.Fork("kernel load")); err != nil {
+ 		return fmt.Errorf("failed to load kernel: %w", err)
+ 	}
++	if r.startPaused {
++		// Apply the stop after LoadFrom has reconstructed the TaskSet but before
++		// Kernel.Start creates task goroutines. BeginExternalStop applies to
++		// current and future tasks, so the restored application cannot execute
++		// before the external owner commits its storage handoff.
++		l.k.Pause()
++	}
+ 	r.timer.Reached("kernel loaded")
+ 	if oldNvidiaDriverVersion.Major() > 0 && !l.k.NvidiaDriverVersion.Equals(oldNvidiaDriverVersion) {
+ 		return fmt.Errorf("nvidia driver version changed during restore: was %v, now %v", oldNvidiaDriverVersion, l.k.NvidiaDriverVersion)
+diff --git a/runsc/cmd/restore.go b/runsc/cmd/restore.go
+index aa29caf80..75401e530 100644
+--- a/runsc/cmd/restore.go
++++ b/runsc/cmd/restore.go
+@@ -62,6 +62,10 @@ type Restore struct {
+ 	// quota, then reapplies the exact OCI resources before restore returns.
+ 	// The caller must not admit work until this command succeeds.
+ 	cpuStartupBurst bool
++
++	// startPaused restores the sandbox completely but keeps guest tasks under
++	// an external kernel stop until a later `runsc resume`.
++	startPaused bool
+ }
+ 
+ // Name implements subcommands.Command.Name.
+@@ -87,6 +91,7 @@ func (r *Restore) SetFlags(f *flag.FlagSet) {
+ 	f.BoolVar(&r.direct, "direct", false, "use O_DIRECT for reading checkpoint pages file")
+ 	f.BoolVar(&r.background, "background", false, "allow image loading to continue after restore exits (requires uncompressed checkpoint)")
+ 	f.BoolVar(&r.cpuStartupBurst, "cpu-startup-burst", false, "temporarily set an unlimited OCI CPU quota while starting a new restore, then reapply all resources before returning")
++	f.BoolVar(&r.startPaused, "start-paused", false, "restore the sandbox completely but keep guest tasks paused until `runsc resume`")
+ 
+ 	// Unimplemented flags necessary for compatibility with docker.
+ 
+@@ -197,7 +202,7 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+ 	}
+ 
+ 	log.Debugf("Restore: %v", r.imagePath)
+-	err = c.Restore(conf, r.imagePath, r.direct, r.background, nil /* networkArgs */)
++	err = c.Restore(conf, r.imagePath, r.direct, r.background, r.startPaused, nil /* networkArgs */)
+ 	if err != nil {
+ 		return util.Errorf("starting container: %v", err)
+ 	}
+diff --git a/runsc/container/container.go b/runsc/container/container.go
+index 12bd09c12..1f5d84ba7 100644
+--- a/runsc/container/container.go
++++ b/runsc/container/container.go
+@@ -437,21 +437,33 @@ func (c *Container) createSubcontainer(conf *config.Config, spec *specs.Spec) er
+ // Start starts running the containerized process inside the sandbox.
+ func (c *Container) Start(conf *config.Config) error {
+ 	log.Debugf("Start container, cid: %s", c.ID)
+-	return c.startImpl(conf, "start", c.Sandbox.StartRoot, c.Sandbox.StartSubcontainer)
++	return c.startImpl(conf, "start", Running, c.Sandbox.StartRoot, c.Sandbox.StartSubcontainer)
+ }
+ 
+ // Restore takes a container and replaces its kernel and file system
+ // to restore a container from its state file.
+-func (c *Container) Restore(conf *config.Config, imagePath string, direct, background bool, networkArgs *boot.CreateLinksAndRoutesArgs) error {
++func (c *Container) Restore(conf *config.Config, imagePath string, direct, background, startPaused bool, networkArgs *boot.CreateLinksAndRoutesArgs) error {
+ 	log.Debugf("Restore container, cid: %s", c.ID)
+ 
+ 	restore := func(conf *config.Config, spec *specs.Spec) error {
+-		return c.Sandbox.Restore(conf, spec, c.ID, imagePath, direct, background, networkArgs)
++		return c.Sandbox.Restore(conf, spec, c.ID, imagePath, direct, background, startPaused, networkArgs)
+ 	}
+-	return c.startImpl(conf, "restore", restore, c.Sandbox.RestoreSubcontainer)
++	finalStatus := Running
++	if startPaused {
++		finalStatus = Paused
++	}
++	return c.startImpl(conf, "restore", finalStatus, restore, c.Sandbox.RestoreSubcontainer)
+ }
+ 
++// changeStatusAfterStart persists the restored kernel's actual run state.
++func (c *Container) changeStatusAfterStart(finalStatus Status) {
++	c.changeStatus(Running)
++	if finalStatus == Paused {
++		c.changeStatus(Paused)
++	}
++}
++
+-func (c *Container) startImpl(conf *config.Config, action string, startRoot func(conf *config.Config, spec *specs.Spec) error, startSub func(spec *specs.Spec, conf *config.Config, cid string, stdios, goferFiles, goferFilestores []*os.File, devIOFile *os.File, goferConfs []specutils.GoferMountConf) error) error {
++func (c *Container) startImpl(conf *config.Config, action string, finalStatus Status, startRoot func(conf *config.Config, spec *specs.Spec) error, startSub func(spec *specs.Spec, conf *config.Config, cid string, stdios, goferFiles, goferFilestores []*os.File, devIOFile *os.File, goferConfs []specutils.GoferMountConf) error) error {
+ 	if err := c.Saver.lock(BlockAcquire); err != nil {
+ 		return err
+ 	}
+@@ -524,7 +536,7 @@ func (c *Container) startImpl(conf *config.Config, action string, startRoot func
+ 		specutils.ExecuteHooksBestEffort(c.Spec.Hooks.Poststart, c.State())
+ 	}
+ 
+-	c.changeStatus(Running)
++	c.changeStatusAfterStart(finalStatus)
+ 	if err := c.saveLocked(); err != nil {
+ 		return err
+ 	}
+@@ -577,7 +589,11 @@ func Run(conf *config.Config, args Args) (unix.WaitStatus, error) {
+ // Update sets the resources of a running container as configured.
++func (c *Container) requireUpdateStatus() error {
++	return c.requireStatus("set resources for", Created, Running, Paused)
++}
++
+ func (c *Container) Update(res *specs.LinuxResources) error {
+ 	log.Debugf("Set resources for container, cid: %s", c.ID)
+-	if err := c.requireStatus("set resources for", Created, Running); err != nil {
++	if err := c.requireUpdateStatus(); err != nil {
+ 		return err
+ 	}
+ 
+diff --git a/runsc/container/container_test.go b/runsc/container/container_test.go
+index 7c1cba065..e707353bb 100644
+--- a/runsc/container/container_test.go
++++ b/runsc/container/container_test.go
+@@ -59,6 +59,20 @@ import (
+ 
+ const pollTimeout = 90 * time.Second
+ 
++func TestStartPausedStatusTransition(t *testing.T) {
++	cont := &Container{
++		Status:  Created,
++		Sandbox: &sandbox.Sandbox{},
++	}
++	cont.changeStatusAfterStart(Paused)
++	if got, want := cont.Status, Paused; got != want {
++		t.Fatalf("container status got %v, want %v", got, want)
++	}
++	if err := cont.requireUpdateStatus(); err != nil {
++		t.Fatalf("paused container rejected resource update: %v", err)
++	}
++}
++
+ func TestMain(m *testing.M) {
+ 	config.RegisterFlags(flag.CommandLine)
+ 	log.SetLevel(log.Debug)
+@@ -1249,7 +1260,7 @@ func testCheckpointRestore(t *testing.T, conf *config.Config, compression statef
+ 	}
+ 	defer cont2.Destroy()
+ 
+-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 
+@@ -1300,7 +1311,7 @@ func testCheckpointRestore(t *testing.T, conf *config.Config, compression statef
+ 	}
+ 	defer cont3.Destroy()
+ 
+-	if err := cont3.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont3.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 
+@@ -1433,7 +1444,7 @@ func TestCheckpointRestoreHostname(t *testing.T) {
+ 			}
+ 			defer cont2.Destroy()
+ 
+-			if err := cont2.Restore(conf, dir, false, false, nil); err != nil {
++			if err := cont2.Restore(conf, dir, false, false, false, nil); err != nil {
+ 				t.Fatalf("error restoring: %v", err)
+ 			}
+ 
+@@ -1562,7 +1573,7 @@ func testCheckpointRestoreHostinet(t *testing.T, conf *config.Config, app string
+ 		t.Fatalf("error creating container: %v", err)
+ 	}
+ 	defer cont2.Destroy()
+-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 	if !cont2.Sandbox.Restored {
+@@ -1724,7 +1735,7 @@ func TestCheckpointHostinetRestoreNetworkMismatch(t *testing.T) {
+ 		t.Fatalf("error creating container: %v", err)
+ 	}
+ 	defer cont2.Destroy()
+-	err = cont2.Restore(&restoreConf, dir, false /* direct */, false /* background */, nil /* networkArgs */)
++	err = cont2.Restore(&restoreConf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */)
+ 	if err == nil {
+ 		t.Fatalf("restore with mismatched network type succeeded, want error")
+ 	}
+@@ -1930,7 +1941,7 @@ func TestCheckpointRestoreExecKilled(t *testing.T) {
+ 	}
+ 	defer cont2.Destroy()
+ 
+-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 
+@@ -2015,7 +2026,7 @@ func TestCheckpointRestoreCreateMountPoint(t *testing.T) {
+ 	}
+ 	defer cont2.Destroy()
+ 
+-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 
+@@ -2127,7 +2138,7 @@ func TestUnixDomainSockets(t *testing.T) {
+ 			}
+ 			defer contRestore.Destroy()
+ 
+-			if err := contRestore.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++			if err := contRestore.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 				t.Fatalf("error restoring container: %v", err)
+ 			}
+ 
+@@ -4137,7 +4148,7 @@ func TestUsageFD(t *testing.T) {
+ 	}
+ 	defer cont2.Destroy()
+ 
+-	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++	if err := cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 		t.Fatalf("error restoring container: %v", err)
+ 	}
+ 
+@@ -5397,7 +5408,7 @@ func TestSpecValidation(t *testing.T) {
+ 			}
+ 			defer cont2.Destroy()
+ 
+-			err = cont2.Restore(conf, dir, false /* direct */, false /* background */, nil /* networkArgs */)
++			err = cont2.Restore(conf, dir, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */)
+ 			if err == nil {
+ 				if test.wantErr == "" {
+ 					return
+diff --git a/runsc/container/metric_server_test.go b/runsc/container/metric_server_test.go
+index 0968bd162..05bd29eb7 100644
+--- a/runsc/container/metric_server_test.go
++++ b/runsc/container/metric_server_test.go
+@@ -984,7 +984,7 @@ func TestContainerMetricsAfterRestore(t *testing.T) {
+ 	}
+ 	defer restoreCont.Destroy()
+ 
+-	if err := restoreCont.Restore(te.sleepConf, imagePath, false, false, nil); err != nil {
++	if err := restoreCont.Restore(te.sleepConf, imagePath, false, false, false, nil); err != nil {
+ 		t.Fatalf("Restore failed: %v", err)
+ 	}
+ 
+diff --git a/runsc/container/multi_container_test.go b/runsc/container/multi_container_test.go
+index dd567e091..519920ecd 100644
+--- a/runsc/container/multi_container_test.go
++++ b/runsc/container/multi_container_test.go
+@@ -261,7 +261,7 @@ func restoreContainers(conf *config.Config, specs []*specs.Spec, ids []string, i
+ 		cu.Add(func() { cont.Destroy() })
+ 		containers = append(containers, cont)
+ 
+-		if err := cont.Restore(conf, imagePath, false /* direct */, false /* background */, nil /* networkArgs */); err != nil {
++		if err := cont.Restore(conf, imagePath, false /* direct */, false /* background */, false /* startPaused */, nil /* networkArgs */); err != nil {
+ 			return nil, nil, fmt.Errorf("error restoring container: %v", err)
+ 		}
+ 
+diff --git a/runsc/sandbox/sandbox.go b/runsc/sandbox/sandbox.go
+index 23dcc7b48..338605dca 100644
+--- a/runsc/sandbox/sandbox.go
++++ b/runsc/sandbox/sandbox.go
+@@ -543,7 +543,7 @@ func (s *Sandbox) StartSubcontainer(spec *specs.Spec, conf *config.Config, cid s
+ }
+ 
+ // Restore sends the restore call for a container in the sandbox.
+-func (s *Sandbox) Restore(conf *config.Config, spec *specs.Spec, cid string, imagePath string, direct, background bool, networkArgs *boot.CreateLinksAndRoutesArgs) error {
++func (s *Sandbox) Restore(conf *config.Config, spec *specs.Spec, cid string, imagePath string, direct, background, startPaused bool, networkArgs *boot.CreateLinksAndRoutesArgs) error {
+ 	if err := hostsettings.Handle(conf); err != nil {
+ 		return fmt.Errorf("host settings: %w (use --host-settings=ignore to bypass)", err)
+ 	}
+@@ -551,7 +551,8 @@ func (s *Sandbox) Restore(conf *config.Config, spec *specs.Spec, cid string, ima
+ 	log.Debugf("Restore sandbox %q from path %q", s.ID, imagePath)
+ 
+ 	opt := boot.RestoreOpts{
+-		Background: background,
++		Background:  background,
++		StartPaused: startPaused,
+ 	}
+ 	defer func() {
+ 		for _, f := range opt.FilePayload.Files {

@@ -126,6 +126,30 @@ class DirectOciConfigTests(unittest.TestCase):
             )
             self.assertTrue(config["root"]["readonly"])
 
+    def test_sandbox_network_uses_node_owned_network_namespace(self) -> None:
+        with TemporaryDirectory() as raw:
+            image = self.image(Path(raw))
+            config = DirectOciConfigBuilder(network_mode="sandbox").build(
+                SandboxSpec(
+                    id="sandbox-network",
+                    image=image.image_ref,
+                    command=("true",),
+                    memory_mb=512,
+                    disk_mb=512,
+                    network="bridge",
+                    security=SandboxSecuritySpec(init=False),
+                ),
+                image,
+                network_namespace_path=Path("/run/netns/ucloud-test"),
+            )
+
+            network = next(
+                item
+                for item in config["linux"]["namespaces"]
+                if item["type"] == "network"
+            )
+            self.assertEqual(network["path"], "/run/netns/ucloud-test")
+
     def test_installs_init_inside_rootfs_without_bind_mount(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -187,6 +211,61 @@ class DirectOciConfigTests(unittest.TestCase):
                 (image.rootfs / ".ucloud-init").read_bytes(),
                 b"trusted-init",
             )
+
+    def test_prepares_sdk_workspace_without_following_image_symlinks(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            image = self.image(root)
+            builder = DirectOciConfigBuilder()
+            spec = SandboxSpec(
+                id="workspace",
+                image=image.image_ref,
+                command=("true",),
+                memory_mb=512,
+                disk_mb=512,
+                security=SandboxSecuritySpec(user="1000:1000", init=False),
+            )
+
+            builder.prepare_workspace(image.rootfs, spec=spec)
+
+            workspace = image.rootfs / "workspace"
+            self.assertTrue(workspace.is_dir())
+            self.assertEqual(workspace.stat().st_mode & 0o777, 0o777)
+
+            workspace.rmdir()
+            outside = root / "outside"
+            outside.mkdir(mode=0o700)
+            workspace.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(
+                DirectOciConfigError,
+                "failed to prepare direct-runtime sandbox workspace",
+            ):
+                builder.prepare_workspace(image.rootfs, spec=spec)
+            self.assertEqual(outside.stat().st_mode & 0o777, 0o700)
+
+    def test_quota_workspace_tmpfs_is_writable_by_non_root_user(self) -> None:
+        with TemporaryDirectory() as raw:
+            image = self.image(Path(raw))
+            spec = SandboxSpec.from_dict(
+                {
+                    "id": "quota-workspace",
+                    "image": image.image_ref,
+                    "command": ["true"],
+                    "memory_mb": 512,
+                    "disk_mb": 512,
+                    "filesystem": {"enforce_disk_quota": True},
+                    "security": {"user": "1000:1000", "init": False},
+                }
+            )
+
+            config = DirectOciConfigBuilder().build(spec, image)
+
+            workspace = next(
+                mount
+                for mount in config["mounts"]
+                if mount["destination"] == "/workspace"
+            )
+            self.assertIn("mode=1777", workspace["options"])
 
 
 if __name__ == "__main__":

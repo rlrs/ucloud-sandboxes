@@ -1,5 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import json
+import os
 import unittest
 
 from ucloud_sandboxes.direct_registry import (
@@ -91,6 +93,118 @@ class DirectRegistryTests(unittest.TestCase):
                     runtime_identity_sha256="b" * 64,
                 )
 
+    def test_version_one_registration_is_upgraded_on_read(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            path = (root / "registry.json").resolve()
+            registry = DirectSandboxRegistry(path)
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256="b" * 64,
+            )
+            legacy = planned.to_dict()
+            legacy.pop("migration_id")
+            legacy.pop("migration_sha256")
+            legacy["version"] = 1
+            path.write_text(
+                json.dumps(
+                    {
+                        "records": [legacy],
+                        "tombstones": {},
+                        "version": 1,
+                    }
+                )
+                + "\n"
+            )
+            os.chmod(path, 0o600)
+
+            loaded = DirectSandboxRegistry(path).get("sandbox")
+
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded.version, 2)
+            self.assertEqual(loaded.migration_id, "")
+
+    def test_migration_phases_are_generation_and_digest_fenced(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            registry = DirectSandboxRegistry(
+                (root / "registry.json").resolve()
+            )
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256="b" * 64,
+            )
+            quota = registry.commit_quota(
+                "sandbox",
+                expected_revision=planned.revision,
+                project_id=200_000,
+                total_mb=4096,
+                quota_path=(root / "quota" / "sandbox.sandbox-7").resolve(),
+            )
+            importing = registry.begin_import(
+                "sandbox",
+                expected_revision=quota.revision,
+                migration_id="move:1",
+                migration_sha256="f" * 64,
+            )
+            sandbox = DirectSandbox(
+                sandbox_id="sandbox",
+                sandbox_generation=7,
+                container_id="c" * 64,
+                spec_sha256=quota.spec_sha256,
+                rootfs_sha256="d" * 64,
+                bundle=(root / "bundles" / "sandbox.sandbox-7").resolve(),
+                memory_directory="sandbox.sandbox-7",
+            )
+            rootfs = registry.commit_import_rootfs(
+                "sandbox",
+                expected_revision=importing.revision,
+                image_id="sha256:" + "e" * 64,
+                sandbox=sandbox,
+            )
+            ready = registry.commit_import_ready(
+                "sandbox",
+                expected_revision=rootfs.revision,
+                migration_id="move:1",
+                migration_sha256="f" * 64,
+            )
+            with self.assertRaisesRegex(
+                DirectRegistryConflictError,
+                "ownership fence",
+            ):
+                registry.activate_import(
+                    "sandbox",
+                    expected_revision=ready.revision,
+                    migration_id="move:stale",
+                    migration_sha256="f" * 64,
+                )
+            owned = registry.activate_import(
+                "sandbox",
+                expected_revision=ready.revision,
+                migration_id="move:1",
+                migration_sha256="f" * 64,
+            )
+            self.assertEqual(owned.migration_id, "move:1")
+            moving = registry.begin_move_out(
+                "sandbox",
+                expected_revision=owned.revision,
+                migration_id="move:2",
+                migration_sha256="a" * 64,
+            )
+            restored = registry.abort_move_out(
+                "sandbox",
+                expected_revision=moving.revision,
+                migration_id="move:2",
+                migration_sha256="a" * 64,
+            )
+
+            self.assertEqual(restored.phase, "owned")
+            self.assertEqual(restored.migration_id, "")
+
     def test_delete_tombstone_fences_delayed_create(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
@@ -149,6 +263,41 @@ class DirectRegistryTests(unittest.TestCase):
                     operation_id="create:7-retry",
                     runtime_identity_sha256="b" * 64,
                 )
+            returning = registry.plan_import(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256="b" * 64,
+                migration_id="move:return",
+                migration_sha256="f" * 64,
+            )
+            registry.abort_import_planned(
+                "sandbox",
+                expected_revision=returning.revision,
+                migration_id="move:return",
+                migration_sha256="f" * 64,
+            )
+            with self.assertRaisesRegex(
+                DirectRegistryConflictError,
+                "migration import is fenced",
+            ):
+                registry.plan_import(
+                    spec=self.spec(),
+                    sandbox_generation=7,
+                    operation_id="create:7",
+                    runtime_identity_sha256="b" * 64,
+                    migration_id="move:return",
+                    migration_sha256="f" * 64,
+                )
+            next_return = registry.plan_import(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256="b" * 64,
+                migration_id="move:return-next",
+                migration_sha256="e" * 64,
+            )
+            self.assertEqual(next_return.phase, "import_planned")
 
     def test_fork_is_explicitly_deferred(self) -> None:
         with TemporaryDirectory() as raw:

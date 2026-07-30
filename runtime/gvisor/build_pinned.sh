@@ -2,20 +2,22 @@
 set -euo pipefail
 
 readonly EXPECTED_COMMIT="9f653e577965df2ddd13875b5530cd2588661f1c"
-readonly EXPECTED_PATCH_SERIES_SHA256="4bc4357924b8ae00eceab79b50cee98ebfd723d1543d7794cc088ec3c92eed18"
-readonly EXPECTED_PATCHED_FILES_SHA256="3a8c2b242f2341c1231adf4bbd82d4924915e40d49d1fcbe838ea0c270e16d58"
+readonly EXPECTED_PATCH_SERIES_SHA256="8fb36e2f8679db5d79d1ecd6c80ee236c32424c2a8ae2b93ffa9120efd436748"
+readonly EXPECTED_PATCHED_FILES_SHA256="d6c13f78e38dbf2b9e5427340bc5bb39791499e5913c98506dca3257f851072f"
 readonly BUILD_CONFIG="opt"
 readonly -a PATCH_NAMES=(
   "0001-disk-backed-main-memory.patch"
   "0002-quota-owned-memory-directory.patch"
   "0003-two-phase-hibernation-capture.patch"
   "0004-restore-cpu-startup-burst.patch"
+  "0005-restore-start-paused.patch"
 )
 readonly -a EXPECTED_PATCH_SHA256S=(
   "6bdf87cf565e96b0d65909a56f19a6a8790b10af0f973f22300d4b07bba9d554"
   "65acb8f572ab74e1ea6e3ebd4f29abd1a8e0b7bb354faafa9dbab47a2d75da5c"
   "495db595700dec88b770a868ed84b2d0b5fa1bf2bd2ab9f511e57816feffe3bd"
-  "fe7e05beb5fd1f9b865898734e1197b5cac0519e2e26c239a6d45f217be1f405"
+  "00e8dc2769edcf936ffec65647a87b43366ba0c6c36bbea33069e4e94cf9d264"
+  "818a844362cfae61279e096bc27e9f34dd38187f606541c77bec57ffd057824a"
 )
 
 usage() {
@@ -103,20 +105,12 @@ readonly BAZEL_VERSION="$(cd "${SOURCE_DIR}" && bazel --version)"
   bazel test \
     "--test_filter=TestCreateMemoryFileWithDiskBacking" \
     "//runsc/boot:boot_test"
-  if [[ "${EUID}" -eq 0 ]]; then
-    bazel test \
-      "--test_filter=TestRemoveCPUQuotaForStartup" \
-      "//runsc/cmd:cmd_test"
-  elif sudo -n true 2>/dev/null; then
-    bazel test \
-      "--run_under=sudo" \
-      "--test_filter=TestRemoveCPUQuotaForStartup" \
-      "//runsc/cmd:cmd_test"
-  else
-    bazel test \
-      "--test_filter=TestRemoveCPUQuotaForStartup" \
-      "//runsc/cmd:cmd_test"
-  fi
+  bazel test \
+    "--test_filter=TestRemoveCPUQuotaForStartup" \
+    "//runsc/cmd:cmd_test"
+  bazel test \
+    "--test_filter=TestStartPausedStatusTransition" \
+    "//runsc/container:container_test"
   bazel build "-c" "${BUILD_CONFIG}" "//runsc:runsc"
 )
 

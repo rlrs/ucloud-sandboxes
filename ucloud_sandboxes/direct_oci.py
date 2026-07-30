@@ -89,15 +89,20 @@ class DirectOciConfigBuilder:
     """Translate the product sandbox contract into a deterministic OCI config."""
 
     init_binary: Path | None = None
+    network_mode: str = "none"
 
     def __post_init__(self) -> None:
         if self.init_binary is not None and not self.init_binary.is_absolute():
             raise ValueError("direct runtime init binary must be absolute")
+        if self.network_mode not in {"none", "sandbox"}:
+            raise ValueError("direct OCI network mode must be none or sandbox")
 
     def build(
         self,
         spec: SandboxSpec,
         image: MaterializedRootfs,
+        *,
+        network_namespace_path: Path | None = None,
     ) -> dict[str, Any]:
         if spec.forkable:
             raise DirectOciConfigError("fork is deferred from the direct runtime")
@@ -160,6 +165,35 @@ class DirectOciConfigBuilder:
         annotations.update(
             {f"dev.ucloud-sandboxes.label.{key}": value for key, value in spec.labels.items()}
         )
+        namespaces = [
+            {"type": "pid"},
+            {"type": "ipc"},
+            {"type": "uts"},
+            {"type": "mount"},
+        ]
+        if self.network_mode == "sandbox":
+            if spec.network == "none":
+                raise DirectOciConfigError(
+                    "network=none sandbox cannot use the node sandbox network mode"
+                )
+            if (
+                network_namespace_path is None
+                or not network_namespace_path.is_absolute()
+            ):
+                raise DirectOciConfigError(
+                    "sandbox networking requires an absolute network namespace path"
+                )
+            namespaces.insert(
+                1,
+                {"type": "network", "path": str(network_namespace_path)},
+            )
+        else:
+            if network_namespace_path is not None:
+                raise DirectOciConfigError(
+                    "network namespace path requires sandbox networking"
+                )
+            namespaces.insert(1, {"type": "network"})
+
         return {
             "annotations": dict(sorted(annotations.items())),
             "hostname": spec.id,
@@ -175,13 +209,7 @@ class DirectOciConfigBuilder:
                     "/proc/sched_debug",
                     "/sys/firmware",
                 ],
-                "namespaces": [
-                    {"type": "pid"},
-                    {"type": "network"},
-                    {"type": "ipc"},
-                    {"type": "uts"},
-                    {"type": "mount"},
-                ],
+                "namespaces": namespaces,
                 "readonlyPaths": [
                     "/proc/bus",
                     "/proc/fs",
@@ -272,6 +300,130 @@ class DirectOciConfigBuilder:
                     os.unlink(temporary)
                 except FileNotFoundError:
                     pass
+
+    def prepare_workspace(self, rootfs: Path, *, spec: SandboxSpec) -> None:
+        """Create the configured workspace without following image symlinks.
+
+        Docker makes its managed workspace usable by an explicitly configured
+        non-root container user. The direct OCI path has to establish the same
+        contract before runsc starts because the overlay rootfs is otherwise
+        populated entirely from the image and BusyBox has no /workspace.
+        """
+        if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
+            raise DirectOciConfigError(
+                "direct-runtime workspace target must be an absolute rootfs directory"
+            )
+        components = tuple(
+            component
+            for component in Path(spec.filesystem.workspace_path).parts
+            if component != "/"
+        )
+        if not components or any(component in {"", ".", ".."} for component in components):
+            raise DirectOciConfigError(
+                "direct-runtime workspace must name a directory below rootfs"
+            )
+
+        directory_fd = -1
+        try:
+            directory_fd = os.open(
+                rootfs,
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            )
+            for component in components:
+                try:
+                    child_fd = os.open(
+                        component,
+                        os.O_RDONLY
+                        | os.O_DIRECTORY
+                        | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=directory_fd,
+                    )
+                except FileNotFoundError:
+                    os.mkdir(component, mode=0o777, dir_fd=directory_fd)
+                    child_fd = os.open(
+                        component,
+                        os.O_RDONLY
+                        | os.O_DIRECTORY
+                        | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=directory_fd,
+                    )
+                os.close(directory_fd)
+                directory_fd = child_fd
+            # A workspace is private to one sandbox mount namespace. Making the
+            # directory writable avoids host uid mapping assumptions and
+            # matches the SDK contract for arbitrary numeric OCI users.
+            os.fchmod(directory_fd, 0o777)
+            os.fsync(directory_fd)
+        except OSError as exc:
+            raise DirectOciConfigError(
+                "failed to prepare direct-runtime sandbox workspace"
+            ) from exc
+        finally:
+            if directory_fd >= 0:
+                os.close(directory_fd)
+
+    def prepare_network_files(self, rootfs: Path, *, spec: SandboxSpec) -> None:
+        """Install a deterministic resolver without following image symlinks."""
+        if spec.network == "none":
+            return
+        if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
+            raise DirectOciConfigError(
+                "direct-runtime network rootfs must be an absolute directory"
+            )
+        root_fd = -1
+        etc_fd = -1
+        temporary = f".ucloud-resolv.{os.getpid()}"
+        descriptor = -1
+        try:
+            root_fd = os.open(
+                rootfs,
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            )
+            etc_fd = os.open(
+                "etc",
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=root_fd,
+            )
+            descriptor = os.open(
+                temporary,
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o644,
+                dir_fd=etc_fd,
+            )
+            with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+                descriptor = -1
+                handle.write(
+                    "nameserver 1.1.1.1\n"
+                    "nameserver 8.8.8.8\n"
+                    "options timeout:2 attempts:2\n"
+                )
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.rename(
+                temporary,
+                "resolv.conf",
+                src_dir_fd=etc_fd,
+                dst_dir_fd=etc_fd,
+            )
+            os.fsync(etc_fd)
+        except OSError as exc:
+            raise DirectOciConfigError(
+                "failed to prepare direct-runtime resolver configuration"
+            ) from exc
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            if etc_fd >= 0:
+                try:
+                    os.unlink(temporary, dir_fd=etc_fd)
+                except FileNotFoundError:
+                    pass
+                os.close(etc_fd)
+            if root_fd >= 0:
+                os.close(root_fd)
 
     @staticmethod
     def _process_args(
@@ -421,7 +573,7 @@ class DirectOciConfigBuilder:
                     "options": [
                         "nosuid",
                         "nodev",
-                        "mode=755",
+                        "mode=1777",
                         f"size={spec.disk_mb * 1024 * 1024}",
                     ],
                     "source": "tmpfs",

@@ -6,8 +6,8 @@ index 3e10345..75b5b82 100644
  	// background has no effect.
  	background bool
 +
-+	// cpuStartupBurst starts a newly restored sandbox without its steady-state
-+	// CPU quota, then reapplies the exact OCI resources before restore returns.
++	// cpuStartupBurst starts a newly restored sandbox with an unlimited CPU
++	// quota, then reapplies the exact OCI resources before restore returns.
 +	// The caller must not admit work until this command succeeds.
 +	cpuStartupBurst bool
  }
@@ -17,7 +17,7 @@ index 3e10345..75b5b82 100644
  	f.BoolVar(&r.detach, "detach", false, "detach from the container's process")
  	f.BoolVar(&r.direct, "direct", false, "use O_DIRECT for reading checkpoint pages file")
  	f.BoolVar(&r.background, "background", false, "allow image loading to continue after restore exits (requires uncompressed checkpoint)")
-+	f.BoolVar(&r.cpuStartupBurst, "cpu-startup-burst", false, "temporarily omit the OCI CPU quota while starting a new restore, then reapply all resources before returning")
++	f.BoolVar(&r.cpuStartupBurst, "cpu-startup-burst", false, "temporarily set an unlimited OCI CPU quota while starting a new restore, then reapply all resources before returning")
  
  	// Unimplemented flags necessary for compatibility with docker.
  
@@ -29,17 +29,18 @@ index 3e10345..75b5b82 100644
  	if err != nil {
  		if err != os.ErrNotExist {
  			return util.Errorf("loading container: %v", err)
-@@ -168,6 +175,9 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+@@ -168,6 +175,10 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
  			}
  		}
  		runArgs.Spec = r.spec
 +		if r.cpuStartupBurst {
 +			steadyStateResources = removeCPUQuotaForStartup(runArgs.Spec)
 +		}
++		runArgs.ForceCgroupUpdate = steadyStateResources != nil
  		specutils.LogSpecDebug(runArgs.Spec, conf.OCISeccomp)
  
  		if c, err = container.New(conf, runArgs); err != nil {
-@@ -180,6 +190,9 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+@@ -180,6 +191,9 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
  			c.Destroy()
  		})
  	} else {
@@ -49,7 +50,7 @@ index 3e10345..75b5b82 100644
  		runArgs.Spec = c.Spec
  	}
  
-@@ -189,6 +202,14 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+@@ -189,6 +203,14 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
  		return util.Errorf("starting container: %v", err)
  	}
  
@@ -64,14 +65,16 @@ index 3e10345..75b5b82 100644
  	// If we allocate a terminal, forward signals to the sandbox process.
  	// Otherwise, Ctrl+C will terminate this process and its children,
  	// including the terminal.
-@@ -209,3 +230,22 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
+@@ -209,3 +231,25 @@ func (r *Restore) Execute(_ context.Context, f *flag.FlagSet, args ...any) subco
  
  	return subcommands.ExitSuccess
  }
 +
 +// removeCPUQuotaForStartup replaces spec's resources with a shallow copy whose
-+// CPU quota and burst are absent. It returns the exact original resources so
-+// Container.Update can durably reapply them before restore succeeds.
++// CPU quota is explicitly unlimited and whose burst is absent. An explicit -1
++// is required to reset a reused cgroup that still has the prior incarnation's
++// quota. It returns the exact original resources so Container.Update can
++// durably reapply them before restore succeeds.
 +func removeCPUQuotaForStartup(spec *specs.Spec) *specs.LinuxResources {
 +	if spec.Linux == nil || spec.Linux.Resources == nil ||
 +		spec.Linux.Resources.CPU == nil ||
@@ -81,12 +84,45 @@ index 3e10345..75b5b82 100644
 +	steadyState := spec.Linux.Resources
 +	startupResources := *steadyState
 +	startupCPU := *steadyState.CPU
-+	startupCPU.Quota = nil
++	unlimitedQuota := int64(-1)
++	startupCPU.Quota = &unlimitedQuota
 +	startupCPU.Burst = nil
 +	startupResources.CPU = &startupCPU
 +	spec.Linux.Resources = &startupResources
 +	return steadyState
 +}
+diff --git a/runsc/container/container.go b/runsc/container/container.go
+index 12bd09c12..c13b23f99 100644
+--- a/runsc/container/container.go
++++ b/runsc/container/container.go
+@@ -185,6 +185,10 @@ type Args struct {
+ 	// It only applies for the init container.
+ 	Attached bool
+ 
++	// ForceCgroupUpdate applies resources even when the cgroup already exists.
++	// It is used only for a fenced restore startup burst.
++	ForceCgroupUpdate bool
++
+ 	// PassFiles are user-supplied files from the host to be exposed to the
+ 	// sandboxed app.
+ 	PassFiles map[int]*os.File
+@@ -348,8 +352,16 @@ func (c *Container) createRoot(conf *config.Config, args Args, sandboxID string)
+ 		// part of the cgroup from the start (and all their children processes).
+ 		parentCgroup, subCgroup, err = c.setupCgroupForRoot(conf, args.Spec)
+ 		if err != nil {
+ 			return fmt.Errorf("cannot set up cgroup for root: %w", err)
+ 		}
++		// Install preserves resources on a pre-existing cgroup. The fenced
++		// restore path must explicitly replace a stale prior-incarnation quota
++		// before creating any sandbox processes.
++		if args.ForceCgroupUpdate && parentCgroup != nil {
++			if err := parentCgroup.Update(args.Spec.Linux.Resources); err != nil {
++				return fmt.Errorf("resetting reused cgroup resources: %w", err)
++			}
++		}
+ 		// Join the child cgroup when using cgroupfs. Joining non leaf-node
+ 		// cgroups is illegal in cgroupsv2 and will return EBUSY.
+ 		if subCgroup != nil && !conf.SystemdCgroup && cgroup.IsOnlyV2() {
 diff --git a/runsc/cmd/restore_test.go b/runsc/cmd/restore_test.go
 new file mode 100644
 index 0000000..72944a4
@@ -142,8 +178,8 @@ index 0000000..72944a4
 +	if spec.Linux.Resources.CPU == steadyState.CPU {
 +		t.Fatal("startup CPU resources alias steady-state CPU resources")
 +	}
-+	if spec.Linux.Resources.CPU.Quota != nil {
-+		t.Fatalf("startup CPU quota = %v, want nil", *spec.Linux.Resources.CPU.Quota)
++	if got, want := *spec.Linux.Resources.CPU.Quota, int64(-1); got != want {
++		t.Fatalf("startup CPU quota = %v, want %v", got, want)
 +	}
 +	if spec.Linux.Resources.CPU.Burst != nil {
 +		t.Fatalf("startup CPU burst = %v, want nil", *spec.Linux.Resources.CPU.Burst)

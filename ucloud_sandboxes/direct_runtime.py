@@ -4,7 +4,9 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import Sequence
 
+from .direct_network import DirectNetworkManager
 from .direct_oci import DirectOciConfigBuilder
 from .direct_provisioner import DirectSandboxProvisioner
 from .direct_registry import DirectSandboxRegistry
@@ -25,13 +27,12 @@ def build_direct_runtime_service(
     init_binary: Path,
     disk_capacity_mb: int,
     disk_headroom_mb: int,
-    quota_helper: Path = Path(
-        "/usr/local/libexec/ucloud-sandbox-hibernation-quota"
-    ),
+    quota_helper: Path = Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
     docker_binary: str = "docker",
     network: str = "none",
+    network_allow_tcp: Sequence[str] = (),
     max_concurrent_restores: int = 8,
-    idle_park_seconds: float = 1.0,
+    idle_park_seconds: float = 0.0,
 ) -> DirectSandboxService:
     """Assemble the one production direct-runtime owner for an entire node."""
     for label, path in (
@@ -43,8 +44,8 @@ def build_direct_runtime_service(
     ):
         if not path.is_absolute():
             raise ValueError(f"{label} must be absolute")
-    if network != "none":
-        raise ValueError("only the qualified direct network=none mode is available")
+    if network not in {"none", "sandbox"}:
+        raise ValueError("direct runtime network must be none or sandbox")
     state_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     quota_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     runsc_digest = _sha256_file(runsc)
@@ -52,9 +53,13 @@ def build_direct_runtime_service(
         {
             "network": network,
             "platform": "systrap",
+            "allow_connected_on_save": True,
             "remove_memory_directory_on_delete": False,
             "restore_background": True,
             "restore_cpu_startup_burst": True,
+            "restore_prefetch_memory": False,
+            "restore_reflink": False,
+            "restore_start_paused": True,
             "rootfs_format": "docker-export-overlay-v2",
             "quota_layout": "unified-xfs-project-v1",
         }
@@ -80,6 +85,14 @@ def build_direct_runtime_service(
         bundle_root=state_root / "bundles",
         require_precreated_writable=True,
     )
+    network_manager = (
+        DirectNetworkManager(
+            state_root / "network-slots.json",
+            allowed_tcp_egress=network_allow_tcp,
+        )
+        if network == "sandbox"
+        else None
+    )
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
             runsc=runsc,
@@ -92,6 +105,9 @@ def build_direct_runtime_service(
             network=network,
             restore_background=True,
             restore_cpu_startup_burst=True,
+            restore_reflink=False,
+            restore_start_paused=True,
+            allow_connected_on_save=True,
             remove_memory_directory_on_delete=False,
         )
     )
@@ -110,8 +126,12 @@ def build_direct_runtime_service(
         ),
         image_store=image_store,
         overlays=overlays,
-        oci=DirectOciConfigBuilder(init_binary=init_binary),
+        oci=DirectOciConfigBuilder(
+            init_binary=init_binary,
+            network_mode=network,
+        ),
         warden=warden,
+        network_manager=network_manager,
     )
     return DirectSandboxService(
         provisioner,
@@ -142,7 +162,11 @@ def _canonical_sha256(payload: object) -> str:
 def _cpu_features_sha256() -> str:
     try:
         lines = Path("/proc/cpuinfo").read_text(encoding="ascii").splitlines()
-        features = next(line for line in lines if line.startswith(("flags", "Features")))
+        features = next(
+            line for line in lines if line.startswith(("flags", "Features"))
+        )
     except (OSError, StopIteration) as exc:
-        raise ValueError("direct runtime requires a stable /proc/cpuinfo feature set") from exc
+        raise ValueError(
+            "direct runtime requires a stable /proc/cpuinfo feature set"
+        ) from exc
     return hashlib.sha256(features.encode("ascii")).hexdigest()

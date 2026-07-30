@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 import subprocess
 import threading
 import time
 from typing import Sequence
 from uuid import uuid4
+import re
 
 from .direct_provisioner import DirectSandboxProvisioner
+from .direct_migration import DirectMigrationArchive
 from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationState
+from .models import ResourceQuantity
 from .sandbox import (
+    SandboxAdmissionClosedError,
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
@@ -141,16 +147,19 @@ class DirectSandboxService:
         *,
         process_runner: DirectProcessRunner | None = None,
         max_concurrent_restores: int = 8,
-        idle_park_seconds: float = 1.0,
+        idle_park_seconds: float = 0.0,
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
-        if idle_park_seconds <= 0:
-            raise ValueError("idle_park_seconds must be positive")
+        if idle_park_seconds < 0:
+            raise ValueError("idle_park_seconds cannot be negative")
         self.provisioner = provisioner
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
         self._restore_slots = threading.Semaphore(max_concurrent_restores)
+        self._active_capacity: ResourceQuantity | None = None
+        self._restore_reservations: set[tuple[str, int]] = set()
+        self._capacity_guard = threading.Lock()
         self._locks: dict[tuple[str, int], threading.Lock] = {}
         self._locks_guard = threading.Lock()
         self._admission_open = True
@@ -160,6 +169,17 @@ class DirectSandboxService:
         self._stop_event = threading.Event()
         self._parking_thread: threading.Thread | None = None
 
+    def configure_active_capacity(self, capacity: ResourceQuantity) -> None:
+        """Install the hard CPU/RAM wake-admission ceiling for this node."""
+
+        if not capacity.is_valid:
+            raise ValueError("direct active capacity cannot be negative")
+        with self._capacity_guard:
+            self._active_capacity = ResourceQuantity(
+                vcpu=capacity.vcpu,
+                memory_mb=capacity.memory_mb,
+            )
+
     def start(self) -> tuple[SandboxRecord, ...]:
         results = self.provisioner.start()
         records = tuple(self._record(item.registration) for item in results)
@@ -168,7 +188,13 @@ class DirectSandboxService:
             self._last_activity = {
                 (record.spec.id, record.generation): now for record in records
             }
-        if self._parking_thread is None or not self._parking_thread.is_alive():
+        if (
+            self._idle_park_seconds > 0
+            and (
+                self._parking_thread is None
+                or not self._parking_thread.is_alive()
+            )
+        ):
             self._stop_event.clear()
             self._parking_thread = threading.Thread(
                 target=self._idle_parking_loop,
@@ -192,7 +218,7 @@ class DirectSandboxService:
         operation: SandboxOperation | None = None,
     ) -> SandboxRecord:
         if not self._admission_open:
-            raise DirectWardenError("direct node admission is closed")
+            raise SandboxAdmissionClosedError("direct node admission is closed")
         operation = operation or SandboxOperation.legacy_create(spec)
         operation.validate_spec(spec)
         with self._lock(spec.id, operation.generation):
@@ -234,13 +260,20 @@ class DirectSandboxService:
         with self._activity_guard:
             self._last_activity.pop(key, None)
 
-    def park(self, sandbox_id: str, *, operation_id: str | None = None) -> SandboxRecord:
+    def park(
+        self, sandbox_id: str, *, operation_id: str | None = None
+    ) -> SandboxRecord:
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
             sandbox = registration.to_direct_sandbox()
             record = self.warden.inspect(sandbox)
             if record is None:
                 raise DirectWardenError("direct sandbox has no lifecycle journal")
+            if (
+                record.state == HibernationState.RUNNING
+                and not self.warden.running_process_alive(sandbox)
+            ):
+                record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
                 return self._record(registration)
             if record.state != HibernationState.RUNNING:
@@ -254,6 +287,248 @@ class DirectSandboxService:
                 operation_id=operation_id or f"park:{uuid4().hex}",
             )
             return self._record(registration)
+
+    def wake(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int | None = None,
+        operation_id: str | None = None,
+    ) -> SandboxRecord:
+        registration = self._require_registration(sandbox_id)
+        if generation is not None and registration.sandbox_generation != generation:
+            raise DirectWardenError("wake generation does not own direct sandbox")
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            sandbox = registration.to_direct_sandbox()
+            record = self.warden.inspect(sandbox)
+            if record is None:
+                raise DirectWardenError("direct sandbox has no lifecycle journal")
+            if (
+                record.state == HibernationState.RUNNING
+                and not self.warden.running_process_alive(sandbox)
+            ):
+                record = self.warden.reconcile(sandbox)
+            if record.state == HibernationState.RUNNING:
+                return self._record(registration)
+            if record.state != HibernationState.PARKED:
+                record = self.warden.reconcile(sandbox)
+            if record.state == HibernationState.PARKED:
+                self.provisioner.ensure_network(registration)
+                record = self.warden.resume(
+                    sandbox,
+                    operation_id=operation_id or f"wake:{uuid4().hex}",
+                )
+            if record.state != HibernationState.RUNNING:
+                raise DirectWardenError(
+                    f"direct sandbox cannot wake from {record.state.value}"
+                )
+            return self._record(registration)
+
+    def prepare_move(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        archive_path: Path | None = None,
+    ) -> DirectMigrationArchive:
+        """Freeze a parked source behind a migration fence and export it."""
+        existing = self.provisioner.registry.get(sandbox_id)
+        if existing is not None and existing.phase == "moving_out":
+            return self.prepared_move_archive(
+                sandbox_id,
+                migration_id=migration_id,
+            )
+        registration = self._require_registration(sandbox_id)
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            archive_path = archive_path or self.migration_archive_path(migration_id)
+            lifecycle = self.warden.inspect(registration.to_direct_sandbox())
+            if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+                raise DirectWardenError(
+                    "only an already parked sandbox can begin migration"
+                )
+            local_manifest = self.warden.artifacts.load_complete(
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation,
+                hibernation_generation=lifecycle.hibernation_generation,
+            )
+            source_guest_ip: str | None = None
+            if registration.spec.network != "none":
+                network_manager = self.provisioner.network_manager
+                if network_manager is None:
+                    raise DirectWardenError(
+                        "networked migration has no source network manager"
+                    )
+                network_lease = network_manager.lease(
+                    registration.sandbox_id,
+                    registration.sandbox_generation,
+                )
+                if network_lease is None:
+                    raise DirectWardenError(
+                        "networked migration has no durable source network lease"
+                    )
+                source_guest_ip = network_lease.guest_ip
+            exported = self.provisioner.migration_archives.export(
+                registration=registration,
+                local_manifest=local_manifest,
+                runtime_identity=self.provisioner.identity,
+                writable_incarnation=Path(registration.quota_path),
+                archive_path=archive_path,
+                source_guest_ip=source_guest_ip,
+            )
+            self.provisioner.registry.begin_move_out(
+                sandbox_id,
+                expected_revision=registration.revision,
+                migration_id=migration_id,
+                migration_sha256=exported.sha256,
+            )
+            return exported
+
+    def migration_archive_path(self, migration_id: str) -> Path:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", migration_id):
+            raise ValueError("migration id contains unsupported characters")
+        root = self.provisioner.registry.path.parent / "migration-archives"
+        return root / f"{migration_id}.tar"
+
+    def prepared_move_archive(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+    ) -> DirectMigrationArchive:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if (
+            registration is None
+            or registration.phase != "moving_out"
+            or registration.migration_id != migration_id
+            or not registration.migration_sha256
+        ):
+            raise DirectWardenError("source does not own this prepared migration")
+        path = self.migration_archive_path(migration_id)
+        manifest = self.provisioner.migration_archives.inspect(
+            path,
+            expected_sha256=registration.migration_sha256,
+        )
+        info = path.lstat()
+        return DirectMigrationArchive(
+            path=path,
+            sha256=registration.migration_sha256,
+            physical_bytes=info.st_blocks * 512,
+            elapsed_ms=0.0,
+            manifest=manifest,
+        )
+
+    def abort_move(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> SandboxRecord:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None:
+            raise DirectWardenError("migration source is absent")
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            if registration.phase == "owned":
+                return self._record(registration)
+            if (
+                registration.phase == "moving_out"
+                and registration.migration_id == migration_id
+                and not migration_sha256
+            ):
+                migration_sha256 = registration.migration_sha256
+            registration = self.provisioner.registry.abort_move_out(
+                sandbox_id,
+                expected_revision=registration.revision,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            self._discard_migration_archive(migration_id)
+            return self._record(registration)
+
+    def activate_import(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> SandboxRecord:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None:
+            raise DirectWardenError("migration destination is absent")
+        with self._lock(sandbox_id, registration.sandbox_generation):
+            result = self.provisioner.activate_import(
+                sandbox_id,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            self.mark_activity(sandbox_id, registration.sandbox_generation)
+            return self._record(result.registration)
+
+    def abort_import(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> None:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None:
+            return
+        key = (sandbox_id, registration.sandbox_generation)
+        with self._lock(*key):
+            self.provisioner.abort_import(
+                sandbox_id,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+        with self._locks_guard:
+            self._locks.pop(key, None)
+        with self._activity_guard:
+            self._last_activity.pop(key, None)
+
+    def stage_import(
+        self,
+        archive_path: Path,
+        *,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> SandboxRecord:
+        result = self.provisioner.stage_import(
+            archive_path,
+            expected_sha256=migration_sha256,
+            migration_id=migration_id,
+        )
+        return self._record(result.registration)
+
+    def finalize_moved_source(
+        self,
+        sandbox_id: str,
+        *,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> None:
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None:
+            return
+        key = (sandbox_id, registration.sandbox_generation)
+        with self._lock(*key):
+            self.provisioner.finalize_moved_source(
+                sandbox_id,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+        with self._locks_guard:
+            self._locks.pop(key, None)
+        with self._activity_guard:
+            self._last_activity.pop(key, None)
+        self._discard_migration_archive(migration_id)
+
+    def _discard_migration_archive(self, migration_id: str) -> None:
+        path = self.migration_archive_path(migration_id)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            return
 
     def exec(
         self,
@@ -315,9 +590,7 @@ class DirectSandboxService:
                 if not lock.acquire(blocking=False):
                     continue
                 try:
-                    lifecycle = self.warden.inspect(
-                        registration.to_direct_sandbox()
-                    )
+                    lifecycle = self.warden.inspect(registration.to_direct_sandbox())
                     if (
                         lifecycle is not None
                         and lifecycle.state == HibernationState.RUNNING
@@ -362,10 +635,10 @@ class DirectSandboxService:
         validate_container_path("sandbox file path", path)
         script = (
             "set -eu; target=$1; dir=${target%/*}; "
-            "mkdir -p -- \"$dir\"; "
-            "tmp=$(mktemp \"$dir/.ucloud-write.XXXXXX\"); "
+            'mkdir -p -- "$dir"; '
+            'tmp=$(mktemp "$dir/.ucloud-write.XXXXXX"); '
             "trap 'rm -f -- \"$tmp\"' EXIT HUP INT TERM; "
-            "cat >\"$tmp\"; chmod 0600 \"$tmp\"; mv -f -- \"$tmp\" \"$target\"; "
+            'cat >"$tmp"; chmod 0600 "$tmp"; mv -f -- "$tmp" "$target"; '
             "trap - EXIT HUP INT TERM"
         )
         result = self.exec(
@@ -400,6 +673,15 @@ class DirectSandboxService:
         timings = {"inspect": (time.monotonic() - phase) * 1000}
         if record is None:
             raise DirectWardenError("direct sandbox has no lifecycle journal")
+        if (
+            record.state == HibernationState.RUNNING
+            and not self.warden.running_process_alive(sandbox)
+        ):
+            phase = time.monotonic()
+            record = self.warden.reconcile(sandbox)
+            timings["reconcile_dead_sentry"] = (
+                time.monotonic() - phase
+            ) * 1000
         if record.state not in {
             HibernationState.RUNNING,
             HibernationState.PARKED,
@@ -408,32 +690,87 @@ class DirectSandboxService:
             record = self.warden.reconcile(sandbox)
             timings["reconcile"] = (time.monotonic() - phase) * 1000
         if record.state == HibernationState.PARKED:
-            phase = time.monotonic()
-            self._restore_slots.acquire()
-            timings["restore_queue"] = (time.monotonic() - phase) * 1000
-            try:
+            with self._reserve_restore_capacity(sandbox.sandbox_id):
                 phase = time.monotonic()
-                warden_timings: dict[str, float] = {}
-                record = self.warden.resume(
-                    sandbox,
-                    operation_id=f"wake:{uuid4().hex}",
-                    timings=warden_timings,
-                )
-                timings["restore"] = (time.monotonic() - phase) * 1000
-                timings.update(
-                    {
-                        f"restore_{name}": elapsed_ms
-                        for name, elapsed_ms in warden_timings.items()
-                    }
-                )
-            finally:
-                self._restore_slots.release()
+                self._restore_slots.acquire()
+                timings["restore_queue"] = (time.monotonic() - phase) * 1000
+                try:
+                    registration = self._require_registration(sandbox.sandbox_id)
+                    phase = time.monotonic()
+                    self.provisioner.ensure_network(registration)
+                    timings["restore_network"] = (
+                        time.monotonic() - phase
+                    ) * 1000
+                    phase = time.monotonic()
+                    warden_timings: dict[str, float] = {}
+                    record = self.warden.resume(
+                        sandbox,
+                        operation_id=f"wake:{uuid4().hex}",
+                        timings=warden_timings,
+                    )
+                    timings["restore"] = (time.monotonic() - phase) * 1000
+                    timings.update(
+                        {
+                            f"restore_{name}": elapsed_ms
+                            for name, elapsed_ms in warden_timings.items()
+                        }
+                    )
+                finally:
+                    self._restore_slots.release()
         if record.state != HibernationState.RUNNING:
             raise DirectWardenError(
                 f"direct sandbox cannot accept traffic in {record.state.value}"
             )
         timings["total"] = (time.monotonic() - started) * 1000
         return timings
+
+    @contextmanager
+    def _reserve_restore_capacity(self, sandbox_id: str):
+        registration = self._require_registration(sandbox_id)
+        key = (sandbox_id, registration.sandbox_generation)
+        with self._capacity_guard:
+            capacity = self._active_capacity
+            if capacity is not None:
+                used = ResourceQuantity()
+                for candidate in self.provisioner.registry.list():
+                    if candidate.phase != "owned":
+                        continue
+                    candidate_key = (
+                        candidate.sandbox_id,
+                        candidate.sandbox_generation,
+                    )
+                    running = candidate_key in self._restore_reservations
+                    if not running:
+                        lifecycle = self.warden.inspect(candidate.to_direct_sandbox())
+                        running = bool(
+                            lifecycle is not None
+                            and lifecycle.state == HibernationState.RUNNING
+                        )
+                    if not running:
+                        continue
+                    used = used + ResourceQuantity(
+                        vcpu=candidate.spec.cpus or 0,
+                        memory_mb=candidate.spec.memory_mb or 0,
+                    )
+                requested = ResourceQuantity(
+                    vcpu=registration.spec.cpus or 0,
+                    memory_mb=registration.spec.memory_mb or 0,
+                )
+                available = ResourceQuantity(
+                    vcpu=max(0.0, capacity.vcpu - used.vcpu),
+                    memory_mb=max(0, capacity.memory_mb - used.memory_mb),
+                )
+                if not requested.fits_within(available):
+                    raise DirectWardenError(
+                        "direct node has insufficient active CPU or memory "
+                        "capacity; relocate the parked sandbox and retry"
+                    )
+            self._restore_reservations.add(key)
+        try:
+            yield
+        finally:
+            with self._capacity_guard:
+                self._restore_reservations.discard(key)
 
     def _require_registration(
         self,
@@ -454,7 +791,14 @@ class DirectSandboxService:
     def _record(self, registration: DirectSandboxRegistration) -> SandboxRecord:
         state = registration.phase
         if registration.phase == "owned":
-            lifecycle = self.warden.inspect(registration.to_direct_sandbox())
+            sandbox = registration.to_direct_sandbox()
+            lifecycle = self.warden.inspect(sandbox)
+            if (
+                lifecycle is not None
+                and lifecycle.state == HibernationState.RUNNING
+                and not self.warden.running_process_alive(sandbox)
+            ):
+                lifecycle = self.warden.reconcile(sandbox)
             state = lifecycle.state.value if lifecycle is not None else "unavailable"
         created_at = datetime.fromtimestamp(
             registration.created_ns / 1_000_000_000,

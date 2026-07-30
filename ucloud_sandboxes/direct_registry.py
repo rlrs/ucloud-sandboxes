@@ -20,13 +20,17 @@ from .sandbox import (
 )
 
 
-DIRECT_REGISTRY_VERSION = 1
-DIRECT_REGISTRATION_VERSION = 1
+DIRECT_REGISTRY_VERSION = 2
+DIRECT_REGISTRATION_VERSION = 2
 DIRECT_REGISTRATION_PHASES = {
     "planned",
+    "import_planned",
     "quota_ready",
+    "importing",
     "rootfs_ready",
+    "import_ready",
     "owned",
+    "moving_out",
     "deleting",
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -59,6 +63,8 @@ class DirectSandboxRegistration:
     container_id: str = ""
     bundle: str = ""
     memory_directory: str = ""
+    migration_id: str = ""
+    migration_sha256: str = ""
     version: int = DIRECT_REGISTRATION_VERSION
 
     def __post_init__(self) -> None:
@@ -75,6 +81,25 @@ class DirectSandboxRegistration:
             raise ValueError("direct registration runtime identity is invalid")
         if self.phase not in DIRECT_REGISTRATION_PHASES:
             raise ValueError("direct registration phase is invalid")
+        if self.migration_id and not OPERATION_ID_RE.fullmatch(self.migration_id):
+            raise ValueError("direct registration migration id is invalid")
+        if self.migration_sha256 and not _DIGEST.fullmatch(self.migration_sha256):
+            raise ValueError("direct registration migration digest is invalid")
+        migration_phase = self.phase in {
+            "import_planned",
+            "importing",
+            "import_ready",
+            "moving_out",
+        } or (
+            self.phase in {"rootfs_ready", "owned", "deleting"}
+            and bool(self.migration_id)
+        )
+        if migration_phase and not self.migration_id:
+            raise ValueError("migration registration has no migration id")
+        if migration_phase and not self.migration_sha256:
+            raise ValueError("migration registration has no archive digest")
+        if not migration_phase and (self.migration_id or self.migration_sha256):
+            raise ValueError("ordinary registration has migration ownership")
         if self.revision < 1 or self.created_ns < 1 or self.updated_ns < 1:
             raise ValueError("direct registration revision/timestamp is invalid")
         quota_values = (
@@ -118,11 +143,21 @@ class DirectSandboxRegistration:
                 raise ValueError("direct registration bundle must be absolute")
             if "/" in self.memory_directory or not self.memory_directory:
                 raise ValueError("direct registration memory directory is invalid")
-        if self.phase == "planned" and (quota_present or rootfs_present):
+        if self.phase in {"planned", "import_planned"} and (
+            quota_present or rootfs_present
+        ):
             raise ValueError("planned direct registration owns external state")
-        if self.phase == "quota_ready" and (not quota_present or rootfs_present):
+        if self.phase in {"quota_ready", "importing"} and (
+            not quota_present or rootfs_present
+        ):
             raise ValueError("quota-ready direct registration is inconsistent")
-        if self.phase in {"rootfs_ready", "owned", "deleting"} and (
+        if self.phase in {
+            "rootfs_ready",
+            "import_ready",
+            "owned",
+            "moving_out",
+            "deleting",
+        } and (
             not quota_present or not rootfs_present
         ):
             raise ValueError("direct registration is missing owned resources")
@@ -136,7 +171,13 @@ class DirectSandboxRegistration:
         return sandbox_spec_fingerprint(self.spec)
 
     def to_direct_sandbox(self) -> DirectSandbox:
-        if self.phase not in {"rootfs_ready", "owned", "deleting"}:
+        if self.phase not in {
+            "rootfs_ready",
+            "import_ready",
+            "owned",
+            "moving_out",
+            "deleting",
+        }:
             raise DirectRegistryError("registration has no direct sandbox yet")
         return DirectSandbox(
             sandbox_id=self.sandbox_id,
@@ -155,6 +196,8 @@ class DirectSandboxRegistration:
             "created_ns": self.created_ns,
             "image_id": self.image_id,
             "memory_directory": self.memory_directory,
+            "migration_id": self.migration_id,
+            "migration_sha256": self.migration_sha256,
             "operation_id": self.operation_id,
             "phase": self.phase,
             "quota_path": self.quota_path,
@@ -179,6 +222,8 @@ class DirectSandboxRegistration:
             "created_ns",
             "image_id",
             "memory_directory",
+            "migration_id",
+            "migration_sha256",
             "operation_id",
             "phase",
             "quota_path",
@@ -192,7 +237,14 @@ class DirectSandboxRegistration:
             "updated_ns",
             "version",
         }
-        if set(raw) != expected or not isinstance(raw["spec"], dict):
+        raw_version = int(raw.get("version", 0))
+        if raw_version == 1:
+            expected -= {"migration_id", "migration_sha256"}
+        if (
+            raw_version not in {1, DIRECT_REGISTRATION_VERSION}
+            or set(raw) != expected
+            or not isinstance(raw["spec"], dict)
+        ):
             raise DirectRegistryError("direct registration schema is invalid")
         try:
             return cls(
@@ -201,6 +253,8 @@ class DirectSandboxRegistration:
                 created_ns=int(raw["created_ns"]),
                 image_id=str(raw["image_id"]),
                 memory_directory=str(raw["memory_directory"]),
+                migration_id=str(raw.get("migration_id") or ""),
+                migration_sha256=str(raw.get("migration_sha256") or ""),
                 operation_id=str(raw["operation_id"]),
                 phase=str(raw["phase"]),
                 quota_path=str(raw["quota_path"]),
@@ -220,7 +274,7 @@ class DirectSandboxRegistration:
                 sandbox_generation=int(raw["sandbox_generation"]),
                 spec=SandboxSpec.from_dict(raw["spec"]),
                 updated_ns=int(raw["updated_ns"]),
-                version=int(raw["version"]),
+                version=DIRECT_REGISTRATION_VERSION,
             )
         except (TypeError, ValueError) as exc:
             raise DirectRegistryError("direct registration is invalid") from exc
@@ -230,6 +284,7 @@ class DirectSandboxRegistration:
 class _DirectRegistryState:
     records: tuple[DirectSandboxRegistration, ...]
     tombstones: dict[str, int]
+    migration_tombstones: dict[str, tuple[str, ...]]
     version: int = DIRECT_REGISTRY_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -238,6 +293,10 @@ class _DirectRegistryState:
                 item.to_dict()
                 for item in sorted(self.records, key=lambda value: value.sandbox_id)
             ],
+            "migration_tombstones": {
+                key: list(values)
+                for key, values in sorted(self.migration_tombstones.items())
+            },
             "tombstones": dict(sorted(self.tombstones.items())),
             "version": self.version,
         }
@@ -292,6 +351,52 @@ class DirectSandboxRegistry:
             self._save_unlocked(replace(state, records=(*state.records, candidate)))
             return candidate
 
+    def plan_import(
+        self,
+        *,
+        spec: SandboxSpec,
+        sandbox_generation: int,
+        operation_id: str,
+        runtime_identity_sha256: str,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        candidate = DirectSandboxRegistration(
+            spec=spec,
+            sandbox_generation=sandbox_generation,
+            operation_id=operation_id,
+            runtime_identity_sha256=runtime_identity_sha256,
+            phase="import_planned",
+            revision=1,
+            created_ns=time.time_ns(),
+            updated_ns=time.time_ns(),
+            migration_id=migration_id,
+            migration_sha256=migration_sha256,
+        )
+        with self._locked():
+            state = self._load_unlocked()
+            existing = self._find(state, spec.id)
+            if existing is not None:
+                if (
+                    existing.sandbox_generation == sandbox_generation
+                    and existing.operation_id == operation_id
+                    and existing.spec == spec
+                    and existing.runtime_identity_sha256
+                    == runtime_identity_sha256
+                    and existing.migration_id == migration_id
+                    and existing.migration_sha256 == migration_sha256
+                ):
+                    return existing
+                raise DirectRegistryConflictError(
+                    "sandbox already has another direct registration"
+                )
+            if migration_id in state.migration_tombstones.get(spec.id, ()):
+                raise DirectRegistryConflictError(
+                    "migration import is fenced by a tombstone"
+                )
+            self._save_unlocked(replace(state, records=(*state.records, candidate)))
+            return candidate
+
     def commit_quota(
         self,
         sandbox_id: str,
@@ -306,6 +411,25 @@ class DirectSandboxRegistry:
             expected_revision=expected_revision,
             expected_phase="planned",
             phase="quota_ready",
+            quota_project_id=project_id,
+            quota_total_mb=total_mb,
+            quota_path=str(quota_path),
+        )
+
+    def commit_import_quota(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        project_id: int,
+        total_mb: int,
+        quota_path: Path,
+    ) -> DirectSandboxRegistration:
+        return self._transition(
+            sandbox_id,
+            expected_revision=expected_revision,
+            expected_phase="import_planned",
+            phase="importing",
             quota_project_id=project_id,
             quota_total_mb=total_mb,
             quota_path=str(quota_path),
@@ -334,6 +458,44 @@ class DirectSandboxRegistry:
                 )
             )
 
+    def abort_import_planned(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+        retire: bool = True,
+    ) -> None:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase != "import_planned"
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "import plan abort lost its ownership fence"
+                )
+            migration_tombstones = dict(state.migration_tombstones)
+            if retire:
+                previous = migration_tombstones.get(sandbox_id, ())
+                migration_tombstones[sandbox_id] = tuple(
+                    dict.fromkeys((*previous, migration_id))
+                )[-256:]
+            self._save_unlocked(
+                replace(
+                    state,
+                    records=tuple(
+                        item for item in state.records
+                        if item.sandbox_id != sandbox_id
+                    ),
+                    migration_tombstones=migration_tombstones,
+                )
+            )
+
     def commit_rootfs(
         self,
         sandbox_id: str,
@@ -353,6 +515,164 @@ class DirectSandboxRegistry:
             bundle=str(sandbox.bundle),
             memory_directory=sandbox.memory_directory,
         )
+
+    def begin_import(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        return self._transition(
+            sandbox_id,
+            expected_revision=expected_revision,
+            expected_phase="quota_ready",
+            phase="importing",
+            migration_id=migration_id,
+            migration_sha256=migration_sha256,
+        )
+
+    def commit_import_rootfs(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        image_id: str,
+        sandbox: DirectSandbox,
+    ) -> DirectSandboxRegistration:
+        return self._transition(
+            sandbox_id,
+            expected_revision=expected_revision,
+            expected_phase="importing",
+            phase="rootfs_ready",
+            image_id=image_id,
+            rootfs_sha256=sandbox.rootfs_sha256,
+            container_id=sandbox.container_id,
+            bundle=str(sandbox.bundle),
+            memory_directory=sandbox.memory_directory,
+        )
+
+    def commit_import_ready(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase != "rootfs_ready"
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "import readiness lost its ownership fence"
+                )
+            return self._replace_record_unlocked(
+                state,
+                record,
+                phase="import_ready",
+            )
+
+    def activate_import(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase != "import_ready"
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "import activation lost its ownership fence"
+                )
+            return self._replace_record_unlocked(
+                state,
+                record,
+                phase="owned",
+            )
+
+    def begin_move_out(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if record.phase != "owned" or record.revision != expected_revision:
+                raise DirectRegistryConflictError(
+                    "move preparation lost its ownership fence"
+                )
+            migration_tombstones = dict(state.migration_tombstones)
+            if record.migration_id:
+                previous = migration_tombstones.get(sandbox_id, ())
+                migration_tombstones[sandbox_id] = tuple(
+                    dict.fromkeys((*previous, record.migration_id))
+                )[-256:]
+            updated = replace(
+                record,
+                phase="moving_out",
+                revision=record.revision + 1,
+                updated_ns=time.time_ns(),
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            self._save_unlocked(
+                replace(
+                    state,
+                    records=tuple(
+                        updated if item.sandbox_id == sandbox_id else item
+                        for item in state.records
+                    ),
+                    migration_tombstones=migration_tombstones,
+                )
+            )
+            return updated
+
+    def abort_move_out(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase != "moving_out"
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "move abort lost its ownership fence"
+                )
+            return self._replace_record_unlocked(
+                state,
+                record,
+                phase="owned",
+                migration_id="",
+                migration_sha256="",
+            )
 
     def commit_owned(
         self,
@@ -380,6 +700,58 @@ class DirectSandboxRegistry:
             phase="deleting",
         )
 
+    def begin_delete_moved(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase != "moving_out"
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "move finalization lost its ownership fence"
+                )
+            return self._replace_record_unlocked(
+                state,
+                record,
+                phase="deleting",
+            )
+
+    def begin_delete_import(
+        self,
+        sandbox_id: str,
+        *,
+        expected_revision: int,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> DirectSandboxRegistration:
+        with self._locked():
+            state = self._load_unlocked()
+            record = self._require(state, sandbox_id)
+            if (
+                record.phase not in {"importing", "rootfs_ready", "import_ready"}
+                or record.revision != expected_revision
+                or record.migration_id != migration_id
+                or record.migration_sha256 != migration_sha256
+            ):
+                raise DirectRegistryConflictError(
+                    "import abort lost its ownership fence"
+                )
+            return self._replace_record_unlocked(
+                state,
+                record,
+                phase="deleting",
+            )
+
     def commit_deleted(
         self,
         sandbox_id: str,
@@ -403,6 +775,12 @@ class DirectSandboxRegistry:
                 sandbox_generation,
                 tombstones.get(sandbox_id, -1),
             )
+            migration_tombstones = dict(state.migration_tombstones)
+            if record.migration_id:
+                previous = migration_tombstones.get(sandbox_id, ())
+                migration_tombstones[sandbox_id] = tuple(
+                    dict.fromkeys((*previous, record.migration_id))
+                )[-256:]
             self._save_unlocked(
                 replace(
                     state,
@@ -410,6 +788,7 @@ class DirectSandboxRegistry:
                         item for item in state.records if item.sandbox_id != sandbox_id
                     ),
                     tombstones=tombstones,
+                    migration_tombstones=migration_tombstones,
                 )
             )
 
@@ -462,6 +841,29 @@ class DirectSandboxRegistry:
                 )
             )
             return updated
+
+    def _replace_record_unlocked(
+        self,
+        state: _DirectRegistryState,
+        record: DirectSandboxRegistration,
+        **changes: Any,
+    ) -> DirectSandboxRegistration:
+        updated = replace(
+            record,
+            revision=record.revision + 1,
+            updated_ns=time.time_ns(),
+            **changes,
+        )
+        self._save_unlocked(
+            replace(
+                state,
+                records=tuple(
+                    updated if item.sandbox_id == record.sandbox_id else item
+                    for item in state.records
+                ),
+            )
+        )
+        return updated
 
     @staticmethod
     def _find(
@@ -517,7 +919,11 @@ class DirectSandboxRegistry:
 
     def _load_unlocked(self) -> _DirectRegistryState:
         if not os.path.lexists(self.path):
-            return _DirectRegistryState(records=(), tombstones={})
+            return _DirectRegistryState(
+                records=(),
+                tombstones={},
+                migration_tombstones={},
+            )
         try:
             info = self.path.lstat()
             if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
@@ -532,14 +938,35 @@ class DirectSandboxRegistry:
             raise
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DirectRegistryError("direct registry is unreadable") from exc
+        payload_version = (
+            int(payload.get("version", 0)) if isinstance(payload, dict) else 0
+        )
+        expected_keys = {"records", "tombstones", "version"}
+        if payload_version == DIRECT_REGISTRY_VERSION:
+            expected_keys.add("migration_tombstones")
         if (
             not isinstance(payload, dict)
-            or set(payload) != {"records", "tombstones", "version"}
-            or payload["version"] != DIRECT_REGISTRY_VERSION
+            or set(payload) != expected_keys
+            or payload_version not in {1, DIRECT_REGISTRY_VERSION}
             or not isinstance(payload["records"], list)
             or not isinstance(payload["tombstones"], dict)
+            or (
+                payload_version == DIRECT_REGISTRY_VERSION
+                and not isinstance(payload["migration_tombstones"], dict)
+            )
         ):
             raise DirectRegistryError("direct registry schema is invalid")
+        raw_migration_tombstones = payload.get("migration_tombstones", {})
+        if any(
+            not isinstance(key, str)
+            or not isinstance(values, list)
+            or len(values) > 256
+            or any(not isinstance(item, str) for item in values)
+            for key, values in raw_migration_tombstones.items()
+        ):
+            raise DirectRegistryError(
+                "direct registry migration tombstones are invalid"
+            )
         try:
             records = tuple(
                 DirectSandboxRegistration.from_dict(item)
@@ -549,12 +976,28 @@ class DirectSandboxRegistry:
                 str(key): int(value)
                 for key, value in payload["tombstones"].items()
             }
+            migration_tombstones = {
+                str(key): tuple(str(item) for item in values)
+                for key, values in raw_migration_tombstones.items()
+            }
         except (TypeError, ValueError) as exc:
             raise DirectRegistryError("direct registry content is invalid") from exc
         ids = [item.sandbox_id for item in records]
-        if len(ids) != len(set(ids)) or any(value < 0 for value in tombstones.values()):
+        if (
+            len(ids) != len(set(ids))
+            or any(value < 0 for value in tombstones.values())
+            or any(
+                not OPERATION_ID_RE.fullmatch(migration_id)
+                for values in migration_tombstones.values()
+                for migration_id in values
+            )
+        ):
             raise DirectRegistryError("direct registry ownership is invalid")
-        return _DirectRegistryState(records=records, tombstones=tombstones)
+        return _DirectRegistryState(
+            records=records,
+            tombstones=tombstones,
+            migration_tombstones=migration_tombstones,
+        )
 
     def _save_unlocked(self, state: _DirectRegistryState) -> None:
         payload = (

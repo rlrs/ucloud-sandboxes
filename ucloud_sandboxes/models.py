@@ -485,10 +485,17 @@ class SandboxNode:
 
 
 @dataclass(frozen=True)
+class SandboxPlacementRequest:
+    resources: ResourceQuantity
+    excluded_job_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class SandboxDemand:
     pending_resources: ResourceQuantity = ResourceQuantity()
     prepared_resources: ResourceQuantity = ResourceQuantity()
     oldest_pending_seconds: int = 0
+    placement_requests: tuple[SandboxPlacementRequest, ...] = ()
 
     @property
     def desired_resources(self) -> ResourceQuantity:

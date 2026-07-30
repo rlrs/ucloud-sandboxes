@@ -1,0 +1,463 @@
+{
+  "create_ms": 749.8370829998748,
+  "cycles": 10,
+  "host": {
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+    "runsc_version": "runsc version release-20260721.0-dirty\nspec: 1.2.1",
+    "uname": "Linux sandbox-builder-paused-restore 6.8.0-53-generic #55-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan 17 15:37:52 UTC 2025 x86_64"
+  },
+  "paused_handoff_probes": [],
+  "samples": [
+    {
+      "after": "scan ns=316563288 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537219072,
+      "before": "scan ns=4879179 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 0,
+      "park_ms": 381.88000900026964,
+      "pre_park_sentry_rss_bytes": 35672064,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 637390,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.58411199982947,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.116126000270015,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.1304790004433,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 224.6491320001951,
+      "resume_phases_ms": {
+        "artifact_cleanup": 4.478356000618078,
+        "begin_restore_journal": 1.4389379994099727,
+        "candidate_fence": 0.07875999926909572,
+        "candidate_journal": 2.6328650001232745,
+        "commit_running_journal": 2.242567999928724,
+        "readiness_exec": 32.15304300010757,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.022834000446891878,
+        "runsc_restore": 164.61923599945294,
+        "runsc_state": 16.39336300013383,
+        "validate_artifact": 0.5134330003784271,
+        "warden_total": 224.62574699966353
+      },
+      "resume_residual_ms": 11.818414999652305,
+      "verify_ms": 365.6889890007733
+    },
+    {
+      "after": "scan ns=365857691 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537198592,
+      "before": "scan ns=3799072 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 1,
+      "park_ms": 396.550968000156,
+      "pre_park_sentry_rss_bytes": 40210432,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 637530,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.65931699985958,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.568037000070035,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 31.983167999896978,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 225.10282400071446,
+      "resume_phases_ms": {
+        "artifact_cleanup": 4.38472499990894,
+        "begin_restore_journal": 1.6009419996407814,
+        "candidate_fence": 0.08300499939650763,
+        "candidate_journal": 2.4423489994660486,
+        "commit_running_journal": 2.2065739995014155,
+        "readiness_exec": 32.01013799935026,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.03495399960229406,
+        "runsc_restore": 164.69453900026565,
+        "runsc_state": 16.89704199998232,
+        "validate_artifact": 0.6699089999528951,
+        "warden_total": 225.07898899948486
+      },
+      "resume_residual_ms": 11.892302000887867,
+      "verify_ms": 415.4992189996847
+    },
+    {
+      "after": "scan ns=327249393 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537198592,
+      "before": "scan ns=41041914 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 2,
+      "park_ms": 413.27341699980025,
+      "pre_park_sentry_rss_bytes": 40841216,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 637661,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.65994699956354,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.100392999760516,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 114.72137100008695,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 310.34235399965837,
+      "resume_phases_ms": {
+        "artifact_cleanup": 6.832461000158219,
+        "begin_restore_journal": 1.6575869994994719,
+        "candidate_fence": 0.08108200017886702,
+        "candidate_journal": 2.3850640000091516,
+        "commit_running_journal": 2.963783999803127,
+        "readiness_exec": 114.76085999947827,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.03146699964418076,
+        "runsc_restore": 164.7018499998012,
+        "runsc_state": 16.37171199945442,
+        "validate_artifact": 0.46598200060543604,
+        "warden_total": 310.3090140002678
+      },
+      "resume_residual_ms": 14.860643000247364,
+      "verify_ms": 366.06053700052144
+    },
+    {
+      "after": "scan ns=402037038 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537206784,
+      "before": "scan ns=4074398 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 3,
+      "park_ms": 467.2919849999744,
+      "pre_park_sentry_rss_bytes": 40747008,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 637807,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.97061300015048,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.50570399942808,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.1548369993252,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 228.35530300017126,
+      "resume_phases_ms": {
+        "artifact_cleanup": 7.072944000356074,
+        "begin_restore_journal": 1.5245059994413168,
+        "candidate_fence": 0.07664599979761988,
+        "candidate_journal": 2.4358089995075716,
+        "commit_running_journal": 2.4018679996515857,
+        "readiness_exec": 32.1791630003645,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.037787000110256486,
+        "runsc_restore": 165.0041240000064,
+        "runsc_state": 16.80565500009834,
+        "validate_artifact": 0.7054229999994277,
+        "warden_total": 228.31550299997616
+      },
+      "resume_residual_ms": 14.724149001267506,
+      "verify_ms": 466.82375999989745
+    },
+    {
+      "after": "scan ns=308832668 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537227264,
+      "before": "scan ns=56349102 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 4,
+      "park_ms": 440.98703899999236,
+      "pre_park_sentry_rss_bytes": 40960000,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 637940,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.268274999813,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.144909000104235,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 31.884669999271864,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 223.73043700008566,
+      "resume_phases_ms": {
+        "artifact_cleanup": 4.415571000208729,
+        "begin_restore_journal": 1.3340599998628022,
+        "candidate_fence": 0.07698500030528521,
+        "candidate_journal": 2.2931950006750412,
+        "commit_running_journal": 2.4559289995522704,
+        "readiness_exec": 31.897969000056037,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.0203200006581028,
+        "runsc_restore": 164.29619799964712,
+        "runsc_state": 16.39250300013373,
+        "validate_artifact": 0.4829579993383959,
+        "warden_total": 223.70759099976567
+      },
+      "resume_residual_ms": 11.432583000896557,
+      "verify_ms": 365.866651000033
+    },
+    {
+      "after": "scan ns=312318369 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537190400,
+      "before": "scan ns=52626104 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 5,
+      "park_ms": 453.3784029999879,
+      "pre_park_sentry_rss_bytes": 40652800,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 638070,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.98055700049008,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.266693000034138,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.089538000036555,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 228.217654999753,
+      "resume_phases_ms": {
+        "artifact_cleanup": 6.494774000202597,
+        "begin_restore_journal": 2.0170489997326513,
+        "candidate_fence": 0.08195300051738741,
+        "candidate_journal": 2.7986559998680605,
+        "commit_running_journal": 2.457201000652276,
+        "readiness_exec": 32.11325299980672,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.02174199926230358,
+        "runsc_restore": 165.01344700009213,
+        "runsc_state": 16.576801000155683,
+        "validate_artifact": 0.5688760002158233,
+        "warden_total": 228.19551100019453
+      },
+      "resume_residual_ms": 14.880866999192222,
+      "verify_ms": 365.7057779992101
+    },
+    {
+      "after": "scan ns=287821457 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537194496,
+      "before": "scan ns=3445520 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 6,
+      "park_ms": 472.85882699998183,
+      "pre_park_sentry_rss_bytes": 40202240,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 638195,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.94210900054895,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.304339000271284,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.23754999999073,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 228.31192600006034,
+      "resume_phases_ms": {
+        "artifact_cleanup": 7.183251000242308,
+        "begin_restore_journal": 1.527680999970471,
+        "candidate_fence": 0.08149199948093155,
+        "candidate_journal": 2.682061000086833,
+        "commit_running_journal": 2.2936049999771058,
+        "readiness_exec": 32.26489200005744,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.023935999706736766,
+        "runsc_restore": 164.9745989998337,
+        "runsc_state": 16.602899000645266,
+        "validate_artifact": 0.5815069998789113,
+        "warden_total": 228.28533600022638
+      },
+      "resume_residual_ms": 14.827927999249368,
+      "verify_ms": 415.87239599994064
+    },
+    {
+      "after": "scan ns=317216546 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537202688,
+      "before": "scan ns=3725452 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 7,
+      "park_ms": 382.10496099964075,
+      "pre_park_sentry_rss_bytes": 40857600,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 638325,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.41864100033854,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.44743599990761,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.417600999906426,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 227.87290300038876,
+      "resume_phases_ms": {
+        "artifact_cleanup": 6.700102000650077,
+        "begin_restore_journal": 1.4271199997892836,
+        "candidate_fence": 0.08145299943862483,
+        "candidate_journal": 3.0956330001572496,
+        "commit_running_journal": 2.3843319995648926,
+        "readiness_exec": 32.443280000734376,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.022313000044960063,
+        "runsc_restore": 164.44944599970768,
+        "runsc_state": 16.7423590000908,
+        "validate_artifact": 0.4437589996086899,
+        "warden_total": 227.8417260004062
+      },
+      "resume_residual_ms": 14.589225000236183,
+      "verify_ms": 415.86294999979145
+    },
+    {
+      "after": "scan ns=309413911 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537202688,
+      "before": "scan ns=3732633 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 8,
+      "park_ms": 499.4442119996165,
+      "pre_park_sentry_rss_bytes": 41156608,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 638458,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 114.01552600000286,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 15.717434999714897,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.43689999999333,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 216.79544700054976,
+      "resume_phases_ms": {
+        "artifact_cleanup": 4.311814999709895,
+        "begin_restore_journal": 1.407140000083018,
+        "candidate_fence": 0.07059699964884203,
+        "candidate_journal": 45.93162899982417,
+        "commit_running_journal": 2.179031999730796,
+        "readiness_exec": 32.45926299950952,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.020260000383132137,
+        "runsc_restore": 114.02936699960264,
+        "runsc_state": 15.861192000556912,
+        "validate_artifact": 0.4644999999072752,
+        "warden_total": 216.77625800020905
+      },
+      "resume_residual_ms": 54.625586000838666,
+      "verify_ms": 364.98485099946265
+    },
+    {
+      "after": "scan ns=304118984 checksum=16711680 pages=131072 bytes=536870912",
+      "allocated_artifact_bytes": 537202688,
+      "before": "scan ns=2950595 checksum=16711680 pages=131072 bytes=536870912",
+      "cycle": 9,
+      "park_ms": 465.18888999980845,
+      "pre_park_sentry_rss_bytes": 40931328,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 638595,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 165.18540600009146,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.610609999588632,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.469198999933724,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 234.74504400019214,
+      "resume_phases_ms": {
+        "artifact_cleanup": 5.795591000605782,
+        "begin_restore_journal": 7.153225000365637,
+        "candidate_fence": 0.15249900025082752,
+        "candidate_journal": 2.74529599937523,
+        "commit_running_journal": 3.230424999856041,
+        "readiness_exec": 32.50295000088954,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.08488700041198172,
+        "runsc_restore": 165.22976199939876,
+        "runsc_state": 16.95555999958742,
+        "validate_artifact": 0.7854129999032011,
+        "warden_total": 234.7130059997653
+      },
+      "resume_residual_ms": 20.47982900057832,
+      "verify_ms": 366.20887299977767
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "park_p50_ms": 447.1827209999901,
+    "park_p95_ms": 499.4442119996165,
+    "resume_p50_ms": 228.04527900007088,
+    "resume_p95_ms": 310.34235399965837,
+    "verify_p50_ms": 366.13470500014955,
+    "verify_p95_ms": 466.82375999989745
+  },
+  "workload": "memory-workload-512mib",
+  "workload_ready_ms": 5197.572324999783
+}

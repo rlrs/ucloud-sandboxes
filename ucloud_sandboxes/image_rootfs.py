@@ -573,6 +573,7 @@ class OverlayRootfsManager:
         image_ref: str,
         config_template: dict[str, Any],
         spec_sha256: str | None = None,
+        imported_parked: bool = False,
     ) -> OverlayRootfsLease:
         if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 0:
             raise ValueError("sandbox incarnation is invalid")
@@ -580,6 +581,9 @@ class OverlayRootfsManager:
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
         writable = self.writable_root / incarnation
         bundle = self.bundle_root / incarnation
+        upper = writable / "upper"
+        work = writable / "work"
+        merged = bundle / "rootfs"
         if bundle.exists():
             raise DirectWardenError("overlay sandbox incarnation already exists")
         writable_owned_by_manager = not self.require_precreated_writable
@@ -589,19 +593,38 @@ class OverlayRootfsManager:
                     "quota-owned writable incarnation was not prepared"
                 )
             DockerRootfsStore._require_private_directory(writable)
-            if any(writable.iterdir()):
+            existing_names = {item.name for item in writable.iterdir()}
+            if imported_parked:
+                generations = {
+                    name
+                    for name in existing_names
+                    if re.fullmatch(r"hibernate-[1-9][0-9]*", name)
+                }
+                if (
+                    "upper" not in existing_names
+                    or len(generations) != 1
+                    or existing_names != {"upper", *generations}
+                ):
+                    raise DirectWardenError(
+                        "imported writable incarnation has an invalid layout"
+                    )
+                DockerRootfsStore._require_real_directory(upper)
+                for generation in generations:
+                    DockerRootfsStore._require_private_directory(
+                        writable / generation
+                    )
+            elif existing_names:
                 raise DirectWardenError(
                     "quota-owned writable incarnation is not empty"
                 )
         elif writable.exists():
             raise DirectWardenError("overlay sandbox incarnation already exists")
-        upper = writable / "upper"
-        work = writable / "work"
-        merged = bundle / "rootfs"
         if writable_owned_by_manager:
             writable.mkdir(mode=0o700)
         bundle.mkdir(mode=0o700)
         for path in (upper, work, merged):
+            if path == upper and imported_parked:
+                continue
             path.mkdir(mode=0o700)
         # Overlayfs exposes the upper directory inode as the mounted root.
         # Keeping it private would make every non-root OCI user unable to

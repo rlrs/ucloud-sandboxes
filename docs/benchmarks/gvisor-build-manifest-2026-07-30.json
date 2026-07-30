@@ -1,0 +1,33 @@
+{
+  "artifact": "runsc-hibernate-342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+  "bazel_version": "bazel 8.3.1",
+  "build_config": "opt",
+  "gvisor_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+  "host_architecture": "x86_64",
+  "patch_series_sha256": "8fb36e2f8679db5d79d1ecd6c80ee236c32424c2a8ae2b93ffa9120efd436748",
+  "patched_files_sha256": "d6c13f78e38dbf2b9e5427340bc5bb39791499e5913c98506dca3257f851072f",
+  "patches": [
+    {
+      "name": "0001-disk-backed-main-memory.patch",
+      "sha256": "6bdf87cf565e96b0d65909a56f19a6a8790b10af0f973f22300d4b07bba9d554"
+    },
+    {
+      "name": "0002-quota-owned-memory-directory.patch",
+      "sha256": "65acb8f572ab74e1ea6e3ebd4f29abd1a8e0b7bb354faafa9dbab47a2d75da5c"
+    },
+    {
+      "name": "0003-two-phase-hibernation-capture.patch",
+      "sha256": "495db595700dec88b770a868ed84b2d0b5fa1bf2bd2ab9f511e57816feffe3bd"
+    },
+    {
+      "name": "0004-restore-cpu-startup-burst.patch",
+      "sha256": "00e8dc2769edcf936ffec65647a87b43366ba0c6c36bbea33069e4e94cf9d264"
+    },
+    {
+      "name": "0005-restore-start-paused.patch",
+      "sha256": "818a844362cfae61279e096bc27e9f34dd38187f606541c77bec57ffd057824a"
+    }
+  ],
+  "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+  "schema": 1
+}

@@ -1,9 +1,11 @@
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 from threading import Thread
 from urllib import request
+import hashlib
 import json
 import shutil
 import unittest
@@ -13,12 +15,21 @@ from ucloud_sandboxes.direct_node_adapter import (
     DirectNodeManagerAdapter,
     DirectNodeStateStore,
 )
+from ucloud_sandboxes.direct_migration import DirectMigrationArchiveStore
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.direct_service import DirectExecResult, DirectSandboxService
-from ucloud_sandboxes.direct_registry import DirectRegistryError, DirectSandboxRegistry
-from ucloud_sandboxes.direct_warden import DirectSandbox
+from ucloud_sandboxes.direct_registry import (
+    DirectRegistryError,
+    DirectSandboxRegistration,
+    DirectSandboxRegistry,
+)
+from ucloud_sandboxes.direct_warden import DirectSandbox, DirectWardenError
 from ucloud_sandboxes.hibernation import (
+    HibernationArtifactFile,
+    HibernationArtifactStore,
     HibernationDiskLedger,
+    HibernationFileRole,
+    HibernationManifest,
     HibernationRuntimeFingerprint,
     HibernationState,
 )
@@ -29,6 +40,7 @@ from ucloud_sandboxes.image_rootfs import (
 )
 from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
 from ucloud_sandboxes.node_agent import build_direct_node_agent_server
+from ucloud_sandboxes.models import ResourceQuantity
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
 
 
@@ -116,6 +128,7 @@ class FakeOverlays:
         image_ref,
         config_template,
         spec_sha256,
+        imported_parked=False,
     ):
         del config_template
         image = self.image_store.materialize(image_ref)
@@ -125,7 +138,8 @@ class FakeOverlays:
             raise AssertionError("quota was not prepared first")
         upper = writable / "upper"
         work = writable / "work"
-        upper.mkdir()
+        if not imported_parked:
+            upper.mkdir()
         work.mkdir()
         bundle = self.bundle_root / incarnation
         merged = bundle / "rootfs"
@@ -133,7 +147,9 @@ class FakeOverlays:
         sandbox = DirectSandbox(
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
-            container_id="c" * 64,
+            container_id=hashlib.sha256(
+                f"{sandbox_id}:{sandbox_generation}".encode("utf-8")
+            ).hexdigest(),
             spec_sha256=spec_sha256,
             rootfs_sha256=image.rootfs_identity_sha256,
             bundle=bundle,
@@ -176,8 +192,10 @@ class FakeWarden:
             remove_memory_directory_on_delete=False,
             runtime_fingerprint=fingerprint,
         )
+        self.artifacts = HibernationArtifactStore(quota)
         self.records = {}
         self.discarded = []
+        self.alive = True
 
     @staticmethod
     def key(sandbox):
@@ -198,7 +216,20 @@ class FakeWarden:
         return record
 
     def reconcile(self, sandbox):
+        if (
+            not self.alive
+            and self.records[self.key(sandbox)].state == HibernationState.RUNNING
+        ):
+            self.records[self.key(sandbox)] = SimpleNamespace(
+                state=HibernationState.RECOVERY_REQUIRED
+            )
         return self.records[self.key(sandbox)]
+
+    def running_process_alive(self, sandbox):
+        return (
+            self.alive
+            and self.records[self.key(sandbox)].state == HibernationState.RUNNING
+        )
 
     def park(self, sandbox, *, operation_id):
         del operation_id
@@ -211,6 +242,12 @@ class FakeWarden:
         if timings is not None:
             timings["runsc_restore"] = 1.0
         record = SimpleNamespace(state=HibernationState.RUNNING)
+        self.records[self.key(sandbox)] = record
+        return record
+
+    def adopt_parked(self, sandbox, manifest):
+        del manifest
+        record = SimpleNamespace(state=HibernationState.PARKED)
         self.records[self.key(sandbox)] = record
         return record
 
@@ -300,6 +337,96 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(ledger.inventory().reservations, ())
             self.assertEqual(quota.inventory(), ())
 
+    def test_import_stays_unavailable_until_explicit_activation(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, images, warden = self.make(root)
+            source_root = root / "source"
+            source = source_root / "sandbox.sandbox-7"
+            generation = source / "hibernate-2"
+            upper = source / "upper"
+            generation.mkdir(parents=True)
+            upper.mkdir()
+            (upper / "payload").write_bytes(b"writable-state")
+            roles = {
+                "application_memory.img": HibernationFileRole.MAIN_MEMORY,
+                "checkpoint.img": HibernationFileRole.KERNEL_STATE,
+                "pages_meta.img": HibernationFileRole.ALLOCATOR_METADATA,
+            }
+            for name in roles:
+                (generation / name).write_bytes(name.encode("ascii"))
+            runtime = replace(
+                warden.config.runtime_fingerprint,
+                rootfs_sha256=images.image.rootfs_identity_sha256,
+            )
+            container_id = hashlib.sha256(b"sandbox:7").hexdigest()
+            source_registration = DirectSandboxRegistration(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256=provisioner.identity.digest,
+                phase="owned",
+                revision=4,
+                created_ns=1,
+                updated_ns=1,
+                quota_project_id=200_007,
+                quota_total_mb=4096,
+                quota_path=str(source),
+                image_id=images.image.image_id,
+                rootfs_sha256=images.image.rootfs_identity_sha256,
+                container_id=container_id,
+                bundle=str(source_root / "bundle"),
+                memory_directory=source.name,
+            )
+            source_manifest = HibernationManifest(
+                sandbox_id="sandbox",
+                sandbox_generation=7,
+                hibernation_generation=2,
+                operation_id="park:source",
+                spec_sha256=source_registration.spec_sha256,
+                container_id=container_id,
+                created_ns=1,
+                runtime=runtime,
+                files=tuple(
+                    HibernationArtifactFile.from_path(
+                        generation / name,
+                        role=role,
+                    )
+                    for name, role in roles.items()
+                ),
+            )
+            HibernationArtifactStore(source_root).publish_complete(source_manifest)
+            archive_path = root / "migration.tar"
+            archive = DirectMigrationArchiveStore().export(
+                registration=source_registration,
+                local_manifest=source_manifest,
+                runtime_identity=provisioner.identity,
+                writable_incarnation=source,
+                archive_path=archive_path,
+            )
+
+            staged = provisioner.stage_import(
+                archive_path,
+                expected_sha256=archive.sha256,
+                migration_id="move:7",
+            )
+
+            self.assertEqual(staged.registration.phase, "import_ready")
+            self.assertEqual(staged.lifecycle_state, HibernationState.PARKED)
+            self.assertEqual(registry.get("sandbox").phase, "import_ready")
+            activated = provisioner.activate_import(
+                "sandbox",
+                migration_id="move:7",
+                migration_sha256=archive.sha256,
+            )
+            self.assertEqual(activated.registration.phase, "owned")
+            replay = provisioner.stage_import(
+                archive_path,
+                expected_sha256=archive.sha256,
+                migration_id="move:7",
+            )
+            self.assertEqual(replay.registration.phase, "owned")
+
     def test_restart_advances_quota_ready_registration(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -330,6 +457,43 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertTrue(images.reconciled)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].registration.phase, "owned")
+
+    def test_restart_never_turns_interrupted_import_into_new_sandbox(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=9,
+                operation_id="create:9",
+                runtime_identity_sha256=provisioner.identity.digest,
+            )
+            reservation = ledger.reserve(
+                sandbox_id="sandbox",
+                sandbox_generation=9,
+                memory_mb=1024,
+                writable_disk_mb=2048,
+            )
+            payload = quota.prepare(reservation)
+            quota_ready = registry.commit_quota(
+                "sandbox",
+                expected_revision=planned.revision,
+                project_id=reservation.project_id,
+                total_mb=reservation.total_mb,
+                quota_path=Path(payload["path"]),
+            )
+            registry.begin_import(
+                "sandbox",
+                expected_revision=quota_ready.revision,
+                migration_id="move:interrupted",
+                migration_sha256="a" * 64,
+            )
+
+            results = provisioner.start()
+
+            self.assertEqual(results, ())
+            self.assertEqual(registry.get("sandbox").phase, "importing")
+            self.assertNotIn(("sandbox", 9), warden.records)
 
     def test_start_fails_closed_on_orphan_capacity_owner(self) -> None:
         with TemporaryDirectory() as raw:
@@ -363,6 +527,46 @@ class DirectProvisionerTests(unittest.TestCase):
                 HibernationState.RUNNING.value,
             )
             self.assertEqual(runner.calls[-1][1], b"\0binary")
+
+    def test_service_quarantines_dead_running_sentry_on_read(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, warden = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = service.create(self.spec())
+            warden.alive = False
+
+            observed = service.get(created.spec.id)
+
+            self.assertIsNotNone(observed)
+            self.assertEqual(observed.state, HibernationState.RECOVERY_REQUIRED.value)
+
+    def test_service_rejects_restore_beyond_hard_active_capacity(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            first = service.create(replace(self.spec(), id="sandbox-a"))
+            second = service.create(replace(self.spec(), id="sandbox-b"))
+            service.park(first.spec.id)
+            service.park(second.spec.id)
+            service.configure_active_capacity(ResourceQuantity(vcpu=1, memory_mb=1024))
+
+            service.exec(first.spec.id, ("/bin/true",))
+            with self.assertRaisesRegex(
+                DirectWardenError,
+                "insufficient active CPU or memory",
+            ):
+                service.exec(second.spec.id, ("/bin/true",))
+
+            self.assertEqual(service.get(first.spec.id).state, "running")
+            self.assertEqual(service.get(second.spec.id).state, "parked")
 
     def test_node_adapter_holds_exec_lease_and_accounts_parked_memory(self) -> None:
         with TemporaryDirectory() as raw:
@@ -452,10 +656,11 @@ class DirectProvisionerTests(unittest.TestCase):
                     "direct-runsc-v1",
                     server.RequestHandlerClass.capabilities,
                 )
+                self.assertIsNone(service._parking_thread)
             finally:
                 server.server_close()
 
-    def test_direct_node_park_endpoint_and_exec_wake(self) -> None:
+    def test_direct_node_park_and_explicit_wake_endpoints(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
             provisioner, _, _, _, _, _ = self.make(root)
@@ -485,17 +690,27 @@ class DirectProvisionerTests(unittest.TestCase):
                 with request.urlopen(park_request) as response:
                     parked = json.load(response)["sandbox"]
                 self.assertEqual(parked["state"], HibernationState.PARKED.value)
-
-                manager = server.RequestHandlerClass.manager
-                manager.lifecycle.acquire_shared(created.spec.id)
-                try:
-                    manager.runtime.exec_command(
+                with self.assertRaises(RuntimeError):
+                    service.wake(
                         created.spec.id,
-                        ("/bin/true",),
-                        interactive=False,
+                        generation=created.generation + 1,
+                        operation_id="wake:stale",
                     )
-                finally:
-                    manager.lifecycle.release_shared(created.spec.id)
+
+                wake_request = request.Request(
+                    f"http://{host}:{port}/v1/sandboxes/{created.spec.id}/wake",
+                    data=json.dumps(
+                        {
+                            "generation": created.generation,
+                            "operation_id": "wake:test",
+                        }
+                    ).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with request.urlopen(wake_request) as response:
+                    woken = json.load(response)["sandbox"]
+                self.assertEqual(woken["state"], HibernationState.RUNNING.value)
                 self.assertEqual(
                     service.get(created.spec.id).state,
                     HibernationState.RUNNING.value,
@@ -504,6 +719,174 @@ class DirectProvisionerTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=1)
+
+    def test_direct_node_migrates_parked_sandbox_between_daemons(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            source_root = root / "source"
+            destination_root = root / "destination"
+            source_root.mkdir()
+            destination_root.mkdir()
+            source, _, _, _, source_images, source_warden = self.make(source_root)
+            destination, destination_registry, _, _, _, _ = self.make(destination_root)
+            source_service = DirectSandboxService(
+                source,
+                process_runner=FakeProcessRunner(),
+            )
+            destination_service = DirectSandboxService(
+                destination,
+                process_runner=FakeProcessRunner(),
+            )
+            created = source_service.create(self.spec())
+            source_service.park(created.spec.id, operation_id="park:migration")
+            registration = source.registry.get(created.spec.id)
+            self.assertIsNotNone(registration)
+            assert registration is not None
+            incarnation = Path(registration.quota_path)
+            generation = incarnation / "hibernate-1"
+            generation.mkdir()
+            (incarnation / "upper" / "payload").write_bytes(b"migrated")
+            roles = {
+                "application_memory.img": HibernationFileRole.MAIN_MEMORY,
+                "checkpoint.img": HibernationFileRole.KERNEL_STATE,
+                "pages_meta.img": HibernationFileRole.ALLOCATOR_METADATA,
+            }
+            for name in roles:
+                (generation / name).write_bytes(name.encode("ascii"))
+            runtime = replace(
+                source_warden.config.runtime_fingerprint,
+                rootfs_sha256=source_images.image.rootfs_identity_sha256,
+            )
+            manifest = HibernationManifest(
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation,
+                hibernation_generation=1,
+                operation_id="park:migration",
+                spec_sha256=registration.spec_sha256,
+                container_id=registration.container_id,
+                created_ns=1,
+                runtime=runtime,
+                files=tuple(
+                    HibernationArtifactFile.from_path(
+                        generation / name,
+                        role=role,
+                    )
+                    for name, role in roles.items()
+                ),
+            )
+            source_warden.artifacts.publish_complete(manifest)
+            source_warden.records[
+                (registration.sandbox_id, registration.sandbox_generation)
+            ] = SimpleNamespace(
+                state=HibernationState.PARKED,
+                hibernation_generation=1,
+            )
+
+            source_server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=source_service,
+                image_file=source_root / "images.json",
+                job_id="source-job",
+                node_id="source-node",
+                node_control_bearer_token="shared-secret",
+            )
+            destination_server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=destination_service,
+                image_file=destination_root / "images.json",
+                job_id="destination-job",
+                node_id="destination-node",
+                node_control_bearer_token="shared-secret",
+            )
+            source_thread = Thread(
+                target=source_server.serve_forever,
+                daemon=True,
+            )
+            destination_thread = Thread(
+                target=destination_server.serve_forever,
+                daemon=True,
+            )
+            source_thread.start()
+            destination_thread.start()
+
+            def post(base: str, path: str, payload: dict) -> dict:
+                outbound = request.Request(
+                    base + path,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": "Bearer shared-secret",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                with request.urlopen(outbound) as response:
+                    return json.load(response)
+
+            try:
+                source_host, source_port = source_server.server_address
+                destination_host, destination_port = destination_server.server_address
+                source_base = f"http://{source_host}:{source_port}"
+                destination_base = f"http://{destination_host}:{destination_port}"
+                migration_id = "migration-http"
+                prepared = post(
+                    source_base,
+                    f"/v1/sandboxes/{created.spec.id}/migration/prepare",
+                    {"migration_id": migration_id},
+                )["migration"]
+                source_url = (
+                    f"{source_base}/v1/sandboxes/{created.spec.id}"
+                    f"/migration/archive?migration_id={migration_id}"
+                )
+                imported = post(
+                    destination_base,
+                    "/v1/migrations/import",
+                    {
+                        "archive_sha256": prepared["archive_sha256"],
+                        "archive_token": prepared["archive_token"],
+                        "migration_id": migration_id,
+                        "sandbox_id": created.spec.id,
+                        "source_url": source_url,
+                    },
+                )
+                self.assertEqual(imported["sandbox"]["state"], "import_ready")
+                activated = post(
+                    destination_base,
+                    f"/v1/sandboxes/{created.spec.id}/migration/activate",
+                    {
+                        "archive_sha256": prepared["archive_sha256"],
+                        "migration_id": migration_id,
+                    },
+                )
+                post(
+                    source_base,
+                    f"/v1/sandboxes/{created.spec.id}/migration/finalize",
+                    {
+                        "archive_sha256": prepared["archive_sha256"],
+                        "migration_id": migration_id,
+                    },
+                )
+            finally:
+                source_server.shutdown()
+                destination_server.shutdown()
+                source_server.server_close()
+                destination_server.server_close()
+                source_thread.join(timeout=1)
+                destination_thread.join(timeout=1)
+
+            self.assertEqual(activated["sandbox"]["state"], "parked")
+            self.assertIsNone(source.registry.get(created.spec.id))
+            destination_registration = destination_registry.get(created.spec.id)
+            self.assertIsNotNone(destination_registration)
+            assert destination_registration is not None
+            self.assertEqual(destination_registration.phase, "owned")
+            self.assertEqual(
+                (
+                    Path(destination_registration.quota_path) / "upper" / "payload"
+                ).read_bytes(),
+                b"migrated",
+            )
 
 
 if __name__ == "__main__":

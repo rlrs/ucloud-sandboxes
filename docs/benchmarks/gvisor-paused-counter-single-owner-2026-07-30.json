@@ -1,0 +1,204 @@
+{
+  "create_ms": 803.2847099993887,
+  "cycles": 3,
+  "host": {
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+    "runsc_version": "runsc version release-20260721.0-dirty\nspec: 1.2.1",
+    "uname": "Linux sandbox-builder-paused-restore 6.8.0-53-generic #55-Ubuntu SMP PREEMPT_DYNAMIC Fri Jan 17 15:37:52 UTC 2025 x86_64"
+  },
+  "paused_handoff_probes": [
+    {
+      "before": 19,
+      "held": 19,
+      "resumed": 30
+    },
+    {
+      "before": 72,
+      "held": 72,
+      "resumed": 82
+    },
+    {
+      "before": 132,
+      "held": 132,
+      "resumed": 142
+    }
+  ],
+  "samples": [
+    {
+      "after": "",
+      "allocated_artifact_bytes": 307200,
+      "before": "",
+      "cycle": 0,
+      "park_ms": 315.2182619996893,
+      "pre_park_sentry_rss_bytes": 33828864,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 649875,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.66304200002924,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.409285000008822,
+          "returncode": 0
+        },
+        {
+          "command": "/opt/ucloud-runsc-v2/runsc-hibernate-342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+          "elapsed_ms": 16.279571000268334,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.271788999802084,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 64.02354100009688,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 553.615974999957,
+      "resume_phases_ms": {
+        "artifact_cleanup": 5.801524000162317,
+        "begin_restore_journal": 1.8198799998572213,
+        "candidate_fence": 0.08318499931192491,
+        "candidate_journal": 2.2922109992578044,
+        "candidate_resume": 293.6100389997591,
+        "commit_running_journal": 3.5897649995604297,
+        "readiness_exec": 64.03604999923118,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.03804700008913642,
+        "runsc_restore": 164.7007580004356,
+        "runsc_state": 16.761384999881557,
+        "validate_artifact": 0.7896799997979542,
+        "warden_total": 553.5921600003348
+      },
+      "resume_residual_ms": 275.9687469997516,
+      "verify_ms": 32.42681099982292
+    },
+    {
+      "after": "",
+      "allocated_artifact_bytes": 319488,
+      "before": "",
+      "cycle": 1,
+      "park_ms": 296.71560499991756,
+      "pre_park_sentry_rss_bytes": 39104512,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 650016,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.87454799971601,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.757981000409927,
+          "returncode": 0
+        },
+        {
+          "command": "/opt/ucloud-runsc-v2/runsc-hibernate-342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+          "elapsed_ms": 16.600784000729618,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.4381089998642,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.75092900003074,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 527.119723999931,
+      "resume_phases_ms": {
+        "artifact_cleanup": 9.644559999287594,
+        "begin_restore_journal": 1.7159139997602324,
+        "candidate_fence": 0.1232149998031673,
+        "candidate_journal": 2.86450200019317,
+        "candidate_resume": 294.65484299998934,
+        "commit_running_journal": 2.5133939998340793,
+        "readiness_exec": 32.79709900016314,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.03192799977114191,
+        "runsc_restore": 164.9174629992558,
+        "runsc_state": 17.143360999398283,
+        "validate_artifact": 0.6104190006226418,
+        "warden_total": 527.0918220003296
+      },
+      "resume_residual_ms": 279.6973729991805,
+      "verify_ms": 115.20903500058921
+    },
+    {
+      "after": "",
+      "allocated_artifact_bytes": 315392,
+      "before": "",
+      "cycle": 2,
+      "park_ms": 275.41776899943216,
+      "pre_park_sentry_rss_bytes": 39329792,
+      "restored_cpu_max": "25000 100000",
+      "restored_sentry_pid": 650156,
+      "resume_commands": [
+        {
+          "command": "restore",
+          "elapsed_ms": 164.6995450000759,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 16.561023000576824,
+          "returncode": 0
+        },
+        {
+          "command": "/opt/ucloud-runsc-v2/runsc-hibernate-342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1",
+          "elapsed_ms": 16.413862999797857,
+          "returncode": 0
+        },
+        {
+          "command": "state",
+          "elapsed_ms": 15.882240999417263,
+          "returncode": 0
+        },
+        {
+          "command": "exec",
+          "elapsed_ms": 32.12669900040055,
+          "returncode": 0
+        }
+      ],
+      "resume_ms": 519.4504170003711,
+      "resume_phases_ms": {
+        "artifact_cleanup": 3.5352220002096146,
+        "begin_restore_journal": 1.7613930003790301,
+        "candidate_fence": 0.07901800017862115,
+        "candidate_journal": 2.9266660003486322,
+        "candidate_resume": 294.6251059993301,
+        "commit_running_journal": 2.1658300001945463,
+        "readiness_exec": 32.151096999768924,
+        "restore_image_reflinked": 0.0,
+        "restore_image_stage": 0.038379000216082204,
+        "runsc_restore": 164.73264599972026,
+        "runsc_state": 16.853093999998237,
+        "validate_artifact": 0.5133519998707925,
+        "warden_total": 519.4343219991424
+      },
+      "resume_residual_ms": 273.7670460001027,
+      "verify_ms": 64.53969900030643
+    }
+  ],
+  "schema": 1,
+  "summary": {
+    "park_p50_ms": 296.71560499991756,
+    "park_p95_ms": 315.2182619996893,
+    "resume_p50_ms": 527.119723999931,
+    "resume_p95_ms": 553.615974999957,
+    "verify_p50_ms": 64.53969900030643,
+    "verify_p95_ms": 115.20903500058921
+  },
+  "workload": "paused-handoff-counter",
+  "workload_ready_ms": 0.0
+}

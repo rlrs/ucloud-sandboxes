@@ -29,6 +29,7 @@ from .sandbox import (
     MAX_FORK_FANOUT,
     DockerGvisorRuntime,
     HibernationQuotaBackend,
+    SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
@@ -71,6 +72,15 @@ async def create_sandbox(request: web.Request) -> web.Response:
         )
     except SandboxConflictError as exc:
         raise web.HTTPConflict(text=str(exc)) from exc
+    except SandboxAdmissionClosedError as exc:
+        return web.json_response(
+            {
+                "error": str(exc),
+                "error_code": "node_admission_closed",
+                "retryable": True,
+            },
+            status=web.HTTPServiceUnavailable.status_code,
+        )
     except SandboxCapacityUnavailableError as exc:
         raise web.HTTPServiceUnavailable(text=str(exc)) from exc
     except RuntimeError as exc:
@@ -342,6 +352,53 @@ async def delete_sandbox(request: web.Request) -> web.Response:
             "exitCode": result.exit_code,
         }
     )
+
+
+async def park_sandbox(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise ValueError("park payload must be a JSON object")
+        operation_id = str(raw.get("operation_id") or "").strip() or None
+        park = getattr(manager, "park", None)
+        if park is None:
+            raise RuntimeError("sandbox parking is unavailable on this runtime")
+        record = await asyncio.to_thread(
+            park,
+            request.match_info["sandbox_id"],
+            operation_id=operation_id,
+        )
+    except RuntimeError as exc:
+        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    return web.json_response({"sandbox": record.to_dict()})
+
+
+async def wake_sandbox(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise ValueError("wake payload must be a JSON object")
+        operation_id = str(raw.get("operation_id") or "").strip() or None
+        generation_raw = raw.get("generation")
+        generation = None if generation_raw is None else int(generation_raw)
+        wake = getattr(manager, "wake", None)
+        if wake is None:
+            raise RuntimeError("sandbox waking is unavailable on this runtime")
+        record = await asyncio.to_thread(
+            wake,
+            request.match_info["sandbox_id"],
+            generation=generation,
+            operation_id=operation_id,
+        )
+    except RuntimeError as exc:
+        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    return web.json_response({"sandbox": record.to_dict()})
 
 
 async def configure_drain(request: web.Request) -> web.Response:
@@ -666,6 +723,8 @@ def create_async_node_agent_app(
     app.router.add_post("/v1/sandboxes", create_sandbox)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/forks", fork_sandbox)
     app.router.add_delete("/v1/sandboxes/{sandbox_id}", delete_sandbox)
+    app.router.add_post("/v1/sandboxes/{sandbox_id}/park", park_sandbox)
+    app.router.add_post("/v1/sandboxes/{sandbox_id}/wake", wake_sandbox)
     app.router.add_post("/v1/drain", configure_drain)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/exec", start_exec)
     app.router.add_get("/v1/exec/{session_id}", get_exec_session)

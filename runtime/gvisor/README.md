@@ -11,6 +11,7 @@ The patch keeps upstream memfd/checkpoint behavior as the default and adds:
 --application-memory-file-dir=/absolute/host/path
 runsc checkpoint --hibernate --image-path=... CONTAINER
 runsc restore --cpu-startup-burst ...
+runsc restore --start-paused ...
 ```
 
 The runsc parent creates a private sparse regular file and donates it as the
@@ -20,13 +21,19 @@ tasks and internal time updates quiesced, and renames the canonical backing file
 into the checkpoint directory. The sentry deliberately remains alive: the node
 Warden can resume it if durable publication fails, or stop it only after the
 artifact and `COMPLETE` marker are durable. Restore creates a new sentry, maps
-that same inode, and moves it back into active storage.
+an application-memory inode back into active storage, and can hold all restored
+guest tasks under a kernel external stop until the Warden explicitly resumes
+them.
 
 The current artifact is intentionally narrow:
 
 - hibernate and active-memory directories must be on the same filesystem;
-- restore consumes the checkpoint's application-memory file, so it is
-  single-owner and cannot be used for fork/fan-out;
+- linear restore remains single-owner and is not yet exposed as fork/fan-out;
+- linear restore moves the single backing inode from the parked generation into
+  a new backend held paused, durably journals and fences that candidate, and
+  only then resumes guest execution; failure moves the same inode back into the
+  checkpoint, so restore never needs quota for two memory backings and retains
+  the inode's warm page-cache identity;
 - `runsc` captures a locally consistent generation but the node Warden, not the
   runtime, owns fsync, manifest publication, exact-process termination, and
   crash reconciliation;
@@ -45,15 +52,21 @@ resources before the restore command succeeds. The Warden admits no exec until
 that boundary. This avoids multiplying wake latency for small CPU requests
 while preserving the requested quota for all sandbox work.
 
-These constraints are deliberate. OverlayBD, ublk, layering, dirty-page
-tracking, and reflink lineage are only needed for cloning, remote storage, or
-crash-durable generations; they are not needed to test whether linear
-hibernate/restore can eliminate page copies and stopped runsc processes.
+The paused restore handoff is also transactional. The runtime atomically moves
+the single memory inode into active storage while the guest remains stopped.
+The candidate identity is durable before it can run. A failed handoff reaps the
+candidate and moves the inode back; a crash after candidate creation discovers,
+fences, and reconciles that sole owner. `runsc resume` is replay-safe if the
+kernel was already unpaused but container metadata was not yet persisted.
+
+These constraints are deliberate. OverlayBD, ublk, layering, and dirty-page
+tracking remain useful for fork, remote storage, or live migration, but are not
+required for quota-safe linear hibernate/restore on local XFS.
 
 ## Build and tests
 
-The preferred path verifies the exact source and patch, runs the four tests
-added by the patch series, builds with `-c opt`, and emits a content-addressed
+The preferred path verifies the exact source and five-patch series, runs its
+focused tests, builds with `-c opt`, and emits a content-addressed
 binary plus build manifest. Filtering to the patch tests avoids making the
 artifact build depend on unrelated host-network tests in gVisor's much larger
 target:
@@ -64,7 +77,7 @@ target:
 
 The script is idempotent for an already-patched checkout but refuses another
 source commit, patch digest, or unrelated dirty tree. For manual development,
-apply the four numbered patches in order to the pinned checkout, then:
+apply the five numbered patches in order to the pinned checkout, then:
 
 ```bash
 bazel build -c opt //runsc:runsc

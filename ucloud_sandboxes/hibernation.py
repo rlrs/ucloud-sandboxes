@@ -623,6 +623,7 @@ class HibernationArtifactStore:
         *,
         active_root: Path,
         file_name: str,
+        artifact_name: str | None = None,
     ) -> Path:
         """Return a manifest-owned inode after a failed restore candidate.
 
@@ -634,8 +635,14 @@ class HibernationArtifactStore:
         """
         if not _SAFE_FILE_NAME.fullmatch(file_name) or file_name in {".", ".."}:
             raise ValueError("consumed artifact name must be a safe basename")
+        artifact_name = file_name if artifact_name is None else artifact_name
+        if (
+            not _SAFE_FILE_NAME.fullmatch(artifact_name)
+            or artifact_name in {".", ".."}
+        ):
+            raise ValueError("artifact target name must be a safe basename")
         expected = next(
-            (item for item in manifest.files if item.name == file_name),
+            (item for item in manifest.files if item.name == artifact_name),
             None,
         )
         if expected is None:
@@ -678,7 +685,7 @@ class HibernationArtifactStore:
                     )
                 try:
                     os.stat(
-                        file_name,
+                        artifact_name,
                         dir_fd=target_fd,
                         follow_symlinks=False,
                     )
@@ -690,7 +697,7 @@ class HibernationArtifactStore:
                     )
                 os.rename(
                     file_name,
-                    file_name,
+                    artifact_name,
                     src_dir_fd=source_fd,
                     dst_dir_fd=target_fd,
                 )
@@ -699,7 +706,7 @@ class HibernationArtifactStore:
             finally:
                 os.close(target_fd)
                 os.close(source_fd)
-            return generation / file_name
+            return generation / artifact_name
 
     def publish_complete(self, manifest: HibernationManifest) -> HibernationManifest:
         with self._locked():
@@ -1545,6 +1552,53 @@ class HibernationJournal:
                 updated_ns=time.time_ns(),
                 sentry_pid=sentry_pid,
                 sentry_start_time_ticks=sentry_start_time_ticks,
+            )
+            self._save_unlocked(record)
+            return record
+
+    def initialize_parked(
+        self,
+        manifest: HibernationManifest,
+    ) -> HibernationRecord:
+        """Adopt a complete portable generation without creating a backend."""
+        with self._locked():
+            existing = self._load_unlocked()
+            if existing is not None:
+                expected = (
+                    manifest.sandbox_id,
+                    manifest.sandbox_generation,
+                    manifest.hibernation_generation,
+                    manifest.spec_sha256,
+                    manifest.metadata_sha256,
+                )
+                actual = (
+                    existing.sandbox_id,
+                    existing.sandbox_generation,
+                    existing.hibernation_generation,
+                    existing.spec_sha256,
+                    existing.manifest_sha256,
+                )
+                if (
+                    actual == expected
+                    and existing.state == HibernationState.PARKED
+                    and existing.authority == HibernationAuthority.PARKED
+                ):
+                    return existing
+                raise HibernationConflictError(
+                    "hibernation journal already owns another lifecycle state"
+                )
+            record = HibernationRecord(
+                sandbox_id=manifest.sandbox_id,
+                sandbox_generation=manifest.sandbox_generation,
+                hibernation_generation=manifest.hibernation_generation,
+                spec_sha256=manifest.spec_sha256,
+                state=HibernationState.PARKED,
+                authority=HibernationAuthority.PARKED,
+                operation_kind="hibernate",
+                operation_id=manifest.operation_id,
+                revision=0,
+                updated_ns=time.time_ns(),
+                manifest_sha256=manifest.metadata_sha256,
             )
             self._save_unlocked(record)
             return record
@@ -2721,6 +2775,7 @@ class HibernationDiskLedger:
         writable_disk_mb: int,
         private_pages_mb: int | None = None,
         fixed_overhead_mb: int = HIBERNATION_FIXED_OVERHEAD_MB,
+        allow_released_generation: bool = False,
     ) -> HibernationDiskReservation:
         sandbox_id = _validate_safe_id("sandbox_id", sandbox_id)
         sandbox_generation = _validate_nonnegative_int(
@@ -2763,7 +2818,10 @@ class HibernationDiskLedger:
                         "replayed disk reservation has different resource bounds"
                     )
                 return existing
-            if state.tombstones.get(sandbox_id, -1) >= sandbox_generation:
+            if (
+                state.tombstones.get(sandbox_id, -1) >= sandbox_generation
+                and not allow_released_generation
+            ):
                 raise HibernationConflictError(
                     "sandbox disk reservation generation is fenced by a tombstone"
                 )

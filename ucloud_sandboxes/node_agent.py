@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import hmac
 import json
 import math
+import os
 from pathlib import Path
 import shutil
 import time
 from typing import Any, Callable
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib import error as urlerror
+from urllib import request as urlrequest
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
 from .agent import build_heartbeat
@@ -37,6 +41,7 @@ from .capabilities import (
 from .sandbox import (
     HibernationQuotaBackend,
     MAX_FORK_FANOUT,
+    SandboxAdmissionClosedError,
     SandboxBusyError,
     DockerGvisorRuntime,
     SandboxCapacityUnavailableError,
@@ -99,6 +104,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/healthz":
             self._write_json(service_health("node-agent"))
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/archive"
+        ):
+            self._download_migration_archive(parsed)
             return
         if not self._check_node_control_authorized():
             return
@@ -255,8 +265,39 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
+        if parsed.path == "/v1/migrations/import":
+            self._import_migration()
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/prepare"
+        ):
+            self._prepare_migration(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/activate"
+        ):
+            self._activate_migration(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/finalize"
+        ):
+            self._finalize_migration(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/abort"
+        ):
+            self._abort_migration(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/migration/abort-import"
+        ):
+            self._abort_import(parsed.path)
+            return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/park"):
             self._park_sandbox(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/wake"):
+            self._wake_sandbox(parsed.path)
             return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/forks"):
             self._fork_sandbox(parsed.path)
@@ -399,9 +440,19 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
+        except SandboxAdmissionClosedError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_admission_closed",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
         except SandboxCapacityUnavailableError as exc:
             self._write_json(
-                {"error": str(exc)},
+                {"error": str(exc), "retryable": True},
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
             )
             return
@@ -474,6 +525,288 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             self._write_exception(exc)
             return
         self._write_json({"sandbox": record.to_dict()})
+
+    def _wake_sandbox(self, path: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix="/wake")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("wake payload must be a JSON object")
+            operation_id = str(raw.get("operation_id") or "").strip() or None
+            generation_raw = raw.get("generation")
+            generation = None if generation_raw is None else int(generation_raw)
+            wake = getattr(self.manager, "wake", None)
+            if wake is None:
+                raise RuntimeError("sandbox waking is unavailable on this runtime")
+            record = wake(
+                sandbox_id,
+                generation=generation,
+                operation_id=operation_id,
+            )
+        except SandboxConflictError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"sandbox": record.to_dict()})
+
+    def _prepare_migration(self, path: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix="/migration/prepare")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("migration payload must be a JSON object")
+            migration_id = str(raw.get("migration_id") or "").strip()
+            service = self._direct_service()
+            archive = service.prepare_move(
+                sandbox_id,
+                migration_id=migration_id,
+            )
+            archive_token = self._migration_archive_token(
+                sandbox_id=sandbox_id,
+                migration_id=migration_id,
+                migration_sha256=archive.sha256,
+            )
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json(
+            {
+                "migration": {
+                    "archive_bytes": archive.path.stat().st_size,
+                    "archive_sha256": archive.sha256,
+                    "archive_token": archive_token,
+                    "manifest": archive.manifest.to_dict(),
+                    "migration_id": migration_id,
+                    "sandbox_id": sandbox_id,
+                }
+            }
+        )
+
+    def _download_migration_archive(self, parsed: Any) -> None:
+        sandbox_id = _sandbox_id_from_path(
+            parsed.path,
+            suffix="/migration/archive",
+        )
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        migration_id = (query.get("migration_id") or [""])[0].strip()
+        supplied_token = self.headers.get("X-UCloud-Migration-Token") or ""
+        try:
+            archive = self._direct_service().prepared_move_archive(
+                sandbox_id,
+                migration_id=migration_id,
+            )
+            expected_token = self._migration_archive_token(
+                sandbox_id=sandbox_id,
+                migration_id=migration_id,
+                migration_sha256=archive.sha256,
+            )
+            if not supplied_token or not hmac.compare_digest(
+                supplied_token,
+                expected_token,
+            ):
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=HTTPStatus.UNAUTHORIZED,
+                )
+                return
+            size = archive.path.stat().st_size
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/x-tar")
+            self.send_header("Content-Length", str(size))
+            self.send_header("X-UCloud-Archive-SHA256", archive.sha256)
+            self.end_headers()
+            with archive.path.open("rb") as source:
+                shutil.copyfileobj(source, self.wfile, length=8 * 1024 * 1024)
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+
+    def _import_migration(self) -> None:
+        archive_path: Path | None = None
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("migration payload must be a JSON object")
+            sandbox_id = str(raw.get("sandbox_id") or "").strip()
+            migration_id = str(raw.get("migration_id") or "").strip()
+            migration_sha256 = str(raw.get("archive_sha256") or "").strip()
+            archive_token = str(raw.get("archive_token") or "").strip()
+            source_url = str(raw.get("source_url") or "").strip()
+            if not sandbox_id or not migration_sha256 or not archive_token:
+                raise ValueError("migration identity and archive fields are required")
+            parsed_source = urlparse(source_url)
+            expected_suffix = (
+                f"/v1/sandboxes/{quote(sandbox_id, safe='')}/migration/archive"
+            )
+            source_query = parse_qs(parsed_source.query, keep_blank_values=True)
+            if (
+                parsed_source.scheme not in {"http", "https"}
+                or not parsed_source.netloc
+                or parsed_source.username is not None
+                or parsed_source.password is not None
+                or parsed_source.fragment
+                or parsed_source.path != expected_suffix
+                or (source_query.get("migration_id") or [""])[0] != migration_id
+            ):
+                raise ValueError("migration source URL is invalid")
+            service = self._direct_service()
+            registration = service.provisioner.registry.get(sandbox_id)
+            if (
+                registration is not None
+                and registration.phase in {"import_ready", "owned"}
+                and registration.migration_id == migration_id
+                and registration.migration_sha256 == migration_sha256
+            ):
+                self._write_json({"sandbox": service._record(registration).to_dict()})
+                return
+            archive_path = service.migration_archive_path(migration_id)
+            archive_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            temporary = archive_path.with_suffix(".partial")
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+            digest = hashlib.sha256()
+            downloaded = 0
+            request = urlrequest.Request(
+                source_url,
+                headers={"X-UCloud-Migration-Token": archive_token},
+                method="GET",
+            )
+            with urlrequest.urlopen(request, timeout=3600) as response:
+                length_header = response.headers.get("Content-Length")
+                expected_length = (
+                    int(length_header) if length_header is not None else None
+                )
+                free_bytes = shutil.disk_usage(archive_path.parent).free
+                if expected_length is not None and expected_length > max(
+                    0, free_bytes - 64 * 1024 * 1024
+                ):
+                    raise RuntimeError(
+                        "destination has insufficient transient migration space"
+                    )
+                with temporary.open("xb") as destination:
+                    while True:
+                        chunk = response.read(8 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > max(0, free_bytes - 64 * 1024 * 1024):
+                            raise RuntimeError(
+                                "migration archive exceeded destination free space"
+                            )
+                        digest.update(chunk)
+                        destination.write(chunk)
+                    destination.flush()
+                    os.fsync(destination.fileno())
+            if expected_length is not None and downloaded != expected_length:
+                raise RuntimeError("migration archive download ended early")
+            if digest.hexdigest() != migration_sha256:
+                raise RuntimeError("migration archive digest does not match")
+            temporary.replace(archive_path)
+            result = service.stage_import(
+                archive_path,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            archive_path.unlink()
+            archive_path = None
+        except (urlerror.URLError, OSError, RuntimeError, ValueError) as exc:
+            self._write_exception(
+                RuntimeError(f"migration import failed: {exc}")
+                if isinstance(exc, urlerror.URLError)
+                else exc
+            )
+            return
+        finally:
+            if archive_path is not None:
+                try:
+                    archive_path.with_suffix(".partial").unlink()
+                except FileNotFoundError:
+                    pass
+        self._write_json(
+            {"sandbox": result.to_dict()},
+            status=HTTPStatus.CREATED,
+        )
+
+    def _activate_migration(self, path: str) -> None:
+        self._complete_migration_action(path, action="activate")
+
+    def _finalize_migration(self, path: str) -> None:
+        self._complete_migration_action(path, action="finalize")
+
+    def _abort_migration(self, path: str) -> None:
+        self._complete_migration_action(path, action="abort")
+
+    def _abort_import(self, path: str) -> None:
+        self._complete_migration_action(path, action="abort-import")
+
+    def _complete_migration_action(self, path: str, *, action: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix=f"/migration/{action}")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("migration payload must be a JSON object")
+            migration_id = str(raw.get("migration_id") or "").strip()
+            migration_sha256 = str(raw.get("archive_sha256") or "").strip()
+            service = self._direct_service()
+            if action == "activate":
+                record = service.activate_import(
+                    sandbox_id,
+                    migration_id=migration_id,
+                    migration_sha256=migration_sha256,
+                )
+            elif action == "abort":
+                record = service.abort_move(
+                    sandbox_id,
+                    migration_id=migration_id,
+                    migration_sha256=migration_sha256,
+                )
+            elif action == "abort-import":
+                service.abort_import(
+                    sandbox_id,
+                    migration_id=migration_id,
+                    migration_sha256=migration_sha256,
+                )
+                record = None
+            else:
+                service.finalize_moved_source(
+                    sandbox_id,
+                    migration_id=migration_id,
+                    migration_sha256=migration_sha256,
+                )
+                record = None
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        payload: dict[str, Any] = {"ok": True}
+        if record is not None:
+            payload["sandbox"] = record.to_dict()
+        self._write_json(payload)
+
+    def _direct_service(self) -> Any:
+        service = getattr(self.manager, "service", None)
+        if service is None:
+            raise RuntimeError("sandbox migration is unavailable on this runtime")
+        return service
+
+    def _migration_archive_token(
+        self,
+        *,
+        sandbox_id: str,
+        migration_id: str,
+        migration_sha256: str,
+    ) -> str:
+        secret = (
+            self.node_control_bearer_token or "development-node-without-control-token"
+        ).encode("utf-8")
+        payload = "\0".join((sandbox_id, migration_id, migration_sha256)).encode(
+            "utf-8"
+        )
+        return hmac.new(secret, payload, hashlib.sha256).hexdigest()
 
     def _fork_sandbox(self, path: str) -> None:
         started = time.monotonic()
@@ -1339,8 +1672,18 @@ def build_direct_node_agent_server(
     configured_resources = total_resources or ResourceQuantity()
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
-    if cpu_overcommit < 0 or memory_overcommit < 0:
-        raise ValueError("direct node overcommit factors cannot be negative")
+    if cpu_overcommit != 1.0 or memory_overcommit != 1.0:
+        raise ValueError(
+            "direct node CPU and memory overcommit factors must be exactly 1.0"
+        )
+    if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
+        service.configure_active_capacity(
+            configured_resources.scaled(
+                cpu=cpu_overcommit,
+                memory=memory_overcommit,
+                disk=0.0,
+            )
+        )
     service.start()
     manager = DirectNodeManagerAdapter(service)
     exec_manager = ExecSessionManager(
@@ -1383,6 +1726,7 @@ def build_direct_node_agent_server(
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
         "direct-runsc-v1",
+        "sandbox-migrate-v2",
     )
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.node_epoch = uuid4().hex

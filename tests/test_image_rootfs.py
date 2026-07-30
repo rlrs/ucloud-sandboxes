@@ -257,6 +257,42 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertTrue((incarnation / "upper").is_dir())
             self.assertTrue((incarnation / "work").is_dir())
 
+    def test_imported_overlay_preserves_upper_and_parked_generation(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            runner = FakeRunner()
+            writable_root = (root / "quota").resolve()
+            incarnation = writable_root / "sandbox-1.sandbox-10"
+            upper = incarnation / "upper"
+            generation = incarnation / "hibernate-3"
+            upper.mkdir(parents=True)
+            generation.mkdir()
+            (upper / "payload").write_bytes(b"migrated")
+            (generation / "checkpoint.img").write_bytes(b"checkpoint")
+            manager = OverlayRootfsManager(
+                DockerRootfsStore(
+                    (root / "cache").resolve(),
+                    runner=runner,
+                    extractor=FakeExtractor(),
+                ),
+                writable_root=writable_root,
+                bundle_root=(root / "bundles").resolve(),
+                runner=runner,
+                require_precreated_writable=True,
+            )
+
+            lease = manager.prepare(
+                sandbox_id="sandbox-1",
+                sandbox_generation=10,
+                image_ref="example/image:latest",
+                config_template={"root": {}},
+                imported_parked=True,
+            )
+
+            self.assertEqual((lease.upper / "payload").read_bytes(), b"migrated")
+            self.assertTrue((generation / "checkpoint.img").is_file())
+            self.assertTrue(lease.work.is_dir())
+
     def test_tar_validator_rejects_parent_traversal(self) -> None:
         with TemporaryDirectory() as raw:
             archive = Path(raw) / "escape.tar"

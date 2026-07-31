@@ -1,8 +1,8 @@
 # Storage-native sandbox mobility plan
 
-Status: **Production package qualified; drained rollout pending**
+Status: **Production correctness qualified; cold destination prewarm in progress**
 
-Last reviewed: 2026-07-30
+Last reviewed: 2026-07-31
 
 This document is the source of truth for the storage-native migration work.
 Before changing the storage format, device lifecycle, park/resume protocol,
@@ -704,3 +704,42 @@ protocol tests and emitted provenance-complete backend artifact
 The final all-in-one release script accepts that artifact and passes shell
 syntax validation. Deployment must use that build manifest and its adjacent
 binary/license; the earlier `b3ed...` artifact is not releasable.
+
+### 2026-07-31: real SDK/Verifiers migration exposed cold image preparation
+
+Release 0.3.66 deployed successfully on DFM gateway job `12362088`. A real
+canonical SDK flow using pinned Verifiers commit
+`fcb48822eaf35efe22b6f6deda9c4b422920314e`, its `NullHarness`, the gateway,
+relay, and two autoscaled storage-native nodes moved sandbox
+`vf-live-7729259458` from job `12362135` to `12362136`. It observed:
+
+```text
+running -> parked -> moving_out -> parked -> waking -> running
+```
+
+The harness returned `relay-live-park-ok` with exactly one model call, one
+trace turn, one durable completion, one expected transport reset, and one
+reattachment. The storage descriptor used `storage-native-v1`; no archive
+identity or archive transfer was present.
+
+The first cold migration protocol took 25.32 seconds, including 24.78 seconds
+in destination staging. This was not accepted as the storage result. The
+destination did not create its ublk device until the end of that interval.
+The direct import path calls `image_store.materialize()` before storage mount,
+while node image prewarming previously stopped after `docker pull`.
+Consequently a heartbeat could report the image cached although its immutable
+rootfs export had not been created.
+
+An immediate repeat between the same two nodes isolated the true warm path:
+the protocol took 1.80 seconds, comprising 74 ms source preparation, 1.08
+seconds destination staging, 25 ms route commit, 59 ms destination activation,
+and 491 ms source finalization. That is an 8.5x reduction from the previous
+15.38-second warm archive protocol, with no whole-snapshot transfer.
+
+Direct-node image warmup must therefore mean both Docker pull and immutable
+rootfs materialization. The image-pull API now performs and times both before
+returning success; if materialization fails it removes the advertised image
+record. This moves cold rootfs CPU/disk work into destination preparation,
+before the migration timer and source fence, without moving it onto the
+source node or weakening disk admission. A fresh-node production repeat is
+required before the drained rollout is complete.

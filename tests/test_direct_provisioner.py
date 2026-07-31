@@ -56,10 +56,12 @@ class FakeImageStore:
             image_config=DockerImageConfig(command=("sleep", "3600")),
         )
         self.reconciled = False
+        self.materialized_refs: list[str] = []
 
     def materialize(self, image_ref: str) -> MaterializedRootfs:
         if image_ref != "image":
             raise AssertionError("wrong image")
+        self.materialized_refs.append(image_ref)
         return self.image
 
     def reconcile_export_containers(self) -> tuple[str, ...]:
@@ -705,6 +707,53 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertIsNone(service._parking_thread)
             finally:
                 server.server_close()
+
+    def test_direct_image_warmup_materializes_rootfs_before_reporting_ready(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, images, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=service,
+                image_file=root / "images.json",
+                job_id="job",
+                node_id="node",
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                outbound = request.Request(
+                    f"http://{host}:{port}/v1/images/pull",
+                    data=json.dumps({"image": "image"}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with request.urlopen(outbound) as response:
+                    pulled = json.load(response)
+                heartbeat_request = request.Request(
+                    f"http://{host}:{port}/v1/heartbeat"
+                )
+                with request.urlopen(heartbeat_request) as response:
+                    heartbeat = json.load(response)["heartbeat"]
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1)
+
+            self.assertEqual(images.materialized_refs, ["image"])
+            self.assertGreaterEqual(
+                pulled["timings"]["rootfs_materialize_ms"],
+                0,
+            )
+            self.assertIn("image", heartbeat["cached_images"])
 
     def test_direct_node_park_and_explicit_wake_endpoints(self) -> None:
         with TemporaryDirectory() as raw:

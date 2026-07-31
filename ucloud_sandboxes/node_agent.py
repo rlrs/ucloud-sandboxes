@@ -101,6 +101,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None]
     node_epoch: str
     physical_disk_path: Path
+    image_materializer: Callable[[str], object] | None = None
     node_control_bearer_token: str | None = None
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
@@ -1424,17 +1425,35 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
             record, result = self.image_manager.pull(image, image_id=image_id)
+            pull_finished = time.monotonic()
+            materialize_ms: int | None = None
+            if self.image_materializer is not None:
+                try:
+                    self.image_materializer(record.tag)
+                except Exception as exc:
+                    # A direct node must not advertise a pulled image as ready
+                    # when its immutable rootfs export is still unavailable.
+                    self.image_manager.store.delete_by_tags((record.tag,))
+                    raise RuntimeError(
+                        f"image rootfs materialization failed: {exc}"
+                    ) from exc
+                materialize_ms = int(
+                    max(0.0, time.monotonic() - pull_finished) * 1000
+                )
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
+        timings = {
+            "docker_pull_ms": int(max(0.0, pull_finished - started) * 1000)
+        }
+        if materialize_ms is not None:
+            timings["rootfs_materialize_ms"] = materialize_ms
         self._write_json(
             {
                 "image": record.to_dict(),
                 "command": list(result.argv),
                 "exitCode": result.exit_code,
-                "timings": {
-                    "docker_pull_ms": int(max(0.0, time.monotonic() - started) * 1000)
-                },
+                "timings": timings,
             },
             status=HTTPStatus.CREATED,
         )
@@ -1863,6 +1882,9 @@ def build_direct_node_agent_server(
     DirectBoundHandler.image_builds_enabled = False
     DirectBoundHandler.node_epoch = uuid4().hex
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
+    DirectBoundHandler.image_materializer = staticmethod(
+        service.provisioner.image_store.materialize
+    )
     DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
     DirectBoundHandler.max_file_body_bytes = max_file_body_bytes

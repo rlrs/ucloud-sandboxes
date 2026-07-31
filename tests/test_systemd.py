@@ -7,6 +7,29 @@ from ucloud_sandboxes.systemd import run_registry_gc
 
 
 class SystemdHelperTests(unittest.TestCase):
+    def test_registry_gc_is_a_noop_for_fresh_empty_registry(self) -> None:
+        calls: list[list[str]] = []
+
+        def runner(
+            command: list[str],
+            *,
+            check: bool,
+            text: bool,
+        ) -> subprocess.CompletedProcess[str]:
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            run_registry_gc(
+                data_dir=root / "registry",
+                registry_image="registry:2",
+                lock_file=root / "maintenance",
+                runner=runner,
+            )
+
+        self.assertEqual(calls, [])
+
     def test_registry_gc_restarts_registry_after_gc_failure(self) -> None:
         calls: list[list[str]] = []
 
@@ -26,8 +49,12 @@ class SystemdHelperTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir, self.assertRaises(
             subprocess.CalledProcessError
         ):
+            data_dir = Path(raw_dir) / "registry"
+            (
+                data_dir / "docker" / "registry" / "v2" / "repositories"
+            ).mkdir(parents=True)
             run_registry_gc(
-                data_dir=Path("/work/data/registry"),
+                data_dir=data_dir,
                 registry_image="registry:2",
                 lock_file=Path(raw_dir) / "maintenance",
                 runner=runner,

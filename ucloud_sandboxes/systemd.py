@@ -21,6 +21,13 @@ def run_registry_gc(
     """Run offline Distribution GC while holding the shared maintenance fence."""
 
     with registry_maintenance_lock(lock_file, blocking=False):
+        # Distribution exits non-zero when its repository tree has never been
+        # created. That is the normal state of a fresh deployment, not a GC
+        # failure. Check under the same maintenance fence used by publishers
+        # so the empty-registry decision cannot race a managed push.
+        repositories_dir = data_dir / "docker" / "registry" / "v2" / "repositories"
+        if not repositories_dir.exists():
+            return
         runner(
             ["systemctl", "stop", "ucloud-sandbox-registry.service"],
             check=True,

@@ -2,6 +2,18 @@
 
 This project uses semantic versioning.
 
+## 0.3.73 - 2026-07-31
+
+- Rebuilt the dashboard visual system across every workspace with consistent
+  typography, spacing, alignment, controls, tables, charts, semantic colors,
+  and responsive composition while preserving high information density.
+- Removed configurable and pausable polling, fixed the live metrics cadence at
+  two seconds, and kept the connection indicator stable during successful
+  background refreshes.
+- Improved compact operational formatting with TiB-scale storage values,
+  readable resource vectors, populated-state layout fixes, and clearer flow,
+  policy, and activity presentation.
+
 ## 0.3.72 - 2026-07-31
 
 - Rebuilt the operations dashboard around operator decisions instead of a

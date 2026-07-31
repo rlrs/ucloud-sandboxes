@@ -92,7 +92,9 @@ class DashboardTests(unittest.TestCase):
     def test_dashboard_exposes_scheduler_controls_accessibly(self) -> None:
         self.assertIn('role="tablist"', DASHBOARD_HTML)
         self.assertIn('aria-live="polite"', DASHBOARD_HTML)
-        self.assertIn('id="refreshSelect"', DASHBOARD_HTML)
+        self.assertNotIn('id="refreshSelect"', DASHBOARD_HTML)
+        self.assertNotIn('id="pauseButton"', DASHBOARD_HTML)
+        self.assertIn("DEFAULT_REFRESH_INTERVAL_MS = 2000", DASHBOARD_JS)
         self.assertIn('id="programResultFilter"', DASHBOARD_HTML)
         self.assertIn('id="nodeStateFilter"', DASHBOARD_HTML)
         self.assertIn("canvas.setAttribute(\"aria-label\"", DASHBOARD_JS)
@@ -102,7 +104,7 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('class="brand-mark"', DASHBOARD_HTML)
         self.assertIn('class="nav-label"', DASHBOARD_HTML)
         self.assertIn('id="overviewNavBadge"', DASHBOARD_HTML)
-        self.assertIn('aria-orientation="vertical"', DASHBOARD_HTML)
+        self.assertIn('aria-orientation="horizontal"', DASHBOARD_HTML)
         self.assertIn('class="command-grid overview-section"', DASHBOARD_HTML)
         self.assertIn('id="capacityFitBadge"', DASHBOARD_HTML)
         self.assertIn('class="overview-pipeline"', DASHBOARD_HTML)
@@ -125,7 +127,8 @@ class DashboardTests(unittest.TestCase):
         )
         self.assertIsNotNone(health)
         self.assertNotIn("setStatus(", health.group(1) if health else "")
-        self.assertIn('setStatus("Refreshing"', DASHBOARD_JS)
+        self.assertIn('if (!state.lastSnapshot) setStatus("Connecting"', DASHBOARD_JS)
+        self.assertNotIn('setStatus("Refreshing"', DASHBOARD_JS)
 
     def test_dashboard_formats_structured_autoscaler_actions(self) -> None:
         self.assertIn("function actionKind(action)", DASHBOARD_JS)

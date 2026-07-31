@@ -37,11 +37,17 @@ DASHBOARD_HTML = """<!doctype html>
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
       <span class="brand-copy">
         <strong>UCloud Sandboxes</strong>
-        <small>Operations console</small>
       </span>
+    </div>
+    <div class="app-context">
+      <span id="pageKicker" class="visually-hidden">Control plane</span>
+      <h1 id="pageHeading" tabindex="-1">Overview</h1>
+      <p id="pageDescription" class="visually-hidden">Overview</p>
     </div>
     <div class="top-controls" aria-label="Dashboard controls">
       <span id="connectionStatus" class="status-pill status-warn" aria-live="polite">Waiting</span>
+      <span id="lastUpdated" class="last-updated">Not refreshed</span>
+      <button id="authToggleButton" type="button" aria-expanded="false" aria-controls="authPanel">Bearer token</button>
       <label class="select-control">
         <span class="clock-mark" aria-hidden="true"></span>
         <span class="visually-hidden">Session chart range</span>
@@ -51,22 +57,8 @@ DASHBOARD_HTML = """<!doctype html>
           <option value="21600000">Session 6h</option>
         </select>
       </label>
-      <label class="select-control">
-        <span class="refresh-mark" aria-hidden="true"></span>
-        <span class="visually-hidden">Refresh interval</span>
-        <select id="refreshSelect">
-          <option value="5000">5s</option>
-          <option value="10000" selected>10s</option>
-          <option value="30000">30s</option>
-          <option value="60000">1m</option>
-          <option value="0">Manual</option>
-        </select>
-      </label>
       <button id="refreshNowButton" class="icon-button" type="button" title="Refresh now" aria-label="Refresh now">
         <span class="refresh-mark" aria-hidden="true"></span>
-      </button>
-      <button id="pauseButton" class="icon-button" type="button" title="Pause refresh" aria-label="Pause refresh">
-        <span class="pause-mark" aria-hidden="true"></span>
       </button>
       <button id="themeButton" class="icon-button" type="button" title="Toggle dark charts" aria-label="Toggle dark charts">
         <span class="moon-mark" aria-hidden="true"></span>
@@ -75,19 +67,6 @@ DASHBOARD_HTML = """<!doctype html>
   </header>
 
   <main class="page-shell">
-    <section class="page-title">
-      <div>
-        <span id="pageKicker" class="page-kicker">Live control plane</span>
-        <h1 id="pageHeading" tabindex="-1">Fleet overview</h1>
-        <p id="pageDescription">Demand, placement headroom, and service health at a glance.</p>
-        <span class="visually-hidden">UCloud Sandboxes</span>
-      </div>
-      <div class="title-actions">
-        <span id="lastUpdated" class="last-updated">Not refreshed yet</span>
-        <button id="authToggleButton" type="button" aria-expanded="false" aria-controls="authPanel">Bearer token</button>
-      </div>
-    </section>
-
     <section id="authPanel" class="auth-panel" aria-label="Metrics authentication" hidden>
       <label class="token-field">
         <span>Gateway bearer token</span>
@@ -97,7 +76,7 @@ DASHBOARD_HTML = """<!doctype html>
       <button id="clearTokenButton" type="button">Clear</button>
     </section>
 
-    <nav class="page-tabs" role="tablist" aria-label="Dashboard pages" aria-orientation="vertical">
+    <nav class="page-tabs" role="tablist" aria-label="Dashboard pages" aria-orientation="horizontal">
       <span class="nav-section-label" role="presentation">Monitor</span>
       <button id="overviewTab" class="page-tab is-active" role="tab" aria-selected="true" aria-controls="overviewPage" type="button" data-page-target="overview">
         <span class="nav-label"><i class="nav-icon nav-icon-overview" aria-hidden="true"></i>Overview</span><span id="overviewNavBadge" class="nav-badge">Live</span>
@@ -123,9 +102,9 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="health-primary">
             <span id="healthBadge" class="health-icon health-neutral" aria-hidden="true"></span>
             <div>
-              <span class="eyebrow">Service posture</span>
-              <strong id="healthTitle">Waiting for metrics</strong>
-              <span id="healthDetail">The first snapshot will explain current demand and capacity.</span>
+              <span class="eyebrow">Status</span>
+              <strong id="healthTitle">No data</strong>
+              <span id="healthDetail">Metrics unavailable</span>
             </div>
           </div>
           <div id="healthSignals" class="health-signals" aria-live="polite"></div>
@@ -138,12 +117,12 @@ DASHBOARD_HTML = """<!doctype html>
         <article class="decision-brief">
           <div class="panel-header">
             <div>
-              <span class="eyebrow">Latest capacity decision</span>
-              <h2 id="overviewDecisionTitle">Waiting for autoscaler</h2>
+              <span class="eyebrow">Autoscaler</span>
+              <h2 id="overviewDecisionTitle">No decision</h2>
             </div>
             <span id="overviewDecisionBadge" class="inline-badge badge-muted">No cycle</span>
           </div>
-          <p id="autoscalerSummary" class="decision-summary">No autoscaler cycle loaded</p>
+          <p id="autoscalerSummary" class="decision-summary">No cycle</p>
           <div id="overviewDecisionReasons" class="decision-reasons"></div>
           <div class="decision-facts">
             <div><span>Ready / provisioning</span><strong id="overviewSupplyValue">-</strong></div>
@@ -155,48 +134,41 @@ DASHBOARD_HTML = """<!doctype html>
 
       <section class="section-heading overview-section overview-heading">
         <div>
-          <span class="eyebrow">Current state</span>
-          <h2>What needs attention now</h2>
+          <span class="eyebrow">Current</span>
+          <h2>Workload</h2>
         </div>
-        <span class="section-summary">Counts are live; latency is session p95.</span>
       </section>
 
       <section class="metric-grid overview-section" aria-label="Current demand and capacity">
-        <article class="metric-card accent-purple">
+        <article class="metric-card">
           <span class="metric-label">Ready for a tool call</span>
           <strong id="readyWakeValue">-</strong>
-          <span id="readyWakeDetail" class="metric-detail">oldest response-ready request</span>
-          <span class="metric-context">Immediate sandbox demand</span>
+          <span id="readyWakeDetail" class="metric-detail">Oldest -</span>
         </article>
-        <article class="metric-card accent-blue">
+        <article class="metric-card">
           <span class="metric-label">Ready capacity</span>
           <strong id="activeNodesValue">-</strong>
-          <span id="activeNodesDetail" class="metric-detail">ready / provisioning / total</span>
-          <span class="metric-context">Fresh nodes accepting placement</span>
+          <span id="activeNodesDetail" class="metric-detail">Ready / provisioning / total</span>
         </article>
-        <article class="metric-card accent-green">
+        <article class="metric-card">
           <span class="metric-label">Sandbox fleet</span>
           <strong id="runningSandboxesValue">-</strong>
-          <span id="runningSandboxesDetail" class="metric-detail">running / parked / waking</span>
-          <span class="metric-context">Durable routed sessions</span>
+          <span id="runningSandboxesDetail" class="metric-detail">Running / parked / waking</span>
         </article>
-        <article class="metric-card accent-orange">
+        <article class="metric-card">
           <span class="metric-label">Hard disk committed</span>
           <strong id="diskCommitValue">-</strong>
-          <span id="diskCommitDetail" class="metric-detail">hard capacity remaining</span>
-          <span class="metric-context">Non-overcommittable placement limit</span>
+          <span id="diskCommitDetail" class="metric-detail">Free -</span>
         </article>
-        <article class="metric-card accent-slate">
+        <article class="metric-card">
           <span class="metric-label">Waiting on the model</span>
           <strong id="modelWaitValue">-</strong>
-          <span id="modelWaitDetail" class="metric-detail">leading demand, not yet runnable</span>
-          <span class="metric-context">Forecast signal only</span>
+          <span id="modelWaitDetail" class="metric-detail">Oldest -</span>
         </article>
-        <article class="metric-card accent-red">
+        <article class="metric-card">
           <span class="metric-label">Response → ready p95</span>
           <strong id="wakeLatencyValue">-</strong>
-          <span id="wakeLatencyDetail" class="metric-detail">tool-return latency</span>
-          <span class="metric-context">Includes restore or migration</span>
+          <span id="wakeLatencyDetail" class="metric-detail">Session p95</span>
         </article>
       </section>
 
@@ -205,11 +177,11 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="section-heading compact">
             <div>
               <span class="eyebrow">Placement headroom</span>
-              <h2>Can the next sandbox fit?</h2>
+              <h2>Resource fit</h2>
             </div>
             <span id="capacityFitBadge" class="inline-badge badge-muted">Waiting</span>
           </div>
-          <p id="capacitySummary" class="workspace-copy">Waiting for schedulable resource totals.</p>
+          <p id="capacitySummary" class="workspace-copy">No data</p>
           <div class="headroom-list">
             <div class="headroom-row">
               <div class="headroom-label"><span>CPU</span><strong id="capacityCpuValue">-</strong></div>
@@ -235,40 +207,39 @@ DASHBOARD_HTML = """<!doctype html>
               <span id="capacityDiskDetail" class="headroom-detail">committed / total</span>
             </div>
           </div>
-          <div class="capacity-rule"><span aria-hidden="true">!</span> Disk is a hard placement ceiling; CPU and memory are pressure-managed.</div>
         </article>
 
         <article class="pipeline-card">
           <div class="section-heading compact">
             <div>
               <span class="eyebrow">Agent lifecycle</span>
-              <h2>Where work is waiting</h2>
+              <h2>Request flow</h2>
             </div>
             <span id="programSummary" class="section-summary">No requests loaded</span>
           </div>
           <div class="overview-pipeline">
             <div class="pipeline-stage forecast">
-              <span>1 · Model generation</span>
+              <span>Model generation</span>
               <strong id="programModelWaitValue">-</strong>
               <small id="overviewModelWaitAge">No active wait</small>
             </div>
             <span class="pipeline-connector" aria-hidden="true"></span>
             <div class="pipeline-stage attention">
-              <span>2 · Ready for tool</span>
+              <span>Ready for tool</span>
               <strong id="programReadyValue">-</strong>
               <small id="programOldestReadyValue">No ready work</small>
             </div>
             <span class="pipeline-connector" aria-hidden="true"></span>
             <div class="pipeline-stage">
-              <span>3 · Restoring</span>
+              <span>Restoring</span>
               <strong id="overviewWakingValue">-</strong>
-              <small>parked state becoming runnable</small>
+              <small>Restore</small>
             </div>
             <span class="pipeline-connector" aria-hidden="true"></span>
             <div class="pipeline-stage success">
-              <span>4 · Tool executing</span>
+              <span>Tool executing</span>
               <strong id="overviewActingValue">-</strong>
-              <small>active sandbox work</small>
+              <small>Active</small>
             </div>
           </div>
           <div class="latency-strip">
@@ -282,43 +253,39 @@ DASHBOARD_HTML = """<!doctype html>
 
       <section class="section-heading overview-section overview-heading">
         <div>
-          <span class="eyebrow">Session trends</span>
-          <h2>Demand, pressure, and latency</h2>
+          <span class="eyebrow">Session</span>
+          <h2>Trends</h2>
         </div>
-        <span class="section-summary">Use the range control above to change the window.</span>
       </section>
 
       <section class="trend-grid overview-section" aria-label="Operational trends">
         <article class="chart-panel trend-supply">
           <div class="panel-header">
-            <div><h2>Fleet footprint</h2><span>Ready nodes and routed sandboxes</span></div>
-            <span class="info-dot" title="Fresh ready nodes compared with durable sandbox routes"></span>
+            <div><h2>Fleet</h2></div>
           </div>
           <canvas id="activeNodesChart" class="chart-canvas" width="760" height="230"></canvas>
           <div class="legend"><span><i class="swatch blue"></i>Ready nodes</span><span><i class="swatch green"></i>Sandbox routes</span></div>
         </article>
         <article class="chart-panel trend-demand">
           <div class="panel-header">
-            <div><h2>Immediate queues</h2><span>Independent counts by work type</span></div>
-            <span class="info-dot" title="Pending sandbox creates, image builds, and response-ready tool calls are intentionally not added together"></span>
+            <div><h2>Queues</h2></div>
           </div>
           <canvas id="queueDepthChart" class="chart-canvas" width="760" height="230"></canvas>
           <div class="legend"><span><i class="swatch green"></i>Ready to wake</span><span><i class="swatch purple"></i>Sandbox creates</span><span><i class="swatch orange"></i>Image builds</span></div>
         </article>
         <article class="chart-panel trend-pressure">
-          <div class="panel-header"><div><h2>CPU pressure</h2><span>Observed versus reserved</span></div></div>
+          <div class="panel-header"><div><h2>CPU</h2></div></div>
           <canvas id="cpuPressureChart" class="chart-canvas small" width="560" height="190"></canvas>
           <div class="legend"><span><i class="swatch green"></i>Actual</span><span><i class="swatch blue-dash"></i>Reserved</span></div>
         </article>
         <article class="chart-panel trend-pressure">
-          <div class="panel-header"><div><h2>Memory pressure</h2><span>Observed versus reserved</span></div></div>
+          <div class="panel-header"><div><h2>Memory</h2></div></div>
           <canvas id="memoryPressureChart" class="chart-canvas small" width="560" height="190"></canvas>
           <div class="legend"><span><i class="swatch orange"></i>Actual</span><span><i class="swatch blue-dash"></i>Reserved</span></div>
         </article>
         <article class="chart-panel trend-latency">
           <div class="panel-header">
-            <div><h2>Agent wait path</h2><span>Model generation versus sandbox readiness</span></div>
-            <span class="info-dot" title="p95 time waiting on a model response and p95 response-to-ready time"></span>
+            <div><h2>Latency</h2></div>
           </div>
           <canvas id="sandboxStartChart" class="chart-canvas small" width="760" height="190"></canvas>
           <div class="legend"><span><i class="swatch purple"></i>Model wait p95</span><span><i class="swatch green"></i>Response → ready p95</span></div>
@@ -326,20 +293,19 @@ DASHBOARD_HTML = """<!doctype html>
       </section>
 
       <section class="section-heading overview-section overview-heading">
-        <div><span class="eyebrow">Forensics</span><h2>Recent operational activity</h2></div>
-        <span class="section-summary">Failures and capacity decisions first.</span>
+        <div><span class="eyebrow">Recent</span><h2>Activity</h2></div>
       </section>
       <section class="activity-grid overview-section" aria-label="Recent operational activity">
         <section class="event-panel activity-event-panel" aria-label="Recent autoscaler events">
-          <div class="panel-header table-header"><h2>Capacity events</h2><span id="eventSummary">No events loaded</span></div>
+          <div class="panel-header table-header"><h2>Autoscaler</h2><span id="eventSummary">No events</span></div>
           <div class="table-wrap"><table><thead><tr><th>Time</th><th>Severity</th><th>Event</th><th>Details</th></tr></thead><tbody id="eventRows"><tr><td colspan="4" class="empty-cell">No metrics loaded</td></tr></tbody></table></div>
         </section>
         <details class="event-panel diagnostic-disclosure build-panel">
-          <summary><span>Image build details</span><span id="buildSummary">No builds loaded</span></summary>
+          <summary><span>Builds</span><span id="buildSummary">No builds</span></summary>
           <div class="table-wrap"><table><thead><tr><th>Status</th><th>Image</th><th>Tag</th><th>Location</th><th>Age</th><th>Details</th></tr></thead><tbody id="buildRows"><tr><td colspan="6" class="empty-cell">No builds loaded</td></tr></tbody></table></div>
         </details>
         <details class="event-panel diagnostic-disclosure trace-panel">
-          <summary><span>Request trace details</span><span id="traceSummary">No traces loaded</span></summary>
+          <summary><span>Traces</span><span id="traceSummary">No traces</span></summary>
           <div class="table-wrap"><table><thead><tr><th>Time</th><th>Status</th><th>Trace</th><th>Duration</th><th>Details</th></tr></thead><tbody id="traceRows"><tr><td colspan="5" class="empty-cell">No traces loaded</td></tr></tbody></table></div>
         </details>
       </section>
@@ -348,12 +314,12 @@ DASHBOARD_HTML = """<!doctype html>
     <section id="schedulerPage" class="workspace-page" role="tabpanel" aria-labelledby="schedulerTab" hidden>
       <section class="decision-hero">
         <div class="decision-copy">
-          <div class="eyebrow">Latest autoscaler cycle</div>
+          <div class="eyebrow">Autoscaler</div>
           <div class="decision-title-row">
             <h2 id="schedulerDecisionTitle">Waiting for a decision</h2>
             <span id="schedulerModeBadge" class="inline-badge badge-muted">Unknown</span>
           </div>
-          <p id="schedulerDecisionDetail" class="workspace-copy">Program-aware scheduling metrics have not loaded yet.</p>
+          <p id="schedulerDecisionDetail" class="workspace-copy">No data</p>
           <div id="schedulerReasons" class="reason-list"></div>
         </div>
         <div class="decision-stats">
@@ -379,8 +345,8 @@ DASHBOARD_HTML = """<!doctype html>
       <section class="flow-panel" aria-label="Program lifecycle">
         <div class="section-heading">
           <div>
-            <div class="eyebrow">Program flow</div>
-            <h2>Where requests are spending time</h2>
+            <div class="eyebrow">Requests</div>
+            <h2>Flow</h2>
           </div>
           <span id="programFlowSummary" class="section-summary">No program requests loaded</span>
         </div>
@@ -392,25 +358,25 @@ DASHBOARD_HTML = """<!doctype html>
           </button>
           <span class="flow-arrow" aria-hidden="true">→</span>
           <button class="flow-stage" type="button" data-program-state="model_wait" aria-pressed="false">
-            <span class="flow-index">1</span>
+            <span class="flow-index">Model wait</span>
             <strong id="flowModelWaitValue">-</strong>
             <small id="flowModelWaitDetail">waiting on model</small>
           </button>
           <span class="flow-arrow" aria-hidden="true">→</span>
           <button class="flow-stage" type="button" data-program-state="ready_to_wake" aria-pressed="false">
-            <span class="flow-index">2</span>
+            <span class="flow-index">Ready</span>
             <strong id="flowReadyValue">-</strong>
             <small id="flowReadyDetail">ready to wake</small>
           </button>
           <span class="flow-arrow" aria-hidden="true">→</span>
           <button class="flow-stage" type="button" data-program-state="waking" aria-pressed="false">
-            <span class="flow-index">3</span>
+            <span class="flow-index">Waking</span>
             <strong id="flowWakingValue">-</strong>
             <small>waking</small>
           </button>
           <span class="flow-arrow" aria-hidden="true">→</span>
           <button class="flow-stage" type="button" data-program-state="acting" aria-pressed="false">
-            <span class="flow-index">4</span>
+            <span class="flow-index">Acting</span>
             <strong id="flowActingValue">-</strong>
             <small>acting</small>
           </button>
@@ -421,8 +387,8 @@ DASHBOARD_HTML = """<!doctype html>
         <article class="workspace-card capacity-equation-card">
           <div class="section-heading compact">
             <div>
-              <div class="eyebrow">Capacity equation</div>
-              <h2>Demand, supply, and the uncovered remainder</h2>
+              <div class="eyebrow">Placement</div>
+              <h2>Capacity equation</h2>
             </div>
             <span id="decisionPressureValue" class="section-summary">No pressure samples</span>
           </div>
@@ -439,27 +405,26 @@ DASHBOARD_HTML = """<!doctype html>
               </tbody>
             </table>
           </div>
-          <div class="equation-footnote"><span>Predictive demand is weighted by policy.</span><span>Disk remains a hard admission constraint.</span><span id="decisionIdleGraceValue">Idle grace -</span></div>
+          <div class="equation-footnote"><span id="decisionIdleGraceValue">Idle grace -</span></div>
         </article>
-        <details class="workspace-card policy-card">
+        <details class="workspace-card policy-card" open>
           <summary class="section-heading compact">
             <div>
-              <div class="eyebrow">Effective policy</div>
-              <h2>View current tuning</h2>
+              <div class="eyebrow">Policy</div>
+              <h2>Current tuning</h2>
             </div>
             <span class="read-only-badge">Read only</span>
           </summary>
           <dl id="policyValues" class="policy-values">
             <div><dt>Program action</dt><dd>-</dd></div>
           </dl>
-          <p class="policy-note">Policy changes remain version-controlled and service-restarted; this view never mutates production.</p>
         </details>
       </section>
 
       <section class="event-panel queue-panel" aria-label="Shadow wake queue">
         <div class="queue-toolbar">
           <div>
-            <div class="eyebrow">Aging-first queue</div>
+            <div class="eyebrow">Queue</div>
             <h2>Wake placement</h2>
           </div>
           <label class="inline-search">
@@ -502,9 +467,9 @@ DASHBOARD_HTML = """<!doctype html>
     <section id="nodesPage" class="workspace-page" role="tabpanel" aria-labelledby="nodesTab" hidden>
       <section class="workspace-hero">
         <div>
-          <div class="eyebrow">Live placement supply</div>
-          <h2>Fleet health and placement constraints</h2>
-          <p id="nodesPageDetail" class="workspace-copy">Waiting for node heartbeats.</p>
+          <div class="eyebrow">Fleet</div>
+          <h2>Placement supply</h2>
+          <p id="nodesPageDetail" class="workspace-copy">No heartbeats</p>
         </div>
         <div class="node-hero-stats">
           <div class="stat-box"><span>Schedulable</span><strong id="nodesReadyValue">-</strong></div>
@@ -565,10 +530,10 @@ DASHBOARD_HTML = """<!doctype html>
       <section class="sandbox-hero">
         <div class="sandbox-hero-main">
           <div class="panel-header">
-            <h2>Sandboxes</h2>
+            <h2>Lifecycle</h2>
             <span id="sandboxesPageStatusBadge" class="inline-badge badge-muted">Not loaded</span>
           </div>
-          <p id="sandboxesPageDetail" class="registry-copy">Waiting for sandbox list</p>
+          <p id="sandboxesPageDetail" class="registry-copy">No data</p>
         </div>
         <div class="sandbox-stat-grid">
           <div class="stat-box">
@@ -646,7 +611,7 @@ DASHBOARD_HTML = """<!doctype html>
             <span id="registryPageStatusBadge" class="inline-badge badge-muted">Unknown</span>
           </div>
           <div id="registryPageUrl" class="registry-url registry-url-large">No registry configured</div>
-          <p id="registryPageHealthDetail" class="registry-copy">Waiting for registry metrics</p>
+          <p id="registryPageHealthDetail" class="registry-copy">No data</p>
         </div>
         <div class="registry-stat-grid">
           <div class="stat-box">
@@ -679,7 +644,7 @@ DASHBOARD_HTML = """<!doctype html>
       <section class="image-supply-grid" aria-label="Image build supply">
         <article class="ops-panel builder-service">
           <div class="panel-header">
-            <div><span class="eyebrow">Build capacity</span><h2>Builder pool</h2></div>
+            <div><span class="eyebrow">Builders</span><h2>Capacity</h2></div>
             <span id="builderSummary">No builder metrics loaded</span>
           </div>
           <div class="stat-strip">
@@ -693,7 +658,7 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="legend"><span><i class="swatch orange"></i>Active builds</span><span><i class="swatch blue-dash"></i>Ready builders</span></div>
         </article>
         <article class="workspace-card image-queue-summary">
-          <div class="section-heading compact"><div><span class="eyebrow">Build queue</span><h2>Supply readiness</h2></div></div>
+          <div class="section-heading compact"><div><span class="eyebrow">Builds</span><h2>Queue</h2></div></div>
           <div class="resource-vector-list">
             <div class="resource-vector"><span>Pending builds</span><strong id="registryPendingBuildsValue">-</strong></div>
             <div class="resource-vector"><span>Oldest pending</span><strong id="registryOldestBuildValue">-</strong></div>
@@ -1199,6 +1164,8 @@ h1 {
 
 .page-tabs {
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
   gap: 4px;
   margin: 0 0 12px;
   border-bottom: 1px solid var(--line);
@@ -2189,7 +2156,7 @@ h2 {
 
 .sandbox-table th:nth-child(3),
 .sandbox-table td:nth-child(3) {
-  width: 260px;
+  width: 245px;
 }
 
 .sandbox-table th:nth-child(4),
@@ -2199,12 +2166,12 @@ h2 {
 
 .sandbox-table th:nth-child(5),
 .sandbox-table td:nth-child(5) {
-  width: 150px;
+  width: 175px;
 }
 
 .sandbox-table th:nth-child(6),
 .sandbox-table td:nth-child(6) {
-  width: 90px;
+  width: 80px;
 }
 
 .sandbox-table th:nth-child(8),
@@ -2222,6 +2189,7 @@ h2 {
 
 .sandbox-id,
 .sandbox-image,
+.sandbox-resources,
 .sandbox-labels {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4369,19 +4337,2833 @@ select:focus-visible,
     background: Highlight;
   }
 }
+
+/* Operations ledger visual system. */
+:root {
+  color-scheme: light;
+  --app-bar-height: 60px;
+  --rail-width: 0px;
+  --background: #f4f5f2;
+  --surface: #fbfcf9;
+  --surface-soft: #f0f2ee;
+  --surface-raised: #ffffff;
+  --line: #cfd4ce;
+  --line-soft: #e1e5df;
+  --text: #171b1d;
+  --muted: #687176;
+  --faint: #8d969a;
+  --blue: #226a78;
+  --green: #217a61;
+  --orange: #ae641c;
+  --purple: #6754a3;
+  --red: #b13f50;
+  --amber: #8d6a17;
+  --app-bar: #171b1d;
+  --app-bar-line: #303638;
+  --shadow: none;
+  --radius: 0px;
+}
+
+:root.dark,
+:root.dark-charts {
+  color-scheme: dark;
+  --background: #0c0f10;
+  --surface: #111516;
+  --surface-soft: #161b1d;
+  --surface-raised: #1a1f21;
+  --line: #303638;
+  --line-soft: #24292b;
+  --text: #edf1ed;
+  --muted: #929c9f;
+  --faint: #6f797c;
+  --blue: #5ab0bd;
+  --green: #52b99a;
+  --orange: #d99a58;
+  --purple: #9c8ad8;
+  --red: #e06d7d;
+  --amber: #c7a552;
+  --app-bar: #0c0f10;
+  --app-bar-line: #303638;
+}
+
+html {
+  background: var(--background);
+  font-size: 15px;
+}
+
+body {
+  min-width: 320px;
+  background: var(--background);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: -0.006em;
+}
+
+button,
+input,
+select {
+  border-radius: 2px;
+  box-shadow: none;
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="tab"]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.app-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  height: var(--app-bar-height);
+  padding: 0 22px;
+  background: var(--app-bar);
+  border-bottom: 1px solid var(--app-bar-line);
+  color: #f4f7f4;
+  box-shadow: none;
+}
+
+.brand {
+  min-width: 0;
+  gap: 11px;
+}
+
+.brand-mark {
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  gap: 3px;
+  background: transparent;
+  border: 0;
+}
+
+.brand-mark span {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  background: #a9b2b1;
+}
+
+.brand-mark span:nth-child(1) { background: #57bda0; }
+.brand-mark span:nth-child(2) { background: #7aa7ae; }
+.brand-mark span:nth-child(3) { background: #d49b5b; }
+.brand-mark span:nth-child(4) { background: #879195; }
+
+.brand-copy strong {
+  font-size: 0.88rem;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+}
+
+.brand-copy small {
+  display: none;
+}
+
+.top-controls {
+  gap: 6px;
+}
+
+.status-pill,
+.select-control,
+.icon-button,
+.title-actions button,
+.auth-panel button,
+.table-action {
+  min-height: 34px;
+  border: 1px solid #343b3e;
+  border-radius: 2px;
+  background: #171c1e;
+  color: #dce2df;
+  box-shadow: none;
+}
+
+.status-pill {
+  padding: 0 11px;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+}
+
+.status-pill::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.select-control {
+  padding: 0 6px 0 9px;
+}
+
+.select-control select {
+  min-height: 32px;
+  padding-right: 22px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.icon-button {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.page-shell {
+  display: block;
+  width: min(100%, 1720px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: calc(var(--app-bar-height) + 20px) 28px 72px;
+}
+
+.page-title {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 52px;
+  margin: 0;
+  padding: 0 0 14px;
+  border: 0;
+}
+
+.page-title h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.65rem, 2.3vw, 2.35rem);
+  font-weight: 580;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.page-kicker,
+.page-title p {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.title-actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.last-updated {
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.title-actions button,
+.auth-panel button,
+.table-action {
+  padding: 0 12px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.title-actions button:hover,
+.auth-panel button:hover,
+.table-action:hover {
+  background: var(--surface-soft);
+}
+
+.auth-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.auth-panel[hidden] {
+  display: none;
+}
+
+.token-field span,
+.sandbox-search > span,
+.sandbox-filter > span,
+.registry-search > span,
+.registry-select > span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.token-field input,
+.inline-search input,
+.sandbox-search input,
+.registry-search input,
+.inline-select select,
+.sandbox-filter select,
+.registry-select select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.page-tabs {
+  position: sticky;
+  top: var(--app-bar-height);
+  left: auto;
+  z-index: 50;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: auto;
+  height: 43px;
+  margin: 0 -28px 26px;
+  padding: 0 28px;
+  gap: 26px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+}
+
+.page-tabs::before,
+.nav-section-label,
+.nav-icon {
+  display: none;
+}
+
+.page-tab {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 42px;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 0.8rem;
+  font-weight: 620;
+}
+
+.page-tab::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: transparent;
+}
+
+.page-tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.page-tab.is-active {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.page-tab.is-active::after {
+  background: var(--text);
+}
+
+.nav-label {
+  gap: 0;
+}
+
+.nav-badge,
+.inline-badge,
+.read-only-badge,
+.sandbox-status,
+.state-badge {
+  min-width: 20px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.overview-page,
+.workspace-page,
+.sandboxes-page,
+.registry-page {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-section,
+.workspace-page > section,
+.sandboxes-page > section,
+.registry-page > section {
+  margin-top: 0;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(400px, 0.75fr);
+  gap: 0;
+  margin-bottom: 34px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.command-grid .health-strip,
+.decision-brief,
+.capacity-card,
+.pipeline-card,
+.metric-card,
+.chart-panel,
+.event-panel,
+.workspace-card,
+.ops-panel,
+.flow-panel,
+.decision-hero,
+.workspace-hero,
+.registry-hero,
+.sandbox-hero,
+.fleet-signal-grid article {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.command-grid .health-strip,
+.decision-brief {
+  min-height: 164px;
+  padding: 22px 24px;
+  border: 0;
+}
+
+.command-grid .health-strip {
+  display: grid;
+  grid-template-columns: minmax(260px, auto) 1fr auto;
+  align-items: center;
+  gap: 24px;
+  border-right: 1px solid var(--line);
+}
+
+.health-strip::before,
+.metric-card::before,
+.resource-vector::before {
+  display: none !important;
+}
+
+.health-primary {
+  align-items: center;
+  gap: 14px;
+}
+
+.health-primary > div {
+  gap: 5px;
+}
+
+.health-icon {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.health-primary strong {
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  font-weight: 560;
+  letter-spacing: -0.035em;
+}
+
+.health-primary #healthDetail {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.health-signals {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.health-actions {
+  align-self: center;
+}
+
+.eyebrow,
+.metric-label,
+.headroom-label > span,
+.pipeline-stage > span,
+.stat-box > span,
+.resource-vector > span,
+th {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 720;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.decision-brief {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.decision-brief h2,
+.panel-header h2,
+.section-heading h2,
+.workspace-hero h2,
+.registry-hero h2,
+.sandbox-hero h2,
+.decision-hero h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 630;
+  letter-spacing: -0.02em;
+}
+
+.decision-summary,
+.workspace-copy,
+.registry-copy {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.73rem;
+  line-height: 1.35;
+}
+
+.decision-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 18px 0 -22px;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.decision-facts > div {
+  min-width: 0;
+  padding: 13px 12px 14px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.decision-brief .decision-summary {
+  display: none;
+}
+
+.decision-facts > div:first-child { padding-left: 0; }
+.decision-facts > div:last-child { border-right: 0; }
+
+.decision-facts span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 680;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.decision-facts strong,
+.metric-card strong,
+.stat-box strong,
+.fleet-signal-grid strong,
+.pipeline-stage strong,
+.latency-strip strong,
+.headroom-label strong,
+.resource-vector strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-heading {
+  min-height: 38px;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.overview-heading .eyebrow {
+  display: none;
+}
+
+.overview-heading h2 {
+  font-size: 0.78rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.section-summary {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 34px;
+  border-bottom: 1px solid var(--line);
+}
+
+.metric-card {
+  min-height: 112px;
+  padding: 17px 18px 15px;
+  border: 0;
+  border-right: 1px solid var(--line);
+}
+
+.metric-card:last-child {
+  border-right: 0;
+}
+
+.metric-card strong {
+  display: block;
+  margin: 10px 0 9px;
+  color: var(--text);
+  font-size: clamp(1.45rem, 2vw, 2.2rem);
+  font-weight: 540;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.metric-detail {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  min-height: 0;
+  margin: 0;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-context {
+  display: none;
+}
+
+.overview-workbench {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.8fr) minmax(600px, 1.2fr);
+  gap: 0;
+  margin: 0 0 34px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.capacity-card,
+.pipeline-card {
+  padding: 22px 24px;
+  border: 0;
+}
+
+.capacity-card {
+  border-right: 1px solid var(--line);
+}
+
+.capacity-card .workspace-copy {
+  min-height: 18px;
+}
+
+.headroom-list {
+  gap: 0;
+  margin: 11px 0 0;
+}
+
+.headroom-row {
+  display: grid;
+  grid-template-columns: 116px 1fr 132px;
+  align-items: center;
+  gap: 12px;
+  min-height: 43px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.headroom-row:last-child {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.headroom-label {
+  display: flex;
+  grid-column: 1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.headroom-label strong {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.dual-meter {
+  position: relative;
+  grid-column: 2;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.dual-meter span {
+  border-radius: 0;
+}
+
+.headroom-detail {
+  grid-column: 3;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capacity-rule {
+  display: none;
+}
+
+.overview-pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 18px;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.pipeline-stage {
+  min-width: 0;
+  min-height: 112px;
+  padding: 15px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent !important;
+}
+
+.pipeline-stage:last-of-type {
+  border-right: 0;
+}
+
+.pipeline-stage strong {
+  display: block;
+  margin: 14px 0 10px;
+  color: var(--text) !important;
+  font-size: 1.8rem;
+  font-weight: 520;
+  letter-spacing: -0.04em;
+}
+
+.pipeline-stage small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-connector {
+  display: none;
+}
+
+.latency-strip,
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.latency-strip > div,
+.stat-strip .stat-box {
+  padding: 12px 12px 13px;
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.latency-strip > div:first-child,
+.stat-strip .stat-box:first-child { padding-left: 0; }
+.latency-strip > div:last-child,
+.stat-strip .stat-box:last-child { border-right: 0; }
+
+.latency-strip span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 34px;
+  border-bottom: 1px solid var(--line);
+}
+
+.trend-grid .chart-panel {
+  min-width: 0;
+  padding: 17px 18px 12px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.trend-supply,
+.trend-demand {
+  grid-column: span 6;
+}
+
+.trend-pressure {
+  grid-column: span 3;
+}
+
+.trend-latency {
+  grid-column: span 6;
+}
+
+.trend-grid .chart-panel:nth-child(2),
+.trend-grid .chart-panel:last-child {
+  border-right: 0;
+}
+
+.trend-grid .panel-header {
+  min-height: 26px;
+  margin-bottom: 4px;
+}
+
+.trend-grid .panel-header h2 {
+  font-size: 0.76rem;
+  font-weight: 680;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.trend-grid .panel-header > div > span,
+.info-dot {
+  display: none;
+}
+
+.chart-canvas,
+.trend-grid .chart-canvas,
+.trend-grid .chart-canvas.small {
+  min-height: 178px;
+  max-height: 178px;
+  margin-top: 0;
+}
+
+.legend {
+  display: flex;
+  gap: 15px;
+  min-height: 18px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+}
+
+.swatch {
+  width: 13px;
+  height: 2px;
+  border-radius: 0;
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activity-event-panel {
+  grid-row: span 2;
+  border-right: 1px solid var(--line) !important;
+}
+
+.activity-grid .event-panel,
+.event-panel,
+.workspace-card,
+.ops-panel {
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.activity-grid .diagnostic-disclosure {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.panel-header,
+.table-header,
+.diagnostic-disclosure summary {
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.diagnostic-disclosure summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.diagnostic-disclosure summary::marker {
+  color: var(--muted);
+}
+
+.table-wrap {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  height: 42px;
+  padding: 8px 13px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+}
+
+th {
+  background: var(--surface-soft);
+}
+
+td {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+}
+
+.empty-cell {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: center;
+}
+
+.decision-hero,
+.workspace-hero,
+.registry-hero,
+.sandbox-hero {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.7fr) minmax(520px, 1.3fr);
+  align-items: stretch;
+  gap: 0;
+  margin: 0 0 28px;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.decision-copy,
+.workspace-hero > div:first-child,
+.registry-hero-main,
+.sandbox-hero-main {
+  min-width: 0;
+  padding: 22px 24px;
+  border-right: 1px solid var(--line);
+}
+
+.decision-stats,
+.node-hero-stats,
+.registry-stat-grid,
+.sandbox-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+}
+
+.node-hero-stats,
+.registry-stat-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.stat-box {
+  min-width: 0;
+  padding: 18px 16px;
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.stat-box:last-child {
+  border-right: 0;
+}
+
+.stat-box strong {
+  display: block;
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 1.45rem;
+  font-weight: 520;
+  letter-spacing: -0.04em;
+}
+
+.flow-panel,
+.capacity-equation-card,
+.policy-card,
+.queue-panel,
+.image-supply-grid > *,
+.registry-full-grid > *,
+.registry-builds-panel,
+.sandbox-list-panel,
+.nodes-page .event-panel,
+#nodesPage > .event-panel {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.flow-panel {
+  padding: 20px 0 0;
+  margin-bottom: 28px;
+  border-right: 0;
+  border-left: 0;
+}
+
+.flow-panel > .section-heading,
+.capacity-equation-card > .section-heading,
+.policy-card > .section-heading {
+  padding: 0 18px 16px;
+}
+
+.program-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.flow-stage {
+  min-height: 92px;
+  padding: 14px 16px;
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.flow-stage:last-of-type {
+  border-right: 0;
+}
+
+.flow-stage.is-selected {
+  background: var(--surface-soft);
+  box-shadow: inset 0 -2px var(--text);
+}
+
+.flow-arrow {
+  display: none;
+}
+
+.scheduler-grid,
+.image-supply-grid,
+.registry-full-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr);
+  gap: 0;
+  margin-bottom: 28px;
+}
+
+.scheduler-grid > :first-child,
+.image-supply-grid > :first-child,
+.registry-full-grid > :first-child {
+  border-right: 1px solid var(--line);
+}
+
+.capacity-equation-card,
+.policy-card,
+.builder-service,
+.image-queue-summary {
+  padding: 20px 0 0;
+}
+
+.policy-values,
+.resource-vector-list {
+  margin: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.policy-values > div,
+.resource-vector {
+  min-height: 43px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.policy-note {
+  display: none;
+}
+
+.equation-footnote {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+}
+
+.queue-toolbar,
+.node-toolbar,
+.sandbox-toolbar,
+.registry-toolbar {
+  display: grid;
+  align-items: end;
+  gap: 8px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.queue-toolbar,
+.node-toolbar {
+  grid-template-columns: minmax(220px, 1fr) minmax(200px, 0.7fr) minmax(170px, 0.45fr) auto;
+}
+
+.sandbox-toolbar,
+.registry-toolbar {
+  grid-template-columns: minmax(280px, 1fr) minmax(180px, 0.4fr) auto auto;
+}
+
+.fleet-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin-bottom: 28px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.fleet-signal-grid article {
+  min-height: 105px;
+  padding: 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+}
+
+.fleet-signal-grid article:last-child {
+  border-right: 0;
+}
+
+.fleet-signal-grid strong {
+  display: block;
+  margin: 11px 0 7px;
+  font-size: 1.2rem;
+  font-weight: 540;
+}
+
+.fleet-signal-grid small {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.63rem;
+}
+
+.builder-service > .panel-header,
+.image-queue-summary > .section-heading {
+  padding: 0 18px 16px;
+}
+
+.builder-service .stat-strip {
+  grid-template-columns: repeat(5, 1fr);
+  border-top: 1px solid var(--line-soft);
+}
+
+.builder-service .chart-canvas {
+  padding: 0 12px;
+}
+
+.toast-region {
+  right: 18px;
+  bottom: 18px;
+}
+
+.toast {
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-raised);
+  box-shadow: none;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .metric-card:nth-child(3) {
+    border-right: 0;
+  }
+
+  .metric-card:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .overview-workbench,
+  .command-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-grid .health-strip,
+  .capacity-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .trend-pressure {
+    grid-column: span 6;
+  }
+
+  .trend-grid .chart-panel:nth-child(3) {
+    border-right: 1px solid var(--line);
+  }
+
+  .decision-hero,
+  .workspace-hero,
+  .registry-hero,
+  .sandbox-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-copy,
+  .workspace-hero > div:first-child,
+  .registry-hero-main,
+  .sandbox-hero-main {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 820px) {
+  .app-bar {
+    padding: 0 14px;
+  }
+
+  .status-pill {
+    display: none;
+  }
+
+  .page-shell {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .page-tabs {
+    margin-right: -16px;
+    margin-left: -16px;
+    padding: 0 16px;
+    gap: 22px;
+  }
+
+  .command-grid .health-strip {
+    grid-template-columns: 1fr auto;
+  }
+
+  .health-signals {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .overview-pipeline {
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    overflow-x: auto;
+  }
+
+  .activity-grid,
+  .scheduler-grid,
+  .image-supply-grid,
+  .registry-full-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-event-panel,
+  .scheduler-grid > :first-child,
+  .image-supply-grid > :first-child,
+  .registry-full-grid > :first-child {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+
+  .fleet-signal-grid,
+  .node-hero-stats,
+  .registry-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .decision-stats,
+  .sandbox-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-toolbar,
+  .node-toolbar,
+  .sandbox-toolbar,
+  .registry-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand-copy strong {
+    font-size: 0.78rem;
+  }
+
+  .select-control:first-of-type,
+  #pauseButton {
+    display: none;
+  }
+
+  .page-title {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .last-updated {
+    display: none;
+  }
+
+  .metric-grid,
+  .fleet-signal-grid,
+  .node-hero-stats,
+  .registry-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .command-grid .health-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .health-actions,
+  .health-signals {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .metric-card:nth-child(3) {
+    border-right: 1px solid var(--line);
+  }
+
+  .metric-card:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .metric-card:nth-child(-n + 4) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .headroom-row {
+    grid-template-columns: 92px 1fr;
+  }
+
+  .headroom-detail {
+    display: none;
+  }
+
+  .latency-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .trend-supply,
+  .trend-demand,
+  .trend-pressure,
+  .trend-latency {
+    grid-column: 1 / -1;
+  }
+
+  .trend-grid .chart-panel {
+    border-right: 0 !important;
+  }
+
+  .queue-toolbar,
+  .node-toolbar,
+  .sandbox-toolbar,
+  .registry-toolbar,
+  .auth-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .program-flow {
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    overflow-x: auto;
+  }
+
+  .overview-workbench,
+  .pipeline-card,
+  .capacity-card {
+    min-width: 0;
+  }
+
+  .overview-pipeline {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+.app-bar .brand {
+  width: auto;
+  min-width: max-content;
+}
+
+.app-bar .brand-copy {
+  display: block;
+  width: auto;
+}
+
+.page-tabs .page-tab {
+  width: auto;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.page-tabs .nav-icon {
+  display: none;
+}
+
+.page-tabs .nav-badge {
+  margin-left: 0;
+}
+
+.capacity-equation-table thead th,
+.capacity-equation-table tbody th,
+.capacity-equation-table td,
+.node-table th,
+.sandbox-table th,
+.registry-table th,
+.program-table th,
+.event-panel th {
+  background: transparent;
+}
+
+.capacity-equation-table thead th,
+.node-table thead th,
+.sandbox-table thead th,
+.registry-table thead th,
+.program-table thead th,
+.event-panel thead th {
+  background: var(--surface-soft);
+}
+
+.decision-facts > div {
+  border-radius: 0;
+  background: transparent;
+}
+
+#healthDetail,
+.capacity-card > .workspace-copy,
+.decision-copy > .workspace-copy,
+.workspace-hero > div:first-child > .workspace-copy,
+.registry-hero-main > .registry-copy,
+.sandbox-hero-main > .registry-copy {
+  display: none;
+}
+
+/* Desktop density pass. */
+:root {
+  --app-bar-height: 50px;
+}
+
+.app-bar {
+  padding: 0 18px;
+}
+
+.app-context {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  min-width: 0;
+  margin: 0 auto 0 18px;
+  padding-left: 18px;
+  border-left: 1px solid var(--app-bar-line);
+}
+
+.app-context h1 {
+  margin: 0;
+  color: #f4f7f4;
+  font-size: 0.9rem;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+}
+
+.top-controls #authToggleButton {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #343b3e;
+  border-radius: 2px;
+  background: #171c1e;
+  color: #dce2df;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.top-controls .last-updated {
+  max-width: 150px;
+  overflow: hidden;
+  color: #8e989a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-shell {
+  padding: var(--app-bar-height) 20px 48px;
+}
+
+.page-tabs {
+  height: 38px;
+  margin: 0 -20px 16px;
+  padding: 0 20px;
+  gap: 24px;
+}
+
+.page-tab {
+  min-height: 37px;
+}
+
+.command-grid {
+  margin-bottom: 20px;
+}
+
+.command-grid .health-strip,
+.decision-brief {
+  min-height: 126px;
+  padding: 16px 18px;
+}
+
+.health-primary strong {
+  font-size: clamp(1.3rem, 1.7vw, 1.7rem);
+}
+
+.decision-facts {
+  margin: 11px 0 -16px;
+}
+
+.decision-facts > div {
+  padding-top: 9px;
+  padding-bottom: 9px;
+}
+
+.overview-heading {
+  min-height: 30px;
+  padding-bottom: 7px;
+}
+
+.metric-grid {
+  margin-bottom: 20px;
+}
+
+.metric-card {
+  min-height: 88px;
+  padding: 12px 14px 11px;
+}
+
+.metric-card strong {
+  margin: 7px 0 7px;
+  font-size: clamp(1.35rem, 1.75vw, 1.85rem);
+}
+
+.metric-detail {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.overview-workbench {
+  margin-bottom: 20px;
+}
+
+.capacity-card,
+.pipeline-card {
+  padding: 15px 18px;
+}
+
+.headroom-list,
+.overview-pipeline {
+  margin-top: 11px;
+}
+
+.headroom-row {
+  grid-template-columns: 145px minmax(110px, 1fr) 175px;
+  gap: 10px;
+  min-height: 35px;
+}
+
+.headroom-label span,
+.headroom-label strong {
+  white-space: nowrap;
+}
+
+.hard-limit .headroom-label span::after {
+  display: none;
+}
+
+.pipeline-stage {
+  min-height: 86px;
+  padding: 11px 13px;
+}
+
+.pipeline-stage strong {
+  margin: 9px 0 7px;
+  font-size: 1.55rem;
+}
+
+.pipeline-stage > span {
+  min-height: 0;
+  line-height: 1.15;
+}
+
+.latency-strip {
+  margin-top: 8px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+}
+
+.latency-strip > div,
+.stat-strip .stat-box {
+  padding-top: 8px;
+  padding-bottom: 9px;
+  background: transparent;
+}
+
+.trend-grid {
+  margin-bottom: 20px;
+}
+
+.trend-grid .chart-panel {
+  padding: 13px 14px 9px;
+}
+
+.chart-canvas,
+.trend-grid .chart-canvas,
+.trend-grid .chart-canvas.small {
+  min-height: 148px;
+  max-height: 148px;
+}
+
+@media (max-width: 820px) {
+  .app-bar {
+    padding: 0 12px;
+  }
+
+  .brand-copy,
+  .top-controls .last-updated {
+    display: none;
+  }
+
+  .app-context {
+    margin-left: 8px;
+    padding-left: 8px;
+  }
+
+  .page-shell {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .page-tabs {
+    margin-right: -14px;
+    margin-left: -14px;
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+}
+
+/* Coherent visual system: calm hierarchy, exact alignment, semantic color. */
+:root {
+  color-scheme: light;
+  --app-bar-height: 56px;
+  --background: #f3f5f8;
+  --surface: #ffffff;
+  --surface-soft: #f7f8fa;
+  --surface-raised: #ffffff;
+  --line: #d9dee7;
+  --line-soft: #e8ebf0;
+  --text: #171a21;
+  --muted: #697386;
+  --faint: #929bab;
+  --blue: #4d6ee8;
+  --green: #23866f;
+  --orange: #a96424;
+  --purple: #7058b3;
+  --red: #c94b5d;
+  --amber: #9a721e;
+  --app-bar: #11141b;
+  --app-bar-line: #282d38;
+  --focus-ring: rgba(77, 110, 232, 0.32);
+  --selection: #4d6ee8;
+}
+
+:root.dark,
+:root.dark-charts {
+  color-scheme: dark;
+  --background: #0c0f15;
+  --surface: #11151d;
+  --surface-soft: #151a24;
+  --surface-raised: #191f2a;
+  --line: #29313e;
+  --line-soft: #202733;
+  --text: #f0f2f6;
+  --muted: #9aa5b5;
+  --faint: #707b8d;
+  --blue: #809bff;
+  --green: #5cc7a7;
+  --orange: #dfa568;
+  --purple: #ad99ec;
+  --red: #f07d8c;
+  --amber: #d6b462;
+  --app-bar: #0a0d12;
+  --app-bar-line: #242b36;
+  --focus-ring: rgba(128, 155, 255, 0.34);
+  --selection: #809bff;
+}
+
+html {
+  background: var(--background);
+  font-size: 15px;
+}
+
+body {
+  background: var(--background);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 430;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+button,
+input,
+select {
+  font-family: inherit;
+  letter-spacing: 0;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="tab"]:focus-visible,
+summary:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+h1,
+h2,
+h3,
+strong,
+th {
+  letter-spacing: -0.012em;
+}
+
+.app-bar {
+  height: var(--app-bar-height);
+  padding: 0 24px;
+  border-bottom: 1px solid var(--app-bar-line);
+  background: var(--app-bar);
+}
+
+.brand {
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 18px;
+  height: 18px;
+  gap: 2px;
+}
+
+.brand-mark span {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  opacity: 0.95;
+}
+
+.brand-mark span:nth-child(1) { background: #69c5aa; }
+.brand-mark span:nth-child(2) { background: #8da2ff; }
+.brand-mark span:nth-child(3) { background: #e3ab69; }
+.brand-mark span:nth-child(4) { background: #748092; }
+
+.brand-copy strong {
+  color: #f5f6f8;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.app-context {
+  margin-left: 20px;
+  padding-left: 20px;
+  border-color: var(--app-bar-line);
+}
+
+.app-context h1 {
+  color: #c9d0da;
+  font-size: 0.82rem;
+  font-weight: 520;
+}
+
+.top-controls {
+  gap: 8px;
+}
+
+.top-controls .last-updated {
+  max-width: none;
+  color: #8d98a8;
+  font-size: 0.73rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-pill,
+.select-control,
+.icon-button,
+.top-controls #authToggleButton {
+  min-height: 34px;
+  border: 1px solid #303745;
+  border-radius: 6px;
+  background: #141922;
+  color: #d6dbe3;
+}
+
+.status-pill {
+  min-width: 80px;
+  padding: 0 12px;
+  font-size: 0.66rem;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+}
+
+.status-pill::before {
+  width: 6px;
+  height: 6px;
+}
+
+.select-control {
+  gap: 8px;
+  padding: 0 8px 0 10px;
+}
+
+.select-control select {
+  color: #d6dbe3;
+  font-size: 0.75rem;
+}
+
+.select-icon {
+  color: #8490a2;
+}
+
+.icon-button,
+.top-controls #authToggleButton {
+  padding: 0 10px;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.icon-button:hover,
+.top-controls #authToggleButton:hover {
+  border-color: #465165;
+  background: #1a202b;
+}
+
+.page-shell {
+  padding: var(--app-bar-height) 24px 64px;
+}
+
+.page-tabs {
+  height: 46px;
+  margin: 0 -24px 18px;
+  padding: 0 24px;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+}
+
+.page-tab {
+  position: relative;
+  min-height: 45px;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 560;
+}
+
+.page-tab::after {
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.page-tab:hover {
+  color: var(--text);
+}
+
+.page-tab.is-active {
+  color: var(--text);
+  font-weight: 660;
+}
+
+.page-tab.is-active::after {
+  background: var(--blue);
+}
+
+.nav-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.nav-badge-bad,
+.nav-badge-warn {
+  background: color-mix(in srgb, var(--red) 13%, var(--surface));
+  color: var(--red);
+}
+
+.auth-panel {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.auth-panel input,
+.inline-search input,
+.inline-select select,
+.registry-toolbar input,
+.registry-toolbar select,
+.sandbox-toolbar input,
+.sandbox-toolbar select,
+.node-toolbar input,
+.node-toolbar select,
+.queue-toolbar input,
+.queue-toolbar select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+.auth-panel button,
+.title-actions button,
+.table-action,
+.health-actions button,
+.sandbox-toolbar button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.auth-panel button:hover,
+.title-actions button:hover,
+.health-actions button:hover,
+.sandbox-toolbar button:hover {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+}
+
+.eyebrow,
+.metric-label,
+.stat-box > span,
+.fleet-signal-grid span,
+.latency-strip span,
+.decision-facts span,
+.pipeline-stage > span,
+.flow-index,
+th {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.section-heading h2,
+.panel-header h2,
+.workspace-card h2,
+.event-panel h2 {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.section-summary,
+.workspace-copy,
+.registry-copy,
+.last-updated,
+.metric-detail,
+.headroom-detail,
+.pipeline-stage small,
+.latency-strip strong,
+.decision-facts strong,
+.stat-box strong {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+small,
+.legend,
+.fleet-signal-grid small,
+.stat-box small,
+.meter-label,
+.equation-footnote,
+.policy-values,
+.registry-page-url {
+  font-family: inherit;
+}
+
+.section-summary {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(430px, 0.9fr);
+  gap: 0;
+  margin: 0 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.command-grid .health-strip,
+.decision-brief {
+  min-height: 144px;
+  padding: 20px 22px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.command-grid .health-strip {
+  grid-template-columns: minmax(320px, 1.1fr) minmax(260px, 0.9fr) auto;
+  gap: 18px;
+}
+
+.decision-brief {
+  border-left: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.health-primary {
+  gap: 12px;
+}
+
+.health-icon {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.health-primary strong {
+  color: var(--text);
+  font-size: clamp(1.3rem, 1.7vw, 1.65rem);
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.health-signals {
+  gap: 6px;
+}
+
+.signal-chip,
+.reason-chip,
+.read-only-badge,
+.inline-badge {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 620;
+}
+
+.signal-chip.warn,
+.reason-chip.warn,
+.badge-warn {
+  border-color: color-mix(in srgb, var(--amber) 30%, var(--line));
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  color: var(--amber);
+}
+
+.signal-chip.bad,
+.badge-bad {
+  border-color: color-mix(in srgb, var(--red) 32%, var(--line));
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  color: var(--red);
+}
+
+.badge-ok {
+  border-color: color-mix(in srgb, var(--green) 30%, var(--line));
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+  color: var(--green);
+}
+
+.decision-brief h2,
+.decision-copy h2 {
+  margin-top: 4px;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.reason-stack,
+.decision-reasons {
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.reason-stack > span,
+.decision-reasons > span {
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.35;
+}
+
+.reason-stack > span::before,
+.decision-reasons > span::before {
+  width: 4px;
+  height: 4px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+.decision-facts {
+  margin: 13px -22px -20px;
+  border-top: 1px solid var(--line);
+}
+
+.decision-facts > div {
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.decision-facts strong {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 630;
+}
+
+.overview-heading {
+  min-height: 32px;
+  padding: 0 0 8px;
+  border: 0;
+}
+
+.overview-heading h2 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.metric-grid {
+  margin: 0 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.metric-card {
+  min-height: 102px;
+  padding: 15px 16px 14px;
+  border-right: 1px solid var(--line);
+  background: transparent;
+}
+
+.metric-card strong {
+  margin: 8px 0 7px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: clamp(1.5rem, 1.9vw, 1.9rem);
+  font-weight: 630;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+.metric-detail {
+  color: var(--muted);
+  font-size: 0.71rem;
+  line-height: 1.3;
+}
+
+.overview-workbench {
+  grid-template-columns: minmax(430px, 0.82fr) minmax(650px, 1.18fr);
+  margin: 0 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.capacity-card,
+.pipeline-card {
+  padding: 18px 20px;
+  background: transparent;
+}
+
+.capacity-card {
+  border-right: 1px solid var(--line);
+}
+
+.headroom-list {
+  margin-top: 13px;
+}
+
+.headroom-row {
+  grid-template-columns: 142px minmax(100px, 1fr) 184px;
+  min-height: 39px;
+  gap: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.headroom-label span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.headroom-label strong {
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+}
+
+.dual-meter {
+  height: 7px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--line-soft);
+}
+
+.dual-meter span {
+  border-radius: 4px;
+}
+
+.meter-reserved {
+  background: color-mix(in srgb, var(--blue) 30%, transparent);
+}
+
+.meter-actual {
+  height: 5px;
+  margin-top: 1px;
+  background: var(--blue);
+}
+
+.meter-disk {
+  background: var(--purple);
+}
+
+.headroom-detail {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.overview-pipeline {
+  margin-top: 13px;
+  border-color: var(--line-soft);
+}
+
+.pipeline-stage {
+  min-height: 88px;
+  padding: 12px 14px;
+  border-color: var(--line-soft);
+}
+
+.pipeline-stage strong {
+  margin: 9px 0 6px;
+  font-family: inherit;
+  font-size: 1.55rem;
+  font-weight: 630;
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-stage small {
+  color: var(--muted) !important;
+  font-size: 0.68rem;
+}
+
+.latency-strip {
+  margin-top: 10px;
+  border-color: var(--line-soft);
+}
+
+.latency-strip > div,
+.stat-strip .stat-box {
+  padding: 9px 12px 10px;
+  border-color: var(--line-soft);
+}
+
+.latency-strip strong,
+.stat-strip strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 630;
+}
+
+.trend-grid,
+.activity-grid,
+.scheduler-grid,
+.image-supply-grid,
+.registry-full-grid {
+  gap: 0;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.trend-grid .chart-panel,
+.activity-grid > *,
+.scheduler-grid > *,
+.image-supply-grid > *,
+.registry-full-grid > * {
+  border-color: var(--line);
+  background: transparent;
+}
+
+.trend-grid .chart-panel {
+  padding: 15px 16px 10px;
+}
+
+.panel-header,
+.table-header {
+  margin-bottom: 10px;
+}
+
+.chart-canvas,
+.trend-grid .chart-canvas,
+.trend-grid .chart-canvas.small {
+  min-height: 148px;
+  max-height: 148px;
+}
+
+.legend {
+  gap: 16px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.legend span::before {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.activity-event-panel,
+.event-panel,
+.ops-panel,
+.workspace-card,
+.chart-panel {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.activity-event-panel table {
+  min-width: 720px;
+}
+
+.decision-hero,
+.workspace-hero,
+.registry-hero,
+.sandbox-hero {
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.decision-copy,
+.workspace-hero > div:first-child,
+.registry-hero-main,
+.sandbox-hero-main {
+  padding: 19px 22px;
+  border-color: var(--line);
+}
+
+.decision-stats,
+.node-hero-stats,
+.registry-stat-grid,
+.sandbox-stat-grid {
+  background: var(--surface-soft);
+}
+
+.decision-stats > div,
+.node-hero-stats > div,
+.registry-stat-grid > div,
+.sandbox-stat-grid > div,
+.fleet-signal-grid > div {
+  padding: 16px 18px;
+  border-color: var(--line);
+}
+
+.decision-stats strong,
+.node-hero-stats strong,
+.registry-stat-grid strong,
+.sandbox-stat-grid strong,
+.fleet-signal-grid strong {
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.35rem;
+  font-weight: 630;
+  font-variant-numeric: tabular-nums;
+}
+
+.fleet-signal-grid,
+.stat-strip,
+.compact-strip {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.program-flow {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.flow-stage {
+  min-height: 96px;
+  padding: 14px 16px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.flow-stage:hover {
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+}
+
+.flow-stage.is-selected {
+  background: color-mix(in srgb, var(--blue) 9%, transparent);
+  box-shadow: inset 0 -2px var(--blue);
+}
+
+.flow-stage strong {
+  margin: 9px 0 7px;
+  font-family: inherit;
+  font-size: 1.65rem;
+  font-weight: 630;
+}
+
+.policy-values dt,
+.policy-values dd,
+.resource-vector,
+.equation-footnote {
+  font-family: inherit;
+}
+
+.policy-values > div {
+  border-color: var(--line-soft);
+}
+
+.queue-toolbar,
+.node-toolbar,
+.sandbox-toolbar,
+.registry-toolbar {
+  padding: 13px 0 11px;
+  border-color: var(--line);
+  background: transparent;
+}
+
+.event-panel,
+.sandbox-list-panel,
+.registry-list-panel {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.table-wrap {
+  background: transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted) 38%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.table-wrap::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 36%, transparent);
+  background-clip: padding-box;
+}
+
+table {
+  color: var(--text);
+  font-family: inherit;
+}
+
+th,
+td {
+  height: 42px;
+  padding: 8px 12px;
+  border-color: var(--line-soft);
+}
+
+th,
+.capacity-equation-table thead th,
+.node-table thead th,
+.sandbox-table thead th,
+.registry-table thead th,
+.program-table thead th,
+.event-panel thead th {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+td {
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+  font-size: 0.74rem;
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+}
+
+.sandbox-id,
+.sandbox-image,
+.sandbox-node,
+.node-table td:nth-child(2),
+.program-table td:nth-child(3),
+.program-table td:nth-child(4) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.71rem;
+  letter-spacing: -0.01em;
+}
+
+.sandbox-resources,
+.sandbox-labels {
+  font-family: inherit;
+  font-size: 0.72rem;
+}
+
+.meter-label,
+.meter-stack {
+  font-family: inherit;
+}
+
+.meter {
+  height: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--line-soft);
+}
+
+.meter span {
+  border-radius: 4px;
+  background: var(--green);
+}
+
+.meter.warn span { background: var(--amber); }
+.meter.bad span { background: var(--red); }
+
+.state-dot {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+}
+
+.sandbox-status,
+.build-status,
+.severity-badge {
+  min-width: 64px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.sandbox-status.running,
+.build-status.succeeded {
+  border-color: color-mix(in srgb, var(--green) 35%, var(--line));
+  background: color-mix(in srgb, var(--green) 9%, transparent);
+  color: var(--green);
+}
+
+.sandbox-status.parked,
+.sandbox-status.pending,
+.build-status.queued {
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--blue);
+}
+
+.sandbox-status.waking,
+.sandbox-status.transitioning,
+.sandbox-status.migrating,
+.build-status.running,
+.severity-warn {
+  border-color: color-mix(in srgb, var(--amber) 32%, var(--line));
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  color: var(--amber);
+}
+
+.sandbox-status.failed,
+.sandbox-status.stale,
+.build-status.failed,
+.severity-alert {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  color: var(--red);
+}
+
+.severity-info {
+  border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+  color: var(--blue);
+}
+
+.table-action.danger {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  background: transparent;
+  color: var(--red);
+}
+
+.table-action.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+}
+
+.tag-chip {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.67rem;
+}
+
+@media (max-width: 1180px) {
+  .command-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-brief {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .overview-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .capacity-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .trend-latency {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1000px) {
+  .scheduler-grid,
+  .image-supply-grid,
+  .registry-full-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduler-grid > :first-child,
+  .image-supply-grid > :first-child,
+  .registry-full-grid > :first-child {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--line) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-context,
+  .top-controls .last-updated {
+    display: none;
+  }
+
+  .headroom-row {
+    grid-template-columns: 142px minmax(100px, 1fr);
+  }
+
+  .headroom-detail {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-bar {
+    padding: 0 14px;
+  }
+
+  .page-shell {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .page-tabs {
+    margin-right: -14px;
+    margin-left: -14px;
+    padding-right: 14px;
+    padding-left: 14px;
+    gap: 22px;
+  }
+
+  .command-grid .health-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-card:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .headroom-row {
+    grid-template-columns: 130px minmax(100px, 1fr);
+  }
+
+  .headroom-detail {
+    display: none;
+  }
+}
 """
 
 
 DASHBOARD_JS = """
 const MAX_HISTORY = 4320;
-const DEFAULT_REFRESH_INTERVAL_MS = 10000;
+const DEFAULT_REFRESH_INTERVAL_MS = 2000;
 const MAX_PROGRAM_ROWS = 200;
 const MAX_NODE_ROWS = 250;
 const MAX_REGISTRY_REPOSITORY_ROWS = 250;
 
 const state = {
   timer: null,
-  paused: false,
   currentPage: "overview",
   history: [],
   lastSnapshot: null,
@@ -4430,9 +7212,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryNavBadge",
     "lastUpdated",
     "timeRangeSelect",
-    "refreshSelect",
     "refreshNowButton",
-    "pauseButton",
     "themeButton",
     "authToggleButton",
     "authPanel",
@@ -4603,10 +7383,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const savedToken = sessionStorage.getItem("ucloud.dashboard.token") || "";
   els.tokenInput.value = savedToken;
-  const savedRefresh = localStorage.getItem("ucloud.dashboard.refreshMs");
-  if (savedRefresh !== null && [...els.refreshSelect.options].some((option) => option.value === savedRefresh)) {
-    els.refreshSelect.value = savedRefresh;
-  }
   restoreSelectPreference(els.sandboxStateFilter, "ucloud.dashboard.sandboxState");
   restoreSelectPreference(els.nodeStateFilter, "ucloud.dashboard.nodeState");
   restoreSelectPreference(els.programResultFilter, "ucloud.dashboard.programResult");
@@ -4631,12 +7407,7 @@ document.addEventListener("DOMContentLoaded", () => {
     trimHistory();
     redrawCharts();
   });
-  els.refreshSelect.addEventListener("change", () => {
-    localStorage.setItem("ucloud.dashboard.refreshMs", els.refreshSelect.value);
-    scheduleNextRefresh();
-  });
   els.refreshNowButton.addEventListener("click", () => refreshNow({ supersede: true }));
-  els.pauseButton.addEventListener("click", togglePause);
   els.themeButton.addEventListener("click", toggleTheme);
   els.copyDiagnosticsButton.addEventListener("click", copyDiagnostics);
   els.downloadSnapshotButton.addEventListener("click", downloadSnapshot);
@@ -4727,19 +7498,6 @@ function syncAuthPanel(show) {
   els.authToggleButton.setAttribute("aria-expanded", String(show));
 }
 
-function togglePause() {
-  state.paused = !state.paused;
-  els.pauseButton.title = state.paused ? "Resume refresh" : "Pause refresh";
-  els.pauseButton.setAttribute("aria-label", els.pauseButton.title);
-  els.pauseButton.classList.toggle("is-paused", state.paused);
-  if (state.paused) {
-    clearRefreshTimer();
-    setStatus("Paused", "warn");
-  } else {
-    refreshNow({ supersede: true });
-  }
-}
-
 function preferredTheme() {
   return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
@@ -4758,36 +7516,36 @@ function applyTheme(theme) {
   palette = dark
     ? {
         ...palette,
-        blue: "#60a5fa",
-        blueSoft: "rgba(96, 165, 250, 0.14)",
-        green: "#4ade80",
-        greenSoft: "rgba(74, 222, 128, 0.14)",
-        orange: "#fb923c",
-        orangeSoft: "rgba(251, 146, 60, 0.14)",
-        purple: "#a78bfa",
-        purpleSoft: "rgba(167, 139, 250, 0.14)",
-        red: "#f87171",
-        redSoft: "rgba(248, 113, 113, 0.14)",
-        grid: "#2b3a52",
-        text: "#e5edf8",
-        muted: "#94a3b8",
-        plotBg: "#111b2e",
+        blue: "#809bff",
+        blueSoft: "rgba(128, 155, 255, 0.10)",
+        green: "#5cc7a7",
+        greenSoft: "rgba(92, 199, 167, 0.10)",
+        orange: "#dfa568",
+        orangeSoft: "rgba(223, 165, 104, 0.10)",
+        purple: "#ad99ec",
+        purpleSoft: "rgba(173, 153, 236, 0.10)",
+        red: "#f07d8c",
+        redSoft: "rgba(240, 125, 140, 0.10)",
+        grid: "#29313e",
+        text: "#f0f2f6",
+        muted: "#9aa5b5",
+        plotBg: "#11151d",
       }
     : {
         ...palette,
-        blue: "#2563eb",
-        blueSoft: "rgba(37, 99, 235, 0.12)",
-        green: "#16a34a",
-        greenSoft: "rgba(22, 163, 74, 0.12)",
-        orange: "#f97316",
-        orangeSoft: "rgba(249, 115, 22, 0.12)",
-        purple: "#7c3aed",
-        purpleSoft: "rgba(124, 58, 237, 0.12)",
-        red: "#dc2626",
-        redSoft: "rgba(220, 38, 38, 0.12)",
-        grid: "#dfe5ee",
-        text: "#0f172a",
-        muted: "#64748b",
+        blue: "#4d6ee8",
+        blueSoft: "rgba(77, 110, 232, 0.08)",
+        green: "#23866f",
+        greenSoft: "rgba(35, 134, 111, 0.08)",
+        orange: "#a96424",
+        orangeSoft: "rgba(169, 100, 36, 0.08)",
+        purple: "#7058b3",
+        purpleSoft: "rgba(112, 88, 179, 0.08)",
+        red: "#c94b5d",
+        redSoft: "rgba(201, 75, 93, 0.08)",
+        grid: "#d9dee7",
+        text: "#171a21",
+        muted: "#697386",
         plotBg: "#ffffff",
       };
 }
@@ -4800,11 +7558,11 @@ function pageFromHash() {
 function setPage(page, options = {}) {
   const next = ["overview", "scheduler", "nodes", "sandboxes", "registry"].includes(page) ? page : "overview";
   const pageCopy = {
-    overview: ["Live control plane", "Fleet overview", "Demand, placement headroom, and service health at a glance."],
-    scheduler: ["Demand and scaling", "Why capacity is changing", "Immediate demand, hard-fit placement, and the latest autoscaler decision."],
-    nodes: ["Fleet", "Placement supply", "Node health, dynamic pressure, and non-overcommittable disk headroom."],
-    sandboxes: ["Sandbox lifecycle", "Sessions and state", "Find stuck, parked, moving, or unhealthy sandboxes and inspect their placement."],
-    registry: ["Images", "Build and artifact supply", "Registry coverage, image availability, and build health."],
+    overview: ["Control plane", "Overview", "Overview"],
+    scheduler: ["Control plane", "Demand & scaling", "Demand & scaling"],
+    nodes: ["Control plane", "Fleet", "Fleet"],
+    sandboxes: ["Control plane", "Sandboxes", "Sandboxes"],
+    registry: ["Control plane", "Images", "Images"],
   };
   state.currentPage = next;
   const [kicker, heading, description] = pageCopy[next];
@@ -4872,10 +7630,8 @@ function clearRefreshTimer() {
 
 function scheduleNextRefresh() {
   clearRefreshTimer();
-  const selectedInterval = Number(els.refreshSelect.value);
-  const interval = Number.isFinite(selectedInterval) ? selectedInterval : DEFAULT_REFRESH_INTERVAL_MS;
-  if (state.paused || document.hidden || !Number.isFinite(interval) || interval <= 0) return;
-  state.timer = window.setTimeout(() => refreshNow(), interval);
+  if (document.hidden) return;
+  state.timer = window.setTimeout(() => refreshNow(), DEFAULT_REFRESH_INTERVAL_MS);
 }
 
 async function refreshNow(options = {}) {
@@ -4888,7 +7644,7 @@ async function refreshNow(options = {}) {
   const sequence = ++state.requestSequence;
   state.metricsRequest = controller;
   els.refreshNowButton.disabled = true;
-  setStatus("Refreshing", "warn");
+  if (!state.lastSnapshot) setStatus("Connecting", "warn");
   const token = sessionStorage.getItem("ucloud.dashboard.token") || els.tokenInput.value.trim();
   const headers = token ? { "X-UCloud-Sandbox-Token": token } : {};
   try {
@@ -4908,7 +7664,7 @@ async function refreshNow(options = {}) {
     if (!response.ok) {
       setStatus(`HTTP ${response.status}`, "bad");
       els.lastUpdated.textContent = state.lastSnapshot
-        ? `Last data ${formatTime(state.lastSnapshot.generated_at)} · refresh failed`
+        ? `Last data ${formatTime(state.lastSnapshot.generated_at)}, refresh failed`
         : "Metrics request failed";
       return;
     }
@@ -4928,7 +7684,7 @@ async function refreshNow(options = {}) {
     if (error && error.name === "AbortError") return;
     setStatus("Offline", "bad");
     els.lastUpdated.textContent = state.lastSnapshot
-      ? `Last data ${formatTime(state.lastSnapshot.generated_at)} · connection lost`
+      ? `Last data ${formatTime(state.lastSnapshot.generated_at)}, connection lost`
       : String(error && error.message ? error.message : error);
     redrawCharts();
   } finally {
@@ -4993,7 +7749,7 @@ function renderSnapshot(snapshot) {
   state.lastSnapshot = snapshot;
   state.history.push(pointFromSnapshot(snapshot));
   trimHistory();
-  els.lastUpdated.textContent = `Updated now · ${formatTime(snapshot.generated_at)}`;
+  els.lastUpdated.textContent = `Updated ${formatTime(snapshot.generated_at)}`;
   renderMetrics(snapshot);
   renderHealth(snapshot);
   if (state.currentPage === "overview") {
@@ -5132,7 +7888,7 @@ function renderMetrics(snapshot) {
   setText(
     "readyWakeDetail",
     asNumber(programStates.ready_to_wake) > 0
-      ? `oldest ${formatAge(programs.oldest_ready_to_wake_seconds)}, ${asNumber(wakePlan.unplaced_count)} unplaced`
+      ? `${formatAge(programs.oldest_ready_to_wake_seconds)} oldest, ${asNumber(wakePlan.unplaced_count)} unplaced`
       : "no response-ready work"
   );
 
@@ -5145,7 +7901,7 @@ function renderMetrics(snapshot) {
   setText("modelWaitValue", formatInteger(programStates.model_wait));
   setText(
     "modelWaitDetail",
-    `${formatResources((programs.resources || {}).model_wait || {})}, oldest ${formatAge(programs.oldest_model_wait_seconds)}`
+    `${formatResources((programs.resources || {}).model_wait || {})}, ${formatAge(programs.oldest_model_wait_seconds)} oldest`
   );
 
   setText(
@@ -5161,7 +7917,7 @@ function renderMetrics(snapshot) {
   const actionText = actionSummary(actions);
   setText(
     "autoscalerSummary",
-    autoscaler.timestamp ? `${actionText} · cycle ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
+    autoscaler.timestamp ? `${actionText}, cycle ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
   );
   setText("autoscalerPressureValue", formatInteger(liveSignals.pressure_samples));
   setText(
@@ -5264,11 +8020,11 @@ function renderOverviewOperational(snapshot) {
       : `${formatResources(free)} remains across ${formatInteger(nodes.sandbox_ready)} schedulable node(s).`
   );
   setText("capacityCpuValue", `${formatNumber(free.vcpu)} vCPU free`);
-  setText("capacityCpuDetail", `${formatPercentPoint(cpuActual)} actual · ${formatPercentPoint(cpuReserved)} reserved · ${formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))} target`);
+  setText("capacityCpuDetail", `Actual ${formatPercentPoint(cpuActual)} / reserved ${formatPercentPoint(cpuReserved)} / target ${formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))}`);
   setMeterWidth("capacityCpuActualMeter", cpuActual);
   setMeterWidth("capacityCpuReservedMeter", cpuReserved);
   setText("capacityMemoryValue", `${formatMemory(free.memory_mb)} free`);
-  setText("capacityMemoryDetail", `${formatPercentPoint(memoryActual)} actual · ${formatPercentPoint(memoryReserved)} reserved · ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))} target`);
+  setText("capacityMemoryDetail", `Actual ${formatPercentPoint(memoryActual)} / reserved ${formatPercentPoint(memoryReserved)} / target ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))}`);
   setMeterWidth("capacityMemoryActualMeter", memoryActual);
   setMeterWidth("capacityMemoryReservedMeter", memoryReserved);
   setText("capacityDiskValue", `${formatMemory(free.disk_mb)} free`);
@@ -5392,7 +8148,7 @@ function renderSchedulerPage(snapshot) {
   setText(
     "schedulerDecisionDetail",
     autoscaler.timestamp
-      ? `${actionSummary(actions)} · cycle ${formatTime(autoscaler.timestamp)}`
+      ? `${actionSummary(actions)}, cycle ${formatTime(autoscaler.timestamp)}`
       : "No autoscaler cycle loaded."
   );
   els.schedulerReasons.replaceChildren(...(reasons.length ? reasons : ["No scale action is required."]).slice(0, 6).map((reason) => {
@@ -5415,7 +8171,7 @@ function renderSchedulerPage(snapshot) {
   setText("flowActingValue", formatInteger(states.acting));
   setText(
     "programFlowSummary",
-    `${formatInteger(programs.rollouts)} rollouts · ${formatInteger(programs.sandboxes)} sandboxes`
+    `${formatInteger(programs.rollouts)} rollouts / ${formatInteger(programs.sandboxes)} sandboxes`
   );
 
   renderCapacityEquation({
@@ -5515,7 +8271,7 @@ function renderProgramQueue() {
   const truncated = asNumber(plan.placements_truncated) + asNumber(plan.unplaced_truncated);
   setText(
     "programQueueSummary",
-    `${formatInteger(shown.length)} shown · ${formatInteger(plan.queued)} queued · ${formatInteger(plan.unplaced_count)} unplaced${truncated ? ` · ${formatInteger(truncated)} sampled out` : ""}`
+    `${formatInteger(shown.length)} shown, ${formatInteger(plan.queued)} queued, ${formatInteger(plan.unplaced_count)} unplaced${truncated ? `, ${formatInteger(truncated)} sampled out` : ""}`
   );
   if (shown.length === 0) {
     renderEmptyRow(
@@ -5541,7 +8297,7 @@ function programQueueRow(item) {
     "",
     `${item.rollout_id || ""}\\n${item.request_id || ""}`
   );
-  appendClassCell(tr, `${item.sandbox_id || "-"} · g${formatInteger(item.sandbox_generation)}`, "");
+  appendClassCell(tr, `${item.sandbox_id || "-"} / g${formatInteger(item.sandbox_generation)}`, "");
   appendCell(tr, formatResources(item.resources || {}));
   appendClassCell(tr, item.node_id || item.job_id || "-", "");
   appendCell(tr, item.result === "placed" ? (item.local ? "local" : "migration") : "-");
@@ -5630,7 +8386,7 @@ function nodeRow(item, plannedWakes) {
   stateCell.append(stateWrapper);
   tr.append(stateCell);
   appendClassCell(tr, `${item.node_id || "-"}\\n${item.job_id || "-"}`, "", item.node_url || "");
-  appendCell(tr, `${formatInteger(item.active_sandboxes)} sandboxes${plannedWakes ? ` · +${plannedWakes} planned` : ""}`);
+  appendCell(tr, `${formatInteger(item.active_sandboxes)} sandboxes${plannedWakes ? `, +${plannedWakes} planned` : ""}`);
   tr.append(resourceMeterCell(item, "vcpu", "cpu_percent"));
   tr.append(resourceMeterCell(item, "memory_mb", "memory_percent"));
   const free = item.free_resources || {};
@@ -5700,7 +8456,7 @@ function nodePressureText(item) {
   const limit = asNumber(actual.storage_max_concurrent_operations);
   if (limit > 0) parts.push(`storage ${asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)}/${limit}`);
   if (asNumber(actual.storage_error_volumes) > 0) parts.push(`${formatInteger(actual.storage_error_volumes)} volume errors`);
-  return parts.join(" · ") || "normal";
+  return parts.join(", ") || "normal";
 }
 
 function actionCount(actions, kind) {
@@ -5850,7 +8606,7 @@ function renderSandboxesPage() {
   setText("sandboxesPageRoutesValue", formatInteger((stateCounts.transitioning || 0) + (stateCounts.migrating || 0)));
   setText(
     "sandboxesPageSummary",
-    `${formatInteger(filtered.length)} shown of ${formatInteger(sandboxes.length)} loaded · ${formatInteger(activeRoutes)} active routes${staleRoutes ? ` · ${formatInteger(staleRoutes)} stale` : ""}`
+    `${formatInteger(filtered.length)} shown of ${formatInteger(sandboxes.length)} loaded, ${formatInteger(activeRoutes)} active routes${staleRoutes ? `, ${formatInteger(staleRoutes)} stale` : ""}`
   );
   setText(
     "sandboxListSummary",
@@ -5955,7 +8711,7 @@ function sandboxRow(sandbox) {
 
   appendClassCell(
     tr,
-    sandbox.generation === null ? (sandbox.id || "-") : `${sandbox.id || "-"} · g${formatInteger(sandbox.generation)}`,
+    sandbox.generation === null ? (sandbox.id || "-") : `${sandbox.id || "-"} / g${formatInteger(sandbox.generation)}`,
     "sandbox-id",
     [sandbox.id, sandbox.operationId, sandbox.checkpointId, sandbox.creationKind].filter(Boolean).join("\\n")
   );
@@ -6008,8 +8764,8 @@ function sandboxResourcesText(sandbox) {
   const parts = [];
   if (cpu !== null && cpu > 0) parts.push(`${formatNumber(cpu)} vCPU`);
   if (memory !== null && memory > 0) parts.push(formatMemory(memory));
-  if (disk !== null && disk > 0) parts.push(`${formatMemory(disk)} disk`);
-  return parts.join(" ") || "-";
+  if (disk !== null && disk > 0) parts.push(formatMemory(disk));
+  return parts.join(" / ") || "-";
 }
 
 function sandboxAge(sandbox) {
@@ -6972,7 +9728,7 @@ function formatResources(value) {
   const cpu = formatNumber(value.vcpu || 0);
   const memory = formatMemory(value.memory_mb || 0);
   const disk = asNumber(value.disk_mb);
-  return `${cpu} vCPU · ${memory}${disk > 0 ? ` · ${formatMemory(disk)} disk` : ""}`;
+  return `${cpu} vCPU / ${memory}${disk > 0 ? ` / ${formatMemory(disk)} disk` : ""}`;
 }
 
 function resourcePercent(used, effective, key) {
@@ -6985,6 +9741,7 @@ function resourcePercent(used, effective, key) {
 function formatMemory(value) {
   const number = nullableNumber(value);
   if (number === null) return "-";
+  if (number >= 1024 * 1024) return `${formatNumber(number / (1024 * 1024))} TiB`;
   if (number >= 1024) return `${formatNumber(number / 1024)} GiB`;
   return `${formatNumber(number)} MiB`;
 }

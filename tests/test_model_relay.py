@@ -408,10 +408,18 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     headers={
                         "Traceparent": "00-before",
                         "X-Stainless-Retry-Count": "0",
+                        "X-Forwarded-For": "100.64.0.10",
+                        "X-Forwarded-Host": "relay-before.example",
+                        "X-Real-IP": "100.64.0.10",
+                        "job-id": "source-node",
                     },
                 )
             )
             delivery = (await relay.poll("lifecycle", token))["request"]
+            forwarded = {
+                key.lower(): value
+                for key, value in delivery["headers"].items()
+            }
             await relay.respond_bytes(
                 delivery,
                 token,
@@ -426,6 +434,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 headers={
                     "Traceparent": "00-after",
                     "X-Stainless-Retry-Count": "1",
+                    "X-Forwarded-For": "100.64.0.11",
+                    "X-Forwarded-Host": "relay-after.example",
+                    "X-Real-IP": "100.64.0.11",
+                    "job-id": "destination-node",
                 },
             )
             stats = await relay.stats()
@@ -438,6 +450,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["counters"]["transport_resets"], 1)
         self.assertEqual(stats["counters"]["reattached"], 1)
         self.assertEqual(stats["counters"]["enqueued"], 1)
+        self.assertNotIn("x-forwarded-for", forwarded)
+        self.assertNotIn("x-forwarded-host", forwarded)
+        self.assertNotIn("x-real-ip", forwarded)
+        self.assertNotIn("job-id", forwarded)
 
     async def test_lifecycle_response_delivery_waits_for_explicit_release(
         self,
@@ -789,6 +805,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                         "Authorization": "Bearer upstream-secret",
                         "Content-Type": "application/octet-stream",
                         "X-Custom": "safe",
+                        "Forwarded": "for=100.64.0.10",
+                        "X-Forwarded-For": "100.64.0.10",
+                        "X-Real-IP": "100.64.0.10",
+                        "job-id": "provider-job",
                     },
                     data=request_body,
                 )
@@ -836,6 +856,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(forwarded["content-type"], "application/octet-stream")
         self.assertEqual(forwarded["x-custom"], "safe")
         self.assertNotIn("x-ucloud-relay-token", forwarded)
+        self.assertNotIn("forwarded", forwarded)
+        self.assertNotIn("x-forwarded-for", forwarded)
+        self.assertNotIn("x-real-ip", forwarded)
+        self.assertNotIn("job-id", forwarded)
         self.assertEqual(
             (response_status, response_body), (207, b"\xffbinary-response")
         )

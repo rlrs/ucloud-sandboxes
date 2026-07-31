@@ -782,3 +782,21 @@ Release 0.3.68 implements this seam without a gVisor patch. The remaining
 rollout gate is a fresh public canonical SDK/Verifiers park-and-migrate run,
 followed by restoring the production worker shape to 2 TB and draining the
 temporary qualification worker.
+
+The first public 0.3.68 retry clarified the sandbox-facing relay contract.
+UCloud's private job DNS name resolves on worker hosts but not inside arbitrary
+sandbox images, whose resolver intentionally uses public DNS. Harnesses must
+therefore receive the stable public relay origin and its per-rollout
+registration token. This is already the SDK default; it survives migration
+without rewriting an arbitrary harness's configuration. Private DNS remains
+the node-infrastructure path for Registry and storage.
+
+That run moved authority successfully but then returned a false 409 on the
+OpenAI client's retry. The durable logical request key and body were identical,
+but the request digest included provider-generated `X-Forwarded-*`, `X-Real-IP`,
+and `job-id` headers. Those hop-by-hop ingress values changed when the
+checkpointed connection was recreated and must neither reach the upstream
+worker nor participate in semantic request identity. Release 0.3.69 strips
+them at the relay boundary. Regression coverage changes all of those headers
+between attempts and requires one enqueue, one worker response, and exact
+completed-response replay.

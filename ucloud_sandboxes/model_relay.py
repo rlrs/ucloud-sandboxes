@@ -1977,11 +1977,14 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
     blocked = {
         "connection",
         "content-length",
+        "forwarded",
         "host",
+        "job-id",
         "proxy-authorization",
         "transfer-encoding",
         RELAY_TOKEN_HEADER.lower(),
         RELAY_REQUEST_ID_HEADER.lower(),
+        "x-real-ip",
         "x-ucloud-sandbox-token",
     }
     expected = request.app[SANDBOX_TOKEN_KEY]
@@ -1998,7 +2001,10 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
     return {
         key: value
         for key, value in request.headers.items()
-        if key.lower() not in blocked
+        if (
+            key.lower() not in blocked
+            and not key.lower().startswith("x-forwarded-")
+        )
     }
 
 

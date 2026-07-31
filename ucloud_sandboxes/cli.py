@@ -1307,9 +1307,8 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument(
         "--registry-private-ip",
         help=(
-            "Optional private-network IP override for the all-in-one VM. If "
-            "omitted, the remote deployment detects the VM's private IPv4 and "
-            "uses it in node init as ucloud-sandbox-registry=<ip>."
+            "Optional stable private-network IP override for the all-in-one VM. "
+            "When omitted, nodes use --gateway-private-host through private DNS."
         ),
     )
     deploy_all.add_argument(

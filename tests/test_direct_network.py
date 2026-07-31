@@ -46,12 +46,16 @@ class DirectNetworkManagerTests(unittest.TestCase):
             DirectNetworkTcpEgress.parse("10.36.136.151:8092").endpoint(),
             "10.36.136.151:8092",
         )
+        hostname = DirectNetworkTcpEgress.parse("Relay.Internal.:8092")
+        self.assertEqual(hostname.endpoint(), "relay.internal:8092")
+        self.assertTrue(hostname.is_dynamic)
         for value in (
-            "relay.internal:8092",
             "10.36.136.151",
             "10.36.136.151:0",
             "10.36.136.151:65536",
             "[fd00::1]:8092",
+            "-relay.internal:8092",
+            "relay..internal:8092",
         ):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 DirectNetworkTcpEgress.parse(value)
@@ -92,6 +96,64 @@ class DirectNetworkManagerTests(unittest.TestCase):
             self.assertIn(deny, commands)
             self.assertEqual(commands.count(allow), 1)
             self.assertGreater(commands.index(allow), commands.index(deny))
+
+    def test_dns_egress_handoff_adds_new_rule_before_removing_old(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            commands: list[tuple[str, ...]] = []
+            addresses = [["10.36.136.151"], ["10.36.144.34"]]
+            manager = DirectNetworkManager(
+                root / "network-slots.json",
+                namespace_root=root / "netns",
+                allowed_tcp_egress=("relay.internal:8092",),
+                runner=lambda command: commands.append(tuple(command)),
+                resolver=lambda _host: addresses.pop(0),
+            )
+            with (
+                patch(
+                    "ucloud_sandboxes.direct_network.subprocess.run",
+                    return_value=Mock(returncode=1),
+                ),
+                patch.object(manager, "_run_best_effort") as remove,
+            ):
+                manager._ensure_host_rules()
+                first_command_count = len(commands)
+                manager._ensure_host_rules()
+
+            new_allow = (
+                "iptables", "-I", "FORWARD", "1",
+                "-s", "100.96.0.0/16",
+                "-d", "10.36.144.34/32",
+                "-p", "tcp",
+                "--dport", "8092",
+                "-j", "ACCEPT",
+            )
+            self.assertIn(new_allow, commands[first_command_count:])
+            remove.assert_called_once_with(
+                (
+                    "iptables", "-D", "FORWARD",
+                    "-s", "100.96.0.0/16",
+                    "-d", "10.36.136.151/32",
+                    "-p", "tcp",
+                    "--dport", "8092",
+                    "-j", "ACCEPT",
+                )
+            )
+
+            reopened = DirectNetworkManager(
+                root / "network-slots.json",
+                namespace_root=root / "netns",
+                allowed_tcp_egress=("relay.internal:8092",),
+                resolver=lambda _host: (_ for _ in ()).throw(OSError("DNS down")),
+            )
+            self.assertEqual(
+                reopened._resolved_tcp_egress,
+                {
+                    DirectNetworkTcpEgress.parse("relay.internal:8092"): (
+                        "10.36.144.34",
+                    )
+                },
+            )
 
     def test_release_cleans_kernel_before_reusing_slot(self) -> None:
         with TemporaryDirectory() as raw:

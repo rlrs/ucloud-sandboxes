@@ -1497,9 +1497,10 @@ class CliTests(unittest.TestCase):
         payload = json.loads(output.getvalue())
         self.assertEqual(result, 0)
         self.assertEqual(payload["plan"]["registryPrivateIp"], "")
+        self.assertEqual(payload["plan"]["dockerHostAlias"], "")
         self.assertEqual(
-            payload["plan"]["dockerHostAlias"],
-            "ucloud-sandbox-registry=__UCLOUD_REGISTRY_PRIVATE_IP__",
+            payload["plan"]["dockerInsecureRegistry"],
+            "sandbox-gateway-prod:5000",
         )
 
     @allow_fixture_mutations

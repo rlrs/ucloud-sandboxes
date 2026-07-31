@@ -2030,6 +2030,16 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--init-host-alias-optional",
+        action="append",
+        default=[],
+        metavar="HOST=ADDRESS",
+        help=(
+            "Like --init-host-alias, but accepts an empty value from a systemd "
+            "environment file."
+        ),
+    )
+    parser.add_argument(
         "--init-cpu-overcommit",
         type=float,
         default=None,
@@ -6765,7 +6775,14 @@ def vm_init_options_for_autoscaled_node(
         docker_insecure_registries=tuple(
             getattr(args, "init_docker_insecure_registry", []) or []
         ),
-        host_aliases=tuple(getattr(args, "init_host_alias", []) or []),
+        host_aliases=tuple(
+            alias
+            for alias in (
+                *(getattr(args, "init_host_alias", []) or []),
+                *(getattr(args, "init_host_alias_optional", []) or []),
+            )
+            if alias
+        ),
         enable_image_builds=role == "builder",
         buildx_direct_push=(
             role == "builder" and bool(getattr(args, "init_buildx_direct_push", False))
@@ -6791,7 +6808,11 @@ def vm_init_options_for_autoscaled_node(
             ()
             if role == "builder"
             else tuple(
-                getattr(args, "init_direct_network_allow_tcp", ()) or ()
+                endpoint
+                for endpoint in (
+                    getattr(args, "init_direct_network_allow_tcp", ()) or ()
+                )
+                if endpoint
             )
         ),
         storage_native_registry_url=(

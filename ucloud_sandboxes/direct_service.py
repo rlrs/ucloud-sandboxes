@@ -176,6 +176,7 @@ class DirectSandboxService:
         self._activity_guard = threading.Lock()
         self._stop_event = threading.Event()
         self._parking_thread: threading.Thread | None = None
+        self._network_thread: threading.Thread | None = None
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
@@ -213,6 +214,23 @@ class DirectSandboxService:
                 daemon=True,
             )
             self._parking_thread.start()
+        network_manager = self.provisioner.network_manager
+        if network_manager is not None:
+            network_manager.reconcile()
+            if (
+                network_manager.has_dynamic_tcp_egress
+                and (
+                    self._network_thread is None
+                    or not self._network_thread.is_alive()
+                )
+            ):
+                self._stop_event.clear()
+                self._network_thread = threading.Thread(
+                    target=self._network_reconciliation_loop,
+                    name="ucloud-direct-network-reconciler",
+                    daemon=True,
+                )
+                self._network_thread.start()
         return records
 
     def stop(self) -> None:
@@ -221,6 +239,23 @@ class DirectSandboxService:
         if thread is not None:
             thread.join(timeout=max(2.0, self._idle_park_seconds * 2))
         self._parking_thread = None
+        network_thread = self._network_thread
+        if network_thread is not None:
+            interval = self.provisioner.network_manager.resolve_interval_seconds
+            network_thread.join(timeout=max(2.0, interval * 2))
+        self._network_thread = None
+
+    def _network_reconciliation_loop(self) -> None:
+        network_manager = self.provisioner.network_manager
+        assert network_manager is not None
+        while not self._stop_event.wait(network_manager.resolve_interval_seconds):
+            try:
+                network_manager.refresh_tcp_egress()
+            except Exception:
+                # Keep the last exact /32 rules and retry. The initial
+                # reconciliation is synchronous and fails node startup if the
+                # endpoint has never resolved.
+                continue
 
     def create(
         self,

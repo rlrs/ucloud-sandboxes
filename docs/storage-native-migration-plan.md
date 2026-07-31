@@ -1,6 +1,6 @@
 # Storage-native sandbox mobility plan
 
-Status: **Production correctness qualified; cold destination prewarm in progress**
+Status: **Production rollout in progress; restart-safe private endpoints in qualification**
 
 Last reviewed: 2026-07-31
 
@@ -669,10 +669,11 @@ Autoscaled direct nodes must retain the VM's actual disk size through init
 rather than replacing it with the Docker image size. A non-positive result is
 a startup/configuration error, not an overcommit opportunity.
 
-The durable snapshot Registry is reached by the same private alias already
-installed for Docker image infrastructure, but uses a separate repository.
-Local ublk runtime state and cache remain node-local and disposable after
-publication.
+The durable snapshot Registry is reached through the gateway job's stable
+private DNS name and a separate repository. An explicitly configured stable
+IP may retain a friendly alias, but the default must not pin a gateway VM's
+current private IP. Local ublk runtime state and cache remain node-local and
+disposable after publication.
 
 ### 2026-07-30: the production three-process stack and hard admission passed
 
@@ -743,3 +744,41 @@ record. This moves cold rootfs CPU/disk work into destination preparation,
 before the migration timer and source fence, without moving it onto the
 source node or weakening disk admission. A fresh-node production repeat is
 required before the drained rollout is complete.
+
+### 2026-07-31: fresh prewarm passed; private IP pinning blocked public qualification
+
+Release 0.3.67 repeated the canonical migration on fresh autoscaled nodes.
+Cold destination preparation happened before the source fence, and the
+storage-native migration protocol completed in 1.889 seconds: 73 ms source
+preparation, 1.297 seconds transfer/staging, 20 ms route commit, 47 ms
+activation, and 399 ms source finalization. The 128-second enclosing event was
+node provisioning and prewarm outside the migration protocol. This closes the
+cold-rootfs regression from 0.3.66.
+
+Gateway job `12362088` then took ownership of the three production public
+links, and obsolete job `12361919` was terminated. All public health endpoints
+reported 0.3.67. A real public SDK/Verifiers run provisioned worker
+`12362141`, but the sandbox relay connection failed before the harness started:
+the gateway had moved from `10.36.136.151` to `10.36.144.34` during a
+suspend/resume while the autoscaler still installed the old address in worker
+`/etc/hosts` and the exact gVisor egress rule. UCloud's job service address
+`10.40.63.33` was tested from the worker and was not reachable. The job's
+private DNS name resolved to the new address and reached both Relay and
+Registry.
+
+The production endpoint rule is therefore:
+
+1. When no explicitly stable IP is configured, Docker, the storage backend,
+   and image prewarm use the gateway job's private DNS name directly.
+2. The direct-network allowlist accepts that DNS name but installs only exact
+   resolved IPv4 `/32` rules above the RFC1918 deny.
+3. The node Warden refreshes the mapping every two seconds, installs new rules
+   before removing old rules, persists its last successful mapping, and keeps
+   that mapping during transient DNS failure.
+4. Initial resolution fails node startup closed. A restart never broadens
+   sandbox private-network access.
+
+Release 0.3.68 implements this seam without a gVisor patch. The remaining
+rollout gate is a fresh public canonical SDK/Verifiers park-and-migrate run,
+followed by restoring the production worker shape to 2 TB and draining the
+temporary qualification worker.

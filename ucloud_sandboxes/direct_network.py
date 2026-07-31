@@ -7,8 +7,11 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
+import socket
 import subprocess
 import tempfile
+import threading
 from typing import Callable, Sequence
 
 
@@ -19,6 +22,7 @@ MAX_NETWORK_SLOTS = (NETWORK_CIDR.num_addresses // 2) - 1
 # veth default at 1500 allows small requests through but black-holes larger TLS
 # records when upstream ICMP fragmentation feedback is filtered.
 NETWORK_MTU = 1420
+DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS = 2.0
 DENIED_DESTINATIONS = (
     "10.0.0.0/8",
     "100.64.0.0/10",
@@ -58,18 +62,40 @@ class DirectNetworkTcpEgress:
                 "direct network TCP egress must use the IPv4:port form"
             )
         try:
-            address = str(ipaddress.IPv4Address(raw_address))
             port = int(raw_port)
         except ValueError as exc:
             raise ValueError(
-                "direct network TCP egress must use the IPv4:port form"
+                "direct network TCP egress must use the HOST:port form"
             ) from exc
         if not 1 <= port <= 65535:
             raise ValueError("direct network TCP egress port must be in 1..65535")
+        try:
+            address = str(ipaddress.IPv4Address(raw_address))
+        except ValueError:
+            address = raw_address.rstrip(".").lower()
+            if (
+                len(address) > 253
+                or not re.fullmatch(
+                    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+                    r"(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*",
+                    address,
+                )
+            ):
+                raise ValueError(
+                    "direct network TCP egress must use the IPv4-or-DNS:port form"
+                )
         return cls(address=address, port=port)
 
     def endpoint(self) -> str:
         return f"{self.address}:{self.port}"
+
+    @property
+    def is_dynamic(self) -> bool:
+        try:
+            ipaddress.IPv4Address(self.address)
+        except ValueError:
+            return True
+        return False
 
 
 class DirectNetworkManager:
@@ -82,11 +108,18 @@ class DirectNetworkManager:
         namespace_root: Path = Path("/run/netns"),
         allowed_tcp_egress: Sequence[str] = (),
         runner: Callable[[Sequence[str]], None] | None = None,
+        resolver: Callable[[str], Sequence[str]] | None = None,
+        resolve_interval_seconds: float = DEFAULT_EGRESS_RESOLVE_INTERVAL_SECONDS,
     ) -> None:
         if not state_path.is_absolute() or not namespace_root.is_absolute():
             raise ValueError("direct network paths must be absolute")
+        if resolve_interval_seconds <= 0:
+            raise ValueError("direct network resolve interval must be positive")
         self.state_path = state_path
         self.lock_path = state_path.with_suffix(state_path.suffix + ".lock")
+        self.egress_state_path = state_path.with_suffix(
+            state_path.suffix + ".egress.json"
+        )
         self.namespace_root = namespace_root
         self.allowed_tcp_egress = tuple(
             dict.fromkeys(
@@ -95,6 +128,22 @@ class DirectNetworkManager:
             )
         )
         self.runner = runner or self._run
+        self.resolver = resolver or self._resolve_ipv4
+        self.resolve_interval_seconds = float(resolve_interval_seconds)
+        self._egress_guard = threading.Lock()
+        self._resolved_tcp_egress = self._load_egress_state()
+
+    @property
+    def has_dynamic_tcp_egress(self) -> bool:
+        return any(endpoint.is_dynamic for endpoint in self.allowed_tcp_egress)
+
+    def reconcile(self) -> None:
+        """Reconcile host rules and refresh DNS-backed exact egress exceptions."""
+        self._ensure_host_rules()
+
+    def refresh_tcp_egress(self) -> None:
+        """Refresh only dynamic exact egress rules after initial reconciliation."""
+        self._reconcile_tcp_egress()
 
     def ensure(
         self,
@@ -178,23 +227,7 @@ class DirectNetworkManager:
                     "-d", destination, "-j", "DROP",
                 ),
             )
-        # These rules are installed after the private-destination denies with
-        # -I, so exact service exceptions sit above the broad denies. The
-        # deployment supplies only node-local infrastructure endpoints (for
-        # example the model relay); sandboxes do not receive general RFC1918
-        # access.
-        for endpoint in self.allowed_tcp_egress:
-            rule = (
-                "-s", str(NETWORK_CIDR),
-                "-d", f"{endpoint.address}/32",
-                "-p", "tcp",
-                "--dport", str(endpoint.port),
-                "-j", "ACCEPT",
-            )
-            self._ensure_iptables(
-                ("iptables", "-C", "FORWARD", *rule),
-                ("iptables", "-I", "FORWARD", "1", *rule),
-            )
+        self._reconcile_tcp_egress()
         self._ensure_iptables(
             ("iptables", "-C", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
             ("iptables", "-A", "FORWARD", "-s", str(NETWORK_CIDR), "-j", "ACCEPT"),
@@ -221,6 +254,165 @@ class DirectNetworkManager:
                 "-s", str(NETWORK_CIDR), "-j", "MASQUERADE",
             ),
         )
+
+    def _reconcile_tcp_egress(self) -> None:
+        # Exact service exceptions sit above the broad private-destination
+        # denies. DNS names are resolved on the host and become /32 rules; no
+        # resolver or general RFC1918 access is exposed to a sandbox.
+        with self._egress_guard:
+            previous = self._resolved_tcp_egress
+            resolved: dict[DirectNetworkTcpEgress, tuple[str, ...]] = {}
+            for endpoint in self.allowed_tcp_egress:
+                if not endpoint.is_dynamic:
+                    addresses = (endpoint.address,)
+                else:
+                    try:
+                        addresses = tuple(
+                            dict.fromkeys(
+                                str(ipaddress.IPv4Address(address))
+                                for address in self.resolver(endpoint.address)
+                            )
+                        )
+                    except (OSError, ValueError):
+                        addresses = previous.get(endpoint, ())
+                    if not addresses:
+                        raise DirectNetworkError(
+                            "direct network could not resolve private egress "
+                            f"endpoint {endpoint.endpoint()}"
+                        )
+                resolved[endpoint] = addresses
+
+            old_rules = {
+                (address, endpoint.port)
+                for endpoint, addresses in previous.items()
+                for address in addresses
+            }
+            new_rules = {
+                (address, endpoint.port)
+                for endpoint, addresses in resolved.items()
+                for address in addresses
+            }
+
+            # Install replacements first so a DNS handoff does not deliberately
+            # create a relay outage. Remove only rules previously owned by this
+            # manager, preserving unrelated firewall policy.
+            for address, port in sorted(new_rules):
+                rule = self._tcp_egress_rule(address, port)
+                self._ensure_iptables(
+                    ("iptables", "-C", "FORWARD", *rule),
+                    ("iptables", "-I", "FORWARD", "1", *rule),
+                )
+            for address, port in sorted(old_rules - new_rules):
+                self._run_best_effort(
+                    (
+                        "iptables",
+                        "-D",
+                        "FORWARD",
+                        *self._tcp_egress_rule(address, port),
+                    )
+                )
+            if resolved != previous:
+                self._store_egress_state(resolved)
+            self._resolved_tcp_egress = resolved
+
+    @staticmethod
+    def _tcp_egress_rule(address: str, port: int) -> tuple[str, ...]:
+        return (
+            "-s", str(NETWORK_CIDR),
+            "-d", f"{address}/32",
+            "-p", "tcp",
+            "--dport", str(port),
+            "-j", "ACCEPT",
+        )
+
+    @staticmethod
+    def _resolve_ipv4(host: str) -> tuple[str, ...]:
+        return tuple(
+            dict.fromkeys(
+                item[4][0]
+                for item in socket.getaddrinfo(
+                    host,
+                    None,
+                    family=socket.AF_INET,
+                    type=socket.SOCK_STREAM,
+                )
+            )
+        )
+
+    def _load_egress_state(
+        self,
+    ) -> dict[DirectNetworkTcpEgress, tuple[str, ...]]:
+        try:
+            raw = json.loads(self.egress_state_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return {}
+        try:
+            if not isinstance(raw, dict) or raw.get("version") != 1:
+                raise ValueError
+            endpoints = raw["endpoints"]
+            if not isinstance(endpoints, dict):
+                raise ValueError
+            resolved = {}
+            for endpoint_value, addresses in endpoints.items():
+                endpoint = DirectNetworkTcpEgress.parse(endpoint_value)
+                if (
+                    not isinstance(addresses, list)
+                    or not addresses
+                    or any(not isinstance(address, str) for address in addresses)
+                ):
+                    raise ValueError
+                resolved[endpoint] = tuple(
+                    str(ipaddress.IPv4Address(address)) for address in addresses
+                )
+            return resolved
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DirectNetworkError(
+                "direct network egress state is invalid"
+            ) from exc
+
+    def _store_egress_state(
+        self,
+        resolved: dict[DirectNetworkTcpEgress, tuple[str, ...]],
+    ) -> None:
+        self.egress_state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=f".{self.egress_state_path.name}.",
+            dir=self.egress_state_path.parent,
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "version": 1,
+                        "endpoints": {
+                            endpoint.endpoint(): list(addresses)
+                            for endpoint, addresses in sorted(
+                                resolved.items(),
+                                key=lambda item: item[0].endpoint(),
+                            )
+                        },
+                    },
+                    handle,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.egress_state_path)
+            directory = os.open(
+                self.egress_state_path.parent,
+                os.O_RDONLY | os.O_DIRECTORY,
+            )
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
 
     def _ensure_iptables(
         self,

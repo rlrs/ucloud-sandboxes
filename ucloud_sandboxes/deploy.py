@@ -26,7 +26,6 @@ from .vm_init import (
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_PROJECT_MOUNT_DIR = "/work/data"
 DEFAULT_REGISTRY_ALIAS = "ucloud-sandbox-registry"
-AUTO_REGISTRY_PRIVATE_IP_TOKEN = "__UCLOUD_REGISTRY_PRIVATE_IP__"
 SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-gateway.service",
     "ucloud-sandbox-relay.service",
@@ -202,7 +201,7 @@ class AllInOneDeployPlan:
 
     @property
     def storage_native_registry_url(self) -> str:
-        return f"http://{self.registry_alias}:{self.registry_port}"
+        return f"http://{self.registry_endpoint_host}:{self.registry_port}"
 
     @property
     def staged_session_file(self) -> str:
@@ -291,19 +290,31 @@ class AllInOneDeployPlan:
 
     @property
     def docker_insecure_registry(self) -> str:
-        return f"{self.registry_alias}:{self.registry_port}"
+        return f"{self.registry_endpoint_host}:{self.registry_port}"
+
+    @property
+    def registry_endpoint_host(self) -> str:
+        # An explicitly supplied address is assumed stable and retains the
+        # friendly alias. Otherwise use UCloud's restart-stable private DNS
+        # hostname directly instead of pinning the gateway VM's current IP.
+        return (
+            self.registry_alias
+            if self.registry_private_ip
+            else self.gateway_private_host
+        )
 
     @property
     def docker_host_alias(self) -> str:
-        registry_private_ip = self.registry_private_ip or AUTO_REGISTRY_PRIVATE_IP_TOKEN
-        return f"{self.registry_alias}={registry_private_ip}"
+        if not self.registry_private_ip:
+            return ""
+        return f"{self.registry_alias}={self.registry_private_ip}"
 
     @property
     def direct_network_relay_endpoint(self) -> str:
-        gateway_private_ip = (
-            self.registry_private_ip or AUTO_REGISTRY_PRIVATE_IP_TOKEN
+        gateway_private_endpoint = (
+            self.registry_private_ip or self.gateway_private_host
         )
-        return f"{gateway_private_ip}:{self.relay_port}"
+        return f"{gateway_private_endpoint}:{self.relay_port}"
 
     def validate(self) -> None:
         for label, value in {
@@ -697,7 +708,6 @@ def render_remote_deploy_script(
         f"STAGED_SESSION_FILE={shlex.quote(plan.staged_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
         f"INIT_KEY_COMMENT={shlex.quote(plan.deployment_id + ' gateway init')}",
-        f"REGISTRY_PRIVATE_IP={shlex.quote(plan.registry_private_ip)}",
         "",
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
         'if ! mountpoint -q "$PROJECT_MOUNT_DIR"; then',
@@ -712,26 +722,6 @@ def render_remote_deploy_script(
         '  echo "No staged, persistent, or legacy UCloud session is available" >&2',
         "  exit 1",
         "fi",
-        "detect_registry_private_ip() {",
-        "  ip -o -4 addr show scope global | awk '",
-        "    {",
-        '      split($4, addr, "/")',
-        "      ip = addr[1]",
-        "      if (ip !~ /^127\\./ && ip !~ /^169\\.254\\./ && ip !~ /^172\\.17\\./) {",
-        "        print ip",
-        "        exit",
-        "      }",
-        "    }",
-        "  '",
-        "}",
-        'if [ -z "$REGISTRY_PRIVATE_IP" ]; then',
-        '  REGISTRY_PRIVATE_IP="$(detect_registry_private_ip)"',
-        "fi",
-        'if [ -z "$REGISTRY_PRIVATE_IP" ]; then',
-        '  echo "Could not detect registry private IPv4 address; pass --registry-private-ip." >&2',
-        "  exit 1",
-        "fi",
-        "",
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$INSTALL_ROOT"',
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'test -s "$REMOTE_WHEEL"',
@@ -1206,14 +1196,6 @@ def render_remote_deploy_script(
     ]
     for path, content in env_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0640"))
-    script_parts.extend(
-        [
-            "sudo sed -i "
-            f"{shlex.quote('s|' + AUTO_REGISTRY_PRIVATE_IP_TOKEN + '|')}"
-            '"$REGISTRY_PRIVATE_IP"'
-            f"{shlex.quote('|g')} /etc/ucloud-sandboxes/autoscaler.env",
-        ]
-    )
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
     for unit_name in PERSISTENT_STORAGE_SYSTEMD_UNITS:

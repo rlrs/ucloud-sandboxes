@@ -13,7 +13,6 @@ import unittest
 from ucloud_sandboxes.cli import build_parser
 from ucloud_sandboxes.deploy import (
     AllInOneDeployPlan,
-    AUTO_REGISTRY_PRIVATE_IP_TOKEN,
     autoscaler_env,
     gateway_env,
     packaged_systemd_units,
@@ -482,7 +481,7 @@ class DeployTests(unittest.TestCase):
             ],
         )
 
-    def test_all_in_one_plan_auto_detects_registry_private_ip(self) -> None:
+    def test_all_in_one_plan_uses_restart_stable_private_dns(self) -> None:
         with TemporaryDirectory() as raw_dir:
             wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
             wheel.write_bytes(b"wheel")
@@ -498,29 +497,31 @@ class DeployTests(unittest.TestCase):
             autoscaler = autoscaler_env(plan)
             script = render_remote_deploy_script(plan)
 
+        self.assertEqual(autoscaler["UCLOUD_DOCKER_HOST_ALIAS"], "")
         self.assertEqual(
-            autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
-            f"ucloud-sandbox-registry={AUTO_REGISTRY_PRIVATE_IP_TOKEN}",
+            autoscaler["UCLOUD_DOCKER_INSECURE_REGISTRY"],
+            "sandbox-gateway-prod:5000",
+        )
+        self.assertEqual(
+            autoscaler["UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL"],
+            "http://sandbox-gateway-prod:5000",
         )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP"],
-            f"{AUTO_REGISTRY_PRIVATE_IP_TOKEN}:8092",
+            "sandbox-gateway-prod:8092",
         )
-        self.assertIn("detect_registry_private_ip() {", script)
-        self.assertIn("REGISTRY_PRIVATE_IP=''", script)
+        self.assertNotIn("detect_registry_private_ip() {", script)
         self.assertIn(
-            f"UCLOUD_DOCKER_HOST_ALIAS=ucloud-sandbox-registry={AUTO_REGISTRY_PRIVATE_IP_TOKEN}",
+            "UCLOUD_DOCKER_HOST_ALIAS=",
             script,
         )
         self.assertIn(
             "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP="
-            f"{AUTO_REGISTRY_PRIVATE_IP_TOKEN}:8092",
+            "sandbox-gateway-prod:8092",
             script,
         )
-        self.assertIn(
-            f"sudo sed -i 's|{AUTO_REGISTRY_PRIVATE_IP_TOKEN}|",
-            script,
-        )
+        self.assertNotIn("__UCLOUD_REGISTRY_PRIVATE_IP__", script)
+        self.assertIn("--init-host-alias-optional=", script)
 
     def test_packaged_systemd_units_are_available(self) -> None:
         units = packaged_systemd_units()

@@ -33,8 +33,11 @@ DASHBOARD_HTML = """<!doctype html>
 <body>
   <header class="app-bar">
     <div class="brand">
-      <span class="menu-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-      <strong>CPU Sandbox Service</strong>
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      <span class="brand-copy">
+        <strong>UCloud Sandboxes</strong>
+        <small>Operations console</small>
+      </span>
     </div>
     <div class="top-controls" aria-label="Dashboard controls">
       <span id="connectionStatus" class="status-pill status-warn" aria-live="polite">Waiting</span>
@@ -73,6 +76,7 @@ DASHBOARD_HTML = """<!doctype html>
   <main class="page-shell">
     <section class="page-title">
       <div>
+        <span class="page-kicker">Control plane · live telemetry</span>
         <h1>Sandbox Operations</h1>
         <p>Capacity, program scheduling, and runtime health</p>
         <span class="visually-hidden">UCloud Sandboxes</span>
@@ -93,11 +97,21 @@ DASHBOARD_HTML = """<!doctype html>
     </section>
 
     <nav class="page-tabs" role="tablist" aria-label="Dashboard pages">
-      <button id="overviewTab" class="page-tab is-active" role="tab" aria-selected="true" aria-controls="overviewPage" type="button" data-page-target="overview">Overview</button>
-      <button id="schedulerTab" class="page-tab" role="tab" aria-selected="false" aria-controls="schedulerPage" type="button" data-page-target="scheduler">Scheduler</button>
-      <button id="nodesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="nodesPage" type="button" data-page-target="nodes">Nodes</button>
-      <button id="sandboxesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="sandboxesPage" type="button" data-page-target="sandboxes">Sandboxes</button>
-      <button id="registryTab" class="page-tab" role="tab" aria-selected="false" aria-controls="registryPage" type="button" data-page-target="registry">Registry</button>
+      <button id="overviewTab" class="page-tab is-active" role="tab" aria-selected="true" aria-controls="overviewPage" type="button" data-page-target="overview">
+        <span class="nav-label"><i aria-hidden="true">OV</i>Overview</span><span id="overviewNavBadge" class="nav-badge">Live</span>
+      </button>
+      <button id="schedulerTab" class="page-tab" role="tab" aria-selected="false" aria-controls="schedulerPage" type="button" data-page-target="scheduler">
+        <span class="nav-label"><i aria-hidden="true">SC</i>Scheduler</span><span id="schedulerNavBadge" class="nav-badge">0</span>
+      </button>
+      <button id="nodesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="nodesPage" type="button" data-page-target="nodes">
+        <span class="nav-label"><i aria-hidden="true">ND</i>Nodes</span><span id="nodesNavBadge" class="nav-badge">0</span>
+      </button>
+      <button id="sandboxesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="sandboxesPage" type="button" data-page-target="sandboxes">
+        <span class="nav-label"><i aria-hidden="true">SB</i>Sandboxes</span><span id="sandboxesNavBadge" class="nav-badge">0</span>
+      </button>
+      <button id="registryTab" class="page-tab" role="tab" aria-selected="false" aria-controls="registryPage" type="button" data-page-target="registry">
+        <span class="nav-label"><i aria-hidden="true">RG</i>Registry</span><span id="registryNavBadge" class="nav-badge">0</span>
+      </button>
     </nav>
 
     <section id="overviewPage" class="overview-page" role="tabpanel" aria-labelledby="overviewTab">
@@ -346,7 +360,8 @@ DASHBOARD_HTML = """<!doctype html>
       </article>
     </section>
 
-    <section class="event-panel build-panel overview-section" aria-label="Recent image builds">
+    <section class="activity-grid overview-section" aria-label="Recent operational activity">
+    <section class="event-panel build-panel" aria-label="Recent image builds">
       <div class="panel-header table-header">
         <h2>Recent Image Builds</h2>
         <span id="buildSummary">No builds loaded</span>
@@ -370,7 +385,7 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
     </section>
 
-    <section class="event-panel overview-section" aria-label="Recent request traces">
+    <section class="event-panel trace-panel" aria-label="Recent request traces">
       <div class="panel-header table-header">
         <h2>Recent Traces</h2>
         <span id="traceSummary">No traces loaded</span>
@@ -393,7 +408,7 @@ DASHBOARD_HTML = """<!doctype html>
       </div>
     </section>
 
-    <section class="event-panel overview-section" aria-label="Recent autoscaler events">
+    <section class="event-panel activity-event-panel" aria-label="Recent autoscaler events">
       <div class="panel-header table-header">
         <h2>Recent Events</h2>
         <span id="eventSummary">No events loaded</span>
@@ -413,6 +428,7 @@ DASHBOARD_HTML = """<!doctype html>
           </tbody>
         </table>
       </div>
+    </section>
     </section>
     </section>
 
@@ -2598,6 +2614,789 @@ td:last-child {
     min-width: 76px;
   }
 }
+
+/* Operations cockpit: density comes from composition, not smaller controls. */
+:root {
+  --rail-width: 228px;
+  --app-bar-height: 68px;
+  --background: #edf1f7;
+  --surface: #ffffff;
+  --surface-soft: #f4f7fb;
+  --line: #d5dce7;
+  --line-soft: #e5eaf1;
+  --text: #101828;
+  --muted: #667085;
+  --blue: #2563eb;
+  --purple: #6941c6;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.055);
+}
+
+:root.dark {
+  --background: #080e18;
+  --surface: #101827;
+  --surface-soft: #151f31;
+  --line: #2a374b;
+  --line-soft: #202c40;
+  --text: #eef4ff;
+  --muted: #98a7bc;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+body {
+  background:
+    radial-gradient(circle at 75% -15%, rgba(37, 99, 235, 0.08), transparent 32rem),
+    var(--background);
+  font-size: 14px;
+}
+
+.app-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 20;
+  min-height: var(--app-bar-height);
+  padding: 0 18px 0 0;
+  border-bottom: 1px solid #253149;
+  background: #0b1220;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.brand {
+  width: var(--rail-width);
+  height: var(--app-bar-height);
+  flex: 0 0 var(--rail-width);
+  gap: 12px;
+  padding: 0 18px;
+  border-right: 1px solid #253149;
+}
+
+.brand-mark {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.brand-mark span {
+  border-radius: 2px;
+  background: #60a5fa;
+}
+
+.brand-mark span:nth-child(2) { background: #a78bfa; }
+.brand-mark span:nth-child(3) { background: #34d399; }
+.brand-mark span:nth-child(4) { background: #fbbf24; }
+
+.brand-copy {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.brand-copy strong {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.brand-copy small {
+  margin-top: 3px;
+  color: #8ea0ba;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.top-controls {
+  gap: 8px;
+}
+
+.select-control,
+.icon-button,
+.status-pill {
+  min-height: 36px;
+  border: 1px solid #2a3850;
+  background: #111c2e;
+}
+
+.select-control {
+  gap: 4px;
+  border-radius: 8px;
+  padding-left: 9px;
+}
+
+.select-control select {
+  height: 34px;
+  padding: 0 8px 0 3px;
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+}
+
+.status-pill {
+  min-width: 104px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.page-shell {
+  width: auto;
+  max-width: none;
+  margin: 0 0 0 var(--rail-width);
+  padding: calc(var(--app-bar-height) + 20px) 22px 36px;
+}
+
+.page-tabs {
+  position: fixed;
+  inset: var(--app-bar-height) auto 0 0;
+  z-index: 12;
+  display: flex;
+  width: var(--rail-width);
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 22px 12px;
+  overflow: auto;
+  border: 0;
+  border-right: 1px solid #253149;
+  background: #0b1220;
+}
+
+.page-tabs::before {
+  margin: 0 10px 8px;
+  color: #667892;
+  content: "WORKSPACES";
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.page-tab {
+  display: flex;
+  width: 100%;
+  height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #a9b6c9;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.page-tab:hover {
+  border-color: #293750;
+  background: #111c2e;
+  color: #f8fafc;
+}
+
+.page-tab.is-active {
+  border-color: #31558d;
+  background: linear-gradient(135deg, #172d4f, #13243e);
+  color: #ffffff;
+  box-shadow: inset 3px 0 #60a5fa;
+}
+
+.nav-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-label i {
+  display: inline-flex;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #314158;
+  border-radius: 7px;
+  background: #111c2e;
+  color: #91a4c0;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.page-tab.is-active .nav-label i {
+  border-color: #3767aa;
+  background: #1d3a65;
+  color: #bfdbfe;
+}
+
+.nav-badge {
+  display: inline-flex;
+  min-width: 28px;
+  height: 23px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #314158;
+  border-radius: 999px;
+  background: #111c2e;
+  color: #a9b6c9;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-badge-ok { border-color: #166534; color: #86efac; }
+.nav-badge-warn { border-color: #92400e; color: #fde68a; }
+.nav-badge-bad { border-color: #991b1b; color: #fecaca; }
+
+.page-title {
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 0 2px;
+}
+
+.page-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: clamp(24px, 2vw, 31px);
+  letter-spacing: -0.035em;
+}
+
+.page-title p {
+  margin-top: 3px;
+  font-size: 14px;
+}
+
+.last-updated {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.title-actions button,
+.auth-panel button,
+.table-action {
+  height: 38px;
+  border-radius: 8px;
+}
+
+.auth-panel {
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+}
+
+.overview-page,
+.workspace-page,
+.registry-page,
+.sandboxes-page {
+  gap: 10px;
+}
+
+.health-strip,
+.decision-hero,
+.flow-panel,
+.workspace-card,
+.workspace-hero,
+.queue-toolbar,
+.registry-hero,
+.registry-toolbar,
+.sandbox-hero,
+.sandbox-toolbar,
+.metric-card,
+.chart-panel,
+.ops-panel,
+.event-panel {
+  border-color: var(--line);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+}
+
+.health-strip {
+  min-height: 72px;
+  grid-template-columns: minmax(340px, 1.2fr) minmax(260px, 1fr) auto;
+  gap: 12px;
+  padding: 13px 15px;
+  border-left: 4px solid var(--blue);
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--blue) 6%, var(--surface)), var(--surface) 44%);
+}
+
+.health-primary strong {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.health-primary span {
+  font-size: 12px;
+}
+
+.signal-chip,
+.reason-chip,
+.read-only-badge {
+  min-height: 26px;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+
+.metric-grid {
+  gap: 10px;
+  margin: 0;
+}
+
+.metric-card {
+  min-height: 118px;
+  padding: 16px;
+  background: linear-gradient(145deg, var(--surface), color-mix(in srgb, var(--accent) 3%, var(--surface)));
+}
+
+.metric-card::before {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--accent);
+  content: "";
+  opacity: 0.8;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  margin-top: 9px;
+  font-size: 27px;
+  letter-spacing: -0.035em;
+}
+
+.metric-detail {
+  margin-top: 7px;
+  font-size: 12px;
+}
+
+.chart-grid,
+.ops-grid {
+  gap: 10px;
+  margin: 0;
+}
+
+.chart-panel,
+.ops-panel {
+  padding: 14px 15px 12px;
+}
+
+.panel-header {
+  margin-bottom: 10px;
+}
+
+h2 {
+  font-size: 15px;
+  letter-spacing: -0.015em;
+}
+
+.chart-canvas {
+  height: 200px;
+}
+
+.chart-canvas.small {
+  height: 184px;
+}
+
+.legend {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.ops-grid .ops-panel:nth-child(1),
+.ops-grid .ops-panel:nth-child(2) {
+  grid-column: span 6;
+}
+
+.ops-grid .ops-panel:nth-child(3) {
+  grid-column: span 8;
+}
+
+.ops-grid .ops-panel:nth-child(4) {
+  grid-column: span 4;
+}
+
+.stat-strip {
+  gap: 7px;
+  margin-bottom: 0;
+}
+
+.stat-box {
+  min-height: 68px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.stat-box span {
+  font-size: 10px;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.stat-box strong {
+  margin-top: 7px;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.activity-grid .build-panel {
+  grid-column: span 7;
+  margin: 0;
+}
+
+.activity-grid .trace-panel {
+  grid-column: span 5;
+}
+
+.activity-grid .activity-event-panel {
+  grid-column: 1 / -1;
+}
+
+.activity-grid .table-wrap {
+  max-height: 318px;
+  overflow: auto;
+}
+
+.activity-grid .build-panel table {
+  min-width: 780px;
+}
+
+.activity-grid .trace-panel table {
+  min-width: 640px;
+}
+
+.activity-grid .activity-event-panel table {
+  min-width: 820px;
+}
+
+.table-header {
+  min-height: 44px;
+  padding: 0 15px;
+}
+
+table {
+  min-width: 860px;
+}
+
+th,
+td {
+  height: 42px;
+  padding: 10px 13px;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+tbody tr {
+  transition: background 120ms ease;
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface));
+}
+
+.decision-hero,
+.workspace-hero,
+.registry-hero,
+.sandbox-hero {
+  grid-template-columns: minmax(0, 1.05fr) minmax(520px, 0.95fr);
+  gap: 18px;
+  padding: 16px;
+}
+
+.decision-title-row h2,
+.section-heading h2,
+.workspace-hero h2,
+.queue-toolbar h2 {
+  font-size: 18px;
+}
+
+.program-flow {
+  gap: 7px;
+}
+
+.flow-stage {
+  min-height: 104px;
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.flow-stage strong {
+  font-size: 27px;
+}
+
+.scheduler-grid {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 5fr) minmax(300px, 4fr);
+  gap: 10px;
+}
+
+.flow-panel,
+.workspace-card {
+  padding: 15px;
+}
+
+.resource-vector {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 7px;
+}
+
+.queue-toolbar,
+.registry-toolbar,
+.sandbox-toolbar {
+  padding: 12px 14px;
+}
+
+.inline-search input,
+.inline-select select,
+.registry-search input,
+.registry-select select,
+.sandbox-search input {
+  height: 38px;
+  border-radius: 8px;
+}
+
+.node-table,
+.program-table,
+.sandbox-table,
+.registry-table {
+  min-width: 1080px;
+}
+
+.meter {
+  height: 7px;
+}
+
+:root.dark .page-title button,
+:root.dark .table-action,
+:root.dark .auth-panel button {
+  background: var(--surface-soft);
+}
+
+:root.dark .repo-pill {
+  border-color: #244b7f;
+  background: #152c4d;
+  color: #bfdbfe;
+}
+
+:root.dark .tag-chip {
+  color: var(--text);
+}
+
+@media (max-width: 1480px) {
+  :root { --rail-width: 204px; }
+
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .chart-wide,
+  .chart-small {
+    grid-column: span 6;
+  }
+
+  .ops-grid .ops-panel:nth-child(n) {
+    grid-column: span 6;
+  }
+
+  .activity-grid .build-panel,
+  .activity-grid .trace-panel {
+    grid-column: 1 / -1;
+  }
+
+  .health-strip,
+  .decision-hero,
+  .workspace-hero,
+  .registry-hero,
+  .sandbox-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduler-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .policy-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 940px) {
+  :root {
+    --rail-width: 0px;
+    --app-bar-height: 62px;
+  }
+
+  .app-bar {
+    position: sticky;
+    min-height: var(--app-bar-height);
+    flex-direction: row;
+    align-items: center;
+    padding: 0 12px;
+  }
+
+  .brand {
+    width: auto;
+    height: var(--app-bar-height);
+    flex: 0 1 auto;
+    border: 0;
+    padding: 0;
+  }
+
+  .brand-copy small {
+    display: none;
+  }
+
+  .page-shell {
+    margin: 0;
+    padding: 16px 12px 26px;
+  }
+
+  .page-tabs {
+    position: sticky;
+    inset: auto;
+    top: 0;
+    z-index: 10;
+    width: auto;
+    flex-direction: row;
+    gap: 5px;
+    margin: 0 -12px 14px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    border: 0;
+    border-bottom: 1px solid #253149;
+  }
+
+  .page-tabs::before {
+    display: none;
+  }
+
+  .page-tab {
+    width: auto;
+    min-width: max-content;
+    padding: 0 11px;
+  }
+
+  .nav-label i {
+    display: none;
+  }
+
+  .page-title {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .top-controls {
+    width: auto;
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .scheduler-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-card {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .brand-copy strong {
+    display: none;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+  }
+
+  .select-control .clock-mark,
+  .select-control .refresh-mark {
+    display: none;
+  }
+
+  .status-pill {
+    min-width: 86px;
+  }
+
+  .page-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chart-wide,
+  .chart-small,
+  .ops-grid .ops-panel:nth-child(n) {
+    grid-column: 1 / -1;
+  }
+
+  .health-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .activity-grid > * {
+    grid-column: 1 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .metric-grid,
+  .stat-strip,
+  .compact-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-badge {
+    display: none;
+  }
+}
 """
 
 
@@ -2648,6 +3447,11 @@ const els = {};
 document.addEventListener("DOMContentLoaded", () => {
   for (const id of [
     "connectionStatus",
+    "overviewNavBadge",
+    "schedulerNavBadge",
+    "nodesNavBadge",
+    "sandboxesNavBadge",
+    "registryNavBadge",
     "lastUpdated",
     "timeRangeSelect",
     "refreshSelect",
@@ -3235,6 +4039,11 @@ function renderMetrics(snapshot) {
   const sandboxStates = sandboxes.states || {};
   const wakePlan = autoscaler.program_wake_plan || {};
 
+  setText("schedulerNavBadge", formatInteger(programStates.ready_to_wake));
+  setText("nodesNavBadge", formatInteger(nodes.sandbox_ready));
+  setText("sandboxesNavBadge", formatInteger(sandboxes.active_routes));
+  setText("registryNavBadge", formatInteger(registry.repository_count));
+
   setText("activeNodesValue", formatInteger(latest.activeNodes));
   setText(
     "activeNodesDetail",
@@ -3394,6 +4203,8 @@ function renderHealth(snapshot) {
   if (signals.length === 0) signals.push({ text: "No active warnings", mode: "" });
 
   els.healthBadge.className = `health-icon health-${severity}`;
+  els.overviewNavBadge.textContent = severity === "bad" ? "Fix" : severity === "warn" ? "Watch" : "Live";
+  els.overviewNavBadge.className = `nav-badge nav-badge-${severity}`;
   setText("healthTitle", title);
   setText("healthDetail", detail);
   els.healthSignals.replaceChildren(...signals.map((signal) => {

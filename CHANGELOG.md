@@ -2,6 +2,15 @@
 
 This project uses semantic versioning.
 
+## 0.3.71 - 2026-07-31
+
+- Overhauled the dashboard UI/UX with persistent workspace
+  navigation, live navigation counts, a wider operations-cockpit layout,
+  grouped activity streams, stronger hierarchy and contrast, sticky table
+  headers, and responsive navigation. Information density now comes from
+  composition and reduced repetition while preserving readable typography and
+  full-size controls.
+
 ## 0.3.70 - 2026-07-31
 
 - Replaced the default rotated JSONL metrics stream with an indexed,

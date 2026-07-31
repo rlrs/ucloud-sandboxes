@@ -97,3 +97,13 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('id="nodeStateFilter"', DASHBOARD_HTML)
         self.assertIn("canvas.setAttribute(\"aria-label\"", DASHBOARD_JS)
         self.assertIn(".dark", DASHBOARD_CSS)
+
+    def test_dashboard_uses_information_dense_operations_layout(self) -> None:
+        self.assertIn('class="brand-mark"', DASHBOARD_HTML)
+        self.assertIn('class="nav-label"', DASHBOARD_HTML)
+        self.assertIn('id="overviewNavBadge"', DASHBOARD_HTML)
+        self.assertIn('class="activity-grid overview-section"', DASHBOARD_HTML)
+        self.assertIn("--rail-width: 228px", DASHBOARD_CSS)
+        self.assertIn("position: sticky", DASHBOARD_CSS)
+        self.assertIn("min-height: 38px", DASHBOARD_CSS)
+        self.assertIn('setText("nodesNavBadge"', DASHBOARD_JS)

@@ -2,6 +2,18 @@
 
 This project uses semantic versioning.
 
+## 0.3.72 - 2026-07-31
+
+- Rebuilt the operations dashboard around operator decisions instead of a
+  repeated card wall: service impact and autoscaler intent, hard-fit placement
+  headroom, the agent request lifecycle, meaningful session trends, a resource
+  capacity equation, fleet pressure signals, sandbox lifecycle filtering, and
+  image/build supply now have distinct task-oriented workspaces.
+- Separated transport connectivity from fleet health, made navigation badges
+  exception-oriented, removed the unsafe global sandbox termination action,
+  added complete parked/waking/migrating state semantics, and fixed structured
+  autoscaler actions and decision reasons in metrics and event summaries.
+
 ## 0.3.71 - 2026-07-31
 
 - Overhauled the dashboard UI/UX with persistent workspace

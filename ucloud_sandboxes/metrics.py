@@ -682,6 +682,7 @@ def record_autoscaler_cycle(
             "provisioning_nodes": decision.get("provisioningNodes", 0),
             "total_nodes": decision.get("totalNodes", 0),
             "actions": decision.get("actions", []),
+            "reasons": decision.get("reasons", []),
             "created_job_ids": result.get("createdJobIds", []),
             "stop_job_ids": result.get("stopJobIds", []),
             "pending_image_builds": result.get("pendingImageBuilds", 0),
@@ -692,6 +693,7 @@ def record_autoscaler_cycle(
                 {},
             ),
             "builder_actions": builder_decision.get("actions", []),
+            "builder_reasons": builder_decision.get("reasons", []),
         },
     )
 

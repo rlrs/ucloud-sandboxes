@@ -279,8 +279,8 @@ class MetricsTests(unittest.TestCase):
                 store,
                 cycle=7,
                 result={
-                    "decision": {},
-                    "builderDecision": {},
+                    "decision": {"reasons": ["disk headroom below demand"]},
+                    "builderDecision": {"reasons": ["no pending builds"]},
                     "pendingImageBuilds": 1,
                     "activeImageBuilds": 2,
                     "preparedBuilderCount": 0,
@@ -298,6 +298,8 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(event.data["pending_image_builds"], 1)
         self.assertEqual(event.data["active_image_builds"], 2)
         self.assertEqual(event.data["build_warm_sandbox_resources"]["vcpu"], 16.0)
+        self.assertEqual(event.data["reasons"], ["disk headroom below demand"])
+        self.assertEqual(event.data["builder_reasons"], ["no pending builds"])
 
     def test_autoscaler_cycle_bounds_wake_plan_and_exposes_policy(self) -> None:
         with TemporaryDirectory() as raw_dir:

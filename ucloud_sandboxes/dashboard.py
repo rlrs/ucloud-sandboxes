@@ -31,6 +31,7 @@ DASHBOARD_HTML = """<!doctype html>
   <link rel="stylesheet" href="/dashboard/dashboard.css">
 </head>
 <body>
+  <a class="skip-link" href="#pageHeading">Skip to dashboard content</a>
   <header class="app-bar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
@@ -76,18 +77,18 @@ DASHBOARD_HTML = """<!doctype html>
   <main class="page-shell">
     <section class="page-title">
       <div>
-        <span class="page-kicker">Control plane · live telemetry</span>
-        <h1>Sandbox Operations</h1>
-        <p>Capacity, program scheduling, and runtime health</p>
+        <span id="pageKicker" class="page-kicker">Live control plane</span>
+        <h1 id="pageHeading" tabindex="-1">Fleet overview</h1>
+        <p id="pageDescription">Demand, placement headroom, and service health at a glance.</p>
         <span class="visually-hidden">UCloud Sandboxes</span>
       </div>
       <div class="title-actions">
         <span id="lastUpdated" class="last-updated">Not refreshed yet</span>
-        <button id="authToggleButton" type="button">Bearer token</button>
+        <button id="authToggleButton" type="button" aria-expanded="false" aria-controls="authPanel">Bearer token</button>
       </div>
     </section>
 
-    <section id="authPanel" class="auth-panel" aria-label="Metrics authentication">
+    <section id="authPanel" class="auth-panel" aria-label="Metrics authentication" hidden>
       <label class="token-field">
         <span>Gateway bearer token</span>
         <input id="tokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Required for /v1/metrics">
@@ -96,340 +97,252 @@ DASHBOARD_HTML = """<!doctype html>
       <button id="clearTokenButton" type="button">Clear</button>
     </section>
 
-    <nav class="page-tabs" role="tablist" aria-label="Dashboard pages">
+    <nav class="page-tabs" role="tablist" aria-label="Dashboard pages" aria-orientation="vertical">
+      <span class="nav-section-label" role="presentation">Monitor</span>
       <button id="overviewTab" class="page-tab is-active" role="tab" aria-selected="true" aria-controls="overviewPage" type="button" data-page-target="overview">
-        <span class="nav-label"><i aria-hidden="true">OV</i>Overview</span><span id="overviewNavBadge" class="nav-badge">Live</span>
+        <span class="nav-label"><i class="nav-icon nav-icon-overview" aria-hidden="true"></i>Overview</span><span id="overviewNavBadge" class="nav-badge">Live</span>
       </button>
       <button id="schedulerTab" class="page-tab" role="tab" aria-selected="false" aria-controls="schedulerPage" type="button" data-page-target="scheduler">
-        <span class="nav-label"><i aria-hidden="true">SC</i>Scheduler</span><span id="schedulerNavBadge" class="nav-badge">0</span>
+        <span class="nav-label"><i class="nav-icon nav-icon-scheduler" aria-hidden="true"></i>Demand &amp; scaling</span><span id="schedulerNavBadge" class="nav-badge">0</span>
       </button>
       <button id="nodesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="nodesPage" type="button" data-page-target="nodes">
-        <span class="nav-label"><i aria-hidden="true">ND</i>Nodes</span><span id="nodesNavBadge" class="nav-badge">0</span>
+        <span class="nav-label"><i class="nav-icon nav-icon-nodes" aria-hidden="true"></i>Fleet</span><span id="nodesNavBadge" class="nav-badge">0</span>
       </button>
+      <span class="nav-section-label nav-section-manage" role="presentation">Manage</span>
       <button id="sandboxesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="sandboxesPage" type="button" data-page-target="sandboxes">
-        <span class="nav-label"><i aria-hidden="true">SB</i>Sandboxes</span><span id="sandboxesNavBadge" class="nav-badge">0</span>
+        <span class="nav-label"><i class="nav-icon nav-icon-sandboxes" aria-hidden="true"></i>Sandboxes</span><span id="sandboxesNavBadge" class="nav-badge">0</span>
       </button>
       <button id="registryTab" class="page-tab" role="tab" aria-selected="false" aria-controls="registryPage" type="button" data-page-target="registry">
-        <span class="nav-label"><i aria-hidden="true">RG</i>Registry</span><span id="registryNavBadge" class="nav-badge">0</span>
+        <span class="nav-label"><i class="nav-icon nav-icon-registry" aria-hidden="true"></i>Images</span><span id="registryNavBadge" class="nav-badge">0</span>
       </button>
     </nav>
 
     <section id="overviewPage" class="overview-page" role="tabpanel" aria-labelledby="overviewTab">
-    <section class="health-strip overview-section" aria-label="Current service health">
-      <div class="health-primary">
-        <span id="healthBadge" class="health-icon health-neutral" aria-hidden="true"></span>
-        <div>
-          <strong id="healthTitle">Waiting for metrics</strong>
-          <span id="healthDetail">The first snapshot will explain current demand and capacity.</span>
-        </div>
-      </div>
-      <div id="healthSignals" class="health-signals" aria-live="polite"></div>
-      <div class="health-actions">
-        <button id="copyDiagnosticsButton" class="table-action" type="button">Copy summary</button>
-        <button id="downloadSnapshotButton" class="table-action" type="button">Download snapshot</button>
-      </div>
-    </section>
+      <section class="command-grid overview-section" aria-label="Current operational posture">
+        <article class="health-strip">
+          <div class="health-primary">
+            <span id="healthBadge" class="health-icon health-neutral" aria-hidden="true"></span>
+            <div>
+              <span class="eyebrow">Service posture</span>
+              <strong id="healthTitle">Waiting for metrics</strong>
+              <span id="healthDetail">The first snapshot will explain current demand and capacity.</span>
+            </div>
+          </div>
+          <div id="healthSignals" class="health-signals" aria-live="polite"></div>
+          <div class="health-actions">
+            <button id="copyDiagnosticsButton" class="table-action" type="button">Copy summary</button>
+            <button id="downloadSnapshotButton" class="table-action" type="button">Download snapshot</button>
+          </div>
+        </article>
 
-    <section class="metric-grid overview-section" aria-label="Key metrics">
-      <article class="metric-card accent-blue">
+        <article class="decision-brief">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Latest capacity decision</span>
+              <h2 id="overviewDecisionTitle">Waiting for autoscaler</h2>
+            </div>
+            <span id="overviewDecisionBadge" class="inline-badge badge-muted">No cycle</span>
+          </div>
+          <p id="autoscalerSummary" class="decision-summary">No autoscaler cycle loaded</p>
+          <div id="overviewDecisionReasons" class="decision-reasons"></div>
+          <div class="decision-facts">
+            <div><span>Ready / provisioning</span><strong id="overviewSupplyValue">-</strong></div>
+            <div><span>Projected free</span><strong id="overviewProjectedValue">-</strong></div>
+            <div><span>Deficit</span><strong id="overviewDeficitValue">-</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-heading overview-section overview-heading">
         <div>
-          <span class="metric-label">Ready Nodes</span>
+          <span class="eyebrow">Current state</span>
+          <h2>What needs attention now</h2>
+        </div>
+        <span class="section-summary">Counts are live; latency is session p95.</span>
+      </section>
+
+      <section class="metric-grid overview-section" aria-label="Current demand and capacity">
+        <article class="metric-card accent-purple">
+          <span class="metric-label">Ready for a tool call</span>
+          <strong id="readyWakeValue">-</strong>
+          <span id="readyWakeDetail" class="metric-detail">oldest response-ready request</span>
+          <span class="metric-context">Immediate sandbox demand</span>
+        </article>
+        <article class="metric-card accent-blue">
+          <span class="metric-label">Ready capacity</span>
           <strong id="activeNodesValue">-</strong>
           <span id="activeNodesDetail" class="metric-detail">ready / provisioning / total</span>
-        </div>
-        <canvas id="nodesSpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-      <article class="metric-card accent-blue">
-        <div>
-          <span class="metric-label">Sandbox Routes</span>
+          <span class="metric-context">Fresh nodes accepting placement</span>
+        </article>
+        <article class="metric-card accent-green">
+          <span class="metric-label">Sandbox fleet</span>
           <strong id="runningSandboxesValue">-</strong>
           <span id="runningSandboxesDetail" class="metric-detail">running / parked / waking</span>
-        </div>
-        <canvas id="sandboxesSpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-      <article class="metric-card accent-purple">
+          <span class="metric-context">Durable routed sessions</span>
+        </article>
+        <article class="metric-card accent-orange">
+          <span class="metric-label">Hard disk committed</span>
+          <strong id="diskCommitValue">-</strong>
+          <span id="diskCommitDetail" class="metric-detail">hard capacity remaining</span>
+          <span class="metric-context">Non-overcommittable placement limit</span>
+        </article>
+        <article class="metric-card accent-slate">
+          <span class="metric-label">Waiting on the model</span>
+          <strong id="modelWaitValue">-</strong>
+          <span id="modelWaitDetail" class="metric-detail">leading demand, not yet runnable</span>
+          <span class="metric-context">Forecast signal only</span>
+        </article>
+        <article class="metric-card accent-red">
+          <span class="metric-label">Response → ready p95</span>
+          <strong id="wakeLatencyValue">-</strong>
+          <span id="wakeLatencyDetail" class="metric-detail">tool-return latency</span>
+          <span class="metric-context">Includes restore or migration</span>
+        </article>
+      </section>
+
+      <section class="overview-workbench overview-section" aria-label="Capacity and request flow">
+        <article class="capacity-card">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">Placement headroom</span>
+              <h2>Can the next sandbox fit?</h2>
+            </div>
+            <span id="capacityFitBadge" class="inline-badge badge-muted">Waiting</span>
+          </div>
+          <p id="capacitySummary" class="workspace-copy">Waiting for schedulable resource totals.</p>
+          <div class="headroom-list">
+            <div class="headroom-row">
+              <div class="headroom-label"><span>CPU</span><strong id="capacityCpuValue">-</strong></div>
+              <div class="dual-meter" aria-label="CPU actual and reserved utilization">
+                <span id="capacityCpuActualMeter" class="meter-actual"></span>
+                <span id="capacityCpuReservedMeter" class="meter-reserved"></span>
+              </div>
+              <span id="capacityCpuDetail" class="headroom-detail">actual / reserved</span>
+            </div>
+            <div class="headroom-row">
+              <div class="headroom-label"><span>Memory</span><strong id="capacityMemoryValue">-</strong></div>
+              <div class="dual-meter" aria-label="Memory actual and reserved utilization">
+                <span id="capacityMemoryActualMeter" class="meter-actual"></span>
+                <span id="capacityMemoryReservedMeter" class="meter-reserved"></span>
+              </div>
+              <span id="capacityMemoryDetail" class="headroom-detail">actual / reserved</span>
+            </div>
+            <div class="headroom-row hard-limit">
+              <div class="headroom-label"><span>Hard disk</span><strong id="capacityDiskValue">-</strong></div>
+              <div class="dual-meter single" aria-label="Hard disk committed utilization">
+                <span id="capacityDiskMeter" class="meter-disk"></span>
+              </div>
+              <span id="capacityDiskDetail" class="headroom-detail">committed / total</span>
+            </div>
+          </div>
+          <div class="capacity-rule"><span aria-hidden="true">!</span> Disk is a hard placement ceiling; CPU and memory are pressure-managed.</div>
+        </article>
+
+        <article class="pipeline-card">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">Agent lifecycle</span>
+              <h2>Where work is waiting</h2>
+            </div>
+            <span id="programSummary" class="section-summary">No requests loaded</span>
+          </div>
+          <div class="overview-pipeline">
+            <div class="pipeline-stage forecast">
+              <span>1 · Model generation</span>
+              <strong id="programModelWaitValue">-</strong>
+              <small id="overviewModelWaitAge">No active wait</small>
+            </div>
+            <span class="pipeline-connector" aria-hidden="true"></span>
+            <div class="pipeline-stage attention">
+              <span>2 · Ready for tool</span>
+              <strong id="programReadyValue">-</strong>
+              <small id="programOldestReadyValue">No ready work</small>
+            </div>
+            <span class="pipeline-connector" aria-hidden="true"></span>
+            <div class="pipeline-stage">
+              <span>3 · Restoring</span>
+              <strong id="overviewWakingValue">-</strong>
+              <small>parked state becoming runnable</small>
+            </div>
+            <span class="pipeline-connector" aria-hidden="true"></span>
+            <div class="pipeline-stage success">
+              <span>4 · Tool executing</span>
+              <strong id="overviewActingValue">-</strong>
+              <small>active sandbox work</small>
+            </div>
+          </div>
+          <div class="latency-strip">
+            <div><span>Model wait p95</span><strong id="overviewModelLatency">-</strong></div>
+            <div><span>Response → ready p95</span><strong id="programWakeLatencyValue">-</strong></div>
+            <div><span>Node provisioning p95</span><strong id="autoscalerProvisioningValue">-</strong></div>
+            <div><span>Idle grace</span><strong id="autoscalerIdleGraceValue">-</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="section-heading overview-section overview-heading">
         <div>
-          <span class="metric-label">Ready to Wake</span>
-          <strong id="cpuUtilizationValue">-</strong>
-          <span id="cpuUtilizationDetail" class="metric-detail">oldest response-ready request</span>
+          <span class="eyebrow">Session trends</span>
+          <h2>Demand, pressure, and latency</h2>
         </div>
-        <canvas id="cpuSpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-      <article class="metric-card accent-orange">
-        <div>
-          <span class="metric-label">Hard Disk Used</span>
-          <strong id="memoryUtilizationValue">-</strong>
-          <span id="memoryUtilizationDetail" class="metric-detail">reserved hard capacity</span>
-        </div>
-        <canvas id="memorySpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-      <article class="metric-card accent-purple">
-        <div>
-          <span class="metric-label">Waiting on Model</span>
-          <strong id="queueDepthValue">-</strong>
-          <span id="queueDepthDetail" class="metric-detail">bounded leading demand</span>
-        </div>
-        <canvas id="queueSpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-      <article class="metric-card accent-red">
-        <div>
-          <span class="metric-label">Response → Wake p95</span>
-          <strong id="errorRateValue">-</strong>
-          <span id="errorRateDetail" class="metric-detail">tool-return latency</span>
-        </div>
-        <canvas id="errorSpark" class="sparkline" width="150" height="56"></canvas>
-      </article>
-    </section>
+        <span class="section-summary">Use the range control above to change the window.</span>
+      </section>
 
-    <section class="chart-grid overview-section" aria-label="Live graphs">
-      <article class="chart-panel chart-wide">
-        <div class="panel-header">
-          <h2>Ready Nodes</h2>
-          <span class="info-dot" title="Fresh sandbox nodes"></span>
-        </div>
-        <canvas id="activeNodesChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch blue"></i>Ready Nodes</span></div>
-      </article>
-      <article class="chart-panel chart-wide">
-        <div class="panel-header">
-          <h2>Sandbox Routes</h2>
-          <span class="info-dot" title="Durable sandbox routes across running, parked, and waking states"></span>
-        </div>
-        <canvas id="activeSandboxesChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch blue"></i>Sandbox Routes</span></div>
-      </article>
-      <article class="chart-panel chart-wide">
-        <div class="panel-header">
-          <h2>Hard Demand</h2>
-          <span class="info-dot" title="Pending sandbox creates, image builds, and ready-to-wake requests; prepared capacity is supply, not demand"></span>
-        </div>
-        <canvas id="queueDepthChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch purple"></i>Hard Demand</span></div>
-      </article>
-      <article class="chart-panel chart-small">
-        <div class="panel-header">
-          <h2>CPU Pressure</h2>
-          <span class="info-dot" title="Actual average CPU and reserved CPU"></span>
-        </div>
-        <canvas id="cpuPressureChart" class="chart-canvas small" width="520" height="190"></canvas>
-        <div class="legend">
-          <span><i class="swatch green"></i>Actual</span>
-          <span><i class="swatch blue"></i>Reserved</span>
-        </div>
-      </article>
-      <article class="chart-panel chart-small">
-        <div class="panel-header">
-          <h2>Memory Pressure</h2>
-          <span class="info-dot" title="Actual memory and reserved memory"></span>
-        </div>
-        <canvas id="memoryPressureChart" class="chart-canvas small" width="520" height="190"></canvas>
-        <div class="legend">
-          <span><i class="swatch orange"></i>Actual</span>
-          <span><i class="swatch blue"></i>Reserved</span>
-        </div>
-      </article>
-      <article class="chart-panel chart-small">
-        <div class="panel-header">
-          <h2>Scale-up Latency (s)</h2>
-          <span class="info-dot" title="Recent sandbox scheduling wait"></span>
-        </div>
-        <canvas id="scaleLatencyChart" class="chart-canvas small" width="520" height="190"></canvas>
-        <div class="legend">
-          <span><i class="swatch blue"></i>p50</span>
-          <span><i class="swatch blue-dash"></i>p95</span>
-        </div>
-      </article>
-      <article class="chart-panel chart-small">
-        <div class="panel-header">
-          <h2>Program Latency (s)</h2>
-          <span class="info-dot" title="Model wait and response-ready to wake latency"></span>
-        </div>
-        <canvas id="sandboxStartChart" class="chart-canvas small" width="520" height="190"></canvas>
-        <div class="legend">
-          <span><i class="swatch purple"></i>Model wait p95</span>
-          <span><i class="swatch green"></i>Wake p95</span>
-        </div>
-      </article>
-    </section>
+      <section class="trend-grid overview-section" aria-label="Operational trends">
+        <article class="chart-panel trend-supply">
+          <div class="panel-header">
+            <div><h2>Fleet footprint</h2><span>Ready nodes and routed sandboxes</span></div>
+            <span class="info-dot" title="Fresh ready nodes compared with durable sandbox routes"></span>
+          </div>
+          <canvas id="activeNodesChart" class="chart-canvas" width="760" height="230"></canvas>
+          <div class="legend"><span><i class="swatch blue"></i>Ready nodes</span><span><i class="swatch green"></i>Sandbox routes</span></div>
+        </article>
+        <article class="chart-panel trend-demand">
+          <div class="panel-header">
+            <div><h2>Immediate queues</h2><span>Independent counts by work type</span></div>
+            <span class="info-dot" title="Pending sandbox creates, image builds, and response-ready tool calls are intentionally not added together"></span>
+          </div>
+          <canvas id="queueDepthChart" class="chart-canvas" width="760" height="230"></canvas>
+          <div class="legend"><span><i class="swatch green"></i>Ready to wake</span><span><i class="swatch purple"></i>Sandbox creates</span><span><i class="swatch orange"></i>Image builds</span></div>
+        </article>
+        <article class="chart-panel trend-pressure">
+          <div class="panel-header"><div><h2>CPU pressure</h2><span>Observed versus reserved</span></div></div>
+          <canvas id="cpuPressureChart" class="chart-canvas small" width="560" height="190"></canvas>
+          <div class="legend"><span><i class="swatch green"></i>Actual</span><span><i class="swatch blue-dash"></i>Reserved</span></div>
+        </article>
+        <article class="chart-panel trend-pressure">
+          <div class="panel-header"><div><h2>Memory pressure</h2><span>Observed versus reserved</span></div></div>
+          <canvas id="memoryPressureChart" class="chart-canvas small" width="560" height="190"></canvas>
+          <div class="legend"><span><i class="swatch orange"></i>Actual</span><span><i class="swatch blue-dash"></i>Reserved</span></div>
+        </article>
+        <article class="chart-panel trend-latency">
+          <div class="panel-header">
+            <div><h2>Agent wait path</h2><span>Model generation versus sandbox readiness</span></div>
+            <span class="info-dot" title="p95 time waiting on a model response and p95 response-to-ready time"></span>
+          </div>
+          <canvas id="sandboxStartChart" class="chart-canvas small" width="760" height="190"></canvas>
+          <div class="legend"><span><i class="swatch purple"></i>Model wait p95</span><span><i class="swatch green"></i>Response → ready p95</span></div>
+        </article>
+      </section>
 
-    <section class="ops-grid overview-section" aria-label="Builder and registry operations">
-      <article class="ops-panel ops-large">
-        <div class="panel-header">
-          <h2>Autoscaler Feedback</h2>
-          <span id="autoscalerSummary">No autoscaler cycle loaded</span>
-        </div>
-        <div class="stat-strip">
-          <div class="stat-box">
-            <span>Pressure Samples</span>
-            <strong id="autoscalerPressureValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>CPU / Memory</span>
-            <strong id="autoscalerUtilizationValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Provisioning p95</span>
-            <strong id="autoscalerProvisioningValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Effective Idle Grace</span>
-            <strong id="autoscalerIdleGraceValue">-</strong>
-          </div>
-        </div>
-      </article>
-
-      <article class="ops-panel ops-large">
-        <div class="panel-header">
-          <h2>Program Scheduler</h2>
-          <span id="programSummary">Shadow observation</span>
-        </div>
-        <div class="stat-strip">
-          <div class="stat-box">
-            <span>Waiting on Model</span>
-            <strong id="programModelWaitValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Ready to Wake</span>
-            <strong id="programReadyValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Oldest Ready</span>
-            <strong id="programOldestReadyValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Response → Wake p95</span>
-            <strong id="programWakeLatencyValue">-</strong>
-          </div>
-        </div>
-      </article>
-
-      <article class="ops-panel ops-large">
-        <div class="panel-header">
-          <h2>Builder Pool</h2>
-          <span id="builderSummary">No builder metrics loaded</span>
-        </div>
-        <div class="stat-strip">
-          <div class="stat-box">
-            <span>Ready Builders</span>
-            <strong id="builderReadyValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Prepared</span>
-            <strong id="builderPreparedValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Active Builds</span>
-            <strong id="builderActiveBuildsValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Builder CPU</span>
-            <strong id="builderCpuValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Builder Memory</span>
-            <strong id="builderMemoryValue">-</strong>
-          </div>
-        </div>
-        <canvas id="builderBuildsChart" class="chart-canvas compact" width="760" height="160"></canvas>
-        <div class="legend">
-          <span><i class="swatch orange"></i>Active Builds</span>
-          <span><i class="swatch blue-dash"></i>Ready Builders</span>
-        </div>
-      </article>
-
-      <article class="ops-panel ops-small">
-        <div class="panel-header">
-          <h2>Registry</h2>
-          <span id="registryStatusBadge" class="inline-badge badge-muted">Unknown</span>
-        </div>
-        <div class="registry-url" id="registryUrl">No registry configured</div>
-        <div class="stat-strip compact-strip">
-          <div class="stat-box">
-            <span>Repositories</span>
-            <strong id="registryReposValue">-</strong>
-          </div>
-          <div class="stat-box">
-            <span>Scanned Tags</span>
-            <strong id="registryTagsValue">-</strong>
-          </div>
-        </div>
-        <div id="registryDetail" class="registry-detail">Waiting for registry metrics</div>
-        <div id="registryRepos" class="repo-list">
-          <span class="empty-inline">No repositories loaded</span>
-        </div>
-      </article>
-    </section>
-
-    <section class="activity-grid overview-section" aria-label="Recent operational activity">
-    <section class="event-panel build-panel" aria-label="Recent image builds">
-      <div class="panel-header table-header">
-        <h2>Recent Image Builds</h2>
-        <span id="buildSummary">No builds loaded</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th>Image</th>
-              <th>Tag</th>
-              <th>Location</th>
-              <th>Age</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody id="buildRows">
-            <tr><td colspan="6" class="empty-cell">No builds loaded</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="event-panel trace-panel" aria-label="Recent request traces">
-      <div class="panel-header table-header">
-        <h2>Recent Traces</h2>
-        <span id="traceSummary">No traces loaded</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Status</th>
-              <th>Trace</th>
-              <th>Duration</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody id="traceRows">
-            <tr><td colspan="5" class="empty-cell">No traces loaded</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="event-panel activity-event-panel" aria-label="Recent autoscaler events">
-      <div class="panel-header table-header">
-        <h2>Recent Events</h2>
-        <span id="eventSummary">No events loaded</span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Severity</th>
-              <th>Event</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody id="eventRows">
-            <tr><td colspan="4" class="empty-cell">No metrics loaded</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-    </section>
+      <section class="section-heading overview-section overview-heading">
+        <div><span class="eyebrow">Forensics</span><h2>Recent operational activity</h2></div>
+        <span class="section-summary">Failures and capacity decisions first.</span>
+      </section>
+      <section class="activity-grid overview-section" aria-label="Recent operational activity">
+        <section class="event-panel activity-event-panel" aria-label="Recent autoscaler events">
+          <div class="panel-header table-header"><h2>Capacity events</h2><span id="eventSummary">No events loaded</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Severity</th><th>Event</th><th>Details</th></tr></thead><tbody id="eventRows"><tr><td colspan="4" class="empty-cell">No metrics loaded</td></tr></tbody></table></div>
+        </section>
+        <details class="event-panel diagnostic-disclosure build-panel">
+          <summary><span>Image build details</span><span id="buildSummary">No builds loaded</span></summary>
+          <div class="table-wrap"><table><thead><tr><th>Status</th><th>Image</th><th>Tag</th><th>Location</th><th>Age</th><th>Details</th></tr></thead><tbody id="buildRows"><tr><td colspan="6" class="empty-cell">No builds loaded</td></tr></tbody></table></div>
+        </details>
+        <details class="event-panel diagnostic-disclosure trace-panel">
+          <summary><span>Request trace details</span><span id="traceSummary">No traces loaded</span></summary>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Status</th><th>Trace</th><th>Duration</th><th>Details</th></tr></thead><tbody id="traceRows"><tr><td colspan="5" class="empty-cell">No traces loaded</td></tr></tbody></table></div>
+        </details>
+      </section>
     </section>
 
     <section id="schedulerPage" class="workspace-page" role="tabpanel" aria-labelledby="schedulerTab" hidden>
@@ -505,79 +418,42 @@ DASHBOARD_HTML = """<!doctype html>
       </section>
 
       <section class="scheduler-grid">
-        <article class="workspace-card">
+        <article class="workspace-card capacity-equation-card">
           <div class="section-heading compact">
             <div>
-              <div class="eyebrow">Demand composition</div>
-              <h2>What the autoscaler sees</h2>
+              <div class="eyebrow">Capacity equation</div>
+              <h2>Demand, supply, and the uncovered remainder</h2>
             </div>
+            <span id="decisionPressureValue" class="section-summary">No pressure samples</span>
           </div>
-          <div class="resource-vector-list">
-            <div class="resource-vector">
-              <span>Pending sandboxes</span>
-              <strong id="demandPendingValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Prepared capacity</span>
-              <strong id="demandPreparedValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Ready wakes</span>
-              <strong id="demandReadyWakeValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Weighted model wait</span>
-              <strong id="demandModelWaitValue">-</strong>
-            </div>
-            <div class="resource-vector emphasis">
-              <span>Effective program demand</span>
-              <strong id="demandEffectiveValue">-</strong>
-            </div>
+          <div class="table-wrap capacity-equation-wrap">
+            <table class="capacity-equation-table">
+              <thead><tr><th>Stage</th><th>vCPU</th><th>Memory</th><th>Hard disk</th></tr></thead>
+              <tbody>
+                <tr><th>Immediate demand</th><td id="equationImmediateCpu">-</td><td id="equationImmediateMemory">-</td><td id="equationImmediateDisk">-</td></tr>
+                <tr><th>Response-ready demand</th><td id="equationReadyCpu">-</td><td id="equationReadyMemory">-</td><td id="equationReadyDisk">-</td></tr>
+                <tr><th>Predictive model demand</th><td id="equationPredictiveCpu">-</td><td id="equationPredictiveMemory">-</td><td id="equationPredictiveDisk">-</td></tr>
+                <tr class="supply-row"><th>Already prepared</th><td id="equationPreparedCpu">-</td><td id="equationPreparedMemory">-</td><td id="equationPreparedDisk">-</td></tr>
+                <tr class="supply-row"><th>Free after commitments</th><td id="equationFreeCpu">-</td><td id="equationFreeMemory">-</td><td id="equationFreeDisk">-</td></tr>
+                <tr class="deficit-row"><th>Uncovered demand</th><td id="equationDeficitCpu">-</td><td id="equationDeficitMemory">-</td><td id="equationDeficitDisk">-</td></tr>
+              </tbody>
+            </table>
           </div>
+          <div class="equation-footnote"><span>Predictive demand is weighted by policy.</span><span>Disk remains a hard admission constraint.</span><span id="decisionIdleGraceValue">Idle grace -</span></div>
         </article>
-        <article class="workspace-card">
-          <div class="section-heading compact">
-            <div>
-              <div class="eyebrow">Capacity decision</div>
-              <h2>Supply versus demand</h2>
-            </div>
-          </div>
-          <div class="resource-vector-list">
-            <div class="resource-vector">
-              <span>Desired</span>
-              <strong id="decisionDesiredValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Projected free</span>
-              <strong id="decisionProjectedValue">-</strong>
-            </div>
-            <div class="resource-vector emphasis">
-              <span>Deficit</span>
-              <strong id="decisionDeficitValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Pressure samples</span>
-              <strong id="decisionPressureValue">-</strong>
-            </div>
-            <div class="resource-vector">
-              <span>Idle grace</span>
-              <strong id="decisionIdleGraceValue">-</strong>
-            </div>
-          </div>
-        </article>
-        <article class="workspace-card policy-card">
-          <div class="section-heading compact">
+        <details class="workspace-card policy-card">
+          <summary class="section-heading compact">
             <div>
               <div class="eyebrow">Effective policy</div>
-              <h2>Current tuning</h2>
+              <h2>View current tuning</h2>
             </div>
             <span class="read-only-badge">Read only</span>
-          </div>
+          </summary>
           <dl id="policyValues" class="policy-values">
             <div><dt>Program action</dt><dd>-</dd></div>
           </dl>
           <p class="policy-note">Policy changes remain version-controlled and service-restarted; this view never mutates production.</p>
-        </article>
+        </details>
       </section>
 
       <section class="event-panel queue-panel" aria-label="Shadow wake queue">
@@ -627,15 +503,23 @@ DASHBOARD_HTML = """<!doctype html>
       <section class="workspace-hero">
         <div>
           <div class="eyebrow">Live placement supply</div>
-          <h2>Sandbox nodes</h2>
+          <h2>Fleet health and placement constraints</h2>
           <p id="nodesPageDetail" class="workspace-copy">Waiting for node heartbeats.</p>
         </div>
         <div class="node-hero-stats">
-          <div class="stat-box"><span>Ready</span><strong id="nodesReadyValue">-</strong></div>
+          <div class="stat-box"><span>Schedulable</span><strong id="nodesReadyValue">-</strong></div>
+          <div class="stat-box"><span>Provisioning</span><strong id="nodesProvisioningValue">-</strong></div>
           <div class="stat-box"><span>Draining</span><strong id="nodesDrainingValue">-</strong></div>
-          <div class="stat-box"><span>Incompatible</span><strong id="nodesIncompatibleValue">-</strong></div>
+          <div class="stat-box"><span>Stale / incompatible</span><strong id="nodesIncompatibleValue">-</strong></div>
           <div class="stat-box"><span>Hard disk free</span><strong id="nodesDiskFreeValue">-</strong></div>
         </div>
+      </section>
+      <section class="fleet-signal-grid" aria-label="Fleet pressure summary">
+        <article><span>CPU actual / reserved</span><strong id="nodesCpuPressureValue">-</strong><small id="nodesCpuPressureDetail">No fresh samples</small></article>
+        <article><span>Memory actual / reserved</span><strong id="nodesMemoryPressureValue">-</strong><small id="nodesMemoryPressureDetail">No fresh samples</small></article>
+        <article><span>Memory PSI full</span><strong id="nodesPsiValue">-</strong><small>10-second average</small></article>
+        <article><span>Storage queue</span><strong id="nodesStorageQueueValue">-</strong><small id="nodesStorageQueueDetail">active / waiting / limit</small></article>
+        <article><span>Volume errors</span><strong id="nodesVolumeErrorsValue">-</strong><small>storage-native volumes</small></article>
       </section>
       <section class="queue-toolbar node-toolbar" aria-label="Node filters">
         <label class="inline-search">
@@ -688,19 +572,19 @@ DASHBOARD_HTML = """<!doctype html>
         </div>
         <div class="sandbox-stat-grid">
           <div class="stat-box">
-            <span>Listed</span>
+            <span>Loaded</span>
             <strong id="sandboxesPageRowsValue">-</strong>
           </div>
           <div class="stat-box">
-            <span>Terminable</span>
+            <span>Running</span>
             <strong id="sandboxesPageTerminableValue">-</strong>
           </div>
           <div class="stat-box">
-            <span>Pending</span>
+            <span>Parked</span>
             <strong id="sandboxesPagePendingValue">-</strong>
           </div>
           <div class="stat-box">
-            <span>Routes</span>
+            <span>Waking / moving</span>
             <strong id="sandboxesPageRoutesValue">-</strong>
           </div>
         </div>
@@ -711,8 +595,19 @@ DASHBOARD_HTML = """<!doctype html>
           <span>Search sandboxes</span>
           <input id="sandboxSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Sandbox id, image, node, label">
         </label>
+        <label class="sandbox-filter">
+          <span>Lifecycle state</span>
+          <select id="sandboxStateFilter">
+            <option value="all">All states</option>
+            <option value="attention">Needs attention</option>
+            <option value="running">Running</option>
+            <option value="parked">Parked</option>
+            <option value="transitioning">Parking / waking / migrating</option>
+            <option value="pending">Pending / creating</option>
+            <option value="failed">Failed / stale</option>
+          </select>
+        </label>
         <button id="refreshSandboxesButton" class="table-action" type="button">Refresh</button>
-        <button id="terminateAllSandboxesButton" class="table-action danger" type="button" disabled>Terminate all</button>
         <div id="sandboxesPageSummary" class="registry-copy">No sandboxes loaded</div>
       </section>
 
@@ -759,11 +654,19 @@ DASHBOARD_HTML = """<!doctype html>
             <strong id="registryPageReposValue">-</strong>
           </div>
           <div class="stat-box">
-            <span>Scanned Tags</span>
+            <span>Scanned tags</span>
             <strong id="registryPageTagsValue">-</strong>
           </div>
           <div class="stat-box">
-            <span>Visible Tags</span>
+            <span>Active builds</span>
+            <strong id="registryActiveBuildsValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Failed builds</span>
+            <strong id="registryFailedBuildsValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Visible tags</span>
             <strong id="registryPageVisibleTagsValue">-</strong>
           </div>
           <div class="stat-box">
@@ -771,6 +674,33 @@ DASHBOARD_HTML = """<!doctype html>
             <strong id="registryPageCoverageValue">-</strong>
           </div>
         </div>
+      </section>
+
+      <section class="image-supply-grid" aria-label="Image build supply">
+        <article class="ops-panel builder-service">
+          <div class="panel-header">
+            <div><span class="eyebrow">Build capacity</span><h2>Builder pool</h2></div>
+            <span id="builderSummary">No builder metrics loaded</span>
+          </div>
+          <div class="stat-strip">
+            <div class="stat-box"><span>Ready</span><strong id="builderReadyValue">-</strong></div>
+            <div class="stat-box"><span>Prepared</span><strong id="builderPreparedValue">-</strong></div>
+            <div class="stat-box"><span>Building</span><strong id="builderActiveBuildsValue">-</strong></div>
+            <div class="stat-box"><span>CPU</span><strong id="builderCpuValue">-</strong></div>
+            <div class="stat-box"><span>Memory</span><strong id="builderMemoryValue">-</strong></div>
+          </div>
+          <canvas id="builderBuildsChart" class="chart-canvas compact" width="760" height="150"></canvas>
+          <div class="legend"><span><i class="swatch orange"></i>Active builds</span><span><i class="swatch blue-dash"></i>Ready builders</span></div>
+        </article>
+        <article class="workspace-card image-queue-summary">
+          <div class="section-heading compact"><div><span class="eyebrow">Build queue</span><h2>Supply readiness</h2></div></div>
+          <div class="resource-vector-list">
+            <div class="resource-vector"><span>Pending builds</span><strong id="registryPendingBuildsValue">-</strong></div>
+            <div class="resource-vector"><span>Oldest pending</span><strong id="registryOldestBuildValue">-</strong></div>
+            <div class="resource-vector"><span>Active builds</span><strong id="registryActiveBuildsSummaryValue">-</strong></div>
+            <div class="resource-vector emphasis"><span>Failed builds</span><strong id="registryFailedBuildsSummaryValue">-</strong></div>
+          </div>
+        </article>
       </section>
 
       <section class="registry-toolbar" aria-label="Registry filters">
@@ -863,6 +793,7 @@ DASHBOARD_HTML = """<!doctype html>
       </section>
     </section>
   </main>
+  <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
   <script src="/dashboard/dashboard.js" defer></script>
 </body>
 </html>
@@ -3397,6 +3328,1047 @@ tbody tr:hover {
     display: none;
   }
 }
+
+/* Operations workspace v2: one hierarchy built around operator decisions. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --healthy: #15803d;
+  --warning: #b45309;
+  --critical: #b42318;
+  --selection: #2563eb;
+}
+
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: 10px;
+  z-index: 100;
+  padding: 9px 12px;
+  border-radius: 7px;
+  background: white;
+  color: #111827;
+  font-weight: 800;
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.toast-region {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 80;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 11px 14px;
+  border: 1px solid #166534;
+  border-radius: 9px;
+  background: #052e16;
+  color: #dcfce7;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  font-size: 13px;
+  font-weight: 750;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.toast-region.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-region.bad {
+  border-color: #991b1b;
+  background: #450a0a;
+  color: #fee2e2;
+}
+
+.page-shell {
+  padding-top: calc(var(--app-bar-height) + var(--space-5));
+}
+
+.page-title {
+  min-height: 66px;
+  margin-bottom: var(--space-4);
+}
+
+.page-title h1 {
+  max-width: 840px;
+}
+
+.page-title p {
+  max-width: 780px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.page-tabs::before {
+  display: none;
+}
+
+.nav-section-label {
+  display: block;
+  margin: 4px 10px 5px;
+  color: #667892;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nav-section-manage {
+  margin-top: 17px;
+}
+
+.nav-icon {
+  position: relative;
+}
+
+.nav-icon::before,
+.nav-icon::after {
+  position: absolute;
+  content: "";
+}
+
+.nav-icon-overview::before {
+  inset: 7px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  box-shadow: 7px 0 0 -5px currentColor, 0 7px 0 -5px currentColor;
+}
+
+.nav-icon-scheduler::before {
+  left: 7px;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 10px 5px 0 currentColor, 0 11px 0 currentColor;
+}
+
+.nav-icon-scheduler::after {
+  left: 10px;
+  top: 9px;
+  width: 9px;
+  height: 12px;
+  border-left: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+}
+
+.nav-icon-nodes::before {
+  inset: 6px 5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  box-shadow: inset 0 5px transparent, inset 0 6px currentColor, inset 0 11px transparent, inset 0 12px currentColor;
+}
+
+.nav-icon-sandboxes::before {
+  inset: 7px 6px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  transform: rotate(30deg) skew(-4deg, -4deg);
+}
+
+.nav-icon-registry::before {
+  left: 6px;
+  top: 7px;
+  width: 15px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: 0 5px 0 -1px #111c2e, 0 5px 0 0 currentColor, 0 10px 0 -1px #111c2e, 0 10px 0 0 currentColor;
+}
+
+.page-tab.is-active .nav-icon-registry::before {
+  box-shadow: 0 5px 0 -1px #1d3a65, 0 5px 0 0 currentColor, 0 10px 0 -1px #1d3a65, 0 10px 0 0 currentColor;
+}
+
+.overview-page {
+  gap: var(--space-4);
+}
+
+.overview-section {
+  margin: 0;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(340px, 5fr);
+  gap: var(--space-3);
+}
+
+.command-grid .health-strip,
+.decision-brief,
+.capacity-card,
+.pipeline-card,
+.fleet-signal-grid article,
+.image-supply-grid > * {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.command-grid .health-strip {
+  display: flex;
+  min-height: 196px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: var(--space-5);
+  border-left: 4px solid var(--selection);
+  background: var(--surface);
+}
+
+.health-primary {
+  align-items: flex-start;
+}
+
+.health-primary strong {
+  display: block;
+  margin: 3px 0 6px;
+  font-size: clamp(21px, 2vw, 27px);
+  letter-spacing: -0.035em;
+}
+
+.health-primary > div > span:last-child {
+  max-width: 720px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.health-signals {
+  justify-content: flex-start;
+}
+
+button.signal-chip {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+button.signal-chip:hover {
+  border-color: var(--selection);
+}
+
+.health-actions {
+  justify-content: flex-start;
+}
+
+.decision-brief {
+  min-height: 196px;
+  padding: var(--space-4);
+}
+
+.decision-brief .panel-header {
+  align-items: flex-start;
+}
+
+.decision-brief h2 {
+  margin-top: 3px;
+  font-size: 20px;
+}
+
+.decision-summary {
+  min-height: 20px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.decision-reasons {
+  display: grid;
+  gap: 5px;
+  margin-bottom: var(--space-3);
+}
+
+.decision-reasons span {
+  position: relative;
+  padding-left: 14px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.decision-reasons span::before {
+  position: absolute;
+  left: 1px;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--selection);
+  content: "";
+}
+
+.decision-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+}
+
+.decision-facts > div {
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--surface-soft);
+}
+
+.decision-facts span,
+.metric-context {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.decision-facts strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-heading {
+  min-height: auto;
+  align-items: end;
+  padding: 5px 2px 0;
+}
+
+.overview-heading h2 {
+  margin-top: 2px;
+  font-size: 18px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.metric-card {
+  display: flex;
+  min-width: 0;
+  min-height: 142px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 15px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.metric-card::before {
+  display: none;
+}
+
+.metric-card strong {
+  margin-top: 12px;
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card .metric-detail {
+  min-height: 34px;
+  margin: 5px 0 10px;
+  line-height: 1.4;
+}
+
+.metric-context {
+  margin-top: auto;
+  font-size: 9px;
+}
+
+.accent-green,
+.accent-slate {
+  --accent: var(--selection);
+}
+
+.overview-workbench {
+  display: grid;
+  grid-template-columns: minmax(360px, 5fr) minmax(560px, 7fr);
+  gap: var(--space-3);
+}
+
+.capacity-card,
+.pipeline-card {
+  padding: var(--space-4);
+}
+
+.headroom-list {
+  display: grid;
+  gap: 16px;
+  margin: 18px 0 14px;
+}
+
+.headroom-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 7px 14px;
+}
+
+.headroom-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.headroom-label span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.headroom-label strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dual-meter {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+
+.dual-meter span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.meter-reserved {
+  z-index: 1;
+  background: rgba(37, 99, 235, 0.28);
+}
+
+.meter-actual {
+  z-index: 2;
+  height: 5px;
+  margin-top: 2.5px;
+  background: var(--selection);
+}
+
+.meter-disk {
+  background: var(--text);
+}
+
+.hard-limit .headroom-label span::after {
+  margin-left: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  content: "hard limit";
+  padding: 2px 6px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.headroom-detail {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.capacity-rule {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 7%, var(--surface));
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.capacity-rule > span {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--warning);
+  color: white;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.overview-pipeline {
+  display: grid;
+  grid-template-columns: minmax(115px, 1fr) 20px minmax(115px, 1fr) 20px minmax(115px, 1fr) 20px minmax(115px, 1fr);
+  align-items: center;
+  margin-top: 17px;
+}
+
+.pipeline-stage {
+  min-height: 122px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.pipeline-stage > span {
+  display: block;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.pipeline-stage strong {
+  display: block;
+  margin: 8px 0 5px;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-stage small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.pipeline-stage.attention {
+  border-color: color-mix(in srgb, var(--selection) 35%, var(--line));
+  background: color-mix(in srgb, var(--selection) 5%, var(--surface));
+}
+
+.pipeline-connector {
+  position: relative;
+  height: 1px;
+  background: var(--line);
+}
+
+.pipeline-connector::after {
+  position: absolute;
+  right: -1px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid var(--muted);
+  border-right: 1px solid var(--muted);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.latency-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+}
+
+.latency-strip > div {
+  padding: 9px 10px;
+  background: var(--surface);
+}
+
+.latency-strip span {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.latency-strip strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.trend-grid .chart-panel {
+  margin: 0;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.trend-grid .panel-header > div > span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trend-supply,
+.trend-demand {
+  grid-column: span 6;
+}
+
+.trend-pressure {
+  grid-column: span 3;
+}
+
+.trend-latency {
+  grid-column: span 6;
+}
+
+.trend-grid .chart-canvas {
+  height: 220px;
+}
+
+.trend-grid .chart-canvas.small {
+  height: 184px;
+}
+
+.fleet-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.scheduler-grid {
+  grid-template-columns: minmax(0, 8fr) minmax(300px, 4fr);
+}
+
+.capacity-equation-card {
+  min-width: 0;
+}
+
+.capacity-equation-wrap {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+
+.capacity-equation-table {
+  width: 100%;
+  min-width: 620px;
+}
+
+.capacity-equation-table th,
+.capacity-equation-table td {
+  height: 39px;
+  font-variant-numeric: tabular-nums;
+}
+
+.capacity-equation-table tbody th {
+  position: static;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.capacity-equation-table .supply-row {
+  background: color-mix(in srgb, var(--healthy) 4%, var(--surface));
+}
+
+.capacity-equation-table .deficit-row {
+  background: color-mix(in srgb, var(--critical) 6%, var(--surface));
+  font-weight: 800;
+}
+
+.equation-footnote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.policy-card summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.policy-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.policy-card:not([open]) {
+  align-self: start;
+}
+
+.policy-card[open] .policy-values {
+  margin-top: 12px;
+}
+
+.fleet-signal-grid article {
+  min-height: 90px;
+  padding: 12px;
+}
+
+.fleet-signal-grid span,
+.fleet-signal-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.fleet-signal-grid span {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.fleet-signal-grid strong {
+  display: block;
+  margin: 9px 0 5px;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-hero-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.sandbox-toolbar {
+  grid-template-columns: minmax(280px, 2fr) minmax(200px, 1fr) auto minmax(200px, 1fr);
+}
+
+.sandbox-filter {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.sandbox-filter select {
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.sandbox-status.parked {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.sandbox-status.transitioning,
+.sandbox-status.migrating {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.sandbox-status.stale {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+:root.dark .sandbox-status.parked {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+:root.dark .sandbox-status.transitioning,
+:root.dark .sandbox-status.migrating {
+  background: #172554;
+  color: #bfdbfe;
+}
+
+:root.dark .sandbox-status.stale {
+  background: #451a03;
+  color: #fde68a;
+}
+
+.image-supply-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(280px, 4fr);
+  gap: var(--space-3);
+}
+
+.image-supply-grid .ops-panel,
+.image-supply-grid .workspace-card {
+  margin: 0;
+}
+
+.registry-stat-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.activity-grid .activity-event-panel {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.activity-grid .activity-event-panel tbody tr:first-child {
+  background: color-mix(in srgb, var(--selection) 4%, var(--surface));
+}
+
+.diagnostic-disclosure {
+  padding: 0;
+}
+
+.diagnostic-disclosure summary {
+  display: flex;
+  min-height: 48px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 15px;
+  color: var(--text);
+  font-weight: 800;
+  list-style: none;
+}
+
+.diagnostic-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostic-disclosure summary::after {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.diagnostic-disclosure[open] summary::after {
+  transform: rotate(225deg);
+}
+
+.diagnostic-disclosure summary span:nth-child(2) {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--selection) 45%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1480px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .command-grid,
+  .overview-workbench,
+  .image-supply-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-pressure {
+    grid-column: span 6;
+  }
+
+  .trend-latency {
+    grid-column: 1 / -1;
+  }
+
+  .fleet-signal-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .node-hero-stats,
+  .registry-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 940px) {
+  .page-shell {
+    padding-top: var(--space-4);
+  }
+
+  .page-tabs {
+    top: var(--app-bar-height);
+  }
+
+  .nav-section-label {
+    display: none;
+  }
+
+  .overview-workbench,
+  .command-grid,
+  .scheduler-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-pipeline {
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .pipeline-connector {
+    display: none;
+  }
+
+  .trend-supply,
+  .trend-demand,
+  .trend-pressure,
+  .trend-latency {
+    grid-column: span 6;
+  }
+
+  .sandbox-toolbar {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .sandbox-toolbar .registry-copy {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .command-grid .health-strip,
+  .decision-brief,
+  .capacity-card,
+  .pipeline-card {
+    padding: var(--space-4);
+  }
+
+  .metric-grid,
+  .latency-strip,
+  .fleet-signal-grid,
+  .node-hero-stats,
+  .registry-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trend-supply,
+  .trend-demand,
+  .trend-pressure,
+  .trend-latency {
+    grid-column: 1 / -1;
+  }
+
+  .decision-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-pipeline {
+    grid-template-columns: repeat(4, minmax(132px, 1fr));
+  }
+
+  .sandbox-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .sandbox-toolbar .registry-copy {
+    grid-column: auto;
+  }
+
+  .node-table,
+  .sandbox-table,
+  .registry-table {
+    min-width: 0;
+  }
+
+  .node-table th:nth-child(4),
+  .node-table td:nth-child(4),
+  .node-table th:nth-child(5),
+  .node-table td:nth-child(5),
+  .node-table th:nth-child(6),
+  .node-table td:nth-child(6),
+  .sandbox-table th:nth-child(3),
+  .sandbox-table td:nth-child(3),
+  .sandbox-table th:nth-child(5),
+  .sandbox-table td:nth-child(5),
+  .sandbox-table th:nth-child(6),
+  .sandbox-table td:nth-child(6),
+  .sandbox-table th:nth-child(7),
+  .sandbox-table td:nth-child(7),
+  .registry-table th:nth-child(4),
+  .registry-table td:nth-child(4),
+  .registry-table th:nth-child(5),
+  .registry-table td:nth-child(5) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .metric-grid,
+  .latency-strip,
+  .fleet-signal-grid,
+  .node-hero-stats,
+  .registry-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card {
+    min-height: 126px;
+  }
+
+  .overview-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .health-icon,
+  .state-dot,
+  .nav-badge,
+  .inline-badge,
+  .sandbox-status {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+
+  .dual-meter span {
+    background: Highlight;
+  }
+}
 """
 
 
@@ -3447,6 +4419,10 @@ const els = {};
 document.addEventListener("DOMContentLoaded", () => {
   for (const id of [
     "connectionStatus",
+    "toastRegion",
+    "pageKicker",
+    "pageHeading",
+    "pageDescription",
     "overviewNavBadge",
     "schedulerNavBadge",
     "nodesNavBadge",
@@ -3467,29 +4443,44 @@ document.addEventListener("DOMContentLoaded", () => {
     "activeNodesDetail",
     "runningSandboxesValue",
     "runningSandboxesDetail",
-    "cpuUtilizationValue",
-    "cpuUtilizationDetail",
-    "memoryUtilizationValue",
-    "memoryUtilizationDetail",
-    "queueDepthValue",
-    "queueDepthDetail",
-    "errorRateValue",
-    "errorRateDetail",
+    "readyWakeValue",
+    "readyWakeDetail",
+    "diskCommitValue",
+    "diskCommitDetail",
+    "modelWaitValue",
+    "modelWaitDetail",
+    "wakeLatencyValue",
+    "wakeLatencyDetail",
+    "overviewDecisionTitle",
+    "overviewDecisionBadge",
+    "overviewDecisionReasons",
+    "overviewSupplyValue",
+    "overviewProjectedValue",
+    "overviewDeficitValue",
+    "capacityFitBadge",
+    "capacitySummary",
+    "capacityCpuValue",
+    "capacityCpuActualMeter",
+    "capacityCpuReservedMeter",
+    "capacityCpuDetail",
+    "capacityMemoryValue",
+    "capacityMemoryActualMeter",
+    "capacityMemoryReservedMeter",
+    "capacityMemoryDetail",
+    "capacityDiskValue",
+    "capacityDiskMeter",
+    "capacityDiskDetail",
+    "overviewModelWaitAge",
+    "overviewWakingValue",
+    "overviewActingValue",
+    "overviewModelLatency",
     "builderSummary",
     "builderReadyValue",
     "builderPreparedValue",
     "builderActiveBuildsValue",
     "builderCpuValue",
     "builderMemoryValue",
-    "registryStatusBadge",
-    "registryUrl",
-    "registryReposValue",
-    "registryTagsValue",
-    "registryDetail",
-    "registryRepos",
     "autoscalerSummary",
-    "autoscalerPressureValue",
-    "autoscalerUtilizationValue",
     "autoscalerProvisioningValue",
     "autoscalerIdleGraceValue",
     "programSummary",
@@ -3520,16 +4511,26 @@ document.addEventListener("DOMContentLoaded", () => {
     "flowReadyDetail",
     "flowWakingValue",
     "flowActingValue",
-    "demandPendingValue",
-    "demandPreparedValue",
-    "demandReadyWakeValue",
-    "demandModelWaitValue",
-    "demandEffectiveValue",
-    "decisionDesiredValue",
-    "decisionProjectedValue",
-    "decisionDeficitValue",
     "decisionPressureValue",
     "decisionIdleGraceValue",
+    "equationImmediateCpu",
+    "equationImmediateMemory",
+    "equationImmediateDisk",
+    "equationReadyCpu",
+    "equationReadyMemory",
+    "equationReadyDisk",
+    "equationPredictiveCpu",
+    "equationPredictiveMemory",
+    "equationPredictiveDisk",
+    "equationPreparedCpu",
+    "equationPreparedMemory",
+    "equationPreparedDisk",
+    "equationFreeCpu",
+    "equationFreeMemory",
+    "equationFreeDisk",
+    "equationDeficitCpu",
+    "equationDeficitMemory",
+    "equationDeficitDisk",
     "policyValues",
     "programSearchInput",
     "programResultFilter",
@@ -3538,9 +4539,18 @@ document.addEventListener("DOMContentLoaded", () => {
     "nodesPage",
     "nodesPageDetail",
     "nodesReadyValue",
+    "nodesProvisioningValue",
     "nodesDrainingValue",
     "nodesIncompatibleValue",
     "nodesDiskFreeValue",
+    "nodesCpuPressureValue",
+    "nodesCpuPressureDetail",
+    "nodesMemoryPressureValue",
+    "nodesMemoryPressureDetail",
+    "nodesPsiValue",
+    "nodesStorageQueueValue",
+    "nodesStorageQueueDetail",
+    "nodesVolumeErrorsValue",
     "nodeSearchInput",
     "nodeStateFilter",
     "nodeTableSummary",
@@ -3553,8 +4563,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "sandboxesPagePendingValue",
     "sandboxesPageRoutesValue",
     "sandboxSearchInput",
+    "sandboxStateFilter",
     "refreshSandboxesButton",
-    "terminateAllSandboxesButton",
     "sandboxesPageSummary",
     "sandboxListSummary",
     "sandboxRows",
@@ -3566,6 +4576,12 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryPageTagsValue",
     "registryPageVisibleTagsValue",
     "registryPageCoverageValue",
+    "registryActiveBuildsValue",
+    "registryFailedBuildsValue",
+    "registryPendingBuildsValue",
+    "registryOldestBuildValue",
+    "registryActiveBuildsSummaryValue",
+    "registryFailedBuildsSummaryValue",
     "registrySearchInput",
     "registryFilterSelect",
     "registryPageSummary",
@@ -3591,6 +4607,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedRefresh !== null && [...els.refreshSelect.options].some((option) => option.value === savedRefresh)) {
     els.refreshSelect.value = savedRefresh;
   }
+  restoreSelectPreference(els.sandboxStateFilter, "ucloud.dashboard.sandboxState");
+  restoreSelectPreference(els.nodeStateFilter, "ucloud.dashboard.nodeState");
+  restoreSelectPreference(els.programResultFilter, "ucloud.dashboard.programResult");
+  restoreSelectPreference(els.registryFilterSelect, "ucloud.dashboard.registryFilter");
   applyTheme(localStorage.getItem("ucloud.dashboard.theme") || preferredTheme());
   document.querySelectorAll("canvas").forEach((canvas) => {
     const heading = canvas.closest("article")?.querySelector("h2, .metric-label");
@@ -3626,14 +4646,26 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   window.addEventListener("hashchange", () => setPage(pageFromHash(), { updateHash: false }));
   els.sandboxSearchInput.addEventListener("input", renderSandboxesPage);
+  els.sandboxStateFilter.addEventListener("change", () => {
+    persistSelectPreference(els.sandboxStateFilter, "ucloud.dashboard.sandboxState");
+    renderSandboxesPage();
+  });
   els.refreshSandboxesButton.addEventListener("click", () => refreshSandboxes({ force: true }));
-  els.terminateAllSandboxesButton.addEventListener("click", terminateAllSandboxes);
   els.registrySearchInput.addEventListener("input", () => renderRegistryPage(state.lastSnapshot || {}));
-  els.registryFilterSelect.addEventListener("change", () => renderRegistryPage(state.lastSnapshot || {}));
+  els.registryFilterSelect.addEventListener("change", () => {
+    persistSelectPreference(els.registryFilterSelect, "ucloud.dashboard.registryFilter");
+    renderRegistryPage(state.lastSnapshot || {});
+  });
   els.programSearchInput.addEventListener("input", renderProgramQueue);
-  els.programResultFilter.addEventListener("change", renderProgramQueue);
+  els.programResultFilter.addEventListener("change", () => {
+    persistSelectPreference(els.programResultFilter, "ucloud.dashboard.programResult");
+    renderProgramQueue();
+  });
   els.nodeSearchInput.addEventListener("input", renderNodesPage);
-  els.nodeStateFilter.addEventListener("change", renderNodesPage);
+  els.nodeStateFilter.addEventListener("change", () => {
+    persistSelectPreference(els.nodeStateFilter, "ucloud.dashboard.nodeState");
+    renderNodesPage();
+  });
   document.querySelectorAll("[data-program-state]").forEach((button) => {
     button.addEventListener("click", () => {
       state.programStateFilter = button.dataset.programState || "all";
@@ -3670,6 +4702,18 @@ function saveToken() {
   clearToken();
 }
 
+function restoreSelectPreference(select, key) {
+  if (!select) return;
+  const saved = localStorage.getItem(key);
+  if (saved !== null && [...select.options].some((option) => option.value === saved)) {
+    select.value = saved;
+  }
+}
+
+function persistSelectPreference(select, key) {
+  if (select) localStorage.setItem(key, select.value);
+}
+
 function clearToken() {
   sessionStorage.removeItem("ucloud.dashboard.token");
   els.tokenInput.value = "";
@@ -3688,8 +4732,12 @@ function togglePause() {
   els.pauseButton.title = state.paused ? "Resume refresh" : "Pause refresh";
   els.pauseButton.setAttribute("aria-label", els.pauseButton.title);
   els.pauseButton.classList.toggle("is-paused", state.paused);
-  if (state.paused) clearRefreshTimer();
-  else refreshNow({ supersede: true });
+  if (state.paused) {
+    clearRefreshTimer();
+    setStatus("Paused", "warn");
+  } else {
+    refreshNow({ supersede: true });
+  }
 }
 
 function preferredTheme() {
@@ -3751,7 +4799,18 @@ function pageFromHash() {
 
 function setPage(page, options = {}) {
   const next = ["overview", "scheduler", "nodes", "sandboxes", "registry"].includes(page) ? page : "overview";
+  const pageCopy = {
+    overview: ["Live control plane", "Fleet overview", "Demand, placement headroom, and service health at a glance."],
+    scheduler: ["Demand and scaling", "Why capacity is changing", "Immediate demand, hard-fit placement, and the latest autoscaler decision."],
+    nodes: ["Fleet", "Placement supply", "Node health, dynamic pressure, and non-overcommittable disk headroom."],
+    sandboxes: ["Sandbox lifecycle", "Sessions and state", "Find stuck, parked, moving, or unhealthy sandboxes and inspect their placement."],
+    registry: ["Images", "Build and artifact supply", "Registry coverage, image availability, and build health."],
+  };
   state.currentPage = next;
+  const [kicker, heading, description] = pageCopy[next];
+  setText("pageKicker", kicker);
+  setText("pageHeading", heading);
+  setText("pageDescription", description);
   const overviewPage = document.getElementById("overviewPage");
   if (overviewPage) overviewPage.hidden = next !== "overview";
   if (els.schedulerPage) els.schedulerPage.hidden = next !== "scheduler";
@@ -3766,6 +4825,8 @@ function setPage(page, options = {}) {
     const active = button.dataset.pageTarget === next;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-selected", String(active));
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
     button.tabIndex = active ? 0 : -1;
   });
   if (options.updateHash !== false) {
@@ -3790,13 +4851,13 @@ function setPage(page, options = {}) {
 }
 
 function handleTabKeydown(event) {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
   const tabs = [...document.querySelectorAll("[data-page-target]")];
   const current = tabs.indexOf(event.currentTarget);
   let index = current;
   if (event.key === "Home") index = 0;
   else if (event.key === "End") index = tabs.length - 1;
-  else index = (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  else index = (current + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
   event.preventDefault();
   tabs[index].focus();
   setPage(tabs[index].dataset.pageTarget || "overview");
@@ -3827,6 +4888,7 @@ async function refreshNow(options = {}) {
   const sequence = ++state.requestSequence;
   state.metricsRequest = controller;
   els.refreshNowButton.disabled = true;
+  setStatus("Refreshing", "warn");
   const token = sessionStorage.getItem("ucloud.dashboard.token") || els.tokenInput.value.trim();
   const headers = token ? { "X-UCloud-Sandbox-Token": token } : {};
   try {
@@ -3845,7 +4907,9 @@ async function refreshNow(options = {}) {
     }
     if (!response.ok) {
       setStatus(`HTTP ${response.status}`, "bad");
-      els.lastUpdated.textContent = "Metrics request failed";
+      els.lastUpdated.textContent = state.lastSnapshot
+        ? `Last data ${formatTime(state.lastSnapshot.generated_at)} · refresh failed`
+        : "Metrics request failed";
       return;
     }
     const snapshot = await response.json();
@@ -3863,7 +4927,9 @@ async function refreshNow(options = {}) {
   } catch (error) {
     if (error && error.name === "AbortError") return;
     setStatus("Offline", "bad");
-    els.lastUpdated.textContent = String(error && error.message ? error.message : error);
+    els.lastUpdated.textContent = state.lastSnapshot
+      ? `Last data ${formatTime(state.lastSnapshot.generated_at)} · connection lost`
+      : String(error && error.message ? error.message : error);
     redrawCharts();
   } finally {
     if (state.metricsRequest === controller) {
@@ -3927,7 +4993,7 @@ function renderSnapshot(snapshot) {
   state.lastSnapshot = snapshot;
   state.history.push(pointFromSnapshot(snapshot));
   trimHistory();
-  els.lastUpdated.textContent = `Updated ${formatTime(snapshot.generated_at)}`;
+  els.lastUpdated.textContent = `Updated now · ${formatTime(snapshot.generated_at)}`;
   renderMetrics(snapshot);
   renderHealth(snapshot);
   if (state.currentPage === "overview") {
@@ -3945,7 +5011,6 @@ function renderSnapshot(snapshot) {
 
 function renderOverviewDetail(snapshot) {
   if (!snapshot || !snapshot.generated_at) return;
-  renderRegistry(snapshot.registry || {});
   renderBuilds(snapshot);
   renderTraces(snapshot);
   renderEvents(snapshot);
@@ -3975,9 +5040,6 @@ function pointFromSnapshot(snapshot) {
   const programStates = programs.states || {};
   const scale = snapshot.scale_up || {};
   const recentEvents = ((snapshot.events || {}).recent || []);
-  const queueDepth = asNumber(sandboxes.pending)
-    + asNumber(images.pending_builds)
-    + asNumber(programStates.ready_to_wake);
   const cpuActual = nullableNumber(actual.cpu_percent_avg);
   const memoryActual = nullableNumber(actual.memory_percent);
   const cpuReserved = ratioToPercent(load.vcpu);
@@ -3988,7 +5050,6 @@ function pointFromSnapshot(snapshot) {
     freshNodes: asNumber(nodes.fresh),
     activeSandboxes: asNumber(sandboxes.active_routes),
     builderNodes: asNumber(nodes.builder),
-    queueDepth,
     readyWake: asNumber(programStates.ready_to_wake),
     modelWait: asNumber(programStates.model_wait),
     wakeP95Seconds: msToSeconds(programs.response_to_wake_p95_ms),
@@ -4039,10 +5100,18 @@ function renderMetrics(snapshot) {
   const sandboxStates = sandboxes.states || {};
   const wakePlan = autoscaler.program_wake_plan || {};
 
-  setText("schedulerNavBadge", formatInteger(programStates.ready_to_wake));
-  setText("nodesNavBadge", formatInteger(nodes.sandbox_ready));
-  setText("sandboxesNavBadge", formatInteger(sandboxes.active_routes));
-  setText("registryNavBadge", formatInteger(registry.repository_count));
+  const blockedWakes = asNumber(wakePlan.unplaced_count);
+  const staleNodes = (Array.isArray(nodes.items) ? nodes.items : []).filter(
+    (node) => (node.capabilities || []).includes("sandbox") && (!node.fresh || !node.agent_version_compatible)
+  ).length;
+  const fleetAttention = staleNodes + asNumber(nodes.sandbox_draining) + asNumber(nodes.incompatible);
+  const sandboxAttention = asNumber(sandboxes.pending) + asNumber(sandboxes.stale_routes)
+    + asNumber(sandboxStates.failed) + asNumber(sandboxStates.error) + asNumber(sandboxStates.migrating);
+  const imageAttention = asNumber(images.failed_builds) + asNumber(images.active_builds);
+  setNavBadge("schedulerNavBadge", blockedWakes || asNumber(programStates.ready_to_wake), blockedWakes ? "bad" : "");
+  setNavBadge("nodesNavBadge", fleetAttention, fleetAttention ? "warn" : "");
+  setNavBadge("sandboxesNavBadge", sandboxAttention, sandboxAttention ? "warn" : "");
+  setNavBadge("registryNavBadge", registry.configured && !registry.ok ? "!" : imageAttention, registry.configured && !registry.ok || asNumber(images.failed_builds) ? "bad" : "");
 
   setText("activeNodesValue", formatInteger(latest.activeNodes));
   setText(
@@ -4059,42 +5128,40 @@ function renderMetrics(snapshot) {
     `${asNumber(sandboxStates.running)} running, ${asNumber(sandboxStates.parked)} parked, ${asNumber(sandboxStates.waking)} waking${staleRouteText}`
   );
 
-  setText("cpuUtilizationValue", formatInteger(programStates.ready_to_wake));
+  setText("readyWakeValue", formatInteger(programStates.ready_to_wake));
   setText(
-    "cpuUtilizationDetail",
+    "readyWakeDetail",
     asNumber(programStates.ready_to_wake) > 0
       ? `oldest ${formatAge(programs.oldest_ready_to_wake_seconds)}, ${asNumber(wakePlan.unplaced_count)} unplaced`
       : "no response-ready work"
   );
 
-  setText("memoryUtilizationValue", formatPercentPoint(latest.hardDiskUtilization));
+  setText("diskCommitValue", formatPercentPoint(latest.hardDiskUtilization));
   setText(
-    "memoryUtilizationDetail",
+    "diskCommitDetail",
     `${formatMemory((sandboxResources.free || {}).disk_mb)} free of ${formatMemory((sandboxResources.effective || {}).disk_mb)}`
   );
 
-  setText("queueDepthValue", formatInteger(programStates.model_wait));
+  setText("modelWaitValue", formatInteger(programStates.model_wait));
   setText(
-    "queueDepthDetail",
+    "modelWaitDetail",
     `${formatResources((programs.resources || {}).model_wait || {})}, oldest ${formatAge(programs.oldest_model_wait_seconds)}`
   );
 
   setText(
-    "errorRateValue",
+    "wakeLatencyValue",
     latest.wakeP95Seconds === null ? "-" : `${latest.wakeP95Seconds.toFixed(2)}s`
   );
   setText(
-    "errorRateDetail",
+    "wakeLatencyDetail",
     `p50 ${formatDurationMs(programs.response_to_wake_p50_ms)}, ${formatInteger(programs.requests)} requests`
   );
 
   const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
-  const actionSummary = actions.length
-    ? actions.map((action) => `${action.kind || "action"} ${asNumber(action.count)}`).join(", ")
-    : "hold";
+  const actionText = actionSummary(actions);
   setText(
     "autoscalerSummary",
-    autoscaler.timestamp ? `${actionSummary}, ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
+    autoscaler.timestamp ? `${actionText} · cycle ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
   );
   setText("autoscalerPressureValue", formatInteger(liveSignals.pressure_samples));
   setText(
@@ -4144,6 +5211,74 @@ function renderMetrics(snapshot) {
     "builderSummary",
     `${asNumber(images.pending_builds)} waiting, ${oldestBuildWait} oldest wait, ${asNumber(images.failed_builds)} failed`
   );
+  renderOverviewOperational(snapshot);
+}
+
+function renderOverviewOperational(snapshot) {
+  const nodes = snapshot.nodes || {};
+  const sandboxes = snapshot.sandboxes || {};
+  const resources = ((snapshot.resources || {}).sandbox || {});
+  const actual = resources.actual_usage || {};
+  const load = resources.load || {};
+  const free = resources.free || {};
+  const used = resources.used || {};
+  const effective = resources.effective || {};
+  const autoscaler = snapshot.autoscaler || {};
+  const policy = autoscaler.effective_policy || {};
+  const programs = snapshot.programs || {};
+  const states = programs.states || {};
+  const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
+  const reasons = Array.isArray(autoscaler.reasons) ? autoscaler.reasons : [];
+  const creates = actionCount(actions, "create");
+  const stops = actionCount(actions, "stop");
+  const decision = creates > 0 ? `Create ${formatInteger(creates)} node${creates === 1 ? "" : "s"}`
+    : stops > 0 ? `Stop ${formatInteger(stops)} node${stops === 1 ? "" : "s"}`
+      : "Hold current capacity";
+  const actionEnabled = Boolean((autoscaler.program_signals || {}).action_enabled || policy.program_aware_autoscaling_enabled);
+
+  setText("overviewDecisionTitle", decision);
+  els.overviewDecisionBadge.textContent = actionEnabled ? "Active policy" : "Shadow policy";
+  els.overviewDecisionBadge.className = `inline-badge ${actionEnabled ? "badge-ok" : "badge-muted"}`;
+  setText("overviewSupplyValue", `${formatInteger(autoscaler.ready_nodes)} / ${formatInteger(autoscaler.provisioning_nodes)}`);
+  setText("overviewProjectedValue", formatResources(autoscaler.projected_free_resources || {}));
+  setText("overviewDeficitValue", formatResources(autoscaler.resource_deficit || {}));
+  els.overviewDecisionReasons.replaceChildren(...(reasons.length ? reasons : ["No additional scale action is required."]).slice(0, 3).map((reason) => {
+    const item = document.createElement("span");
+    item.textContent = String(reason);
+    return item;
+  }));
+
+  const cpuActual = nullableNumber(actual.cpu_percent_avg);
+  const cpuReserved = ratioToPercent(load.vcpu);
+  const memoryActual = nullableNumber(actual.memory_percent);
+  const memoryReserved = ratioToPercent(load.memory);
+  const diskPercent = resourcePercent(used, effective, "disk_mb");
+  const hasReadySupply = asNumber(nodes.sandbox_ready) > 0;
+  const hasDeficit = resourceHasPositiveValue(autoscaler.resource_deficit);
+  els.capacityFitBadge.textContent = hasDeficit ? "Does not fit" : hasReadySupply ? "Fits current supply" : "No ready nodes";
+  els.capacityFitBadge.className = `inline-badge ${hasDeficit ? "badge-bad" : hasReadySupply ? "badge-ok" : "badge-muted"}`;
+  setText(
+    "capacitySummary",
+    hasDeficit
+      ? `Uncovered immediate demand: ${formatResources(autoscaler.resource_deficit || {})}.`
+      : `${formatResources(free)} remains across ${formatInteger(nodes.sandbox_ready)} schedulable node(s).`
+  );
+  setText("capacityCpuValue", `${formatNumber(free.vcpu)} vCPU free`);
+  setText("capacityCpuDetail", `${formatPercentPoint(cpuActual)} actual · ${formatPercentPoint(cpuReserved)} reserved · ${formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))} target`);
+  setMeterWidth("capacityCpuActualMeter", cpuActual);
+  setMeterWidth("capacityCpuReservedMeter", cpuReserved);
+  setText("capacityMemoryValue", `${formatMemory(free.memory_mb)} free`);
+  setText("capacityMemoryDetail", `${formatPercentPoint(memoryActual)} actual · ${formatPercentPoint(memoryReserved)} reserved · ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))} target`);
+  setMeterWidth("capacityMemoryActualMeter", memoryActual);
+  setMeterWidth("capacityMemoryReservedMeter", memoryReserved);
+  setText("capacityDiskValue", `${formatMemory(free.disk_mb)} free`);
+  setText("capacityDiskDetail", `${formatMemory(used.disk_mb)} committed of ${formatMemory(effective.disk_mb)} hard capacity`);
+  setMeterWidth("capacityDiskMeter", diskPercent);
+
+  setText("overviewModelWaitAge", asNumber(states.model_wait) ? `oldest ${formatAge(programs.oldest_model_wait_seconds)}` : "No active wait");
+  setText("overviewWakingValue", formatInteger(states.waking));
+  setText("overviewActingValue", formatInteger(states.acting));
+  setText("overviewModelLatency", formatDurationMs(programs.model_wait_p95_ms));
 }
 
 function renderHealth(snapshot) {
@@ -4153,8 +5288,13 @@ function renderHealth(snapshot) {
   const programs = snapshot.programs || {};
   const states = programs.states || {};
   const autoscaler = snapshot.autoscaler || {};
+  const registry = snapshot.registry || {};
   const wakePlan = autoscaler.program_wake_plan || {};
   const recent = ((snapshot.events || {}).recent || []);
+  const volumeErrors = (Array.isArray(nodes.items) ? nodes.items : []).reduce(
+    (total, node) => total + asNumber((node.actual_usage || {}).storage_error_volumes),
+    0
+  );
   const signals = [];
   let severity = "ok";
   let title = "Service is healthy";
@@ -4179,26 +5319,33 @@ function renderHealth(snapshot) {
     severity = "warn";
     title = "Some supply is unavailable";
     detail = `${formatInteger(sandboxes.stale_routes)} stale route(s), ${formatInteger(nodes.incompatible)} incompatible node(s).`;
-  } else if (asNumber(states.ready_to_wake) > 0 || asNumber(sandboxes.pending) > 0 || asNumber(images.pending_builds) > 0) {
+  } else if (volumeErrors > 0 || asNumber(images.failed_builds) > 0 || (registry.configured && !registry.ok)) {
     severity = "warn";
-    title = "Demand is waiting";
-    detail = `${formatInteger(states.ready_to_wake)} ready wake(s), ${formatInteger(sandboxes.pending)} sandbox create(s), ${formatInteger(images.pending_builds)} build(s).`;
+    title = "A supporting subsystem needs attention";
+    detail = `${formatInteger(volumeErrors)} volume error(s), ${formatInteger(images.failed_builds)} failed build(s)${registry.configured && !registry.ok ? ", registry unavailable" : ""}.`;
+  } else if (Boolean(autoscaler.pressure_scale_up)) {
+    severity = "warn";
+    title = "Live pressure is above policy";
+    detail = "The autoscaler is adding or evaluating capacity from live node pressure.";
   } else if (actionCount(autoscaler.actions, "create") > 0 || actionCount(autoscaler.actions, "stop") > 0) {
     title = "Capacity is changing";
     detail = actionSummary(autoscaler.actions);
   }
 
   if (asNumber(states.ready_to_wake) > 0) {
-    signals.push({ text: `${formatInteger(states.ready_to_wake)} ready`, mode: asNumber(wakePlan.unplaced_count) ? "bad" : "warn" });
+    signals.push({ text: `${formatInteger(states.ready_to_wake)} ready`, mode: asNumber(wakePlan.unplaced_count) ? "bad" : "", page: "scheduler" });
   }
   if (asNumber(states.model_wait) > 0) {
-    signals.push({ text: `${formatInteger(states.model_wait)} model wait`, mode: "" });
+    signals.push({ text: `${formatInteger(states.model_wait)} model wait`, mode: "", page: "scheduler" });
   }
   if (asNumber(nodes.sandbox_draining) > 0) {
-    signals.push({ text: `${formatInteger(nodes.sandbox_draining)} draining`, mode: "warn" });
+    signals.push({ text: `${formatInteger(nodes.sandbox_draining)} draining`, mode: "warn", page: "nodes" });
   }
-  if (asNumber((autoscaler.live_signals || {}).pressure_samples) > 0) {
-    signals.push({ text: `${formatInteger((autoscaler.live_signals || {}).pressure_samples)} pressure samples`, mode: "warn" });
+  if (asNumber(images.failed_builds) > 0) {
+    signals.push({ text: `${formatInteger(images.failed_builds)} failed builds`, mode: "warn", page: "registry" });
+  }
+  if (volumeErrors > 0) {
+    signals.push({ text: `${formatInteger(volumeErrors)} volume errors`, mode: "bad", page: "nodes" });
   }
   if (signals.length === 0) signals.push({ text: "No active warnings", mode: "" });
 
@@ -4208,12 +5355,16 @@ function renderHealth(snapshot) {
   setText("healthTitle", title);
   setText("healthDetail", detail);
   els.healthSignals.replaceChildren(...signals.map((signal) => {
-    const span = document.createElement("span");
-    span.className = `signal-chip ${signal.mode}`.trim();
-    span.textContent = signal.text;
-    return span;
+    const element = document.createElement(signal.page ? "button" : "span");
+    element.className = `signal-chip ${signal.mode}`.trim();
+    element.textContent = signal.text;
+    if (signal.page) {
+      element.type = "button";
+      element.title = `Open ${signal.page}`;
+      element.addEventListener("click", () => setPage(signal.page));
+    }
+    return element;
   }));
-  setStatus(severity === "bad" ? "Action needed" : severity === "warn" ? "Watching" : "Live", severity);
 }
 
 function renderSchedulerPage(snapshot) {
@@ -4267,18 +5418,35 @@ function renderSchedulerPage(snapshot) {
     `${formatInteger(programs.rollouts)} rollouts · ${formatInteger(programs.sandboxes)} sandboxes`
   );
 
-  setText("demandPendingValue", formatResources(autoscaler.pending_resources || {}));
-  setText("demandPreparedValue", formatResources(autoscaler.prepared_resources || {}));
-  setText("demandReadyWakeValue", formatResources(programSignals.ready_to_wake_resources || {}));
-  setText("demandModelWaitValue", formatResources(programSignals.weighted_model_wait_resources || {}));
-  setText("demandEffectiveValue", formatResources(programSignals.effective_resources || {}));
-  setText("decisionDesiredValue", formatResources(autoscaler.desired_resources || {}));
-  setText("decisionProjectedValue", formatResources(autoscaler.projected_free_resources || {}));
-  setText("decisionDeficitValue", formatResources(autoscaler.resource_deficit || {}));
-  setText("decisionPressureValue", formatInteger((autoscaler.live_signals || {}).pressure_samples));
-  setText("decisionIdleGraceValue", formatAge(autoscaler.effective_scale_down_idle_seconds));
+  renderCapacityEquation({
+    immediate: autoscaler.pending_resources || {},
+    ready: programSignals.ready_to_wake_resources || {},
+    predictive: programSignals.weighted_model_wait_resources || {},
+    prepared: autoscaler.prepared_resources || {},
+    free: autoscaler.projected_free_resources || {},
+    deficit: autoscaler.resource_deficit || {},
+  });
+  setText("decisionPressureValue", `${formatInteger((autoscaler.live_signals || {}).pressure_samples)} pressure samples`);
+  setText("decisionIdleGraceValue", `Idle grace ${formatAge(autoscaler.effective_scale_down_idle_seconds)}`);
   renderPolicy(policy);
   renderProgramQueue();
+}
+
+function renderCapacityEquation(rows) {
+  const mapping = [
+    ["Immediate", rows.immediate],
+    ["Ready", rows.ready],
+    ["Predictive", rows.predictive],
+    ["Prepared", rows.prepared],
+    ["Free", rows.free],
+    ["Deficit", rows.deficit],
+  ];
+  for (const [prefix, resources] of mapping) {
+    const values = resources || {};
+    setText(`equation${prefix}Cpu`, `${formatNumber(values.vcpu)} vCPU`);
+    setText(`equation${prefix}Memory`, formatMemory(values.memory_mb));
+    setText(`equation${prefix}Disk`, formatMemory(values.disk_mb));
+  }
 }
 
 function renderPolicy(policy) {
@@ -4388,6 +5556,7 @@ function renderNodesPage() {
   const nodes = snapshot.nodes || {};
   const resources = (snapshot.resources || {}).sandbox || {};
   const autoscaler = snapshot.autoscaler || {};
+  const policy = autoscaler.effective_policy || {};
   const plan = autoscaler.program_wake_plan || {};
   const placements = Array.isArray(plan.placements) ? plan.placements : [];
   const plannedByNode = placements.reduce((counts, item) => {
@@ -4410,10 +5579,33 @@ function renderNodesPage() {
   });
   items.sort((a, b) => nodeStateRank(a) - nodeStateRank(b) || asNumber(b.active_workloads) - asNumber(a.active_workloads) || String(a.node_id).localeCompare(String(b.node_id)));
   const shown = items.slice(0, MAX_NODE_ROWS);
+  const allSandboxNodes = Array.isArray(nodes.items) ? nodes.items.filter((item) => (item.capabilities || []).includes("sandbox")) : [];
+  const freshSandboxNodes = allSandboxNodes.filter((item) => item.fresh && item.agent_version_compatible);
+  const aggregateActual = resources.actual_usage || {};
+  const aggregateLoad = resources.load || {};
+  const storage = freshSandboxNodes.reduce((summary, item) => {
+    const actual = item.actual_usage || {};
+    summary.active += asNumber(actual.storage_active_operations);
+    summary.waiting += asNumber(actual.storage_waiting_operations);
+    summary.limit += asNumber(actual.storage_max_concurrent_operations);
+    summary.errors += asNumber(actual.storage_error_volumes);
+    summary.psi = Math.max(summary.psi, asNumber(actual.memory_psi_full_avg10));
+    return summary;
+  }, { active: 0, waiting: 0, limit: 0, errors: 0, psi: 0 });
+  const staleOrIncompatible = allSandboxNodes.filter((item) => !item.fresh || !item.agent_version_compatible).length;
   setText("nodesReadyValue", formatInteger(nodes.sandbox_ready));
+  setText("nodesProvisioningValue", formatInteger(autoscaler.provisioning_nodes));
   setText("nodesDrainingValue", formatInteger(nodes.sandbox_draining));
-  setText("nodesIncompatibleValue", formatInteger(nodes.incompatible));
+  setText("nodesIncompatibleValue", formatInteger(staleOrIncompatible));
   setText("nodesDiskFreeValue", formatMemory((resources.free || {}).disk_mb));
+  setText("nodesCpuPressureValue", `${formatPercentPoint(aggregateActual.cpu_percent_avg)} / ${formatPercentPoint(ratioToPercent(aggregateLoad.vcpu))}`);
+  setText("nodesCpuPressureDetail", `target ${formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))}`);
+  setText("nodesMemoryPressureValue", `${formatPercentPoint(aggregateActual.memory_percent)} / ${formatPercentPoint(ratioToPercent(aggregateLoad.memory))}`);
+  setText("nodesMemoryPressureDetail", `target ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))}`);
+  setText("nodesPsiValue", `${formatNumber(storage.psi)}%`);
+  setText("nodesStorageQueueValue", `${formatInteger(storage.active)} / ${formatInteger(storage.waiting)} / ${formatInteger(storage.limit)}`);
+  setText("nodesStorageQueueDetail", "active / waiting / concurrency limit");
+  setText("nodesVolumeErrorsValue", formatInteger(storage.errors));
   setText(
     "nodesPageDetail",
     `${formatInteger(nodes.sandbox_ready)} ready of ${formatInteger(nodes.sandbox)} fresh sandbox nodes; ${formatInteger(plan.placed)} shadow wake placement(s).`
@@ -4513,7 +5705,7 @@ function nodePressureText(item) {
 
 function actionCount(actions, kind) {
   return (Array.isArray(actions) ? actions : []).reduce(
-    (total, action) => total + (action && action.kind === kind ? Math.max(0, asNumber(action.count || (action.job_ids || []).length)) : 0),
+    (total, action) => total + (actionKind(action) === kind ? Math.max(0, asNumber((action || {}).count || ((action || {}).job_ids || []).length || 1)) : 0),
     0
   );
 }
@@ -4521,9 +5713,19 @@ function actionCount(actions, kind) {
 function actionSummary(actions) {
   if (!Array.isArray(actions) || actions.length === 0) return "Hold";
   return actions.map((action) => {
-    const count = Math.max(0, asNumber(action.count || (action.job_ids || []).length));
-    return `${action.kind || "action"}${count ? ` ${formatInteger(count)}` : ""}`;
+    const kind = actionKind(action);
+    const count = Math.max(0, asNumber((action || {}).count || ((action || {}).job_ids || []).length));
+    const label = kind === "create" || kind === "scale_up" ? "Create"
+      : kind === "stop" || kind === "scale_down" ? "Stop"
+        : kind === "scale_up_builder" ? "Create builder"
+          : String(kind || "Action").replaceAll("_", " ");
+    return `${label}${count ? ` ${formatInteger(count)}` : ""}`;
   }).join(", ");
+}
+
+function actionKind(action) {
+  if (typeof action === "string") return action;
+  return action && typeof action === "object" ? String(action.kind || "") : "";
 }
 
 async function copyDiagnostics() {
@@ -4542,10 +5744,9 @@ async function copyDiagnostics() {
   ].join("\\n");
   try {
     await navigator.clipboard.writeText(text);
-    els.copyDiagnosticsButton.textContent = "Copied";
-    window.setTimeout(() => { els.copyDiagnosticsButton.textContent = "Copy summary"; }, 1500);
+    showToast("Operational summary copied");
   } catch (_error) {
-    els.copyDiagnosticsButton.textContent = "Copy failed";
+    showToast("Could not copy the operational summary", "bad");
   }
 }
 
@@ -4558,11 +5759,22 @@ function downloadSnapshot() {
   link.download = `ucloud-sandbox-metrics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   link.click();
   URL.revokeObjectURL(url);
+  showToast("Metrics snapshot downloaded");
+}
+
+function showToast(message, mode = "ok") {
+  if (!els.toastRegion) return;
+  els.toastRegion.textContent = message;
+  els.toastRegion.className = `toast-region is-visible ${mode === "bad" ? "bad" : ""}`.trim();
+  window.setTimeout(() => {
+    els.toastRegion.className = "toast-region";
+  }, 2400);
 }
 
 function renderEvents(snapshot) {
-  const events = ((snapshot.events || {}).recent || []).slice(-12).reverse();
-  els.eventSummary.textContent = events.length ? `${events.length} recent events` : "No recent events";
+  const allEvents = ((snapshot.events || {}).recent || []).slice().reverse();
+  const events = allEvents.filter(isMeaningfulEvent).slice(0, 12);
+  els.eventSummary.textContent = events.length ? `${events.length} decisions or exceptions` : "No decisions or exceptions";
   if (events.length === 0) {
     els.eventRows.innerHTML = '<tr><td colspan="4" class="empty-cell">No recent events</td></tr>';
     return;
@@ -4570,34 +5782,13 @@ function renderEvents(snapshot) {
   els.eventRows.replaceChildren(...events.map(eventRow));
 }
 
-function renderRegistry(registry) {
-  const configured = Boolean(registry.configured);
-  const ok = Boolean(registry.ok);
-  els.registryStatusBadge.textContent = configured ? (ok ? "Online" : "Offline") : "Not set";
-  els.registryStatusBadge.className = `inline-badge ${configured ? (ok ? "badge-ok" : "badge-bad") : "badge-muted"}`;
-  setText("registryUrl", registry.url || "No registry configured");
-  setText("registryReposValue", configured ? formatInteger(registry.repository_count) : "-");
-  setText("registryTagsValue", configured ? formatInteger(registry.scanned_tag_count) : "-");
-  if (!configured) {
-    setText("registryDetail", "Set --registry-url or UCLOUD_SANDBOX_REGISTRY_URL to show registry health.");
-    els.registryRepos.innerHTML = '<span class="empty-inline">No registry configured</span>';
-    return;
-  }
-  if (!ok) {
-    setText("registryDetail", registry.error ? `Registry check failed: ${registry.error}` : "Registry check failed");
-    els.registryRepos.innerHTML = '<span class="empty-inline">Registry unavailable</span>';
-    return;
-  }
-  const repos = Array.isArray(registry.repositories) ? registry.repositories : [];
-  const truncated = registry.catalog_truncated ? ", catalog truncated" : "";
-  const unavailable = asNumber(registry.unavailable_repository_count);
-  const partial = unavailable > 0 ? `, ${formatInteger(unavailable)} missing tag lists` : "";
-  setText("registryDetail", `${formatInteger(registry.scanned_repository_count)} repositories scanned${truncated}${partial}`);
-  if (repos.length === 0) {
-    els.registryRepos.innerHTML = '<span class="empty-inline">Registry is empty</span>';
-    return;
-  }
-  els.registryRepos.replaceChildren(...repos.slice(0, 12).map(repoPill));
+function isMeaningfulEvent(event) {
+  if (!event || event.kind === "node_heartbeat") return false;
+  if (severityForEvent(event) !== "INFO") return true;
+  if (event.kind !== "autoscaler_cycle") return true;
+  const data = event.data || {};
+  return actionSummary([...(data.actions || []), ...(data.builder_actions || [])]) !== "Hold"
+    || resourceHasPositiveValue(data.resource_deficit);
 }
 
 async function refreshSandboxes(options = {}) {
@@ -4642,21 +5833,24 @@ function renderSandboxesPage() {
   const snapshot = state.lastSnapshot || {};
   const metrics = snapshot.sandboxes || {};
   const query = String(els.sandboxSearchInput.value || "").trim().toLowerCase();
+  const stateFilter = String(els.sandboxStateFilter.value || "all");
   const sandboxes = state.lastSandboxes || [];
-  const filtered = sandboxes.filter((sandbox) => sandboxMatchesSearch(sandbox, query));
-  const terminable = sandboxes.filter(canTerminateSandbox);
+  const filtered = sandboxes.filter((sandbox) => sandboxMatchesSearch(sandbox, query) && sandboxMatchesState(sandbox, stateFilter));
   const activeRoutes = asNumber(metrics.active_routes);
   const staleRoutes = asNumber(metrics.stale_routes);
+  const stateCounts = sandboxes.reduce((counts, sandbox) => {
+    const group = sandboxStateGroup(sandbox.state);
+    counts[group] = (counts[group] || 0) + 1;
+    return counts;
+  }, {});
 
   setText("sandboxesPageRowsValue", formatInteger(sandboxes.length));
-  setText("sandboxesPageTerminableValue", formatInteger(terminable.length));
-  setText("sandboxesPagePendingValue", formatInteger(metrics.pending));
-  setText("sandboxesPageRoutesValue", staleRoutes > 0 ? `${formatInteger(activeRoutes)}/${formatInteger(staleRoutes)}` : formatInteger(activeRoutes));
+  setText("sandboxesPageTerminableValue", formatInteger(stateCounts.running));
+  setText("sandboxesPagePendingValue", formatInteger(stateCounts.parked));
+  setText("sandboxesPageRoutesValue", formatInteger((stateCounts.transitioning || 0) + (stateCounts.migrating || 0)));
   setText(
     "sandboxesPageSummary",
-    query
-      ? `${formatInteger(filtered.length)} shown from ${formatInteger(sandboxes.length)} loaded`
-      : `${formatInteger(sandboxes.length)} loaded, ${formatInteger(terminable.length)} terminable`
+    `${formatInteger(filtered.length)} shown of ${formatInteger(sandboxes.length)} loaded · ${formatInteger(activeRoutes)} active routes${staleRoutes ? ` · ${formatInteger(staleRoutes)} stale` : ""}`
   );
   setText(
     "sandboxListSummary",
@@ -4667,8 +5861,6 @@ function renderSandboxesPage() {
 
   els.refreshSandboxesButton.disabled = state.sandboxFetchInFlight;
   els.refreshSandboxesButton.textContent = state.sandboxFetchInFlight ? "Refreshing" : "Refresh";
-  els.terminateAllSandboxesButton.disabled =
-    state.sandboxFetchInFlight || state.sandboxActionInFlight || terminable.length === 0;
 
   if (filtered.length === 0) {
     renderEmptyRow(
@@ -4690,6 +5882,7 @@ function normalizeSandboxRecord(record) {
   const resources = plainObject(raw.resources);
   return {
     id: firstText(raw.id, raw.sandbox_id, spec.id),
+    generation: firstNumber(raw.generation, raw.sandbox_generation, spec.generation),
     state: firstText(raw.state, raw.status, raw.cached_state, "unknown"),
     image: firstText(raw.image, spec.image, "-"),
     profile: firstText(raw.profile, spec.profile, "-"),
@@ -4700,6 +5893,9 @@ function normalizeSandboxRecord(record) {
     labels: Object.keys(labels).length ? labels : specLabels,
     createdAt: firstText(raw.created_at, raw.createdAt),
     updatedAt: firstText(raw.updated_at, raw.updatedAt),
+    operationId: firstText(raw.operation_id, raw.operationId),
+    checkpointId: firstText(raw.checkpoint_id, raw.checkpointId),
+    creationKind: firstText(raw.creation_kind, raw.creationKind),
     routeOnly: Boolean(raw.route_only),
     cached: Boolean(raw.cached),
   };
@@ -4724,6 +5920,25 @@ function sandboxMatchesSearch(sandbox, query) {
   ].join(" ").toLowerCase().includes(query);
 }
 
+function sandboxMatchesState(sandbox, filter) {
+  if (!filter || filter === "all") return true;
+  const group = sandboxStateGroup(sandbox.state);
+  if (filter === "attention") return ["failed", "stale", "migrating", "transitioning", "pending"].includes(group) || sandbox.nodeFresh === false;
+  return group === filter;
+}
+
+function sandboxStateGroup(state) {
+  const status = String(state || "unknown").toLowerCase();
+  if (["running", "acting", "ready"].includes(status)) return "running";
+  if (["parked", "paused"].includes(status)) return "parked";
+  if (["parking", "waking", "restoring", "moving"].includes(status)) return "transitioning";
+  if (["migrating", "migration_pending"].includes(status)) return "migrating";
+  if (["creating", "pending", "queued"].includes(status)) return "pending";
+  if (["failed", "error", "terminated", "terminating"].includes(status)) return "failed";
+  if (["stale", "orphaned"].includes(status)) return "stale";
+  return "unknown";
+}
+
 function canTerminateSandbox(sandbox) {
   return Boolean(sandbox && sandbox.id);
 }
@@ -4738,7 +5953,12 @@ function sandboxRow(sandbox) {
   statusCell.append(badge);
   tr.append(statusCell);
 
-  appendClassCell(tr, sandbox.id || "-", "sandbox-id", sandbox.id || "");
+  appendClassCell(
+    tr,
+    sandbox.generation === null ? (sandbox.id || "-") : `${sandbox.id || "-"} · g${formatInteger(sandbox.generation)}`,
+    "sandbox-id",
+    [sandbox.id, sandbox.operationId, sandbox.checkpointId, sandbox.creationKind].filter(Boolean).join("\\n")
+  );
   appendClassCell(tr, sandbox.image || "-", "sandbox-image", sandbox.image || "");
   appendClassCell(tr, sandboxNodeText(sandbox), "sandbox-node", sandboxNodeTitle(sandbox));
   appendClassCell(tr, sandboxResourcesText(sandbox), "sandbox-resources", sandboxResourcesText(sandbox));
@@ -4760,9 +5980,8 @@ function sandboxRow(sandbox) {
 }
 
 function sandboxStatusClass(status) {
-  if (status === "running") return "running";
-  if (status === "creating" || status === "pending") return status;
-  if (status === "failed" || status === "error") return "failed";
+  const group = sandboxStateGroup(status);
+  if (["running", "parked", "transitioning", "migrating", "pending", "failed", "stale"].includes(group)) return group;
   return "unknown";
 }
 
@@ -4879,6 +6098,14 @@ function renderRegistryPage(snapshot) {
   const repos = Array.isArray(registry.repositories) ? registry.repositories : [];
   const query = String(els.registrySearchInput.value || "").trim().toLowerCase();
   const filter = String(els.registryFilterSelect.value || "all");
+
+  setText("registryActiveBuildsValue", formatInteger(images.active_builds));
+  setText("registryFailedBuildsValue", formatInteger(images.failed_builds));
+  setText("registryPendingBuildsValue", formatInteger(images.pending_builds));
+  setText("registryOldestBuildValue", asNumber(images.pending_builds) ? formatAge(images.oldest_pending_build_seconds) : "-");
+  setText("registryActiveBuildsSummaryValue", formatInteger(images.active_builds));
+  setText("registryFailedBuildsSummaryValue", formatInteger(images.failed_builds));
+  drawBuilderChart();
 
   els.registryPageStatusBadge.textContent = configured ? (ok ? "Online" : "Offline") : "Not set";
   els.registryPageStatusBadge.className = `inline-badge ${configured ? (ok ? "badge-ok" : "badge-bad") : "badge-muted"}`;
@@ -5308,7 +6535,8 @@ function severityForEvent(event) {
     const builderActions = Array.isArray(data.builder_actions) ? data.builder_actions : [];
     const hasDeficit = resourceHasPositiveValue(data.resource_deficit);
     if (hasDeficit) return "WARN";
-    if (actions.includes("scale_up") || builderActions.includes("scale_up_builder")) return "INFO";
+    if (actions.some((action) => ["create", "scale_up"].includes(actionKind(action)))
+      || builderActions.some((action) => actionKind(action) === "scale_up_builder")) return "INFO";
     return "INFO";
   }
   if (event.kind === "node_heartbeat") {
@@ -5337,8 +6565,9 @@ function summarizeEvent(event) {
     const stopped = Array.isArray(data.stop_job_ids) ? data.stop_job_ids.length : 0;
     const pending = data.pending_resources || {};
     const prepared = data.prepared_resources || {};
-    const actionText = actions.concat(builderActions).join(", ") || "none";
-    return `ready ${asNumber(data.ready_nodes)}, provisioning ${asNumber(data.provisioning_nodes)}, created ${created}, stopped ${stopped}, pending ${formatResources(pending)}, prepared ${formatResources(prepared)}, actions ${actionText}`;
+    const actionText = actionSummary(actions.concat(builderActions));
+    const reasons = Array.isArray(data.reasons) && data.reasons.length ? `, because ${data.reasons.slice(0, 2).join("; ")}` : "";
+    return `ready ${asNumber(data.ready_nodes)}, provisioning ${asNumber(data.provisioning_nodes)}, created ${created}, stopped ${stopped}, pending ${formatResources(pending)}, prepared ${formatResources(prepared)}, decision ${actionText}${reasons}`;
   }
   if (event.kind === "sandbox_scheduled") {
     return `${data.sandbox_id || "sandbox"} on ${data.node_id || data.job_id || "node"}, wait ${formatDurationMs(data.scale_up_wait_ms)}`;
@@ -5355,7 +6584,12 @@ function summarizeEvent(event) {
 }
 
 function redrawCharts() {
-  if (state.currentPage !== "overview" || document.hidden) return;
+  if (document.hidden) return;
+  if (state.currentPage === "registry") {
+    drawBuilderChart();
+    return;
+  }
+  if (state.currentPage !== "overview") return;
   if (state.history.length === 0) {
     for (const id of [
       "activeNodesChart",
@@ -5378,21 +6612,14 @@ function redrawCharts() {
     return;
   }
 
-  drawSpark("nodesSpark", state.history.map((p) => p.activeNodes), palette.blue, palette.blueSoft);
-  drawSpark("sandboxesSpark", state.history.map((p) => p.activeSandboxes), palette.blue, palette.blueSoft);
-  drawSpark("cpuSpark", state.history.map((p) => p.readyWake), palette.purple, palette.purpleSoft, { min: 0 });
-  drawSpark("memorySpark", state.history.map((p) => p.hardDiskUtilization), palette.orange, palette.orangeSoft, { min: 0, max: 100 });
-  drawSpark("queueSpark", state.history.map((p) => p.modelWait), palette.purple, palette.purpleSoft, { min: 0 });
-  drawSpark("errorSpark", state.history.map((p) => p.wakeP95Seconds), palette.red, palette.redSoft, { min: 0 });
-
   drawLineChart("activeNodesChart", [
-    { label: "Active Nodes", color: palette.blue, fill: palette.blueSoft, values: state.history.map((p) => p.activeNodes) },
+    { label: "Ready nodes", color: palette.blue, values: state.history.map((p) => p.activeNodes) },
+    { label: "Sandbox routes", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.activeSandboxes) },
   ], { min: 0, ticks: 4 });
-  drawLineChart("activeSandboxesChart", [
-    { label: "Sandbox Routes", color: palette.blue, fill: palette.blueSoft, values: state.history.map((p) => p.activeSandboxes) },
-  ], { min: 0, ticks: 4, integerAxis: true });
   drawLineChart("queueDepthChart", [
-    { label: "Hard Demand", color: palette.purple, fill: palette.purpleSoft, values: state.history.map((p) => p.queueDepth) },
+    { label: "Ready to wake", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.readyWake) },
+    { label: "Sandbox creates", color: palette.purple, values: state.history.map((p) => p.pendingSandboxes) },
+    { label: "Image builds", color: palette.orange, dashed: true, values: state.history.map((p) => p.pendingBuilds) },
   ], { min: 0, ticks: 4, integerAxis: true });
   drawLineChart("cpuPressureChart", [
     { label: "Actual", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.cpuUtilization) },
@@ -5402,17 +6629,20 @@ function redrawCharts() {
     { label: "Actual", color: palette.orange, fill: palette.orangeSoft, values: state.history.map((p) => p.memoryUtilization) },
     { label: "Reserved", color: palette.blue, dashed: true, values: state.history.map((p) => p.memoryReserved) },
   ], { min: 0, max: 100, ticks: 4, suffix: "%" });
-  drawLineChart("scaleLatencyChart", [
-    { label: "p50", color: palette.blue, values: state.history.map((p) => p.scaleP50Seconds) },
-    { label: "p95", color: palette.blue, dashed: true, values: state.history.map((p) => p.scaleP95Seconds) },
-  ], { min: 0, ticks: 4 });
   drawLineChart("sandboxStartChart", [
     { label: "Model wait p95", color: palette.purple, values: state.history.map((p) => p.modelWaitP95Seconds) },
     { label: "Wake p95", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.wakeP95Seconds) },
   ], { min: 0, ticks: 4 });
+}
+
+function drawBuilderChart() {
+  if (state.history.length === 0) {
+    clearPlot("builderBuildsChart", "Waiting for metrics");
+    return;
+  }
   drawLineChart("builderBuildsChart", [
-    { label: "Active Builds", color: palette.orange, fill: palette.orangeSoft, values: state.history.map((p) => p.activeBuilds) },
-    { label: "Ready Builders", color: palette.blue, dashed: true, values: state.history.map((p) => p.builderNodes) },
+    { label: "Active builds", color: palette.orange, fill: palette.orangeSoft, values: state.history.map((p) => p.activeBuilds) },
+    { label: "Ready builders", color: palette.blue, dashed: true, values: state.history.map((p) => p.builderNodes) },
   ], { min: 0, ticks: 4, integerAxis: true });
 }
 
@@ -5425,7 +6655,9 @@ function scheduleChartRedraw() {
 }
 
 function clearPlot(id, label) {
-  const prepared = prepareCanvas(document.getElementById(id));
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const prepared = prepareCanvas(canvas);
   const ctx = prepared.ctx;
   ctx.fillStyle = palette.plotBg;
   ctx.fillRect(0, 0, prepared.width, prepared.height);
@@ -5437,7 +6669,9 @@ function clearPlot(id, label) {
 }
 
 function drawSpark(id, values, color, fill, options = {}) {
-  const prepared = prepareCanvas(document.getElementById(id));
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const prepared = prepareCanvas(canvas);
   const ctx = prepared.ctx;
   const width = prepared.width;
   const height = prepared.height;
@@ -5453,7 +6687,9 @@ function drawSpark(id, values, color, fill, options = {}) {
 }
 
 function drawLineChart(id, series, options = {}) {
-  const prepared = prepareCanvas(document.getElementById(id));
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const prepared = prepareCanvas(canvas);
   const ctx = prepared.ctx;
   const width = prepared.width;
   const height = prepared.height;
@@ -5480,6 +6716,13 @@ function drawLineChart(id, series, options = {}) {
     }
     strokeLine(ctx, points, line.color, Boolean(line.dashed), 2);
   }
+  const summaries = series.map((line) => {
+    const numeric = line.values.filter((value) => value !== null && Number.isFinite(value));
+    const latest = [...line.values].reverse().find((value) => value !== null && Number.isFinite(value));
+    if (!numeric.length) return `${line.label}: unavailable`;
+    return `${line.label}: latest ${formatAxisValue(latest, options)}, range ${formatAxisValue(Math.min(...numeric), options)} to ${formatAxisValue(Math.max(...numeric), options)}`;
+  });
+  canvas.setAttribute("aria-label", `${summaries.join(". ")}. ${state.history.length} session sample${state.history.length === 1 ? "" : "s"}.`);
 }
 
 function valuesToPoints(values, width, height, pad, min, max) {
@@ -5612,6 +6855,20 @@ function setText(id, value) {
   if (!element) return;
   els[id] = element;
   element.textContent = value;
+}
+
+function setNavBadge(id, value, mode = "") {
+  const element = els[id] || document.getElementById(id);
+  if (!element) return;
+  element.textContent = typeof value === "number" ? formatInteger(value) : String(value);
+  element.className = `nav-badge ${mode ? `nav-badge-${mode}` : ""}`.trim();
+}
+
+function setMeterWidth(id, value) {
+  const element = els[id] || document.getElementById(id);
+  if (!element) return;
+  const percent = nullableNumber(value);
+  element.style.width = `${Math.max(0, Math.min(100, percent === null ? 0 : percent))}%`;
 }
 
 function plainObject(value) {

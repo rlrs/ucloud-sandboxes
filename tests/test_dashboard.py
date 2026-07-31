@@ -98,12 +98,36 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("canvas.setAttribute(\"aria-label\"", DASHBOARD_JS)
         self.assertIn(".dark", DASHBOARD_CSS)
 
-    def test_dashboard_uses_information_dense_operations_layout(self) -> None:
+    def test_dashboard_uses_operator_decision_information_architecture(self) -> None:
         self.assertIn('class="brand-mark"', DASHBOARD_HTML)
         self.assertIn('class="nav-label"', DASHBOARD_HTML)
         self.assertIn('id="overviewNavBadge"', DASHBOARD_HTML)
+        self.assertIn('aria-orientation="vertical"', DASHBOARD_HTML)
+        self.assertIn('class="command-grid overview-section"', DASHBOARD_HTML)
+        self.assertIn('id="capacityFitBadge"', DASHBOARD_HTML)
+        self.assertIn('class="overview-pipeline"', DASHBOARD_HTML)
+        self.assertIn('class="capacity-equation-table"', DASHBOARD_HTML)
+        self.assertIn('id="sandboxStateFilter"', DASHBOARD_HTML)
         self.assertIn('class="activity-grid overview-section"', DASHBOARD_HTML)
+        self.assertNotIn('id="terminateAllSandboxesButton"', DASHBOARD_HTML)
         self.assertIn("--rail-width: 228px", DASHBOARD_CSS)
-        self.assertIn("position: sticky", DASHBOARD_CSS)
-        self.assertIn("min-height: 38px", DASHBOARD_CSS)
-        self.assertIn('setText("nodesNavBadge"', DASHBOARD_JS)
+        self.assertIn(".overview-workbench", DASHBOARD_CSS)
+        self.assertIn("prefers-reduced-motion", DASHBOARD_CSS)
+        self.assertIn('setNavBadge("nodesNavBadge"', DASHBOARD_JS)
+        self.assertIn('setText("readyWakeValue"', DASHBOARD_JS)
+        self.assertNotIn('setText("cpuUtilizationValue"', DASHBOARD_JS)
+
+    def test_dashboard_keeps_transport_and_fleet_health_separate(self) -> None:
+        health = re.search(
+            r"function renderHealth\(snapshot\) \{(.*?)\n\}",
+            DASHBOARD_JS,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(health)
+        self.assertNotIn("setStatus(", health.group(1) if health else "")
+        self.assertIn('setStatus("Refreshing"', DASHBOARD_JS)
+
+    def test_dashboard_formats_structured_autoscaler_actions(self) -> None:
+        self.assertIn("function actionKind(action)", DASHBOARD_JS)
+        self.assertIn("actionSummary(actions.concat(builderActions))", DASHBOARD_JS)
+        self.assertNotIn('actions.concat(builderActions).join(", ")', DASHBOARD_JS)

@@ -1,6 +1,6 @@
 # Storage-native sandbox mobility plan
 
-Status: **Production rollout in progress; restart-safe private endpoints in qualification**
+Status: **Production rollout complete**
 
 Last reviewed: 2026-07-31
 
@@ -778,10 +778,8 @@ The production endpoint rule is therefore:
 4. Initial resolution fails node startup closed. A restart never broadens
    sandbox private-network access.
 
-Release 0.3.68 implements this seam without a gVisor patch. The remaining
-rollout gate is a fresh public canonical SDK/Verifiers park-and-migrate run,
-followed by restoring the production worker shape to 2 TB and draining the
-temporary qualification worker.
+Release 0.3.68 implements this seam without a gVisor patch. Its public
+qualification and the follow-up relay fix are recorded below.
 
 The first public 0.3.68 retry clarified the sandbox-facing relay contract.
 UCloud's private job DNS name resolves on worker hosts but not inside arbitrary
@@ -800,3 +798,46 @@ worker nor participate in semantic request identity. Release 0.3.69 strips
 them at the relay boundary. Regression coverage changes all of those headers
 between attempts and requires one enqueue, one worker response, and exact
 completed-response replay.
+
+### 2026-07-31: production SDK/Verifiers park, migration, and relay replay passed
+
+Release 0.3.69 is deployed on gateway job `12362088`. The production gateway,
+relay, and fallback relay public links all report 0.3.69. The autoscaler is
+back at its final homogeneous shape: 2-TB sandbox workers, 440 GB bounded
+Docker image storage, 96 GB swap, 32 GB disposable storage cache, 16 GB
+headroom, and exact 1x CPU, memory, and disk factors.
+
+The canonical public SDK flow at pinned Verifiers commit
+`fcb48822eaf35efe22b6f6deda9c4b422920314e` ran `NullHarness` inside a real
+sandbox, using the public relay origin and its scoped rollout token. It parked
+on the first model request, provisioned a second full-size node, migrated from
+job `12362143` to `12362145`, restored, reattached, and returned
+`relay-live-park-ok`. The result had exactly one model call, one trace turn,
+one enqueue, one durable completion, one transport reset, one reattachment,
+and one wake notification. Relay health from inside the sandbox returned 200.
+The final sandbox state was running before the qualification script deleted
+it.
+
+The storage-native protocol took 1.212 seconds:
+
+```text
+source prepare        29.637 ms
+transfer and stage   671.673 ms
+route commit          30.144 ms
+destination activate  19.935 ms
+source finalize      412.432 ms
+```
+
+The enclosing migration event took 71.48 seconds because the second 2-TB VM
+was provisioned and bootstrapped on demand; none of that time was inside the
+source fence or storage protocol. The relay response committed in 1.504
+seconds after migration, and the complete harness qualification took 99.87
+seconds.
+
+Post-test audit found zero sandbox routes, zero pending demand, zero relay
+rollouts/pending requests, and empty inventories on both qualification
+workers. Jobs `12362143` and `12362145` were then explicitly terminated and
+reached `SUCCESS`. Obsolete gateway job `12361919` was already terminal. The
+scoped local gateway/relay test credentials were deleted. This completes the
+production rollout gate; future work may optimize destination provisioning,
+but it is separate from the qualified 1.212-second migration protocol.

@@ -220,18 +220,18 @@ Use `--no-copy-session` only when the VM already has
 
 Current live all-in-one VM:
 
-- job id: `12361919`
-- name: `ucloud-sandbox-gateway-direct-20260730-prod-2vcpu`
-- deployment id: `direct-20260730`
-- package version: `0.3.59`; it must match the `version` returned by both
+- job id: `12362088`
+- name: `ucloud-sandbox-gateway-migration-v2-canary`
+- deployment id: `migration-v2-canary-20260730a`
+- package version: `0.3.73`; it must match the `version` returned by both
   service health endpoints
 - gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
   `cpu-amd-zen5-32-vcpu`
 - compute project: `DFM` (`5530ccd4-2828-4031-9275-d51aa231cc01`)
 - private network: `12345327`
-- private registry IPv4 observed on the VM: `10.36.106.217`
+- private registry IPv4 observed on the VM: `10.36.144.34`
 - persistent project drive: `/998037`, mounted by UCloud as `/work/data`
-- SSH: resolve with `ucloud jobs ssh 12361919 --print-only`
+- SSH: resolve with `ucloud jobs ssh 12362088 --print-only`
 
 The private network, persistent drive, and ingresses remain resources of
 `DFM Pretraining`, but UCloud attaches them to the DFM-funded gateway job. This

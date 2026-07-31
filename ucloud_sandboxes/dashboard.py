@@ -37,20 +37,30 @@ DASHBOARD_HTML = """<!doctype html>
       <strong>CPU Sandbox Service</strong>
     </div>
     <div class="top-controls" aria-label="Dashboard controls">
-      <span id="connectionStatus" class="status-pill status-warn">Waiting</span>
+      <span id="connectionStatus" class="status-pill status-warn" aria-live="polite">Waiting</span>
       <label class="select-control">
         <span class="clock-mark" aria-hidden="true"></span>
-        <span class="visually-hidden">Time range</span>
+        <span class="visually-hidden">Session chart range</span>
         <select id="timeRangeSelect">
-          <option value="900000">Last 15m</option>
-          <option value="3600000" selected>Last 1h</option>
-          <option value="21600000">Last 6h</option>
+          <option value="900000">Session 15m</option>
+          <option value="3600000" selected>Session 1h</option>
+          <option value="21600000">Session 6h</option>
         </select>
       </label>
-      <div class="select-control fixed-control" aria-label="Refresh interval" title="Refresh interval">
+      <label class="select-control">
         <span class="refresh-mark" aria-hidden="true"></span>
-        <span class="control-value">5s</span>
-      </div>
+        <span class="visually-hidden">Refresh interval</span>
+        <select id="refreshSelect">
+          <option value="5000">5s</option>
+          <option value="10000" selected>10s</option>
+          <option value="30000">30s</option>
+          <option value="60000">1m</option>
+          <option value="0">Manual</option>
+        </select>
+      </label>
+      <button id="refreshNowButton" class="icon-button" type="button" title="Refresh now" aria-label="Refresh now">
+        <span class="refresh-mark" aria-hidden="true"></span>
+      </button>
       <button id="pauseButton" class="icon-button" type="button" title="Pause refresh" aria-label="Pause refresh">
         <span class="pause-mark" aria-hidden="true"></span>
       </button>
@@ -63,8 +73,8 @@ DASHBOARD_HTML = """<!doctype html>
   <main class="page-shell">
     <section class="page-title">
       <div>
-        <h1>CPU Sandbox Service</h1>
-        <p>Internal Monitoring Dashboard</p>
+        <h1>Sandbox Operations</h1>
+        <p>Capacity, program scheduling, and runtime health</p>
         <span class="visually-hidden">UCloud Sandboxes</span>
       </div>
       <div class="title-actions">
@@ -82,58 +92,76 @@ DASHBOARD_HTML = """<!doctype html>
       <button id="clearTokenButton" type="button">Clear</button>
     </section>
 
-    <nav class="page-tabs" aria-label="Dashboard pages">
-      <button class="page-tab is-active" type="button" data-page-target="overview">Overview</button>
-      <button class="page-tab" type="button" data-page-target="sandboxes">Sandboxes</button>
-      <button class="page-tab" type="button" data-page-target="registry">Registry</button>
+    <nav class="page-tabs" role="tablist" aria-label="Dashboard pages">
+      <button id="overviewTab" class="page-tab is-active" role="tab" aria-selected="true" aria-controls="overviewPage" type="button" data-page-target="overview">Overview</button>
+      <button id="schedulerTab" class="page-tab" role="tab" aria-selected="false" aria-controls="schedulerPage" type="button" data-page-target="scheduler">Scheduler</button>
+      <button id="nodesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="nodesPage" type="button" data-page-target="nodes">Nodes</button>
+      <button id="sandboxesTab" class="page-tab" role="tab" aria-selected="false" aria-controls="sandboxesPage" type="button" data-page-target="sandboxes">Sandboxes</button>
+      <button id="registryTab" class="page-tab" role="tab" aria-selected="false" aria-controls="registryPage" type="button" data-page-target="registry">Registry</button>
     </nav>
+
+    <section id="overviewPage" class="overview-page" role="tabpanel" aria-labelledby="overviewTab">
+    <section class="health-strip overview-section" aria-label="Current service health">
+      <div class="health-primary">
+        <span id="healthBadge" class="health-icon health-neutral" aria-hidden="true"></span>
+        <div>
+          <strong id="healthTitle">Waiting for metrics</strong>
+          <span id="healthDetail">The first snapshot will explain current demand and capacity.</span>
+        </div>
+      </div>
+      <div id="healthSignals" class="health-signals" aria-live="polite"></div>
+      <div class="health-actions">
+        <button id="copyDiagnosticsButton" class="table-action" type="button">Copy summary</button>
+        <button id="downloadSnapshotButton" class="table-action" type="button">Download snapshot</button>
+      </div>
+    </section>
 
     <section class="metric-grid overview-section" aria-label="Key metrics">
       <article class="metric-card accent-blue">
         <div>
-          <span class="metric-label">Active Nodes</span>
+          <span class="metric-label">Ready Nodes</span>
           <strong id="activeNodesValue">-</strong>
-          <span id="activeNodesDetail" class="metric-detail">-</span>
+          <span id="activeNodesDetail" class="metric-detail">ready / provisioning / total</span>
         </div>
         <canvas id="nodesSpark" class="sparkline" width="150" height="56"></canvas>
       </article>
       <article class="metric-card accent-blue">
         <div>
-          <span class="metric-label">Running Sandboxes</span>
+          <span class="metric-label">Sandbox Routes</span>
           <strong id="runningSandboxesValue">-</strong>
-          <span id="runningSandboxesDetail" class="metric-detail">-</span>
+          <span id="runningSandboxesDetail" class="metric-detail">running / parked / waking</span>
         </div>
         <canvas id="sandboxesSpark" class="sparkline" width="150" height="56"></canvas>
       </article>
-      <article class="metric-card accent-green">
+      <article class="metric-card accent-purple">
         <div>
-          <span class="metric-label">CPU Utilization</span>
+          <span class="metric-label">Ready to Wake</span>
           <strong id="cpuUtilizationValue">-</strong>
-          <span id="cpuUtilizationDetail" class="metric-detail">-</span>
+          <span id="cpuUtilizationDetail" class="metric-detail">oldest response-ready request</span>
         </div>
         <canvas id="cpuSpark" class="sparkline" width="150" height="56"></canvas>
       </article>
       <article class="metric-card accent-orange">
         <div>
-          <span class="metric-label">Memory Utilization</span>
+          <span class="metric-label">Hard Disk Used</span>
           <strong id="memoryUtilizationValue">-</strong>
-          <span id="memoryUtilizationDetail" class="metric-detail">-</span>
+          <span id="memoryUtilizationDetail" class="metric-detail">reserved hard capacity</span>
         </div>
         <canvas id="memorySpark" class="sparkline" width="150" height="56"></canvas>
       </article>
       <article class="metric-card accent-purple">
         <div>
-          <span class="metric-label">Queue Depth</span>
+          <span class="metric-label">Waiting on Model</span>
           <strong id="queueDepthValue">-</strong>
-          <span id="queueDepthDetail" class="metric-detail">-</span>
+          <span id="queueDepthDetail" class="metric-detail">bounded leading demand</span>
         </div>
         <canvas id="queueSpark" class="sparkline" width="150" height="56"></canvas>
       </article>
       <article class="metric-card accent-red">
         <div>
-          <span class="metric-label">Error Rate</span>
+          <span class="metric-label">Response → Wake p95</span>
           <strong id="errorRateValue">-</strong>
-          <span id="errorRateDetail" class="metric-detail">-</span>
+          <span id="errorRateDetail" class="metric-detail">tool-return latency</span>
         </div>
         <canvas id="errorSpark" class="sparkline" width="150" height="56"></canvas>
       </article>
@@ -142,27 +170,27 @@ DASHBOARD_HTML = """<!doctype html>
     <section class="chart-grid overview-section" aria-label="Live graphs">
       <article class="chart-panel chart-wide">
         <div class="panel-header">
-          <h2>Active Nodes</h2>
+          <h2>Ready Nodes</h2>
           <span class="info-dot" title="Fresh sandbox nodes"></span>
         </div>
         <canvas id="activeNodesChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch blue"></i>Active Nodes</span></div>
+        <div class="legend"><span><i class="swatch blue"></i>Ready Nodes</span></div>
       </article>
       <article class="chart-panel chart-wide">
         <div class="panel-header">
-          <h2>Running Sandboxes</h2>
-          <span class="info-dot" title="Running sandboxes from fresh node heartbeats"></span>
+          <h2>Sandbox Routes</h2>
+          <span class="info-dot" title="Durable sandbox routes across running, parked, and waking states"></span>
         </div>
         <canvas id="activeSandboxesChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch blue"></i>Running Sandboxes</span></div>
+        <div class="legend"><span><i class="swatch blue"></i>Sandbox Routes</span></div>
       </article>
       <article class="chart-panel chart-wide">
         <div class="panel-header">
-          <h2>Queue Depth</h2>
-          <span class="info-dot" title="Pending sandboxes, prepared capacity, and image builds"></span>
+          <h2>Hard Demand</h2>
+          <span class="info-dot" title="Pending sandbox creates, image builds, and ready-to-wake requests; prepared capacity is supply, not demand"></span>
         </div>
         <canvas id="queueDepthChart" class="chart-canvas" width="620" height="210"></canvas>
-        <div class="legend"><span><i class="swatch purple"></i>Queue Depth</span></div>
+        <div class="legend"><span><i class="swatch purple"></i>Hard Demand</span></div>
       </article>
       <article class="chart-panel chart-small">
         <div class="panel-header">
@@ -199,15 +227,68 @@ DASHBOARD_HTML = """<!doctype html>
       </article>
       <article class="chart-panel chart-small">
         <div class="panel-header">
-          <h2>Sandbox Start Time (s)</h2>
-          <span class="info-dot" title="Latest observed sandbox schedule wait"></span>
+          <h2>Program Latency (s)</h2>
+          <span class="info-dot" title="Model wait and response-ready to wake latency"></span>
         </div>
         <canvas id="sandboxStartChart" class="chart-canvas small" width="520" height="190"></canvas>
-        <div class="legend"><span><i class="swatch green"></i>Start Time (p50)</span></div>
+        <div class="legend">
+          <span><i class="swatch purple"></i>Model wait p95</span>
+          <span><i class="swatch green"></i>Wake p95</span>
+        </div>
       </article>
     </section>
 
     <section class="ops-grid overview-section" aria-label="Builder and registry operations">
+      <article class="ops-panel ops-large">
+        <div class="panel-header">
+          <h2>Autoscaler Feedback</h2>
+          <span id="autoscalerSummary">No autoscaler cycle loaded</span>
+        </div>
+        <div class="stat-strip">
+          <div class="stat-box">
+            <span>Pressure Samples</span>
+            <strong id="autoscalerPressureValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>CPU / Memory</span>
+            <strong id="autoscalerUtilizationValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Provisioning p95</span>
+            <strong id="autoscalerProvisioningValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Effective Idle Grace</span>
+            <strong id="autoscalerIdleGraceValue">-</strong>
+          </div>
+        </div>
+      </article>
+
+      <article class="ops-panel ops-large">
+        <div class="panel-header">
+          <h2>Program Scheduler</h2>
+          <span id="programSummary">Shadow observation</span>
+        </div>
+        <div class="stat-strip">
+          <div class="stat-box">
+            <span>Waiting on Model</span>
+            <strong id="programModelWaitValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Ready to Wake</span>
+            <strong id="programReadyValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Oldest Ready</span>
+            <strong id="programOldestReadyValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Response → Wake p95</span>
+            <strong id="programWakeLatencyValue">-</strong>
+          </div>
+        </div>
+      </article>
+
       <article class="ops-panel ops-large">
         <div class="panel-header">
           <h2>Builder Pool</h2>
@@ -333,8 +414,254 @@ DASHBOARD_HTML = """<!doctype html>
         </table>
       </div>
     </section>
+    </section>
 
-    <section id="sandboxesPage" class="sandboxes-page" aria-label="Sandboxes" hidden>
+    <section id="schedulerPage" class="workspace-page" role="tabpanel" aria-labelledby="schedulerTab" hidden>
+      <section class="decision-hero">
+        <div class="decision-copy">
+          <div class="eyebrow">Latest autoscaler cycle</div>
+          <div class="decision-title-row">
+            <h2 id="schedulerDecisionTitle">Waiting for a decision</h2>
+            <span id="schedulerModeBadge" class="inline-badge badge-muted">Unknown</span>
+          </div>
+          <p id="schedulerDecisionDetail" class="workspace-copy">Program-aware scheduling metrics have not loaded yet.</p>
+          <div id="schedulerReasons" class="reason-list"></div>
+        </div>
+        <div class="decision-stats">
+          <div class="stat-box">
+            <span>Ready nodes</span>
+            <strong id="schedulerReadyNodesValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Provisioning</span>
+            <strong id="schedulerProvisioningValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Wake plan</span>
+            <strong id="schedulerWakePlanValue">-</strong>
+          </div>
+          <div class="stat-box">
+            <span>Unplaced</span>
+            <strong id="schedulerUnplacedValue">-</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="flow-panel" aria-label="Program lifecycle">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">Program flow</div>
+            <h2>Where requests are spending time</h2>
+          </div>
+          <span id="programFlowSummary" class="section-summary">No program requests loaded</span>
+        </div>
+        <div class="program-flow">
+          <button class="flow-stage is-selected" type="button" data-program-state="all" aria-pressed="true">
+            <span class="flow-index">All</span>
+            <strong id="flowAllValue">-</strong>
+            <small>active requests</small>
+          </button>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <button class="flow-stage" type="button" data-program-state="model_wait" aria-pressed="false">
+            <span class="flow-index">1</span>
+            <strong id="flowModelWaitValue">-</strong>
+            <small id="flowModelWaitDetail">waiting on model</small>
+          </button>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <button class="flow-stage" type="button" data-program-state="ready_to_wake" aria-pressed="false">
+            <span class="flow-index">2</span>
+            <strong id="flowReadyValue">-</strong>
+            <small id="flowReadyDetail">ready to wake</small>
+          </button>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <button class="flow-stage" type="button" data-program-state="waking" aria-pressed="false">
+            <span class="flow-index">3</span>
+            <strong id="flowWakingValue">-</strong>
+            <small>waking</small>
+          </button>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <button class="flow-stage" type="button" data-program-state="acting" aria-pressed="false">
+            <span class="flow-index">4</span>
+            <strong id="flowActingValue">-</strong>
+            <small>acting</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="scheduler-grid">
+        <article class="workspace-card">
+          <div class="section-heading compact">
+            <div>
+              <div class="eyebrow">Demand composition</div>
+              <h2>What the autoscaler sees</h2>
+            </div>
+          </div>
+          <div class="resource-vector-list">
+            <div class="resource-vector">
+              <span>Pending sandboxes</span>
+              <strong id="demandPendingValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Prepared capacity</span>
+              <strong id="demandPreparedValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Ready wakes</span>
+              <strong id="demandReadyWakeValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Weighted model wait</span>
+              <strong id="demandModelWaitValue">-</strong>
+            </div>
+            <div class="resource-vector emphasis">
+              <span>Effective program demand</span>
+              <strong id="demandEffectiveValue">-</strong>
+            </div>
+          </div>
+        </article>
+        <article class="workspace-card">
+          <div class="section-heading compact">
+            <div>
+              <div class="eyebrow">Capacity decision</div>
+              <h2>Supply versus demand</h2>
+            </div>
+          </div>
+          <div class="resource-vector-list">
+            <div class="resource-vector">
+              <span>Desired</span>
+              <strong id="decisionDesiredValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Projected free</span>
+              <strong id="decisionProjectedValue">-</strong>
+            </div>
+            <div class="resource-vector emphasis">
+              <span>Deficit</span>
+              <strong id="decisionDeficitValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Pressure samples</span>
+              <strong id="decisionPressureValue">-</strong>
+            </div>
+            <div class="resource-vector">
+              <span>Idle grace</span>
+              <strong id="decisionIdleGraceValue">-</strong>
+            </div>
+          </div>
+        </article>
+        <article class="workspace-card policy-card">
+          <div class="section-heading compact">
+            <div>
+              <div class="eyebrow">Effective policy</div>
+              <h2>Current tuning</h2>
+            </div>
+            <span class="read-only-badge">Read only</span>
+          </div>
+          <dl id="policyValues" class="policy-values">
+            <div><dt>Program action</dt><dd>-</dd></div>
+          </dl>
+          <p class="policy-note">Policy changes remain version-controlled and service-restarted; this view never mutates production.</p>
+        </article>
+      </section>
+
+      <section class="event-panel queue-panel" aria-label="Shadow wake queue">
+        <div class="queue-toolbar">
+          <div>
+            <div class="eyebrow">Aging-first queue</div>
+            <h2>Wake placement</h2>
+          </div>
+          <label class="inline-search">
+            <span class="visually-hidden">Search wake queue</span>
+            <input id="programSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Rollout, request, sandbox, or node">
+          </label>
+          <label class="inline-select">
+            <span class="visually-hidden">Wake result filter</span>
+            <select id="programResultFilter">
+              <option value="all">All results</option>
+              <option value="unplaced">Unplaced first</option>
+              <option value="local">Local wakes</option>
+              <option value="migration">Migrations</option>
+            </select>
+          </label>
+          <span id="programQueueSummary" class="section-summary">No queue loaded</span>
+        </div>
+        <div class="table-wrap">
+          <table class="program-table">
+            <thead>
+              <tr>
+                <th>Position</th>
+                <th>Age</th>
+                <th>Rollout / Request</th>
+                <th>Sandbox</th>
+                <th>Requested</th>
+                <th>Planned node</th>
+                <th>Path</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody id="programQueueRows">
+              <tr><td colspan="8" class="empty-cell">No wake queue loaded</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="nodesPage" class="workspace-page" role="tabpanel" aria-labelledby="nodesTab" hidden>
+      <section class="workspace-hero">
+        <div>
+          <div class="eyebrow">Live placement supply</div>
+          <h2>Sandbox nodes</h2>
+          <p id="nodesPageDetail" class="workspace-copy">Waiting for node heartbeats.</p>
+        </div>
+        <div class="node-hero-stats">
+          <div class="stat-box"><span>Ready</span><strong id="nodesReadyValue">-</strong></div>
+          <div class="stat-box"><span>Draining</span><strong id="nodesDrainingValue">-</strong></div>
+          <div class="stat-box"><span>Incompatible</span><strong id="nodesIncompatibleValue">-</strong></div>
+          <div class="stat-box"><span>Hard disk free</span><strong id="nodesDiskFreeValue">-</strong></div>
+        </div>
+      </section>
+      <section class="queue-toolbar node-toolbar" aria-label="Node filters">
+        <label class="inline-search">
+          <span class="visually-hidden">Search nodes</span>
+          <input id="nodeSearchInput" type="search" autocomplete="off" spellcheck="false" placeholder="Node or job id">
+        </label>
+        <label class="inline-select">
+          <span class="visually-hidden">Node state filter</span>
+          <select id="nodeStateFilter">
+            <option value="all">All nodes</option>
+            <option value="ready">Ready</option>
+            <option value="constrained">Constrained</option>
+            <option value="draining">Draining / closed</option>
+            <option value="stale">Stale / incompatible</option>
+          </select>
+        </label>
+        <span id="nodeTableSummary" class="section-summary">No nodes loaded</span>
+      </section>
+      <section class="event-panel">
+        <div class="table-wrap">
+          <table class="node-table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Node</th>
+                <th>Work</th>
+                <th>CPU actual / reserved</th>
+                <th>Memory actual / reserved</th>
+                <th>Hard disk free</th>
+                <th>Pressure</th>
+                <th>Heartbeat</th>
+              </tr>
+            </thead>
+            <tbody id="nodeRows">
+              <tr><td colspan="8" class="empty-cell">No node metrics loaded</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <section id="sandboxesPage" class="sandboxes-page" role="tabpanel" aria-labelledby="sandboxesTab" hidden>
       <section class="sandbox-hero">
         <div class="sandbox-hero-main">
           <div class="panel-header">
@@ -400,7 +727,7 @@ DASHBOARD_HTML = """<!doctype html>
       </section>
     </section>
 
-    <section id="registryPage" class="registry-page" aria-label="Registry" hidden>
+    <section id="registryPage" class="registry-page" role="tabpanel" aria-labelledby="registryTab" hidden>
       <section class="registry-hero">
         <div class="registry-hero-main">
           <div class="panel-header">
@@ -550,6 +877,26 @@ DASHBOARD_CSS = """
 :root.dark-charts {
   --background: #eef3f9;
   --surface-soft: #f7f9fc;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --app-bar: #060b13;
+  --app-bar-line: #1e293b;
+  --background: #0b1220;
+  --surface: #111b2e;
+  --surface-soft: #162238;
+  --line: #2b3a52;
+  --line-soft: #233149;
+  --text: #e5edf8;
+  --muted: #94a3b8;
+  --blue: #60a5fa;
+  --green: #4ade80;
+  --orange: #fb923c;
+  --purple: #a78bfa;
+  --red: #f87171;
+  --amber: #fbbf24;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -908,6 +1255,7 @@ h1 {
   gap: 4px;
   margin: 0 0 12px;
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
 }
 
 .page-tab {
@@ -930,10 +1278,122 @@ h1 {
   color: var(--blue);
 }
 
+.overview-page[hidden],
 .overview-section[hidden],
+.workspace-page[hidden],
 .sandboxes-page[hidden],
 .registry-page[hidden] {
   display: none;
+}
+
+.overview-page,
+.workspace-page {
+  display: grid;
+  gap: 12px;
+}
+
+.health-strip,
+.decision-hero,
+.flow-panel,
+.workspace-card,
+.workspace-hero,
+.queue-toolbar {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.health-strip {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.2fr) minmax(280px, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.health-primary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-primary strong,
+.health-primary span {
+  display: block;
+}
+
+.health-primary strong {
+  font-size: 15px;
+}
+
+.health-primary span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--muted) 14%, transparent);
+}
+
+.health-ok {
+  background: var(--green);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.health-warn {
+  background: var(--amber);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--amber) 14%, transparent);
+}
+
+.health-bad {
+  background: var(--red);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--red) 14%, transparent);
+}
+
+.health-signals {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signal-chip,
+.reason-chip,
+.read-only-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.signal-chip.warn,
+.reason-chip.warn {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  color: var(--amber);
+}
+
+.signal-chip.bad,
+.reason-chip.bad {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  color: var(--red);
+}
+
+.health-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .metric-grid {
@@ -1122,6 +1582,336 @@ h2 {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.decision-hero,
+.workspace-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(420px, 0.75fr);
+  gap: 22px;
+  padding: 18px;
+}
+
+.decision-title-row,
+.section-heading,
+.queue-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.decision-title-row {
+  justify-content: flex-start;
+  margin: 3px 0 6px;
+}
+
+.decision-title-row h2,
+.section-heading h2,
+.workspace-hero h2,
+.queue-toolbar h2 {
+  font-size: 18px;
+}
+
+.eyebrow {
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.workspace-copy,
+.policy-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.decision-stats,
+.node-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.flow-panel,
+.workspace-card {
+  padding: 16px;
+}
+
+.section-heading {
+  margin-bottom: 14px;
+}
+
+.section-heading.compact {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.section-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.program-flow {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) repeat(4, auto minmax(130px, 1fr));
+  align-items: stretch;
+  gap: 8px;
+}
+
+.flow-stage {
+  min-width: 0;
+  min-height: 96px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text);
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.flow-stage:hover,
+.flow-stage.is-selected {
+  border-color: color-mix(in srgb, var(--blue) 55%, var(--line));
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+}
+
+.flow-stage span,
+.flow-stage strong,
+.flow-stage small {
+  display: block;
+}
+
+.flow-stage strong {
+  margin: 5px 0 3px;
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-stage small {
+  color: var(--muted);
+}
+
+.flow-index {
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.flow-arrow {
+  align-self: center;
+  color: var(--muted);
+  font-size: 18px;
+}
+
+.scheduler-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.resource-vector-list {
+  display: grid;
+  gap: 6px;
+}
+
+.resource-vector {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.resource-vector span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.resource-vector strong {
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.resource-vector.emphasis {
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--line-soft));
+}
+
+.policy-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.policy-values div {
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.policy-values dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.policy-values dd {
+  margin: 3px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.policy-note {
+  margin-top: 10px;
+}
+
+.queue-panel {
+  min-width: 0;
+}
+
+.queue-toolbar {
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.inline-search,
+.inline-select {
+  display: inline-flex;
+}
+
+.inline-search {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.inline-search input,
+.inline-select select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.program-table,
+.node-table {
+  min-width: 1080px;
+}
+
+.program-table td:nth-child(3),
+.program-table td:nth-child(4),
+.program-table td:nth-child(6),
+.node-table td:nth-child(2) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.node-hero-stats {
+  align-content: start;
+}
+
+.node-toolbar {
+  justify-content: flex-start;
+  border-radius: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.node-toolbar .section-summary {
+  margin-left: auto;
+}
+
+.meter-stack {
+  display: grid;
+  min-width: 140px;
+  gap: 4px;
+}
+
+.meter-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.meter {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-soft);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+
+.meter.warn > span {
+  background: var(--amber);
+}
+
+.meter.bad > span {
+  background: var(--red);
+}
+
+.state-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.state-dot.ok { background: var(--green); }
+.state-dot.warn { background: var(--amber); }
+.state-dot.bad { background: var(--red); }
+
+:root.dark th {
+  background: #162238;
+  color: var(--text);
+}
+
+:root.dark .token-field input,
+:root.dark .registry-search input,
+:root.dark .registry-select select,
+:root.dark .sandbox-search input {
+  background: var(--surface-soft);
+  color: var(--text);
+}
+
+:root.dark .badge-muted,
+:root.dark .build-status.unknown {
+  background: #334155;
+  color: #dbeafe;
 }
 
 .ops-panel {
@@ -1668,6 +2458,20 @@ td:last-child {
     grid-template-columns: 1fr;
   }
 
+  .health-strip,
+  .decision-hero,
+  .workspace-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .scheduler-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .policy-card {
+    grid-column: 1 / -1;
+  }
+
   .registry-toolbar,
   .sandbox-toolbar {
     grid-template-columns: 1fr 220px;
@@ -1742,6 +2546,31 @@ td:last-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .health-actions {
+    flex-wrap: wrap;
+  }
+
+  .program-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-arrow {
+    display: none;
+  }
+
+  .scheduler-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-card {
+    grid-column: auto;
+  }
+
+  .decision-stats,
+  .node-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .registry-toolbar,
   .registry-stat-grid,
   .sandbox-toolbar,
@@ -1773,8 +2602,11 @@ td:last-child {
 
 
 DASHBOARD_JS = """
-const MAX_HISTORY = 720;
-const REFRESH_INTERVAL_MS = 5000;
+const MAX_HISTORY = 4320;
+const DEFAULT_REFRESH_INTERVAL_MS = 10000;
+const MAX_PROGRAM_ROWS = 200;
+const MAX_NODE_ROWS = 250;
+const MAX_REGISTRY_REPOSITORY_ROWS = 250;
 
 const state = {
   timer: null,
@@ -1786,9 +2618,15 @@ const state = {
   sandboxFetchInFlight: false,
   sandboxActionInFlight: false,
   terminatingSandboxIds: new Set(),
+  metricsRequest: null,
+  requestSequence: 0,
+  appliedSequence: 0,
+  resizeFrame: null,
+  lastSandboxRefreshAt: 0,
+  programStateFilter: "all",
 };
 
-const palette = {
+let palette = {
   blue: "#2563eb",
   blueSoft: "rgba(37, 99, 235, 0.12)",
   green: "#16a34a",
@@ -1812,6 +2650,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "connectionStatus",
     "lastUpdated",
     "timeRangeSelect",
+    "refreshSelect",
+    "refreshNowButton",
     "pauseButton",
     "themeButton",
     "authToggleButton",
@@ -1843,6 +2683,64 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryTagsValue",
     "registryDetail",
     "registryRepos",
+    "autoscalerSummary",
+    "autoscalerPressureValue",
+    "autoscalerUtilizationValue",
+    "autoscalerProvisioningValue",
+    "autoscalerIdleGraceValue",
+    "programSummary",
+    "programModelWaitValue",
+    "programReadyValue",
+    "programOldestReadyValue",
+    "programWakeLatencyValue",
+    "healthBadge",
+    "healthTitle",
+    "healthDetail",
+    "healthSignals",
+    "copyDiagnosticsButton",
+    "downloadSnapshotButton",
+    "schedulerPage",
+    "schedulerDecisionTitle",
+    "schedulerModeBadge",
+    "schedulerDecisionDetail",
+    "schedulerReasons",
+    "schedulerReadyNodesValue",
+    "schedulerProvisioningValue",
+    "schedulerWakePlanValue",
+    "schedulerUnplacedValue",
+    "programFlowSummary",
+    "flowAllValue",
+    "flowModelWaitValue",
+    "flowModelWaitDetail",
+    "flowReadyValue",
+    "flowReadyDetail",
+    "flowWakingValue",
+    "flowActingValue",
+    "demandPendingValue",
+    "demandPreparedValue",
+    "demandReadyWakeValue",
+    "demandModelWaitValue",
+    "demandEffectiveValue",
+    "decisionDesiredValue",
+    "decisionProjectedValue",
+    "decisionDeficitValue",
+    "decisionPressureValue",
+    "decisionIdleGraceValue",
+    "policyValues",
+    "programSearchInput",
+    "programResultFilter",
+    "programQueueSummary",
+    "programQueueRows",
+    "nodesPage",
+    "nodesPageDetail",
+    "nodesReadyValue",
+    "nodesDrainingValue",
+    "nodesIncompatibleValue",
+    "nodesDiskFreeValue",
+    "nodeSearchInput",
+    "nodeStateFilter",
+    "nodeTableSummary",
+    "nodeRows",
     "sandboxesPage",
     "sandboxesPageStatusBadge",
     "sandboxesPageDetail",
@@ -1885,6 +2783,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const savedToken = sessionStorage.getItem("ucloud.dashboard.token") || "";
   els.tokenInput.value = savedToken;
+  const savedRefresh = localStorage.getItem("ucloud.dashboard.refreshMs");
+  if (savedRefresh !== null && [...els.refreshSelect.options].some((option) => option.value === savedRefresh)) {
+    els.refreshSelect.value = savedRefresh;
+  }
+  applyTheme(localStorage.getItem("ucloud.dashboard.theme") || preferredTheme());
+  document.querySelectorAll("canvas").forEach((canvas) => {
+    const heading = canvas.closest("article")?.querySelector("h2, .metric-label");
+    const label = `${heading?.textContent?.trim() || "Metric"} session chart`;
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", label);
+    canvas.textContent = label;
+  });
+  document.querySelectorAll(".info-dot[title]").forEach((dot) => {
+    dot.setAttribute("role", "note");
+    dot.setAttribute("aria-label", dot.title);
+  });
   syncAuthPanel(!savedToken);
   els.authToggleButton.addEventListener("click", () => syncAuthPanel(els.authPanel.hidden));
   els.saveTokenButton.addEventListener("click", saveToken);
@@ -1893,10 +2807,18 @@ document.addEventListener("DOMContentLoaded", () => {
     trimHistory();
     redrawCharts();
   });
+  els.refreshSelect.addEventListener("change", () => {
+    localStorage.setItem("ucloud.dashboard.refreshMs", els.refreshSelect.value);
+    scheduleNextRefresh();
+  });
+  els.refreshNowButton.addEventListener("click", () => refreshNow({ supersede: true }));
   els.pauseButton.addEventListener("click", togglePause);
-  els.themeButton.addEventListener("click", () => document.documentElement.classList.toggle("dark-charts"));
+  els.themeButton.addEventListener("click", toggleTheme);
+  els.copyDiagnosticsButton.addEventListener("click", copyDiagnostics);
+  els.downloadSnapshotButton.addEventListener("click", downloadSnapshot);
   document.querySelectorAll("[data-page-target]").forEach((button) => {
     button.addEventListener("click", () => setPage(button.dataset.pageTarget || "overview"));
+    button.addEventListener("keydown", handleTabKeydown);
   });
   window.addEventListener("hashchange", () => setPage(pageFromHash(), { updateHash: false }));
   els.sandboxSearchInput.addEventListener("input", renderSandboxesPage);
@@ -1904,10 +2826,32 @@ document.addEventListener("DOMContentLoaded", () => {
   els.terminateAllSandboxesButton.addEventListener("click", terminateAllSandboxes);
   els.registrySearchInput.addEventListener("input", () => renderRegistryPage(state.lastSnapshot || {}));
   els.registryFilterSelect.addEventListener("change", () => renderRegistryPage(state.lastSnapshot || {}));
-  window.addEventListener("resize", redrawCharts);
+  els.programSearchInput.addEventListener("input", renderProgramQueue);
+  els.programResultFilter.addEventListener("change", renderProgramQueue);
+  els.nodeSearchInput.addEventListener("input", renderNodesPage);
+  els.nodeStateFilter.addEventListener("change", renderNodesPage);
+  document.querySelectorAll("[data-program-state]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.programStateFilter = button.dataset.programState || "all";
+      document.querySelectorAll("[data-program-state]").forEach((item) => {
+        const selected = item === button;
+        item.classList.toggle("is-selected", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      renderProgramQueue();
+    });
+  });
+  window.addEventListener("resize", scheduleChartRedraw);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearRefreshTimer();
+      return;
+    }
+    refreshNow({ supersede: true });
+    scheduleNextRefresh();
+  });
   setPage(pageFromHash(), { updateHash: false });
   refreshNow();
-  scheduleNextRefresh();
 });
 
 function saveToken() {
@@ -1916,7 +2860,7 @@ function saveToken() {
     sessionStorage.setItem("ucloud.dashboard.token", token);
     syncAuthPanel(false);
     setStatus("Saved", "ok");
-    refreshNow();
+    refreshNow({ supersede: true });
     return;
   }
   clearToken();
@@ -1940,22 +2884,74 @@ function togglePause() {
   els.pauseButton.title = state.paused ? "Resume refresh" : "Pause refresh";
   els.pauseButton.setAttribute("aria-label", els.pauseButton.title);
   els.pauseButton.classList.toggle("is-paused", state.paused);
-  if (!state.paused) {
-    refreshNow();
-  }
+  if (state.paused) clearRefreshTimer();
+  else refreshNow({ supersede: true });
+}
+
+function preferredTheme() {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function toggleTheme() {
+  applyTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
+  redrawCharts();
+}
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.classList.toggle("dark", dark);
+  localStorage.setItem("ucloud.dashboard.theme", dark ? "dark" : "light");
+  els.themeButton.title = dark ? "Use light theme" : "Use dark theme";
+  els.themeButton.setAttribute("aria-label", els.themeButton.title);
+  palette = dark
+    ? {
+        ...palette,
+        blue: "#60a5fa",
+        blueSoft: "rgba(96, 165, 250, 0.14)",
+        green: "#4ade80",
+        greenSoft: "rgba(74, 222, 128, 0.14)",
+        orange: "#fb923c",
+        orangeSoft: "rgba(251, 146, 60, 0.14)",
+        purple: "#a78bfa",
+        purpleSoft: "rgba(167, 139, 250, 0.14)",
+        red: "#f87171",
+        redSoft: "rgba(248, 113, 113, 0.14)",
+        grid: "#2b3a52",
+        text: "#e5edf8",
+        muted: "#94a3b8",
+        plotBg: "#111b2e",
+      }
+    : {
+        ...palette,
+        blue: "#2563eb",
+        blueSoft: "rgba(37, 99, 235, 0.12)",
+        green: "#16a34a",
+        greenSoft: "rgba(22, 163, 74, 0.12)",
+        orange: "#f97316",
+        orangeSoft: "rgba(249, 115, 22, 0.12)",
+        purple: "#7c3aed",
+        purpleSoft: "rgba(124, 58, 237, 0.12)",
+        red: "#dc2626",
+        redSoft: "rgba(220, 38, 38, 0.12)",
+        grid: "#dfe5ee",
+        text: "#0f172a",
+        muted: "#64748b",
+        plotBg: "#ffffff",
+      };
 }
 
 function pageFromHash() {
   const page = window.location.hash.replace(/^#/, "");
-  return ["overview", "sandboxes", "registry"].includes(page) ? page : "overview";
+  return ["overview", "scheduler", "nodes", "sandboxes", "registry"].includes(page) ? page : "overview";
 }
 
 function setPage(page, options = {}) {
-  const next = ["overview", "sandboxes", "registry"].includes(page) ? page : "overview";
+  const next = ["overview", "scheduler", "nodes", "sandboxes", "registry"].includes(page) ? page : "overview";
   state.currentPage = next;
-  document.querySelectorAll(".overview-section").forEach((section) => {
-    section.hidden = next !== "overview";
-  });
+  const overviewPage = document.getElementById("overviewPage");
+  if (overviewPage) overviewPage.hidden = next !== "overview";
+  if (els.schedulerPage) els.schedulerPage.hidden = next !== "scheduler";
+  if (els.nodesPage) els.nodesPage.hidden = next !== "nodes";
   if (els.sandboxesPage) {
     els.sandboxesPage.hidden = next !== "sandboxes";
   }
@@ -1963,7 +2959,10 @@ function setPage(page, options = {}) {
     els.registryPage.hidden = next !== "registry";
   }
   document.querySelectorAll("[data-page-target]").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.pageTarget === next);
+    const active = button.dataset.pageTarget === next;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   });
   if (options.updateHash !== false) {
     const hash = `#${next}`;
@@ -1973,6 +2972,11 @@ function setPage(page, options = {}) {
   }
   if (next === "overview") {
     redrawCharts();
+    renderOverviewDetail(state.lastSnapshot || {});
+  } else if (next === "scheduler") {
+    renderSchedulerPage(state.lastSnapshot || {});
+  } else if (next === "nodes") {
+    renderNodesPage();
   } else if (next === "registry") {
     renderRegistryPage(state.lastSnapshot || {});
   } else {
@@ -1981,25 +2985,53 @@ function setPage(page, options = {}) {
   }
 }
 
-function scheduleNextRefresh() {
-  if (state.timer !== null) {
-    window.clearInterval(state.timer);
-  }
-  state.timer = window.setInterval(() => {
-    if (!state.paused) {
-      refreshNow();
-    }
-  }, REFRESH_INTERVAL_MS);
+function handleTabKeydown(event) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...document.querySelectorAll("[data-page-target]")];
+  const current = tabs.indexOf(event.currentTarget);
+  let index = current;
+  if (event.key === "Home") index = 0;
+  else if (event.key === "End") index = tabs.length - 1;
+  else index = (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  tabs[index].focus();
+  setPage(tabs[index].dataset.pageTarget || "overview");
 }
 
-async function refreshNow() {
+function clearRefreshTimer() {
+  if (state.timer !== null) {
+    window.clearTimeout(state.timer);
+    state.timer = null;
+  }
+}
+
+function scheduleNextRefresh() {
+  clearRefreshTimer();
+  const selectedInterval = Number(els.refreshSelect.value);
+  const interval = Number.isFinite(selectedInterval) ? selectedInterval : DEFAULT_REFRESH_INTERVAL_MS;
+  if (state.paused || document.hidden || !Number.isFinite(interval) || interval <= 0) return;
+  state.timer = window.setTimeout(() => refreshNow(), interval);
+}
+
+async function refreshNow(options = {}) {
+  if (state.metricsRequest) {
+    if (!options.supersede) return;
+    state.metricsRequest.abort();
+  }
+  clearRefreshTimer();
+  const controller = new AbortController();
+  const sequence = ++state.requestSequence;
+  state.metricsRequest = controller;
+  els.refreshNowButton.disabled = true;
   const token = sessionStorage.getItem("ucloud.dashboard.token") || els.tokenInput.value.trim();
   const headers = token ? { "X-UCloud-Sandbox-Token": token } : {};
   try {
     const response = await fetch("/v1/metrics", {
       headers,
       cache: "no-store",
+      signal: controller.signal,
     });
+    if (sequence < state.requestSequence) return;
     if (response.status === 401) {
       setStatus("Auth required", "warn");
       els.lastUpdated.textContent = "Enter the gateway bearer token";
@@ -2013,16 +3045,28 @@ async function refreshNow() {
       return;
     }
     const snapshot = await response.json();
+    if (sequence < state.requestSequence) return;
+    state.appliedSequence = sequence;
     setStatus("Live", "ok");
     syncAuthPanel(false);
     renderSnapshot(snapshot);
     if (state.currentPage === "sandboxes") {
-      await refreshSandboxes({ quiet: true });
+      const now = Date.now();
+      if (now - state.lastSandboxRefreshAt >= 30000) {
+        await refreshSandboxes({ quiet: true });
+      }
     }
   } catch (error) {
+    if (error && error.name === "AbortError") return;
     setStatus("Offline", "bad");
     els.lastUpdated.textContent = String(error && error.message ? error.message : error);
     redrawCharts();
+  } finally {
+    if (state.metricsRequest === controller) {
+      state.metricsRequest = null;
+      els.refreshNowButton.disabled = false;
+      scheduleNextRefresh();
+    }
   }
 }
 
@@ -2081,7 +3125,23 @@ function renderSnapshot(snapshot) {
   trimHistory();
   els.lastUpdated.textContent = `Updated ${formatTime(snapshot.generated_at)}`;
   renderMetrics(snapshot);
-  renderRegistryPage(snapshot);
+  renderHealth(snapshot);
+  if (state.currentPage === "overview") {
+    renderOverviewDetail(snapshot);
+  } else if (state.currentPage === "scheduler") {
+    renderSchedulerPage(snapshot);
+  } else if (state.currentPage === "nodes") {
+    renderNodesPage();
+  } else if (state.currentPage === "registry") {
+    renderRegistryPage(snapshot);
+  } else {
+    renderSandboxesPage();
+  }
+}
+
+function renderOverviewDetail(snapshot) {
+  if (!snapshot || !snapshot.generated_at) return;
+  renderRegistry(snapshot.registry || {});
   renderBuilds(snapshot);
   renderTraces(snapshot);
   renderEvents(snapshot);
@@ -2107,23 +3167,34 @@ function pointFromSnapshot(snapshot) {
   const capacity = snapshot.capacity || {};
   const images = snapshot.images || {};
   const builders = snapshot.builders || {};
+  const programs = snapshot.programs || {};
+  const programStates = programs.states || {};
   const scale = snapshot.scale_up || {};
   const recentEvents = ((snapshot.events || {}).recent || []);
   const queueDepth = asNumber(sandboxes.pending)
-    + asNumber(capacity.prepared_sandboxes)
     + asNumber(images.pending_builds)
-    + asNumber(builders.prepared_builders);
+    + asNumber(programStates.ready_to_wake);
   const cpuActual = nullableNumber(actual.cpu_percent_avg);
   const memoryActual = nullableNumber(actual.memory_percent);
   const cpuReserved = ratioToPercent(load.vcpu);
   const memoryReserved = ratioToPercent(load.memory);
   return {
     at: Date.parse(snapshot.generated_at) || Date.now(),
-    activeNodes: asNumber(nodes.sandbox),
+    activeNodes: firstNumber(nodes.sandbox_ready, nodes.sandbox) || 0,
     freshNodes: asNumber(nodes.fresh),
-    activeSandboxes: asNumber(sandboxes.running),
+    activeSandboxes: asNumber(sandboxes.active_routes),
     builderNodes: asNumber(nodes.builder),
     queueDepth,
+    readyWake: asNumber(programStates.ready_to_wake),
+    modelWait: asNumber(programStates.model_wait),
+    wakeP95Seconds: msToSeconds(programs.response_to_wake_p95_ms),
+    wakeP50Seconds: msToSeconds(programs.response_to_wake_p50_ms),
+    modelWaitP95Seconds: msToSeconds(programs.model_wait_p95_ms),
+    hardDiskUtilization: resourcePercent(
+      sandboxResources.used || {},
+      sandboxResources.effective || {},
+      "disk_mb"
+    ),
     pendingSandboxes: asNumber(sandboxes.pending),
     preparedSandboxes: asNumber(capacity.prepared_sandboxes),
     pendingBuilds: asNumber(images.pending_builds),
@@ -2157,27 +3228,100 @@ function renderMetrics(snapshot) {
   const builderActual = builderResources.actual_usage || {};
   const builderLoad = builderResources.load || {};
   const scale = snapshot.scale_up || {};
+  const autoscaler = snapshot.autoscaler || {};
+  const liveSignals = autoscaler.live_signals || {};
+  const programs = snapshot.programs || {};
+  const programStates = programs.states || {};
+  const sandboxStates = sandboxes.states || {};
+  const wakePlan = autoscaler.program_wake_plan || {};
 
-  setText("activeNodesValue", String(latest.activeNodes));
-  setText("activeNodesDetail", `${asNumber(nodes.sandbox)} sandbox, ${asNumber(nodes.builder)} builder`);
+  setText("activeNodesValue", formatInteger(latest.activeNodes));
+  setText(
+    "activeNodesDetail",
+    `${asNumber(autoscaler.ready_nodes)} ready, ${asNumber(autoscaler.provisioning_nodes)} provisioning, ${asNumber(autoscaler.total_nodes || nodes.sandbox)} total`
+  );
 
-  setText("runningSandboxesValue", formatInteger(latest.activeSandboxes));
+  setText("runningSandboxesValue", formatInteger(sandboxes.active_routes));
   const staleRouteText = asNumber(sandboxes.stale_routes) > 0
     ? `, ${asNumber(sandboxes.stale_routes)} stale routes`
     : "";
-  setText("runningSandboxesDetail", `${asNumber(sandboxes.pending)} pending, ${asNumber(exec.sessions)} exec, ${asNumber(sandboxes.active_routes)} routes${staleRouteText}`);
+  setText(
+    "runningSandboxesDetail",
+    `${asNumber(sandboxStates.running)} running, ${asNumber(sandboxStates.parked)} parked, ${asNumber(sandboxStates.waking)} waking${staleRouteText}`
+  );
 
-  setText("cpuUtilizationValue", formatPercentPoint(latest.cpuUtilization));
-  setText("cpuUtilizationDetail", `Avg ${formatPercentPoint(actual.cpu_percent_avg)}, reserved ${formatPercentPoint(ratioToPercent(load.vcpu))}`);
+  setText("cpuUtilizationValue", formatInteger(programStates.ready_to_wake));
+  setText(
+    "cpuUtilizationDetail",
+    asNumber(programStates.ready_to_wake) > 0
+      ? `oldest ${formatAge(programs.oldest_ready_to_wake_seconds)}, ${asNumber(wakePlan.unplaced_count)} unplaced`
+      : "no response-ready work"
+  );
 
-  setText("memoryUtilizationValue", formatPercentPoint(latest.memoryUtilization));
-  setText("memoryUtilizationDetail", `Avg ${formatPercentPoint(actual.memory_percent)}, reserved ${formatPercentPoint(ratioToPercent(load.memory))}`);
+  setText("memoryUtilizationValue", formatPercentPoint(latest.hardDiskUtilization));
+  setText(
+    "memoryUtilizationDetail",
+    `${formatMemory((sandboxResources.free || {}).disk_mb)} free of ${formatMemory((sandboxResources.effective || {}).disk_mb)}`
+  );
 
-  setText("queueDepthValue", formatInteger(latest.queueDepth));
-  setText("queueDepthDetail", `${asNumber(sandboxes.pending)} pend, ${asNumber(capacity.prepared_sandboxes)} warm, ${asNumber(images.active_builds)} active builds, ${asNumber(images.pending_builds)} build waits, ${asNumber(builders.prepared_builders)} builders`);
+  setText("queueDepthValue", formatInteger(programStates.model_wait));
+  setText(
+    "queueDepthDetail",
+    `${formatResources((programs.resources || {}).model_wait || {})}, oldest ${formatAge(programs.oldest_model_wait_seconds)}`
+  );
 
-  setText("errorRateValue", formatPercentDecimal(latest.errorRate));
-  setText("errorRateDetail", `Avg ${formatPercentDecimal(average(state.history.map((p) => p.errorRate)))}`);
+  setText(
+    "errorRateValue",
+    latest.wakeP95Seconds === null ? "-" : `${latest.wakeP95Seconds.toFixed(2)}s`
+  );
+  setText(
+    "errorRateDetail",
+    `p50 ${formatDurationMs(programs.response_to_wake_p50_ms)}, ${formatInteger(programs.requests)} requests`
+  );
+
+  const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
+  const actionSummary = actions.length
+    ? actions.map((action) => `${action.kind || "action"} ${asNumber(action.count)}`).join(", ")
+    : "hold";
+  setText(
+    "autoscalerSummary",
+    autoscaler.timestamp ? `${actionSummary}, ${formatTime(autoscaler.timestamp)}` : "No autoscaler cycle loaded"
+  );
+  setText("autoscalerPressureValue", formatInteger(liveSignals.pressure_samples));
+  setText(
+    "autoscalerUtilizationValue",
+    `${formatPercentPoint(ratioToPercent(liveSignals.cpu_utilization))} / ${formatPercentPoint(ratioToPercent(liveSignals.memory_utilization))}`
+  );
+  setText(
+    "autoscalerProvisioningValue",
+    nullableNumber(liveSignals.provisioning_p95_seconds) === null
+      ? "-"
+      : `${Number(liveSignals.provisioning_p95_seconds).toFixed(1)}s`
+  );
+  setText(
+    "autoscalerIdleGraceValue",
+    nullableNumber(autoscaler.effective_scale_down_idle_seconds) === null
+      ? "-"
+      : formatAge(autoscaler.effective_scale_down_idle_seconds)
+  );
+  setText(
+    "programSummary",
+    `${asNumber(programs.rollouts)} rollouts, ${asNumber(programs.requests)} requests`
+  );
+  setText("programModelWaitValue", formatInteger(programStates.model_wait));
+  setText("programReadyValue", formatInteger(programStates.ready_to_wake));
+  setText(
+    "programOldestReadyValue",
+    asNumber(programStates.ready_to_wake) > 0
+      ? formatAge(programs.oldest_ready_to_wake_seconds)
+      : "-"
+  );
+  setText(
+    "programWakeLatencyValue",
+    asNumber(programs.response_to_wake_p95_ms) > 0
+      ? `${(asNumber(programs.response_to_wake_p95_ms) / 1000).toFixed(2)}s`
+      : "-"
+  );
 
   setText("builderReadyValue", formatInteger(nodes.builder));
   setText("builderPreparedValue", formatInteger(builders.prepared_builders));
@@ -2191,23 +3335,418 @@ function renderMetrics(snapshot) {
     "builderSummary",
     `${asNumber(images.pending_builds)} waiting, ${oldestBuildWait} oldest wait, ${asNumber(images.failed_builds)} failed`
   );
-  renderRegistry(registry);
+}
 
-  if (latest.queueDepth > 0 || asNumber(images.pending_builds) > 0) {
-    setStatus("Demand pending", "warn");
+function renderHealth(snapshot) {
+  const nodes = snapshot.nodes || {};
+  const sandboxes = snapshot.sandboxes || {};
+  const images = snapshot.images || {};
+  const programs = snapshot.programs || {};
+  const states = programs.states || {};
+  const autoscaler = snapshot.autoscaler || {};
+  const wakePlan = autoscaler.program_wake_plan || {};
+  const recent = ((snapshot.events || {}).recent || []);
+  const signals = [];
+  let severity = "ok";
+  let title = "Service is healthy";
+  let detail = "Current hard demand fits projected ready capacity.";
+
+  const projectionErrors = recent.filter((event) =>
+    ["program_state_projection_error", "program_wake_shadow_plan_error"].includes(event.kind)
+  ).length;
+  if (projectionErrors > 0) {
+    severity = "bad";
+    title = "Program scheduling telemetry is degraded";
+    detail = `${projectionErrors} recent projection or shadow-plan error(s) need attention.`;
+  } else if (asNumber(wakePlan.unplaced_count) > 0) {
+    severity = "bad";
+    title = "Ready work cannot be placed";
+    detail = `${formatInteger(wakePlan.unplaced_count)} wake request(s) have no current hard fit.`;
+  } else if (resourceHasPositiveValue(autoscaler.resource_deficit)) {
+    severity = "warn";
+    title = "Capacity is catching up";
+    detail = `Autoscaler deficit: ${formatResources(autoscaler.resource_deficit)}.`;
+  } else if (asNumber(sandboxes.stale_routes) > 0 || asNumber(nodes.incompatible) > 0) {
+    severity = "warn";
+    title = "Some supply is unavailable";
+    detail = `${formatInteger(sandboxes.stale_routes)} stale route(s), ${formatInteger(nodes.incompatible)} incompatible node(s).`;
+  } else if (asNumber(states.ready_to_wake) > 0 || asNumber(sandboxes.pending) > 0 || asNumber(images.pending_builds) > 0) {
+    severity = "warn";
+    title = "Demand is waiting";
+    detail = `${formatInteger(states.ready_to_wake)} ready wake(s), ${formatInteger(sandboxes.pending)} sandbox create(s), ${formatInteger(images.pending_builds)} build(s).`;
+  } else if (actionCount(autoscaler.actions, "create") > 0 || actionCount(autoscaler.actions, "stop") > 0) {
+    title = "Capacity is changing";
+    detail = actionSummary(autoscaler.actions);
   }
-  if (asNumber(images.active_builds) > 0) {
-    setStatus("Build running", "warn");
+
+  if (asNumber(states.ready_to_wake) > 0) {
+    signals.push({ text: `${formatInteger(states.ready_to_wake)} ready`, mode: asNumber(wakePlan.unplaced_count) ? "bad" : "warn" });
   }
-  if (asNumber(capacity.prepared_sandboxes) > 0 && asNumber(sandboxes.pending) === 0) {
-    setStatus("Prepared", "ok");
+  if (asNumber(states.model_wait) > 0) {
+    signals.push({ text: `${formatInteger(states.model_wait)} model wait`, mode: "" });
   }
-  if (latest.errorRate > 0) {
-    setStatus("Alerts", "bad");
+  if (asNumber(nodes.sandbox_draining) > 0) {
+    signals.push({ text: `${formatInteger(nodes.sandbox_draining)} draining`, mode: "warn" });
   }
-  if (nullableNumber(scale.p95_ms) !== null && Number(scale.p95_ms) > 300000) {
-    setStatus("Slow scale-up", "warn");
+  if (asNumber((autoscaler.live_signals || {}).pressure_samples) > 0) {
+    signals.push({ text: `${formatInteger((autoscaler.live_signals || {}).pressure_samples)} pressure samples`, mode: "warn" });
   }
+  if (signals.length === 0) signals.push({ text: "No active warnings", mode: "" });
+
+  els.healthBadge.className = `health-icon health-${severity}`;
+  setText("healthTitle", title);
+  setText("healthDetail", detail);
+  els.healthSignals.replaceChildren(...signals.map((signal) => {
+    const span = document.createElement("span");
+    span.className = `signal-chip ${signal.mode}`.trim();
+    span.textContent = signal.text;
+    return span;
+  }));
+  setStatus(severity === "bad" ? "Action needed" : severity === "warn" ? "Watching" : "Live", severity);
+}
+
+function renderSchedulerPage(snapshot) {
+  if (!snapshot || !snapshot.generated_at) return;
+  const autoscaler = snapshot.autoscaler || {};
+  const programs = snapshot.programs || {};
+  const states = programs.states || {};
+  const programSignals = autoscaler.program_signals || {};
+  const wakePlan = autoscaler.program_wake_plan || {};
+  const policy = autoscaler.effective_policy || {};
+  const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
+  const reasons = Array.isArray(autoscaler.reasons) ? autoscaler.reasons : [];
+  const enabled = Boolean(programSignals.action_enabled || policy.program_aware_autoscaling_enabled);
+  const creates = actionCount(actions, "create");
+  const stops = actionCount(actions, "stop");
+  const decisionTitle = creates > 0
+    ? `Create ${formatInteger(creates)} node${creates === 1 ? "" : "s"}`
+    : stops > 0
+      ? `Stop ${formatInteger(stops)} node${stops === 1 ? "" : "s"}`
+      : "Hold current capacity";
+
+  setText("schedulerDecisionTitle", decisionTitle);
+  els.schedulerModeBadge.textContent = enabled ? "Action enabled" : "Shadow only";
+  els.schedulerModeBadge.className = `inline-badge ${enabled ? "badge-ok" : "badge-muted"}`;
+  setText(
+    "schedulerDecisionDetail",
+    autoscaler.timestamp
+      ? `${actionSummary(actions)} · cycle ${formatTime(autoscaler.timestamp)}`
+      : "No autoscaler cycle loaded."
+  );
+  els.schedulerReasons.replaceChildren(...(reasons.length ? reasons : ["No scale action is required."]).slice(0, 6).map((reason) => {
+    const span = document.createElement("span");
+    span.className = `reason-chip ${resourceHasPositiveValue(autoscaler.resource_deficit) ? "warn" : ""}`.trim();
+    span.textContent = String(reason);
+    return span;
+  }));
+  setText("schedulerReadyNodesValue", formatInteger(autoscaler.ready_nodes));
+  setText("schedulerProvisioningValue", formatInteger(autoscaler.provisioning_nodes));
+  setText("schedulerWakePlanValue", `${formatInteger(wakePlan.placed)}/${formatInteger(wakePlan.queued)}`);
+  setText("schedulerUnplacedValue", formatInteger(wakePlan.unplaced_count));
+
+  setText("flowAllValue", formatInteger(programs.requests));
+  setText("flowModelWaitValue", formatInteger(states.model_wait));
+  setText("flowModelWaitDetail", `p95 ${formatDurationMs(programs.model_wait_p95_ms)}`);
+  setText("flowReadyValue", formatInteger(states.ready_to_wake));
+  setText("flowReadyDetail", `oldest ${formatAge(programs.oldest_ready_to_wake_seconds)}`);
+  setText("flowWakingValue", formatInteger(states.waking));
+  setText("flowActingValue", formatInteger(states.acting));
+  setText(
+    "programFlowSummary",
+    `${formatInteger(programs.rollouts)} rollouts · ${formatInteger(programs.sandboxes)} sandboxes`
+  );
+
+  setText("demandPendingValue", formatResources(autoscaler.pending_resources || {}));
+  setText("demandPreparedValue", formatResources(autoscaler.prepared_resources || {}));
+  setText("demandReadyWakeValue", formatResources(programSignals.ready_to_wake_resources || {}));
+  setText("demandModelWaitValue", formatResources(programSignals.weighted_model_wait_resources || {}));
+  setText("demandEffectiveValue", formatResources(programSignals.effective_resources || {}));
+  setText("decisionDesiredValue", formatResources(autoscaler.desired_resources || {}));
+  setText("decisionProjectedValue", formatResources(autoscaler.projected_free_resources || {}));
+  setText("decisionDeficitValue", formatResources(autoscaler.resource_deficit || {}));
+  setText("decisionPressureValue", formatInteger((autoscaler.live_signals || {}).pressure_samples));
+  setText("decisionIdleGraceValue", formatAge(autoscaler.effective_scale_down_idle_seconds));
+  renderPolicy(policy);
+  renderProgramQueue();
+}
+
+function renderPolicy(policy) {
+  const rows = [
+    ["Program action", policy.program_aware_autoscaling_enabled ? "Enabled" : "Shadow"],
+    ["Model-wait weight", formatPercentPoint(ratioToPercent(policy.model_wait_capacity_weight))],
+    ["Leading headroom", `${formatInteger(policy.model_wait_max_headroom_nodes)} node max`],
+    ["Node range", `${formatInteger(policy.min_nodes)}–${formatInteger(policy.max_nodes)}`],
+    ["CPU target", formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))],
+    ["Memory target", formatPercentPoint(ratioToPercent(policy.target_memory_utilization))],
+    ["Storage queue", formatPercentPoint(ratioToPercent(policy.target_storage_queue_utilization))],
+    ["Idle grace", formatAge(policy.scale_down_idle_seconds)],
+  ];
+  els.policyValues.replaceChildren(...rows.map(([name, value]) => {
+    const wrapper = document.createElement("div");
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = name;
+    dd.textContent = value;
+    wrapper.append(dt, dd);
+    return wrapper;
+  }));
+}
+
+function renderProgramQueue() {
+  if (!els.programQueueRows) return;
+  const snapshot = state.lastSnapshot || {};
+  const programs = snapshot.programs || {};
+  const autoscaler = snapshot.autoscaler || {};
+  const plan = autoscaler.program_wake_plan || {};
+  const queue = Array.isArray(programs.shadow_wake_queue) ? programs.shadow_wake_queue : [];
+  const placements = Array.isArray(plan.placements) ? plan.placements : [];
+  const unplaced = Array.isArray(plan.unplaced) ? plan.unplaced : [];
+  const byRequest = new Map();
+  for (const item of queue) byRequest.set(String(item.request_id || ""), { ...item });
+  for (const item of placements) {
+    const key = String(item.request_id || "");
+    byRequest.set(key, { ...(byRequest.get(key) || {}), ...item, result: "placed" });
+  }
+  for (const item of unplaced) {
+    const key = String(item.request_id || "");
+    byRequest.set(key, { ...(byRequest.get(key) || {}), ...item, result: "unplaced" });
+  }
+  let rows = [...byRequest.values()];
+  const query = String(els.programSearchInput.value || "").trim().toLowerCase();
+  const resultFilter = String(els.programResultFilter.value || "all");
+  if (!["all", "ready_to_wake"].includes(state.programStateFilter)) rows = [];
+  if (query) {
+    rows = rows.filter((item) => [
+      item.rollout_id,
+      item.request_id,
+      item.sandbox_id,
+      item.node_id,
+      item.job_id,
+      item.reason,
+    ].join(" ").toLowerCase().includes(query));
+  }
+  if (resultFilter === "local") rows = rows.filter((item) => item.local === true);
+  if (resultFilter === "migration") rows = rows.filter((item) => item.local === false && item.result === "placed");
+  if (resultFilter === "unplaced") {
+    rows.sort((a, b) => Number(b.result === "unplaced") - Number(a.result === "unplaced") || asNumber(a.position) - asNumber(b.position));
+  } else {
+    rows.sort((a, b) => asNumber(a.position) - asNumber(b.position));
+  }
+  const shown = rows.slice(0, MAX_PROGRAM_ROWS);
+  const truncated = asNumber(plan.placements_truncated) + asNumber(plan.unplaced_truncated);
+  setText(
+    "programQueueSummary",
+    `${formatInteger(shown.length)} shown · ${formatInteger(plan.queued)} queued · ${formatInteger(plan.unplaced_count)} unplaced${truncated ? ` · ${formatInteger(truncated)} sampled out` : ""}`
+  );
+  if (shown.length === 0) {
+    renderEmptyRow(
+      els.programQueueRows,
+      8,
+      state.programStateFilter === "all" || state.programStateFilter === "ready_to_wake"
+        ? "No ready wake requests match the current filter"
+        : "Per-request rows are available for the ready-to-wake phase"
+    );
+    return;
+  }
+  els.programQueueRows.replaceChildren(...shown.map(programQueueRow));
+}
+
+function programQueueRow(item) {
+  const tr = document.createElement("tr");
+  if (item.result === "unplaced") tr.className = "row-alert";
+  appendCell(tr, formatInteger(item.position));
+  appendCell(tr, formatAge(firstNumber(item.ready_age_seconds, item.age_seconds)));
+  appendClassCell(
+    tr,
+    `${item.rollout_id || "-"} / ${item.request_id || "-"}`,
+    "",
+    `${item.rollout_id || ""}\\n${item.request_id || ""}`
+  );
+  appendClassCell(tr, `${item.sandbox_id || "-"} · g${formatInteger(item.sandbox_generation)}`, "");
+  appendCell(tr, formatResources(item.resources || {}));
+  appendClassCell(tr, item.node_id || item.job_id || "-", "");
+  appendCell(tr, item.result === "placed" ? (item.local ? "local" : "migration") : "-");
+  const result = item.result === "unplaced" ? `blocked: ${item.reason || "no hard fit"}` : item.result || "queued";
+  appendCell(tr, result);
+  return tr;
+}
+
+function renderNodesPage() {
+  if (!els.nodeRows) return;
+  const snapshot = state.lastSnapshot || {};
+  const nodes = snapshot.nodes || {};
+  const resources = (snapshot.resources || {}).sandbox || {};
+  const autoscaler = snapshot.autoscaler || {};
+  const plan = autoscaler.program_wake_plan || {};
+  const placements = Array.isArray(plan.placements) ? plan.placements : [];
+  const plannedByNode = placements.reduce((counts, item) => {
+    const key = String(item.node_id || "");
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+  }, new Map());
+  const query = String(els.nodeSearchInput.value || "").trim().toLowerCase();
+  const filter = String(els.nodeStateFilter.value || "all");
+  let items = Array.isArray(nodes.items) ? nodes.items.filter((item) => (item.capabilities || []).includes("sandbox")) : [];
+  items = items.filter((item) => {
+    const stateName = nodeState(item);
+    if (query && !`${item.node_id || ""} ${item.job_id || ""}`.toLowerCase().includes(query)) return false;
+    if (filter === "all") return true;
+    if (filter === "ready") return stateName.mode === "ok";
+    if (filter === "constrained") return nodeConstrained(item);
+    if (filter === "draining") return Boolean(item.draining || item.admission_open === false);
+    if (filter === "stale") return !item.fresh || !item.agent_version_compatible;
+    return true;
+  });
+  items.sort((a, b) => nodeStateRank(a) - nodeStateRank(b) || asNumber(b.active_workloads) - asNumber(a.active_workloads) || String(a.node_id).localeCompare(String(b.node_id)));
+  const shown = items.slice(0, MAX_NODE_ROWS);
+  setText("nodesReadyValue", formatInteger(nodes.sandbox_ready));
+  setText("nodesDrainingValue", formatInteger(nodes.sandbox_draining));
+  setText("nodesIncompatibleValue", formatInteger(nodes.incompatible));
+  setText("nodesDiskFreeValue", formatMemory((resources.free || {}).disk_mb));
+  setText(
+    "nodesPageDetail",
+    `${formatInteger(nodes.sandbox_ready)} ready of ${formatInteger(nodes.sandbox)} fresh sandbox nodes; ${formatInteger(plan.placed)} shadow wake placement(s).`
+  );
+  setText("nodeTableSummary", `${formatInteger(shown.length)} shown of ${formatInteger(items.length)} matching`);
+  if (shown.length === 0) {
+    renderEmptyRow(els.nodeRows, 8, "No nodes match the current filter");
+    return;
+  }
+  els.nodeRows.replaceChildren(...shown.map((item) => nodeRow(item, plannedByNode.get(String(item.node_id || "")) || 0)));
+}
+
+function nodeRow(item, plannedWakes) {
+  const tr = document.createElement("tr");
+  const stateInfo = nodeState(item);
+  const stateCell = document.createElement("td");
+  const stateWrapper = document.createElement("span");
+  const dot = document.createElement("i");
+  dot.className = `state-dot ${stateInfo.mode}`;
+  stateWrapper.className = "state-cell";
+  stateWrapper.append(dot, document.createTextNode(stateInfo.label));
+  stateCell.append(stateWrapper);
+  tr.append(stateCell);
+  appendClassCell(tr, `${item.node_id || "-"}\\n${item.job_id || "-"}`, "", item.node_url || "");
+  appendCell(tr, `${formatInteger(item.active_sandboxes)} sandboxes${plannedWakes ? ` · +${plannedWakes} planned` : ""}`);
+  tr.append(resourceMeterCell(item, "vcpu", "cpu_percent"));
+  tr.append(resourceMeterCell(item, "memory_mb", "memory_percent"));
+  const free = item.free_resources || {};
+  const effective = item.effective_resources || {};
+  appendCell(tr, `${formatMemory(free.disk_mb)} / ${formatMemory(effective.disk_mb)}`);
+  appendCell(tr, nodePressureText(item));
+  appendCell(tr, item.fresh ? `${formatAge(item.age_seconds)} ago` : `stale ${formatAge(item.age_seconds)}`);
+  return tr;
+}
+
+function resourceMeterCell(item, resource, actualKey) {
+  const td = document.createElement("td");
+  const load = ratioToPercent((item.load || {})[resource === "vcpu" ? "vcpu" : "memory"]);
+  const actual = nullableNumber((item.actual_usage || {})[actualKey]);
+  const value = firstNumber(actual, load, 0);
+  const wrapper = document.createElement("div");
+  const label = document.createElement("div");
+  const meter = document.createElement("div");
+  const fill = document.createElement("span");
+  const actualLabel = document.createElement("span");
+  const reservedLabel = document.createElement("span");
+  wrapper.className = "meter-stack";
+  label.className = "meter-label";
+  actualLabel.textContent = `${formatPercentPoint(actual)} actual`;
+  reservedLabel.textContent = `${formatPercentPoint(load)} reserved`;
+  label.append(actualLabel, reservedLabel);
+  meter.className = `meter ${value >= 90 ? "bad" : value >= 75 ? "warn" : ""}`.trim();
+  fill.style.width = `${Math.max(0, Math.min(100, value))}%`;
+  meter.append(fill);
+  wrapper.append(label, meter);
+  td.append(wrapper);
+  return td;
+}
+
+function nodeState(item) {
+  if (!item.fresh) return { label: "Stale", mode: "bad" };
+  if (!item.agent_version_compatible) return { label: "Incompatible", mode: "bad" };
+  if (item.draining) return { label: "Draining", mode: "warn" };
+  if (item.admission_open === false) return { label: "Closed", mode: "warn" };
+  if (nodeConstrained(item)) return { label: "Constrained", mode: "warn" };
+  return { label: "Ready", mode: "ok" };
+}
+
+function nodeStateRank(item) {
+  const mode = nodeState(item).mode;
+  return mode === "bad" ? 0 : mode === "warn" ? 1 : 2;
+}
+
+function nodeConstrained(item) {
+  const actual = item.actual_usage || {};
+  const load = item.load || {};
+  const storageLimit = asNumber(actual.storage_max_concurrent_operations);
+  const storageQueue = storageLimit > 0
+    ? (asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)) / storageLimit
+    : 0;
+  return asNumber(load.vcpu) >= 0.8
+    || asNumber(load.memory) >= 0.85
+    || asNumber(actual.memory_psi_full_avg10) >= 5
+    || storageQueue >= 0.75
+    || asNumber(actual.storage_error_volumes) > 0;
+}
+
+function nodePressureText(item) {
+  const actual = item.actual_usage || {};
+  const parts = [];
+  if (nullableNumber(actual.memory_psi_full_avg10) !== null) parts.push(`PSI ${formatNumber(actual.memory_psi_full_avg10)}`);
+  const limit = asNumber(actual.storage_max_concurrent_operations);
+  if (limit > 0) parts.push(`storage ${asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)}/${limit}`);
+  if (asNumber(actual.storage_error_volumes) > 0) parts.push(`${formatInteger(actual.storage_error_volumes)} volume errors`);
+  return parts.join(" · ") || "normal";
+}
+
+function actionCount(actions, kind) {
+  return (Array.isArray(actions) ? actions : []).reduce(
+    (total, action) => total + (action && action.kind === kind ? Math.max(0, asNumber(action.count || (action.job_ids || []).length)) : 0),
+    0
+  );
+}
+
+function actionSummary(actions) {
+  if (!Array.isArray(actions) || actions.length === 0) return "Hold";
+  return actions.map((action) => {
+    const count = Math.max(0, asNumber(action.count || (action.job_ids || []).length));
+    return `${action.kind || "action"}${count ? ` ${formatInteger(count)}` : ""}`;
+  }).join(", ");
+}
+
+async function copyDiagnostics() {
+  if (!state.lastSnapshot) return;
+  const snapshot = state.lastSnapshot;
+  const autoscaler = snapshot.autoscaler || {};
+  const programs = snapshot.programs || {};
+  const text = [
+    `Generated: ${snapshot.generated_at || "-"}`,
+    `Health: ${els.healthTitle.textContent}`,
+    `Nodes: ${asNumber((snapshot.nodes || {}).sandbox_ready)} ready / ${asNumber(autoscaler.provisioning_nodes)} provisioning`,
+    `Programs: ${asNumber(programs.requests)} requests, ${asNumber((programs.states || {}).ready_to_wake)} ready`,
+    `Wake plan: ${asNumber((autoscaler.program_wake_plan || {}).placed)} placed / ${asNumber((autoscaler.program_wake_plan || {}).unplaced_count)} unplaced`,
+    `Decision: ${actionSummary(autoscaler.actions)}`,
+    `Reasons: ${(autoscaler.reasons || []).join("; ") || "none"}`,
+  ].join("\\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    els.copyDiagnosticsButton.textContent = "Copied";
+    window.setTimeout(() => { els.copyDiagnosticsButton.textContent = "Copy summary"; }, 1500);
+  } catch (_error) {
+    els.copyDiagnosticsButton.textContent = "Copy failed";
+  }
+}
+
+function downloadSnapshot() {
+  if (!state.lastSnapshot) return;
+  const blob = new Blob([JSON.stringify(state.lastSnapshot, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `ucloud-sandbox-metrics-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function renderEvents(snapshot) {
@@ -2261,6 +3800,7 @@ async function refreshSandboxes(options = {}) {
     const payload = await dashboardJsonRequest("/v1/sandboxes?refresh=true");
     const rows = Array.isArray(payload.sandboxes) ? payload.sandboxes : [];
     state.lastSandboxes = rows.map(normalizeSandboxRecord).sort(compareSandboxesNewestFirst);
+    state.lastSandboxRefreshAt = Date.now();
     setSandboxPageStatus(payload.cached ? "Cached" : "Live", "ok");
     setText(
       "sandboxesPageDetail",
@@ -2485,9 +4025,12 @@ async function terminateAllSandboxes() {
   state.sandboxActionInFlight = true;
   renderSandboxesPage();
   const failures = [];
-  for (const sandbox of candidates) {
+  for (const [index, sandbox] of candidates.entries()) {
     state.terminatingSandboxIds.add(sandbox.id);
-    renderSandboxesPage();
+    setText(
+      "sandboxesPageDetail",
+      `Terminating ${formatInteger(index + 1)} of ${formatInteger(candidates.length)}: ${sandbox.id}`
+    );
     try {
       await deleteSandboxById(sandbox.id);
     } catch (error) {
@@ -2566,6 +4109,7 @@ function renderRegistryPage(snapshot) {
   );
 
   const filteredRepos = repos.filter((repo) => registryRepoMatches(repo, buildByTag, filter, query));
+  const shownRepos = filteredRepos.slice(0, MAX_REGISTRY_REPOSITORY_ROWS);
   const flattenedTags = flattenRegistryTags(filteredRepos, buildByTag)
     .filter((item) => !query || matchesRegistrySearch(item.searchText, query));
   const summaryParts = [
@@ -2576,13 +4120,19 @@ function renderRegistryPage(snapshot) {
   if (unavailable > 0) summaryParts.push(`${formatInteger(unavailable)} missing tag lists`);
   if (query) summaryParts.push(`matching "${query}"`);
   setText("registryPageSummary", summaryParts.join(", "));
-  setText("registryRepoSummary", `${formatInteger(filteredRepos.length)} shown`);
-  setText("registryTagSummary", `${formatInteger(flattenedTags.length)} shown`);
+  setText(
+    "registryRepoSummary",
+    `${formatInteger(shownRepos.length)} shown of ${formatInteger(filteredRepos.length)} matching`
+  );
+  setText(
+    "registryTagSummary",
+    `${formatInteger(Math.min(flattenedTags.length, 200))} shown of ${formatInteger(flattenedTags.length)} matching`
+  );
 
-  if (filteredRepos.length === 0) {
+  if (shownRepos.length === 0) {
     renderEmptyRow(els.registryRepoRows, 5, "No repositories match the current filter");
   } else {
-    els.registryRepoRows.replaceChildren(...filteredRepos.map((repo) => registryRepoRow(repo, buildByTag)));
+    els.registryRepoRows.replaceChildren(...shownRepos.map((repo) => registryRepoRow(repo, buildByTag)));
   }
   if (flattenedTags.length === 0) {
     renderEmptyRow(els.registryTagRows, 5, "No tags match the current filter");
@@ -2994,6 +4544,7 @@ function summarizeEvent(event) {
 }
 
 function redrawCharts() {
+  if (state.currentPage !== "overview" || document.hidden) return;
   if (state.history.length === 0) {
     for (const id of [
       "activeNodesChart",
@@ -3018,19 +4569,19 @@ function redrawCharts() {
 
   drawSpark("nodesSpark", state.history.map((p) => p.activeNodes), palette.blue, palette.blueSoft);
   drawSpark("sandboxesSpark", state.history.map((p) => p.activeSandboxes), palette.blue, palette.blueSoft);
-  drawSpark("cpuSpark", state.history.map((p) => p.cpuUtilization), palette.green, palette.greenSoft, { min: 0, max: 100 });
-  drawSpark("memorySpark", state.history.map((p) => p.memoryUtilization), palette.orange, palette.orangeSoft, { min: 0, max: 100 });
-  drawSpark("queueSpark", state.history.map((p) => p.queueDepth), palette.purple, palette.purpleSoft);
-  drawSpark("errorSpark", state.history.map((p) => p.errorRate), palette.red, palette.redSoft, { min: 0 });
+  drawSpark("cpuSpark", state.history.map((p) => p.readyWake), palette.purple, palette.purpleSoft, { min: 0 });
+  drawSpark("memorySpark", state.history.map((p) => p.hardDiskUtilization), palette.orange, palette.orangeSoft, { min: 0, max: 100 });
+  drawSpark("queueSpark", state.history.map((p) => p.modelWait), palette.purple, palette.purpleSoft, { min: 0 });
+  drawSpark("errorSpark", state.history.map((p) => p.wakeP95Seconds), palette.red, palette.redSoft, { min: 0 });
 
   drawLineChart("activeNodesChart", [
     { label: "Active Nodes", color: palette.blue, fill: palette.blueSoft, values: state.history.map((p) => p.activeNodes) },
   ], { min: 0, ticks: 4 });
   drawLineChart("activeSandboxesChart", [
-    { label: "Running Sandboxes", color: palette.blue, fill: palette.blueSoft, values: state.history.map((p) => p.activeSandboxes) },
+    { label: "Sandbox Routes", color: palette.blue, fill: palette.blueSoft, values: state.history.map((p) => p.activeSandboxes) },
   ], { min: 0, ticks: 4, integerAxis: true });
   drawLineChart("queueDepthChart", [
-    { label: "Queue Depth", color: palette.purple, fill: palette.purpleSoft, values: state.history.map((p) => p.queueDepth) },
+    { label: "Hard Demand", color: palette.purple, fill: palette.purpleSoft, values: state.history.map((p) => p.queueDepth) },
   ], { min: 0, ticks: 4, integerAxis: true });
   drawLineChart("cpuPressureChart", [
     { label: "Actual", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.cpuUtilization) },
@@ -3045,12 +4596,21 @@ function redrawCharts() {
     { label: "p95", color: palette.blue, dashed: true, values: state.history.map((p) => p.scaleP95Seconds) },
   ], { min: 0, ticks: 4 });
   drawLineChart("sandboxStartChart", [
-    { label: "Start Time", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.startP50Seconds) },
+    { label: "Model wait p95", color: palette.purple, values: state.history.map((p) => p.modelWaitP95Seconds) },
+    { label: "Wake p95", color: palette.green, fill: palette.greenSoft, values: state.history.map((p) => p.wakeP95Seconds) },
   ], { min: 0, ticks: 4 });
   drawLineChart("builderBuildsChart", [
     { label: "Active Builds", color: palette.orange, fill: palette.orangeSoft, values: state.history.map((p) => p.activeBuilds) },
     { label: "Ready Builders", color: palette.blue, dashed: true, values: state.history.map((p) => p.builderNodes) },
   ], { min: 0, ticks: 4, integerAxis: true });
+}
+
+function scheduleChartRedraw() {
+  if (state.resizeFrame !== null) return;
+  state.resizeFrame = window.requestAnimationFrame(() => {
+    state.resizeFrame = null;
+    redrawCharts();
+  });
 }
 
 function clearPlot(id, label) {
@@ -3237,7 +4797,10 @@ function resourceHasPositiveValue(value) {
 }
 
 function setText(id, value) {
-  els[id].textContent = value;
+  const element = els[id] || document.getElementById(id);
+  if (!element) return;
+  els[id] = element;
+  element.textContent = value;
 }
 
 function plainObject(value) {
@@ -3340,7 +4903,15 @@ function formatResources(value) {
   if (!value || typeof value !== "object") return "0 vCPU";
   const cpu = formatNumber(value.vcpu || 0);
   const memory = formatMemory(value.memory_mb || 0);
-  return `${cpu} vCPU ${memory}`;
+  const disk = asNumber(value.disk_mb);
+  return `${cpu} vCPU · ${memory}${disk > 0 ? ` · ${formatMemory(disk)} disk` : ""}`;
+}
+
+function resourcePercent(used, effective, key) {
+  const numerator = nullableNumber((used || {})[key]);
+  const denominator = nullableNumber((effective || {})[key]);
+  if (numerator === null || denominator === null || denominator <= 0) return null;
+  return Math.max(0, Math.min(100, (numerator / denominator) * 100));
 }
 
 function formatMemory(value) {

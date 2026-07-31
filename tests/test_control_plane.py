@@ -157,6 +157,103 @@ class FileRuntime(DockerGvisorRuntime):
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_relay_lifecycle_persists_program_request_transitions(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "heartbeats.json"
+            metrics_file = root / "metrics.sqlite"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=ResourceQuantity(
+                        vcpu=1,
+                        memory_mb=1024,
+                        disk_mb=4096,
+                    ),
+                    state="running",
+                )
+            )
+            HeartbeatStore(heartbeat_file).upsert(
+                build_heartbeat(
+                    job_id=route.job_id,
+                    node_id=route.node_id,
+                    node_url=route.node_url,
+                    capabilities=("sandbox", "disk-quota"),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_file,
+                routing_file=route_file,
+                metrics_file=metrics_file,
+            )
+
+            def fake_proxy_request(_handler, *_args, **_kwargs):
+                return control_plane.ProxiedResponse(
+                    200,
+                    {"Content-Type": "application/json"},
+                    b'{"ok":true}',
+                )
+
+            gateway.RequestHandlerClass._proxy_request = fake_proxy_request
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
+                identity = {
+                    "generation": route.generation,
+                    "request_id": "request-1",
+                    "rollout_id": "rollout-1",
+                    "request_created_at": 1_785_489_600.0,
+                }
+                self._json_request(
+                    f"{base}/park",
+                    method="POST",
+                    payload=identity,
+                )
+                self._json_request(
+                    f"{base}/wake",
+                    method="POST",
+                    payload=identity,
+                )
+                records = RoutingStore(route_file).program_requests_readonly()
+                wake_events = control_plane.MetricsStore(metrics_file).load_events(
+                    max_events=10,
+                    kinds=(
+                        "program_wake_shadow_plan",
+                        "program_wake_actual",
+                    ),
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                gateway_thread.join(timeout=1)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].state, "acting")
+        self.assertEqual(records[0].rollout_id, "rollout-1")
+        self.assertTrue(records[0].parked_at)
+        self.assertTrue(records[0].response_ready_at)
+        self.assertTrue(records[0].wake_started_at)
+        self.assertTrue(records[0].wake_completed_at)
+        self.assertEqual(
+            {event.kind for event in wake_events},
+            {"program_wake_shadow_plan", "program_wake_actual"},
+        )
+
     def test_transport_epoch_changes_only_after_committed_route_handoff(
         self,
     ) -> None:
@@ -2248,11 +2345,13 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("text/html", html_type or "")
         self.assertIn("UCloud Sandboxes", html)
         self.assertIn("/dashboard/dashboard.js", html)
+        self.assertIn('data-page-target="scheduler"', html)
+        self.assertIn('data-page-target="nodes"', html)
         self.assertIn('data-page-target="sandboxes"', html)
         self.assertIn('data-page-target="registry"', html)
         self.assertIn('id="terminateAllSandboxesButton"', html)
-        self.assertIn('<span class="control-value">5s</span>', html)
-        self.assertNotIn("refreshSelect", html)
+        self.assertIn('id="refreshSelect"', html)
+        self.assertIn('id="refreshNowButton"', html)
         self.assertNotIn("secret-token", html)
         self.assertIn("text/css", css_type or "")
         self.assertIn(".metric-grid", css)
@@ -2264,8 +2363,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("terminateAllSandboxes", js)
         self.assertIn("X-UCloud-Sandbox-Token", js)
         self.assertIn("renderRegistryPage", js)
-        self.assertIn("const REFRESH_INTERVAL_MS = 5000;", js)
-        self.assertNotIn("refreshSelect", js)
+        self.assertIn("const DEFAULT_REFRESH_INTERVAL_MS = 10000;", js)
+        self.assertIn("state.metricsRequest.abort()", js)
+        self.assertIn("scheduleNextRefresh", js)
         self.assertNotIn("secret-token", js)
         self.assertEqual(unauthorized_metrics["status"], 401)
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)

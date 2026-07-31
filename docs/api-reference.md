@@ -44,7 +44,15 @@ refreshed.
 
 ```json
 {
-  "nodes": {"fresh": 1, "sandbox": 1, "builder": 0, "samples": 24},
+  "nodes": {
+    "fresh": 1,
+    "sandbox": 1,
+    "sandbox_ready": 1,
+    "sandbox_draining": 0,
+    "sandbox_admission_closed": 0,
+    "builder": 0,
+    "samples": 24
+  },
   "resources": {
     "sandbox": {
       "effective": {"vcpu": 16, "memory_mb": 32768, "disk_mb": 204800},
@@ -58,7 +66,11 @@ refreshed.
       }
     }
   },
-  "sandboxes": {"active_routes": 1, "pending": 0},
+  "sandboxes": {
+    "active_routes": 1,
+    "states": {"running": 1},
+    "pending": 0
+  },
   "capacity": {
     "prepared": 1,
     "prepared_sandboxes": 16,
@@ -66,6 +78,29 @@ refreshed.
   },
   "images": {"pending_builds": 0},
   "builders": {"prepared": 1, "prepared_builders": 1},
+  "programs": {
+    "requests": 2,
+    "states": {"model_wait": 1, "ready_to_wake": 1, "waking": 0, "acting": 0},
+    "oldest_ready_to_wake_seconds": 3,
+    "response_to_wake_p95_ms": 240
+  },
+  "autoscaler": {
+    "actions": [],
+    "reasons": ["capacity is sufficient"],
+    "program_wake_plan": {
+      "queued": 1,
+      "placed": 1,
+      "unplaced_count": 0,
+      "placements": [{"request_id": "request-1", "node_id": "node-1"}],
+      "placements_truncated": 0,
+      "unplaced_truncated": 0
+    },
+    "effective_policy": {
+      "program_aware_autoscaling_enabled": false,
+      "target_cpu_utilization": 0.75,
+      "target_memory_utilization": 0.8
+    }
+  },
   "scale_up": {"samples": 1, "last_ms": 391000, "p95_ms": 391000},
   "traces": {
     "span_count": 42,
@@ -100,7 +135,14 @@ refreshed.
 }
 ```
 
-Trace spans are written to the same metrics JSONL stream as autoscaler and
+The compact response keeps at most 100 wake placements and 100 unplaced wake
+samples from the latest autoscaler cycle and reports omitted counts. This
+prevents a model-return burst from making every dashboard poll proportional to
+the entire wake queue. `effective_policy` contains only non-secret operational
+knobs and is observational; `/v1/metrics` does not provide a policy mutation
+path.
+
+Trace spans are written to the same indexed metrics database as autoscaler and
 heartbeat events. Sandbox create traces cover gateway image resolution,
 existing-route checks, node selection, image availability or pull, and node
 create proxying. Image build traces cover builder selection, pending-build

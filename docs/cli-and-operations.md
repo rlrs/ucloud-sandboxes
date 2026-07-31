@@ -195,7 +195,8 @@ uv run ucloud-sandboxes deploy-all-in-one 12361919 \
   --direct-runsc-commit 9f653e577965df2ddd13875b5530cd2588661f1c \
   --sandbox-product-id cpu-amd-zen5-32-vcpu \
   --sandbox-disk-gb 2000 \
-  --docker-quota-image-gb 1800 \
+  --docker-quota-image-gb 440 \
+  --storage-native-cache-gb 32 \
   --direct-disk-headroom-mb 16384 \
   --swap-gb 96 \
   --cpu-overcommit 1 \
@@ -291,7 +292,8 @@ uv run ucloud-sandboxes init-vm 12345317 \
   --execute
 ```
 
-Initialize sandbox VM nodes without image builds enabled:
+The following is the historical legacy-runtime initialization example. New
+storage-native nodes use `deploy-all-in-one --sandbox-runtime direct` above:
 
 ```bash
 uv run ucloud-sandboxes init-vm 12345318 \

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 import math
 
@@ -9,6 +10,8 @@ from .models import (
     SandboxDemand,
     SandboxNode,
     SandboxPlacementRequest,
+    LiveScaleSignals,
+    ProgramScaleSignals,
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
@@ -22,6 +25,8 @@ def evaluate_scale(
     policy: ScalePolicy,
     *,
     now: datetime | None = None,
+    live_signals: LiveScaleSignals | None = None,
+    program_signals: ProgramScaleSignals | None = None,
 ) -> ScaleDecision:
     if now is None:
         now = utc_now()
@@ -63,8 +68,39 @@ def evaluate_scale(
         )
     ]
     total_nodes = len(pool_nodes)
+    effective_scale_down_idle_seconds = policy.scale_down_idle_seconds
+    if (
+        policy.live_pressure_enabled
+        and live_signals is not None
+        and live_signals.provisioning_p95_seconds is not None
+    ):
+        effective_scale_down_idle_seconds = max(
+            effective_scale_down_idle_seconds,
+            int(
+                math.ceil(
+                    live_signals.provisioning_p95_seconds
+                    * max(0.0, policy.provisioning_scale_down_multiplier)
+                )
+            ),
+        )
+    effective_policy = replace(
+        policy,
+        scale_down_idle_seconds=effective_scale_down_idle_seconds,
+    )
+    pressure_scale_up = _live_pressure_requires_capacity(
+        policy,
+        live_signals,
+    ) and not any(node.is_idle for node in ready_nodes)
 
     demand_resources = demand.desired_resources
+    if (
+        policy.program_aware_autoscaling_enabled
+        and program_signals is not None
+    ):
+        demand_resources = _add_resources(
+            demand_resources,
+            program_signals.effective_resources,
+        )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
     projected_free_resources = _projected_free_resources(
         capacity_nodes,
@@ -76,9 +112,18 @@ def evaluate_scale(
         desired_resources,
         projected_free_resources,
     )
+    placement_requests = demand.placement_requests
+    if (
+        policy.program_aware_autoscaling_enabled
+        and program_signals is not None
+    ):
+        placement_requests = (
+            *placement_requests,
+            *program_signals.ready_placement_requests,
+        )
     placement_nodes = _nodes_for_unplaced_requests(
         capacity_nodes,
-        demand.placement_requests,
+        placement_requests,
         policy,
         now=now,
     )
@@ -176,6 +221,23 @@ def evaluate_scale(
                     f"{_resource_label(resource_deficit)}: {reason}"
                 )
 
+    if (
+        pressure_scale_up
+        and _planned_creates(actions) == 0
+        and len(provisioning_nodes) == 0
+        and ready_nodes
+    ):
+        create_count = min(
+            1,
+            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+        )
+        if create_count > 0:
+            reason = _live_pressure_reason(policy, live_signals)
+            actions.append(
+                ScaleAction(kind="create", count=create_count, reason=reason)
+            )
+            reasons.append(reason)
+
     planned_creates = _planned_creates(actions)
     if (
         planned_creates == 0
@@ -184,10 +246,21 @@ def evaluate_scale(
     ):
         excess_nodes = total_nodes - policy.min_nodes
         stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
-        if excess_nodes > 0 and stop_budget > 0:
+        pressure_cooldown = bool(
+            policy.live_pressure_enabled
+            and live_signals is not None
+            and live_signals.latest_pressure_age_seconds is not None
+            and live_signals.latest_pressure_age_seconds
+            < policy.pressure_scale_down_cooldown_seconds
+        )
+        if pressure_cooldown:
+            reasons.append(
+                "recent live pressure retains ready capacity during cooldown"
+            )
+        elif excess_nodes > 0 and stop_budget > 0:
             stop_candidates = _stop_candidates(
                 ready_nodes,
-                policy,
+                effective_policy,
                 now,
                 required_resources=desired_resources,
                 max_count=min(excess_nodes, stop_budget),
@@ -224,6 +297,59 @@ def evaluate_scale(
         projected_free_resources=projected_free_resources,
         resource_deficit=resource_deficit,
         reasons=tuple(reasons),
+        live_signals=live_signals,
+        program_signals=program_signals,
+        pressure_scale_up=pressure_scale_up,
+        effective_scale_down_idle_seconds=effective_scale_down_idle_seconds,
+    )
+
+
+def _live_pressure_requires_capacity(
+    policy: ScalePolicy,
+    signals: LiveScaleSignals | None,
+) -> bool:
+    if not policy.live_pressure_enabled or signals is None:
+        return False
+    age = signals.latest_pressure_age_seconds
+    return bool(
+        signals.pressure_samples >= policy.live_pressure_min_samples
+        and age is not None
+        and age <= policy.live_pressure_fresh_seconds
+    )
+
+
+def _live_pressure_reason(
+    policy: ScalePolicy,
+    signals: LiveScaleSignals | None,
+) -> str:
+    if signals is None:
+        return "sustained live node pressure exceeds target headroom"
+    values: list[str] = []
+    if (
+        signals.cpu_utilization is not None
+        and signals.cpu_utilization >= policy.target_cpu_utilization
+    ):
+        values.append(f"cpu={signals.cpu_utilization:.0%}")
+    if (
+        signals.memory_utilization is not None
+        and signals.memory_utilization >= policy.target_memory_utilization
+    ):
+        values.append(f"memory={signals.memory_utilization:.0%}")
+    if (
+        signals.memory_psi_full_avg10 is not None
+        and signals.memory_psi_full_avg10 >= policy.max_memory_psi_full_avg10
+    ):
+        values.append(f"memory-psi={signals.memory_psi_full_avg10:g}")
+    if (
+        signals.storage_queue_utilization is not None
+        and signals.storage_queue_utilization
+        >= policy.target_storage_queue_utilization
+    ):
+        values.append(f"storage-queue={signals.storage_queue_utilization:.0%}")
+    suffix = f" ({', '.join(values)})" if values else ""
+    return (
+        f"sustained live pressure across {signals.pressure_samples} sample(s)"
+        f"{suffix}"
     )
 
 
@@ -381,11 +507,18 @@ def _nodes_for_unplaced_requests(
     for placement in sorted(requests, key=pressure, reverse=True):
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
-        fitting = [
-            (index, job_id, available)
-            for index, (job_id, available) in enumerate(bins)
-            if job_id not in excluded and requested.fits_within(available)
-        ]
+        fitting: list[tuple[int, str, ResourceQuantity]] = []
+        for index, (job_id, available) in enumerate(bins):
+            if job_id in excluded:
+                continue
+            available_for_request = available
+            if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
+                available_for_request = replace(
+                    available,
+                    disk_mb=available.disk_mb + placement.owned_disk_mb,
+                )
+            if requested.fits_within(available_for_request):
+                fitting.append((index, job_id, available_for_request))
         if fitting:
             index, job_id, available = min(
                 fitting,

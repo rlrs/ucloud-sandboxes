@@ -25,6 +25,120 @@ from ucloud_sandboxes.routing import (
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_program_request_transitions_are_durable_and_monotonic(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            store = RoutingStore(path)
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=4096,
+                        disk_mb=8192,
+                    ),
+                    state="parked",
+                )
+            )
+
+            store.upsert_program_request_transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="model_wait",
+                transition_at="2026-07-31T10:00:00+00:00",
+            )
+            store.upsert_program_request_transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="ready_to_wake",
+                transition_at="2026-07-31T10:00:10+00:00",
+            )
+            store.upsert_program_request_transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="model_wait",
+                transition_at="2026-07-31T10:00:11+00:00",
+            )
+            records = RoutingStore(path).program_requests_readonly()
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].state, "ready_to_wake")
+        self.assertEqual(
+            records[0].response_ready_at,
+            "2026-07-31T10:00:10+00:00",
+        )
+        self.assertEqual(records[0].resources.disk_mb, 8192)
+
+    def test_program_request_identity_is_generation_fenced(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                )
+            )
+            store.upsert_program_request_transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="model_wait",
+            )
+
+            with self.assertRaises(SandboxRouteConflictError):
+                store.upsert_program_request_transition(
+                    replace(route, generation=route.generation + 1),
+                    request_id="request-2",
+                    rollout_id="rollout-1",
+                    state="model_wait",
+                )
+            with self.assertRaises(SandboxRouteConflictError):
+                store.upsert_program_request_transition(
+                    route,
+                    request_id="request-1",
+                    rollout_id="rollout-2",
+                    state="ready_to_wake",
+                )
+
+    def test_sandbox_delete_terminalizes_program_requests(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                )
+            )
+            store.upsert_program_request_transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="ready_to_wake",
+            )
+
+            removed = store.delete_sandbox_if_current(
+                route.sandbox_id,
+                generation=route.generation,
+            )
+
+            self.assertIsNotNone(removed)
+            self.assertEqual(store.program_requests_readonly(), [])
+            retained = store.program_requests_readonly(include_terminal=True)
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(retained[0].state, "terminal")
+
     def test_wake_state_change_is_exact_route_compare_and_swap(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

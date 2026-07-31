@@ -2,6 +2,35 @@
 
 This project uses semantic versioning.
 
+## 0.3.70 - 2026-07-31
+
+- Replaced the default rotated JSONL metrics stream with an indexed,
+  bounded SQLite/WAL event database shared by the gateway, autoscaler, and
+  dashboard. Explicit `.jsonl` paths remain available for rollback
+  compatibility.
+- Added tunable live-pressure autoscaling from CPU, memory, memory PSI, and
+  storage-operation queue observations. Sustained pressure can add one
+  headroom node, recent pressure delays scale-down, and measured VM
+  provisioning p95 sets a lower bound on idle retention.
+- Added sparse first-heartbeat lifecycle markers and exposed the exact
+  autoscaler signals, action, and effective idle grace on the live dashboard.
+- Added generation-fenced rollout/request lifecycle projections, bounded
+  program-state dashboard metrics, per-return and periodic global shadow wake
+  planning, and terminal cleanup when a sandbox disappears.
+- Added action-gated program-aware autoscaling: exact ready-to-wake CPU/memory
+  demand plus bounded weighted model-wait headroom. It is disabled by default,
+  never adds disk capacity, and leaves immediate wake behavior unchanged.
+- Reworked the embedded dashboard into Overview, Scheduler, Nodes, Sandboxes,
+  and Registry workspaces. It now explains autoscaler decisions and effective
+  policy, visualizes program flow and bounded wake placement, separates actual
+  from reserved node pressure, and adds search, filtering, refresh controls,
+  diagnostics export, accessible navigation, and a real dark theme.
+- Made dashboard polling single-flight and visibility-aware, bounded all
+  high-cardinality tables, and bounded persisted wake-plan telemetry to 100
+  placed and 100 unplaced samples with explicit truncation counts.
+- Reconciled post-storage-native work into one production roadmap and updated
+  fallback planning to the qualified 2-TB worker shape.
+
 ## 0.3.64 - 2026-07-30
 
 - Added gateway-observed timings for every migration protocol phase:

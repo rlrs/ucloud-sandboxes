@@ -1,6 +1,9 @@
 # Scaling policy
 
-Date: 2026-06-28
+Date: 2026-07-31
+
+Implementation priority and rollout gates are tracked in
+[Production roadmap](roadmap.md).
 
 UCloud VM startup can be slow or capacity-constrained, so the autoscaler should
 not behave like a normal fast container scheduler. The policy should balance
@@ -36,20 +39,107 @@ data:
     "unreachable_stop_after_seconds": 1800,
     "scale_down_idle_seconds": 600,
     "builder_scale_down_idle_seconds": 900,
+    "live_pressure_enabled": true,
+    "live_pressure_window_seconds": 60,
+    "live_pressure_min_samples": 3,
+    "live_pressure_fresh_seconds": 30,
+    "target_cpu_utilization": 0.70,
+    "target_memory_utilization": 0.80,
+    "max_memory_psi_full_avg10": 5.0,
+    "target_storage_queue_utilization": 0.75,
+    "pressure_scale_down_cooldown_seconds": 300,
+    "provisioning_latency_lookback_seconds": 604800,
+    "provisioning_scale_down_multiplier": 2.0,
+    "program_aware_autoscaling_enabled": false,
+    "model_wait_capacity_weight": 0.10,
+    "model_wait_max_headroom_nodes": 1,
     "default_node_resources": {
       "vcpu": 32,
       "memory_mb": 98304,
-      "disk_mb": 450560
+      "disk_mb": 1449984
     }
   }
 }
 ```
 
 This keeps no idle VM by default, submits at most one new VM per reconciliation
-cycle, and uses a coarse sandbox node shape by default: one 32-vCPU VM with
-96 GiB RAM as the planning fallback and 440 GiB advertised Docker
-writable-layer capacity. The ten-minute idle grace avoids churn after the last
-sandbox exits; set it to `0` for immediate scale-down.
+cycle, and uses the qualified homogeneous storage-native node shape as the
+planning fallback: 32 vCPU, 96 GiB RAM, and 1,449,984 MiB of hard sandbox
+capacity on a 2-TB worker after bounded image storage, swap, cache, and
+headroom. A heartbeat replaces this estimate with measured capacity as soon as
+the node is ready.
+
+## Static safety and live feedback
+
+Requested disk, CPU, and memory are still the hard placement model. Disk is
+never overallocated. Live feedback only decides when the pool should retain an
+additional ready node around that hard capacity.
+
+With `live_pressure_enabled`, the controller reads indexed recent heartbeat
+events from `metrics.sqlite`. Three pressure samples in the default 60-second
+window trigger one additional node when no node is already provisioning.
+Pressure is any configured CPU, memory, full-memory PSI, or storage-operation
+queue target being crossed by a node with active work. Idle host cache or an
+idle node's background state cannot trigger it.
+
+`target_cpu_utilization` and `target_memory_utilization` are the clearest
+density/latency tradeoff. Lower targets retain more headroom. The PSI and
+storage queue limits catch cases that average utilization misses.
+
+`pressure_scale_down_cooldown_seconds` supplies hysteresis after the last
+pressure sample. Independently, measured submit-to-first-heartbeat p95
+multiplied by `provisioning_scale_down_multiplier` becomes a lower bound on the
+idle grace. With a 70-second p95 and multiplier `2`, an idle node is retained
+for at least 140 seconds even if `scale_down_idle_seconds` is lower.
+
+The policy does not predict the next tool call for each parked sandbox.
+Instead, the relay supplies an exact `ready_to_wake` signal and a deliberately
+coarse aggregate `model_wait` leading signal. The latter is bounded and
+disabled for action by default, as described below.
+
+The deployed systemd service exposes every live-feedback setting through
+`/etc/ucloud-sandboxes/autoscaler.env`. The corresponding variables are
+`UCLOUD_LIVE_PRESSURE_ENABLED`, `UCLOUD_LIVE_PRESSURE_WINDOW_SECONDS`,
+`UCLOUD_LIVE_PRESSURE_MIN_SAMPLES`, `UCLOUD_LIVE_PRESSURE_FRESH_SECONDS`,
+`UCLOUD_TARGET_CPU_UTILIZATION`, `UCLOUD_TARGET_MEMORY_UTILIZATION`,
+`UCLOUD_MAX_MEMORY_PSI_FULL_AVG10`,
+`UCLOUD_TARGET_STORAGE_QUEUE_UTILIZATION`,
+`UCLOUD_PRESSURE_SCALE_DOWN_COOLDOWN_SECONDS`,
+`UCLOUD_PROVISIONING_LATENCY_LOOKBACK_SECONDS`, and
+`UCLOUD_PROVISIONING_SCALE_DOWN_MULTIPLIER`. Program-aware settings use
+`UCLOUD_PROGRAM_AWARE_AUTOSCALING_ENABLED`,
+`UCLOUD_MODEL_WAIT_CAPACITY_WEIGHT`, and
+`UCLOUD_MODEL_WAIT_MAX_HEADROOM_NODES`. Changes take effect after an
+autoscaler service restart. Set the corresponding enabled variable to `false`
+for a shadow rollout: metrics and the dashboard continue to update, while that
+feedback neither creates nor retains nodes.
+
+## Program-aware leading demand
+
+The gateway durably projects relay requests as `model_wait`,
+`ready_to_wake`, `waking`, or `acting`, fenced by sandbox generation. A relay
+return also records an O(nodes) shadow destination choice before the existing
+immediate wake. The periodic autoscaler independently computes a full
+aging-first global wake plan for blocked ready work.
+
+`ready_to_wake` CPU and memory are hard immediate demand unless the ordinary
+pending wake record already represents the same sandbox. Disk is not added:
+the sandbox's durable route already owns its hard disk reservation, and a
+cross-node destination must independently pass exact disk fit.
+
+`model_wait_capacity_weight` discounts aggregate parked CPU and memory to
+retain leading headroom. The contribution is capped at
+`model_wait_max_headroom_nodes * default_node_resources`; it never contributes
+disk. Concurrent relay calls for one sandbox are collapsed to the most urgent
+phase, so one sandbox cannot reserve its active shape multiple times.
+
+`program_aware_autoscaling_enabled=false` is the production default. In that
+mode the exact counts, counterfactual resource contribution, arrival decisions,
+and periodic global plan are emitted, but the resulting resource quantity is
+zero in the scale decision. Enabling it changes only create/retain demand; it
+does not yet activate a durable queued-wake dispatcher or delay relay delivery.
+Those changes remain behind the acceptance gates in
+[Program-aware sandbox scheduling](program-aware-scheduling-plan.md).
 
 ## Knobs
 
@@ -302,7 +392,8 @@ combined free RAM and swap cannot cover the request (with a 2 GiB minimum
 headroom), or when the 10-second full-memory PSI average reaches 10%. Existing
 containers continue running; this is an admission brake, not an eviction rule.
 
-The controller records VM lifecycle events into the metrics JSONL stream:
+The controller records VM lifecycle events into the indexed SQLite metrics
+database:
 submission, observed UCloud state changes, init attempt durations, first
 heartbeat, and first sandbox placement. `GET /v1/metrics` exposes these under
 `vm_lifecycle`, including `submit_to_running_ms`,

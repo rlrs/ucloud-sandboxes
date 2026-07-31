@@ -1,10 +1,13 @@
 # Direct runtime production qualification
 
-Status: the direct Warden is deployed behind the public SDK gateway as a
-dedicated UCloud canary and its basic client lifecycle has passed. The broader
-production-flow and product-contract gates listed below remain. The direct
-Warden is the replacement runtime; it must not share a node or state store with
-the legacy Docker-owned task runtime.
+Status: **initial production qualification superseded by the storage-native
+0.3.69 rollout**.
+
+This file is the historical direct-Warden qualification record. Current work
+and remaining production gates are tracked only in
+[Production roadmap](roadmap.md). The direct Warden is the replacement runtime;
+it must not share a node or state store with the legacy Docker-owned task
+runtime.
 
 ## Deployment invariant
 
@@ -547,9 +550,12 @@ disk. The autoscaler then drained and terminated job `12361072`; the pool
 returned to zero without pending or prepared demand. The production idle
 threshold was restored to 600 seconds after the canary.
 
-## Remaining release gates
+## Historical pre-rollout gates
 
-The following work is still required before production traffic:
+The following list was the release gate at the time of the initial direct
+runtime canary. Later storage-native qualification closed or changed several
+items. Any still-relevant work has been reconciled into
+[Production roadmap](roadmap.md); do not use this list as a current backlog.
 
 1. Put the sandbox data root on a native XFS volume with project quotas in the
    node image. The qualification loopback filesystem must not become the

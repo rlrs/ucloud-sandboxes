@@ -558,6 +558,8 @@ class SandboxNode:
 class SandboxPlacementRequest:
     resources: ResourceQuantity
     excluded_job_ids: tuple[str, ...] = ()
+    owned_job_id: str = ""
+    owned_disk_mb: int = 0
 
 
 @dataclass(frozen=True)
@@ -570,6 +572,82 @@ class SandboxDemand:
     @property
     def desired_resources(self) -> ResourceQuantity:
         return self.pending_resources + self.prepared_resources
+
+
+@dataclass(frozen=True)
+class LiveScaleSignals:
+    """Bounded recent observations used to retain latency headroom.
+
+    Requested resources remain the hard placement and disk-admission model.
+    These signals only let the autoscaler add capacity sooner and retain it
+    longer when the ready pool is measurably busy.
+    """
+
+    window_seconds: int = 0
+    pressure_samples: int = 0
+    latest_pressure_age_seconds: int | None = None
+    cpu_utilization: float | None = None
+    memory_utilization: float | None = None
+    memory_psi_full_avg10: float | None = None
+    storage_queue_utilization: float | None = None
+    provisioning_samples: int = 0
+    provisioning_p95_seconds: float | None = None
+    scale_up_wait_samples: int = 0
+    scale_up_wait_p95_seconds: float | None = None
+
+    def to_dict(self) -> dict[str, float | int | None]:
+        return {
+            "window_seconds": self.window_seconds,
+            "pressure_samples": self.pressure_samples,
+            "latest_pressure_age_seconds": self.latest_pressure_age_seconds,
+            "cpu_utilization": self.cpu_utilization,
+            "memory_utilization": self.memory_utilization,
+            "memory_psi_full_avg10": self.memory_psi_full_avg10,
+            "storage_queue_utilization": self.storage_queue_utilization,
+            "provisioning_samples": self.provisioning_samples,
+            "provisioning_p95_seconds": self.provisioning_p95_seconds,
+            "scale_up_wait_samples": self.scale_up_wait_samples,
+            "scale_up_wait_p95_seconds": self.scale_up_wait_p95_seconds,
+        }
+
+
+@dataclass(frozen=True)
+class ProgramScaleSignals:
+    """Current rollout phases reduced into bounded autoscaler demand."""
+
+    model_wait_requests: int = 0
+    ready_to_wake_requests: int = 0
+    waking_requests: int = 0
+    acting_requests: int = 0
+    model_wait_sandboxes: int = 0
+    ready_to_wake_sandboxes: int = 0
+    model_wait_resources: ResourceQuantity = ResourceQuantity()
+    ready_to_wake_resources: ResourceQuantity = ResourceQuantity()
+    weighted_model_wait_resources: ResourceQuantity = ResourceQuantity()
+    effective_resources: ResourceQuantity = ResourceQuantity()
+    ready_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
+    oldest_model_wait_seconds: int = 0
+    oldest_ready_to_wake_seconds: int = 0
+    action_enabled: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "model_wait_requests": self.model_wait_requests,
+            "ready_to_wake_requests": self.ready_to_wake_requests,
+            "waking_requests": self.waking_requests,
+            "acting_requests": self.acting_requests,
+            "model_wait_sandboxes": self.model_wait_sandboxes,
+            "ready_to_wake_sandboxes": self.ready_to_wake_sandboxes,
+            "model_wait_resources": self.model_wait_resources.to_dict(),
+            "ready_to_wake_resources": self.ready_to_wake_resources.to_dict(),
+            "weighted_model_wait_resources": (
+                self.weighted_model_wait_resources.to_dict()
+            ),
+            "effective_resources": self.effective_resources.to_dict(),
+            "oldest_model_wait_seconds": self.oldest_model_wait_seconds,
+            "oldest_ready_to_wake_seconds": self.oldest_ready_to_wake_seconds,
+            "action_enabled": self.action_enabled,
+        }
 
 
 @dataclass(frozen=True)
@@ -587,10 +665,26 @@ class ScalePolicy:
     scale_down_idle_seconds: int = 600
     builder_scale_down_idle_seconds: int = 900
     heartbeat_ttl_seconds: int = 120
+    live_pressure_enabled: bool = True
+    live_pressure_window_seconds: int = 60
+    live_pressure_min_samples: int = 3
+    live_pressure_fresh_seconds: int = 30
+    target_cpu_utilization: float = 0.70
+    target_memory_utilization: float = 0.80
+    max_memory_psi_full_avg10: float = 5.0
+    target_storage_queue_utilization: float = 0.75
+    pressure_scale_down_cooldown_seconds: int = 300
+    provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
+    provisioning_scale_down_multiplier: float = 2.0
+    program_aware_autoscaling_enabled: bool = False
+    model_wait_capacity_weight: float = 0.10
+    model_wait_max_headroom_nodes: int = 1
     default_node_resources: ResourceQuantity = ResourceQuantity(
         vcpu=32.0,
         memory_mb=98304,
-        disk_mb=450560,
+        # 2-TB worker less 440-GiB image storage, 96-GiB swap,
+        # 32-GiB disposable block cache, and 16-GiB safety headroom.
+        disk_mb=1_449_984,
     )
     cpu_overcommit: float = 1.0
     memory_overcommit: float = 1.0
@@ -627,6 +721,10 @@ class ScaleDecision:
     desired_resources: ResourceQuantity = ResourceQuantity()
     projected_free_resources: ResourceQuantity = ResourceQuantity()
     resource_deficit: ResourceQuantity = ResourceQuantity()
+    live_signals: LiveScaleSignals | None = None
+    program_signals: ProgramScaleSignals | None = None
+    pressure_scale_up: bool = False
+    effective_scale_down_idle_seconds: int = 0
 
     @property
     def creates(self) -> int:

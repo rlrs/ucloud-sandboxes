@@ -2,6 +2,8 @@
 
 The crash-safe generation, operation-id, inventory, and drain invariants are
 specified in [Distributed sandbox state protocol](distributed-state-protocol.md).
+Current implementation priorities are tracked in
+[Production roadmap](roadmap.md).
 
 ## Runtime ownership
 
@@ -76,24 +78,25 @@ to keep registry storage bounded.
 ## Resource Placement
 
 Sandbox placement is resource-based. Each sandbox request can ask for its own
-`cpus`, `memory_mb`, and `disk_mb`. Nodes report physical resources plus
-overcommit multipliers in their heartbeat, so the control plane can pack small
-and large sandboxes differently. The live sandbox pool is configured for
-`--init-cpu-overcommit 3` and `--init-memory-overcommit 2`, with disk left at
-`1.0`. These multipliers affect placement only. Each container keeps its
-requested CPU cgroup limit and its requested RAM limit, with an explicit
-combined RAM+swap ceiling of twice the RAM limit. Standard 96 GiB workers have
-a fixed 96 GiB host swap file. Swap usage and memory PSI are reported in node
-heartbeats so the gateway can stop new placements before backing memory is
-exhausted.
+`cpus`, `memory_mb`, and `disk_mb`. The storage-native direct-runtime pool uses
+exact `1.0` CPU, memory, and disk capacity factors. Parked sandboxes retain
+their hard disk placement but release active CPU and memory; those resources
+are checked again on wake and may cause migration. Node heartbeats report
+actual CPU, memory, PSI, storage capacity, and storage-operation queueing.
+Static requested resources remain hard admission constraints, while the
+autoscaler's live feedback policy uses those observations to retain latency
+headroom. The qualified homogeneous worker shape has 32 vCPU, 96 GiB RAM, and
+a 2-TB attached disk split into bounded Docker image storage, swap, disposable
+storage cache, and headroom before sandbox hard capacity is advertised.
 
 ## Disk Quotas
 
-The direct-runtime target uses one XFS project per sandbox incarnation. Its
-hard limit covers the writable overlay upper, complete main-memory backing,
-worst-case private page image, and bounded runtime metadata. Shared immutable
-image rootfs data remains outside that project. Logical ledger reservation and
-the physical project hard limit must agree before runsc creation.
+The storage-native direct runtime uses one fixed-size COW-backed filesystem per
+sandbox incarnation. Its hard reservation covers the client-visible writable
+capacity and required runtime state. Published immutable parents are durable
+remote authority; bounded local cache bytes are disposable and are not
+admission capacity. Logical reservation and physical/durable hard capacity
+must agree before runsc creation.
 
 The following describes the legacy removal target. `disk_mb` maps to Docker
 `--storage-opt size=...` for the container

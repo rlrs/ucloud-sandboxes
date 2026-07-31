@@ -1,0 +1,52 @@
+{
+  "date": "2026-07-31",
+  "host": "local macOS workspace",
+  "python": ".venv",
+  "program_requests": 10000,
+  "candidate_nodes": 32,
+  "runs": 7,
+  "shape": {
+    "vcpu": 0.05,
+    "memory_mb": 64,
+    "disk_mb": 100
+  },
+  "sqlite_current_state_read": {
+    "median_ms": 104.982,
+    "p95_ms": 116.573,
+    "min_ms": 102.046,
+    "rows": 10000,
+    "database_bytes": 4186112
+  },
+  "scale_signal_reduction": {
+    "median_ms": 18.974,
+    "p95_ms": 19.322,
+    "min_ms": 18.743,
+    "ready_sandboxes": 10000
+  },
+  "metrics_summary": {
+    "median_ms": 33.254,
+    "p95_ms": 38.482,
+    "min_ms": 32.671,
+    "queue_rows_returned": 100
+  },
+  "relay_arrival_shadow_choice": {
+    "runs": 21,
+    "median_ms": 0.598,
+    "p95_ms": 0.845,
+    "min_ms": 0.585,
+    "note": "One ready request against 10,000 routes and 32 candidates; route loading is excluded and shared with ordinary wake admission."
+  },
+  "periodic_global_wake_plan": {
+    "median_ms": 558.601,
+    "p95_ms": 588.669,
+    "min_ms": 555.498,
+    "placed": 10000,
+    "unplaced": 0
+  },
+  "notes": [
+    "All timings are local lower bounds and exclude UCloud, registry, and sandbox-node I/O.",
+    "The full 10,000-by-32 plan runs only in the periodic autoscaler cycle; relay arrivals compute one O(nodes) shadow choice.",
+    "The benchmark intentionally uses homogeneous small sandboxes to force the planner to place all 10,000 entries.",
+    "Production acceptance still requires representative heterogeneous shapes, wake storms, and the control-host persistent mount."
+  ]
+}

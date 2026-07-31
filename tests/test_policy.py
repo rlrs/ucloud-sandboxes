@@ -2,7 +2,9 @@ from datetime import timedelta
 import unittest
 
 from ucloud_sandboxes.models import (
+    LiveScaleSignals,
     NodeHeartbeat,
+    ProgramScaleSignals,
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
@@ -200,6 +202,52 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
         self.assertEqual(decision.creates, 1)
+
+    def test_ready_wake_shape_reuses_its_existing_hard_disk_reservation(
+        self,
+    ) -> None:
+        requested = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
+        decision = evaluate_scale(
+            [
+                node(
+                    "source",
+                    total_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=8192,
+                        disk_mb=8192,
+                    ),
+                    used_resources=ResourceQuantity(disk_mb=8192),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                max_nodes=2,
+                max_create_per_cycle=1,
+                program_aware_autoscaling_enabled=True,
+            ),
+            program_signals=ProgramScaleSignals(
+                ready_to_wake_sandboxes=1,
+                ready_to_wake_resources=ResourceQuantity(
+                    vcpu=requested.vcpu,
+                    memory_mb=requested.memory_mb,
+                ),
+                effective_resources=ResourceQuantity(
+                    vcpu=requested.vcpu,
+                    memory_mb=requested.memory_mb,
+                ),
+                ready_placement_requests=(
+                    SandboxPlacementRequest(
+                        resources=requested,
+                        owned_job_id="source",
+                        owned_disk_mb=requested.disk_mb,
+                    ),
+                ),
+                action_enabled=True,
+            ),
+        )
+
+        self.assertEqual(decision.resource_deficit, ResourceQuantity())
+        self.assertEqual(decision.creates, 0)
 
     def test_default_policy_bursts_large_backlog_without_waiting_for_one_node(
         self,
@@ -420,7 +468,7 @@ class ScalePolicyTests(unittest.TestCase):
             ScalePolicy(max_nodes=2, max_create_per_cycle=1),
         )
 
-        self.assertEqual(decision.projected_free_resources.disk_mb, 450560)
+        self.assertEqual(decision.projected_free_resources.disk_mb, 614400)
         self.assertEqual(decision.creates, 0)
 
     def test_staged_preparation_reaches_100_sandboxes_with_four_nodes(self) -> None:
@@ -687,7 +735,7 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.provisioning_nodes, 1)
         self.assertEqual(decision.creates, 0)
         self.assertEqual(decision.projected_free_resources.vcpu, 2)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 450560)
+        self.assertEqual(decision.projected_free_resources.disk_mb, 1_449_984)
 
     def test_stale_suspended_vm_has_no_capacity_but_counts_toward_limits(self) -> None:
         now = utc_now()
@@ -772,7 +820,7 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 450560)
+        self.assertEqual(decision.projected_free_resources.disk_mb, 1_449_984)
 
     def test_discounted_provisioning_resources_can_create_another_vm(self) -> None:
         decision = evaluate_scale(
@@ -1137,6 +1185,154 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.stops, ())
+
+    def test_sustained_live_pressure_adds_one_headroom_node(self) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "busy",
+                    active=1,
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=2_000_000,
+                    ),
+                    used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(max_nodes=4),
+            live_signals=LiveScaleSignals(
+                window_seconds=60,
+                pressure_samples=3,
+                latest_pressure_age_seconds=2,
+                cpu_utilization=0.85,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 1)
+        self.assertTrue(decision.pressure_scale_up)
+        self.assertIn("live pressure", decision.reasons[0])
+
+    def test_live_pressure_does_not_create_when_ready_headroom_exists(self) -> None:
+        resources = ResourceQuantity(
+            vcpu=32,
+            memory_mb=98304,
+            disk_mb=2_000_000,
+        )
+        decision = evaluate_scale(
+            [
+                node(
+                    "busy",
+                    active=1,
+                    total_resources=resources,
+                    used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
+                ),
+                node("idle", total_resources=resources),
+            ],
+            SandboxDemand(),
+            ScalePolicy(max_nodes=4),
+            live_signals=LiveScaleSignals(
+                window_seconds=60,
+                pressure_samples=3,
+                latest_pressure_age_seconds=2,
+                cpu_utilization=0.85,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertFalse(decision.pressure_scale_up)
+
+    def test_provisioning_p95_extends_scale_down_grace(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "idle",
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=2_000_000,
+                    ),
+                    idle_since=now - timedelta(seconds=100),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                scale_down_idle_seconds=30,
+                provisioning_scale_down_multiplier=2.0,
+            ),
+            now=now,
+            live_signals=LiveScaleSignals(
+                provisioning_samples=5,
+                provisioning_p95_seconds=70.0,
+            ),
+        )
+
+        self.assertEqual(decision.stops, ())
+        self.assertEqual(decision.effective_scale_down_idle_seconds, 140)
+
+    def test_recent_pressure_blocks_scale_down_during_cooldown(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "idle",
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=2_000_000,
+                    ),
+                    idle_since=now - timedelta(seconds=1000),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                scale_down_idle_seconds=30,
+                pressure_scale_down_cooldown_seconds=300,
+            ),
+            now=now,
+            live_signals=LiveScaleSignals(
+                pressure_samples=1,
+                latest_pressure_age_seconds=120,
+            ),
+        )
+
+        self.assertEqual(decision.stops, ())
+        self.assertIn("cooldown", decision.reasons[0])
+
+    def test_live_pressure_can_be_disabled_for_shadow_observation(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "idle",
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=2_000_000,
+                    ),
+                    idle_since=now - timedelta(seconds=100),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                live_pressure_enabled=False,
+                scale_down_idle_seconds=30,
+            ),
+            now=now,
+            live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=1,
+                cpu_utilization=0.90,
+                provisioning_samples=5,
+                provisioning_p95_seconds=70.0,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.stops, ("idle",))
+        self.assertEqual(decision.effective_scale_down_idle_seconds, 30)
 
     def test_prepared_builder_count_scales_builder_pool(self) -> None:
         decision = evaluate_builder_scale(

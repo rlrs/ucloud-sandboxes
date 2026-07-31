@@ -27,6 +27,17 @@ _EXEC_ROUTE_CACHES: dict[Path, OrderedDict[str, ExecRoute]] = {}
 _EXEC_ROUTE_CACHE_SANDBOX_INDEXES: dict[Path, dict[str, set[str]]] = {}
 PENDING_DEMAND_TTL_SECONDS = 300
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
+PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
+PROGRAM_REQUEST_STATES = (
+    "model_wait",
+    "ready_to_wake",
+    "waking",
+    "acting",
+    "terminal",
+)
+_PROGRAM_STATE_RANK = {
+    state: index for index, state in enumerate(PROGRAM_REQUEST_STATES)
+}
 
 
 class SandboxRouteConflictError(RuntimeError):
@@ -130,6 +141,51 @@ class SandboxRoute:
             "storage_schema": self.storage_schema,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class ProgramRequestState:
+    """Current scheduler projection for one relay request.
+
+    Product ownership remains in the relay journal and sandbox route. This
+    projection is durable so autoscaling and shadow placement never need to
+    reconstruct current program phases by scanning metric history.
+    """
+
+    request_id: str
+    rollout_id: str
+    sandbox_id: str
+    sandbox_generation: int
+    state: str
+    resources: ResourceQuantity
+    accepted_at: str = ""
+    parked_at: str = ""
+    response_ready_at: str = ""
+    wake_started_at: str = ""
+    wake_completed_at: str = ""
+    updated_at: str = ""
+    last_error: str = ""
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.state == "terminal"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "rollout_id": self.rollout_id,
+            "sandbox_id": self.sandbox_id,
+            "sandbox_generation": self.sandbox_generation,
+            "state": self.state,
+            "resources": self.resources.to_dict(),
+            "accepted_at": self.accepted_at,
+            "parked_at": self.parked_at,
+            "response_ready_at": self.response_ready_at,
+            "wake_started_at": self.wake_started_at,
+            "wake_completed_at": self.wake_completed_at,
+            "updated_at": self.updated_at,
+            "last_error": self.last_error,
         }
 
 
@@ -612,6 +668,168 @@ class RoutingStore:
                     )
                 )
                 if route is not None
+            ]
+
+    def upsert_program_request_transition(
+        self,
+        route: SandboxRoute,
+        *,
+        request_id: str,
+        rollout_id: str,
+        state: str,
+        transition_at: str | None = None,
+        accepted_at: str | None = None,
+        last_error: str = "",
+    ) -> ProgramRequestState:
+        request_id = request_id.strip()
+        rollout_id = rollout_id.strip()
+        if not request_id or not rollout_id:
+            raise ValueError("program request and rollout ids are required")
+        if state not in _PROGRAM_STATE_RANK:
+            raise ValueError(f"unsupported program request state: {state}")
+        transition_at = transition_at or utc_now().isoformat()
+        with self._lock:
+            with self._transaction() as conn:
+                current_route = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if (
+                    current_route is None
+                    or current_route.generation != route.generation
+                ):
+                    raise SandboxRouteConflictError(
+                        "program transition does not own the current sandbox generation"
+                    )
+                existing_row = conn.execute(
+                    """
+                    SELECT request_id, rollout_id, sandbox_id,
+                           sandbox_generation, state, resources_json,
+                           accepted_at, parked_at, response_ready_at,
+                           wake_started_at, wake_completed_at, updated_at,
+                           last_error
+                    FROM program_requests
+                    WHERE request_id = ?
+                    """,
+                    (request_id,),
+                ).fetchone()
+                existing = (
+                    _program_request_from_row(existing_row)
+                    if existing_row is not None
+                    else None
+                )
+                if existing is not None and (
+                    existing.rollout_id != rollout_id
+                    or existing.sandbox_id != route.sandbox_id
+                    or existing.sandbox_generation != route.generation
+                ):
+                    raise SandboxRouteConflictError(
+                        "program request id belongs to another rollout or sandbox"
+                    )
+                effective_state = state
+                if (
+                    existing is not None
+                    and _PROGRAM_STATE_RANK[existing.state]
+                    > _PROGRAM_STATE_RANK[state]
+                ):
+                    effective_state = existing.state
+                timestamps = {
+                    "accepted_at": existing.accepted_at if existing else "",
+                    "parked_at": existing.parked_at if existing else "",
+                    "response_ready_at": (
+                        existing.response_ready_at if existing else ""
+                    ),
+                    "wake_started_at": existing.wake_started_at if existing else "",
+                    "wake_completed_at": (
+                        existing.wake_completed_at if existing else ""
+                    ),
+                }
+                if accepted_at and not timestamps["accepted_at"]:
+                    timestamps["accepted_at"] = accepted_at
+                if not timestamps["accepted_at"]:
+                    timestamps["accepted_at"] = transition_at
+                transition_field = {
+                    "model_wait": "parked_at",
+                    "ready_to_wake": "response_ready_at",
+                    "waking": "wake_started_at",
+                    "acting": "wake_completed_at",
+                }.get(state)
+                if transition_field and not timestamps[transition_field]:
+                    timestamps[transition_field] = transition_at
+                error = last_error or (existing.last_error if existing else "")
+                conn.execute(
+                    """
+                    INSERT INTO program_requests (
+                        request_id, rollout_id, sandbox_id, sandbox_generation,
+                        state, resources_json, accepted_at, parked_at,
+                        response_ready_at, wake_started_at, wake_completed_at,
+                        updated_at, last_error
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(request_id) DO UPDATE SET
+                        state = excluded.state,
+                        resources_json = excluded.resources_json,
+                        accepted_at = excluded.accepted_at,
+                        parked_at = excluded.parked_at,
+                        response_ready_at = excluded.response_ready_at,
+                        wake_started_at = excluded.wake_started_at,
+                        wake_completed_at = excluded.wake_completed_at,
+                        updated_at = excluded.updated_at,
+                        last_error = excluded.last_error
+                    """,
+                    (
+                        request_id,
+                        rollout_id,
+                        route.sandbox_id,
+                        route.generation,
+                        effective_state,
+                        _resources_json(route.resources),
+                        timestamps["accepted_at"],
+                        timestamps["parked_at"],
+                        timestamps["response_ready_at"],
+                        timestamps["wake_started_at"],
+                        timestamps["wake_completed_at"],
+                        transition_at,
+                        error,
+                    ),
+                )
+                row = conn.execute(
+                    """
+                    SELECT request_id, rollout_id, sandbox_id,
+                           sandbox_generation, state, resources_json,
+                           accepted_at, parked_at, response_ready_at,
+                           wake_started_at, wake_completed_at, updated_at,
+                           last_error
+                    FROM program_requests
+                    WHERE request_id = ?
+                    """,
+                    (request_id,),
+                ).fetchone()
+                assert row is not None
+                return _program_request_from_row(row)
+
+    def program_requests_readonly(
+        self,
+        *,
+        include_terminal: bool = False,
+        limit: int = 100_000,
+    ) -> list[ProgramRequestState]:
+        clauses = "" if include_terminal else "WHERE state != 'terminal'"
+        bounded_limit = max(1, min(1_000_000, int(limit)))
+        with self._connect() as conn:
+            return [
+                _program_request_from_row(row)
+                for row in conn.execute(
+                    f"""
+                    SELECT request_id, rollout_id, sandbox_id,
+                           sandbox_generation, state, resources_json,
+                           accepted_at, parked_at, response_ready_at,
+                           wake_started_at, wake_completed_at, updated_at,
+                           last_error
+                    FROM program_requests
+                    {clauses}
+                    ORDER BY updated_at DESC, request_id
+                    LIMIT ?
+                    """,
+                    (bounded_limit,),
+                )
             ]
 
     def set_sandbox_state_if_current(
@@ -1371,6 +1589,11 @@ class RoutingStore:
                 conn.execute(
                     "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                 )
+                self._terminalize_program_requests_unlocked(
+                    conn,
+                    sandbox_id,
+                    generation=generation,
+                )
             self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
             return existing
 
@@ -1542,6 +1765,11 @@ class RoutingStore:
                     conn.execute(
                         "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                     )
+                    self._terminalize_program_requests_unlocked(
+                        conn,
+                        sandbox_id,
+                        generation=route.generation,
+                    )
                     removed_sandbox_ids.append(sandbox_id)
             for sandbox_id in removed_sandbox_ids:
                 self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
@@ -1556,6 +1784,7 @@ class RoutingStore:
                 conn.execute(
                     "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
                 )
+                self._terminalize_program_requests_unlocked(conn, sandbox_id)
             self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
@@ -1597,6 +1826,11 @@ class RoutingStore:
                     conn.execute(
                         "DELETE FROM exec_sessions WHERE sandbox_id = ?",
                         (route.sandbox_id,),
+                    )
+                    self._terminalize_program_requests_unlocked(
+                        conn,
+                        route.sandbox_id,
+                        generation=route.generation,
                     )
             if not removed:
                 return []
@@ -1654,11 +1888,40 @@ class RoutingStore:
                         "DELETE FROM exec_sessions WHERE sandbox_id = ?",
                         (route.sandbox_id,),
                     )
+                    self._terminalize_program_requests_unlocked(
+                        conn,
+                        route.sandbox_id,
+                        generation=route.generation,
+                    )
             if not removed:
                 return []
             for route in removed:
                 self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
+
+    @staticmethod
+    def _terminalize_program_requests_unlocked(
+        conn: sqlite3.Connection,
+        sandbox_id: str,
+        *,
+        generation: int | None = None,
+    ) -> int:
+        """Retain a bounded terminal projection when its sandbox disappears."""
+
+        generation_clause = ""
+        parameters: list[object] = [utc_now().isoformat(), sandbox_id]
+        if generation is not None:
+            generation_clause = " AND sandbox_generation = ?"
+            parameters.append(generation)
+        return conn.execute(
+            f"""
+            UPDATE program_requests
+            SET state = 'terminal', updated_at = ?
+            WHERE sandbox_id = ? AND state != 'terminal'
+            {generation_clause}
+            """,
+            parameters,
+        ).rowcount
 
     def get_exec(self, session_id: str) -> ExecRoute | None:
         with self._lock:
@@ -2337,6 +2600,16 @@ class RoutingStore:
             "DELETE FROM image_warmups WHERE expires_at <= ?",
             (timestamp,),
         )
+        terminal_cutoff = (
+            now - timedelta(seconds=PROGRAM_TERMINAL_RETENTION_SECONDS)
+        ).isoformat()
+        conn.execute(
+            """
+            DELETE FROM program_requests
+            WHERE state = 'terminal' AND updated_at <= ?
+            """,
+            (terminal_cutoff,),
+        )
 
     def _sandbox_demand_unlocked(
         self,
@@ -2605,6 +2878,43 @@ class RoutingStore:
                     warmed_node_ids_json TEXT NOT NULL DEFAULT '[]',
                     attempts INTEGER NOT NULL DEFAULT 1
                 )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS program_requests (
+                    request_id TEXT PRIMARY KEY,
+                    rollout_id TEXT NOT NULL,
+                    sandbox_id TEXT NOT NULL,
+                    sandbox_generation INTEGER NOT NULL,
+                    state TEXT NOT NULL,
+                    resources_json TEXT NOT NULL,
+                    accepted_at TEXT NOT NULL DEFAULT '',
+                    parked_at TEXT NOT NULL DEFAULT '',
+                    response_ready_at TEXT NOT NULL DEFAULT '',
+                    wake_started_at TEXT NOT NULL DEFAULT '',
+                    wake_completed_at TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    last_error TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS program_requests_state_updated
+                ON program_requests(state, updated_at)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS program_requests_rollout
+                ON program_requests(rollout_id, updated_at)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS program_requests_sandbox
+                ON program_requests(sandbox_id, sandbox_generation)
                 """
             )
             conn.commit()
@@ -3458,6 +3768,27 @@ def _sandbox_route_from_row(row: sqlite3.Row) -> SandboxRoute:
         storage_snapshot=_object_from_json(row["storage_snapshot_json"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
+    )
+
+
+def _program_request_from_row(row: sqlite3.Row) -> ProgramRequestState:
+    state = str(row["state"])
+    if state not in _PROGRAM_STATE_RANK:
+        state = "terminal"
+    return ProgramRequestState(
+        request_id=str(row["request_id"]),
+        rollout_id=str(row["rollout_id"]),
+        sandbox_id=str(row["sandbox_id"]),
+        sandbox_generation=max(0, int(row["sandbox_generation"])),
+        state=state,
+        resources=_resources_from_json(row["resources_json"]),
+        accepted_at=str(row["accepted_at"] or ""),
+        parked_at=str(row["parked_at"] or ""),
+        response_ready_at=str(row["response_ready_at"] or ""),
+        wake_started_at=str(row["wake_started_at"] or ""),
+        wake_completed_at=str(row["wake_completed_at"] or ""),
+        updated_at=str(row["updated_at"] or ""),
+        last_error=str(row["last_error"] or ""),
     )
 
 

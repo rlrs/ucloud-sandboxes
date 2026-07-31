@@ -29,6 +29,16 @@ class ConfigTests(unittest.TestCase):
                     "stale_provisioning_capacity_weight": 0.1,
                     "unreachable_stop_after_seconds": 3600,
                     "scale_down_idle_seconds": 900,
+                    "live_pressure_enabled": True,
+                    "live_pressure_window_seconds": 90,
+                    "live_pressure_min_samples": 4,
+                    "target_cpu_utilization": 0.65,
+                    "target_memory_utilization": 0.75,
+                    "pressure_scale_down_cooldown_seconds": 420,
+                    "provisioning_scale_down_multiplier": 1.5,
+                    "program_aware_autoscaling_enabled": True,
+                    "model_wait_capacity_weight": 0.2,
+                    "model_wait_max_headroom_nodes": 2,
                     "cpu_overcommit": 2.0,
                     "memory_overcommit": 1.2,
                     "disk_overcommit": 1.0,
@@ -47,6 +57,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.stale_provisioning_capacity_weight, 0.1)
         self.assertEqual(config.policy.unreachable_stop_after_seconds, 3600)
         self.assertEqual(config.policy.scale_down_idle_seconds, 900)
+        self.assertEqual(config.policy.live_pressure_window_seconds, 90)
+        self.assertEqual(config.policy.live_pressure_min_samples, 4)
+        self.assertEqual(config.policy.target_cpu_utilization, 0.65)
+        self.assertEqual(config.policy.target_memory_utilization, 0.75)
+        self.assertEqual(config.policy.pressure_scale_down_cooldown_seconds, 420)
+        self.assertEqual(config.policy.provisioning_scale_down_multiplier, 1.5)
+        self.assertTrue(config.policy.program_aware_autoscaling_enabled)
+        self.assertEqual(config.policy.model_wait_capacity_weight, 0.2)
+        self.assertEqual(config.policy.model_wait_max_headroom_nodes, 2)
         self.assertEqual(config.policy.cpu_overcommit, 2.0)
         self.assertEqual(config.policy.memory_overcommit, 1.2)
         self.assertEqual(config.policy.disk_overcommit, 1.0)
@@ -72,6 +91,18 @@ class ConfigTests(unittest.TestCase):
                 "policy": {"provisioning_capacity_weight": 1.1}
             },
             "zero heartbeat ttl": {"policy": {"heartbeat_ttl_seconds": 0}},
+            "invalid live pressure toggle": {
+                "policy": {"live_pressure_enabled": "yes"}
+            },
+            "invalid cpu target": {
+                "policy": {"target_cpu_utilization": 1.1}
+            },
+            "invalid program toggle": {
+                "policy": {"program_aware_autoscaling_enabled": "yes"}
+            },
+            "invalid model wait weight": {
+                "policy": {"model_wait_capacity_weight": 1.1}
+            },
             "negative warm resources": {
                 "policy": {"warm_resources": {"vcpu": -1}}
             },

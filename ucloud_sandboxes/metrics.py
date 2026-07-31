@@ -6,14 +6,27 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import sqlite3
 from threading import RLock
 import time
 from typing import Any
 from uuid import uuid4
 
 from .deployment import agent_version_is_compatible
-from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
-from .routing import PendingSandboxDemand, RoutingState, SandboxRoute
+from .models import (
+    LiveScaleSignals,
+    NodeHeartbeat,
+    ResourceQuantity,
+    ScalePolicy,
+    parse_iso_datetime,
+    utc_now,
+)
+from .routing import (
+    PendingSandboxDemand,
+    ProgramRequestState,
+    RoutingState,
+    SandboxRoute,
+)
 
 
 DEFAULT_RECENT_EVENT_LIMIT = 50
@@ -21,9 +34,11 @@ DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
 DEFAULT_TRACE_SPAN_LIMIT = 250
 DEFAULT_TRACE_LIMIT = 50
+DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT = 100
 DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
 DEFAULT_METRICS_MAX_FILES = 5
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
+DEFAULT_METRICS_MAX_EVENTS = 100_000
 _METRICS_LOCKS_GUARD = RLock()
 _METRICS_LOCKS: dict[Path, RLock] = {}
 
@@ -69,12 +84,21 @@ class MetricsStore:
         max_bytes: int = DEFAULT_METRICS_MAX_BYTES,
         max_files: int = DEFAULT_METRICS_MAX_FILES,
         max_event_bytes: int = DEFAULT_METRICS_MAX_EVENT_BYTES,
+        max_events: int = DEFAULT_METRICS_MAX_EVENTS,
     ) -> None:
         self.path = path
         self._lock = _metrics_lock(path)
         self._max_bytes = max(1, max_bytes)
         self._max_files = max(1, max_files)
         self._max_event_bytes = max(1, min(max_event_bytes, self._max_bytes))
+        self._max_events = max(1, max_events)
+        self._sqlite = self.path.suffix.lower() != ".jsonl"
+        self._sqlite_connection: sqlite3.Connection | None = None
+        self._sqlite_pid = 0
+        self._dropped_sqlite_events = 0
+        if self._sqlite:
+            with self._lock:
+                self._sqlite_connect_locked()
 
     def append(
         self,
@@ -101,6 +125,62 @@ class MetricsStore:
             line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode(
                 "utf-8"
             )
+        if self._sqlite:
+            with self._lock:
+                connection = self._sqlite_connect_locked()
+                try:
+                    if self._dropped_sqlite_events:
+                        connection.execute(
+                            """
+                            INSERT INTO metric_events(
+                                timestamp, timestamp_epoch, kind, data_json
+                            )
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (
+                                event.timestamp,
+                                _timestamp_epoch(event.timestamp),
+                                "metrics_dropped_events",
+                                json.dumps(
+                                    {
+                                        "count": self._dropped_sqlite_events,
+                                        "reason": "sqlite_busy",
+                                    },
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                ),
+                            ),
+                        )
+                    cursor = connection.execute(
+                        """
+                        INSERT INTO metric_events(
+                            timestamp, timestamp_epoch, kind, data_json
+                        )
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (
+                            event.timestamp,
+                            _timestamp_epoch(event.timestamp),
+                            event.kind,
+                            json.dumps(
+                                event.data,
+                                sort_keys=True,
+                                separators=(",", ":"),
+                            ),
+                        ),
+                    )
+                    sequence = int(cursor.lastrowid or 0)
+                    if sequence > 0 and sequence % 512 == 0:
+                        self._prune_sqlite_locked(connection)
+                    connection.commit()
+                    self._dropped_sqlite_events = 0
+                except sqlite3.OperationalError:
+                    connection.rollback()
+                    # Metrics are observational. A brief writer collision must
+                    # never fail a heartbeat, gateway request, or autoscaler
+                    # cycle. The next successful transaction records the loss.
+                    self._dropped_sqlite_events += 1
+            return event
         with _metrics_file_lock(self.path, self._lock):
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._rotate_if_needed(len(line))
@@ -117,7 +197,25 @@ class MetricsStore:
                 os.close(fd)
         return event
 
-    def load_events(self, *, max_events: int = 1000) -> list[MetricEvent]:
+    def load_events(
+        self,
+        *,
+        max_events: int = 1000,
+        kinds: tuple[str, ...] = (),
+        since_seconds: int | None = None,
+    ) -> list[MetricEvent]:
+        if self._sqlite:
+            return self._load_sqlite_events(
+                max_events=max_events,
+                kinds=kinds,
+                since_seconds=since_seconds,
+            )
+        result_limit = max_events
+        if (kinds or since_seconds is not None) and max_events > 0:
+            # JSONL is rollback compatibility only. Scan a bounded superset so
+            # callers still get useful filtered results without restoring the
+            # old whole-file dashboard behavior.
+            max_events = max(1000, max_events * 20)
         # Metrics are observational and may tolerate an incomplete final line.
         # Avoid taking the writer lock while reading: on network-backed state
         # directories a dashboard read can otherwise block every request trace
@@ -162,9 +260,123 @@ class MetricsStore:
             event = MetricEvent.from_dict(parsed)
             if event is not None:
                 events.append(event)
-        if max_events <= 0:
+        normalized_kinds = {kind for kind in kinds if kind}
+        if normalized_kinds:
+            events = [event for event in events if event.kind in normalized_kinds]
+        if since_seconds is not None:
+            cutoff = time.time() - max(0, since_seconds)
+            events = [
+                event
+                for event in events
+                if _timestamp_epoch(event.timestamp) >= cutoff
+            ]
+        if result_limit <= 0:
             return events
-        return events[-max_events:]
+        return events[-result_limit:]
+
+    def _sqlite_connect_locked(self) -> sqlite3.Connection:
+        pid = os.getpid()
+        if self._sqlite_connection is not None and self._sqlite_pid == pid:
+            return self._sqlite_connection
+        if self._sqlite_connection is not None:
+            self._sqlite_connection.close()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(
+            self.path,
+            timeout=5.0,
+            check_same_thread=False,
+        )
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=NORMAL")
+        connection.execute("PRAGMA busy_timeout=1000")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metric_events (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                timestamp_epoch REAL NOT NULL,
+                kind TEXT NOT NULL,
+                data_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS metric_events_kind_sequence
+            ON metric_events(kind, sequence DESC)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS metric_events_timestamp
+            ON metric_events(timestamp_epoch)
+            """
+        )
+        connection.commit()
+        try:
+            os.chmod(self.path, 0o600)
+        except OSError:
+            connection.close()
+            raise
+        self._sqlite_connection = connection
+        self._sqlite_pid = pid
+        return connection
+
+    def _load_sqlite_events(
+        self,
+        *,
+        max_events: int,
+        kinds: tuple[str, ...],
+        since_seconds: int | None,
+    ) -> list[MetricEvent]:
+        clauses: list[str] = []
+        parameters: list[Any] = []
+        normalized_kinds = tuple(dict.fromkeys(kind for kind in kinds if kind))
+        if normalized_kinds:
+            placeholders = ",".join("?" for _ in normalized_kinds)
+            clauses.append(f"kind IN ({placeholders})")
+            parameters.extend(normalized_kinds)
+        if since_seconds is not None:
+            clauses.append("timestamp_epoch >= ?")
+            parameters.append(time.time() - max(0, since_seconds))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        limit = ""
+        if max_events > 0:
+            limit = "LIMIT ?"
+            parameters.append(max_events)
+        query = (
+            "SELECT timestamp, kind, data_json FROM metric_events "
+            f"{where} ORDER BY sequence DESC {limit}"
+        )
+        with self._lock:
+            rows = self._sqlite_connect_locked().execute(query, parameters).fetchall()
+        events: list[MetricEvent] = []
+        for timestamp, kind, data_json in reversed(rows):
+            try:
+                data = json.loads(str(data_json))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            event = MetricEvent.from_dict(
+                {"timestamp": timestamp, "kind": kind, "data": data}
+            )
+            if event is not None:
+                events.append(event)
+        return events
+
+    def _prune_sqlite_locked(self, connection: sqlite3.Connection) -> None:
+        cutoff = connection.execute(
+            """
+            SELECT sequence FROM metric_events
+            ORDER BY sequence DESC
+            LIMIT 1 OFFSET ?
+            """,
+            (self._max_events - 1,),
+        ).fetchone()
+        if cutoff is not None:
+            connection.execute(
+                "DELETE FROM metric_events WHERE sequence < ?",
+                (int(cutoff[0]),),
+            )
 
     def _rotate_if_needed(self, additional_bytes: int) -> None:
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -184,6 +396,11 @@ class MetricsStore:
 
     def _rotated_path(self, index: int) -> Path:
         return self.path.with_name(f"{self.path.name}.{index}")
+
+
+def _timestamp_epoch(value: str) -> float:
+    parsed = parse_iso_datetime(value)
+    return parsed.timestamp() if parsed is not None else time.time()
 
 
 @contextmanager
@@ -451,6 +668,16 @@ def record_autoscaler_cycle(
             "desired_resources": decision.get("desiredResources", {}),
             "projected_free_resources": decision.get("projectedFreeResources", {}),
             "resource_deficit": decision.get("resourceDeficit", {}),
+            "live_signals": decision.get("liveSignals"),
+            "program_signals": decision.get("programSignals"),
+            "program_wake_plan": _bounded_program_wake_plan(
+                result.get("programWakePlan")
+            ),
+            "effective_policy": result.get("effectivePolicy", {}),
+            "pressure_scale_up": bool(decision.get("pressureScaleUp")),
+            "effective_scale_down_idle_seconds": decision.get(
+                "effectiveScaleDownIdleSeconds"
+            ),
             "ready_nodes": decision.get("readyNodes", 0),
             "provisioning_nodes": decision.get("provisioningNodes", 0),
             "total_nodes": decision.get("totalNodes", 0),
@@ -467,6 +694,32 @@ def record_autoscaler_cycle(
             "builder_actions": builder_decision.get("actions", []),
         },
     )
+
+
+def _bounded_program_wake_plan(value: Any) -> dict[str, Any]:
+    """Keep autoscaler telemetry useful without persisting an unbounded plan."""
+
+    if not isinstance(value, dict):
+        return {}
+    placements = (
+        value.get("placements")
+        if isinstance(value.get("placements"), list)
+        else []
+    )
+    unplaced = (
+        value.get("unplaced") if isinstance(value.get("unplaced"), list) else []
+    )
+    limit = DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT
+    return {
+        "mode": str(value.get("mode") or "shadow"),
+        "queued": max(0, int(value.get("queued") or 0)),
+        "placed": max(0, int(value.get("placed") or 0)),
+        "unplaced_count": max(0, int(value.get("unplaced_count") or 0)),
+        "placements": placements[:limit],
+        "unplaced": unplaced[:limit],
+        "placements_truncated": max(0, len(placements) - limit),
+        "unplaced_truncated": max(0, len(unplaced) - limit),
+    }
 
 
 def record_vm_submitted(
@@ -588,6 +841,8 @@ def record_vm_init_attempt(
 def record_node_heartbeat(
     store: MetricsStore | None,
     heartbeat: NodeHeartbeat,
+    *,
+    first: bool = False,
 ) -> None:
     if store is None:
         return
@@ -600,6 +855,7 @@ def record_node_heartbeat(
             "job_id": heartbeat.job_id,
             "node_url": heartbeat.node_url or "",
             "active_sandboxes": heartbeat.active_sandboxes,
+            "active_workloads": heartbeat.active_workloads,
             "draining": heartbeat.draining,
             "capabilities": list(heartbeat.capabilities),
             "agent_version": heartbeat.agent_version,
@@ -621,6 +877,111 @@ def record_node_heartbeat(
             "heartbeat_updated_at": heartbeat.updated_at.isoformat(),
         },
     )
+    if first:
+        store.append(
+            "node_first_heartbeat",
+            {
+                "node_id": heartbeat.node_id,
+                "job_id": heartbeat.job_id,
+                "heartbeat_updated_at": heartbeat.updated_at.isoformat(),
+            },
+        )
+
+
+def build_live_scale_signals(
+    events: list[MetricEvent],
+    policy: ScalePolicy,
+) -> LiveScaleSignals:
+    """Reduce recent observations into a deliberately small feedback surface."""
+
+    now = utc_now()
+    pressure_cutoff = now.timestamp() - max(1, policy.live_pressure_window_seconds)
+    pressure_samples = 0
+    latest_pressure_epoch: float | None = None
+    latest_cpu: float | None = None
+    latest_memory: float | None = None
+    latest_psi: float | None = None
+    latest_storage_queue: float | None = None
+
+    for event in events:
+        if event.kind != "node_heartbeat":
+            continue
+        event_epoch = _timestamp_epoch(event.timestamp)
+        if event_epoch < pressure_cutoff:
+            continue
+        data = event.data
+        actual = data.get("actual_usage")
+        if not isinstance(actual, dict):
+            continue
+        active_workloads = _optional_int(data.get("active_workloads"))
+        if active_workloads is None:
+            active_workloads = _optional_int(data.get("active_sandboxes"))
+        storage_active = _optional_int(actual.get("storage_active_operations")) or 0
+        storage_waiting = _optional_int(actual.get("storage_waiting_operations")) or 0
+        if (active_workloads or 0) <= 0 and storage_active + storage_waiting <= 0:
+            continue
+
+        cpu = _fraction_from_percent(actual.get("cpu_percent"))
+        memory = _fraction_from_percent(actual.get("memory_percent"))
+        psi = _optional_float(actual.get("memory_psi_full_avg10"))
+        storage_limit = (
+            _optional_int(actual.get("storage_max_concurrent_operations")) or 0
+        )
+        storage_queue = (
+            min(1.0, (storage_active + storage_waiting) / storage_limit)
+            if storage_limit > 0
+            else None
+        )
+        is_pressure = any(
+            (
+                cpu is not None and cpu >= policy.target_cpu_utilization,
+                memory is not None and memory >= policy.target_memory_utilization,
+                psi is not None and psi >= policy.max_memory_psi_full_avg10,
+                storage_queue is not None
+                and storage_queue >= policy.target_storage_queue_utilization,
+            )
+        )
+        if not is_pressure:
+            continue
+        pressure_samples += 1
+        if latest_pressure_epoch is None or event_epoch >= latest_pressure_epoch:
+            latest_pressure_epoch = event_epoch
+            latest_cpu = cpu
+            latest_memory = memory
+            latest_psi = psi
+            latest_storage_queue = storage_queue
+
+    lifecycle = _vm_lifecycle_summary(events)
+    provisioning_values = sorted(
+        value / 1000.0
+        for item in lifecycle.get("items", [])
+        if isinstance(item, dict)
+        if (value := _optional_int(item.get("submit_to_first_heartbeat_ms")))
+        is not None
+    )
+    scale_wait_values = sorted(
+        value / 1000.0
+        for event in events
+        if event.kind == "sandbox_scheduled"
+        if (value := _optional_int(event.data.get("scale_up_wait_ms"))) is not None
+    )
+    return LiveScaleSignals(
+        window_seconds=max(1, policy.live_pressure_window_seconds),
+        pressure_samples=pressure_samples,
+        latest_pressure_age_seconds=(
+            max(0, int(now.timestamp() - latest_pressure_epoch))
+            if latest_pressure_epoch is not None
+            else None
+        ),
+        cpu_utilization=latest_cpu,
+        memory_utilization=latest_memory,
+        memory_psi_full_avg10=latest_psi,
+        storage_queue_utilization=latest_storage_queue,
+        provisioning_samples=len(provisioning_values),
+        provisioning_p95_seconds=_percentile_float(provisioning_values, 0.95),
+        scale_up_wait_samples=len(scale_wait_values),
+        scale_up_wait_p95_seconds=_percentile_float(scale_wait_values, 0.95),
+    )
 
 
 def build_metrics_snapshot(
@@ -630,6 +991,7 @@ def build_metrics_snapshot(
     *,
     heartbeat_ttl_seconds: int,
     exec_session_count: int | None = None,
+    program_requests: list[ProgramRequestState] | None = None,
 ) -> dict[str, Any]:
     now = utc_now()
     heartbeat_items = list(heartbeats.values())
@@ -650,7 +1012,11 @@ def build_metrics_snapshot(
         heartbeat for heartbeat in fresh if "image-build" in heartbeat.capabilities
     ]
     schedulable_sandbox_nodes = [
-        heartbeat for heartbeat in compatible if "sandbox" in heartbeat.capabilities
+        heartbeat
+        for heartbeat in compatible
+        if "sandbox" in heartbeat.capabilities
+        and not heartbeat.draining
+        and heartbeat.admission_open
     ]
     schedulable_builder_nodes = [
         heartbeat for heartbeat in compatible if "image-build" in heartbeat.capabilities
@@ -663,6 +1029,10 @@ def build_metrics_snapshot(
         if route.node_id in fresh_sandbox_nodes
     )
     active_routes = len(routing_state.sandboxes)
+    sandbox_state_counts: dict[str, int] = {}
+    for route in routing_state.sandboxes.values():
+        state = str(route.state or "unknown").strip().lower() or "unknown"
+        sandbox_state_counts[state] = sandbox_state_counts.get(state, 0) + 1
     fresh_resources = _aggregate_node_resources(fresh)
     sandbox_resources = _aggregate_node_resources(sandbox_nodes)
     builder_resources = _aggregate_node_resources(builder_nodes)
@@ -697,6 +1067,15 @@ def build_metrics_snapshot(
         -DEFAULT_RECENT_EVENT_LIMIT:
     ]
     scale_values = [int(event.data["scale_up_wait_ms"]) for event in scale_events]
+    latest_autoscaler = next(
+        (
+            event
+            for event in reversed(events)
+            if event.kind == "autoscaler_cycle"
+        ),
+        None,
+    )
+    program_summary = build_program_state_summary(program_requests or [], now=now)
 
     return {
         "generated_at": now.isoformat(),
@@ -706,6 +1085,13 @@ def build_metrics_snapshot(
             "compatible": len(compatible),
             "incompatible": max(0, len(fresh) - len(compatible)),
             "sandbox": len(sandbox_nodes),
+            "sandbox_ready": len(schedulable_sandbox_nodes),
+            "sandbox_draining": sum(
+                1 for heartbeat in sandbox_nodes if heartbeat.draining
+            ),
+            "sandbox_admission_closed": sum(
+                1 for heartbeat in sandbox_nodes if not heartbeat.admission_open
+            ),
             "builder": len(builder_nodes),
             "items": [
                 _node_metrics(heartbeat, now, heartbeat_ttl_seconds)
@@ -727,6 +1113,7 @@ def build_metrics_snapshot(
             "routes_on_fresh_nodes": routes_on_fresh_nodes,
             "provisional_running_routes": provisional_running,
             "stale_routes": max(0, active_routes - routes_on_fresh_nodes),
+            "states": dict(sorted(sandbox_state_counts.items())),
             "pending": len(pending_sandboxes),
             "pending_resources": _sum_pending_resources(pending_sandboxes).to_dict(),
             "oldest_pending_seconds": _oldest_age_seconds(pending_sandboxes),
@@ -747,6 +1134,7 @@ def build_metrics_snapshot(
                 else max(0, int(exec_session_count))
             ),
         },
+        "programs": program_summary,
         "images": {
             "pending_builds": len(pending_builds),
             "oldest_pending_build_seconds": _oldest_age_seconds(pending_builds),
@@ -763,6 +1151,14 @@ def build_metrics_snapshot(
             "items": [item.to_dict() for item in prepared_builders],
         },
         "scale_up": _scale_up_summary(scale_values, scale_events),
+        "autoscaler": (
+            {
+                "timestamp": latest_autoscaler.timestamp,
+                **latest_autoscaler.data,
+            }
+            if latest_autoscaler is not None
+            else None
+        ),
         "vm_lifecycle": _vm_lifecycle_summary(events),
         "traces": _trace_snapshot(events),
         "events": {
@@ -770,6 +1166,103 @@ def build_metrics_snapshot(
                 event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]
             ],
         },
+    }
+
+
+def build_program_state_summary(
+    requests: list[ProgramRequestState],
+    *,
+    now: Any = None,
+) -> dict[str, Any]:
+    """Build a bounded current-state view and an aging-first shadow queue."""
+
+    now = now or utc_now()
+    active = [request for request in requests if not request.is_terminal]
+    counts = {state: 0 for state in ("model_wait", "ready_to_wake", "waking", "acting")}
+    resources = {
+        state: ResourceQuantity()
+        for state in ("model_wait", "ready_to_wake", "waking", "acting")
+    }
+    for request in active:
+        if request.state not in counts:
+            continue
+        counts[request.state] += 1
+        resources[request.state] = resources[request.state] + request.resources
+
+    ready = sorted(
+        (request for request in active if request.state == "ready_to_wake"),
+        key=lambda request: (
+            _timestamp_epoch(request.response_ready_at or request.updated_at),
+            request.request_id,
+        ),
+    )
+    completed_wait_ms = [
+        duration
+        for request in active
+        if (
+            duration := _duration_ms(
+                request.accepted_at,
+                request.response_ready_at,
+            )
+        )
+        is not None
+    ]
+    completed_wake_ms = [
+        duration
+        for request in active
+        if (
+            duration := _duration_ms(
+                request.response_ready_at,
+                request.wake_completed_at,
+            )
+        )
+        is not None
+    ]
+    return {
+        "requests": len(active),
+        "rollouts": len({request.rollout_id for request in active}),
+        "sandboxes": len({request.sandbox_id for request in active}),
+        "states": counts,
+        "resources": {
+            state: quantity.to_dict() for state, quantity in resources.items()
+        },
+        "oldest_model_wait_seconds": _oldest_program_age_seconds(
+            (
+                request.accepted_at
+                for request in active
+                if request.state == "model_wait"
+            ),
+            now,
+        ),
+        "oldest_ready_to_wake_seconds": _oldest_program_age_seconds(
+            (request.response_ready_at for request in ready),
+            now,
+        ),
+        "model_wait_p50_ms": _percentile(completed_wait_ms, 0.50),
+        "model_wait_p95_ms": _percentile(completed_wait_ms, 0.95),
+        "response_to_wake_p50_ms": _percentile(completed_wake_ms, 0.50),
+        "response_to_wake_p95_ms": _percentile(completed_wake_ms, 0.95),
+        "shadow_wake_queue": [
+            {
+                "position": position,
+                "request_id": request.request_id,
+                "rollout_id": request.rollout_id,
+                "sandbox_id": request.sandbox_id,
+                "sandbox_generation": request.sandbox_generation,
+                "resources": request.resources.to_dict(),
+                "ready_at": request.response_ready_at,
+                "age_seconds": max(
+                    0,
+                    int(
+                        now.timestamp()
+                        - _timestamp_epoch(
+                            request.response_ready_at or request.updated_at
+                        )
+                    ),
+                ),
+            }
+            for position, request in enumerate(ready[:100], start=1)
+        ],
     }
 
 
@@ -793,6 +1286,7 @@ def _node_metrics(
         "active_image_builds": heartbeat.active_image_builds,
         "active_workloads": heartbeat.active_workloads,
         "draining": heartbeat.draining,
+        "admission_open": heartbeat.admission_open,
         "capabilities": list(heartbeat.capabilities),
         "agent_version": heartbeat.agent_version,
         "deployment_id": heartbeat.deployment_id,
@@ -1008,6 +1502,28 @@ def _optional_int(raw: object) -> int | None:
         return None
 
 
+def _optional_float(raw: object) -> float | None:
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return value if value >= 0 else None
+
+
+def _fraction_from_percent(raw: object) -> float | None:
+    value = _optional_float(raw)
+    return min(1.0, value / 100.0) if value is not None else None
+
+
+def _percentile_float(sorted_values: list[float], quantile: float) -> float | None:
+    if not sorted_values:
+        return None
+    index = int(round((len(sorted_values) - 1) * max(0.0, min(1.0, quantile))))
+    return sorted_values[index]
+
+
 def _metrics_lock(path: Path) -> RLock:
     key = path.resolve()
     with _METRICS_LOCKS_GUARD:
@@ -1068,6 +1584,15 @@ def _oldest_age_seconds(items: list[Any]) -> int:
     return max(0, oldest)
 
 
+def _oldest_program_age_seconds(timestamps: Any, now: Any) -> int:
+    oldest = 0
+    for timestamp in timestamps:
+        parsed = parse_iso_datetime(timestamp)
+        if parsed is not None:
+            oldest = max(oldest, int((now - parsed).total_seconds()))
+    return max(0, oldest)
+
+
 def _next_expiration_seconds(items: list[Any]) -> int | None:
     now = utc_now()
     values: list[int] = []
@@ -1122,6 +1647,7 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
             "vm_observed",
             "vm_init_attempt",
             "node_heartbeat",
+            "node_first_heartbeat",
             "sandbox_scheduled",
         }
     ]
@@ -1197,7 +1723,7 @@ def _vm_lifecycle_summary(events: list[MetricEvent]) -> dict[str, Any]:
                         "reason": data.get("reason") or "",
                     }
                 )
-        elif event.kind == "node_heartbeat":
+        elif event.kind in {"node_heartbeat", "node_first_heartbeat"}:
             _copy_first(record, data, "node_id")
             heartbeat_at = data.get("heartbeat_updated_at") or event.timestamp
             if not record.get("first_heartbeat_at"):

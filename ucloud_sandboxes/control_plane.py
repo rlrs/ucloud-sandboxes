@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import fcntl
@@ -70,11 +71,17 @@ from .metrics import (
     trace_span,
 )
 from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
+from .program_scheduler import (
+    WakeNodeCandidate,
+    node_pressure_score,
+    plan_shadow_wake_queue,
+)
 from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
 from .routing import (
     ExecRoute,
     PendingImageWarmup,
     PendingSandboxDemand,
+    ProgramRequestState,
     RoutingStore,
     SandboxRoute,
     SandboxRouteConflictError,
@@ -539,7 +546,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         heartbeats = self.store.upsert(heartbeat)
         stored_heartbeat = heartbeats.get(heartbeat.job_id, heartbeat)
-        record_node_heartbeat(self.metrics_store, stored_heartbeat)
+        record_node_heartbeat(
+            self.metrics_store,
+            stored_heartbeat,
+            first=previous is None,
+        )
         if self.registry_layer_cache is not None:
             self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
         if (
@@ -1552,23 +1563,50 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     exec_session_count = len(routing_state.exec_sessions)
                 else:
                     routing_state, exec_session_count = load_metrics()
-            events = (
-                self.metrics_store.load_events(
+            events = []
+            if self.metrics_store is not None:
+                events = self.metrics_store.load_events(
                     max_events=(
                         FULL_METRICS_EVENT_LIMIT
                         if full
                         else DEFAULT_METRICS_EVENT_LIMIT
                     )
                 )
-                if self.metrics_store is not None
-                else []
-            )
+                # High-rate heartbeats must not crowd the sparse provisioning
+                # and autoscaler records out of the dashboard snapshot.
+                supplemental = self.metrics_store.load_events(
+                    max_events=2_000 if full else 500,
+                    kinds=(
+                        "vm_submitted",
+                        "node_first_heartbeat",
+                        "sandbox_scheduled",
+                        "autoscaler_cycle",
+                    ),
+                    since_seconds=7 * 24 * 60 * 60,
+                )
+                keyed = {
+                    (
+                        event.timestamp,
+                        event.kind,
+                        json.dumps(event.data, sort_keys=True),
+                    ): event
+                    for event in [*events, *supplemental]
+                }
+                events = sorted(
+                    keyed.values(),
+                    key=lambda event: event.timestamp,
+                )
             snapshot = build_metrics_snapshot(
                 self.store.load(),
                 routing_state,
                 events,
                 heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
                 exec_session_count=exec_session_count,
+                program_requests=(
+                    self.routing_store.program_requests_readonly()
+                    if self.routing_store is not None
+                    else []
+                ),
             )
             builds = self._cached_image_build_records()
             active_builds = [
@@ -3578,6 +3616,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         normalized_path = urlparse(path).path
         transport_reset = False
+        lifecycle_payload: dict[str, Any] = {}
         lifecycle_action = (
             "wake"
             if self.command == "POST" and normalized_path.endswith("/wake")
@@ -3592,6 +3631,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 lifecycle_payload = json.loads((body or b"{}").decode("utf-8"))
                 if not isinstance(lifecycle_payload, dict):
                     raise ValueError("sandbox lifecycle payload must be an object")
+                request_id = str(lifecycle_payload.get("request_id") or "").strip()
+                rollout_id = str(lifecycle_payload.get("rollout_id") or "").strip()
+                if bool(request_id) != bool(rollout_id):
+                    raise ValueError(
+                        "program lifecycle requires both request_id and rollout_id"
+                    )
                 raw_generation = lifecycle_payload.get("generation")
                 if lifecycle_action == "wake" and raw_generation is None:
                     raise ValueError("wake generation is required")
@@ -3617,6 +3662,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+        wake_program: ProgramRequestState | None = None
+        wake_placement_routes: list[SandboxRoute] | None = None
+        if lifecycle_action and lifecycle_payload.get("request_id"):
+            wake_program = self._record_program_request_transition(
+                route,
+                lifecycle_payload,
+                state=(
+                    "model_wait"
+                    if lifecycle_action == "park"
+                    else "ready_to_wake"
+                ),
+            )
+            if lifecycle_action == "wake" and wake_program is not None:
+                wake_placement_routes = self._placement_routes()
+                self._record_program_wake_shadow_plan(
+                    lifecycle_payload,
+                    wake_program,
+                    wake_placement_routes,
+                )
+
         if (route.state or "unknown").lower() == "parked" and _sandbox_request_wakes(
             path, self.command
         ):
@@ -3634,7 +3699,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         current.job_id,
                         current.node_url,
                     )
-                    route = self._ensure_parked_sandbox_wake_placement(current)
+                    route = self._ensure_parked_sandbox_wake_placement(
+                        current,
+                        routes=wake_placement_routes,
+                    )
                     if route is None:
                         return
                     transport_reset = previous_owner != (
@@ -3644,6 +3712,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     )
                 else:
                     route = current
+
+        if lifecycle_action == "wake" and lifecycle_payload.get("request_id"):
+            self._record_program_request_transition(
+                route,
+                lifecycle_payload,
+                state="waking",
+            )
 
         extra_headers: dict[str, str] | None = None
         if self.command == "DELETE" and route.generation > 0:
@@ -3803,6 +3878,31 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 ):
                     self._release_registry_snapshot_reference(route)
                 route = updated
+            if (
+                lifecycle_action == "wake"
+                and lifecycle_payload.get("request_id")
+            ):
+                self._record_program_request_transition(
+                    route,
+                    lifecycle_payload,
+                    state="acting",
+                )
+                if self.metrics_store is not None:
+                    self.metrics_store.append(
+                        "program_wake_actual",
+                        {
+                            "request_id": str(
+                                lifecycle_payload.get("request_id") or ""
+                            ).strip(),
+                            "rollout_id": str(
+                                lifecycle_payload.get("rollout_id") or ""
+                            ).strip(),
+                            "sandbox_id": route.sandbox_id,
+                            "sandbox_generation": route.generation,
+                            "node_id": route.node_id,
+                            "job_id": route.job_id,
+                        },
+                    )
         if self.command == "DELETE" and 200 <= response.status < 300:
             deleted = response.json().get("deleted")
             response_generation = _record_generation(deleted)
@@ -3841,13 +3941,137 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             extra_headers=response_headers,
         )
 
+    def _record_program_request_transition(
+        self,
+        route: SandboxRoute,
+        lifecycle_payload: dict[str, Any],
+        *,
+        state: str,
+    ) -> ProgramRequestState | None:
+        request_id = str(lifecycle_payload.get("request_id") or "").strip()
+        rollout_id = str(lifecycle_payload.get("rollout_id") or "").strip()
+        if not request_id or not rollout_id:
+            return None
+        accepted_at = ""
+        try:
+            raw_created_at = float(lifecycle_payload.get("request_created_at"))
+            if math.isfinite(raw_created_at) and raw_created_at >= 0:
+                accepted_at = datetime.fromtimestamp(
+                    raw_created_at,
+                    tz=timezone.utc,
+                ).isoformat()
+        except (TypeError, ValueError, OverflowError, OSError):
+            pass
+        try:
+            program = self.routing_store.upsert_program_request_transition(
+                route,
+                request_id=request_id,
+                rollout_id=rollout_id,
+                state=state,
+                accepted_at=accepted_at or None,
+            )
+        except (OSError, sqlite3.Error, ValueError, SandboxRouteConflictError) as exc:
+            if self.metrics_store is not None:
+                self.metrics_store.append(
+                    "program_state_projection_error",
+                    {
+                        "request_id": request_id,
+                        "rollout_id": rollout_id,
+                        "sandbox_id": route.sandbox_id,
+                        "sandbox_generation": route.generation,
+                        "state": state,
+                        "error": str(exc),
+                    },
+                )
+            return None
+        if self.metrics_store is not None:
+            self.metrics_store.append(
+                "program_state_transition",
+                program.to_dict(),
+            )
+        return program
+
+    def _record_program_wake_shadow_plan(
+        self,
+        lifecycle_payload: dict[str, Any],
+        program: ProgramRequestState,
+        routes: list[SandboxRoute],
+    ) -> None:
+        """Observe every response-ready event without changing wake behavior."""
+
+        if self.metrics_store is None or self.routing_store is None:
+            return
+        request_id = str(lifecycle_payload.get("request_id") or "").strip()
+        if not request_id:
+            return
+        try:
+            plan = plan_shadow_wake_queue(
+                [program],
+                routes,
+                [
+                    WakeNodeCandidate(
+                        node_id=heartbeat.node_id,
+                        job_id=heartbeat.job_id,
+                        available=_node_available_resources(heartbeat, routes),
+                        total=heartbeat.effective_resources,
+                        pressure=node_pressure_score(heartbeat),
+                    )
+                    for heartbeat in self._ready_sandbox_heartbeats()
+                    if heartbeat.admission_open
+                    and agent_version_is_compatible(heartbeat.agent_version)
+                ],
+            )
+            placements = plan.get("placements")
+            unplaced = plan.get("unplaced")
+            decision = next(
+                (
+                    item
+                    for item in (
+                        [
+                            *(
+                                placements
+                                if isinstance(placements, list)
+                                else []
+                            ),
+                            *(unplaced if isinstance(unplaced, list) else []),
+                        ]
+                    )
+                    if isinstance(item, dict)
+                    and item.get("request_id") == request_id
+                ),
+                None,
+            )
+            self.metrics_store.append(
+                "program_wake_shadow_plan",
+                {
+                    "request_id": request_id,
+                    "rollout_id": str(
+                        lifecycle_payload.get("rollout_id") or ""
+                    ).strip(),
+                    "queued": plan.get("queued", 0),
+                    "placed": plan.get("placed", 0),
+                    "unplaced_count": plan.get("unplaced_count", 0),
+                    "decision": decision,
+                },
+            )
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            self.metrics_store.append(
+                "program_wake_shadow_plan_error",
+                {
+                    "request_id": request_id,
+                    "error": str(exc),
+                },
+            )
+
     def _ensure_parked_sandbox_wake_placement(
         self,
         route: SandboxRoute,
+        *,
+        routes: list[SandboxRoute] | None = None,
     ) -> SandboxRoute | None:
         """Keep a parked sandbox local only when its active shape still fits."""
 
-        routes = self._placement_routes()
+        routes = routes if routes is not None else self._placement_routes()
         source_heartbeat = self._heartbeat_for_route(
             node_id=route.node_id,
             job_id=route.job_id,

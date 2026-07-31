@@ -1,21 +1,30 @@
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
+import sqlite3
 import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.metrics import (
     GatewayBusyTraceSampler,
+    MetricEvent,
     MetricsStore,
+    build_live_scale_signals,
     build_metrics_snapshot,
     record_autoscaler_cycle,
     record_trace_span,
 )
-from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
+from ucloud_sandboxes.models import (
+    NodeRuntimeMetrics,
+    ResourceQuantity,
+    ScalePolicy,
+    utc_now,
+)
 from ucloud_sandboxes.routing import (
     ExecRoute,
     PendingImageBuildDemand,
     PendingSandboxDemand,
+    ProgramRequestState,
     PreparedBuilderDemand,
     PreparedCapacityDemand,
     RoutingState,
@@ -24,6 +33,90 @@ from ucloud_sandboxes.routing import (
 
 
 class MetricsTests(unittest.TestCase):
+    def test_sqlite_store_filters_indexed_recent_events(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            store = MetricsStore(path)
+            store.append("heartbeat", {"index": 1})
+            store.append("trace", {"index": 2})
+            store.append("heartbeat", {"index": 3})
+
+            events = store.load_events(
+                max_events=10,
+                kinds=("heartbeat",),
+                since_seconds=60,
+            )
+            mode = path.stat().st_mode & 0o777
+
+        self.assertEqual([event.data["index"] for event in events], [1, 3])
+        self.assertEqual(mode, 0o600)
+
+    def test_sqlite_writer_collision_does_not_fail_product_path(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            store = MetricsStore(path)
+            blocker = sqlite3.connect(path)
+            blocker.execute("BEGIN IMMEDIATE")
+            store.append("heartbeat", {"index": 1})
+            blocker.rollback()
+            blocker.close()
+
+            store.append("heartbeat", {"index": 2})
+            events = store.load_events()
+
+        self.assertEqual(
+            [event.kind for event in events],
+            ["metrics_dropped_events", "heartbeat"],
+        )
+        self.assertEqual(events[0].data["count"], 1)
+        self.assertEqual(events[1].data["index"], 2)
+
+    def test_builds_live_pressure_and_provisioning_signals(self) -> None:
+        now = utc_now()
+        heartbeat_data = {
+            "job_id": "job-1",
+            "active_workloads": 1,
+            "actual_usage": {
+                "cpu_percent": 82.0,
+                "memory_percent": 70.0,
+                "memory_psi_full_avg10": 0.0,
+                "storage_active_operations": 1,
+                "storage_waiting_operations": 0,
+                "storage_max_concurrent_operations": 8,
+            },
+        }
+        events = [
+            MetricEvent(
+                timestamp=(now - timedelta(seconds=70)).isoformat(),
+                kind="vm_submitted",
+                data={"job_id": "job-1", "role": "sandbox"},
+            ),
+            *[
+                MetricEvent(
+                    timestamp=(now - timedelta(seconds=offset)).isoformat(),
+                    kind="node_heartbeat",
+                    data=heartbeat_data,
+                )
+                for offset in (20, 10, 1)
+            ],
+            MetricEvent(
+                timestamp=now.isoformat(),
+                kind="sandbox_scheduled",
+                data={
+                    "job_id": "job-1",
+                    "scale_up_wait_ms": 72_000,
+                },
+            ),
+        ]
+
+        signals = build_live_scale_signals(events, ScalePolicy())
+
+        self.assertEqual(signals.pressure_samples, 3)
+        self.assertEqual(signals.cpu_utilization, 0.82)
+        self.assertEqual(signals.provisioning_samples, 1)
+        self.assertGreaterEqual(signals.provisioning_p95_seconds or 0, 49)
+        self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
+
     def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
         snapshot = build_metrics_snapshot(
             {},
@@ -34,6 +127,65 @@ class MetricsTests(unittest.TestCase):
         )
 
         self.assertEqual(snapshot["exec"]["sessions"], 2_000)
+
+    def test_snapshot_exposes_aging_first_program_wake_queue(self) -> None:
+        now = utc_now()
+        requests = [
+            ProgramRequestState(
+                request_id="newer",
+                rollout_id="rollout-2",
+                sandbox_id="sandbox-2",
+                sandbox_generation=1,
+                state="ready_to_wake",
+                resources=ResourceQuantity(vcpu=2, memory_mb=2048, disk_mb=4096),
+                accepted_at=(now - timedelta(seconds=30)).isoformat(),
+                response_ready_at=(now - timedelta(seconds=5)).isoformat(),
+                updated_at=(now - timedelta(seconds=5)).isoformat(),
+            ),
+            ProgramRequestState(
+                request_id="older",
+                rollout_id="rollout-1",
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                state="ready_to_wake",
+                resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=2048),
+                accepted_at=(now - timedelta(seconds=60)).isoformat(),
+                response_ready_at=(now - timedelta(seconds=20)).isoformat(),
+                wake_completed_at=(now - timedelta(seconds=10)).isoformat(),
+                updated_at=(now - timedelta(seconds=10)).isoformat(),
+            ),
+            ProgramRequestState(
+                request_id="waiting",
+                rollout_id="rollout-3",
+                sandbox_id="sandbox-3",
+                sandbox_generation=1,
+                state="model_wait",
+                resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=16384),
+                accepted_at=(now - timedelta(seconds=40)).isoformat(),
+                updated_at=(now - timedelta(seconds=40)).isoformat(),
+            ),
+        ]
+
+        snapshot = build_metrics_snapshot(
+            {},
+            RoutingState({}, {}, {}, {}),
+            [],
+            heartbeat_ttl_seconds=120,
+            program_requests=requests,
+        )
+
+        programs = snapshot["programs"]
+        self.assertEqual(programs["states"]["model_wait"], 1)
+        self.assertEqual(programs["states"]["ready_to_wake"], 2)
+        self.assertEqual(
+            programs["shadow_wake_queue"][0]["request_id"],
+            "older",
+        )
+        self.assertEqual(
+            programs["resources"]["ready_to_wake"]["memory_mb"],
+            3072,
+        )
+        self.assertEqual(programs["response_to_wake_p95_ms"], 10_000)
 
     def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -147,6 +299,48 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(event.data["active_image_builds"], 2)
         self.assertEqual(event.data["build_warm_sandbox_resources"]["vcpu"], 16.0)
 
+    def test_autoscaler_cycle_bounds_wake_plan_and_exposes_policy(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            record_autoscaler_cycle(
+                store,
+                cycle=8,
+                result={
+                    "decision": {},
+                    "programWakePlan": {
+                        "mode": "action",
+                        "queued": 300,
+                        "placed": 150,
+                        "unplaced_count": 150,
+                        "placements": [
+                            {"request_id": f"placed-{index}"}
+                            for index in range(150)
+                        ],
+                        "unplaced": [
+                            {"request_id": f"unplaced-{index}"}
+                            for index in range(150)
+                        ],
+                    },
+                    "effectivePolicy": {
+                        "program_aware_autoscaling_enabled": True,
+                        "model_wait_capacity_weight": 0.25,
+                    },
+                },
+            )
+
+            event = store.load_events()[0]
+
+        wake_plan = event.data["program_wake_plan"]
+        self.assertEqual(len(wake_plan["placements"]), 100)
+        self.assertEqual(len(wake_plan["unplaced"]), 100)
+        self.assertEqual(wake_plan["placements_truncated"], 50)
+        self.assertEqual(wake_plan["unplaced_truncated"], 50)
+        self.assertTrue(
+            event.data["effective_policy"][
+                "program_aware_autoscaling_enabled"
+            ]
+        )
+
     def test_builds_dashboard_snapshot_from_heartbeats_routes_and_events(self) -> None:
         now = utc_now()
         heartbeat = build_heartbeat(
@@ -256,6 +450,9 @@ class MetricsTests(unittest.TestCase):
             )
 
         self.assertEqual(snapshot["nodes"]["fresh"], 1)
+        self.assertEqual(snapshot["nodes"]["sandbox_ready"], 1)
+        self.assertEqual(snapshot["nodes"]["sandbox_draining"], 0)
+        self.assertEqual(snapshot["nodes"]["sandbox_admission_closed"], 0)
         self.assertEqual(snapshot["nodes"]["samples"], 0)
         self.assertEqual(
             snapshot["nodes"]["items"][0]["actual_usage"]["cpu_percent"], 20.0
@@ -266,6 +463,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["resources"]["sandbox"]["load"]["vcpu"], 0.25)
         self.assertEqual(snapshot["sandboxes"]["running"], 1)
         self.assertEqual(snapshot["sandboxes"]["active_routes"], 2)
+        self.assertEqual(snapshot["sandboxes"]["states"], {"unknown": 2})
         self.assertEqual(snapshot["sandboxes"]["routes_on_fresh_nodes"], 1)
         self.assertEqual(snapshot["sandboxes"]["provisional_running_routes"], 0)
         self.assertEqual(snapshot["sandboxes"]["stale_routes"], 1)

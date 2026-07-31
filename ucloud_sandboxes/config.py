@@ -180,6 +180,120 @@ class AutoscalerConfig:
                 ),
                 minimum=1,
             ),
+            live_pressure_enabled=_config_bool(
+                "policy.live_pressure_enabled",
+                policy_raw.get(
+                    "live_pressure_enabled",
+                    policy_defaults.live_pressure_enabled,
+                ),
+            ),
+            live_pressure_window_seconds=_config_int(
+                "policy.live_pressure_window_seconds",
+                policy_raw.get(
+                    "live_pressure_window_seconds",
+                    policy_defaults.live_pressure_window_seconds,
+                ),
+                minimum=1,
+            ),
+            live_pressure_min_samples=_config_int(
+                "policy.live_pressure_min_samples",
+                policy_raw.get(
+                    "live_pressure_min_samples",
+                    policy_defaults.live_pressure_min_samples,
+                ),
+                minimum=1,
+            ),
+            live_pressure_fresh_seconds=_config_int(
+                "policy.live_pressure_fresh_seconds",
+                policy_raw.get(
+                    "live_pressure_fresh_seconds",
+                    policy_defaults.live_pressure_fresh_seconds,
+                ),
+                minimum=1,
+            ),
+            target_cpu_utilization=_config_float(
+                "policy.target_cpu_utilization",
+                policy_raw.get(
+                    "target_cpu_utilization",
+                    policy_defaults.target_cpu_utilization,
+                ),
+                minimum=0.01,
+                maximum=1.0,
+            ),
+            target_memory_utilization=_config_float(
+                "policy.target_memory_utilization",
+                policy_raw.get(
+                    "target_memory_utilization",
+                    policy_defaults.target_memory_utilization,
+                ),
+                minimum=0.01,
+                maximum=1.0,
+            ),
+            max_memory_psi_full_avg10=_config_float(
+                "policy.max_memory_psi_full_avg10",
+                policy_raw.get(
+                    "max_memory_psi_full_avg10",
+                    policy_defaults.max_memory_psi_full_avg10,
+                ),
+                minimum=0.0,
+            ),
+            target_storage_queue_utilization=_config_float(
+                "policy.target_storage_queue_utilization",
+                policy_raw.get(
+                    "target_storage_queue_utilization",
+                    policy_defaults.target_storage_queue_utilization,
+                ),
+                minimum=0.01,
+                maximum=1.0,
+            ),
+            pressure_scale_down_cooldown_seconds=_config_int(
+                "policy.pressure_scale_down_cooldown_seconds",
+                policy_raw.get(
+                    "pressure_scale_down_cooldown_seconds",
+                    policy_defaults.pressure_scale_down_cooldown_seconds,
+                ),
+                minimum=0,
+            ),
+            provisioning_latency_lookback_seconds=_config_int(
+                "policy.provisioning_latency_lookback_seconds",
+                policy_raw.get(
+                    "provisioning_latency_lookback_seconds",
+                    policy_defaults.provisioning_latency_lookback_seconds,
+                ),
+                minimum=60,
+            ),
+            provisioning_scale_down_multiplier=_config_float(
+                "policy.provisioning_scale_down_multiplier",
+                policy_raw.get(
+                    "provisioning_scale_down_multiplier",
+                    policy_defaults.provisioning_scale_down_multiplier,
+                ),
+                minimum=0.0,
+            ),
+            program_aware_autoscaling_enabled=_config_bool(
+                "policy.program_aware_autoscaling_enabled",
+                policy_raw.get(
+                    "program_aware_autoscaling_enabled",
+                    policy_defaults.program_aware_autoscaling_enabled,
+                ),
+            ),
+            model_wait_capacity_weight=_config_float(
+                "policy.model_wait_capacity_weight",
+                policy_raw.get(
+                    "model_wait_capacity_weight",
+                    policy_defaults.model_wait_capacity_weight,
+                ),
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            model_wait_max_headroom_nodes=_config_int(
+                "policy.model_wait_max_headroom_nodes",
+                policy_raw.get(
+                    "model_wait_max_headroom_nodes",
+                    policy_defaults.model_wait_max_headroom_nodes,
+                ),
+                minimum=0,
+            ),
             default_node_resources=ResourceQuantity.from_dict(default_node_resources_raw),
             cpu_overcommit=_config_float(
                 "policy.cpu_overcommit",
@@ -311,7 +425,7 @@ class AutoscalerConfig:
     def metrics_path(self) -> Path:
         if self.metrics_file:
             return Path(self.metrics_file).expanduser()
-        return Path(self.state_dir).expanduser() / "metrics.jsonl"
+        return Path(self.state_dir).expanduser() / "metrics.sqlite"
 
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
@@ -361,6 +475,12 @@ def _config_float(
     if maximum is not None and parsed > maximum:
         raise ValueError(f"{label} must be at most {maximum}.")
     return parsed
+
+
+def _config_bool(label: str, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be a boolean.")
+    return value
 
 
 def _validate_resource_quantity(label: str, value: object) -> None:

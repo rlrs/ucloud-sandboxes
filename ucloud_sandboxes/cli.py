@@ -101,6 +101,7 @@ from .managed_registry import (
 )
 from .metrics import (
     MetricsStore,
+    build_live_scale_signals,
     record_autoscaler_cycle,
     record_vm_init_attempt,
     record_vm_observed,
@@ -137,6 +138,12 @@ from .policy import (
     unreachable_node_reference,
     unreachable_node_stop_ready,
 )
+from .program_scheduler import (
+    WakeNodeCandidate,
+    build_program_scale_signals,
+    node_pressure_score,
+    plan_shadow_wake_queue,
+)
 from .reconcile import (
     VmCreateIntent,
     VmNodeSubmissionDefaults,
@@ -155,7 +162,12 @@ from .registry import (
     load_heartbeats,
     merge_jobs_and_heartbeats,
 )
-from .routing import SandboxRoute, RoutingStore, sandbox_demand_from_routing_state
+from .routing import (
+    ProgramRequestState,
+    RoutingStore,
+    SandboxRoute,
+    sandbox_demand_from_routing_state,
+)
 from .runtime_probe import (
     DEFAULT_CHECKPOINT_HELPER,
     DEFAULT_CHECKPOINT_ROOT,
@@ -448,7 +460,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--metrics-file",
         type=Path,
-        help="JSONL metrics event file. Defaults to <state_dir>/metrics.jsonl.",
+        help="SQLite metrics database. Defaults to <state_dir>/metrics.sqlite.",
     )
     serve.add_argument(
         "--registry-url",
@@ -1651,7 +1663,7 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument(
         "--metrics-file",
         type=Path,
-        help="JSONL metrics event file. Defaults to <state_dir>/metrics.jsonl.",
+        help="SQLite metrics database. Defaults to <state_dir>/metrics.sqlite.",
     )
     loop.add_argument(
         "--heartbeats",
@@ -1858,6 +1870,90 @@ def add_builder_autoscale_args(parser: argparse.ArgumentParser) -> None:
             "Idle grace before stopping builder VMs after image-build demand "
             "drops to zero. Defaults to policy.builder_scale_down_idle_seconds."
         ),
+    )
+    parser.add_argument(
+        "--live-pressure-enabled",
+        type=_parse_cli_bool,
+        default=None,
+        help="Enable live-pressure headroom and latency-aware scale-down.",
+    )
+    parser.add_argument(
+        "--live-pressure-window-seconds",
+        type=int,
+        default=None,
+        help="Recent heartbeat window used for live-pressure samples.",
+    )
+    parser.add_argument(
+        "--live-pressure-min-samples",
+        type=int,
+        default=None,
+        help="Pressure samples required before adding a headroom node.",
+    )
+    parser.add_argument(
+        "--live-pressure-fresh-seconds",
+        type=int,
+        default=None,
+        help="Maximum age of the newest pressure sample for scale-up.",
+    )
+    parser.add_argument(
+        "--target-cpu-utilization",
+        type=float,
+        default=None,
+        help="Actual host CPU fraction that triggers live pressure.",
+    )
+    parser.add_argument(
+        "--target-memory-utilization",
+        type=float,
+        default=None,
+        help="Actual host memory fraction that triggers live pressure.",
+    )
+    parser.add_argument(
+        "--max-memory-psi-full-avg10",
+        type=float,
+        default=None,
+        help="Maximum full-memory PSI avg10 before adding headroom.",
+    )
+    parser.add_argument(
+        "--target-storage-queue-utilization",
+        type=float,
+        default=None,
+        help="Storage operation slot/queue fraction that triggers pressure.",
+    )
+    parser.add_argument(
+        "--pressure-scale-down-cooldown-seconds",
+        type=int,
+        default=None,
+        help="Scale-down cooldown after the newest pressure sample.",
+    )
+    parser.add_argument(
+        "--provisioning-latency-lookback-seconds",
+        type=int,
+        default=None,
+        help="Lookback used to calculate VM provisioning p95.",
+    )
+    parser.add_argument(
+        "--provisioning-scale-down-multiplier",
+        type=float,
+        default=None,
+        help="Provisioning p95 multiplier used as an idle-grace floor.",
+    )
+    parser.add_argument(
+        "--program-aware-autoscaling-enabled",
+        type=_parse_cli_bool,
+        default=None,
+        help="Apply rollout-phase demand to autoscaling; false is shadow-only.",
+    )
+    parser.add_argument(
+        "--model-wait-capacity-weight",
+        type=float,
+        default=None,
+        help="CPU/memory weight assigned to parked model-wait sandboxes.",
+    )
+    parser.add_argument(
+        "--model-wait-max-headroom-nodes",
+        type=int,
+        default=None,
+        help="Maximum node-equivalents retained for weighted model waits.",
     )
 
 
@@ -3076,6 +3172,9 @@ def _post_gateway_sandbox_lifecycle(
         {
             "generation": relay_request.sandbox_generation,
             "operation_id": f"relay-{action}:{relay_request.request_id}",
+            "rollout_id": relay_request.rollout_id,
+            "request_id": relay_request.request_id,
+            "request_created_at": relay_request.created_at,
         },
         separators=(",", ":"),
     ).encode("utf-8")
@@ -4098,6 +4197,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             pending_snapshot = list(routing_state.pending.values())
             pending_image_build_snapshot = list(routing_state.image_builds.values())
             prepared_builder_snapshot = list(routing_state.prepared_builders.values())
+            program_request_snapshot = routing_store.program_requests_readonly()
             demand = sandbox_demand_from_routing_state(routing_state)
             route_reservations = sandbox_route_reservations(
                 routing_state.sandboxes.values()
@@ -4119,6 +4219,13 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                 provider_state=provider_state,
                 provider_mutations_allowed=controller_active,
                 route_reservations=route_reservations,
+                sandbox_routes=tuple(routing_state.sandboxes.values()),
+                program_requests=tuple(program_request_snapshot),
+                pending_wake_sandbox_ids={
+                    item.sandbox_id.removeprefix("__wake__:")
+                    for item in pending_snapshot
+                    if item.sandbox_id.startswith("__wake__:")
+                },
                 bootstrap_coordinator=bootstrap_coordinator,
                 provider_fence=assert_process_fence,
             )
@@ -4642,6 +4749,9 @@ def run_reconcile_cycle(
     provider_state: AutoscalerStateStore | None = None,
     provider_mutations_allowed: bool = False,
     route_reservations: dict[str, tuple[SandboxRoute, ...]] | None = None,
+    sandbox_routes: tuple[SandboxRoute, ...] = (),
+    program_requests: tuple[ProgramRequestState, ...] = (),
+    pending_wake_sandbox_ids: set[str] | None = None,
     bootstrap_coordinator: _VmBootstrapCoordinator | None = None,
     provider_fence: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
@@ -4839,7 +4949,57 @@ def run_reconcile_cycle(
         demand,
         build_warm_resources,
     )
-    decision = evaluate_scale(sandbox_nodes, sandbox_demand, effective_policy)
+    live_scale_signals = None
+    if metrics_store is not None:
+        pressure_events = metrics_store.load_events(
+            max_events=10_000,
+            kinds=("node_heartbeat",),
+            since_seconds=effective_policy.live_pressure_window_seconds,
+        )
+        lifecycle_events = metrics_store.load_events(
+            max_events=20_000,
+            kinds=(
+                "vm_submitted",
+                "node_first_heartbeat",
+                "sandbox_scheduled",
+            ),
+            since_seconds=effective_policy.provisioning_latency_lookback_seconds,
+        )
+        live_scale_signals = build_live_scale_signals(
+            sorted(
+                [*pressure_events, *lifecycle_events],
+                key=lambda event: event.timestamp,
+            ),
+            effective_policy,
+        )
+    program_scale_signals = build_program_scale_signals(
+        list(program_requests),
+        list(sandbox_routes),
+        effective_policy,
+        pending_wake_sandbox_ids=pending_wake_sandbox_ids,
+    )
+    program_wake_plan = plan_shadow_wake_queue(
+        list(program_requests),
+        list(sandbox_routes),
+        [
+            WakeNodeCandidate(
+                node_id=node.heartbeat.node_id,
+                job_id=node.job_id,
+                available=node.heartbeat.free_resources,
+                total=node.heartbeat.effective_resources,
+                pressure=node_pressure_score(node.heartbeat),
+            )
+            for node in sandbox_nodes
+            if node.is_schedulable and node.heartbeat is not None
+        ],
+    )
+    decision = evaluate_scale(
+        sandbox_nodes,
+        sandbox_demand,
+        effective_policy,
+        live_signals=live_scale_signals,
+        program_signals=program_scale_signals,
+    )
     builder_decision = evaluate_builder_scale(
         builder_nodes,
         pending_builds=builder_pending,
@@ -4911,6 +5071,8 @@ def run_reconcile_cycle(
                 counterfactual_sandbox_nodes,
                 sandbox_demand,
                 effective_policy,
+                live_signals=live_scale_signals,
+                program_signals=program_scale_signals,
             )
             builder_decision = evaluate_builder_scale(
                 counterfactual_builder_nodes,
@@ -5424,6 +5586,8 @@ def run_reconcile_cycle(
         "sandboxNodes": [node_to_dict(node) for node in sandbox_nodes],
         "builderNodes": [node_to_dict(node) for node in builder_nodes],
         "decision": scale_decision_to_dict(decision),
+        "effectivePolicy": dashboard_scale_policy_to_dict(effective_policy),
+        "programWakePlan": program_wake_plan,
         "builderDecision": scale_decision_to_dict(builder_decision),
         "pendingImageBuilds": builder_pending,
         "activeImageBuilds": active_image_builds,
@@ -5798,7 +5962,7 @@ def metrics_path_from_args(
     if config.metrics_file:
         return config.metrics_path()
     if sibling_file is not None:
-        return Path(sibling_file).expanduser().parent / "metrics.jsonl"
+        return Path(sibling_file).expanduser().parent / "metrics.sqlite"
     return config.metrics_path()
 
 
@@ -6361,6 +6525,29 @@ def policy_with_cli_overrides(
         factor_updates[field_name] = _node_capacity_factor(raw_value, 1.0)
     if factor_updates:
         effective = replace(effective, **factor_updates)
+    live_updates: dict[str, Any] = {}
+    for field_name in (
+        "live_pressure_enabled",
+        "live_pressure_window_seconds",
+        "live_pressure_min_samples",
+        "live_pressure_fresh_seconds",
+        "target_cpu_utilization",
+        "target_memory_utilization",
+        "max_memory_psi_full_avg10",
+        "target_storage_queue_utilization",
+        "pressure_scale_down_cooldown_seconds",
+        "provisioning_latency_lookback_seconds",
+        "provisioning_scale_down_multiplier",
+        "program_aware_autoscaling_enabled",
+        "model_wait_capacity_weight",
+        "model_wait_max_headroom_nodes",
+    ):
+        raw_value = getattr(args, field_name, None)
+        if raw_value is not None:
+            live_updates[field_name] = raw_value
+    if live_updates:
+        _validate_live_policy_overrides(live_updates)
+        effective = replace(effective, **live_updates)
     builder_idle_seconds = getattr(args, "builder_scale_down_idle_seconds", None)
     if builder_idle_seconds is None:
         return effective
@@ -6375,6 +6562,63 @@ def _node_capacity_factor(raw_value: object, default: float) -> float:
     if not math.isfinite(value) or value <= 0:
         raise ValueError("node capacity factors must be positive finite numbers")
     return value
+
+
+def _parse_cli_bool(raw: str) -> bool:
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("expected true or false")
+
+
+def _validate_live_policy_overrides(values: dict[str, Any]) -> None:
+    for field_name in (
+        "live_pressure_window_seconds",
+        "live_pressure_min_samples",
+        "live_pressure_fresh_seconds",
+    ):
+        if field_name in values and int(values[field_name]) < 1:
+            raise ValueError(f"{field_name} must be positive")
+    if (
+        "provisioning_latency_lookback_seconds" in values
+        and int(values["provisioning_latency_lookback_seconds"]) < 60
+    ):
+        raise ValueError("provisioning_latency_lookback_seconds must be at least 60")
+    if (
+        "pressure_scale_down_cooldown_seconds" in values
+        and int(values["pressure_scale_down_cooldown_seconds"]) < 0
+    ):
+        raise ValueError("pressure_scale_down_cooldown_seconds cannot be negative")
+    for field_name in (
+        "target_cpu_utilization",
+        "target_memory_utilization",
+        "target_storage_queue_utilization",
+    ):
+        if field_name not in values:
+            continue
+        value = float(values[field_name])
+        if not math.isfinite(value) or not 0 < value <= 1:
+            raise ValueError(f"{field_name} must be in (0, 1]")
+    for field_name in (
+        "max_memory_psi_full_avg10",
+        "provisioning_scale_down_multiplier",
+    ):
+        if field_name not in values:
+            continue
+        value = float(values[field_name])
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"{field_name} must be finite and non-negative")
+    if "model_wait_capacity_weight" in values:
+        weight = float(values["model_wait_capacity_weight"])
+        if not math.isfinite(weight) or not 0 <= weight <= 1:
+            raise ValueError("model_wait_capacity_weight must be in [0, 1]")
+    if (
+        "model_wait_max_headroom_nodes" in values
+        and int(values["model_wait_max_headroom_nodes"]) < 0
+    ):
+        raise ValueError("model_wait_max_headroom_nodes cannot be negative")
 
 
 def sandbox_route_reservations(
@@ -7153,7 +7397,50 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         "desiredResources": decision.desired_resources.to_dict(),
         "projectedFreeResources": decision.projected_free_resources.to_dict(),
         "resourceDeficit": decision.resource_deficit.to_dict(),
+        "liveSignals": (
+            decision.live_signals.to_dict()
+            if decision.live_signals is not None
+            else None
+        ),
+        "programSignals": (
+            decision.program_signals.to_dict()
+            if decision.program_signals is not None
+            else None
+        ),
+        "pressureScaleUp": decision.pressure_scale_up,
+        "effectiveScaleDownIdleSeconds": (
+            decision.effective_scale_down_idle_seconds
+        ),
         "reasons": list(decision.reasons),
+    }
+
+
+def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
+    """Expose non-secret effective knobs needed to explain scale decisions."""
+
+    return {
+        "min_nodes": policy.min_nodes,
+        "max_nodes": policy.max_nodes,
+        "max_create_per_cycle": policy.max_create_per_cycle,
+        "max_stop_per_cycle": policy.max_stop_per_cycle,
+        "max_provisioning_nodes": policy.max_provisioning_nodes,
+        "scale_down_idle_seconds": policy.scale_down_idle_seconds,
+        "live_pressure_enabled": policy.live_pressure_enabled,
+        "target_cpu_utilization": policy.target_cpu_utilization,
+        "target_memory_utilization": policy.target_memory_utilization,
+        "max_memory_psi_full_avg10": policy.max_memory_psi_full_avg10,
+        "target_storage_queue_utilization": (
+            policy.target_storage_queue_utilization
+        ),
+        "pressure_scale_down_cooldown_seconds": (
+            policy.pressure_scale_down_cooldown_seconds
+        ),
+        "program_aware_autoscaling_enabled": (
+            policy.program_aware_autoscaling_enabled
+        ),
+        "model_wait_capacity_weight": policy.model_wait_capacity_weight,
+        "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
+        "default_node_resources": policy.default_node_resources.to_dict(),
     }
 
 

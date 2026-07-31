@@ -10,6 +10,10 @@ publication protocol, placement model, or benchmark target, reread this
 document and record the decision in the decision log. Do not optimize a
 different problem merely because it is easier to measure.
 
+Post-rollout priorities are tracked only in
+[Production roadmap](roadmap.md). This document is the completed design and
+qualification record, not a second active backlog.
+
 ## Goal
 
 Replace whole-archive sandbox migration with an AgentEnv-like storage model

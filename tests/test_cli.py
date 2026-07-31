@@ -27,6 +27,7 @@ from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import RegistryTag, RegistryUsageStore
+from ucloud_sandboxes.metrics import MetricsStore
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     ResourceQuantity,
@@ -803,7 +804,7 @@ class CliTests(unittest.TestCase):
                 config,
                 sibling_file=Path("/work/ucloud-sandboxes/state/routes.json"),
             ),
-            Path("/work/ucloud-sandboxes/state/metrics.jsonl"),
+            Path("/work/ucloud-sandboxes/state/metrics.sqlite"),
         )
 
     def test_vm_submission_options_use_private_network_config(self) -> None:
@@ -2271,7 +2272,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["activeImageBuilds"], 0)
         self.assertEqual(
             payload["buildWarmSandboxResources"],
-            {"vcpu": 32.0, "memory_mb": 98304, "disk_mb": 450560},
+            {"vcpu": 32.0, "memory_mb": 98304, "disk_mb": 1_449_984},
         )
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
@@ -2416,7 +2417,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(
             policy.schedulable_node_resources,
-            ResourceQuantity(vcpu=64, memory_mb=117964, disk_mb=450560),
+            ResourceQuantity(vcpu=64, memory_mb=117964, disk_mb=1_449_984),
         )
 
     def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:
@@ -2437,6 +2438,61 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(policy, configured)
+
+    def test_policy_cli_live_feedback_overrides_are_runtime_tunable(self) -> None:
+        policy = cli.policy_with_cli_overrides(
+            ScalePolicy(),
+            argparse.Namespace(
+                scale_down_idle_seconds=None,
+                builder_scale_down_idle_seconds=None,
+                init_cpu_overcommit=None,
+                init_memory_overcommit=None,
+                init_disk_overcommit=None,
+                live_pressure_enabled=False,
+                live_pressure_window_seconds=120,
+                live_pressure_min_samples=5,
+                live_pressure_fresh_seconds=45,
+                target_cpu_utilization=0.55,
+                target_memory_utilization=0.65,
+                max_memory_psi_full_avg10=2.5,
+                target_storage_queue_utilization=0.5,
+                pressure_scale_down_cooldown_seconds=420,
+                provisioning_latency_lookback_seconds=86400,
+                provisioning_scale_down_multiplier=3.0,
+                program_aware_autoscaling_enabled=True,
+                model_wait_capacity_weight=0.2,
+                model_wait_max_headroom_nodes=2,
+            ),
+        )
+
+        self.assertFalse(policy.live_pressure_enabled)
+        self.assertEqual(policy.live_pressure_window_seconds, 120)
+        self.assertEqual(policy.live_pressure_min_samples, 5)
+        self.assertEqual(policy.live_pressure_fresh_seconds, 45)
+        self.assertEqual(policy.target_cpu_utilization, 0.55)
+        self.assertEqual(policy.target_memory_utilization, 0.65)
+        self.assertEqual(policy.max_memory_psi_full_avg10, 2.5)
+        self.assertEqual(policy.target_storage_queue_utilization, 0.5)
+        self.assertEqual(policy.pressure_scale_down_cooldown_seconds, 420)
+        self.assertEqual(policy.provisioning_latency_lookback_seconds, 86400)
+        self.assertEqual(policy.provisioning_scale_down_multiplier, 3.0)
+        self.assertTrue(policy.program_aware_autoscaling_enabled)
+        self.assertEqual(policy.model_wait_capacity_weight, 0.2)
+        self.assertEqual(policy.model_wait_max_headroom_nodes, 2)
+
+    def test_policy_cli_rejects_invalid_live_feedback_target(self) -> None:
+        with self.assertRaisesRegex(ValueError, "target_cpu_utilization"):
+            cli.policy_with_cli_overrides(
+                ScalePolicy(),
+                argparse.Namespace(
+                    scale_down_idle_seconds=None,
+                    builder_scale_down_idle_seconds=None,
+                    init_cpu_overcommit=None,
+                    init_memory_overcommit=None,
+                    init_disk_overcommit=None,
+                    target_cpu_utilization=1.1,
+                ),
+            )
 
     def test_route_reservations_bound_stale_heartbeat_free_capacity(self) -> None:
         routes = [
@@ -3256,10 +3312,8 @@ class CliTests(unittest.TestCase):
                 payload = json.loads(output.getvalue())
                 state = json.loads(state_file.read_text(encoding="utf-8"))
                 metric_events = [
-                    json.loads(line)
-                    for line in (root / "metrics.jsonl")
-                    .read_text(encoding="utf-8")
-                    .splitlines()
+                    event.to_dict()
+                    for event in MetricsStore(root / "metrics.sqlite").load_events()
                 ]
         finally:
             cli.run_init_over_ssh = original

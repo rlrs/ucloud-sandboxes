@@ -238,8 +238,8 @@ class DirectNodeManagerAdapter:
         return self.service.get(sandbox_id)
 
     def list(self) -> list[SandboxRecord]:
-        self.cleanup_expired()
-        return list(self.service.list())
+        self.cleanup_expired(blocking=False)
+        return list(self.service.list_snapshot())
 
     def park(
         self,
@@ -321,10 +321,17 @@ class DirectNodeManagerAdapter:
         del args, kwargs
         raise RuntimeError("image snapshot is not implemented by the direct runtime")
 
-    def cleanup_expired(self) -> list[SandboxRecord]:
-        expired = [record for record in self.service.list() if record.is_expired()]
+    def cleanup_expired(self, *, blocking: bool = True) -> list[SandboxRecord]:
+        records = self.service.list() if blocking else self.service.list_snapshot()
+        expired = [record for record in records if record.is_expired()]
         for record in expired:
-            self.service.delete(record.spec.id, generation=record.generation)
+            if blocking:
+                self.service.delete(record.spec.id, generation=record.generation)
+            else:
+                self.service.try_delete(
+                    record.spec.id,
+                    generation=record.generation,
+                )
         return expired
 
     def configure_drain(
@@ -367,8 +374,8 @@ class DirectNodeManagerAdapter:
         return self.heartbeat_snapshot(active_build_count=active_build_count)
 
     def heartbeat_snapshot(self, *, active_build_count) -> NodeDrainSnapshot:
-        self.cleanup_expired()
-        records = self.service.list()
+        self.cleanup_expired(blocking=False)
+        records = self.service.list_snapshot()
         used = ResourceQuantity()
         reserved = ResourceQuantity()
         for record in records:

@@ -287,6 +287,37 @@ class DirectSandboxService:
             if item.phase != "deleting"
         )
 
+    def list_snapshot(self) -> tuple[SandboxRecord, ...]:
+        """Return inventory without waiting for a sandbox lifecycle fence."""
+
+        return tuple(
+            self._record_snapshot(item)
+            for item in self.provisioner.registry.list()
+            if item.phase != "deleting"
+        )
+
+    def try_delete(self, sandbox_id: str, *, generation: int) -> bool:
+        """Delete only when no lifecycle operation currently owns the sandbox."""
+
+        key = (sandbox_id, generation)
+        lock = self._lock(*key)
+        if not lock.acquire(blocking=False):
+            return False
+        try:
+            registration = self.provisioner.registry.get(sandbox_id)
+            if registration is None:
+                return True
+            if registration.sandbox_generation != generation:
+                return False
+            self.provisioner.delete(sandbox_id)
+        finally:
+            lock.release()
+        with self._locks_guard:
+            self._locks.pop(key, None)
+        with self._activity_guard:
+            self._last_activity.pop(key, None)
+        return True
+
     def delete(
         self,
         sandbox_id: str,
@@ -1175,6 +1206,25 @@ class DirectSandboxService:
             ):
                 lifecycle = self.warden.reconcile(sandbox)
             state = lifecycle.state.value if lifecycle is not None else "unavailable"
+        return self._record_with_state(registration, state)
+
+    def _record_snapshot(
+        self,
+        registration: DirectSandboxRegistration,
+    ) -> SandboxRecord:
+        state = registration.phase
+        if registration.phase == "owned":
+            lifecycle = self.warden.inspect_snapshot(
+                registration.to_direct_sandbox()
+            )
+            state = lifecycle.state.value if lifecycle is not None else "unavailable"
+        return self._record_with_state(registration, state)
+
+    @staticmethod
+    def _record_with_state(
+        registration: DirectSandboxRegistration,
+        state: str,
+    ) -> SandboxRecord:
         created_at = datetime.fromtimestamp(
             registration.created_ns / 1_000_000_000,
             tz=timezone.utc,

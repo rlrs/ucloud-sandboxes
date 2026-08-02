@@ -30,7 +30,7 @@ from .capabilities import (
 )
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .dashboard import dashboard_asset
-from .deployment import agent_version_is_compatible, service_health
+from .deployment import agent_version_is_schedulable, service_health
 from .direct_migration import (
     STORAGE_NATIVE_MIGRATION_SCHEMA,
     StorageNativeMigration,
@@ -2640,7 +2640,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             or not heartbeat.node_url
             or not heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
             or heartbeat.draining
-            or not agent_version_is_compatible(heartbeat.agent_version)
+            or not agent_version_is_schedulable(heartbeat.agent_version)
         ):
             self._write_json(
                 {
@@ -4069,7 +4069,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     )
                     for heartbeat in self._ready_sandbox_heartbeats()
                     if heartbeat.admission_open
-                    and agent_version_is_compatible(heartbeat.agent_version)
+                    and agent_version_is_schedulable(heartbeat.agent_version)
                 ],
             )
             placements = plan.get("placements")
@@ -4455,7 +4455,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         routes = self._placement_routes()
         candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
         for heartbeat in self._ready_sandbox_heartbeats():
-            if not agent_version_is_compatible(heartbeat.agent_version):
+            if not agent_version_is_schedulable(heartbeat.agent_version):
                 continue
             if not all(
                 has_capability(heartbeat.capabilities, capability)
@@ -4756,7 +4756,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             heartbeat
             for heartbeat in self._ready_heartbeats()
             if capability in heartbeat.capabilities
-            and agent_version_is_compatible(heartbeat.agent_version)
+            and agent_version_is_schedulable(heartbeat.agent_version)
         ]
         if not candidates:
             return None
@@ -4785,7 +4785,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         for heartbeat in self._ready_heartbeats():
             if "image-cache" not in heartbeat.capabilities:
                 continue
-            if not agent_version_is_compatible(heartbeat.agent_version):
+            if not agent_version_is_schedulable(heartbeat.agent_version):
                 continue
             if sandbox_nodes_only and "sandbox" not in heartbeat.capabilities:
                 continue
@@ -4810,7 +4810,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for heartbeat in self._ready_heartbeats()
             if "image-build" in heartbeat.capabilities
             and "sandbox" not in heartbeat.capabilities
-            and agent_version_is_compatible(heartbeat.agent_version)
+            and agent_version_is_schedulable(heartbeat.agent_version)
         ]
         if not candidates:
             return None
@@ -4901,7 +4901,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             heartbeat
             for heartbeat in heartbeats
             if _warmup_node_units(heartbeat, warmup.resources) > 0
-            and agent_version_is_compatible(heartbeat.agent_version)
+            and agent_version_is_schedulable(heartbeat.agent_version)
         ]
         for heartbeat in candidate_heartbeats:
             if _heartbeat_has_image(

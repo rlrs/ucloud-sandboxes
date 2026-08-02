@@ -11,7 +11,7 @@ from threading import RLock, get_ident
 import time
 from typing import Any, Iterable
 
-from .deployment import AGENT_VERSION_LABEL, agent_version_is_compatible
+from .deployment import AGENT_VERSION_LABEL, agent_version_is_schedulable
 from .models import (
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -509,4 +509,4 @@ def _agent_version_compatible(job: VmJob, heartbeat: NodeHeartbeat | None) -> bo
     version = heartbeat.agent_version if heartbeat is not None and heartbeat.agent_version else ""
     if not version:
         version = job.labels.get(AGENT_VERSION_LABEL, "")
-    return agent_version_is_compatible(version)
+    return agent_version_is_schedulable(version)

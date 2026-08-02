@@ -1524,6 +1524,18 @@ class HibernationJournal:
         with self._locked():
             return self._load_unlocked()
 
+    def load_snapshot(self) -> HibernationRecord | None:
+        """Read one atomically committed revision without waiting for its writer.
+
+        Journal updates are fsynced temporary files installed with ``os.replace``.
+        A monitoring reader can therefore safely observe either the previous or
+        next complete revision without joining the lifecycle operation fence.
+        This must remain read-only: compare-and-swap decisions still use
+        :meth:`load` or another journal method that holds ``_locked``.
+        """
+
+        return self._load_unlocked()
+
     def initialize_running(
         self,
         *,

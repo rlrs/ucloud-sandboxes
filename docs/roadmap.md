@@ -29,6 +29,15 @@ incomplete cold create therefore hid the whole node, marked its routes stale,
 and induced replacement scale-up. Release 0.3.75 keeps those registrations in
 reserved-resource accounting without inspecting unavailable backend state.
 
+A subsequent parkable production sandbox exposed another heartbeat boundary:
+its long-lived attached harness correctly held the sandbox lifecycle fence, but
+heartbeat inventory joined that same fence and eventually made the healthy
+sandbox and its node appear `unknown`. Release 0.3.76 reads the atomically
+replaced lifecycle journal without joining active operations and makes TTL
+cleanup opportunistic during heartbeat collection. Pre-0.3.76 agents remain
+protocol-compatible with routes they already own, but are excluded from new
+placement and autoscaler capacity until they drain.
+
 Second, the observed PRIME/TMax traffic used `parkable=false` sandboxes and
 long-lived attached exec harnesses. Those sandboxes are permanently active for
 scheduling purposes; they cannot exercise parked density or emit model-wait

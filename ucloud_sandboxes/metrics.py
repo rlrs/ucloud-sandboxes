@@ -12,7 +12,7 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from .deployment import agent_version_is_compatible
+from .deployment import agent_version_is_schedulable
 from .models import (
     LiveScaleSignals,
     NodeHeartbeat,
@@ -1005,7 +1005,7 @@ def build_metrics_snapshot(
     compatible = [
         heartbeat
         for heartbeat in fresh
-        if agent_version_is_compatible(heartbeat.agent_version)
+        if agent_version_is_schedulable(heartbeat.agent_version)
     ]
     sandbox_nodes = [
         heartbeat for heartbeat in fresh if "sandbox" in heartbeat.capabilities
@@ -1280,7 +1280,7 @@ def _node_metrics(
         "job_id": heartbeat.job_id,
         "node_url": heartbeat.node_url or "",
         "fresh": heartbeat.is_fresh(now, heartbeat_ttl_seconds),
-        "agent_version_compatible": agent_version_is_compatible(
+        "agent_version_compatible": agent_version_is_schedulable(
             heartbeat.agent_version
         ),
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),

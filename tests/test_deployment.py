@@ -1,6 +1,9 @@
 import unittest
 
-from ucloud_sandboxes.deployment import agent_version_is_compatible
+from ucloud_sandboxes.deployment import (
+    agent_version_is_compatible,
+    agent_version_is_schedulable,
+)
 
 
 class DeploymentTests(unittest.TestCase):
@@ -15,6 +18,12 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(agent_version_is_compatible("0.4.0", expected="0.3.44"))
         self.assertFalse(agent_version_is_compatible("0.3.44-dev", expected="0.3.44"))
         self.assertFalse(agent_version_is_compatible("", expected="0.3.44"))
+
+    def test_schedulable_floor_is_stricter_than_protocol_compatibility(self) -> None:
+        self.assertTrue(agent_version_is_compatible("0.3.75", expected="0.3.76"))
+        self.assertFalse(agent_version_is_schedulable("0.3.75", expected="0.3.76"))
+        self.assertTrue(agent_version_is_schedulable("0.3.76", expected="0.3.76"))
+        self.assertFalse(agent_version_is_schedulable("0.3.77", expected="0.3.76"))
 
 
 if __name__ == "__main__":

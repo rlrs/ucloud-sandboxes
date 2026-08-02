@@ -206,6 +206,9 @@ class FakeWarden:
     def inspect(self, sandbox):
         return self.records.get(self.key(sandbox))
 
+    def inspect_snapshot(self, sandbox):
+        return self.records.get(self.key(sandbox))
+
     def discard_unjournaled(self, sandbox):
         if self.inspect(sandbox) is not None:
             raise AssertionError("journal already exists")
@@ -688,6 +691,28 @@ class DirectProvisionerTests(unittest.TestCase):
                 {record.state for record in snapshot.activity.records},
                 {"planned", "quota_ready"},
             )
+
+    def test_node_adapter_heartbeat_does_not_join_exec_lifecycle_fence(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, warden = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = service.create(self.spec())
+            manager = DirectNodeManagerAdapter(service)
+
+            def fenced_inspect(_sandbox):
+                raise AssertionError("heartbeat joined the streaming exec fence")
+
+            warden.inspect = fenced_inspect
+            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+            listed = manager.list()
+
+            self.assertEqual(snapshot.activity.active_sandboxes, 1)
+            self.assertEqual(snapshot.activity.used_resources.memory_mb, 1024)
+            self.assertEqual([record.spec.id for record in listed], [created.spec.id])
 
     def test_direct_node_drain_survives_adapter_restart(self) -> None:
         with TemporaryDirectory() as raw:

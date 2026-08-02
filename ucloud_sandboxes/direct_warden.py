@@ -423,6 +423,17 @@ class DirectRunscWarden:
         with self._locked(sandbox):
             return self._journal(sandbox).load()
 
+    def inspect_snapshot(self, sandbox: DirectSandbox) -> HibernationRecord | None:
+        """Read durable lifecycle state without joining an active operation.
+
+        Heartbeats and inventory reads must not wait for a streaming exec, park,
+        restore, or migration to release the per-sandbox lifecycle fence.  The
+        journal itself is atomically replaced, so this returns a complete, if
+        possibly immediately superseded, revision suitable for observation.
+        """
+
+        return self._journal(sandbox).load_snapshot()
+
     def load_parked_manifest(self, sandbox: DirectSandbox) -> HibernationManifest:
         """Load portable checkpoint metadata without mounting parked storage."""
         with self._locked(sandbox):

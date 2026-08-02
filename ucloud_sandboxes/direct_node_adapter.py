@@ -384,10 +384,16 @@ class DirectNodeManagerAdapter:
                     raise RuntimeError(
                         "direct activity has no storage-native registration"
                     )
-                storage = self.service.warden._storage_record(
-                    registration.to_direct_sandbox()
-                )
-                disk_charged = storage.get("state") != "published"
+                # Planned and quota-ready registrations are valid, durable
+                # create reservations but do not own a runsc sandbox yet.
+                # They must remain visible in heartbeat capacity accounting
+                # without making the entire node heartbeat fail while a cold
+                # image is materialized.
+                if registration.has_direct_sandbox:
+                    storage = self.service.warden._storage_record(
+                        registration.to_direct_sandbox()
+                    )
+                    disk_charged = storage.get("state") != "published"
             resources = ResourceQuantity(
                 disk_mb=quota_disk if disk_charged else 0
             )

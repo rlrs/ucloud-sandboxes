@@ -2,7 +2,7 @@
 
 Status: **Phase 1 in progress**
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-02
 
 This is the source of truth for work after the storage-native runtime rollout.
 The detailed parking, direct-runtime, and storage-native plans remain design
@@ -14,13 +14,32 @@ backlogs.
 - One privileged direct Warden owns every sandbox lifecycle on a node.
 - Docker/containerd are image build, pull, cache, and export infrastructure
   only.
-- gVisor park/wake works through the SDK and Verifiers relay flow.
+- gVisor park/wake works through the qualified SDK and Verifiers relay flow.
 - Parked state is a durable storage-native manifest with lazy remote reads.
 - Cross-node migration, route handoff, relay replay, drain evacuation, and
   hard disk admission passed production qualification.
 - Release 0.3.69 qualified a 1.212-second storage-native migration protocol.
   The observed 71.48-second enclosing event was dominated by destination VM
   provisioning.
+
+Production traffic on 2026-08-02 exposed two important boundaries. First,
+direct-node heartbeat construction tried to inspect storage state for durable
+`planned` and `quota_ready` registrations before a runsc sandbox existed. One
+incomplete cold create therefore hid the whole node, marked its routes stale,
+and induced replacement scale-up. Release 0.3.75 keeps those registrations in
+reserved-resource accounting without inspecting unavailable backend state.
+
+Second, the observed PRIME/TMax traffic used `parkable=false` sandboxes and
+long-lived attached exec harnesses. Those sandboxes are permanently active for
+scheduling purposes; they cannot exercise parked density or emit model-wait
+program state. The arbitrary-harness production integration is not complete
+until it creates parkable sandboxes and starts harnesses as checkpointable
+initial or detached jobs, as required by `verifiers-v1.md`. Autoscaler policy
+must not ignore their requested CPU and memory before that lifecycle contract
+is real. For the observed 4-vCPU, 8-GiB-memory, 16-GiB-writable shape, the
+parked hard-storage reservation is 33,856 MiB, so one qualified node can own
+at most 42 such parked sandboxes and 64 require at least two nodes even with no
+resident CPU or memory working set.
 
 ## Phase 1: live-metrics autoscaling
 

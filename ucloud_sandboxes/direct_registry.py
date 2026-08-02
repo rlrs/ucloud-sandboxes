@@ -170,14 +170,20 @@ class DirectSandboxRegistration:
     def spec_sha256(self) -> str:
         return sandbox_spec_fingerprint(self.spec)
 
-    def to_direct_sandbox(self) -> DirectSandbox:
-        if self.phase not in {
+    @property
+    def has_direct_sandbox(self) -> bool:
+        """Whether this registration owns a materialized runsc sandbox."""
+
+        return self.phase in {
             "rootfs_ready",
             "import_ready",
             "owned",
             "moving_out",
             "deleting",
-        }:
+        }
+
+    def to_direct_sandbox(self) -> DirectSandbox:
+        if not self.has_direct_sandbox:
             raise DirectRegistryError("registration has no direct sandbox yet")
         return DirectSandbox(
             sandbox_id=self.sandbox_id,

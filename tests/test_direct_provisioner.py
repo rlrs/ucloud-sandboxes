@@ -645,6 +645,50 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(parked.activity.active_sandboxes, 0)
             self.assertEqual(parked.activity.used_resources.memory_mb, 0)
 
+    def test_node_adapter_heartbeat_accounts_incomplete_create_registrations(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            planned_spec = replace(self.spec(), id="planned")
+            quota_spec = replace(self.spec(), id="quota-ready")
+            registry.plan(
+                spec=planned_spec,
+                sandbox_generation=1,
+                operation_id="create:planned",
+                runtime_identity_sha256=provisioner.identity.digest,
+            )
+            quota_planned = registry.plan(
+                spec=quota_spec,
+                sandbox_generation=2,
+                operation_id="create:quota-ready",
+                runtime_identity_sha256=provisioner.identity.digest,
+            )
+            registry.commit_quota(
+                quota_spec.id,
+                expected_revision=quota_planned.revision,
+                project_id=200_002,
+                total_mb=4096,
+                quota_path=(root / "quota" / "quota-ready.sandbox-2").resolve(),
+            )
+            manager = DirectNodeManagerAdapter(service)
+
+            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            self.assertEqual(snapshot.activity.active_sandboxes, 0)
+            self.assertEqual(snapshot.activity.used_resources, ResourceQuantity())
+            self.assertEqual(snapshot.activity.reserved_resources.memory_mb, 2048)
+            self.assertEqual(snapshot.activity.reserved_resources.disk_mb, 6144)
+            self.assertEqual(
+                {record.state for record in snapshot.activity.records},
+                {"planned", "quota_ready"},
+            )
+
     def test_direct_node_drain_survives_adapter_restart(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

@@ -36,6 +36,7 @@ DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT = 1024
 DEFAULT_MAX_INFLIGHT_BYTES = 128 * 1024**2
 DEFAULT_MAX_COMPLETED_REQUESTS = 8192
 DEFAULT_MAX_WORKERS = 4096
+MAX_TRANSIENT_WORKER_DELIVERIES = 3
 MAX_RELAY_BODY_BYTES = 32 * 1024**2
 MAX_WORKER_RESPONSE_BYTES = 32 * 1024**2
 RELAY_TOKEN_HEADER = "X-UCloud-Relay-Token"
@@ -301,6 +302,8 @@ class ModelRelayState:
             "completed": 0,
             "duplicate_responses": 0,
             "worker_errors": 0,
+            "worker_retries": 0,
+            "worker_retry_exhausted": 0,
             "timed_out": 0,
             "lease_expired": 0,
             "lease_renewed": 0,
@@ -742,7 +745,10 @@ class ModelRelayState:
             if request.state != "leased" or request.lease_id != lease_id:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
-            if request.lease_expires_at is not None and request.lease_expires_at <= now:
+            if (
+                request.lease_expires_at is not None
+                and request.lease_expires_at <= now
+            ):
                 self._requeue_expired_leases_locked(now)
                 raise web.HTTPConflict(text="request lease has expired")
             if worker_id:
@@ -823,6 +829,48 @@ class ModelRelayState:
                 self._store.save_request(request)
             self._condition.notify_all()
             return RelayRespondResult(request_id=request_id, request=request)
+
+    async def retry_worker_failure(
+        self,
+        *,
+        request_id: str,
+        registration_token: str,
+        lease_id: str,
+    ) -> RelayRequest | None:
+        """Release a transient failed lease back to the durable queue."""
+
+        validate_registration_token(registration_token)
+        async with self._condition:
+            self._ensure_loaded_locked()
+            now = time.time()
+            self._prune_completed_locked(now)
+            self._expire_requests_locked(now)
+            request = self._requests.get(request_id)
+            if request is None:
+                return None
+            self._require_request_registration_locked(
+                request,
+                registration_token,
+            )
+            if request.state != "leased" or request.lease_id != lease_id:
+                raise web.HTTPConflict(text="request lease is no longer active")
+            if request.lease_expires_at is not None and request.lease_expires_at <= now:
+                self._requeue_expired_leases_locked(now)
+                raise web.HTTPConflict(text="request lease has expired")
+            if request.delivery_count >= MAX_TRANSIENT_WORKER_DELIVERIES:
+                self._counters["worker_retry_exhausted"] += 1
+                return None
+            request.state = "pending"
+            request.lease_id = None
+            request.lease_expires_at = None
+            request.leased_by = None
+            request.delivered_at = None
+            self._pending.setdefault(request.rollout_id, deque()).append(request)
+            self._counters["worker_retries"] += 1
+            if self._store is not None:
+                self._store.save_request(request)
+            self._condition.notify_all()
+            return request
 
     async def release_completed_response(self, request_id: str) -> None:
         """Allow the sandbox-facing HTTP handler to deliver a committed result.
@@ -1587,6 +1635,27 @@ async def worker_error(request: web.Request) -> web.Response:
     lease_id = str(payload.get("lease_id") or "")
     status = _status_code(payload.get("status"), default=502)
     message = str(payload.get("error") or payload.get("message") or "worker error")
+    explicit_retryable = payload.get("retryable")
+    retryable = (
+        explicit_retryable
+        if isinstance(explicit_retryable, bool)
+        else _worker_error_is_retryable(status, message)
+    )
+    if retryable:
+        retried = await _state(request).retry_worker_failure(
+            request_id=request_id,
+            registration_token=registration_token,
+            lease_id=lease_id,
+        )
+        if retried is not None:
+            return web.json_response(
+                {
+                    "ok": True,
+                    "request_id": retried.request_id,
+                    "retried": True,
+                    "delivery_count": retried.delivery_count,
+                }
+            )
     result = await _state(request).respond(
         request_id=request_id,
         registration_token=registration_token,
@@ -1607,6 +1676,28 @@ async def worker_error(request: web.Request) -> web.Response:
             "request_id": result.request_id,
             "duplicate": result.duplicate,
         }
+    )
+
+
+def _worker_error_is_retryable(status: int, message: str) -> bool:
+    """Classify transport/provider failures that should release their lease."""
+
+    if status in {408, 425, 429, 500, 502, 503, 504}:
+        return True
+    lowered = message.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "server disconnected",
+            "connection reset",
+            "connection closed",
+            "connection refused",
+            "temporarily unavailable",
+            "timed out",
+            "timeout",
+            "unexpected eof",
+            "remote protocol error",
+        )
     )
 
 

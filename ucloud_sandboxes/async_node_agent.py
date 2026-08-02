@@ -82,7 +82,14 @@ async def create_sandbox(request: web.Request) -> web.Response:
             status=web.HTTPServiceUnavailable.status_code,
         )
     except SandboxCapacityUnavailableError as exc:
-        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+        return web.json_response(
+            {
+                "error": str(exc),
+                "error_code": "node_active_admission_deferred",
+                "retryable": True,
+            },
+            status=web.HTTPServiceUnavailable.status_code,
+        )
     except RuntimeError as exc:
         raise web.HTTPServiceUnavailable(text=str(exc)) from exc
     except ValueError as exc:

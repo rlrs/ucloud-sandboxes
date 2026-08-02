@@ -1212,12 +1212,12 @@ def render_remote_deploy_script(
     script_parts.extend(
         [
             "sudo systemctl daemon-reload",
-            "sudo systemctl enable --now ucloud-sandbox-registry.service",
+            "sudo systemctl enable ucloud-sandbox-registry.service",
             "sudo systemctl enable --now ucloud-sandbox-registry-prune.timer",
             "sudo systemctl enable --now ucloud-sandbox-registry-gc.timer",
-            "sudo systemctl enable --now ucloud-sandbox-gateway.service",
-            "sudo systemctl enable --now ucloud-sandbox-relay.service",
-            "sudo systemctl enable --now ucloud-sandbox-autoscaler.service",
+            "sudo systemctl enable ucloud-sandbox-gateway.service",
+            "sudo systemctl enable ucloud-sandbox-relay.service",
+            "sudo systemctl enable ucloud-sandbox-autoscaler.service",
             "sudo systemctl restart ucloud-sandbox-registry.service",
             "sudo systemctl restart ucloud-sandbox-gateway.service",
             "sudo systemctl restart ucloud-sandbox-relay.service",

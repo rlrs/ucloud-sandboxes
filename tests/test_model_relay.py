@@ -220,6 +220,38 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_transient_worker_disconnect_requeues_without_failing_caller(
+        self,
+    ) -> None:
+        async with relay_app(worker_poll_timeout_seconds=1) as relay:
+            token = await relay.register("transient-worker")
+            caller = asyncio.create_task(relay.model_call("transient-worker"))
+            first = (await relay.poll("transient-worker", token))["request"]
+
+            _status, retry = await relay.request(
+                "POST",
+                "/worker/error",
+                expected=200,
+                json={
+                    "request_id": first["request_id"],
+                    "registration_token": token,
+                    "lease_id": first["lease_id"],
+                    "status": 502,
+                    "error": "Server disconnected",
+                },
+            )
+            second = (await relay.poll("transient-worker", token))["request"]
+            await relay.respond(second, token, {"ok": True})
+            caller_status, caller_body = await caller
+            stats = await relay.stats()
+
+        self.assertTrue(retry["retried"])
+        self.assertEqual(second["request_id"], first["request_id"])
+        self.assertEqual(second["delivery_count"], 2)
+        self.assertEqual((caller_status, caller_body), (200, {"ok": True}))
+        self.assertEqual(stats["counters"]["worker_retries"], 1)
+        self.assertEqual(stats["counters"]["worker_errors"], 0)
+
     async def test_disconnected_call_reattaches_without_duplicate_work(self) -> None:
         state = ModelRelayState()
         token = str((await state.register_rollout("reattach"))["registration_token"])

@@ -3548,6 +3548,98 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(EmptyNode.post_count, 0)
         self.assertIsNotNone(route)
 
+    def test_gateway_fences_tool_traffic_until_direct_create_is_owned(self) -> None:
+        class PlannedNode(BaseHTTPRequestHandler):
+            post_count = 0
+            record: dict[str, object] = {}
+
+            def do_GET(self) -> None:
+                if self.path == "/v1/sandboxes":
+                    self._write_json({"sandboxes": [type(self).record]})
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self) -> None:
+                type(self).post_count += 1
+                self._write_json({"error": "tool traffic leaked"}, status=500)
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(
+                self, payload: dict[str, object], *, status: int = 200
+            ) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), PlannedNode)
+            Thread(target=node.serve_forever, daemon=True).start()
+            try:
+                node_host, node_port = node.server_address
+                spec = SandboxSpec(
+                    id="planned-one",
+                    image="busybox",
+                    cpus=1,
+                    memory_mb=512,
+                )
+                spec_hash = control_plane.sandbox_spec_fingerprint(spec)
+                operation_id = "create-planned-one"
+                PlannedNode.record = {
+                    "state": "planned",
+                    "spec": spec.to_dict(),
+                    "generation": 1,
+                    "operation_id": operation_id,
+                    "spec_hash": spec_hash,
+                }
+                RoutingStore(route_file).upsert_sandbox(
+                    SandboxRoute(
+                        sandbox_id=spec.id,
+                        node_id="node-1",
+                        job_id="job-1",
+                        node_url=f"http://{node_host}:{node_port}",
+                        resources=spec.requested_resources(),
+                        spec=spec.to_dict(),
+                        state="creating",
+                        generation=1,
+                        create_operation_id=operation_id,
+                        spec_hash=spec_hash,
+                    )
+                )
+                gateway = build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "heartbeats.json",
+                    routing_file=route_file,
+                )
+                Thread(target=gateway.serve_forever, daemon=True).start()
+                try:
+                    host, port = gateway.server_address
+                    result = self._json_request(
+                        f"http://{host}:{port}/v1/sandboxes/{spec.id}/exec",
+                        method="POST",
+                        payload={"command": ["/bin/true"]},
+                        allow_error=True,
+                    )
+                finally:
+                    gateway.shutdown()
+                    gateway.server_close()
+            finally:
+                node.shutdown()
+                node.server_close()
+
+        self.assertEqual(result["status"], 503)
+        self.assertTrue(result["body"]["retryable"])
+        self.assertIn("creation is already in progress", result["body"]["error"])
+        self.assertEqual(PlannedNode.post_count, 0)
+
     def test_registry_reference_survives_ambiguous_create_restart_and_reconciliation(
         self,
     ) -> None:
@@ -4906,6 +4998,51 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response.json()["code"], "node_request_timeout")
         self.assertTrue(response.json()["retryable"])
         self.assertTrue(control_plane._node_create_may_still_be_running(response))
+
+    def test_active_admission_deferral_is_a_definitive_create_rejection(self) -> None:
+        response = control_plane.ProxiedResponse(
+            503,
+            {"Content-Type": "application/json"},
+            json.dumps(
+                {
+                    "error": "direct node has insufficient active headroom",
+                    "error_code": "node_active_admission_deferred",
+                    "retryable": True,
+                }
+            ).encode("utf-8"),
+        )
+
+        self.assertTrue(control_plane._node_create_definitively_rejected(response))
+        self.assertEqual(
+            control_plane._node_create_rejection_reason(response),
+            "node_active_admission_deferred",
+        )
+
+        old_node_response = control_plane.ProxiedResponse(
+            503,
+            {"Content-Type": "application/json"},
+            json.dumps(
+                {
+                    "error": (
+                        "direct node has insufficient active CPU or memory "
+                        "admission headroom; retry on another node"
+                    ),
+                    "retryable": True,
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(
+            control_plane._node_create_rejection_reason(old_node_response),
+            "node_active_admission_deferred",
+        )
+
+    def test_planned_node_record_is_not_ready_for_client_traffic(self) -> None:
+        self.assertFalse(control_plane._sandbox_record_is_ready({"state": "planned"}))
+        self.assertFalse(
+            control_plane._sandbox_record_is_ready({"state": "rootfs_ready"})
+        )
+        self.assertTrue(control_plane._sandbox_record_is_ready({"state": "running"}))
+        self.assertTrue(control_plane._sandbox_record_is_ready({"state": "parked"}))
 
     def test_enriches_old_node_sandbox_records_with_top_level_identity(self) -> None:
         heartbeat = build_heartbeat(

@@ -311,6 +311,10 @@ The relay uses explicit request leases:
 - pending requests are assigned to a worker for `lease_seconds`
 - active workers renew leases during long inference
 - expired leases are retried and can be delivered again
+- transient worker failures (`408`, `425`, `429`, and `5xx`, including
+  connection resets such as `Server disconnected`) release the lease back to
+  the durable queue, up to three total deliveries; workers may override the
+  classification with an explicit `retryable` boolean
 - stale responses with old leases are rejected
 - rollout registration tokens fence unregister, poll, heartbeat, renew,
   response, and error calls from older incarnations of a reused rollout id

@@ -115,6 +115,10 @@ SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS = 0.25
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
+# Creation includes quota allocation, rootfs preparation, networking, and
+# runsc startup. Those idempotent lifecycle operations can legitimately queue
+# behind other creates on a dense direct node.
+SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS = 10 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
@@ -2466,6 +2470,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "/v1/sandboxes",
                     method="POST",
                     body=_sandbox_create_request_body(spec, route),
+                    timeout_seconds=SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS,
                 )
                 span.set_attribute("status_code", int(response.status))
                 response_payload = response.json()
@@ -2528,11 +2533,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         generation=route.generation,
                         create_operation_id=route.create_operation_id,
                     )
-                    if _node_create_definitively_rejected(response):
+                    rejection_reason = _node_create_rejection_reason(response)
+                    if rejection_reason is not None:
                         self._persist_failed_sandbox_demand(
                             spec,
                             route,
-                            failure_reason="node_admission_closed",
+                            failure_reason=rejection_reason,
                         )
             self._send_proxied_response(response)
 
@@ -2925,7 +2931,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         pending: PendingSandboxDemand | None = None,
     ) -> bool:
         record = self._sandbox_record_on_node(route.node_url, spec.id)
-        if record is None or not _sandbox_record_matches_route(record, route, spec):
+        if (
+            record is None
+            or not _sandbox_record_matches_route(record, route, spec)
+            or not _sandbox_record_is_ready(
+                record,
+                allow_legacy_planned=route.generation == 0,
+            )
+        ):
             return False
         route = _route_with_sandbox_record(route, record)
         self.routing_store.upsert_sandbox(route)
@@ -2966,6 +2979,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             "/v1/sandboxes",
             method="POST",
             body=_sandbox_create_request_body(spec, route),
+            timeout_seconds=SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS,
         )
         payload = response.json()
         record = payload.get("sandbox")
@@ -3002,7 +3016,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
         ):
             return
-        if _node_create_definitively_rejected(response):
+        rejection_reason = _node_create_rejection_reason(response)
+        if rejection_reason is not None:
             self._release_registry_route_reference(route)
             self.routing_store.delete_sandbox_if_current(
                 spec.id,
@@ -3012,7 +3027,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self._persist_failed_sandbox_demand(
                 spec,
                 route,
-                failure_reason="node_admission_closed",
+                failure_reason=rejection_reason,
             )
         # Ambiguous failures retain the identity fence for another identical
         # replay. A closed admission gate is synchronous and definitive, so its
@@ -3655,6 +3670,34 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 {"error": "sandbox route not found"}, status=HTTPStatus.NOT_FOUND
             )
             return
+
+        # Placement is durable before provisioning begins. Do not forward
+        # tool traffic into a registration that is still planned, quota-ready,
+        # or preparing its rootfs. Reconcile a completed node record first;
+        # otherwise keep the caller on the retryable create boundary.
+        if (
+            self.command != "DELETE"
+            and route.generation > 0
+            and route.create_operation_id
+            and (route.state or "unknown").lower() in {"creating", "unknown"}
+        ):
+            try:
+                routed_spec = SandboxSpec.from_dict(route.spec)
+            except (TypeError, ValueError):
+                routed_spec = None
+            record = self._sandbox_record_on_node(route.node_url, sandbox_id)
+            if (
+                routed_spec is not None
+                and record is not None
+                and _sandbox_record_matches_route(record, route, routed_spec)
+                and _sandbox_record_is_ready(record)
+            ):
+                route = self.routing_store.upsert_sandbox(
+                    _route_with_sandbox_record(route, record)
+                )
+            else:
+                self._write_create_in_progress_response(sandbox_id)
+                return
 
         try:
             body = (
@@ -5741,6 +5784,29 @@ def _sandbox_record_state(record: dict[str, Any], *, default: str) -> str:
     return default
 
 
+def _sandbox_record_is_ready(
+    record: dict[str, Any],
+    *,
+    allow_legacy_planned: bool = False,
+) -> bool:
+    """Return true only for externally usable lifecycle states."""
+
+    state = _sandbox_record_state(record, default="unknown").lower()
+    if (
+        allow_legacy_planned
+        and state == "planned"
+        and (_record_generation(record) or 0) == 0
+    ):
+        # The legacy dry-run node API historically returned its completed
+        # generation-zero record as planned. Versioned direct registrations
+        # must never use this compatibility path.
+        return True
+    return state in {
+        "running",
+        "parked",
+    }
+
+
 def _is_duplicate_sandbox_response(response: ProxiedResponse, sandbox_id: str) -> bool:
     if response.status not in {HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT}:
         return False
@@ -6908,12 +6974,38 @@ def _precise_elapsed_ms(started: float) -> float:
 
 
 def _node_create_definitively_rejected(response: ProxiedResponse) -> bool:
-    """A closed admission gate proves this create never reached provisioning."""
+    """An explicit pre-provisioning rejection is safe to place elsewhere."""
 
-    return (
-        response.status == HTTPStatus.SERVICE_UNAVAILABLE
-        and response.json().get("error_code") == "node_admission_closed"
-    )
+    return _node_create_rejection_reason(response) is not None
+
+
+def _node_create_rejection_reason(response: ProxiedResponse) -> str | None:
+    if response.status != HTTPStatus.SERVICE_UNAVAILABLE:
+        return None
+    payload = response.json()
+    error_code = str(payload.get("error_code") or "")
+    if error_code in {
+        "node_admission_closed",
+        "node_active_admission_deferred",
+    }:
+        return error_code
+    # Compatibility with direct nodes predating the structured error code.
+    # These messages are emitted only by DirectSandboxService before it calls
+    # the provisioner, so no sandbox operation can still be running.
+    message = str(payload.get("error") or "").lower()
+    if bool(payload.get("retryable")) and message.startswith("direct node ") and any(
+        marker in message
+        for marker in (
+            "active cpu or memory admission headroom",
+            "cpu pressure blocks active admission",
+            "cpu load blocks active admission",
+            "memory pressure blocks active admission",
+            "live memory headroom",
+            "no fresh runtime metrics",
+        )
+    ):
+        return "node_active_admission_deferred"
+    return None
 
 
 def _node_transport_error_response(reason: object) -> ProxiedResponse:

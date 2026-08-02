@@ -461,7 +461,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         except SandboxCapacityUnavailableError as exc:
             self._write_json(
-                {"error": str(exc), "retryable": True},
+                {
+                    "error": str(exc),
+                    "error_code": "node_active_admission_deferred",
+                    "retryable": True,
+                },
                 status=HTTPStatus.SERVICE_UNAVAILABLE,
             )
             return

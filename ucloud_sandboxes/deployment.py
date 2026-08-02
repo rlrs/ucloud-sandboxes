@@ -11,7 +11,7 @@ DEFAULT_INIT_VERSION = "2"
 MIN_COMPATIBLE_AGENT_VERSION = "0.3.42"
 # Older agents remain protocol-compatible for routes they already own, but
 # must not receive new work when a correctness fix requires a clean rollout.
-MIN_SCHEDULABLE_AGENT_VERSION = "0.3.76"
+MIN_SCHEDULABLE_AGENT_VERSION = "0.3.77"
 
 NODE_LABEL = "ucloud-sandboxes/node"
 GATEWAY_LABEL = "ucloud-sandboxes/gateway"

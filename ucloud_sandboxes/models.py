@@ -679,6 +679,7 @@ class ScalePolicy:
     program_aware_autoscaling_enabled: bool = False
     model_wait_capacity_weight: float = 0.10
     model_wait_max_headroom_nodes: int = 1
+    dynamic_active_admission_enabled: bool = False
     default_node_resources: ResourceQuantity = ResourceQuantity(
         vcpu=32.0,
         memory_mb=98304,

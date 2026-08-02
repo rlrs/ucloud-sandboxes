@@ -48,9 +48,10 @@ Image builds should not run on sandbox nodes. The intended model is:
 - control plane/gateway: scheduler, routing, and optionally Docker builds on a
   sufficiently large machine; can also host the private registry service
 - builder nodes: autoscaled, builder-only VMs for Docker builds and registry
-  push; they advertise physical capacity and do not use sandbox overcommit
-- sandbox nodes: run already-built images and pull/cache gateway-resolved
-  immutable registry references
+  push; they advertise physical capacity and do not use sandbox admission
+- sandbox nodes: run already-built images, pull/cache gateway-resolved immutable
+  registry references, reserve disk exactly, and admit CPU/RAM dynamically from
+  individual shapes plus live pressure
 - registry: durable image cache for common building blocks and custom images,
   typically the control-plane-managed registry backed by a UCloud mount
 

@@ -405,11 +405,10 @@ class DirectNodeManagerAdapter:
                 disk_mb=quota_disk if disk_charged else 0
             )
             if record.state == "running":
-                resources = replace(
-                    resources,
-                    vcpu=record.spec.cpus or 0,
-                    memory_mb=record.spec.memory_mb or 0,
-                )
+                # Direct-runtime CPU and memory limits bound an individual
+                # sandbox; they are not permanent node reservations. Actual
+                # host consumption and pressure are reported separately in
+                # runtime_metrics. Disk remains additive and hard.
                 used = used + resources
             elif record.state not in {"parked"}:
                 reserved = reserved + ResourceQuantity(

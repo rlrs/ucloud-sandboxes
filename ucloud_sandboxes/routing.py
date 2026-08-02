@@ -2647,9 +2647,26 @@ class RoutingStore:
         ]
         pending_resources = ResourceQuantity()
         prepared_resources = ResourceQuantity()
+        placement_requests: list[SandboxPlacementRequest] = []
         oldest_pending_seconds = 0
         for item in pending:
             pending_resources = pending_resources + item.resources
+            excluded_job_ids: tuple[str, ...] = ()
+            for prefix in ("__migration__:", "__wake__:"):
+                if item.sandbox_id.startswith(prefix):
+                    route = self._get_sandbox_unlocked(
+                        conn,
+                        item.sandbox_id[len(prefix) :],
+                    )
+                    if route is not None and route.job_id:
+                        excluded_job_ids = (route.job_id,)
+                    break
+            placement_requests.append(
+                SandboxPlacementRequest(
+                    resources=item.resources,
+                    excluded_job_ids=excluded_job_ids,
+                )
+            )
             created_at = parse_iso_datetime(item.created_at)
             if created_at is not None:
                 oldest_pending_seconds = max(
@@ -2658,6 +2675,10 @@ class RoutingStore:
                 )
         for item in prepared:
             prepared_resources = prepared_resources + item.total_resources
+            placement_requests.extend(
+                SandboxPlacementRequest(resources=item.resources)
+                for _ in range(item.count)
+            )
             created_at = parse_iso_datetime(item.created_at)
             if created_at is not None:
                 oldest_pending_seconds = max(
@@ -2668,6 +2689,7 @@ class RoutingStore:
             pending_resources=pending_resources,
             prepared_resources=prepared_resources,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
+            placement_requests=tuple(placement_requests),
         )
 
     def _ensure_db(self) -> None:

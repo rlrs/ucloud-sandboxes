@@ -1047,6 +1047,57 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_dynamic_direct_placement_uses_live_pressure_not_resident_limits(
+        self,
+    ) -> None:
+        requested = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096)
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=64,
+            total_resources=ResourceQuantity(
+                vcpu=32,
+                memory_mb=98304,
+                disk_mb=1_449_984,
+            ),
+            used_resources=ResourceQuantity(disk_mb=64 * requested.disk_mb),
+            capabilities=("disk-quota", "dynamic-active-admission-v1"),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                cpu_percent=5.0,
+                cpu_count=32,
+                memory_total_mb=98304,
+                memory_available_mb=80000,
+                swap_total_mb=98304,
+                swap_free_mb=90000,
+                memory_psi_full_avg10=0.0,
+                load_average_1m=2.0,
+            ),
+        )
+
+        self.assertTrue(control_plane._node_can_fit(heartbeat, requested, []))
+        self.assertFalse(
+            control_plane._node_can_fit(
+                replace(heartbeat, runtime_metrics=None),
+                requested,
+                [],
+            )
+        )
+        self.assertFalse(
+            control_plane._node_can_fit(
+                replace(
+                    heartbeat,
+                    runtime_metrics=replace(
+                        heartbeat.runtime_metrics,
+                        cpu_percent=95.0,
+                    ),
+                ),
+                requested,
+                [],
+            )
+        )
+
     def test_waking_route_reserves_compute_delta_without_double_charging_disk(
         self,
     ) -> None:

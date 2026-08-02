@@ -39,6 +39,7 @@ class ConfigTests(unittest.TestCase):
                     "program_aware_autoscaling_enabled": True,
                     "model_wait_capacity_weight": 0.2,
                     "model_wait_max_headroom_nodes": 2,
+                    "dynamic_active_admission_enabled": True,
                     "cpu_overcommit": 2.0,
                     "memory_overcommit": 1.2,
                     "disk_overcommit": 1.0,
@@ -66,6 +67,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.policy.program_aware_autoscaling_enabled)
         self.assertEqual(config.policy.model_wait_capacity_weight, 0.2)
         self.assertEqual(config.policy.model_wait_max_headroom_nodes, 2)
+        self.assertTrue(config.policy.dynamic_active_admission_enabled)
         self.assertEqual(config.policy.cpu_overcommit, 2.0)
         self.assertEqual(config.policy.memory_overcommit, 1.2)
         self.assertEqual(config.policy.disk_overcommit, 1.0)
@@ -99,6 +101,9 @@ class ConfigTests(unittest.TestCase):
             },
             "invalid program toggle": {
                 "policy": {"program_aware_autoscaling_enabled": "yes"}
+            },
+            "invalid dynamic admission toggle": {
+                "policy": {"dynamic_active_admission_enabled": "yes"}
             },
             "invalid model wait weight": {
                 "policy": {"model_wait_capacity_weight": 1.1}

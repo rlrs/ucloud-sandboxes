@@ -24,6 +24,7 @@ from uuid import uuid4
 
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
+    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     has_capability,
@@ -6165,6 +6166,8 @@ def _node_can_fit_available(
         return False
     if not _node_memory_pressure_allows(heartbeat, requested):
         return False
+    if not _node_cpu_pressure_allows(heartbeat):
+        return False
     if not _node_storage_pressure_allows(heartbeat, requested):
         return False
     return requested.fits_within(available)
@@ -6200,9 +6203,15 @@ def _node_memory_pressure_allows(
     heartbeat: NodeHeartbeat,
     requested: ResourceQuantity,
 ) -> bool:
-    """Stop adding work to an overcommitted node under real memory pressure."""
+    """Require one-request headroom and stop on real memory pressure."""
 
-    if heartbeat.memory_overcommit <= 1.0 or heartbeat.runtime_metrics is None:
+    dynamic = has_capability(
+        heartbeat.capabilities,
+        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
+    )
+    if heartbeat.runtime_metrics is None:
+        return not dynamic
+    if not dynamic and heartbeat.memory_overcommit <= 1.0:
         return True
     metrics = heartbeat.runtime_metrics
     if (
@@ -6215,6 +6224,24 @@ def _node_memory_pressure_allows(
         return metrics.memory_available_mb + metrics.swap_free_mb >= minimum_headroom_mb
     if metrics.memory_total_mb > 0:
         return metrics.memory_available_mb >= minimum_headroom_mb
+    return True
+
+
+def _node_cpu_pressure_allows(heartbeat: NodeHeartbeat) -> bool:
+    """Use actual CPU pressure as the direct-runtime admission brake."""
+
+    if not has_capability(
+        heartbeat.capabilities,
+        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
+    ):
+        return True
+    metrics = heartbeat.runtime_metrics
+    if metrics is None:
+        return False
+    if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
+        return False
+    if metrics.cpu_count > 0 and metrics.load_average_1m is not None:
+        return metrics.load_average_1m < metrics.cpu_count * 1.25
     return True
 
 

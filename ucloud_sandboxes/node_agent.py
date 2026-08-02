@@ -40,6 +40,7 @@ from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry
 from .runtime_metrics import sample_node_runtime_metrics
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
+    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     merge_capabilities,
@@ -1819,13 +1820,16 @@ def build_direct_node_agent_server(
         raise ValueError(
             "direct node CPU and memory overcommit factors must be exactly 1.0"
         )
+    host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
             configured_resources.scaled(
                 cpu=cpu_overcommit,
                 memory=memory_overcommit,
                 disk=0.0,
-            )
+            ),
+            dynamic=True,
+            runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
     manager = DirectNodeManagerAdapter(service)
@@ -1871,6 +1875,8 @@ def build_direct_node_agent_server(
         "direct-runsc-v1",
         "sandbox-migrate-v2",
     ]
+    if service.dynamic_active_admission_enabled:
+        direct_capabilities.append(DYNAMIC_ACTIVE_ADMISSION_CAPABILITY)
     if getattr(service.warden, "storage", None) is not None:
         direct_capabilities.extend(
             (
@@ -1888,8 +1894,6 @@ def build_direct_node_agent_server(
     DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
     DirectBoundHandler.max_file_body_bytes = max_file_body_bytes
-    host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
-
     def direct_runtime_metrics() -> NodeRuntimeMetrics | None:
         metrics = host_runtime_metrics()
         storage = getattr(service.warden, "storage", None)

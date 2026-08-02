@@ -2420,6 +2420,24 @@ class CliTests(unittest.TestCase):
             ResourceQuantity(vcpu=64, memory_mb=117964, disk_mb=1_449_984),
         )
 
+    def test_direct_runtime_enables_dynamic_active_admission_policy(self) -> None:
+        policy = cli.policy_with_cli_overrides(
+            ScalePolicy(cpu_overcommit=3.0, memory_overcommit=2.0),
+            argparse.Namespace(
+                scale_down_idle_seconds=None,
+                builder_scale_down_idle_seconds=None,
+                init_cpu_overcommit=3.0,
+                init_memory_overcommit=2.0,
+                init_disk_overcommit=1.0,
+                init_node_runtime="direct",
+            ),
+        )
+
+        self.assertTrue(policy.dynamic_active_admission_enabled)
+        self.assertEqual(policy.cpu_overcommit, 1.0)
+        self.assertEqual(policy.memory_overcommit, 1.0)
+        self.assertEqual(policy.disk_overcommit, 1.0)
+
     def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:
         configured = ScalePolicy(
             cpu_overcommit=2.0,
@@ -2533,6 +2551,44 @@ class CliTests(unittest.TestCase):
             ResourceQuantity(vcpu=8, memory_mb=4096, disk_mb=8192),
         )
         self.assertEqual(reconciled.free_resources.vcpu, 24)
+
+    def test_dynamic_route_reconciliation_reserves_only_hard_disk(self) -> None:
+        routes = [
+            SandboxRoute(
+                sandbox_id=f"sandbox-{index}",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096),
+                state="running",
+            )
+            for index in range(64)
+        ]
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            total_resources=ResourceQuantity(
+                vcpu=32,
+                memory_mb=98304,
+                disk_mb=1_449_984,
+            ),
+            capabilities=("disk-quota", "dynamic-active-admission-v1"),
+        )
+
+        reconciled = cli.apply_route_reservations_to_heartbeats(
+            {"job-1": heartbeat},
+            cli.sandbox_route_reservations(routes),
+        )["job-1"]
+
+        self.assertEqual(reconciled.active_sandboxes, 64)
+        self.assertEqual(
+            reconciled.used_resources,
+            ResourceQuantity(disk_mb=64 * 4096),
+        )
+        self.assertEqual(reconciled.free_resources.vcpu, 32)
+        self.assertEqual(reconciled.free_resources.memory_mb, 98304)
 
     def test_route_reservations_remain_visible_without_a_heartbeat(self) -> None:
         job = VmJob(

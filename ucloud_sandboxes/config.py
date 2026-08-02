@@ -294,6 +294,13 @@ class AutoscalerConfig:
                 ),
                 minimum=0,
             ),
+            dynamic_active_admission_enabled=_config_bool(
+                "policy.dynamic_active_admission_enabled",
+                policy_raw.get(
+                    "dynamic_active_admission_enabled",
+                    policy_defaults.dynamic_active_admission_enabled,
+                ),
+            ),
             default_node_resources=ResourceQuantity.from_dict(default_node_resources_raw),
             cpu_overcommit=_config_float(
                 "policy.cpu_overcommit",

@@ -87,6 +87,80 @@ def node(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_dynamic_admission_does_not_sum_nominal_cpu_and_memory_limits(
+        self,
+    ) -> None:
+        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096)
+        requests = tuple(
+            SandboxPlacementRequest(resources=shape) for _ in range(64)
+        )
+        decision = evaluate_scale(
+            [
+                node(
+                    "dynamic",
+                    active=64,
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=1_449_984,
+                    ),
+                    used_resources=ResourceQuantity(disk_mb=64 * shape.disk_mb),
+                    capabilities=(
+                        "disk-quota",
+                        "dynamic-active-admission-v1",
+                    ),
+                )
+            ],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=64 * shape.vcpu,
+                    memory_mb=64 * shape.memory_mb,
+                    disk_mb=64 * shape.disk_mb,
+                ),
+                placement_requests=requests,
+            ),
+            ScalePolicy(
+                max_nodes=8,
+                max_create_per_cycle=8,
+                dynamic_active_admission_enabled=True,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.desired_resources.vcpu, shape.vcpu)
+        self.assertEqual(decision.desired_resources.memory_mb, shape.memory_mb)
+        self.assertEqual(
+            decision.desired_resources.disk_mb,
+            64 * shape.disk_mb,
+        )
+
+    def test_dynamic_admission_still_scales_for_additive_hard_disk(self) -> None:
+        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=32_000)
+        requests = tuple(
+            SandboxPlacementRequest(resources=shape) for _ in range(64)
+        )
+        decision = evaluate_scale(
+            [],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=64 * shape.vcpu,
+                    memory_mb=64 * shape.memory_mb,
+                    disk_mb=64 * shape.disk_mb,
+                ),
+                placement_requests=requests,
+            ),
+            ScalePolicy(
+                max_nodes=8,
+                max_create_per_cycle=8,
+                dynamic_active_admission_enabled=True,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 2)
+        self.assertEqual(decision.resource_deficit.vcpu, shape.vcpu)
+        self.assertEqual(decision.resource_deficit.memory_mb, shape.memory_mb)
+        self.assertEqual(decision.resource_deficit.disk_mb, 64 * shape.disk_mb)
+
     def test_draining_or_admission_closed_node_contributes_no_ready_capacity(
         self,
     ) -> None:
@@ -248,6 +322,41 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
         self.assertEqual(decision.creates, 0)
+
+    def test_dynamic_program_ready_demand_does_not_sum_nominal_limits(
+        self,
+    ) -> None:
+        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=16384)
+        requests = tuple(
+            SandboxPlacementRequest(resources=shape) for _ in range(64)
+        )
+        decision = evaluate_scale(
+            [],
+            SandboxDemand(),
+            ScalePolicy(
+                max_nodes=8,
+                max_create_per_cycle=8,
+                program_aware_autoscaling_enabled=True,
+                dynamic_active_admission_enabled=True,
+            ),
+            program_signals=ProgramScaleSignals(
+                ready_to_wake_sandboxes=64,
+                ready_to_wake_resources=ResourceQuantity(
+                    vcpu=64 * shape.vcpu,
+                    memory_mb=64 * shape.memory_mb,
+                ),
+                effective_resources=ResourceQuantity(
+                    vcpu=64 * shape.vcpu,
+                    memory_mb=64 * shape.memory_mb,
+                ),
+                ready_placement_requests=requests,
+                action_enabled=True,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.desired_resources.vcpu, shape.vcpu)
+        self.assertEqual(decision.desired_resources.memory_mb, shape.memory_mb)
 
     def test_default_policy_bursts_large_backlog_without_waiting_for_one_node(
         self,

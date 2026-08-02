@@ -316,8 +316,8 @@ Builder-node VMs:
 - initialized over the announced UCloud SSH proxy
 - initialized with the same worker registry URL
 - advertise `image-build` only, not `sandbox`
-- advertise physical CPU, memory, and disk capacity only; sandbox overcommit
-  settings are ignored for builder nodes
+- advertise physical CPU, memory, and disk capacity; sandbox admission settings
+  are ignored for builder nodes
 - build and push gateway-assigned registry tags; sandbox nodes later pull/cache
   digest-pinned references
 - carry `ucloud-sandboxes/deployment=<deployment-id>`

@@ -23,7 +23,7 @@ from ucloud_sandboxes.direct_registry import (
     DirectSandboxRegistration,
     DirectSandboxRegistry,
 )
-from ucloud_sandboxes.direct_warden import DirectSandbox, DirectWardenError
+from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactFile,
     HibernationArtifactStore,
@@ -40,8 +40,12 @@ from ucloud_sandboxes.image_rootfs import (
 )
 from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
 from ucloud_sandboxes.node_agent import build_direct_node_agent_server
-from ucloud_sandboxes.models import ResourceQuantity
-from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
+from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
+from ucloud_sandboxes.sandbox import (
+    SandboxCapacityUnavailableError,
+    SandboxSecuritySpec,
+    SandboxSpec,
+)
 
 
 class FakeImageStore:
@@ -611,13 +615,117 @@ class DirectProvisionerTests(unittest.TestCase):
 
             service.exec(first.spec.id, ("/bin/true",))
             with self.assertRaisesRegex(
-                DirectWardenError,
+                SandboxCapacityUnavailableError,
                 "insufficient active CPU or memory",
             ):
                 service.exec(second.spec.id, ("/bin/true",))
 
             self.assertEqual(service.get(first.spec.id).state, "running")
             self.assertEqual(service.get(second.spec.id).state, "parked")
+
+    def test_dynamic_active_admission_reuses_idle_cpu_and_memory_limits(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=1, memory_mb=1024),
+                dynamic=True,
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=1.0,
+                    cpu_count=1,
+                    memory_total_mb=1024,
+                    memory_available_mb=4096,
+                    swap_total_mb=4096,
+                    swap_free_mb=4096,
+                ),
+            )
+
+            for index in range(3):
+                service.create(replace(self.spec(), id=f"sandbox-{index}"))
+
+            self.assertEqual(
+                {record.state for record in service.list()},
+                {"running"},
+            )
+
+    def test_dynamic_active_admission_stops_on_live_pressure(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                dynamic=True,
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=95.0,
+                    cpu_count=4,
+                    memory_total_mb=8192,
+                    memory_available_mb=8192,
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "CPU pressure",
+            ):
+                service.create(self.spec())
+
+    def test_dynamic_active_admission_fails_closed_without_metrics(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                dynamic=True,
+                runtime_metrics_provider=lambda: None,
+            )
+
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "no fresh runtime metrics",
+            ):
+                service.create(self.spec())
+
+    def test_dynamic_active_admission_stops_on_cpu_load(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                dynamic=True,
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=20.0,
+                    cpu_count=4,
+                    load_average_1m=5.0,
+                    memory_total_mb=8192,
+                    memory_available_mb=8192,
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "CPU load",
+            ):
+                service.create(self.spec())
+
 
     def test_node_adapter_holds_exec_lease_and_accounts_parked_memory(self) -> None:
         with TemporaryDirectory() as raw:
@@ -642,7 +750,7 @@ class DirectProvisionerTests(unittest.TestCase):
 
             self.assertEqual(command[:2], ("runsc", "exec"))
             self.assertEqual(snapshot.activity.active_sandboxes, 1)
-            self.assertEqual(snapshot.activity.used_resources.memory_mb, 1024)
+            self.assertEqual(snapshot.activity.used_resources.memory_mb, 0)
             service.park(created.spec.id)
             parked = manager.heartbeat_snapshot(active_build_count=lambda: 0)
             self.assertEqual(parked.activity.active_sandboxes, 0)
@@ -711,7 +819,7 @@ class DirectProvisionerTests(unittest.TestCase):
             listed = manager.list()
 
             self.assertEqual(snapshot.activity.active_sandboxes, 1)
-            self.assertEqual(snapshot.activity.used_resources.memory_mb, 1024)
+            self.assertEqual(snapshot.activity.used_resources.memory_mb, 0)
             self.assertEqual([record.spec.id for record in listed], [created.spec.id])
 
     def test_direct_node_drain_survives_adapter_restart(self) -> None:
@@ -773,7 +881,43 @@ class DirectProvisionerTests(unittest.TestCase):
                     "direct-runsc-v1",
                     server.RequestHandlerClass.capabilities,
                 )
+                self.assertNotIn(
+                    "dynamic-active-admission-v1",
+                    server.RequestHandlerClass.capabilities,
+                )
                 self.assertIsNone(service._parking_thread)
+            finally:
+                server.server_close()
+
+    def test_direct_node_advertises_dynamic_admission_with_live_metrics(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=service,
+                image_file=root / "images.json",
+                job_id="job",
+                node_id="node",
+                total_resources=ResourceQuantity(vcpu=32, memory_mb=98304),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=1.0,
+                    cpu_count=32,
+                    memory_total_mb=98304,
+                    memory_available_mb=90000,
+                ),
+            )
+            try:
+                self.assertIn(
+                    "dynamic-active-admission-v1",
+                    server.RequestHandlerClass.capabilities,
+                )
             finally:
                 server.server_close()
 

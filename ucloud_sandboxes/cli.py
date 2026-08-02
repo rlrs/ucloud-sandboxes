@@ -36,6 +36,7 @@ from .autoscaler_state import (
 )
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
+    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
     GVISOR_HIBERNATE_PROBE,
     GVISOR_LIVE_FORK_PROBE,
@@ -6532,6 +6533,7 @@ def policy_with_cli_overrides(
             "memory_overcommit": 1.0,
             "disk_overcommit": 1.0,
         }
+        effective = replace(effective, dynamic_active_admission_enabled=True)
     factor_updates: dict[str, float] = {}
     for field_name, raw_value in capacity_factors.items():
         if raw_value is None:
@@ -6771,8 +6773,15 @@ def apply_route_reservations_to_heartbeats(
             if not _heartbeat_inventory_contains_route(inventory, route)
         ]
         missing_resources = ResourceQuantity()
+        dynamic_active = (
+            DYNAMIC_ACTIVE_ADMISSION_CAPABILITY in heartbeat.capabilities
+        )
         for route in missing_routes:
-            missing_resources = missing_resources + route.resources
+            missing_resources = missing_resources + (
+                ResourceQuantity(disk_mb=route.resources.disk_mb)
+                if dynamic_active
+                else route.resources
+            )
         used = heartbeat.used_resources + missing_resources
         active_sandboxes = heartbeat.active_sandboxes + len(missing_routes)
         reconciled[job_id] = replace(
@@ -7454,6 +7463,9 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         ),
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
+        "dynamic_active_admission_enabled": (
+            policy.dynamic_active_admission_enabled
+        ),
         "default_node_resources": policy.default_node_resources.to_dict(),
     }
 

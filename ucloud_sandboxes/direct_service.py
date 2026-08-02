@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import threading
 import time
-from typing import Sequence
+from typing import Callable, Sequence
 from uuid import uuid4
 import re
 
@@ -24,9 +24,10 @@ from .hibernation import (
     HibernationManifest,
     HibernationState,
 )
-from .models import ResourceQuantity
+from .models import NodeRuntimeMetrics, ResourceQuantity
 from .sandbox import (
     SandboxAdmissionClosedError,
+    SandboxCapacityUnavailableError,
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
@@ -166,7 +167,13 @@ class DirectSandboxService:
         self.process_runner = process_runner or DirectProcessRunner()
         self._restore_slots = threading.Semaphore(max_concurrent_restores)
         self._active_capacity: ResourceQuantity | None = None
-        self._restore_reservations: set[tuple[str, int]] = set()
+        self._dynamic_active_admission = False
+        self._runtime_metrics_provider: (
+            Callable[[], NodeRuntimeMetrics | None] | None
+        ) = None
+        self._active_reservations: dict[
+            tuple[str, int], ResourceQuantity
+        ] = {}
         self._capacity_guard = threading.Lock()
         self._locks: dict[tuple[str, int], threading.Lock] = {}
         self._locks_guard = threading.Lock()
@@ -181,16 +188,35 @@ class DirectSandboxService:
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
 
-    def configure_active_capacity(self, capacity: ResourceQuantity) -> None:
-        """Install the hard CPU/RAM wake-admission ceiling for this node."""
+    def configure_active_capacity(
+        self,
+        capacity: ResourceQuantity,
+        *,
+        dynamic: bool = False,
+        runtime_metrics_provider: (
+            Callable[[], NodeRuntimeMetrics | None] | None
+        ) = None,
+    ) -> None:
+        """Install the per-shape and concurrent CPU/RAM admission ceiling."""
 
         if not capacity.is_valid:
             raise ValueError("direct active capacity cannot be negative")
+        if dynamic and runtime_metrics_provider is None:
+            raise ValueError(
+                "dynamic direct admission requires runtime metrics"
+            )
         with self._capacity_guard:
             self._active_capacity = ResourceQuantity(
                 vcpu=capacity.vcpu,
                 memory_mb=capacity.memory_mb,
             )
+            self._dynamic_active_admission = bool(dynamic)
+            self._runtime_metrics_provider = runtime_metrics_provider
+
+    @property
+    def dynamic_active_admission_enabled(self) -> bool:
+        with self._capacity_guard:
+            return self._dynamic_active_admission
 
     def start(self) -> tuple[SandboxRecord, ...]:
         results = self.provisioner.start()
@@ -268,11 +294,19 @@ class DirectSandboxService:
         operation = operation or SandboxOperation.legacy_create(spec)
         operation.validate_spec(spec)
         with self._lock(spec.id, operation.generation):
-            result = self.provisioner.create(
-                spec=spec,
-                sandbox_generation=operation.generation,
-                operation_id=operation.operation_id or "legacy-create",
-            )
+            with self._reserve_active_capacity(
+                spec.id,
+                operation.generation,
+                ResourceQuantity(
+                    vcpu=spec.cpus or 0,
+                    memory_mb=spec.memory_mb or 0,
+                ),
+            ):
+                result = self.provisioner.create(
+                    spec=spec,
+                    sandbox_generation=operation.generation,
+                    operation_id=operation.operation_id or "legacy-create",
+                )
             self.mark_activity(spec.id, operation.generation)
             return self._record(result.registration)
 
@@ -1096,7 +1130,15 @@ class DirectSandboxService:
             record = self.warden.reconcile(sandbox)
             timings["reconcile"] = (time.monotonic() - phase) * 1000
         if record.state == HibernationState.PARKED:
-            with self._reserve_restore_capacity(sandbox.sandbox_id):
+            registration = self._require_registration(sandbox.sandbox_id)
+            with self._reserve_active_capacity(
+                sandbox.sandbox_id,
+                registration.sandbox_generation,
+                ResourceQuantity(
+                    vcpu=registration.spec.cpus or 0,
+                    memory_mb=registration.spec.memory_mb or 0,
+                ),
+            ):
                 phase = time.monotonic()
                 self._restore_slots.acquire()
                 timings["restore_queue"] = (time.monotonic() - phase) * 1000
@@ -1131,52 +1173,93 @@ class DirectSandboxService:
         return timings
 
     @contextmanager
-    def _reserve_restore_capacity(self, sandbox_id: str):
-        registration = self._require_registration(sandbox_id)
-        key = (sandbox_id, registration.sandbox_generation)
+    def _reserve_active_capacity(
+        self,
+        sandbox_id: str,
+        generation: int,
+        requested: ResourceQuantity,
+    ):
+        key = (sandbox_id, generation)
         with self._capacity_guard:
             capacity = self._active_capacity
             if capacity is not None:
                 used = ResourceQuantity()
-                for candidate in self.provisioner.registry.list():
-                    if candidate.phase != "owned":
-                        continue
-                    candidate_key = (
-                        candidate.sandbox_id,
-                        candidate.sandbox_generation,
-                    )
-                    running = candidate_key in self._restore_reservations
-                    if not running:
-                        lifecycle = self.warden.inspect(candidate.to_direct_sandbox())
-                        running = bool(
-                            lifecycle is not None
-                            and lifecycle.state == HibernationState.RUNNING
+                for candidate_key, reservation in self._active_reservations.items():
+                    if candidate_key != key:
+                        used = used + reservation
+                if not self._dynamic_active_admission:
+                    for candidate in self.provisioner.registry.list():
+                        if candidate.phase != "owned":
+                            continue
+                        candidate_key = (
+                            candidate.sandbox_id,
+                            candidate.sandbox_generation,
                         )
-                    if not running:
-                        continue
-                    used = used + ResourceQuantity(
-                        vcpu=candidate.spec.cpus or 0,
-                        memory_mb=candidate.spec.memory_mb or 0,
-                    )
-                requested = ResourceQuantity(
-                    vcpu=registration.spec.cpus or 0,
-                    memory_mb=registration.spec.memory_mb or 0,
-                )
+                        if candidate_key == key:
+                            continue
+                        lifecycle = self.warden.inspect(
+                            candidate.to_direct_sandbox()
+                        )
+                        if (
+                            lifecycle is None
+                            or lifecycle.state != HibernationState.RUNNING
+                        ):
+                            continue
+                        used = used + ResourceQuantity(
+                            vcpu=candidate.spec.cpus or 0,
+                            memory_mb=candidate.spec.memory_mb or 0,
+                        )
                 available = ResourceQuantity(
                     vcpu=max(0.0, capacity.vcpu - used.vcpu),
                     memory_mb=max(0, capacity.memory_mb - used.memory_mb),
                 )
                 if not requested.fits_within(available):
-                    raise DirectWardenError(
+                    raise SandboxCapacityUnavailableError(
                         "direct node has insufficient active CPU or memory "
-                        "capacity; relocate the parked sandbox and retry"
+                        "admission headroom; retry on another node"
                     )
-            self._restore_reservations.add(key)
+                if self._dynamic_active_admission:
+                    self._require_dynamic_headroom(requested)
+            self._active_reservations[key] = requested
         try:
             yield
         finally:
             with self._capacity_guard:
-                self._restore_reservations.discard(key)
+                self._active_reservations.pop(key, None)
+
+    def _require_dynamic_headroom(self, requested: ResourceQuantity) -> None:
+        provider = self._runtime_metrics_provider
+        metrics = provider() if provider is not None else None
+        if metrics is None:
+            raise SandboxCapacityUnavailableError(
+                "direct node has no fresh runtime metrics for dynamic admission"
+            )
+        if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
+            raise SandboxCapacityUnavailableError(
+                "direct node CPU pressure blocks active admission"
+            )
+        if (
+            metrics.cpu_count > 0
+            and metrics.load_average_1m is not None
+            and metrics.load_average_1m >= metrics.cpu_count * 1.25
+        ):
+            raise SandboxCapacityUnavailableError(
+                "direct node CPU load blocks active admission"
+            )
+        if (
+            metrics.memory_psi_full_avg10 is not None
+            and metrics.memory_psi_full_avg10 >= 10.0
+        ):
+            raise SandboxCapacityUnavailableError(
+                "direct node memory pressure blocks active admission"
+            )
+        available_memory_mb = metrics.memory_available_mb
+        if metrics.swap_total_mb > 0:
+            available_memory_mb += metrics.swap_free_mb
+        if available_memory_mb < max(2048, requested.memory_mb):
+            raise SandboxCapacityUnavailableError(
+                "direct node has insufficient live memory headroom"
+            )
 
     def _require_registration(
         self,

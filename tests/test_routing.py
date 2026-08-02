@@ -183,12 +183,14 @@ class RoutingStoreTests(unittest.TestCase):
             store.upsert_pending("__migration__:sandbox-1", resources)
 
             demand = sandbox_demand_from_routing_state(store.load())
+            indexed_demand = store.pending_demand()
 
         self.assertEqual(demand.placement_requests[0].resources, resources)
         self.assertEqual(
             demand.placement_requests[0].excluded_job_ids,
             ("job-1",),
         )
+        self.assertEqual(indexed_demand.placement_requests, demand.placement_requests)
 
     def test_routing_database_is_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:

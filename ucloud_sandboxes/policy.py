@@ -4,7 +4,11 @@ from dataclasses import replace
 from datetime import datetime
 import math
 
-from .capabilities import DISK_QUOTA_CAPABILITY, has_capability
+from .capabilities import (
+    DISK_QUOTA_CAPABILITY,
+    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
+    has_capability,
+)
 from .models import (
     ResourceQuantity,
     SandboxDemand,
@@ -92,14 +96,22 @@ def evaluate_scale(
         live_signals,
     ) and not any(node.is_idle for node in ready_nodes)
 
-    demand_resources = demand.desired_resources
+    demand_resources = (
+        _dynamic_demand_resources(demand)
+        if policy.dynamic_active_admission_enabled
+        else demand.desired_resources
+    )
     if (
         policy.program_aware_autoscaling_enabled
         and program_signals is not None
     ):
         demand_resources = _add_resources(
             demand_resources,
-            program_signals.effective_resources,
+            (
+                _dynamic_program_resources(program_signals)
+                if policy.dynamic_active_admission_enabled
+                else program_signals.effective_resources
+            ),
         )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
     projected_free_resources = _projected_free_resources(
@@ -460,7 +472,7 @@ def _nodes_for_unplaced_requests(
     if not requests:
         return 0
     del now
-    bins: list[tuple[str, ResourceQuantity]] = []
+    bins: list[tuple[str, ResourceQuantity, bool]] = []
     for node in nodes:
         if node.job.is_final:
             continue
@@ -470,6 +482,10 @@ def _nodes_for_unplaced_requests(
                     node.job_id,
                     _security_adjusted_resources(
                         node, node.heartbeat.free_resources
+                    ),
+                    has_capability(
+                        node.heartbeat.capabilities,
+                        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
                     ),
                 )
             )
@@ -484,6 +500,7 @@ def _nodes_for_unplaced_requests(
                         node,
                         _estimated_node_resources(node, policy),
                     ),
+                    policy.dynamic_active_admission_enabled,
                 )
             )
     default_bin = policy.schedulable_node_resources
@@ -507,8 +524,8 @@ def _nodes_for_unplaced_requests(
     for placement in sorted(requests, key=pressure, reverse=True):
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
-        fitting: list[tuple[int, str, ResourceQuantity]] = []
-        for index, (job_id, available) in enumerate(bins):
+        fitting: list[tuple[int, str, ResourceQuantity, bool]] = []
+        for index, (job_id, available, dynamic_active) in enumerate(bins):
             if job_id in excluded:
                 continue
             available_for_request = available
@@ -518,9 +535,11 @@ def _nodes_for_unplaced_requests(
                     disk_mb=available.disk_mb + placement.owned_disk_mb,
                 )
             if requested.fits_within(available_for_request):
-                fitting.append((index, job_id, available_for_request))
+                fitting.append(
+                    (index, job_id, available_for_request, dynamic_active)
+                )
         if fitting:
-            index, job_id, available = min(
+            index, job_id, available, dynamic_active = min(
                 fitting,
                 key=lambda item: (
                     item[2].disk_mb - requested.disk_mb,
@@ -528,18 +547,84 @@ def _nodes_for_unplaced_requests(
                     item[2].vcpu - requested.vcpu,
                 ),
             )
-            bins[index] = (job_id, _subtract_resources(available, requested))
+            bins[index] = (
+                job_id,
+                _subtract_dynamic_resources(available, requested)
+                if dynamic_active
+                else _subtract_resources(available, requested),
+                dynamic_active,
+            )
             continue
         missing += 1
         bins.append(
             (
                 "",
-                _subtract_resources(default_bin, requested)
+                (
+                    _subtract_dynamic_resources(default_bin, requested)
+                    if policy.dynamic_active_admission_enabled
+                    else _subtract_resources(default_bin, requested)
+                )
                 if requested.fits_within(default_bin)
                 else ResourceQuantity(),
+                policy.dynamic_active_admission_enabled,
             )
         )
     return missing
+
+
+def _dynamic_demand_resources(demand: SandboxDemand) -> ResourceQuantity:
+    """Reduce dynamic CPU/RAM demand without weakening hard disk ownership.
+
+    Pending and prepared requests retain additive disk demand. CPU and memory
+    limits describe the largest single sandbox that must fit; they are not
+    steady-state reservations for every resident sandbox. Placement requests
+    preserve the exact individual shapes for bin fitting.
+    """
+
+    if not demand.placement_requests:
+        # Older state backends cannot reconstruct individual shapes. Retain
+        # conservative aggregation rather than guessing a maximum.
+        return demand.desired_resources
+    return ResourceQuantity(
+        vcpu=max(
+            (item.resources.vcpu for item in demand.placement_requests),
+            default=0.0,
+        ),
+        memory_mb=max(
+            (item.resources.memory_mb for item in demand.placement_requests),
+            default=0,
+        ),
+        disk_mb=demand.desired_resources.disk_mb,
+    )
+
+
+def _dynamic_program_resources(
+    signals: ProgramScaleSignals,
+) -> ResourceQuantity:
+    """Keep predictive headroom without adding every ready CPU/RAM limit."""
+
+    if signals.ready_placement_requests:
+        ready = ResourceQuantity(
+            vcpu=max(
+                (
+                    item.resources.vcpu
+                    for item in signals.ready_placement_requests
+                ),
+                default=0.0,
+            ),
+            memory_mb=max(
+                (
+                    item.resources.memory_mb
+                    for item in signals.ready_placement_requests
+                ),
+                default=0,
+            ),
+        )
+    else:
+        # Preserve conservative behavior for program-state backends that do
+        # not expose exact ready-to-wake shapes.
+        ready = signals.ready_to_wake_resources
+    return _add_resources(ready, signals.weighted_model_wait_resources)
 
 
 def _weighted_estimated_node_resources(
@@ -675,6 +760,19 @@ def _subtract_resources(
     return ResourceQuantity(
         vcpu=max(0.0, left.vcpu - right.vcpu),
         memory_mb=max(0, left.memory_mb - right.memory_mb),
+        disk_mb=max(0, left.disk_mb - right.disk_mb),
+    )
+
+
+def _subtract_dynamic_resources(
+    left: ResourceQuantity,
+    right: ResourceQuantity,
+) -> ResourceQuantity:
+    """Consume hard disk while retaining reusable dynamic CPU/RAM headroom."""
+
+    return ResourceQuantity(
+        vcpu=left.vcpu,
+        memory_mb=left.memory_mb,
         disk_mb=max(0, left.disk_mb - right.disk_mb),
     )
 

@@ -6,6 +6,7 @@ import re
 
 
 DISK_QUOTA_CAPABILITY = "disk-quota"
+DYNAMIC_ACTIVE_ADMISSION_CAPABILITY = "dynamic-active-admission-v1"
 RUNTIME_CONFORMANCE_CAPABILITY = "runtime-conformance"
 FORK_LOCAL_CAPABILITY = "fork-local-v1"
 HIBERNATE_LOCAL_CAPABILITY = "hibernate-local-v1"

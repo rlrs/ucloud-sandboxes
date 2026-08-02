@@ -315,29 +315,33 @@ will likely be launched shortly afterward.
 
 ## Direct-runtime placement, wake, and evacuation
 
-The direct runtime has no fixed CPU or memory overcommit. Each node advertises
-physical CPU and RAM, and both node-side wake admission and gateway placement
-enforce that hard active ceiling. Parked sandboxes retain only their exact hard
-disk reservation on their current node. Disk is never overallocated.
+The direct runtime has no fixed CPU or memory overcommit multiplier. Each node
+advertises physical CPU and RAM, but resident sandbox CPU and memory limits are
+not treated as additive lifetime reservations. They are limits, while actual
+usage is bursty. Parked and running sandboxes retain their exact hard disk
+reservation on their current node. Disk is never overallocated.
 
 This produces two independent capacity questions:
 
 1. Can the sandbox's lifetime disk reservation remain on this node?
-2. When it becomes active, can its CPU and memory shape fit on one ready node?
+2. Can its individual CPU and memory limit fit on one node, and does that node
+   currently have enough live headroom to admit more work?
 
 The first answer determines durable placement. The second is re-evaluated on
-wake. A parked sandbox stays local when its CPU/RAM delta fits. Otherwise the
-gateway migrates its opaque parked state to a ready node that fits the complete
-active shape, atomically switches the route, and only then forwards the tool or
-file request. The node independently rejects a restore beyond its hard active
-ceiling, so stale heartbeats or simultaneous requests cannot silently
-overcommit it.
+create and wake using actual CPU, available RAM plus swap, load, and memory PSI.
+A parked sandbox stays local when its individual shape fits and live pressure
+allows admission. Otherwise the gateway can choose or provision another node
+and migrate the opaque parked state before forwarding the request. The node
+independently applies the same pressure brake and reserves concurrent creates
+and wakes against physical CPU/RAM, so stale heartbeats and simultaneous
+requests cannot produce an unbounded activation burst.
 
 Failed create, wake, and migration placement attempts persist individual
-request shapes as pending demand. The autoscaler bin-packs those shapes against
-per-node free resources; it does not rely only on aggregate free CPU, memory,
-and disk, which can claim capacity exists when it is fragmented across
-different nodes.
+request shapes as pending demand. The autoscaler consumes disk additively and
+bin-packs exact disk shapes. CPU and memory contribute the largest individual
+shape and are reusable within a dynamic-admission node; sustained live pressure
+adds a headroom node. Older nodes without the dynamic-admission capability keep
+the conservative additive CPU/RAM behavior during a rolling upgrade.
 
 Closing admission and selecting placement can race. A node that has durably
 closed its admission gate returns the structured, retryable
@@ -378,13 +382,14 @@ Until we have measurements, prefer:
 - Two provisioning VMs max.
 - Prepared-capacity signals for known near-term bursts.
 - Standing warm resources only for a measured latency SLO that justifies the cost.
-- CPU and memory overcommit of `1.0` for direct-runtime sandbox nodes.
+- CPU and memory overcommit factors of `1.0` for direct-runtime nodes, with
+  live-pressure dynamic admission instead of fixed limit aggregation.
 - No disk overcommit by default.
 
 The legacy runtime can retain its historical fixed overcommit policy while it
 is being removed. Memory overcommit changes placement capacity; it does not
 increase a sandbox's individual Docker `--memory` limit. The standard 96 GiB
-worker uses a fixed
+legacy worker uses a fixed
 96 GiB swap file and each container receives an explicit combined RAM+swap
 ceiling of twice its requested memory. Node heartbeats expose swap use and
 memory PSI. The gateway stops placing new work on an overcommitted node when

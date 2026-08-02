@@ -1061,7 +1061,11 @@ class ControlPlaneTests(unittest.TestCase):
                 memory_mb=98304,
                 disk_mb=1_449_984,
             ),
-            used_resources=ResourceQuantity(disk_mb=64 * requested.disk_mb),
+            used_resources=ResourceQuantity(
+                vcpu=64 * requested.vcpu,
+                memory_mb=64 * requested.memory_mb,
+                disk_mb=64 * requested.disk_mb,
+            ),
             capabilities=("disk-quota", "dynamic-active-admission-v1"),
             runtime_metrics=NodeRuntimeMetrics(
                 collected_at=utc_now(),
@@ -1095,6 +1099,64 @@ class ControlPlaneTests(unittest.TestCase):
                 ),
                 requested,
                 [],
+            )
+        )
+
+    def test_dynamic_direct_placement_ignores_provisional_compute_but_not_disk(
+        self,
+    ) -> None:
+        requested = ResourceQuantity(vcpu=4, memory_mb=4096, disk_mb=17_472)
+        heartbeat = NodeHeartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            node_url="http://node-1:8090",
+            total_resources=ResourceQuantity(
+                vcpu=32,
+                memory_mb=98304,
+                disk_mb=1_449_984,
+            ),
+            capabilities=("disk-quota", "dynamic-active-admission-v1"),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                cpu_percent=2.0,
+                cpu_count=32,
+                memory_total_mb=98304,
+                memory_available_mb=80000,
+                swap_total_mb=98304,
+                swap_free_mb=90000,
+                memory_psi_full_avg10=0.0,
+                load_average_1m=1.0,
+            ),
+        )
+        routes = [
+            SandboxRoute(
+                sandbox_id=f"creating-{index}",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=requested,
+                state="creating",
+            )
+            for index in range(8)
+        ]
+
+        self.assertTrue(control_plane._node_can_fit(heartbeat, requested, routes))
+
+        disk_filling_route = SandboxRoute(
+            sandbox_id="disk-filling",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            resources=ResourceQuantity(disk_mb=1_449_984 - 8 * requested.disk_mb),
+            state="creating",
+        )
+        self.assertFalse(
+            control_plane._node_can_fit(
+                heartbeat,
+                requested,
+                [*routes, disk_filling_route],
             )
         )
 

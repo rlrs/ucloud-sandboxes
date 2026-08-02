@@ -6170,6 +6170,15 @@ def _node_can_fit_available(
         return False
     if not _node_storage_pressure_allows(heartbeat, requested):
         return False
+    if has_capability(
+        heartbeat.capabilities,
+        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
+    ):
+        # CPU and memory are deliberately admitted from fresh runtime pressure
+        # on direct nodes. Keep the route-accounted disk check so concurrent
+        # creates cannot outrun the storage daemon's next heartbeat, but do not
+        # reintroduce the legacy nominal CPU/RAM ceiling here.
+        return requested.disk_mb <= available.disk_mb
     return requested.fits_within(available)
 
 

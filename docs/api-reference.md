@@ -235,6 +235,13 @@ when absent there. Stores are bounded and content-addressed; temporary extracted
 directories are removed after the tracked build. The legacy
 `context_archive_base64` build field remains accepted for older SDKs.
 
+Managed `POST /v1/images/build` requests provide `id`, the context reference,
+and optional Dockerfile/build arguments, but omit `tag`. The gateway generates
+the worker-private registry tag and forces `push=true`; clients later create a
+sandbox using the same image id. An explicit `tag` is still accepted for
+external or advanced registry flows. Private registry DNS names and ports are
+deployment details, not client configuration.
+
 `POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
 and optional `image` and `parkable`. Set `parkable: true` when the future
 sandboxes will be parkable; the gateway then expands the caller's writable

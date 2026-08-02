@@ -470,6 +470,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     serve.add_argument(
+        "--registry-worker-url",
+        help=(
+            "Private registry URL used in worker pull/push references. Clients "
+            "never need this address. Defaults to UCLOUD_REGISTRY_WORKER_URL."
+        ),
+    )
+    serve.add_argument(
         "--registry-usage-file",
         type=Path,
         help=(
@@ -2634,6 +2641,10 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         or os.environ.get("UCLOUD_SANDBOX_REGISTRY_URL")
         or os.environ.get("UCLOUD_REGISTRY_URL")
     )
+    registry_worker_url = (
+        getattr(args, "registry_worker_url", None)
+        or os.environ.get("UCLOUD_REGISTRY_WORKER_URL")
+    )
     server = build_server(
         args.host,
         args.port,
@@ -2661,6 +2672,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         local_image_builds_enabled=args.enable_image_builds,
         metrics_file=metrics_file,
         registry_url=registry_url,
+        registry_worker_url=registry_worker_url,
         registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
         max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
         max_http_request_threads=args.max_http_request_threads,
@@ -2680,6 +2692,8 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print("Node control auth: distinct bearer token required")
     if registry_url:
         print(f"Registry metrics: {registry_url}")
+    if registry_worker_url:
+        print(f"Worker registry transport: {registry_worker_url}")
     print(
         f"Registry usage file: {args.registry_usage_file or config.registry_usage_file()}"
     )

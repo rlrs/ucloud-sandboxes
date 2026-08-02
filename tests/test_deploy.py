@@ -124,6 +124,10 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(gateway["UCLOUD_REGISTRY_URL"], "http://127.0.0.1:5000")
         self.assertEqual(
+            gateway["UCLOUD_REGISTRY_WORKER_URL"],
+            "http://ucloud-sandbox-registry:5000",
+        )
+        self.assertEqual(
             relay["UCLOUD_RELAY_SANDBOX_TOKEN_FILE"],
             "/work/data/ucloud-sandboxes/state/relay-sandbox-token",
         )
@@ -504,6 +508,10 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(
             autoscaler["UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL"],
+            "http://sandbox-gateway-prod:5000",
+        )
+        self.assertEqual(
+            gateway_env(plan)["UCLOUD_REGISTRY_WORKER_URL"],
             "http://sandbox-gateway-prod:5000",
         )
         self.assertEqual(

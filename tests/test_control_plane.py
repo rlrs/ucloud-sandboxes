@@ -4849,6 +4849,7 @@ class ControlPlaneTests(unittest.TestCase):
                     routing_file=raw_path / "routes.json",
                     image_file=raw_path / "gateway-images.json",
                     image_runtime=DockerImageRuntime(dry_run=True),
+                    registry_worker_url="http://sandbox-gateway-prod:5000",
                 )
                 gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
                 gateway_thread.start()
@@ -4890,9 +4891,7 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "custom",
-                            "tag": "registry.example.org/custom:latest",
                             "context_path": "/tmp/context",
-                            "push": True,
                         },
                     )
                     images = self._json_request(f"{base}/v1/images")
@@ -4921,6 +4920,10 @@ class ControlPlaneTests(unittest.TestCase):
                 regular.server_close()
 
             self.assertEqual(built["image"]["id"], "custom")
+            self.assertTrue(built["image"]["tag"].startswith(
+                "sandbox-gateway-prod:5000/ucloud-managed/custom-"
+            ))
+            self.assertTrue(built["image"]["tag"].endswith(":latest"))
             self.assertIn("pushCommand", built)
             self.assertEqual(
                 [(image["id"], image.get("location")) for image in images["images"]],
@@ -4970,6 +4973,7 @@ class ControlPlaneTests(unittest.TestCase):
                     image_file=image_file,
                     image_runtime=DockerImageRuntime(dry_run=True),
                     registry_url=f"http://{registry_host}:{registry_port}",
+                    registry_worker_url="http://sandbox-gateway-prod:5000",
                 )
                 Thread(target=gateway.serve_forever, daemon=True).start()
                 try:
@@ -4979,9 +4983,7 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "digest-build",
-                            "tag": ("ucloud-sandbox-registry:5000/team/image:v1"),
                             "context_path": "/tmp/context",
-                            "push": True,
                         },
                     )
                     prepared = self._json_request(
@@ -5007,10 +5009,14 @@ class ControlPlaneTests(unittest.TestCase):
                 registry.server_close()
 
         self.assertEqual(built["image"]["manifest_digest"], digest)
+        generated_tag = built["image"]["tag"]
+        self.assertTrue(generated_tag.startswith(
+            "sandbox-gateway-prod:5000/ucloud-managed/digest-build-"
+        ))
         self.assertEqual(stored_digest, digest)
         self.assertEqual(
             prepared["prepare"]["image"],
-            ("ucloud-sandbox-registry:5000/team/image:v1" f"@{digest}"),
+            f"{generated_tag}@{digest}",
         )
 
     def test_gateway_resolves_pushed_image_id_to_registry_tag_on_create(self) -> None:
@@ -5411,6 +5417,7 @@ class ControlPlaneTests(unittest.TestCase):
                     routing_file=raw_path / "routes.json",
                     image_file=raw_path / "gateway-images.json",
                     local_image_builds_enabled=False,
+                    registry_worker_url="http://sandbox-gateway-prod:5000",
                 )
                 gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
                 gateway_thread.start()
@@ -5436,9 +5443,7 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "custom",
-                            "tag": "registry.example.org/custom:latest",
                             "context_path": "/tmp/context",
-                            "push": True,
                         },
                     )
                     builder_heartbeat = self._json_request(
@@ -5453,6 +5458,9 @@ class ControlPlaneTests(unittest.TestCase):
                 builder.server_close()
 
             self.assertEqual(built["image"]["id"], "custom")
+            self.assertTrue(built["image"]["tag"].startswith(
+                "sandbox-gateway-prod:5000/ucloud-managed/custom-"
+            ))
             self.assertIn("pushCommand", built)
             self.assertNotIn("sandbox", builder_heartbeat["heartbeat"]["capabilities"])
             self.assertIn(
@@ -5469,6 +5477,33 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
             )
+
+    def test_managed_registry_rewrites_legacy_alias_for_worker_transport(self) -> None:
+        digest = "sha256:" + "a" * 64
+        legacy = (
+            "ucloud-sandbox-registry:5000/prime-rl/tmax:task-1"
+            f"@{digest}"
+        )
+
+        rewritten = control_plane._managed_registry_worker_reference(
+            legacy,
+            "http://127.0.0.1:5000",
+            "http://sandbox-gateway-prod:5000",
+        )
+
+        self.assertEqual(
+            rewritten,
+            "sandbox-gateway-prod:5000/prime-rl/tmax:task-1"
+            f"@{digest}",
+        )
+        self.assertEqual(
+            control_plane._managed_registry_worker_reference(
+                "registry.example.org/team/image:latest",
+                "http://127.0.0.1:5000",
+                "http://sandbox-gateway-prod:5000",
+            ),
+            "registry.example.org/team/image:latest",
+        )
 
     def test_gateway_clears_pending_signal_after_async_build_is_accepted(self) -> None:
         digest = "sha256:" + "8" * 64

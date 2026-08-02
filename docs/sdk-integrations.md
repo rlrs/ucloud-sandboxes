@@ -26,8 +26,8 @@ The gateway is responsible for:
 - raw byte upload/download endpoints for files
 - sandbox prepare signals for near-term resource demand
 - builder prepare signals for near-term image-build demand
-- image build/pull/snapshot endpoints and image-id to pushed-registry-tag
-  resolution
+- image build/pull/snapshot endpoints, gateway-owned managed registry naming,
+  and image-id to immutable worker pull-reference resolution
 - image prewarm controls for prepared capacity and multi-node image pulls
 - authenticated dashboard and metrics data at `/v1/metrics`
 
@@ -35,15 +35,16 @@ See [api-reference.md](api-reference.md) for endpoint details.
 
 ## Image Builds
 
-Client-submitted Docker builds should use a registry tag and `push=true` so the
-result is available to sandbox nodes. Builder-local images are not transferred
-between VMs. The gateway records pushed image metadata by image id and registry
-tag; sandbox creation can then use either the registry tag or the recorded image
-id.
+Managed Docker builds submit a stable image id and no registry coordinates.
+The gateway allocates an internal tag using its configured worker registry URL,
+forces the builder to push, records the immutable manifest digest, and resolves
+later sandbox requests by image id. Builder-local images are not transferred
+between VMs. Explicit tags remain supported for external or advanced registry
+flows, but SDK integrations must not embed the deployment's private registry
+hostname or port.
 
-The current deployment uses the private registry alias
-`ucloud-sandbox-registry:5000`. Registry setup, persistence, pruning, and GC are
-covered in [managed-registry.md](managed-registry.md).
+Registry setup, transport naming, persistence, pruning, and GC are covered in
+[managed-registry.md](managed-registry.md).
 
 ## Inspect AI And Benchmark Runners
 

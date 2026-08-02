@@ -2,6 +2,16 @@
 
 This project uses semantic versioning.
 
+## 0.3.74 - 2026-08-02
+
+- Moved managed image registry naming into the gateway: clients now submit an
+  image id, while the gateway generates the worker-private tag, forces a
+  durable push, and records the manifest digest.
+- Rewrote legacy managed registry aliases to the deployment's restart-stable
+  worker registry URL before builder and sandbox-node dispatch.
+- Removed private registry coordinates from TMax and live-load build requests
+  and documented the image-id-only managed build contract.
+
 ## 0.3.73 - 2026-07-31
 
 - Rebuilt the dashboard visual system across every workspace with consistent

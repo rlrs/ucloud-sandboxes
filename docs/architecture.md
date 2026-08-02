@@ -49,7 +49,8 @@ Image builds should not run on sandbox nodes. The intended model is:
   sufficiently large machine; can also host the private registry service
 - builder nodes: autoscaled, builder-only VMs for Docker builds and registry
   push; they advertise physical capacity and do not use sandbox overcommit
-- sandbox nodes: run already-built images and pull/cache registry tags
+- sandbox nodes: run already-built images and pull/cache gateway-resolved
+  immutable registry references
 - registry: durable image cache for common building blocks and custom images,
   typically the control-plane-managed registry backed by a UCloud mount
 
@@ -60,20 +61,22 @@ demand signal so the autoscaler can create a builder VM. The executing
 autoscaler consumes that signal after reacting; the image-build caller should
 retry the build request once a builder is ready. Runners that know builds are
 coming can also call `POST /v1/builders/prepare` to prewarm one or more builder
-VMs before the build requests arrive. Built tags should use `"push": true` and a
-registry tag; sandbox nodes do not receive builder-local Docker images and
-instead pull registry tags before creating containers. Sandbox placement only
-considers nodes advertising the `sandbox` capability, and builder nodes scale
-back to zero when pending image-build demand is gone, prepared builder signals
-have been consumed, and the builder idle grace has elapsed.
+VMs before the build requests arrive. Managed build clients submit a stable
+image id. The gateway allocates the internal registry tag, forces a durable
+push, records the manifest digest, and resolves the image id to a worker-private
+pull reference. Sandbox nodes do not receive builder-local Docker images.
+Sandbox placement only considers nodes advertising the `sandbox` capability,
+and builder nodes scale back to zero when pending image-build demand is gone,
+prepared builder signals have been consumed, and the builder idle grace has
+elapsed.
 
 For a control-plane-managed registry, run `ucloud-sandbox-registry.service` on
 the gateway VM, back `UCLOUD_REGISTRY_DATA_DIR` with persistent storage, and
-initialize builder and sandbox VMs with
-`--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
-`--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>` when using
-private HTTP. Use `ucloud-sandboxes registry-prune` plus the installed GC timer
-to keep registry storage bounded.
+initialize builder and sandbox VMs with the gateway's restart-stable private DNS
+name as the insecure-registry endpoint when using private HTTP. The registry
+hostname and port are deployment configuration and are never part of the
+managed client contract. Use `ucloud-sandboxes registry-prune` plus the
+installed GC timer to keep registry storage bounded.
 
 ## Resource Placement
 

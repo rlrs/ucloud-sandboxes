@@ -7,10 +7,11 @@ gateway, relay, registry, registry GC, and autoscaler run together, and registry
 storage is backed by the mounted project drive. Current live job and address
 details are maintained in [deployment-flow.md](deployment-flow.md):
 
-1. Builder nodes build and push
-   `ucloud-sandbox-registry:5000/repo/name:tag`.
-2. The gateway records pushed image metadata by image id and registry tag.
-3. Sandbox nodes pull the registry tag before creating containers.
+1. Clients submit a managed build with a stable image id and no registry
+   coordinates.
+2. The gateway assigns a worker-private tag, builders push it, and the gateway
+   records its manifest digest under the image id.
+3. Sandbox nodes receive a gateway-resolved, digest-pinned pull reference.
 
 The registry is a standard Docker Distribution container. Back it with an
 explicit UCloud project storage path mounted into the gateway VM. UCloud mounts
@@ -65,7 +66,9 @@ the private network.
 The generated gateway env file sets
 `UCLOUD_REGISTRY_URL=http://127.0.0.1:5000`. This enables the dashboard registry
 page and the `/v1/registry` status endpoint without exposing the registry itself
-publicly.
+publicly. `UCLOUD_REGISTRY_WORKER_URL` separately names the same service as
+builders and sandbox nodes reach it. The latter is gateway deployment state;
+clients never need its hostname or port.
 
 The current registry service will survive container and service restarts as
 long as `UCLOUD_REGISTRY_DATA_DIR` points at the mounted project folder. A
@@ -96,13 +99,11 @@ until this change is released and converged.
 ## Node Init
 
 Builders and sandbox nodes must trust the private registry if it is served over
-HTTP. Use a stable alias in image tags, and map that alias to the current
-gateway private-network address during VM init:
+HTTP. Use the gateway's restart-stable private-network DNS name during VM init:
 
 ```bash
 ucloud-sandboxes init-vm <job-id> \
-  --docker-insecure-registry ucloud-sandbox-registry:5000 \
-  --host-alias ucloud-sandbox-registry=<gateway-private-ip> \
+  --docker-insecure-registry <gateway-private-host>:5000 \
   ...
 ```
 
@@ -111,20 +112,17 @@ For autoscaled nodes, pass the prefixed option to the autoscaler:
 ```bash
 ucloud-sandboxes autoscaler-loop \
   --execute-init \
-  --init-docker-insecure-registry ucloud-sandbox-registry:5000 \
-  --init-host-alias ucloud-sandbox-registry=<gateway-private-ip> \
+  --init-docker-insecure-registry <gateway-private-host>:5000 \
   ...
 ```
 
 The init script writes Docker's `insecure-registries` daemon setting and
-restarts Docker before starting the node agent. It also writes the host alias to
-`/etc/hosts`, so image tags do not need to change when the gateway's private IP
-changes. The mapping is static after initialization: changing the deployment's
-host-alias value affects newly initialized nodes only. Update `/etc/hosts` and
-`/etc/ucloud-sandboxes/node.env` on existing builders and sandbox nodes as well,
-and restart the autoscaler after changing its environment. See the dated
-registry alias incident in [deployment-flow.md](deployment-flow.md) for the
-recovery and validation procedure.
+restarts Docker before starting the node agent. UCloud's restart-stable private
+DNS name avoids per-node `/etc/hosts` state when the gateway's private IP
+changes. The gateway rewrites legacy managed references that still contain
+`ucloud-sandbox-registry:5000` to the configured worker URL before dispatching
+them. See the dated registry alias incident in
+[deployment-flow.md](deployment-flow.md) for why the static alias was retired.
 
 The same init script configures Docker's bridge MTU from the VM default-route
 interface. This matters on UCloud private-network VMs where the host interface
@@ -134,7 +132,7 @@ networking works.
 
 ## Build And Run
 
-Use a registry tag as the build tag and push it:
+Use a stable gateway image id; do not provide registry coordinates:
 
 ```python
 from ucloud_sandboxes_sdk import Image
@@ -142,13 +140,12 @@ from ucloud_sandboxes_sdk import Image
 client.build_image(
     Image.from_dockerfile(
         image_id="mini-swe-python311",
-        tag="ucloud-sandbox-registry:5000/prime-rl/mini-swe-python311:mswe-2.2.8",
         context_path="./build-context",
     )
 )
 ```
 
-Then create sandboxes with either the registry tag or the image id:
+Then create sandboxes with the same image id:
 
 ```python
 client.create_sandbox(
@@ -160,9 +157,10 @@ client.create_sandbox(
 )
 ```
 
-When `image` is a gateway image id, the gateway resolves it to the recorded
-pushed registry tag. SDK builds always push because builder-local Docker images
-are not durable and are not copied to sandbox nodes.
+The gateway resolves the image id to its recorded digest-pinned internal
+reference. Managed SDK builds are always pushed because builder-local Docker
+images are not durable and are not copied to sandbox nodes. Explicit registry
+tags remain supported for external and administrative flows.
 
 ## Cleanup
 

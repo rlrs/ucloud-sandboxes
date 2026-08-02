@@ -44,7 +44,6 @@ def main() -> int:
                         "row_idx": context.row_idx,
                         "task_id": context.task_id,
                         "image_id": context.image_id,
-                        "tag": context.tag,
                         "context_path": str(context.context_path),
                     }
                     for context in contexts
@@ -79,13 +78,12 @@ def main() -> int:
 
     results: list[dict[str, Any]] = []
     for context in contexts:
-        print(f"building {context.task_id} as {context.tag}", flush=True)
+        print(f"building {context.task_id} as {context.image_id}", flush=True)
         build = build_with_retry(client, context, args=args)
         result: dict[str, Any] = {
             "task_id": context.task_id,
             "row_idx": context.row_idx,
             "image_id": context.image_id,
-            "tag": context.tag,
             "build": build.get("build", build),
         }
         if not args.skip_sandbox:
@@ -113,7 +111,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--page-size", type=int, default=20)
     parser.add_argument("--count", type=int, default=2)
     parser.add_argument("--context-root", default="/tmp/ucloud-tmax-build-contexts")
-    parser.add_argument("--registry-prefix", default="ucloud-sandbox-registry:5000/tmax")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-sandbox", action="store_true")
@@ -189,7 +186,6 @@ def select_contexts(
             row,
             row_idx=row_idx,
             output_root=context_root,
-            registry_prefix=args.registry_prefix,
             tag_suffix=run_id,
         )
         if context.buildable:
@@ -217,7 +213,6 @@ def build_with_retry(
 ) -> dict[str, Any]:
     image = Image.from_dockerfile(
         image_id=context.image_id,
-        tag=context.tag,
         context_path=context.context_path,
         labels={"ucloud-sandboxes.tmax.task-id": context.task_id},
     )
@@ -281,7 +276,7 @@ def run_sandbox_smoke(
         try:
             sandbox = client.create_sandbox(
                 id=sandbox_id,
-                image=Image.from_registry(context.tag),
+                image=Image.from_gateway_id(context.image_id),
                 command=["sleep", str(int(args.sandbox_timeout_seconds))],
                 cpus=args.cpus,
                 memory_mb=args.memory_mb,

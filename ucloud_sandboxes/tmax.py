@@ -92,13 +92,17 @@ def materialize_tmax_context(
     *,
     row_idx: int,
     output_root: Path,
-    registry_prefix: str,
+    registry_prefix: str = "",
     tag_suffix: str,
     allow_file_mappings: bool = False,
 ) -> TMaxBuildContext:
     task_id = str(row.get("task_id") or f"row-{row_idx}")
     image_id = image_id_for_task(task_id)
-    tag = f"{registry_prefix.rstrip('/')}/{safe_image_component(task_id)}:{tag_suffix}"
+    tag = (
+        f"{registry_prefix.rstrip('/')}/{safe_image_component(task_id)}:{tag_suffix}"
+        if registry_prefix.strip()
+        else ""
+    )
     context_path = output_root / safe_image_component(task_id)
     container_def = str(row.get("container_def") or "")
     if not container_def.strip():

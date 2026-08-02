@@ -53,10 +53,6 @@ def parse_args() -> argparse.Namespace:
         default=Path("/work/ucloud-sandboxes/state/gateway-token"),
     )
     parser.add_argument("--run-id", default="")
-    parser.add_argument(
-        "--registry-prefix",
-        default="ucloud-sandbox-registry:5000/benchmarks",
-    )
     parser.add_argument("--sandboxes", type=int, default=100)
     parser.add_argument("--cpus", type=float, default=1.0)
     parser.add_argument("--memory-mb", type=int, default=512)
@@ -134,7 +130,6 @@ def main() -> int:
             images = make_build_images(
                 Path(raw_context_root),
                 run_id=run_id,
-                registry_prefix=args.registry_prefix,
             )
             image_counts = split_counts(args.sandboxes, len(images))
             capacity_started = time.monotonic()
@@ -360,7 +355,6 @@ def make_build_images(
     root: Path,
     *,
     run_id: str,
-    registry_prefix: str,
 ) -> list[Image]:
     definitions = [
         (
@@ -406,11 +400,9 @@ CMD [\"sleep\", \"900\"]
         context.mkdir(parents=True)
         (context / "Dockerfile").write_text(dockerfile, encoding="utf-8")
         (context / "payload.bin").write_bytes(payload)
-        tag = f"{registry_prefix.rstrip('/')}/{run_id}/{slug}:latest"
         images.append(
             Image.from_dockerfile(
                 image_id=f"bench-{run_id}-{slug}",
-                tag=tag,
                 context_path=context,
                 build_args={"BENCH_RUN_ID": run_id},
                 labels={"ucloud-sandboxes.benchmark.run-id": run_id},

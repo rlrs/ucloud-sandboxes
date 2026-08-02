@@ -196,8 +196,15 @@ class NodePlacementState:
 class RegistryLayerMetadataCache:
     """Bounded immutable-manifest cache used by placement scoring."""
 
-    def __init__(self, registry_url: str, *, max_entries: int = 4096) -> None:
+    def __init__(
+        self,
+        registry_url: str,
+        *,
+        registry_worker_url: str | None = None,
+        max_entries: int = 4096,
+    ) -> None:
         self.registry_url = registry_url.rstrip("/")
+        self.registry_worker_url = (registry_worker_url or "").rstrip("/")
         self.max_entries = max(1, int(max_entries))
         self._lock = RLock()
         self._records: OrderedDict[str, RegistryManifestLayers] = OrderedDict()
@@ -289,6 +296,7 @@ class RegistryLayerMetadataCache:
         coordinates = _managed_registry_image_coordinates(
             image_ref,
             self.registry_url,
+            self.registry_worker_url,
         )
         digest = manifest_digest_from_image_ref(image_ref)
         if coordinates is None or not digest:
@@ -373,6 +381,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     local_image_builds_enabled: bool
     metrics_store: MetricsStore | None
     registry_url: str | None
+    registry_worker_url: str | None = None
     registry_status_cache: dict[str, Any] | None
     registry_status_cache_at: float
     registry_status_lock: RLock
@@ -2072,7 +2081,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         existing = manifest_digest_from_image_ref(image_ref)
         if not self.registry_url:
             return existing
-        coordinates = _managed_registry_image_coordinates(image_ref, self.registry_url)
+        coordinates = _managed_registry_image_coordinates(
+            image_ref,
+            self.registry_url,
+            self.registry_worker_url or "",
+        )
         if coordinates is None:
             return existing
         repository, image_tag = coordinates
@@ -2100,7 +2113,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         managed_record = bool(
             self.registry_url
-            and _managed_registry_image_coordinates(tag, self.registry_url) is not None
+            and _managed_registry_image_coordinates(
+                tag,
+                self.registry_url,
+                self.registry_worker_url or "",
+            )
+            is not None
         )
         if not digest and not managed_record:
             digest = existing
@@ -2426,8 +2444,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     {
                         "error": (
                             "image is not available on selected sandbox node; pull failed. "
-                            "For images built by the UCloud builder, build with push=true "
-                            "and a pullable registry tag before creating sandboxes."
+                            "For gateway-managed images, resubmit the build by image id "
+                            "before creating sandboxes."
                         ),
                         "pull": image_response.json(),
                     },
@@ -3083,7 +3101,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             not push
             or self.registry_usage_store is None
             or not self.registry_url
-            or _managed_registry_image_coordinates(spec.tag, self.registry_url) is None
+            or _managed_registry_image_coordinates(
+                spec.tag,
+                self.registry_url,
+                self.registry_worker_url or "",
+            )
+            is None
         ):
             return None
         owner = _registry_operation_lease_owner(
@@ -3265,8 +3288,36 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raw, self.build_context_store
             )
             spec = ImageBuildSpec.from_dict(raw)
-            spec.validate()
             push = bool(raw.get("push", False))
+            build_registry_url = (
+                self.registry_worker_url
+                or (self.registry_url if self.local_image_builds_enabled else "")
+                or ""
+            )
+            if not spec.tag.strip():
+                if not str(raw.get("id") or "").strip():
+                    raise ValueError(
+                        "gateway-managed image builds require an image id"
+                    )
+                spec = replace(
+                    spec,
+                    tag=_managed_registry_build_tag(spec.id, build_registry_url),
+                )
+                push = True
+            elif self.registry_url and self.registry_worker_url:
+                spec = replace(
+                    spec,
+                    tag=_managed_registry_worker_reference(
+                        spec.tag,
+                        self.registry_url,
+                        self.registry_worker_url,
+                    ),
+                )
+            spec.validate()
+            raw = dict(raw)
+            raw["tag"] = spec.tag
+            raw["push"] = push
+            body = json.dumps(raw, separators=(",", ":")).encode("utf-8")
             trace_id = _request_trace_id(self, "image-build", spec.id)
             with trace_span(
                 self.metrics_store,
@@ -4577,7 +4628,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             protected_digest = self._managed_registry_manifest_digest(image)
             if (
                 self.registry_url
-                and _managed_registry_image_coordinates(image, self.registry_url)
+                and _managed_registry_image_coordinates(
+                    image,
+                    self.registry_url,
+                    self.registry_worker_url or "",
+                )
                 is not None
                 and protected_digest != existing_digest
             ):
@@ -4586,10 +4641,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "retryable": True,
                     "image": image,
                 }
-            return image, None
+            return self._managed_registry_worker_reference(image), None
         direct_digest = self._managed_registry_manifest_digest(image)
         if direct_digest:
-            return image_ref_with_manifest_digest(image, direct_digest), None
+            return self._managed_registry_worker_reference(
+                image_ref_with_manifest_digest(image, direct_digest)
+            ), None
         if not _looks_like_image_id_reference(image):
             return image, None
         matches = self._image_records_across_nodes(image_id=image)
@@ -4619,7 +4676,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if (
                 not digest
                 and self.registry_url
-                and _managed_registry_image_coordinates(selected_tag, self.registry_url)
+                and _managed_registry_image_coordinates(
+                    selected_tag,
+                    self.registry_url,
+                    self.registry_worker_url or "",
+                )
                 is not None
             ):
                 return image, {
@@ -4636,22 +4697,34 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     self.image_manager.store.upsert(ImageRecord.from_dict(selected))
                 except ValueError:
                     pass
-            return image_ref_with_manifest_digest(selected_tag, digest), None
+            return self._managed_registry_worker_reference(
+                image_ref_with_manifest_digest(selected_tag, digest)
+            ), None
         return image, {
             "error": (
                 "image id exists, but it is not available to sandbox nodes; "
-                "build with push=true and a pullable registry tag, then create "
-                "the sandbox with that image id or registry tag"
+                "resubmit the gateway-managed build, then create the sandbox "
+                "with that image id"
             ),
             "image_id": image,
             "matches": [_image_record_summary(record) for record in matches],
         }
+
+    def _managed_registry_worker_reference(self, image_ref: str) -> str:
+        if not self.registry_url:
+            return image_ref
+        return _managed_registry_worker_reference(
+            image_ref,
+            self.registry_url,
+            self.registry_worker_url or "",
+        )
 
     def _image_record_missing_registry_manifest(self, record: dict[str, Any]) -> bool:
         tag = str(record.get("tag") or "")
         if not self.registry_url or not _image_record_requires_registry_manifest(
             record,
             self.registry_url,
+            self.registry_worker_url or "",
         ):
             return False
         parsed = registry_repository_tag_from_image_ref(tag)
@@ -4953,7 +5026,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _managed_image_requires_digest_cache_identity(self, image: str) -> bool:
         return bool(
             self.registry_url
-            and _managed_registry_image_coordinates(image, self.registry_url)
+            and _managed_registry_image_coordinates(
+                image,
+                self.registry_url,
+                self.registry_worker_url or "",
+            )
             is not None
         )
 
@@ -5304,6 +5381,7 @@ def build_server(
     local_image_builds_enabled: bool | None = None,
     metrics_file: Path | None = None,
     registry_url: str | None = None,
+    registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
     max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
@@ -5357,6 +5435,7 @@ def build_server(
     )
     BoundHandler.metrics_store = metrics_store
     BoundHandler.registry_url = registry_url
+    BoundHandler.registry_worker_url = registry_worker_url
     BoundHandler.registry_status_cache = None
     BoundHandler.registry_status_cache_at = 0.0
     BoundHandler.registry_status_lock = RLock()
@@ -5366,6 +5445,7 @@ def build_server(
     BoundHandler.registry_layer_cache = (
         RegistryLayerMetadataCache(
             registry_url,
+            registry_worker_url=registry_worker_url,
             max_entries=REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES,
         )
         if registry_url
@@ -6462,23 +6542,65 @@ def _private_registry_image_coordinates(
 def _managed_registry_image_coordinates(
     image_ref: str,
     registry_url: str,
+    registry_worker_url: str = "",
 ) -> tuple[str, str] | None:
     """Return coordinates only when the tag targets this managed registry."""
 
     image_host = registry_host_from_image_ref(image_ref).lower()
     if not image_host:
         return None
-    configured_host = urlparse(registry_url).netloc.lower()
     allowed_hosts = {
         "ucloud-sandbox-registry:5000",
         "localhost:5000",
         "127.0.0.1:5000",
     }
-    if configured_host:
-        allowed_hosts.add(configured_host)
+    for configured_url in (registry_url, registry_worker_url):
+        configured_host = urlparse(configured_url).netloc.lower()
+        if configured_host:
+            allowed_hosts.add(configured_host)
     if image_host not in allowed_hosts:
         return None
     return registry_repository_tag_from_image_ref(image_ref)
+
+
+def _managed_registry_build_tag(image_id: str, registry_worker_url: str) -> str:
+    """Allocate a stable internal tag without exposing registry naming to clients."""
+
+    host = urlparse(registry_worker_url).netloc
+    if not host:
+        raise ValueError(
+            "gateway-managed image builds require a worker registry URL"
+        )
+    component = "".join(
+        character.lower() if character.isalnum() else "-"
+        for character in image_id.strip()
+    ).strip("-")
+    component = component[:40].rstrip("-") or "image"
+    suffix = hashlib.sha256(image_id.encode("utf-8")).hexdigest()[:12]
+    return f"{host}/ucloud-managed/{component}-{suffix}:latest"
+
+
+def _managed_registry_worker_reference(
+    image_ref: str,
+    registry_url: str,
+    registry_worker_url: str,
+) -> str:
+    """Rewrite a managed logical/legacy reference for worker transport."""
+
+    if not registry_worker_url:
+        return image_ref
+    coordinates = _managed_registry_image_coordinates(
+        image_ref,
+        registry_url,
+        registry_worker_url,
+    )
+    worker_host = urlparse(registry_worker_url).netloc
+    if coordinates is None or not worker_host:
+        return image_ref
+    repository, tag = coordinates
+    rewritten = f"{worker_host}/{repository}:{tag}"
+    digest = manifest_digest_from_image_ref(image_ref)
+    return image_ref_with_manifest_digest(rewritten, digest) if digest else rewritten
 
 
 def _persist_registry_image_protection(
@@ -6884,6 +7006,7 @@ def _image_record_available_to_sandboxes(record: dict[str, Any]) -> bool:
 def _image_record_requires_registry_manifest(
     record: dict[str, Any],
     registry_url: str,
+    registry_worker_url: str = "",
 ) -> bool:
     if not _image_record_available_to_sandboxes(record):
         return False
@@ -6898,9 +7021,10 @@ def _image_record_requires_registry_manifest(
         "localhost:5000",
         "127.0.0.1:5000",
     }
-    configured = urlparse(registry_url).netloc
-    if configured:
-        allowed.add(configured)
+    for configured_url in (registry_url, registry_worker_url):
+        configured = urlparse(configured_url).netloc
+        if configured:
+            allowed.add(configured)
     return host in allowed
 
 

@@ -531,6 +531,7 @@ def gateway_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_HEARTBEAT_TOKEN_FILE": plan.heartbeat_token_file,
         "UCLOUD_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
         "UCLOUD_REGISTRY_URL": plan.registry_url,
+        "UCLOUD_REGISTRY_WORKER_URL": plan.storage_native_registry_url,
         "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
     }
 

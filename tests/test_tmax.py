@@ -86,11 +86,11 @@ From: ubuntu:22.04
                 row,
                 row_idx=1,
                 output_root=Path(raw_dir),
-                registry_prefix="ucloud-sandbox-registry:5000/tmax",
                 tag_suffix="test",
             )
 
             self.assertTrue(context.buildable)
+            self.assertEqual(context.tag, "")
             self.assertTrue((context.context_path / "Dockerfile").is_file())
             self.assertTrue((context.context_path / "post.sh").is_file())
             self.assertTrue((context.context_path / "test_initial_state.py").is_file())

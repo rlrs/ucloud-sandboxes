@@ -52,9 +52,9 @@ sandboxes. The intended rollout flow is:
    the gateway key.
 7. Start the public gateway service, model relay service, and autoscaler service
    from the same installed wheel.
-8. Start the private Docker registry service on the control-plane VM. Builder
-   output must be pushed to a durable registry tag before sandbox nodes can pull
-   it.
+8. Start the private Docker registry service on the control-plane VM. The
+   gateway assigns managed tags and builder output must be pushed before
+   sandbox nodes can pull it by image id.
 9. Run the autoscaler with `--execute`, `--execute-resumes`, and
    `--execute-init`.
 10. Let the autoscaler submit sandbox-node and builder VMs with matching
@@ -223,7 +223,7 @@ Current live all-in-one VM:
 - job id: `12362088`
 - name: `ucloud-sandbox-gateway-migration-v2-canary`
 - deployment id: `migration-v2-canary-20260730a`
-- package version: `0.3.73`; it must match the `version` returned by both
+- package version: `0.3.74`; it must match the `version` returned by both
   service health endpoints
 - gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
   `cpu-amd-zen5-32-vcpu`
@@ -257,8 +257,10 @@ Services on the all-in-one VM:
 
 The registry is intentionally local to the all-in-one VM and persistent on the
 project drive. The gateway reaches it as `http://127.0.0.1:5000`; autoscaled
-builder and sandbox nodes reach the same registry over the private network by
-using image tags under `ucloud-sandbox-registry:5000` plus a VM init host alias:
+builder and sandbox nodes reach the same registry using the gateway's
+restart-stable private DNS name. `UCLOUD_REGISTRY_WORKER_URL` holds that
+worker-facing URL. Managed clients submit only image ids and never receive this
+address as configuration.
 
 The deployment stores gateway state under
 `/work/data/ucloud-sandboxes/state` on the attached project drive. During the
@@ -277,8 +279,7 @@ successful sandbox creation is older than the configured retention window, 30
 days by default.
 
 ```bash
---init-docker-insecure-registry ucloud-sandbox-registry:5000 \
---init-host-alias ucloud-sandbox-registry=<gateway-private-ip>
+--init-docker-insecure-registry <gateway-private-host>:5000
 ```
 
 Registry data lives at:
@@ -298,9 +299,8 @@ Sandbox-node VMs:
 - autoscaled from pending sandbox resource demand or
   `POST /v1/sandboxes/prepare` signals
 - initialized over the announced UCloud SSH proxy
-- initialized with the local registry alias:
-  `--init-docker-insecure-registry ucloud-sandbox-registry:5000` and
-  `--init-host-alias ucloud-sandbox-registry=<gateway-private-ip>`
+- initialized with the worker registry URL's restart-stable private DNS name as
+  Docker's insecure registry endpoint
 - heartbeat back to the all-in-one gateway private-network URL with the
   dedicated heartbeat bearer token; the public gateway token is not copied to
   nodes
@@ -314,24 +314,21 @@ Builder-node VMs:
 - autoscaled from pending image-build demand or `POST /v1/builders/prepare`
   signals
 - initialized over the announced UCloud SSH proxy
-- initialized with the same local registry alias
+- initialized with the same worker registry URL
 - advertise `image-build` only, not `sandbox`
 - advertise physical CPU, memory, and disk capacity only; sandbox overcommit
   settings are ignored for builder nodes
-- build and push registry tags; sandbox nodes later pull/cache those tags
+- build and push gateway-assigned registry tags; sandbox nodes later pull/cache
+  digest-pinned references
 - carry `ucloud-sandboxes/deployment=<deployment-id>`
 
-Builds should use `push=true` and tags under
-`ucloud-sandbox-registry:5000`; sandbox create can then use either the registry
-tag or the recorded image id. If the all-in-one VM is replaced and receives a
-new private IP, keep image tags the same and update only the host alias value in
-the deployment. The current deployment renders the detected address into
-`/etc/ucloud-sandboxes/autoscaler.env` once during convergence. It does not
-automatically refresh that value after a gateway address change, and existing
-nodes retain their old `/etc/hosts` mapping. Until dynamic registry discovery is
-implemented, a gateway replacement therefore requires updating the autoscaler
-environment and every still-running builder and sandbox node, then restarting
-the autoscaler so future nodes receive the new mapping.
+Managed builds submit an image id without `tag` or registry port. The gateway
+forces `push=true`, assigns a tag under `UCLOUD_REGISTRY_WORKER_URL`, and later
+resolves sandbox creation by image id. If the all-in-one VM is replaced, its
+restart-stable private DNS name remains the transport identity even if the
+private IP changes. A deployment that deliberately changes that DNS name must
+update the gateway/autoscaler environment and reinitialize Docker trust on
+still-running builder and sandbox nodes.
 
 ### 2026-07-12 registry alias incident
 

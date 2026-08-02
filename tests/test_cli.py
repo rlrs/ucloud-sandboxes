@@ -1428,6 +1428,8 @@ class CliTests(unittest.TestCase):
                         "ssh ucloud@example.org -p 2222",
                         "--wheel",
                         str(wheel),
+                        "--sandbox-runtime",
+                        "legacy",
                         "--output",
                         "json",
                     ]
@@ -1453,6 +1455,23 @@ class CliTests(unittest.TestCase):
             payload["plan"]["legacyStateDir"],
             "/work/ucloud-sandboxes/state",
         )
+
+    def test_deploy_all_in_one_requires_explicit_sandbox_runtime(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+            cli.main(
+                [
+                    "deploy-all-in-one",
+                    "job-1",
+                    "--project",
+                    "project-1",
+                    "--wheel",
+                    "package.whl",
+                ]
+            )
+
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("--sandbox-runtime", stderr.getvalue())
 
     def test_deploy_all_in_one_does_not_infer_registry_from_ucloud_job_label(
         self,
@@ -1488,6 +1507,8 @@ class CliTests(unittest.TestCase):
                             "ssh ucloud@example.org -p 2222",
                             "--wheel",
                             str(wheel),
+                            "--sandbox-runtime",
+                            "legacy",
                             "--output",
                             "json",
                         ]

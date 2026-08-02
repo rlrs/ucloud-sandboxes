@@ -1261,8 +1261,11 @@ def build_parser() -> argparse.ArgumentParser:
     deploy_all.add_argument(
         "--sandbox-runtime",
         choices=("legacy", "direct"),
-        default="legacy",
-        help="Exclusive sandbox task lifecycle owner installed on worker nodes.",
+        required=True,
+        help=(
+            "Required exclusive sandbox task lifecycle owner installed on worker "
+            "nodes. The deploy command never changes runtimes implicitly."
+        ),
     )
     deploy_all.add_argument(
         "--direct-runsc",

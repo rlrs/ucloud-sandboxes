@@ -117,6 +117,56 @@ class MetricsTests(unittest.TestCase):
         self.assertGreaterEqual(signals.provisioning_p95_seconds or 0, 49)
         self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
 
+    def test_builds_gateway_create_pressure_signal(self) -> None:
+        now = utc_now()
+        events = [
+            MetricEvent(
+                timestamp=(now - timedelta(seconds=offset)).isoformat(),
+                kind="trace_span",
+                data={
+                    "name": "gateway.sandbox_create",
+                    "attributes": {
+                        "outcome": "gateway_busy",
+                        "aggregated_rejections": rejections,
+                        "max_concurrent_sandbox_creates": 32,
+                    },
+                },
+            )
+            for offset, rejections in ((10, 4), (1, 7))
+        ]
+
+        signals = build_live_scale_signals(events, ScalePolicy())
+
+        self.assertEqual(signals.create_pressure_samples, 2)
+        self.assertEqual(signals.sandbox_create_rejections, 11)
+        self.assertEqual(signals.sandbox_create_limit, 32)
+        self.assertLessEqual(signals.latest_create_pressure_age_seconds or 0, 2)
+
+    def test_rootfs_export_queue_is_live_pressure(self) -> None:
+        now = utc_now()
+        events = [
+            MetricEvent(
+                timestamp=(now - timedelta(seconds=offset)).isoformat(),
+                kind="node_heartbeat",
+                data={
+                    "active_workloads": 4,
+                    "actual_usage": {
+                        "cpu_percent": 2,
+                        "memory_percent": 3,
+                        "rootfs_export_active_operations": 4,
+                        "rootfs_export_waiting_operations": 8,
+                        "rootfs_export_max_concurrent_operations": 4,
+                    },
+                },
+            )
+            for offset in (20, 10, 1)
+        ]
+
+        signals = build_live_scale_signals(events, ScalePolicy())
+
+        self.assertEqual(signals.pressure_samples, 3)
+        self.assertEqual(signals.rootfs_export_queue_utilization, 1.0)
+
     def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
         snapshot = build_metrics_snapshot(
             {},

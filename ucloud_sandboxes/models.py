@@ -247,6 +247,9 @@ class NodeRuntimeMetrics:
     storage_max_concurrent_operations: int = 0
     storage_published_volumes: int = 0
     storage_error_volumes: int = 0
+    rootfs_export_active_operations: int = 0
+    rootfs_export_waiting_operations: int = 0
+    rootfs_export_max_concurrent_operations: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -348,6 +351,27 @@ class NodeRuntimeMetrics:
                     "storageErrorVolumes",
                 )
             ),
+            rootfs_export_active_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "rootfs_export_active_operations",
+                    "rootfsExportActiveOperations",
+                )
+            ),
+            rootfs_export_waiting_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "rootfs_export_waiting_operations",
+                    "rootfsExportWaitingOperations",
+                )
+            ),
+            rootfs_export_max_concurrent_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "rootfs_export_max_concurrent_operations",
+                    "rootfsExportMaxConcurrentOperations",
+                )
+            ),
         )
 
     def to_dict(self) -> dict[str, float | int | str | None]:
@@ -378,6 +402,15 @@ class NodeRuntimeMetrics:
             ),
             "storage_published_volumes": self.storage_published_volumes,
             "storage_error_volumes": self.storage_error_volumes,
+            "rootfs_export_active_operations": (
+                self.rootfs_export_active_operations
+            ),
+            "rootfs_export_waiting_operations": (
+                self.rootfs_export_waiting_operations
+            ),
+            "rootfs_export_max_concurrent_operations": (
+                self.rootfs_export_max_concurrent_operations
+            ),
         }
 
 
@@ -436,6 +469,7 @@ class NodeHeartbeat:
     updated_at: datetime
     active_sandboxes: int
     active_image_builds: int = 0
+    active_sandbox_creates: int = 0
     idle_since: datetime | None = None
     draining: bool = False
     node_url: str | None = None
@@ -507,6 +541,7 @@ class NodeHeartbeat:
         return (
             max(0, self.active_sandboxes)
             + max(0, self.active_image_builds)
+            + max(0, self.active_sandbox_creates)
             + reserved_work
         )
 
@@ -590,6 +625,11 @@ class LiveScaleSignals:
     memory_utilization: float | None = None
     memory_psi_full_avg10: float | None = None
     storage_queue_utilization: float | None = None
+    rootfs_export_queue_utilization: float | None = None
+    create_pressure_samples: int = 0
+    latest_create_pressure_age_seconds: int | None = None
+    sandbox_create_rejections: int = 0
+    sandbox_create_limit: int = 0
     provisioning_samples: int = 0
     provisioning_p95_seconds: float | None = None
     scale_up_wait_samples: int = 0
@@ -604,6 +644,15 @@ class LiveScaleSignals:
             "memory_utilization": self.memory_utilization,
             "memory_psi_full_avg10": self.memory_psi_full_avg10,
             "storage_queue_utilization": self.storage_queue_utilization,
+            "rootfs_export_queue_utilization": (
+                self.rootfs_export_queue_utilization
+            ),
+            "create_pressure_samples": self.create_pressure_samples,
+            "latest_create_pressure_age_seconds": (
+                self.latest_create_pressure_age_seconds
+            ),
+            "sandbox_create_rejections": self.sandbox_create_rejections,
+            "sandbox_create_limit": self.sandbox_create_limit,
             "provisioning_samples": self.provisioning_samples,
             "provisioning_p95_seconds": self.provisioning_p95_seconds,
             "scale_up_wait_samples": self.scale_up_wait_samples,
@@ -673,6 +722,12 @@ class ScalePolicy:
     target_memory_utilization: float = 0.80
     max_memory_psi_full_avg10: float = 5.0
     target_storage_queue_utilization: float = 0.75
+    create_pressure_enabled: bool = True
+    create_pressure_window_seconds: int = 30
+    create_pressure_min_samples: int = 2
+    create_pressure_fresh_seconds: int = 15
+    create_target_concurrency_per_node: int = 8
+    create_pressure_max_headroom_nodes: int = 4
     pressure_scale_down_cooldown_seconds: int = 300
     provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
     provisioning_scale_down_multiplier: float = 2.0
@@ -725,6 +780,7 @@ class ScaleDecision:
     live_signals: LiveScaleSignals | None = None
     program_signals: ProgramScaleSignals | None = None
     pressure_scale_up: bool = False
+    create_pressure_scale_up: bool = False
     effective_scale_down_idle_seconds: int = 0
 
     @property

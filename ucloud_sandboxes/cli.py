@@ -4971,8 +4971,11 @@ def run_reconcile_cycle(
     if metrics_store is not None:
         pressure_events = metrics_store.load_events(
             max_events=10_000,
-            kinds=("node_heartbeat",),
-            since_seconds=effective_policy.live_pressure_window_seconds,
+            kinds=("node_heartbeat", "trace_span"),
+            since_seconds=max(
+                effective_policy.live_pressure_window_seconds,
+                effective_policy.create_pressure_window_seconds,
+            ),
         )
         lifecycle_events = metrics_store.load_events(
             max_events=20_000,
@@ -7434,6 +7437,7 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
             else None
         ),
         "pressureScaleUp": decision.pressure_scale_up,
+        "createPressureScaleUp": decision.create_pressure_scale_up,
         "effectiveScaleDownIdleSeconds": (
             decision.effective_scale_down_idle_seconds
         ),
@@ -7457,6 +7461,16 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "max_memory_psi_full_avg10": policy.max_memory_psi_full_avg10,
         "target_storage_queue_utilization": (
             policy.target_storage_queue_utilization
+        ),
+        "create_pressure_enabled": policy.create_pressure_enabled,
+        "create_pressure_window_seconds": policy.create_pressure_window_seconds,
+        "create_pressure_min_samples": policy.create_pressure_min_samples,
+        "create_pressure_fresh_seconds": policy.create_pressure_fresh_seconds,
+        "create_target_concurrency_per_node": (
+            policy.create_target_concurrency_per_node
+        ),
+        "create_pressure_max_headroom_nodes": (
+            policy.create_pressure_max_headroom_nodes
         ),
         "pressure_scale_down_cooldown_seconds": (
             policy.pressure_scale_down_cooldown_seconds

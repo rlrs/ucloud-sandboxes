@@ -891,6 +891,7 @@ class SandboxActivitySnapshot:
     used_resources: ResourceQuantity
     reserved_resources: ResourceQuantity
     activity_revision: int
+    active_operations: int = 0
 
 
 @dataclass(frozen=True)
@@ -906,6 +907,7 @@ class NodeDrainSnapshot:
             and not self.drain.admission_open
             and self.drain.drain_activity_epoch == self.activity.activity_revision
             and not self.activity.records
+            and self.activity.active_operations == 0
             and self.active_image_builds == 0
         )
 

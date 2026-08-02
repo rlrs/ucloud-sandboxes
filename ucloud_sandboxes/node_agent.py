@@ -155,6 +155,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             init_version=self.init_version,
                             active_sandboxes=activity.active_sandboxes,
                             active_image_builds=node_snapshot.active_image_builds,
+                            active_sandbox_creates=activity.active_operations,
                             draining=node_snapshot.drain.draining,
                             capabilities=self.capabilities,
                             total_resources=self.total_resources,
@@ -163,7 +164,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             memory_overcommit=self.memory_overcommit,
                             disk_overcommit=self.disk_overcommit,
                             cached_images=_cached_image_refs(self.image_manager),
-                            runtime_metrics=self.runtime_metrics_provider(),
+                            runtime_metrics=self._runtime_metrics_snapshot(),
                             node_epoch=self.node_epoch,
                             activity_epoch=activity.activity_revision,
                             inventory=inventory,
@@ -1429,22 +1430,33 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 raise ValueError("image pull payload must be a JSON object")
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
-            record, result = self.image_manager.pull(image, image_id=image_id)
-            pull_finished = time.monotonic()
-            materialize_ms: int | None = None
-            if self.image_materializer is not None:
-                try:
-                    self.image_materializer(record.tag)
-                except Exception as exc:
-                    # A direct node must not advertise a pulled image as ready
-                    # when its immutable rootfs export is still unavailable.
-                    self.image_manager.store.delete_by_tags((record.tag,))
-                    raise RuntimeError(
-                        f"image rootfs materialization failed: {exc}"
-                    ) from exc
-                materialize_ms = int(
-                    max(0.0, time.monotonic() - pull_finished) * 1000
-                )
+            manager_image_operation = getattr(
+                self.manager,
+                "image_operation",
+                None,
+            )
+            operation = (
+                manager_image_operation(self.image_manager)
+                if manager_image_operation is not None
+                else self.image_manager.image_operation()
+            )
+            with operation:
+                record, result = self.image_manager.pull(image, image_id=image_id)
+                pull_finished = time.monotonic()
+                materialize_ms: int | None = None
+                if self.image_materializer is not None:
+                    try:
+                        self.image_materializer(record.tag)
+                    except Exception as exc:
+                        # A direct node must not advertise a pulled image as ready
+                        # when its immutable rootfs export is still unavailable.
+                        self.image_manager.store.delete_by_tags((record.tag,))
+                        raise RuntimeError(
+                            f"image rootfs materialization failed: {exc}"
+                        ) from exc
+                    materialize_ms = int(
+                        max(0.0, time.monotonic() - pull_finished) * 1000
+                    )
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -1461,6 +1473,28 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 "timings": timings,
             },
             status=HTTPStatus.CREATED,
+        )
+
+    def _runtime_metrics_snapshot(self) -> NodeRuntimeMetrics | None:
+        metrics = self.runtime_metrics_provider()
+        owner = getattr(self.image_materializer, "__self__", None)
+        snapshot_provider = getattr(owner, "operation_snapshot", None)
+        if snapshot_provider is None:
+            return metrics
+        snapshot = snapshot_provider()
+        if metrics is None:
+            metrics = NodeRuntimeMetrics()
+        return replace(
+            metrics,
+            rootfs_export_active_operations=max(
+                0, int(snapshot.get("active_operations") or 0)
+            ),
+            rootfs_export_waiting_operations=max(
+                0, int(snapshot.get("waiting_operations") or 0)
+            ),
+            rootfs_export_max_concurrent_operations=max(
+                0, int(snapshot.get("max_concurrent_operations") or 0)
+            ),
         )
 
     def _snapshot_sandbox(self, path: str) -> None:

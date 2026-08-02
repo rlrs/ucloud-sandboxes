@@ -11,6 +11,7 @@ import re
 import shutil
 import tarfile
 import tempfile
+from threading import Lock, Semaphore
 import time
 from typing import Any, Iterator, Protocol
 from uuid import uuid4
@@ -215,6 +216,7 @@ class DockerRootfsStore:
         runner: CommandRunner | None = None,
         extractor: RootfsExtractor | None = None,
         docker_binary: str = "docker",
+        max_concurrent_exports: int = 4,
     ) -> None:
         if not root.is_absolute():
             raise ValueError("rootfs store root must be absolute")
@@ -222,6 +224,15 @@ class DockerRootfsStore:
         self.runner = runner or SubprocessCommandRunner()
         self.extractor = extractor or GnuTarRootfsExtractor()
         self.docker_binary = docker_binary
+        if max_concurrent_exports < 1:
+            raise ValueError("max_concurrent_exports must be positive")
+        self.max_concurrent_exports = int(max_concurrent_exports)
+        self._export_slots = Semaphore(self.max_concurrent_exports)
+        self._operation_guard = Lock()
+        self._active_exports = 0
+        self._waiting_exports = 0
+        self._exports_reconcile_guard = Lock()
+        self._exports_reconciled = False
         self.images = root / "images"
         self.locks = root / "locks"
         for path in (root, self.images, self.locks):
@@ -255,31 +266,62 @@ class DockerRootfsStore:
         if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
             raise DirectWardenError("docker image inspect returned an invalid image ID")
         digest = image_id[7:]
-        # A node has one Warden. Serializing the uncommon cold-export path makes
-        # it safe for the next Warden process to reap Docker containers orphaned
-        # by a predecessor without racing an export that is still in progress.
-        with self._locked("exports"):
-            self._reconcile_export_containers_locked()
-            with self._locked(digest):
-                existing = self._load_complete(digest, image_ref=image_ref)
-                if existing is not None:
-                    return existing
-                self._discard_pending_exports(digest)
-                try:
+        # The digest lock deduplicates identical images. Distinct cold images
+        # may export concurrently; a shared process lease prevents a restarted
+        # Warden's orphan reconciliation from deleting their exporter
+        # containers. The old global exclusive lock serialized every distinct
+        # image in a burst and produced multi-minute queues.
+        with self._locked(digest):
+            existing = self._load_complete(digest, image_ref=image_ref)
+            if existing is not None:
+                return existing
+            self._ensure_export_reconciliation()
+            self._discard_pending_exports(digest)
+            with self._operation_guard:
+                self._waiting_exports += 1
+            self._export_slots.acquire()
+            with self._operation_guard:
+                self._waiting_exports -= 1
+                self._active_exports += 1
+            try:
+                with self._locked("exports", shared=True):
                     return self._export(
                         digest,
                         image_id=image_id,
                         image_ref=image_ref,
                         image_config=image_config,
                     )
-                except Exception:
-                    self._discard_pending_exports(digest)
-                    raise
+            except Exception:
+                self._discard_pending_exports(digest)
+                raise
+            finally:
+                with self._operation_guard:
+                    self._active_exports -= 1
+                self._export_slots.release()
+
+    def operation_snapshot(self) -> dict[str, int]:
+        with self._operation_guard:
+            return {
+                "active_operations": self._active_exports,
+                "waiting_operations": self._waiting_exports,
+                "max_concurrent_operations": self.max_concurrent_exports,
+            }
+
+    def _ensure_export_reconciliation(self) -> None:
+        with self._exports_reconcile_guard:
+            if self._exports_reconciled:
+                return
+            with self._locked("exports"):
+                self._reconcile_export_containers_locked()
+            self._exports_reconciled = True
 
     def reconcile_export_containers(self) -> tuple[str, ...]:
         """Remove exporter containers orphaned by an earlier Warden process."""
         with self._locked("exports"):
-            return self._reconcile_export_containers_locked()
+            removed = self._reconcile_export_containers_locked()
+        with self._exports_reconcile_guard:
+            self._exports_reconciled = True
+        return removed
 
     def _reconcile_export_containers_locked(self) -> tuple[str, ...]:
         listing = self._checked(
@@ -466,7 +508,7 @@ class DockerRootfsStore:
         return result.stdout.strip()
 
     @contextmanager
-    def _locked(self, digest: str) -> Iterator[None]:
+    def _locked(self, digest: str, *, shared: bool = False) -> Iterator[None]:
         descriptor = os.open(
             self.locks / f"{digest}.lock",
             os.O_RDWR
@@ -476,7 +518,10 @@ class DockerRootfsStore:
             0o600,
         )
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            fcntl.flock(
+                descriptor,
+                fcntl.LOCK_SH if shared else fcntl.LOCK_EX,
+            )
             yield
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)

@@ -387,6 +387,54 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 4)
         self.assertEqual(decision.resource_deficit.vcpu, 224)
 
+    def test_gateway_create_saturation_adds_bounded_temporary_nodes(self) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "ready",
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=1_449_984,
+                    ),
+                )
+            ],
+            SandboxDemand(
+                prepared_resources=ResourceQuantity(
+                    vcpu=32,
+                    memory_mb=98304,
+                    disk_mb=1_449_984,
+                )
+            ),
+            ScalePolicy(max_nodes=10, max_create_per_cycle=4),
+            live_signals=LiveScaleSignals(
+                create_pressure_samples=2,
+                latest_create_pressure_age_seconds=1,
+                sandbox_create_rejections=17,
+                sandbox_create_limit=32,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 3)
+        self.assertTrue(decision.create_pressure_scale_up)
+        self.assertIn("targeting 4 temporary node(s)", decision.reasons[-1])
+
+    def test_single_create_pressure_sample_does_not_scale(self) -> None:
+        decision = evaluate_scale(
+            [node("ready")],
+            SandboxDemand(),
+            ScalePolicy(),
+            live_signals=LiveScaleSignals(
+                create_pressure_samples=1,
+                latest_create_pressure_age_seconds=1,
+                sandbox_create_rejections=1,
+                sandbox_create_limit=32,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertFalse(decision.create_pressure_scale_up)
+
     def test_create_count_uses_effective_overcommitted_node_capacity(self) -> None:
         decision = evaluate_scale(
             [],

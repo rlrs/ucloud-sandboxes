@@ -47,6 +47,12 @@ data:
     "target_memory_utilization": 0.80,
     "max_memory_psi_full_avg10": 5.0,
     "target_storage_queue_utilization": 0.75,
+    "create_pressure_enabled": true,
+    "create_pressure_window_seconds": 30,
+    "create_pressure_min_samples": 2,
+    "create_pressure_fresh_seconds": 15,
+    "create_target_concurrency_per_node": 8,
+    "create_pressure_max_headroom_nodes": 4,
     "pressure_scale_down_cooldown_seconds": 300,
     "provisioning_latency_lookback_seconds": 604800,
     "provisioning_scale_down_multiplier": 2.0,
@@ -85,6 +91,27 @@ idle node's background state cannot trigger it.
 `target_cpu_utilization` and `target_memory_utilization` are the clearest
 density/latency tradeoff. Lower targets retain more headroom. The PSI and
 storage queue limits catch cases that average utilization misses.
+
+Create pressure is separate from resident host pressure. Two sampled
+`gateway_busy` rejections in the default 30-second window prove that all
+gateway create slots are occupied. The autoscaler divides the advertised
+gateway limit by `create_target_concurrency_per_node` and immediately targets
+that many temporary nodes, bounded to at most
+`create_pressure_max_headroom_nodes` beyond hard resource demand and by the
+ordinary node/provisioning caps. With the production 32-slot gateway and the
+default target of eight, saturation targets four nodes. Already-provisioning
+nodes count toward that target, preventing repeated scale-up every cycle.
+
+Placement still prefers an existing immutable image copy. At eight concurrent
+creates on that node it may spill to another ready node, using registry-layer
+cost estimates to decide whether another image transfer is cheaper than the
+queue. This prevents a cached image from pinning an entire diverse cold-start
+burst to one rootfs export pipeline.
+
+Node heartbeats expose active sandbox creates plus active, waiting, and maximum
+rootfs-export operations. Rootfs queue utilization participates in the same
+sustained-pressure rule as the storage-native queue, while gateway saturation
+is the faster signal used when all public create slots are already occupied.
 
 `pressure_scale_down_cooldown_seconds` supplies hysteresis after the last
 pressure sample. Independently, measured submit-to-first-heartbeat p95

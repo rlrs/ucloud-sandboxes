@@ -1409,6 +1409,65 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNotNone(same)
         self.assertEqual(same.node_id, "node-1")
 
+    def test_cached_image_spills_when_create_pipeline_is_saturated(self) -> None:
+        image = "registry.test/team/a@sha256:" + "a" * 64
+        with TemporaryDirectory() as raw_dir:
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            handler.registry_layer_cache = None
+            base = NodeHeartbeat(
+                node_id="cached-node",
+                job_id="cached-job",
+                updated_at=utc_now(),
+                active_sandboxes=0,
+                node_url="http://cached-node:8090",
+                agent_version=package_version(),
+                capabilities=("sandbox", "image-cache", "disk-quota"),
+                total_resources=ResourceQuantity(
+                    vcpu=32,
+                    memory_mb=98304,
+                    disk_mb=100_000,
+                ),
+                cached_images=(image,),
+                cached_images_known=True,
+            )
+            candidates = [
+                base,
+                replace(
+                    base,
+                    node_id="spill-node",
+                    job_id="spill-job",
+                    node_url="http://spill-node:8090",
+                    cached_images=(),
+                ),
+            ]
+            handler._ready_sandbox_heartbeats = lambda: candidates
+            handler._nodes_with_image = lambda *_args, **_kwargs: {"cached-node"}
+            for index in range(control_plane.CREATE_PIPELINE_TARGET_PER_NODE):
+                handler.routing_store.upsert_sandbox(
+                    SandboxRoute(
+                        sandbox_id=f"creating-{index}",
+                        node_id="cached-node",
+                        job_id="cached-job",
+                        node_url="http://cached-node:8090",
+                        resources=ResourceQuantity(
+                            vcpu=1,
+                            memory_mb=512,
+                            disk_mb=1024,
+                        ),
+                        spec={"image": image},
+                        state="creating",
+                    )
+                )
+
+            selected = handler._select_node(
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                image=image,
+            )
+
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.node_id, "spill-node")
+
     def test_cold_image_placement_prefers_shared_cached_layers(self) -> None:
         target = "registry.test/team/target@sha256:" + "b" * 64
         cached = "registry.test/team/cached@sha256:" + "a" * 64

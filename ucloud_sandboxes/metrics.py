@@ -675,6 +675,9 @@ def record_autoscaler_cycle(
             ),
             "effective_policy": result.get("effectivePolicy", {}),
             "pressure_scale_up": bool(decision.get("pressureScaleUp")),
+            "create_pressure_scale_up": bool(
+                decision.get("createPressureScaleUp")
+            ),
             "effective_scale_down_idle_seconds": decision.get(
                 "effectiveScaleDownIdleSeconds"
             ),
@@ -858,6 +861,7 @@ def record_node_heartbeat(
             "node_url": heartbeat.node_url or "",
             "active_sandboxes": heartbeat.active_sandboxes,
             "active_workloads": heartbeat.active_workloads,
+            "active_sandbox_creates": heartbeat.active_sandbox_creates,
             "draining": heartbeat.draining,
             "capabilities": list(heartbeat.capabilities),
             "agent_version": heartbeat.agent_version,
@@ -904,11 +908,45 @@ def build_live_scale_signals(
     latest_memory: float | None = None
     latest_psi: float | None = None
     latest_storage_queue: float | None = None
+    latest_rootfs_export_queue: float | None = None
+    create_cutoff = now.timestamp() - max(
+        1, policy.create_pressure_window_seconds
+    )
+    create_pressure_samples = 0
+    latest_create_pressure_epoch: float | None = None
+    sandbox_create_rejections = 0
+    sandbox_create_limit = 0
 
     for event in events:
+        event_epoch = _timestamp_epoch(event.timestamp)
+        if event.kind == "trace_span" and event_epoch >= create_cutoff:
+            data = event.data
+            attributes = data.get("attributes")
+            if (
+                data.get("name") == "gateway.sandbox_create"
+                and isinstance(attributes, dict)
+                and attributes.get("outcome") == "gateway_busy"
+            ):
+                create_pressure_samples += 1
+                sandbox_create_rejections += max(
+                    0,
+                    _optional_int(attributes.get("aggregated_rejections")) or 0,
+                )
+                if (
+                    latest_create_pressure_epoch is None
+                    or event_epoch >= latest_create_pressure_epoch
+                ):
+                    latest_create_pressure_epoch = event_epoch
+                    sandbox_create_limit = max(
+                        0,
+                        _optional_int(
+                            attributes.get("max_concurrent_sandbox_creates")
+                        )
+                        or 0,
+                    )
+            continue
         if event.kind != "node_heartbeat":
             continue
-        event_epoch = _timestamp_epoch(event.timestamp)
         if event_epoch < pressure_cutoff:
             continue
         data = event.data
@@ -920,7 +958,17 @@ def build_live_scale_signals(
             active_workloads = _optional_int(data.get("active_sandboxes"))
         storage_active = _optional_int(actual.get("storage_active_operations")) or 0
         storage_waiting = _optional_int(actual.get("storage_waiting_operations")) or 0
-        if (active_workloads or 0) <= 0 and storage_active + storage_waiting <= 0:
+        rootfs_active = (
+            _optional_int(actual.get("rootfs_export_active_operations")) or 0
+        )
+        rootfs_waiting = (
+            _optional_int(actual.get("rootfs_export_waiting_operations")) or 0
+        )
+        if (
+            (active_workloads or 0) <= 0
+            and storage_active + storage_waiting <= 0
+            and rootfs_active + rootfs_waiting <= 0
+        ):
             continue
 
         cpu = _fraction_from_percent(actual.get("cpu_percent"))
@@ -934,6 +982,17 @@ def build_live_scale_signals(
             if storage_limit > 0
             else None
         )
+        rootfs_limit = (
+            _optional_int(
+                actual.get("rootfs_export_max_concurrent_operations")
+            )
+            or 0
+        )
+        rootfs_queue = (
+            min(1.0, (rootfs_active + rootfs_waiting) / rootfs_limit)
+            if rootfs_limit > 0
+            else None
+        )
         is_pressure = any(
             (
                 cpu is not None and cpu >= policy.target_cpu_utilization,
@@ -941,6 +1000,8 @@ def build_live_scale_signals(
                 psi is not None and psi >= policy.max_memory_psi_full_avg10,
                 storage_queue is not None
                 and storage_queue >= policy.target_storage_queue_utilization,
+                rootfs_queue is not None
+                and rootfs_queue >= policy.target_storage_queue_utilization,
             )
         )
         if not is_pressure:
@@ -952,6 +1013,7 @@ def build_live_scale_signals(
             latest_memory = memory
             latest_psi = psi
             latest_storage_queue = storage_queue
+            latest_rootfs_export_queue = rootfs_queue
 
     lifecycle = _vm_lifecycle_summary(events)
     provisioning_values = sorted(
@@ -979,6 +1041,15 @@ def build_live_scale_signals(
         memory_utilization=latest_memory,
         memory_psi_full_avg10=latest_psi,
         storage_queue_utilization=latest_storage_queue,
+        rootfs_export_queue_utilization=latest_rootfs_export_queue,
+        create_pressure_samples=create_pressure_samples,
+        latest_create_pressure_age_seconds=(
+            max(0, int(now.timestamp() - latest_create_pressure_epoch))
+            if latest_create_pressure_epoch is not None
+            else None
+        ),
+        sandbox_create_rejections=sandbox_create_rejections,
+        sandbox_create_limit=sandbox_create_limit,
         provisioning_samples=len(provisioning_values),
         provisioning_p95_seconds=_percentile_float(provisioning_values, 0.95),
         scale_up_wait_samples=len(scale_wait_values),
@@ -1286,6 +1357,7 @@ def _node_metrics(
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),
         "active_sandboxes": heartbeat.active_sandboxes,
         "active_image_builds": heartbeat.active_image_builds,
+        "active_sandbox_creates": heartbeat.active_sandbox_creates,
         "active_workloads": heartbeat.active_workloads,
         "draining": heartbeat.draining,
         "admission_open": heartbeat.admission_open,
@@ -1311,17 +1383,22 @@ def _aggregate_node_resources(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]
     free = ResourceQuantity()
     active_sandboxes = 0
     active_image_builds = 0
+    active_sandbox_creates = 0
     for heartbeat in heartbeats:
         effective = effective + heartbeat.effective_resources
         used = used + heartbeat.used_resources
         free = free + heartbeat.free_resources
         active_sandboxes += heartbeat.active_sandboxes
         active_image_builds += heartbeat.active_image_builds
+        active_sandbox_creates += heartbeat.active_sandbox_creates
     return {
         "nodes": len(heartbeats),
         "active_sandboxes": active_sandboxes,
         "active_image_builds": active_image_builds,
-        "active_workloads": active_sandboxes + active_image_builds,
+        "active_sandbox_creates": active_sandbox_creates,
+        "active_workloads": (
+            active_sandboxes + active_image_builds + active_sandbox_creates
+        ),
         "effective": effective.to_dict(),
         "used": used.to_dict(),
         "free": free.to_dict(),

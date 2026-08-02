@@ -18,6 +18,7 @@ from .sandbox import (
     NodeDrainState,
     OPERATION_ID_RE,
     SandboxActivitySnapshot,
+    SandboxAdmissionClosedError,
     SandboxConflictError,
     SandboxForkUnsupportedError,
     SandboxLifecycleCoordinator,
@@ -412,9 +413,43 @@ class DirectNodeManagerAdapter:
                     self._state_store.save_drain(self._drain)
         return self.heartbeat_snapshot(active_build_count=active_build_count)
 
+    @contextmanager
+    def image_operation(self, image_manager):
+        """Admit image pull/materialization atomically against node drain."""
+
+        with self._drain_guard:
+            if self._drain.draining or not self.service.admission_open:
+                raise SandboxAdmissionClosedError(
+                    "direct node admission is closed"
+                )
+            operation = image_manager.image_operation()
+            operation.__enter__()
+        try:
+            yield
+        finally:
+            operation.__exit__(None, None, None)
+
     def heartbeat_snapshot(self, *, active_build_count) -> NodeDrainSnapshot:
         self.cleanup_expired(blocking=False)
+        # Drain admission and the empty proof share this lock. A heartbeat
+        # that began just before drain therefore cannot publish an empty proof
+        # from observations taken before admission closed.
+        with self._drain_guard:
+            return self._heartbeat_snapshot_locked(
+                active_build_count=active_build_count,
+            )
+
+    def _heartbeat_snapshot_locked(self, *, active_build_count) -> NodeDrainSnapshot:
+        # Read transient operations before durable inventory. During drain,
+        # admission has already been atomically closed, so this ordering cannot
+        # miss a create transitioning from pre-registry work into the registry.
+        active_reservations, transient_epoch = (
+            self.service.active_reservations_snapshot()
+        )
         records = self.service.list_snapshot()
+        registered_keys = {
+            (record.spec.id, record.generation) for record in records
+        }
         used = ResourceQuantity()
         reserved = ResourceQuantity()
         for record in records:
@@ -457,29 +492,40 @@ class DirectNodeManagerAdapter:
                 )
             else:
                 used = used + resources
+        for key, resources in active_reservations.items():
+            if key in registered_keys:
+                continue
+            # The gateway route owns the exact hard-disk reservation before a
+            # node registry record exists. Only transient CPU/RAM are added
+            # here, avoiding duplicate disk charging during placement.
+            reserved = reserved + ResourceQuantity(
+                vcpu=resources.vcpu,
+                memory_mb=resources.memory_mb,
+            )
         revision = max(
             (item.revision for item in self.service.provisioner.registry.list()),
             default=0,
-        )
+        ) + transient_epoch
         activity = SandboxActivitySnapshot(
             records=records,
             active_sandboxes=sum(record.state == "running" for record in records),
             used_resources=used,
             reserved_resources=reserved,
             activity_revision=revision,
+            active_operations=len(active_reservations),
         )
         build_count = max(0, active_build_count())
-        with self._drain_guard:
-            drain = self._drain
-            if (
-                drain.draining
-                and not records
-                and build_count == 0
-                and drain.drain_activity_epoch != revision
-            ):
-                drain = replace(drain, drain_activity_epoch=revision)
-                self._drain = drain
-                self._state_store.save_drain(drain)
+        drain = self._drain
+        if (
+            drain.draining
+            and not records
+            and activity.active_operations == 0
+            and build_count == 0
+            and drain.drain_activity_epoch != revision
+        ):
+            drain = replace(drain, drain_activity_epoch=revision)
+            self._drain = drain
+            self._state_store.save_drain(drain)
         return NodeDrainSnapshot(activity, drain, build_count)
 
     def _attach_exec_lease(self, sandbox_id: str, lease: object) -> None:

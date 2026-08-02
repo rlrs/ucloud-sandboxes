@@ -38,6 +38,40 @@ cleanup opportunistic during heartbeat collection. Pre-0.3.76 agents remain
 protocol-compatible with routes they already own, but are excluded from new
 placement and autoscaler capacity until they drain.
 
+A later create burst exposed a third boundary. A direct create reserved
+transient CPU/RAM before calling the provisioner, but that reservation was not
+part of the heartbeat or drain activity epoch. Cold rootfs materialization also
+precedes the durable node registry record. The autoscaler could therefore close
+admission, observe an apparently empty inventory, stop the node after its idle
+grace, and leave gateway create handlers waiting for the ten-minute proxy
+timeout. Those handlers saturated the 32-request gateway limiter while neither
+pending demand nor host CPU/memory pressure asked the autoscaler for capacity.
+
+The production design for burst scale-up is deliberately bounded:
+
+1. Admission and transient-create registration share one node lock. Every
+   accepted create is included in heartbeat work count, reserved CPU/RAM, and
+   the drain activity epoch before image or rootfs work begins.
+2. Gateway-busy trace samples are an explicit live signal. Saturating 32 create
+   slots targets four temporary nodes at the default eight creates per node,
+   subject to the existing hard `max_nodes`, provisioning, and per-cycle caps.
+3. Image locality remains preferred while a cached node has pipeline headroom.
+   Once it is saturated, placement may copy the image to a less-loaded node
+   rather than queue every rootfs export behind one host.
+4. Recent create pressure uses the ordinary pressure cooldown. Surplus nodes
+   then enter the existing drain workflow; parked storage-native sandboxes are
+   migrated only when exact destination disk-fit proofs succeed.
+
+This is latency headroom, not disk overcommit. Temporary nodes never weaken
+per-route hard disk reservation or node quota admission.
+
+The deterministic 32-image pipeline benchmark is recorded in
+[`benchmarks/rootfs-export-pipeline-2026-08-02.json`](benchmarks/rootfs-export-pipeline-2026-08-02.json).
+With four export slots it observed four overlapping exports, a 3.71x makespan
+improvement over the serialized lower bound, and a 16.1 ms makespan for 32
+concurrent warm cache checks. This benchmark isolates locking behavior; a
+production canary with real large images remains the latency acceptance gate.
+
 Second, the observed PRIME/TMax traffic eventually created `parkable=true`
 sandboxes but still ran each harness through a long-lived attached exec. Those
 sandboxes are permanently active for scheduling purposes; they cannot exercise

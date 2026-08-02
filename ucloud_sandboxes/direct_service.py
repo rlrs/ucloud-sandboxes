@@ -174,6 +174,11 @@ class DirectSandboxService:
         self._active_reservations: dict[
             tuple[str, int], ResourceQuantity
         ] = {}
+        # Cover transient work that deliberately precedes a durable registry
+        # record, notably cold rootfs materialization. A per-process
+        # nanosecond seed prevents a restarted draining Warden from reusing a
+        # predecessor's drain proof by accident.
+        self._activity_epoch = time.time_ns()
         self._capacity_guard = threading.Lock()
         self._locks: dict[tuple[str, int], threading.Lock] = {}
         self._locks_guard = threading.Lock()
@@ -289,18 +294,13 @@ class DirectSandboxService:
         *,
         operation: SandboxOperation | None = None,
     ) -> SandboxRecord:
-        if not self._admission_open:
-            raise SandboxAdmissionClosedError("direct node admission is closed")
         operation = operation or SandboxOperation.legacy_create(spec)
         operation.validate_spec(spec)
         with self._lock(spec.id, operation.generation):
             with self._reserve_active_capacity(
                 spec.id,
                 operation.generation,
-                ResourceQuantity(
-                    vcpu=spec.cpus or 0,
-                    memory_mb=spec.memory_mb or 0,
-                ),
+                spec.requested_resources(),
             ):
                 result = self.provisioner.create(
                     spec=spec,
@@ -1094,14 +1094,19 @@ class DirectSandboxService:
             )
 
     def close_admission(self) -> None:
-        self._admission_open = False
+        # Once this returns, every admitted create is present in the transient
+        # reservation snapshot or has already finished.
+        with self._capacity_guard:
+            self._admission_open = False
 
     def open_admission(self) -> None:
-        self._admission_open = True
+        with self._capacity_guard:
+            self._admission_open = True
 
     @property
     def admission_open(self) -> bool:
-        return self._admission_open
+        with self._capacity_guard:
+            return self._admission_open
 
     def _ensure_running(self, sandbox) -> None:
         self.ensure_running_with_timings(sandbox)
@@ -1181,6 +1186,10 @@ class DirectSandboxService:
     ):
         key = (sandbox_id, generation)
         with self._capacity_guard:
+            if not self._admission_open:
+                raise SandboxAdmissionClosedError(
+                    "direct node admission is closed"
+                )
             capacity = self._active_capacity
             if capacity is not None:
                 used = ResourceQuantity()
@@ -1213,19 +1222,33 @@ class DirectSandboxService:
                     vcpu=max(0.0, capacity.vcpu - used.vcpu),
                     memory_mb=max(0, capacity.memory_mb - used.memory_mb),
                 )
-                if not requested.fits_within(available):
+                active_requested = ResourceQuantity(
+                    vcpu=requested.vcpu,
+                    memory_mb=requested.memory_mb,
+                )
+                if not active_requested.fits_within(available):
                     raise SandboxCapacityUnavailableError(
                         "direct node has insufficient active CPU or memory "
                         "admission headroom; retry on another node"
                     )
                 if self._dynamic_active_admission:
-                    self._require_dynamic_headroom(requested)
+                    self._require_dynamic_headroom(active_requested)
             self._active_reservations[key] = requested
+            self._activity_epoch += 1
         try:
             yield
         finally:
             with self._capacity_guard:
                 self._active_reservations.pop(key, None)
+                self._activity_epoch += 1
+
+    def active_reservations_snapshot(
+        self,
+    ) -> tuple[dict[tuple[str, int], ResourceQuantity], int]:
+        """Return admitted transient work and its drain-fencing epoch."""
+
+        with self._capacity_guard:
+            return dict(self._active_reservations), self._activity_epoch
 
     def _require_dynamic_headroom(self, requested: ResourceQuantity) -> None:
         provider = self._runtime_metrics_provider

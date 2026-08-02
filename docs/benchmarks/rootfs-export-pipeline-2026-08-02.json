@@ -1,0 +1,13 @@
+{
+  "cold_makespan_ms": 862.3356660827994,
+  "cold_speedup_vs_serialized": 3.7108519638717383,
+  "images": 32,
+  "max_concurrent_exports": 4,
+  "observed_max_concurrent_exports": 4,
+  "schema": 1,
+  "serialized_baseline_ms": 3200.0,
+  "synthetic_extract_delay_ms": 100.0,
+  "warm_makespan_ms": 16.05400023981929,
+  "warm_p50_ms": 5.668937461450696,
+  "warm_p95_ms": 7.361458148807287
+}

@@ -241,6 +241,10 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         raw.get("active_image_builds", raw.get("activeImageBuilds")),
         default=0,
     )
+    active_sandbox_creates = _strict_nonnegative_int(
+        raw.get("active_sandbox_creates", raw.get("activeSandboxCreates")),
+        default=0,
+    )
     cpu_overcommit = _strict_nonnegative_float(raw.get("cpu_overcommit"), default=1.0)
     memory_overcommit = _strict_nonnegative_float(
         raw.get("memory_overcommit"),
@@ -253,6 +257,7 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
     if None in {
         active_sandboxes,
         active_image_builds,
+        active_sandbox_creates,
         cpu_overcommit,
         memory_overcommit,
         disk_overcommit,
@@ -326,6 +331,7 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         updated_at=updated_at,
         active_sandboxes=active_sandboxes,
         active_image_builds=active_image_builds,
+        active_sandbox_creates=active_sandbox_creates,
         idle_since=parse_iso_datetime(raw.get("idle_since")),
         draining=bool(draining),
         node_url=string_or_none(raw.get("node_url")),

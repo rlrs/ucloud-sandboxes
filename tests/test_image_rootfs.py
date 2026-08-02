@@ -1,8 +1,11 @@
 import io
+import hashlib
 import json
 from pathlib import Path
 import tarfile
 from tempfile import TemporaryDirectory
+from threading import Lock, Thread
+import time
 import unittest
 
 from ucloud_sandboxes.direct_warden import CommandResult, DirectWardenError
@@ -91,7 +94,80 @@ class FakeExtractor:
         (destination / "bin" / "tool").write_bytes(b"tool")
 
 
+class ConcurrentRunner(FakeRunner):
+    def run(self, argv, *, timeout):
+        command = tuple(str(item) for item in argv)
+        if command[:3] == ("docker", "image", "inspect"):
+            digest = hashlib.sha256(command[-1].encode("utf-8")).hexdigest()
+            self.commands.append(command)
+            return CommandResult(
+                command,
+                0,
+                json.dumps([{"Id": f"sha256:{digest}", "Config": {}}]),
+            )
+        if command[:2] == ("docker", "create"):
+            self.commands.append(command)
+            return CommandResult(
+                command,
+                0,
+                hashlib.sha256(command[-1].encode("utf-8")).hexdigest() + "\n",
+            )
+        return super().run(argv, timeout=timeout)
+
+
+class ConcurrentExtractor(FakeExtractor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.guard = Lock()
+        self.active = 0
+        self.max_active = 0
+
+    def extract(self, archive: Path, destination: Path) -> None:
+        with self.guard:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        try:
+            time.sleep(0.1)
+            super().extract(archive, destination)
+        finally:
+            with self.guard:
+                self.active -= 1
+
+
 class ImageRootfsTests(unittest.TestCase):
+    def test_distinct_cold_rootfs_exports_run_concurrently(self) -> None:
+        with TemporaryDirectory() as raw:
+            runner = ConcurrentRunner()
+            extractor = ConcurrentExtractor()
+            store = DockerRootfsStore(
+                (Path(raw) / "cache").resolve(),
+                runner=runner,
+                extractor=extractor,
+                max_concurrent_exports=4,
+            )
+            results: list[object] = []
+            threads = [
+                Thread(
+                    target=lambda image=image: results.append(
+                        store.materialize(image)
+                    )
+                )
+                for image in ("image:a", "image:b", "image:c", "image:d")
+            ]
+
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=3)
+
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            self.assertEqual(len(results), 4)
+            self.assertGreaterEqual(extractor.max_active, 2)
+            self.assertEqual(
+                sum(command[:2] == ("docker", "ps") for command in runner.commands),
+                1,
+            )
+
     def test_docker_only_materializes_one_content_addressed_rootfs(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)

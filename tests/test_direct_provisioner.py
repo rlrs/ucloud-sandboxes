@@ -3,7 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from urllib import request
 import hashlib
 import json
@@ -42,6 +42,7 @@ from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
 from ucloud_sandboxes.node_agent import build_direct_node_agent_server
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import (
+    SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxSecuritySpec,
@@ -72,6 +73,13 @@ class FakeImageStore:
     def reconcile_export_containers(self) -> tuple[str, ...]:
         self.reconciled = True
         return ()
+
+    def operation_snapshot(self) -> dict[str, int]:
+        return {
+            "active_operations": 0,
+            "waiting_operations": 0,
+            "max_concurrent_operations": 4,
+        }
 
 
 class FakeQuota:
@@ -837,6 +845,156 @@ class DirectProvisionerTests(unittest.TestCase):
                 {"planned", "quota_ready"},
             )
 
+    def test_drain_fences_create_before_rootfs_registration(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, images, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            manager = DirectNodeManagerAdapter(service)
+            materialize_started = Event()
+            materialize_release = Event()
+            original_materialize = images.materialize
+
+            def blocked_materialize(image_ref):
+                materialize_started.set()
+                if not materialize_release.wait(timeout=5):
+                    raise AssertionError("test did not release image materialization")
+                return original_materialize(image_ref)
+
+            images.materialize = blocked_materialize
+            created: list[object] = []
+            create_thread = Thread(target=lambda: created.append(service.create(self.spec())))
+            create_thread.start()
+            self.assertTrue(materialize_started.wait(timeout=2))
+
+            active = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+            draining = manager.configure_drain(
+                "drain-create",
+                True,
+                active_build_count=lambda: 0,
+            )
+
+            self.assertEqual(active.activity.active_operations, 1)
+            self.assertEqual(active.activity.records, ())
+            self.assertEqual(active.activity.reserved_resources.memory_mb, 1024)
+            self.assertFalse(draining.ready)
+            self.assertEqual(draining.activity.active_operations, 1)
+            with self.assertRaises(SandboxAdmissionClosedError):
+                service.create(replace(self.spec(), id="rejected"))
+
+            materialize_release.set()
+            create_thread.join(timeout=5)
+            self.assertFalse(create_thread.is_alive())
+            self.assertEqual(len(created), 1)
+            owned = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+            self.assertFalse(owned.ready)
+            self.assertEqual(owned.activity.active_operations, 0)
+            self.assertEqual(len(owned.activity.records), 1)
+
+    def test_drain_waits_for_an_inflight_heartbeat_empty_proof(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            manager = DirectNodeManagerAdapter(service)
+            snapshot_started = Event()
+            snapshot_release = Event()
+            configure_done = Event()
+            calls_guard = Lock()
+            calls = 0
+            original_snapshot = service.active_reservations_snapshot
+
+            def block_first_snapshot():
+                nonlocal calls
+                with calls_guard:
+                    calls += 1
+                    first = calls == 1
+                if first:
+                    snapshot_started.set()
+                    if not snapshot_release.wait(timeout=5):
+                        raise AssertionError("test did not release heartbeat snapshot")
+                return original_snapshot()
+
+            service.active_reservations_snapshot = block_first_snapshot
+            heartbeat_results: list[object] = []
+            drain_results: list[object] = []
+            heartbeat_thread = Thread(
+                target=lambda: heartbeat_results.append(
+                    manager.heartbeat_snapshot(active_build_count=lambda: 0)
+                )
+            )
+
+            def configure():
+                drain_results.append(
+                    manager.configure_drain(
+                        "drain-heartbeat",
+                        True,
+                        active_build_count=lambda: 0,
+                    )
+                )
+                configure_done.set()
+
+            heartbeat_thread.start()
+            self.assertTrue(snapshot_started.wait(timeout=2))
+            configure_thread = Thread(target=configure)
+            configure_thread.start()
+            self.assertFalse(configure_done.wait(timeout=0.1))
+
+            snapshot_release.set()
+            heartbeat_thread.join(timeout=5)
+            configure_thread.join(timeout=5)
+
+            self.assertFalse(heartbeat_thread.is_alive())
+            self.assertFalse(configure_thread.is_alive())
+            self.assertFalse(heartbeat_results[0].drain.draining)
+            self.assertTrue(drain_results[0].ready)
+
+    def test_drain_fences_image_pull_and_rootfs_materialization(self) -> None:
+        class ImageOperations:
+            def __init__(self) -> None:
+                self.active = 0
+
+            @contextmanager
+            def image_operation(self):
+                self.active += 1
+                try:
+                    yield
+                finally:
+                    self.active -= 1
+
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            manager = DirectNodeManagerAdapter(service)
+            images = ImageOperations()
+
+            with manager.image_operation(images):
+                draining = manager.configure_drain(
+                    "drain-image",
+                    True,
+                    active_build_count=lambda: images.active,
+                )
+                self.assertFalse(draining.ready)
+                self.assertEqual(draining.active_image_builds, 1)
+
+            ready = manager.heartbeat_snapshot(
+                active_build_count=lambda: images.active
+            )
+            self.assertTrue(ready.ready)
+            with self.assertRaises(SandboxAdmissionClosedError):
+                with manager.image_operation(images):
+                    pass
+
     def test_node_adapter_heartbeat_does_not_join_exec_lifecycle_fence(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1004,6 +1162,12 @@ class DirectProvisionerTests(unittest.TestCase):
                 0,
             )
             self.assertIn("image", heartbeat["cached_images"])
+            self.assertEqual(
+                heartbeat["runtime_metrics"][
+                    "rootfs_export_max_concurrent_operations"
+                ],
+                4,
+            )
 
     def test_direct_node_park_and_explicit_wake_endpoints(self) -> None:
         with TemporaryDirectory() as raw:

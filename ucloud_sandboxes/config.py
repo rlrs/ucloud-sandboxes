@@ -246,6 +246,53 @@ class AutoscalerConfig:
                 minimum=0.01,
                 maximum=1.0,
             ),
+            create_pressure_enabled=_config_bool(
+                "policy.create_pressure_enabled",
+                policy_raw.get(
+                    "create_pressure_enabled",
+                    policy_defaults.create_pressure_enabled,
+                ),
+            ),
+            create_pressure_window_seconds=_config_int(
+                "policy.create_pressure_window_seconds",
+                policy_raw.get(
+                    "create_pressure_window_seconds",
+                    policy_defaults.create_pressure_window_seconds,
+                ),
+                minimum=1,
+            ),
+            create_pressure_min_samples=_config_int(
+                "policy.create_pressure_min_samples",
+                policy_raw.get(
+                    "create_pressure_min_samples",
+                    policy_defaults.create_pressure_min_samples,
+                ),
+                minimum=1,
+            ),
+            create_pressure_fresh_seconds=_config_int(
+                "policy.create_pressure_fresh_seconds",
+                policy_raw.get(
+                    "create_pressure_fresh_seconds",
+                    policy_defaults.create_pressure_fresh_seconds,
+                ),
+                minimum=1,
+            ),
+            create_target_concurrency_per_node=_config_int(
+                "policy.create_target_concurrency_per_node",
+                policy_raw.get(
+                    "create_target_concurrency_per_node",
+                    policy_defaults.create_target_concurrency_per_node,
+                ),
+                minimum=1,
+            ),
+            create_pressure_max_headroom_nodes=_config_int(
+                "policy.create_pressure_max_headroom_nodes",
+                policy_raw.get(
+                    "create_pressure_max_headroom_nodes",
+                    policy_defaults.create_pressure_max_headroom_nodes,
+                ),
+                minimum=0,
+            ),
             pressure_scale_down_cooldown_seconds=_config_int(
                 "policy.pressure_scale_down_cooldown_seconds",
                 policy_raw.get(

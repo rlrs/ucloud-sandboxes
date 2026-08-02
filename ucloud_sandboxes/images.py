@@ -696,6 +696,7 @@ class ImageManager:
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
+        self._active_image_operations = 0
         self._pending_build_logs: dict[str, str] = {}
         self._build_log_last_flush: dict[str, float] = {}
         self.reconcile_interrupted_builds()
@@ -710,7 +711,23 @@ class ImageManager:
         return list(self.build_store.load().values())
 
     def active_build_count(self) -> int:
-        return sum(1 for record in self.build_store.load().values() if not record.terminal)
+        builds = sum(
+            1 for record in self.build_store.load().values() if not record.terminal
+        )
+        with self._build_lock:
+            return builds + self._active_image_operations
+
+    @contextmanager
+    def image_operation(self):
+        """Fence node drain across pull plus direct-rootfs materialization."""
+
+        with self._build_lock:
+            self._active_image_operations += 1
+        try:
+            yield
+        finally:
+            with self._build_lock:
+                self._active_image_operations -= 1
 
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         with self._build_lock:

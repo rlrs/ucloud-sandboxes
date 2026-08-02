@@ -95,6 +95,10 @@ def evaluate_scale(
         policy,
         live_signals,
     ) and not any(node.is_idle for node in ready_nodes)
+    create_pressure_scale_up = _create_pressure_requires_capacity(
+        policy,
+        live_signals,
+    )
 
     demand_resources = (
         _dynamic_demand_resources(demand)
@@ -250,6 +254,62 @@ def evaluate_scale(
             )
             reasons.append(reason)
 
+    if create_pressure_scale_up:
+        assert live_signals is not None
+        baseline_nodes = max(0, policy.min_nodes)
+        if _has_resource_demand(desired_resources):
+            baseline_nodes = max(
+                baseline_nodes,
+                _nodes_for_resource_deficit(desired_resources, policy),
+            )
+        elif total_nodes > 0:
+            baseline_nodes = max(baseline_nodes, 1)
+        pipeline_nodes = _ceil_div(
+            max(1, live_signals.sandbox_create_limit),
+            max(1, policy.create_target_concurrency_per_node),
+        )
+        target_nodes = min(
+            policy.max_nodes,
+            max(
+                baseline_nodes,
+                min(
+                    pipeline_nodes,
+                    baseline_nodes
+                    + max(0, policy.create_pressure_max_headroom_nodes),
+                ),
+            ),
+        )
+        needed_nodes = max(
+            0,
+            target_nodes - total_nodes - _planned_creates(actions),
+        )
+        create_count = min(
+            needed_nodes,
+            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+        )
+        if create_count > 0:
+            reason = (
+                "sandbox create pipeline saturated at "
+                f"{live_signals.sandbox_create_limit} concurrent request(s); "
+                f"targeting {target_nodes} temporary node(s) after "
+                f"{live_signals.sandbox_create_rejections} recent rejection(s)"
+            )
+            actions.append(
+                ScaleAction(kind="create", count=create_count, reason=reason)
+            )
+            reasons.append(reason)
+        elif target_nodes > total_nodes + _planned_creates(actions):
+            reason = _create_limit_reason(
+                policy,
+                total_nodes,
+                len(provisioning_nodes),
+                actions,
+            )
+            if reason:
+                reasons.append(
+                    "cannot create temporary sandbox-create headroom: " + reason
+                )
+
     planned_creates = _planned_creates(actions)
     if (
         planned_creates == 0
@@ -258,11 +318,15 @@ def evaluate_scale(
     ):
         excess_nodes = total_nodes - policy.min_nodes
         stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
+        latest_capacity_pressure_age = _latest_capacity_pressure_age(
+            policy,
+            live_signals,
+        )
         pressure_cooldown = bool(
-            policy.live_pressure_enabled
+            (policy.live_pressure_enabled or policy.create_pressure_enabled)
             and live_signals is not None
-            and live_signals.latest_pressure_age_seconds is not None
-            and live_signals.latest_pressure_age_seconds
+            and latest_capacity_pressure_age is not None
+            and latest_capacity_pressure_age
             < policy.pressure_scale_down_cooldown_seconds
         )
         if pressure_cooldown:
@@ -312,6 +376,7 @@ def evaluate_scale(
         live_signals=live_signals,
         program_signals=program_signals,
         pressure_scale_up=pressure_scale_up,
+        create_pressure_scale_up=create_pressure_scale_up,
         effective_scale_down_idle_seconds=effective_scale_down_idle_seconds,
     )
 
@@ -328,6 +393,41 @@ def _live_pressure_requires_capacity(
         and age is not None
         and age <= policy.live_pressure_fresh_seconds
     )
+
+
+def _create_pressure_requires_capacity(
+    policy: ScalePolicy,
+    signals: LiveScaleSignals | None,
+) -> bool:
+    if not policy.create_pressure_enabled or signals is None:
+        return False
+    age = signals.latest_create_pressure_age_seconds
+    return bool(
+        signals.create_pressure_samples >= policy.create_pressure_min_samples
+        and signals.sandbox_create_limit > 0
+        and age is not None
+        and age <= policy.create_pressure_fresh_seconds
+    )
+
+
+def _latest_capacity_pressure_age(
+    policy: ScalePolicy,
+    signals: LiveScaleSignals | None,
+) -> int | None:
+    if signals is None:
+        return None
+    ages: list[int] = []
+    if (
+        policy.live_pressure_enabled
+        and signals.latest_pressure_age_seconds is not None
+    ):
+        ages.append(signals.latest_pressure_age_seconds)
+    if (
+        policy.create_pressure_enabled
+        and signals.latest_create_pressure_age_seconds is not None
+    ):
+        ages.append(signals.latest_create_pressure_age_seconds)
+    return min(ages) if ages else None
 
 
 def _live_pressure_reason(
@@ -358,6 +458,14 @@ def _live_pressure_reason(
         >= policy.target_storage_queue_utilization
     ):
         values.append(f"storage-queue={signals.storage_queue_utilization:.0%}")
+    if (
+        signals.rootfs_export_queue_utilization is not None
+        and signals.rootfs_export_queue_utilization
+        >= policy.target_storage_queue_utilization
+    ):
+        values.append(
+            f"rootfs-export={signals.rootfs_export_queue_utilization:.0%}"
+        )
     suffix = f" ({', '.join(values)})" if values else ""
     return (
         f"sustained live pressure across {signals.pressure_samples} sample(s)"

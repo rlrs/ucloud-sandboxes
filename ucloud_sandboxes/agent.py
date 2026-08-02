@@ -55,6 +55,7 @@ def build_heartbeat(
     node_id: str | None = None,
     active_sandboxes: int = 0,
     active_image_builds: int = 0,
+    active_sandbox_creates: int = 0,
     draining: bool = False,
     node_url: str | None = None,
     agent_version: str | None = None,
@@ -89,6 +90,8 @@ def build_heartbeat(
         raise ValueError("active sandbox count cannot be negative.")
     if active_image_builds < 0:
         raise ValueError("active image build count cannot be negative.")
+    if active_sandbox_creates < 0:
+        raise ValueError("active sandbox create count cannot be negative.")
     if activity_epoch < 0:
         raise ValueError("activity epoch cannot be negative.")
     if drain_activity_epoch < 0:
@@ -126,6 +129,7 @@ def build_heartbeat(
         updated_at=reported_at,
         active_sandboxes=active_sandboxes,
         active_image_builds=active_image_builds,
+        active_sandbox_creates=active_sandbox_creates,
         draining=draining,
         node_url=cleaned_node_url,
         agent_version=(agent_version or package_version()).strip(),

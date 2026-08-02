@@ -2,6 +2,21 @@
 
 This project uses semantic versioning.
 
+## 0.3.82 - 2026-08-02
+
+- Removed the node-global cold-rootfs serialization: warm cache hits bypass
+  export coordination, identical images deduplicate by digest, and up to four
+  distinct image exports can run concurrently behind a cross-process-safe
+  orphan-reconciliation fence.
+- Fenced image pulls, rootfs materialization, and pre-registry sandbox creates
+  into node drain and heartbeat accounting, including a race-free empty-node
+  proof and live rootfs active/queued metrics.
+- Added gateway create-saturation autoscaling and create-pipeline-aware image
+  placement, bounded temporary headroom, scale-down hysteresis, dashboard
+  visibility, and hard-disk-preserving placement behavior.
+- Added deterministic concurrency, warm-hit, drain-race, placement, metrics,
+  and policy tests plus a reproducible rootfs pipeline benchmark.
+
 ## 0.3.81 - 2026-08-02
 
 - Fixed direct-runtime lifecycle fencing so a streaming `runsc exec` retains

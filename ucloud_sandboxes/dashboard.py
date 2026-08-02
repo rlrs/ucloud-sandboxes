@@ -8079,6 +8079,11 @@ function renderHealth(snapshot) {
     severity = "warn";
     title = "A supporting subsystem needs attention";
     detail = `${formatInteger(volumeErrors)} volume error(s), ${formatInteger(images.failed_builds)} failed build(s)${registry.configured && !registry.ok ? ", registry unavailable" : ""}.`;
+  } else if (Boolean(autoscaler.create_pressure_scale_up)) {
+    severity = "warn";
+    title = "Create pipeline is saturated";
+    const live = autoscaler.live_signals || {};
+    detail = `${formatInteger(live.sandbox_create_limit)} create slots occupied; ${formatInteger(live.sandbox_create_rejections)} recent rejection(s).`;
   } else if (Boolean(autoscaler.pressure_scale_up)) {
     severity = "warn";
     title = "Live pressure is above policy";
@@ -8182,7 +8187,15 @@ function renderSchedulerPage(snapshot) {
     free: autoscaler.projected_free_resources || {},
     deficit: autoscaler.resource_deficit || {},
   });
-  setText("decisionPressureValue", `${formatInteger((autoscaler.live_signals || {}).pressure_samples)} pressure samples`);
+  const liveSignals = autoscaler.live_signals || {};
+  const pressureParts = [
+    `${formatInteger(liveSignals.pressure_samples)} host`,
+    `${formatInteger(liveSignals.create_pressure_samples)} create`,
+  ];
+  if (nullableNumber(liveSignals.rootfs_export_queue_utilization) !== null) {
+    pressureParts.push(`${formatPercentPoint(ratioToPercent(liveSignals.rootfs_export_queue_utilization))} rootfs`);
+  }
+  setText("decisionPressureValue", pressureParts.join(" / "));
   setText("decisionIdleGraceValue", `Idle grace ${formatAge(autoscaler.effective_scale_down_idle_seconds)}`);
   renderPolicy(policy);
   renderProgramQueue();
@@ -8214,6 +8227,8 @@ function renderPolicy(policy) {
     ["CPU target", formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))],
     ["Memory target", formatPercentPoint(ratioToPercent(policy.target_memory_utilization))],
     ["Storage queue", formatPercentPoint(ratioToPercent(policy.target_storage_queue_utilization))],
+    ["Create target", `${formatInteger(policy.create_target_concurrency_per_node)} per node`],
+    ["Create burst", `${formatInteger(policy.create_pressure_max_headroom_nodes)} node max`],
     ["Idle grace", formatAge(policy.scale_down_idle_seconds)],
   ];
   els.policyValues.replaceChildren(...rows.map(([name, value]) => {
@@ -8345,9 +8360,12 @@ function renderNodesPage() {
     summary.waiting += asNumber(actual.storage_waiting_operations);
     summary.limit += asNumber(actual.storage_max_concurrent_operations);
     summary.errors += asNumber(actual.storage_error_volumes);
+    summary.rootfsActive += asNumber(actual.rootfs_export_active_operations);
+    summary.rootfsWaiting += asNumber(actual.rootfs_export_waiting_operations);
+    summary.rootfsLimit += asNumber(actual.rootfs_export_max_concurrent_operations);
     summary.psi = Math.max(summary.psi, asNumber(actual.memory_psi_full_avg10));
     return summary;
-  }, { active: 0, waiting: 0, limit: 0, errors: 0, psi: 0 });
+  }, { active: 0, waiting: 0, limit: 0, errors: 0, rootfsActive: 0, rootfsWaiting: 0, rootfsLimit: 0, psi: 0 });
   const staleOrIncompatible = allSandboxNodes.filter((item) => !item.fresh || !item.agent_version_compatible).length;
   setText("nodesReadyValue", formatInteger(nodes.sandbox_ready));
   setText("nodesProvisioningValue", formatInteger(autoscaler.provisioning_nodes));
@@ -8359,8 +8377,8 @@ function renderNodesPage() {
   setText("nodesMemoryPressureValue", `${formatPercentPoint(aggregateActual.memory_percent)} / ${formatPercentPoint(ratioToPercent(aggregateLoad.memory))}`);
   setText("nodesMemoryPressureDetail", `target ${formatPercentPoint(ratioToPercent(policy.target_memory_utilization))}`);
   setText("nodesPsiValue", `${formatNumber(storage.psi)}%`);
-  setText("nodesStorageQueueValue", `${formatInteger(storage.active)} / ${formatInteger(storage.waiting)} / ${formatInteger(storage.limit)}`);
-  setText("nodesStorageQueueDetail", "active / waiting / concurrency limit");
+  setText("nodesStorageQueueValue", `${formatInteger(storage.active + storage.rootfsActive)} / ${formatInteger(storage.waiting + storage.rootfsWaiting)}`);
+  setText("nodesStorageQueueDetail", `active / waiting; storage ${formatInteger(storage.limit)}, rootfs ${formatInteger(storage.rootfsLimit)} max`);
   setText("nodesVolumeErrorsValue", formatInteger(storage.errors));
   setText(
     "nodesPageDetail",
@@ -8442,10 +8460,15 @@ function nodeConstrained(item) {
   const storageQueue = storageLimit > 0
     ? (asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)) / storageLimit
     : 0;
+  const rootfsLimit = asNumber(actual.rootfs_export_max_concurrent_operations);
+  const rootfsQueue = rootfsLimit > 0
+    ? (asNumber(actual.rootfs_export_active_operations) + asNumber(actual.rootfs_export_waiting_operations)) / rootfsLimit
+    : 0;
   return asNumber(load.vcpu) >= 0.8
     || asNumber(load.memory) >= 0.85
     || asNumber(actual.memory_psi_full_avg10) >= 5
     || storageQueue >= 0.75
+    || rootfsQueue >= 0.75
     || asNumber(actual.storage_error_volumes) > 0;
 }
 
@@ -8455,6 +8478,8 @@ function nodePressureText(item) {
   if (nullableNumber(actual.memory_psi_full_avg10) !== null) parts.push(`PSI ${formatNumber(actual.memory_psi_full_avg10)}`);
   const limit = asNumber(actual.storage_max_concurrent_operations);
   if (limit > 0) parts.push(`storage ${asNumber(actual.storage_active_operations) + asNumber(actual.storage_waiting_operations)}/${limit}`);
+  const rootfsLimit = asNumber(actual.rootfs_export_max_concurrent_operations);
+  if (rootfsLimit > 0) parts.push(`rootfs ${asNumber(actual.rootfs_export_active_operations) + asNumber(actual.rootfs_export_waiting_operations)}/${rootfsLimit}`);
   if (asNumber(actual.storage_error_volumes) > 0) parts.push(`${formatInteger(actual.storage_error_volumes)} volume errors`);
   return parts.join(", ") || "normal";
 }

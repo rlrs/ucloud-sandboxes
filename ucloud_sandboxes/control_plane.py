@@ -143,6 +143,10 @@ REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
 COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
+# One direct node may own hundreds of resident sandboxes, but cold rootfs
+# creation is a bounded pipeline. Once this many creates are assigned, permit
+# another node to trade an image transfer for lower queue latency.
+CREATE_PIPELINE_TARGET_PER_NODE = 8
 
 
 def _migration_pending_demand_id(sandbox_id: str) -> str:
@@ -196,6 +200,7 @@ class NodePlacementState:
     available_resources: ResourceQuantity
     inflight_image_identities: frozenset[str]
     projected_image_identities: frozenset[str]
+    active_creates: int
 
 
 class RegistryLayerMetadataCache:
@@ -4530,13 +4535,23 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for heartbeat, state in candidate_states
             if image_identity and image_identity in state.inflight_image_identities
         }
-        if image_node_ids:
+        cached_nodes_have_headroom = any(
+            heartbeat.node_id in image_node_ids
+            and state.active_creates < CREATE_PIPELINE_TARGET_PER_NODE
+            for heartbeat, state in candidate_states
+        )
+        inflight_nodes_have_headroom = any(
+            heartbeat.node_id in inflight_image_node_ids
+            and state.active_creates < CREATE_PIPELINE_TARGET_PER_NODE
+            for heartbeat, state in candidate_states
+        )
+        if image_node_ids and cached_nodes_have_headroom:
             candidate_states = [
                 (heartbeat, state)
                 for heartbeat, state in candidate_states
                 if heartbeat.node_id in image_node_ids
             ]
-        elif inflight_image_node_ids:
+        elif inflight_image_node_ids and inflight_nodes_have_headroom:
             # Follow an in-flight copy of the exact immutable image instead
             # of transferring the same layers to another node.
             candidate_states = [
@@ -4545,7 +4560,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 if heartbeat.node_id in inflight_image_node_ids
             ]
         spread_cold_image = bool(
-            image and not image_node_ids and not inflight_image_node_ids
+            image
+            and not (
+                (image_node_ids and cached_nodes_have_headroom)
+                or (inflight_image_node_ids and inflight_nodes_have_headroom)
+            )
         )
         layer_cache = getattr(self, "registry_layer_cache", None)
         target_manifest = (
@@ -4560,6 +4579,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     layer_cache,
                     spread_cold_image=spread_cold_image,
                 ),
+                item[1].active_creates,
                 _resource_slack(
                     item[1].available_resources,
                     requested,
@@ -6271,6 +6291,20 @@ def _node_placement_state(
         available_resources=_node_available_resources(heartbeat, node_routes),
         inflight_image_identities=inflight_images,
         projected_image_identities=frozenset(projected_images),
+        active_creates=max(
+            heartbeat.active_sandbox_creates,
+            sum(
+                (route.state or "unknown").lower()
+                in {
+                    "creating",
+                    "planned",
+                    "quota_ready",
+                    "rootfs_ready",
+                    "unknown",
+                }
+                for route in node_routes
+            ),
+        ),
     )
 
 
@@ -6565,7 +6599,7 @@ def _cold_image_placement_cost_for_state(
 ) -> tuple[int, int]:
     if not spread_cold_image:
         return (0, 0)
-    pressure = len(state.inflight_image_identities)
+    pressure = max(len(state.inflight_image_identities), state.active_creates)
     if target_manifest is None or layer_cache is None:
         return (1, pressure)
     available_layers: set[str] = set()

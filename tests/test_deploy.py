@@ -582,6 +582,15 @@ class DeployTests(unittest.TestCase):
             units["ucloud-sandbox-autoscaler.service"],
         )
         self.assertIn(
+            "--create-pressure-enabled ${UCLOUD_CREATE_PRESSURE_ENABLED}",
+            units["ucloud-sandbox-autoscaler.service"],
+        )
+        self.assertIn(
+            "--create-target-concurrency-per-node "
+            "${UCLOUD_CREATE_TARGET_CONCURRENCY_PER_NODE}",
+            units["ucloud-sandbox-autoscaler.service"],
+        )
+        self.assertIn(
             "EnvironmentFile=/etc/ucloud-sandboxes/gateway.env",
             units["ucloud-sandbox-gateway.service"],
         )

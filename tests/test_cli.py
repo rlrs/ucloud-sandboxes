@@ -2491,6 +2491,12 @@ class CliTests(unittest.TestCase):
                 live_pressure_window_seconds=120,
                 live_pressure_min_samples=5,
                 live_pressure_fresh_seconds=45,
+                create_pressure_enabled=False,
+                create_pressure_window_seconds=50,
+                create_pressure_min_samples=4,
+                create_pressure_fresh_seconds=20,
+                create_target_concurrency_per_node=6,
+                create_pressure_max_headroom_nodes=3,
                 target_cpu_utilization=0.55,
                 target_memory_utilization=0.65,
                 max_memory_psi_full_avg10=2.5,
@@ -2508,6 +2514,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(policy.live_pressure_window_seconds, 120)
         self.assertEqual(policy.live_pressure_min_samples, 5)
         self.assertEqual(policy.live_pressure_fresh_seconds, 45)
+        self.assertFalse(policy.create_pressure_enabled)
+        self.assertEqual(policy.create_pressure_window_seconds, 50)
+        self.assertEqual(policy.create_pressure_min_samples, 4)
+        self.assertEqual(policy.create_pressure_fresh_seconds, 20)
+        self.assertEqual(policy.create_target_concurrency_per_node, 6)
+        self.assertEqual(policy.create_pressure_max_headroom_nodes, 3)
         self.assertEqual(policy.target_cpu_utilization, 0.55)
         self.assertEqual(policy.target_memory_utilization, 0.65)
         self.assertEqual(policy.max_memory_psi_full_avg10, 2.5)

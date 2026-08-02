@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.83 - 2026-08-02
+
+- Wired all gateway-create pressure settings through the autoscaler CLI and
+  packaged systemd service so saturation headroom is explicitly tunable in
+  production instead of relying only on policy defaults.
+
 ## 0.3.82 - 2026-08-02
 
 - Removed the node-global cold-rootfs serialization: warm cache hits bypass

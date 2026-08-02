@@ -1907,6 +1907,42 @@ def add_builder_autoscale_args(parser: argparse.ArgumentParser) -> None:
         help="Maximum age of the newest pressure sample for scale-up.",
     )
     parser.add_argument(
+        "--create-pressure-enabled",
+        type=_parse_cli_bool,
+        default=None,
+        help="Enable temporary capacity from gateway create saturation.",
+    )
+    parser.add_argument(
+        "--create-pressure-window-seconds",
+        type=int,
+        default=None,
+        help="Recent gateway-busy window used for create-pressure samples.",
+    )
+    parser.add_argument(
+        "--create-pressure-min-samples",
+        type=int,
+        default=None,
+        help="Gateway-busy samples required before adding temporary nodes.",
+    )
+    parser.add_argument(
+        "--create-pressure-fresh-seconds",
+        type=int,
+        default=None,
+        help="Maximum age of the newest gateway-busy sample for scale-up.",
+    )
+    parser.add_argument(
+        "--create-target-concurrency-per-node",
+        type=int,
+        default=None,
+        help="Target concurrent sandbox creates per ready node.",
+    )
+    parser.add_argument(
+        "--create-pressure-max-headroom-nodes",
+        type=int,
+        default=None,
+        help="Maximum temporary nodes beyond hard resource demand.",
+    )
+    parser.add_argument(
         "--target-cpu-utilization",
         type=float,
         default=None,
@@ -6553,6 +6589,12 @@ def policy_with_cli_overrides(
         "live_pressure_window_seconds",
         "live_pressure_min_samples",
         "live_pressure_fresh_seconds",
+        "create_pressure_enabled",
+        "create_pressure_window_seconds",
+        "create_pressure_min_samples",
+        "create_pressure_fresh_seconds",
+        "create_target_concurrency_per_node",
+        "create_pressure_max_headroom_nodes",
         "target_cpu_utilization",
         "target_memory_utilization",
         "max_memory_psi_full_avg10",
@@ -6600,6 +6642,10 @@ def _validate_live_policy_overrides(values: dict[str, Any]) -> None:
         "live_pressure_window_seconds",
         "live_pressure_min_samples",
         "live_pressure_fresh_seconds",
+        "create_pressure_window_seconds",
+        "create_pressure_min_samples",
+        "create_pressure_fresh_seconds",
+        "create_target_concurrency_per_node",
     ):
         if field_name in values and int(values[field_name]) < 1:
             raise ValueError(f"{field_name} must be positive")
@@ -6608,6 +6654,11 @@ def _validate_live_policy_overrides(values: dict[str, Any]) -> None:
         and int(values["provisioning_latency_lookback_seconds"]) < 60
     ):
         raise ValueError("provisioning_latency_lookback_seconds must be at least 60")
+    if (
+        "create_pressure_max_headroom_nodes" in values
+        and int(values["create_pressure_max_headroom_nodes"]) < 0
+    ):
+        raise ValueError("create_pressure_max_headroom_nodes cannot be negative")
     if (
         "pressure_scale_down_cooldown_seconds" in values
         and int(values["pressure_scale_down_cooldown_seconds"]) < 0

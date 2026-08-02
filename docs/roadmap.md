@@ -69,8 +69,12 @@ The deterministic 32-image pipeline benchmark is recorded in
 [`benchmarks/rootfs-export-pipeline-2026-08-02.json`](benchmarks/rootfs-export-pipeline-2026-08-02.json).
 With four export slots it observed four overlapping exports, a 3.71x makespan
 improvement over the serialized lower bound, and a 16.1 ms makespan for 32
-concurrent warm cache checks. This benchmark isolates locking behavior; a
-production canary with real large images remains the latency acceptance gate.
+concurrent warm cache checks. The production canary is recorded in
+[`benchmarks/rootfs-export-production-canary-2026-08-02.json`](benchmarks/rootfs-export-production-canary-2026-08-02.json).
+It observed three distinct exports running concurrently with no export waiters,
+10/10 cold creates completing in 20.4--27.1 seconds, and two subsequent warm
+creates completing in 1.09--1.20 seconds. All 24 exec checks succeeded and the
+run cleaned up every route and reservation.
 
 Second, the observed PRIME/TMax traffic eventually created `parkable=true`
 sandboxes but still ran each harness through a long-lived attached exec. Those

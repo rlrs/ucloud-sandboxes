@@ -175,7 +175,7 @@ def main() -> int:
                 raise RuntimeError(f"{len(failed_builds)} image build(s) failed")
 
             registry_images = [
-                Image.from_registry(str(item["tag"])) for item in build_results
+                Image.from_gateway_id(str(item["image"])) for item in build_results
             ]
             summary["metrics"]["after_builds"] = metrics_snapshot(client)
 
@@ -427,22 +427,29 @@ def build_one(
     timeout_seconds: float,
 ) -> dict[str, Any]:
     started = time.monotonic()
+    deadline = started + timeout_seconds
     tag = str(image.tag or image.reference)
     emit("image_build_started", image=image.reference, tag=tag)
     try:
-        build = client.build_image(
-            image,
-            timeout_seconds=timeout_seconds,
-            poll_interval_seconds=2.0,
-            retry_interval_seconds=1.0,
-            on_status=lambda raw: emit(
-                "image_build_status",
-                image=image.reference,
-                build_id=raw.get("build_id"),
-                status=raw.get("status"),
-                updated_at=raw.get("updated_at"),
-            ),
-        )
+        while True:
+            try:
+                build = client.build_image(
+                    image,
+                    timeout_seconds=max(0.1, deadline - time.monotonic()),
+                    poll_interval_seconds=2.0,
+                    on_status=lambda raw: emit(
+                        "image_build_status",
+                        image=image.reference,
+                        build_id=raw.get("build_id"),
+                        status=raw.get("status"),
+                        updated_at=raw.get("updated_at"),
+                    ),
+                )
+                break
+            except SandboxApiError as exc:
+                if exc.status_code != 503 or time.monotonic() >= deadline:
+                    raise
+                time.sleep(min(2.0, max(0.1, deadline - time.monotonic())))
         completed = build.get("build") if isinstance(build.get("build"), dict) else build
         result = {
             "ok": True,
@@ -486,7 +493,7 @@ def create_one(
             memory_mb=args.memory_mb,
             disk_mb=args.disk_mb,
             ttl_seconds=args.sandbox_ttl_seconds,
-            network="none",
+            network="bridge",
             filesystem={
                 "enforce_disk_quota": True,
                 "workspace_path": "/workspace",
@@ -497,9 +504,7 @@ def create_one(
                 "benchmark.run_id": run_id,
                 "benchmark.index": str(index),
             },
-            start_timeout_seconds=args.create_timeout_seconds,
-            request_timeout_seconds=args.request_timeout_seconds,
-            retry_interval_seconds=1.0,
+            request_timeout_seconds=args.create_timeout_seconds,
         )
         response = handle.create_response
         return {

@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "run_id": "rootfs-0383f",
+  "gateway_version": "0.3.83",
+  "completed_at": "2026-08-02T20:33:30.531297+00:00",
+  "configuration": {
+    "sandboxes": 12,
+    "distinct_cold_images": 3,
+    "vcpu_per_sandbox": 1.0,
+    "memory_mb_per_sandbox": 512,
+    "disk_mb_per_sandbox": 1024,
+    "network": "bridge"
+  },
+  "image_build_seconds": [
+    5.702,
+    8.08,
+    14.757
+  ],
+  "cold_create_ramp": {
+    "count": 10,
+    "succeeded": 10,
+    "failed": 0,
+    "makespan_seconds": 27.122,
+    "latency_ms": {
+      "min": 20440.233,
+      "mean": 23456.195,
+      "p50": 21589.548,
+      "p95": 27121.172,
+      "max": 27121.172
+    }
+  },
+  "warm_create_ramp": {
+    "count": 2,
+    "succeeded": 2,
+    "failed": 0,
+    "makespan_seconds": 1.196,
+    "latency_ms": {
+      "min": 1091.798,
+      "mean": 1143.735,
+      "p50": 1091.798,
+      "p95": 1195.672,
+      "max": 1195.672
+    }
+  },
+  "rootfs_heartbeat_samples": [
+    {
+      "node_id": "sandbox-node-697390b2bf-1",
+      "active": 3,
+      "waiting": 0,
+      "max_concurrent": 4
+    },
+    {
+      "node_id": "sandbox-node-88fc749987-1",
+      "active": 3,
+      "waiting": 0,
+      "max_concurrent": 4
+    }
+  ],
+  "exec": {
+    "light": {
+      "count": 12,
+      "succeeded": 12,
+      "failed": 0,
+      "makespan_seconds": 2.071
+    },
+    "cpu_io": {
+      "count": 12,
+      "succeeded": 12,
+      "failed": 0,
+      "makespan_seconds": 2.589
+    }
+  },
+  "cleanup": {
+    "sandbox_deletes_succeeded": 12,
+    "sandbox_deletes_failed": 0,
+    "capacity_deletes_succeeded": 3,
+    "builder_capacity_deletes_succeeded": 1,
+    "active_routes_after_settle": 0,
+    "pending_after_settle": 0,
+    "prepared_after_settle": 0
+  }
+}

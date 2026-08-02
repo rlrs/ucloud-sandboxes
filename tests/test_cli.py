@@ -2293,7 +2293,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["activeImageBuilds"], 0)
         self.assertEqual(
             payload["buildWarmSandboxResources"],
-            {"vcpu": 32.0, "memory_mb": 98304, "disk_mb": 1_449_984},
+            {"vcpu": 1.0, "memory_mb": 512, "disk_mb": 1024},
         )
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
@@ -2398,11 +2398,24 @@ class CliTests(unittest.TestCase):
         )
         demand = cli.demand_with_build_warm_resources(SandboxDemand(), resources)
 
-        self.assertEqual(resources, policy.schedulable_node_resources)
+        self.assertEqual(
+            resources,
+            ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
+        )
         self.assertEqual(
             demand.prepared_resources,
-            policy.schedulable_node_resources,
+            ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
         )
+
+    def test_prepared_builder_alone_does_not_reserve_a_sandbox_node(self) -> None:
+        resources = cli.build_activity_sandbox_warm_resources(
+            active_image_builds=0,
+            pending_image_builds=0,
+            prepared_builder_count=1,
+            policy=ScalePolicy(),
+        )
+
+        self.assertEqual(resources, ResourceQuantity())
 
     def test_build_warm_resources_supplement_instead_of_double_counting_demand(
         self,
@@ -3044,11 +3057,12 @@ class CliTests(unittest.TestCase):
         self.assertEqual(submitted[0][0], "project-1")
         self.assertEqual(
             payload["createdJobIds"],
-            ["created-1", "created-2", "created-3"],
+            ["created-1", "created-2"],
         )
-        self.assertEqual(len(submitted), 3)
+        self.assertEqual(len(submitted), 2)
         self.assertTrue(all(len(call[1]["items"]) == 1 for call in submitted))
         self.assertEqual(payload["preparedBuilderCount"], 2)
+        self.assertEqual(payload["decision"]["actions"], [])
         self.assertEqual(
             [item["prepare_id"] for item in payload["consumedPreparedBuilders"]],
             ["builds-soon"],

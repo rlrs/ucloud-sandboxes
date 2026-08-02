@@ -407,6 +407,12 @@ def _create_pressure_requires_capacity(
         and signals.sandbox_create_limit > 0
         and age is not None
         and age <= policy.create_pressure_fresh_seconds
+        # Gateway saturation says callers are waiting, but not that another VM
+        # would help. Require the ordinary sustained node-pressure proof before
+        # treating it as a burst-capacity signal. Gateway pressure can then
+        # accelerate/magnify a real backlog without reacting to healthy cold
+        # creates merely occupying request slots.
+        and _live_pressure_requires_capacity(policy, signals)
     )
 
 
@@ -422,11 +428,10 @@ def _latest_capacity_pressure_age(
         and signals.latest_pressure_age_seconds is not None
     ):
         ages.append(signals.latest_pressure_age_seconds)
-    if (
-        policy.create_pressure_enabled
-        and signals.latest_create_pressure_age_seconds is not None
-    ):
-        ages.append(signals.latest_create_pressure_age_seconds)
+    # Create pressure is only an amplifier for live node pressure. Its raw age
+    # must not retain otherwise idle capacity after a harmless gateway burst;
+    # the corroborating live-pressure age already supplies the cooldown when
+    # the combined signal was actionable.
     return min(ages) if ages else None
 
 

@@ -52,9 +52,9 @@ The production design for burst scale-up is deliberately bounded:
 1. Admission and transient-create registration share one node lock. Every
    accepted create is included in heartbeat work count, reserved CPU/RAM, and
    the drain activity epoch before image or rootfs work begins.
-2. Gateway-busy trace samples are an explicit live signal. Saturating 32 create
-   slots targets four temporary nodes at the default eight creates per node,
-   subject to the existing hard `max_nodes`, provisioning, and per-cycle caps.
+2. Gateway-busy trace samples are an explicit live signal, but only amplify
+   independently confirmed node-side pressure. The default permits one
+   temporary node beyond hard demand; raw gateway occupancy cannot scale alone.
 3. Image locality remains preferred while a cached node has pipeline headroom.
    Once it is saturated, placement may copy the image to a less-loaded node
    rather than queue every rootfs export behind one host.
@@ -74,7 +74,10 @@ concurrent warm cache checks. The production canary is recorded in
 It observed three distinct exports running concurrently with no export waiters,
 10/10 cold creates completing in 20.4--27.1 seconds, and two subsequent warm
 creates completing in 1.09--1.20 seconds. All 24 exec checks succeeded and the
-run cleaned up every route and reservation.
+run cleaned up every route and reservation. Its retained metrics also exposed
+two policy errors fixed in 0.3.84: the builder warm signal demanded a completely
+empty full-disk node, and three occupied export slots were counted as 75% queue
+pressure despite zero waiters.
 
 Second, the observed PRIME/TMax traffic eventually created `parkable=true`
 sandboxes but still ran each harness through a long-lived attached exec. Those

@@ -52,7 +52,7 @@ data:
     "create_pressure_min_samples": 2,
     "create_pressure_fresh_seconds": 15,
     "create_target_concurrency_per_node": 8,
-    "create_pressure_max_headroom_nodes": 4,
+    "create_pressure_max_headroom_nodes": 1,
     "pressure_scale_down_cooldown_seconds": 300,
     "provisioning_latency_lookback_seconds": 604800,
     "provisioning_scale_down_multiplier": 2.0,
@@ -92,15 +92,15 @@ idle node's background state cannot trigger it.
 density/latency tradeoff. Lower targets retain more headroom. The PSI and
 storage queue limits catch cases that average utilization misses.
 
-Create pressure is separate from resident host pressure. Two sampled
-`gateway_busy` rejections in the default 30-second window prove that all
-gateway create slots are occupied. The autoscaler divides the advertised
-gateway limit by `create_target_concurrency_per_node` and immediately targets
-that many temporary nodes, bounded to at most
-`create_pressure_max_headroom_nodes` beyond hard resource demand and by the
-ordinary node/provisioning caps. With the production 32-slot gateway and the
-default target of eight, saturation targets four nodes. Already-provisioning
-nodes count toward that target, preventing repeated scale-up every cycle.
+Create pressure is an amplifier for resident host pressure, not an independent
+reason to buy capacity. Two sampled `gateway_busy` rejections in the default
+30-second window prove that all gateway create slots are occupied, but another
+VM is requested only when the ordinary sustained CPU, memory, PSI, storage, or
+rootfs-waiting signal independently proves that it can help. The default burst
+is capped at one node beyond hard resource demand. Operators can raise
+`create_pressure_max_headroom_nodes` after observing a workload where measured
+node-side queues justify a wider burst. Already-provisioning nodes count toward
+the target, preventing repeated scale-up every cycle.
 
 Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer
@@ -109,9 +109,16 @@ queue. This prevents a cached image from pinning an entire diverse cold-start
 burst to one rootfs export pipeline.
 
 Node heartbeats expose active sandbox creates plus active, waiting, and maximum
-rootfs-export operations. Rootfs queue utilization participates in the same
-sustained-pressure rule as the storage-native queue, while gateway saturation
-is the faster signal used when all public create slots are already occupied.
+rootfs-export operations. Rootfs pressure is `waiting / concurrency`: occupied
+slots are productive capacity and cannot trigger scale-up without a queue.
+Gateway saturation can widen a confirmed burst but cannot manufacture pressure
+from healthy cold creates.
+
+Pending or active image builds keep one small runnable sandbox shape warm (1
+vCPU, 512 MiB memory, and 1 GiB disk). They do not reserve an entire pristine
+sandbox node, and a prepared builder without build work does not create any
+sandbox-node demand. Exact client capacity preparations and creates continue to
+drive exact hard-disk demand.
 
 `pressure_scale_down_cooldown_seconds` supplies hysteresis after the last
 pressure sample. Independently, measured submit-to-first-heartbeat p95

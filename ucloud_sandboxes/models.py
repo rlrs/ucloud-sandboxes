@@ -727,7 +727,7 @@ class ScalePolicy:
     create_pressure_min_samples: int = 2
     create_pressure_fresh_seconds: int = 15
     create_target_concurrency_per_node: int = 8
-    create_pressure_max_headroom_nodes: int = 4
+    create_pressure_max_headroom_nodes: int = 1
     pressure_scale_down_cooldown_seconds: int = 300
     provisioning_latency_lookback_seconds: int = 7 * 24 * 60 * 60
     provisioning_scale_down_multiplier: float = 2.0

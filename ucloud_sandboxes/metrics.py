@@ -988,8 +988,12 @@ def build_live_scale_signals(
             )
             or 0
         )
+        # Occupied export slots are useful work, not queue pressure. Only work
+        # waiting behind those slots proves that another pipeline could reduce
+        # latency. This distinction matters now that distinct images export
+        # concurrently instead of serializing behind one host-wide lock.
         rootfs_queue = (
-            min(1.0, (rootfs_active + rootfs_waiting) / rootfs_limit)
+            min(1.0, rootfs_waiting / rootfs_limit)
             if rootfs_limit > 0
             else None
         )

@@ -2,6 +2,16 @@
 
 This project uses semantic versioning.
 
+## 0.3.84 - 2026-08-02
+
+- Stopped treating occupied rootfs export slots as queue pressure; only
+  sustained waiting work can now request another sandbox node.
+- Made gateway create saturation an amplifier for confirmed node-side pressure
+  instead of an independent scale-up trigger, with one burst node by default.
+- Replaced the builder's artificial full-empty-node sandbox reservation with a
+  small one-sandbox warm probe, and stopped builder preparation alone from
+  allocating sandbox capacity.
+
 ## 0.3.83 - 2026-08-02
 
 - Wired all gateway-create pressure settings through the autoscaler CLI and

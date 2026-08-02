@@ -6907,13 +6907,23 @@ def build_activity_sandbox_warm_resources(
     prepared_builder_count: int,
     policy: ScalePolicy,
 ) -> ResourceQuantity:
+    del prepared_builder_count
     if (
         max(0, active_image_builds) <= 0
         and max(0, pending_image_builds) <= 0
-        and max(0, prepared_builder_count) <= 0
     ):
         return ResourceQuantity()
-    return policy.schedulable_node_resources
+    # A build proves that a sandbox node will probably be needed soon, but it
+    # says nothing about the eventual sandbox shape. Reserve a small runnable
+    # probe to keep one node warm. Reserving the entire schedulable node shape
+    # (especially all hard disk) demanded a pristine empty node and created a
+    # second VM as soon as the first node stored even one image or sandbox.
+    capacity = policy.schedulable_node_resources
+    return ResourceQuantity(
+        vcpu=min(1.0, capacity.vcpu),
+        memory_mb=min(512, capacity.memory_mb),
+        disk_mb=min(1024, capacity.disk_mb),
+    )
 
 
 def demand_with_build_warm_resources(

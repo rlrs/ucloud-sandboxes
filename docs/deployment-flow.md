@@ -223,7 +223,7 @@ Current live all-in-one VM:
 - job id: `12362088`
 - name: `ucloud-sandbox-gateway-migration-v2-canary`
 - deployment id: `migration-v2-canary-20260730a`
-- package version: `0.3.83`; it must match the `version` returned by both
+- package version: `0.3.84`; it must match the `version` returned by both
   service health endpoints
 - gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
   `cpu-amd-zen5-32-vcpu`

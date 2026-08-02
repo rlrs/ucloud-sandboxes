@@ -167,6 +167,31 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.pressure_samples, 3)
         self.assertEqual(signals.rootfs_export_queue_utilization, 1.0)
 
+    def test_busy_rootfs_slots_without_waiters_are_not_pressure(self) -> None:
+        now = utc_now()
+        events = [
+            MetricEvent(
+                timestamp=(now - timedelta(seconds=offset)).isoformat(),
+                kind="node_heartbeat",
+                data={
+                    "active_workloads": 3,
+                    "actual_usage": {
+                        "cpu_percent": 2,
+                        "memory_percent": 3,
+                        "rootfs_export_active_operations": 3,
+                        "rootfs_export_waiting_operations": 0,
+                        "rootfs_export_max_concurrent_operations": 4,
+                    },
+                },
+            )
+            for offset in (20, 10, 1)
+        ]
+
+        signals = build_live_scale_signals(events, ScalePolicy())
+
+        self.assertEqual(signals.pressure_samples, 0)
+        self.assertIsNone(signals.rootfs_export_queue_utilization)
+
     def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
         snapshot = build_metrics_snapshot(
             {},

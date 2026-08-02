@@ -387,7 +387,7 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 4)
         self.assertEqual(decision.resource_deficit.vcpu, 224)
 
-    def test_gateway_create_saturation_adds_bounded_temporary_nodes(self) -> None:
+    def test_gateway_create_saturation_amplifies_confirmed_node_pressure(self) -> None:
         decision = evaluate_scale(
             [
                 node(
@@ -408,6 +408,9 @@ class ScalePolicyTests(unittest.TestCase):
             ),
             ScalePolicy(max_nodes=10, max_create_per_cycle=4),
             live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=1,
+                rootfs_export_queue_utilization=1.0,
                 create_pressure_samples=2,
                 latest_create_pressure_age_seconds=1,
                 sandbox_create_rejections=17,
@@ -415,9 +418,27 @@ class ScalePolicyTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.creates, 3)
+        self.assertEqual(decision.creates, 1)
         self.assertTrue(decision.create_pressure_scale_up)
-        self.assertIn("targeting 4 temporary node(s)", decision.reasons[-1])
+        self.assertIn("targeting 2 temporary node(s)", decision.reasons[-1])
+
+    def test_gateway_create_saturation_without_node_pressure_does_not_scale(
+        self,
+    ) -> None:
+        decision = evaluate_scale(
+            [node("ready")],
+            SandboxDemand(),
+            ScalePolicy(),
+            live_signals=LiveScaleSignals(
+                create_pressure_samples=10,
+                latest_create_pressure_age_seconds=1,
+                sandbox_create_rejections=100,
+                sandbox_create_limit=32,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertFalse(decision.create_pressure_scale_up)
 
     def test_single_create_pressure_sample_does_not_scale(self) -> None:
         decision = evaluate_scale(
@@ -1457,6 +1478,38 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.stops, ())
         self.assertIn("cooldown", decision.reasons[0])
+
+    def test_gateway_saturation_alone_does_not_extend_scale_down_cooldown(
+        self,
+    ) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "idle",
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=2_000_000,
+                    ),
+                    idle_since=now - timedelta(seconds=1000),
+                )
+            ],
+            SandboxDemand(),
+            ScalePolicy(
+                scale_down_idle_seconds=30,
+                pressure_scale_down_cooldown_seconds=300,
+            ),
+            now=now,
+            live_signals=LiveScaleSignals(
+                create_pressure_samples=10,
+                latest_create_pressure_age_seconds=5,
+                sandbox_create_rejections=100,
+                sandbox_create_limit=32,
+            ),
+        )
+
+        self.assertEqual(decision.stops, ("idle",))
 
     def test_live_pressure_can_be_disabled_for_shadow_observation(self) -> None:
         now = utc_now()

@@ -20,6 +20,7 @@ from .sandbox import (
     SandboxActivitySnapshot,
     SandboxConflictError,
     SandboxForkUnsupportedError,
+    SandboxLifecycleCoordinator,
     SandboxOperation,
     SandboxRecord,
     SandboxSpec,
@@ -103,25 +104,48 @@ class DirectExecRuntimeAdapter:
         del interactive
         if tty:
             raise ValueError("direct runtime TTY exec is not yet qualified")
-        registration = self.owner.service._require_registration(sandbox_id)
-        lease = self.owner.service.warden.exec_lease(
-            registration.to_direct_sandbox(),
-            command,
-            env=env,
-            working_dir=working_dir,
-            user=user,
-        )
-        started = time.monotonic()
+        start_lock = self.owner._acquire_exec_start(sandbox_id)
         try:
-            argv = lease.__enter__()
+            registration = self.owner.service._require_registration(sandbox_id)
+            lease = self.owner.service.warden.exec_lease(
+                registration.to_direct_sandbox(),
+                command,
+                env=env,
+                working_dir=working_dir,
+                user=user,
+            )
+            started = time.monotonic()
+            try:
+                argv = lease.__enter__()
+            except Exception:
+                raise
+            self.owner._record_exec_start_timing(
+                "exec_lease",
+                (time.monotonic() - started) * 1000,
+            )
+            try:
+                self.owner._attach_exec_lease(sandbox_id, lease)
+            except Exception:
+                lease.__exit__(None, None, None)
+                raise
+            return argv
         except Exception:
+            self.owner._release_exec_start_lock(sandbox_id, start_lock)
             raise
-        self.owner._record_exec_start_timing(
-            "exec_lease",
-            (time.monotonic() - started) * 1000,
-        )
-        self.owner._attach_exec_lease(sandbox_id, lease)
-        return argv
+
+    def exec_started(self, sandbox_id: str) -> None:
+        """Release the start fence once runsc exec owns the child request.
+
+        The fence closes the build/spawn race with park and delete. Keeping it
+        for the child lifetime would make forced deletion impossible: the
+        runsc client only exits after deletion, while deletion would wait for
+        the client to release this fence.
+        """
+
+        self.owner._release_exec_start(sandbox_id)
+
+    def exec_start_failed(self, sandbox_id: str) -> None:
+        self.owner._release_exec_start(sandbox_id)
 
 
 class DirectLifecycleAdapter:
@@ -129,43 +153,36 @@ class DirectLifecycleAdapter:
 
     def __init__(self, owner: DirectNodeManagerAdapter) -> None:
         self.owner = owner
+        self._coordinator = SandboxLifecycleCoordinator()
 
     def acquire_shared(self, sandbox_id: str) -> None:
-        registration = self.owner.service._require_registration(sandbox_id)
-        lock = self.owner.service._lock(
-            sandbox_id,
-            registration.sandbox_generation,
-        )
-        lock.acquire()
+        self._coordinator.acquire_shared(sandbox_id)
         try:
+            registration = self.owner.service._require_registration(sandbox_id)
+            with self.owner.service._lock(
+                sandbox_id,
+                registration.sandbox_generation,
+            ):
+                self.owner.service.mark_activity(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
+                timings = self.owner.service.ensure_running_with_timings(
+                    registration.to_direct_sandbox()
+                )
+            self.owner._set_exec_start_timings(timings)
+        except Exception:
+            self._coordinator.release_shared(sandbox_id)
+            raise
+
+    def release_shared(self, sandbox_id: str) -> None:
+        registration = self.owner.service.provisioner.registry.get(sandbox_id)
+        if registration is not None:
             self.owner.service.mark_activity(
                 sandbox_id,
                 registration.sandbox_generation,
             )
-            timings = self.owner.service.ensure_running_with_timings(
-                registration.to_direct_sandbox()
-            )
-            self.owner._set_exec_start_timings(timings)
-            self.owner._attach_activity_lock(sandbox_id, lock)
-        except Exception:
-            lock.release()
-            raise
-
-    def release_shared(self, sandbox_id: str) -> None:
-        lease = self.owner._pop_exec_lease(sandbox_id)
-        try:
-            if lease is not None:
-                lease.__exit__(None, None, None)
-        finally:
-            lock = self.owner._pop_activity_lock(sandbox_id)
-            if lock is not None:
-                registration = self.owner.service.provisioner.registry.get(sandbox_id)
-                if registration is not None:
-                    self.owner.service.mark_activity(
-                        sandbox_id,
-                        registration.sandbox_generation,
-                    )
-                lock.release()
+        self._coordinator.release_shared(sandbox_id)
 
     @contextmanager
     def shared(self, sandbox_id: str) -> Iterator[None]:
@@ -174,6 +191,19 @@ class DirectLifecycleAdapter:
             yield
         finally:
             self.release_shared(sandbox_id)
+
+    @contextmanager
+    def exclusive(
+        self,
+        sandbox_id: str,
+        *,
+        allow_shared: bool = False,
+    ) -> Iterator[None]:
+        with self._coordinator.exclusive(
+            sandbox_id,
+            allow_shared=allow_shared,
+        ):
+            yield
 
 
 class DirectNodeManagerAdapter:
@@ -188,8 +218,9 @@ class DirectNodeManagerAdapter:
         self.service = service
         self.lifecycle = DirectLifecycleAdapter(self)
         self.runtime = DirectExecRuntimeAdapter(self)
-        self._activity_locks: dict[str, Lock] = {}
         self._exec_leases: dict[str, object] = {}
+        self._exec_start_locks: dict[str, Lock] = {}
+        self._exec_start_users: dict[str, int] = {}
         self._activity_guard = Lock()
         self._exec_start_state = local()
         self._drain_guard = RLock()
@@ -231,7 +262,13 @@ class DirectNodeManagerAdapter:
         record = self.service.get(sandbox_id)
         if record is not None and record.generation != generation:
             raise SandboxConflictError("delete generation does not own direct sandbox")
-        self.service.delete(sandbox_id, generation=generation if record else None)
+        # Deletion is a hard revocation boundary. It closes new activity but is
+        # allowed to sever attached execs, matching the legacy runtime contract.
+        with self.lifecycle.exclusive(sandbox_id, allow_shared=True):
+            self.service.delete(
+                sandbox_id,
+                generation=generation if record else None,
+            )
         return record, CommandResult(("direct-warden", "delete", sandbox_id), 0)
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
@@ -248,11 +285,12 @@ class DirectNodeManagerAdapter:
         operation_id: str | None = None,
         background: bool = False,
     ) -> SandboxRecord:
-        return self.service.park(
-            sandbox_id,
-            operation_id=operation_id,
-            background=background,
-        )
+        with self.lifecycle.exclusive(sandbox_id):
+            return self.service.park(
+                sandbox_id,
+                operation_id=operation_id,
+                background=background,
+            )
 
     def wake(
         self,
@@ -261,11 +299,12 @@ class DirectNodeManagerAdapter:
         generation: int | None = None,
         operation_id: str | None = None,
     ) -> SandboxRecord:
-        return self.service.wake(
-            sandbox_id,
-            generation=generation,
-            operation_id=operation_id,
-        )
+        with self.lifecycle.exclusive(sandbox_id):
+            return self.service.wake(
+                sandbox_id,
+                generation=generation,
+                operation_id=operation_id,
+            )
 
     def require_activity_sandbox(self, sandbox_id: str) -> SandboxRecord:
         record = self.service.get(sandbox_id)
@@ -443,22 +482,45 @@ class DirectNodeManagerAdapter:
                 self._state_store.save_drain(drain)
         return NodeDrainSnapshot(activity, drain, build_count)
 
-    def _attach_activity_lock(self, sandbox_id: str, lock: Lock) -> None:
-        with self._activity_guard:
-            if sandbox_id in self._activity_locks:
-                raise RuntimeError("direct sandbox already has attached activity")
-            self._activity_locks[sandbox_id] = lock
-
-    def _pop_activity_lock(self, sandbox_id: str) -> Lock | None:
-        with self._activity_guard:
-            return self._activity_locks.pop(sandbox_id, None)
-
     def _attach_exec_lease(self, sandbox_id: str, lease: object) -> None:
         with self._activity_guard:
             if sandbox_id in self._exec_leases:
                 raise RuntimeError("direct sandbox already has an exec lease")
             self._exec_leases[sandbox_id] = lease
 
+    def _acquire_exec_start(self, sandbox_id: str) -> Lock:
+        with self._activity_guard:
+            lock = self._exec_start_locks.setdefault(sandbox_id, Lock())
+            self._exec_start_users[sandbox_id] = (
+                self._exec_start_users.get(sandbox_id, 0) + 1
+            )
+        lock.acquire()
+        return lock
+
+    def _release_exec_start_lock(self, sandbox_id: str, lock: Lock) -> None:
+        lock.release()
+        with self._activity_guard:
+            users = self._exec_start_users.get(sandbox_id, 0) - 1
+            if users <= 0:
+                self._exec_start_users.pop(sandbox_id, None)
+                if self._exec_start_locks.get(sandbox_id) is lock:
+                    self._exec_start_locks.pop(sandbox_id, None)
+            else:
+                self._exec_start_users[sandbox_id] = users
+
     def _pop_exec_lease(self, sandbox_id: str):
         with self._activity_guard:
             return self._exec_leases.pop(sandbox_id, None)
+
+    def _release_exec_start(self, sandbox_id: str) -> None:
+        lease = self._pop_exec_lease(sandbox_id)
+        if lease is None:
+            return
+        with self._activity_guard:
+            lock = self._exec_start_locks.get(sandbox_id)
+        if lock is None:
+            raise RuntimeError("direct exec start lock is unavailable")
+        try:
+            lease.__exit__(None, None, None)
+        finally:
+            self._release_exec_start_lock(sandbox_id, lock)

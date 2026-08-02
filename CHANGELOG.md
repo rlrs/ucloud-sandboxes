@@ -2,6 +2,17 @@
 
 This project uses semantic versioning.
 
+## 0.3.81 - 2026-08-02
+
+- Fixed direct-runtime lifecycle fencing so a streaming `runsc exec` retains
+  its activity lease but no longer owns the cross-process Warden lock for the
+  lifetime of the child process.
+- Made direct sandbox deletion a hard revocation boundary that closes new
+  activity and can sever attached exec sessions, while parking and waking
+  continue to fail fast when activity is attached.
+- Added an explicit exec-start handshake so the Warden fence covers the full
+  validation-to-process-spawn race without deadlocking later deletion.
+
 ## 0.3.74 - 2026-08-02
 
 - Moved managed image registry naming into the gateway: clients now submit an

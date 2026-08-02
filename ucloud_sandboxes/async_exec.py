@@ -234,10 +234,37 @@ class AsyncExecSessionManager:
                 stderr=subprocess.PIPE,
             )
         except OSError as exc:
+            exec_start_failed = getattr(
+                self.sandbox_manager.runtime,
+                "exec_start_failed",
+                None,
+            )
+            if exec_start_failed is not None:
+                await asyncio.to_thread(
+                    exec_start_failed,
+                    session.spec.sandbox_id,
+                )
             await self._append_event(session, "error", str(exc).encode("utf-8"))
             await self._complete(session, 1)
             return
         session.process = process
+        exec_started = getattr(self.sandbox_manager.runtime, "exec_started", None)
+        if exec_started is not None:
+            try:
+                await asyncio.to_thread(exec_started, session.spec.sandbox_id)
+            except Exception as exc:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                await process.wait()
+                await self._append_event(
+                    session,
+                    "error",
+                    str(exc).encode("utf-8"),
+                )
+                await self._complete(session, 1)
+                return
         stream_tasks = [
             asyncio.create_task(self._pump_stream(session, "stdout", process.stdout)),
             asyncio.create_task(self._pump_stream(session, "stderr", process.stderr)),

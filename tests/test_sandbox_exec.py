@@ -235,6 +235,30 @@ class SandboxExecTests(unittest.TestCase):
             self.assertEqual(streams[-1], "exit")
             self.assertCountEqual(streams[1:-1], ["stdout", "stderr"])
 
+    def test_runtime_is_notified_after_exec_process_is_spawned(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            manager = SandboxManager(
+                SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                DockerGvisorRuntime(dry_run=True),
+            )
+            record, _result = manager.create(
+                SandboxSpec(id="sbx-1", image="busybox", memory_mb=128)
+            )
+            manager.store.upsert(replace(record, state="running"))
+            runtime = HookedLocalExecRuntime()
+            manager.runtime = runtime  # type: ignore[assignment]
+            exec_manager = ExecSessionManager(manager)
+
+            session = exec_manager.start(
+                SandboxExecSpec(sandbox_id="sbx-1", command=("ignored",))
+            )
+            deadline = time.monotonic() + 2
+            while session.status == "running" and time.monotonic() < deadline:
+                time.sleep(0.01)
+
+            self.assertEqual(runtime.started, ["sbx-1"])
+            self.assertEqual(session.status, "exited")
+
 
 class LocalExecRuntime:
     dry_run = False
@@ -245,6 +269,14 @@ class LocalExecRuntime:
             "-c",
             "import sys; sys.stdout.write('out'); sys.stderr.write('err')",
         )
+
+
+class HookedLocalExecRuntime(LocalExecRuntime):
+    def __init__(self) -> None:
+        self.started: list[str] = []
+
+    def exec_started(self, sandbox_id: str) -> None:
+        self.started.append(sandbox_id)
 
 
 if __name__ == "__main__":

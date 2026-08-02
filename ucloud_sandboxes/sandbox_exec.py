@@ -373,12 +373,33 @@ class ExecSessionManager:
                 bufsize=1,
             )
         except OSError as exc:
+            exec_start_failed = getattr(
+                self.sandbox_manager.runtime,
+                "exec_start_failed",
+                None,
+            )
+            if exec_start_failed is not None:
+                exec_start_failed(session.spec.sandbox_id)
             with self._lock:
                 self._append_event_locked(session, "error", str(exc))
                 self._complete_locked(session, 1)
             return
         with self._lock:
             session.process = process
+        exec_started = getattr(self.sandbox_manager.runtime, "exec_started", None)
+        if exec_started is not None:
+            try:
+                exec_started(session.spec.sandbox_id)
+            except Exception as exc:
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                process.wait()
+                with self._lock:
+                    self._append_event_locked(session, "error", str(exc))
+                    self._complete_locked(session, 1)
+                return
         stdout_thread = Thread(
             target=self._pump_stream,
             args=(session.id, "stdout", process.stdout),

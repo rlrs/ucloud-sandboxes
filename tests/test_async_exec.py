@@ -213,6 +213,29 @@ class AsyncExecTests(unittest.TestCase):
         self.assertEqual(streams[-1], "exit")
         self.assertCountEqual(streams[1:-1], ["stdout", "stderr"])
 
+    def test_runtime_is_notified_after_async_exec_process_is_spawned(self) -> None:
+        async def scenario() -> tuple[list[str], str]:
+            with TemporaryDirectory() as raw_dir:
+                manager = SandboxManager(
+                    SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                    DockerGvisorRuntime(dry_run=True),
+                )
+                record, _result = manager.create(
+                    SandboxSpec(id="sbx-1", image="busybox", memory_mb=128)
+                )
+                manager.store.upsert(replace(record, state="running"))
+                runtime = HookedLocalExecRuntime()
+                manager.runtime = runtime  # type: ignore[assignment]
+                exec_manager = AsyncExecSessionManager(manager)
+                session = await exec_manager.start(
+                    SandboxExecSpec(sandbox_id="sbx-1", command=("ignored",))
+                )
+                while session.status == "running":
+                    await asyncio.sleep(0.01)
+                return runtime.started, session.status
+
+        self.assertEqual(asyncio.run(scenario()), (["sbx-1"], "exited"))
+
 
 class LocalExecRuntime:
     dry_run = False
@@ -223,6 +246,14 @@ class LocalExecRuntime:
             "-c",
             "import sys; sys.stdout.buffer.write(b'out'); sys.stderr.buffer.write(b'err')",
         )
+
+
+class HookedLocalExecRuntime(LocalExecRuntime):
+    def __init__(self) -> None:
+        self.started: list[str] = []
+
+    def exec_started(self, sandbox_id: str) -> None:
+        self.started.append(sandbox_id)
 
 
 if __name__ == "__main__":

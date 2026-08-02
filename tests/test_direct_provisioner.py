@@ -42,6 +42,7 @@ from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
 from ucloud_sandboxes.node_agent import build_direct_node_agent_server
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import (
+    SandboxBusyError,
     SandboxCapacityUnavailableError,
     SandboxSecuritySpec,
     SandboxSpec,
@@ -727,7 +728,9 @@ class DirectProvisionerTests(unittest.TestCase):
                 service.create(self.spec())
 
 
-    def test_node_adapter_holds_exec_lease_and_accounts_parked_memory(self) -> None:
+    def test_node_adapter_releases_exec_start_fence_and_accounts_parked_memory(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
             provisioner, _, _, _, _, _ = self.make(root)
@@ -745,6 +748,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 ("/bin/true",),
                 interactive=False,
             )
+            manager.runtime.exec_started(created.spec.id)
             manager.lifecycle.release_shared(created.spec.id)
             snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
 
@@ -755,6 +759,39 @@ class DirectProvisionerTests(unittest.TestCase):
             parked = manager.heartbeat_snapshot(active_build_count=lambda: 0)
             self.assertEqual(parked.activity.active_sandboxes, 0)
             self.assertEqual(parked.activity.used_resources.memory_mb, 0)
+
+    def test_node_adapter_delete_preempts_attached_exec_but_park_does_not(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = service.create(self.spec())
+            manager = DirectNodeManagerAdapter(service)
+
+            manager.lifecycle.acquire_shared(created.spec.id)
+            manager.runtime.exec_command(
+                created.spec.id,
+                ("/bin/sleep", "3600"),
+                interactive=False,
+            )
+            manager.runtime.exec_started(created.spec.id)
+            with self.assertRaisesRegex(SandboxBusyError, "active exec"):
+                manager.park(created.spec.id)
+
+            deleted, _ = manager.delete(
+                created.spec.id,
+                generation=created.generation,
+                operation_id="delete:test",
+            )
+            manager.lifecycle.release_shared(created.spec.id)
+
+            self.assertEqual(deleted, created)
+            self.assertIsNone(service.get(created.spec.id))
 
     def test_node_adapter_heartbeat_accounts_incomplete_create_registrations(
         self,

@@ -1,6 +1,6 @@
 # Production roadmap
 
-Status: **Phase 1 in progress**
+Status: **Phase 0 in progress; Phase 1 infrastructure deployed in shadow**
 
 Last reviewed: 2026-08-02
 
@@ -38,17 +38,31 @@ cleanup opportunistic during heartbeat collection. Pre-0.3.76 agents remain
 protocol-compatible with routes they already own, but are excluded from new
 placement and autoscaler capacity until they drain.
 
-Second, the observed PRIME/TMax traffic used `parkable=false` sandboxes and
-long-lived attached exec harnesses. Those sandboxes are permanently active for
-scheduling purposes; they cannot exercise parked density or emit model-wait
-program state. The arbitrary-harness production integration is not complete
-until it creates parkable sandboxes and starts harnesses as checkpointable
-initial or detached jobs, as required by `verifiers-v1.md`. Autoscaler policy
-must not ignore their requested CPU and memory before that lifecycle contract
-is real. For the observed 4-vCPU, 8-GiB-memory, 16-GiB-writable shape, the
+Second, the observed PRIME/TMax traffic eventually created `parkable=true`
+sandboxes but still ran each harness through a long-lived attached exec. Those
+sandboxes are permanently active for scheduling purposes; they cannot exercise
+parked density or emit useful model-wait program state. The arbitrary-harness
+production integration is not complete until it uses the generation-fenced
+primary-job contract in [`durable-sandbox-jobs.md`](durable-sandbox-jobs.md).
+An image command or `runsc exec --detach` is not a substitute for that contract.
+Attached harnesses still consume real CPU and memory, but their nominal limits
+must not be multiplied into permanent node reservations. Dynamic admission now
+uses the individual sandbox shape, concurrent create/wake reservations, and
+live host CPU, RAM+swap, load, and PSI. Durable primary jobs remain necessary
+to make model-wait parking observable and safe; they are not a prerequisite for
+correct burst-sensitive admission. For the observed 4-vCPU, 8-GiB-memory,
+16-GiB-writable shape, the
 parked hard-storage reservation is 33,856 MiB, so one qualified node can own
 at most 42 such parked sandboxes and 64 require at least two nodes even with no
 resident CPU or memory working set.
+
+## Phase 0: durable primary jobs
+
+This is the immediate production blocker. Implement and qualify the runtime
+init, gateway job journal, checkpoint/migration binding, SDK `JobHandle`, and
+real Verifiers harness flow specified in
+[`durable-sandbox-jobs.md`](durable-sandbox-jobs.md). Program-aware scheduler
+actions remain disabled until this gate passes.
 
 ## Phase 1: live-metrics autoscaling
 
@@ -60,7 +74,7 @@ Implementation status:
   markers, indexed pressure/lifecycle reads, live-pressure headroom action,
   provisioning-p95 idle grace, cooldown hysteresis, decision telemetry, and a
   decision-oriented operations dashboard.
-- **Program-aware extension in progress:** durable rollout/request phase
+- **Program-aware extension blocked on Phase 0:** durable rollout/request phase
   observation and terminal cleanup, per-return and periodic shadow wake
   planning, and bounded leading demand (action off by default) as specified in
   [`program-aware-scheduling-plan.md`](program-aware-scheduling-plan.md).
@@ -167,10 +181,9 @@ semantics, audit history, and rollback.
   wake/restore p50 and p95, and storage queue tails.
 - The policy is tuned from the canary data before broad traffic.
 
-Program-aware work is staged independently from the live-pressure canary.
-Observation and shadow planning may deploy with Phase 1, but queued wake
-activation cannot occur until its replay, fairness, and crash-boundary gates
-pass.
+Program-aware observation and shadow planning may remain deployed with Phase 1,
+but queued-wake activation cannot occur until the durable-primary-job flow,
+replay, fairness, and crash-boundary gates pass.
 
 The local 20,000-event lower-bound benchmark is recorded in
 [`benchmarks/metrics-sqlite-2026-07-31.json`](benchmarks/metrics-sqlite-2026-07-31.json).

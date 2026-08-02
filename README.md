@@ -36,6 +36,8 @@ under `docs/`, not in this overview.
   sandboxes that need to reach model workers behind outbound-only networking.
 - [Verifiers v1 and parked sandboxes](docs/verifiers-v1.md): no-sidecar relay,
   park/wake, retry, streaming, and detached-harness lifecycle contract.
+- [Durable sandbox jobs](docs/durable-sandbox-jobs.md): generation-fenced
+  primary-job ownership across park, restore, migration, and node restart.
 - [Routing gateway](docs/routing-gateway.md): gateway and exec/SSH routing
   design, performance expectations, and concurrency notes.
 - [Scaling policy](docs/scaling-policy.md): scale-to-zero policy, prepare

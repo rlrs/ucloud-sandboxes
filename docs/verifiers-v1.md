@@ -116,7 +116,8 @@ silently request another sample.
 
 ## Harness process lifecycle
 
-The harness itself must be a detached, checkpointable sandbox job:
+The harness itself must be the sandbox's durable primary job, as specified in
+[`durable-sandbox-jobs.md`](durable-sandbox-jobs.md):
 
 - starting it returns a durable job ID rather than holding a gateway exec
   stream open;
@@ -129,6 +130,10 @@ The harness itself must be a detached, checkpointable sandbox job:
 
 This is separate from the relay. Keeping an attached exec session alive for the
 whole rollout would hold a sandbox lifecycle lease and prevent parking.
+`runsc exec --detach` is also insufficient because a source-host child process
+continues to own its wait and output lifecycle. The selected runtime init is a
+replacement for the already-injected PID 1, not an additional relay or harness
+sidecar.
 
 The direct runtime does not infer guest idleness from time since the last host
 API call. Guest CPU, network, and subprocess activity are invisible to that

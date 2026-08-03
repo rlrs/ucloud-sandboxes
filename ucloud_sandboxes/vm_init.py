@@ -1309,8 +1309,38 @@ if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
   # Repair old bootstrap ownership without descending into rootfs mounts.
   # Those mounts can contain millions of files and changing them also creates
-  # unnecessary storage-native COW writes.
-  $SUDO chown -R --one-file-system root:root "$UCLOUD_STATE_DIR/direct-runtime"
+  # unnecessary storage-native COW writes. Coreutils chown has no portable
+  # filesystem-boundary option, so prune by st_dev before changing anything.
+  $SUDO python3 - "$UCLOUD_STATE_DIR/direct-runtime" <<'UCLOUD_CHOWN_DIRECT_STATE_PY'
+import os
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+root_device = os.lstat(root).st_dev
+os.chown(root, 0, 0, follow_symlinks=False)
+for current, directories, filenames in os.walk(
+    root, topdown=True, followlinks=False
+):
+    retained = []
+    for name in directories:
+        path = Path(current) / name
+        try:
+            if os.lstat(path).st_dev != root_device:
+                continue
+            os.chown(path, 0, 0, follow_symlinks=False)
+        except FileNotFoundError:
+            continue
+        retained.append(name)
+    directories[:] = retained
+    for name in filenames:
+        path = Path(current) / name
+        try:
+            if os.lstat(path).st_dev == root_device:
+                os.chown(path, 0, 0, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+UCLOUD_CHOWN_DIRECT_STATE_PY
   if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
     echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
     exit 1

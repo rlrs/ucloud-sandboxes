@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.90 - 2026-08-03
+
+- Replaced the non-portable `chown --one-file-system` bootstrap assumption
+  with an explicit device-aware ownership repair that prunes mounted rootfs
+  trees before changing any inode.
+
 ## 0.3.89 - 2026-08-03
 
 - Made node re-initialization mount-safe by stopping recursive ownership and

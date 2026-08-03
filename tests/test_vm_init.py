@@ -57,9 +57,11 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("Skipping legacy task conformance", script)
         self.assertIn("runtime/direct/runsc", script)
         self.assertIn(
-            'chown -R --one-file-system root:root "$UCLOUD_STATE_DIR/direct-runtime"',
+            'root_device = os.lstat(root).st_dev',
             script,
         )
+        self.assertIn('follow_symlinks=False', script)
+        self.assertNotIn('chown -R --one-file-system', script)
         self.assertNotIn(
             'chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"',
             script,

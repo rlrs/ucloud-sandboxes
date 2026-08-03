@@ -878,3 +878,31 @@ material state, timestamp, resource, or error change. Failed lifecycle calls
 retain their HTTP error, and a node-confirmed parked wake rollback restores the
 gateway route to `parked`; ambiguous failures remain `waking` for durable
 reconciliation.
+
+The first production rollout of that fix exposed the complete cleanup chain.
+Forty-four wakes on a 0.3.86 node had mounted a fresh COW above published
+authority and then failed the obsolete `st_dev` validation. Their later client
+deletes correctly fenced the node registrations as `deleting`, but deletion
+hit the same validation failure. Because deleting registrations are excluded
+from public sandbox inventory and cleanup was replayed only at node startup,
+the 44 volumes looked orphaned while retaining 1,424,128 MiB of legitimate
+hard storage reservations. They were not ownerless: the durable node registry
+still owned every one.
+
+Deletion is now an autonomous reconciliation state. Node startup attempts all
+fenced deletions but does not withhold healthy service when one cleanup is
+temporarily unavailable; the direct service retries them continuously behind
+the per-incarnation lifecycle lock. Replay is also valid after physical quota
+removal or after the disk ledger has written its tombstone but before the
+registry commits deletion. The immutable deleting record reconstructs only the
+exact original quota identity, verifies its total, and cannot acquire new
+capacity. Truly unowned storage still fails the ownership audit and is never
+deleted from gateway absence alone.
+
+The autoscaler now consumes the same physical authority as node admission.
+For storage-native heartbeats, free disk is the minimum of route-accounted
+nominal free space and `storage_hard_capacity - storage_hard_reserved`. Cleanup
+debt therefore remains visible, blocks placement on the affected node, and
+creates bounded replacement capacity when queued requests cannot fit. As the
+deletion reconciler releases volumes, the hard reservation falls and ordinary
+scale-down removes any temporary surplus node.

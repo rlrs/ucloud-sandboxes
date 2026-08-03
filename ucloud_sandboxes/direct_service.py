@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import logging
 import subprocess
 import threading
 import time
@@ -45,6 +46,9 @@ from .sandbox import (
     SandboxSpec,
     validate_container_path,
 )
+
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -168,11 +172,16 @@ class DirectSandboxService:
         process_runner: DirectProcessRunner | None = None,
         max_concurrent_restores: int = 8,
         idle_park_seconds: float = 0.0,
+        deletion_reconcile_interval_seconds: float = 5.0,
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
         if idle_park_seconds < 0:
             raise ValueError("idle_park_seconds cannot be negative")
+        if deletion_reconcile_interval_seconds <= 0:
+            raise ValueError(
+                "deletion_reconcile_interval_seconds must be positive"
+            )
         self.provisioner = provisioner
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
@@ -195,11 +204,15 @@ class DirectSandboxService:
         self._locks_guard = threading.Lock()
         self._admission_open = True
         self._idle_park_seconds = float(idle_park_seconds)
+        self._deletion_reconcile_interval_seconds = float(
+            deletion_reconcile_interval_seconds
+        )
         self._last_activity: dict[tuple[str, int], float] = {}
         self._activity_guard = threading.Lock()
         self._stop_event = threading.Event()
         self._parking_thread: threading.Thread | None = None
         self._network_thread: threading.Thread | None = None
+        self._deletion_thread: threading.Thread | None = None
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
@@ -237,6 +250,7 @@ class DirectSandboxService:
     def start(self) -> tuple[SandboxRecord, ...]:
         results = self.provisioner.start()
         records = tuple(self._record(item.registration) for item in results)
+        self._stop_event.clear()
         now = time.monotonic()
         with self._activity_guard:
             self._last_activity = {
@@ -249,13 +263,19 @@ class DirectSandboxService:
                 or not self._parking_thread.is_alive()
             )
         ):
-            self._stop_event.clear()
             self._parking_thread = threading.Thread(
                 target=self._idle_parking_loop,
                 name="ucloud-direct-idle-parker",
                 daemon=True,
             )
             self._parking_thread.start()
+        if self._deletion_thread is None or not self._deletion_thread.is_alive():
+            self._deletion_thread = threading.Thread(
+                target=self._deletion_reconciliation_loop,
+                name="ucloud-direct-deletion-reconciler",
+                daemon=True,
+            )
+            self._deletion_thread.start()
         network_manager = self.provisioner.network_manager
         if network_manager is not None:
             network_manager.reconcile()
@@ -266,7 +286,6 @@ class DirectSandboxService:
                     or not self._network_thread.is_alive()
                 )
             ):
-                self._stop_event.clear()
                 self._network_thread = threading.Thread(
                     target=self._network_reconciliation_loop,
                     name="ucloud-direct-network-reconciler",
@@ -277,6 +296,12 @@ class DirectSandboxService:
 
     def stop(self) -> None:
         self._stop_event.set()
+        deletion_thread = self._deletion_thread
+        if deletion_thread is not None:
+            deletion_thread.join(
+                timeout=max(2.0, self._deletion_reconcile_interval_seconds * 2)
+            )
+        self._deletion_thread = None
         thread = self._parking_thread
         if thread is not None:
             thread.join(timeout=max(2.0, self._idle_park_seconds * 2))
@@ -286,6 +311,43 @@ class DirectSandboxService:
             interval = self.provisioner.network_manager.resolve_interval_seconds
             network_thread.join(timeout=max(2.0, interval * 2))
         self._network_thread = None
+
+    def _deletion_reconciliation_loop(self) -> None:
+        while not self._stop_event.wait(
+            self._deletion_reconcile_interval_seconds
+        ):
+            failures: list[tuple[str, Exception]] = []
+            deleted = 0
+            try:
+                registrations = self.provisioner.registry.list()
+            except Exception as exc:
+                _LOG.warning(
+                    "could not read durable sandbox deletions for reconciliation: %s",
+                    exc,
+                )
+                continue
+            for registration in registrations:
+                if registration.phase != "deleting":
+                    continue
+                try:
+                    self.delete(
+                        registration.sandbox_id,
+                        generation=registration.sandbox_generation,
+                    )
+                    deleted += 1
+                except Exception as exc:
+                    failures.append((registration.sandbox_id, exc))
+            if deleted:
+                _LOG.info("reconciled %d durable sandbox deletion(s)", deleted)
+            if failures:
+                first_id, first_error = failures[0]
+                _LOG.warning(
+                    "could not reconcile %d durable sandbox deletion(s); "
+                    "first=%s: %s",
+                    len(failures),
+                    first_id,
+                    first_error,
+                )
 
     def _network_reconciliation_loop(self) -> None:
         network_manager = self.provisioner.network_manager

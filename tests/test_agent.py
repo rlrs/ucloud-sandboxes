@@ -92,6 +92,36 @@ class AgentTests(unittest.TestCase):
         assert heartbeat.runtime_metrics is not None
         self.assertEqual(heartbeat.runtime_metrics.cpu_percent, 12.5)
 
+    def test_storage_native_free_disk_uses_daemon_hard_reservations(self) -> None:
+        heartbeat = build_heartbeat(
+            job_id="storage-node",
+            capabilities=("disk-quota", "storage-native-v1"),
+            total_resources=ResourceQuantity(disk_mb=1_449_984),
+            used_resources=ResourceQuantity(disk_mb=17_472),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                storage_hard_capacity_mb=1_449_984,
+                storage_hard_reserved_mb=1_441_600,
+            ),
+        )
+
+        self.assertEqual(heartbeat.free_resources.disk_mb, 8_384)
+
+    def test_legacy_free_disk_ignores_storage_native_only_metrics(self) -> None:
+        heartbeat = build_heartbeat(
+            job_id="legacy-node",
+            capabilities=("disk-quota",),
+            total_resources=ResourceQuantity(disk_mb=1_449_984),
+            used_resources=ResourceQuantity(disk_mb=17_472),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                storage_hard_capacity_mb=1_449_984,
+                storage_hard_reserved_mb=1_441_600,
+            ),
+        )
+
+        self.assertEqual(heartbeat.free_resources.disk_mb, 1_432_512)
+
     def test_rejects_missing_job_id(self) -> None:
         with self.assertRaises(ValueError):
             build_heartbeat(job_id="")

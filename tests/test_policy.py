@@ -4,6 +4,7 @@ import unittest
 from ucloud_sandboxes.models import (
     LiveScaleSignals,
     NodeHeartbeat,
+    NodeRuntimeMetrics,
     ProgramScaleSignals,
     ResourceQuantity,
     SandboxDemand,
@@ -41,6 +42,7 @@ def node(
     agent_version_compatible: bool = True,
     draining: bool = False,
     admission_open: bool = True,
+    runtime_metrics: NodeRuntimeMetrics | None = None,
     job_cpu: int = 2,
     job_memory_gb: int = 6,
     job_disk_gb: int | None = None,
@@ -62,6 +64,7 @@ def node(
             draining=draining,
             admission_open=admission_open,
             inventory_complete=inventory_complete,
+            runtime_metrics=runtime_metrics,
         )
     return SandboxNode(
         job=VmJob(
@@ -87,6 +90,59 @@ def node(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_storage_native_hard_reservations_trigger_replacement_capacity(
+        self,
+    ) -> None:
+        decision = evaluate_scale(
+            [
+                node(
+                    "storage-full",
+                    active=1,
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98_304,
+                        disk_mb=1_449_984,
+                    ),
+                    used_resources=ResourceQuantity(disk_mb=17_472),
+                    capabilities=(
+                        "disk-quota",
+                        "dynamic-active-admission-v1",
+                        "storage-native-v1",
+                    ),
+                    runtime_metrics=NodeRuntimeMetrics(
+                        collected_at=utc_now(),
+                        storage_hard_capacity_mb=1_449_984,
+                        storage_hard_reserved_mb=1_441_600,
+                    ),
+                    job_cpu=32,
+                    job_memory_gb=96,
+                    job_disk_gb=2_000,
+                )
+            ],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=48,
+                    memory_mb=86_016,
+                    disk_mb=357_120,
+                ),
+                pending_count=12,
+            ),
+            ScalePolicy(
+                max_nodes=10,
+                max_create_per_cycle=4,
+                dynamic_active_admission_enabled=True,
+                default_node_resources=ResourceQuantity(
+                    vcpu=32,
+                    memory_mb=98_304,
+                    disk_mb=1_449_984,
+                ),
+            ),
+        )
+
+        self.assertEqual(decision.projected_free_resources.disk_mb, 8_384)
+        self.assertEqual(decision.resource_deficit.disk_mb, 348_736)
+        self.assertEqual(decision.creates, 1)
+
     def test_non_capacity_failures_do_not_create_nodes(self) -> None:
         failed = ResourceQuantity(vcpu=400, memory_mb=819_200, disk_mb=3_385_600)
         decision = evaluate_scale(

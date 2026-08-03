@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
+import logging
 import shutil
+import time
 from typing import Any
 
 from .direct_migration import (
@@ -22,10 +24,12 @@ from .direct_registry import (
 )
 from .direct_warden import DirectRunscWarden, DirectWardenError
 from .hibernation import (
+    HIBERNATION_FIXED_OVERHEAD_MB,
     HibernationCapacityError,
     HibernationDiskLedger,
     HibernationDiskReservation,
     HibernationState,
+    hibernation_memory_backing_reservation_mb,
 )
 from .image_rootfs import DockerRootfsStore, OverlayRootfsManager
 from .runtime_identity import (
@@ -38,6 +42,9 @@ from .storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -96,9 +103,17 @@ class DirectSandboxProvisioner:
         self.image_store.reconcile_export_containers()
         self._audit_ownership()
         results: list[DirectProvisioningResult] = []
+        deletion_failures: list[tuple[str, Exception]] = []
         for item in self.registry.list():
             if item.phase == "deleting":
-                self.delete(item.sandbox_id)
+                try:
+                    self.delete(item.sandbox_id)
+                except Exception as exc:
+                    # DELETING is the durable ownership fence. Keep serving
+                    # healthy sandboxes and let the service reconciler retry;
+                    # a transient cleanup failure must not require a node
+                    # restart or hide its still-reserved storage from metrics.
+                    deletion_failures.append((item.sandbox_id, exc))
             elif item.phase in {
                 "import_planned",
                 "importing",
@@ -118,6 +133,14 @@ class DirectSandboxProvisioner:
                 results.append(DirectProvisioningResult(item, record.state))
             else:
                 results.append(self.reconcile(item.sandbox_id))
+        if deletion_failures:
+            first_id, first_error = deletion_failures[0]
+            _LOG.warning(
+                "deferred %d durable sandbox deletion(s); first=%s: %s",
+                len(deletion_failures),
+                first_id,
+                first_error,
+            )
         return tuple(results)
 
     def create(
@@ -606,7 +629,7 @@ class DirectSandboxProvisioner:
                 registration.sandbox_generation,
             )
         self.overlays.release_sandbox(sandbox)
-        reservation = self._reservation_for(registration)
+        reservation = self._deletion_reservation_for(registration)
         self.quota_backend.drop(reservation)
         # Logical node capacity is released only after the physical quota tree
         # is gone. Replays after this boundary are fenced by the ledger tombstone.
@@ -619,6 +642,64 @@ class DirectSandboxProvisioner:
             sandbox_generation=registration.sandbox_generation,
             expected_revision=registration.revision,
         )
+
+    def _deletion_reservation_for(
+        self,
+        registration: DirectSandboxRegistration,
+    ) -> HibernationDiskReservation:
+        """Recover cleanup identity across the ledger-release crash boundary.
+
+        Physical quota is removed before logical admission is released. A
+        crash after the ledger tombstone but before registry completion must
+        still be able to replay quota deletion and commit the DELETING record.
+        The immutable registry record contains every field needed to recreate
+        that cleanup capability, and the total is checked against the original
+        quota commitment before it is used.
+        """
+
+        matching = [
+            item
+            for item in self.disk_ledger.inventory().reservations
+            if item.sandbox_id == registration.sandbox_id
+            and item.sandbox_generation == registration.sandbox_generation
+        ]
+        if len(matching) > 1:
+            raise DirectRegistryError(
+                "deleting direct registration owns multiple disk reservations"
+            )
+        if matching:
+            return matching[0]
+        if registration.phase != "deleting":
+            raise DirectRegistryError(
+                "direct registration does not have exactly one disk reservation"
+            )
+        if (
+            registration.quota_project_id is None
+            or registration.quota_total_mb is None
+            or registration.spec.memory_mb is None
+            or registration.spec.disk_mb is None
+        ):
+            raise DirectRegistryError(
+                "deleting direct registration lacks immutable quota identity"
+            )
+        reservation = HibernationDiskReservation(
+            sandbox_id=registration.sandbox_id,
+            sandbox_generation=registration.sandbox_generation,
+            project_id=registration.quota_project_id,
+            memory_mb=registration.spec.memory_mb,
+            writable_disk_mb=registration.spec.disk_mb,
+            memory_backing_mb=hibernation_memory_backing_reservation_mb(
+                registration.spec.memory_mb
+            ),
+            private_pages_mb=registration.spec.memory_mb,
+            fixed_overhead_mb=HIBERNATION_FIXED_OVERHEAD_MB,
+            created_ns=max(1, registration.created_ns or time.time_ns()),
+        )
+        if reservation.total_mb != registration.quota_total_mb:
+            raise DirectRegistryError(
+                "deleting direct registration quota identity changed"
+            )
+        return reservation
 
     def _reset_interrupted_import(
         self,
@@ -863,7 +944,7 @@ class DirectSandboxProvisioner:
             quota = quota_inventory.get(identity)
             if registration.phase not in {"planned", "import_planned"} and (
                 reservation is None
-            ):
+            ) and registration.phase != "deleting":
                 raise DirectRegistryError(
                     "registered direct sandbox is missing disk admission"
                 )
@@ -876,17 +957,21 @@ class DirectSandboxProvisioner:
                 "moving_out",
                 "deleting",
             } and quota is None:
-                raise DirectRegistryError(
-                    "registered direct sandbox is missing physical quota"
-                )
+                if registration.phase != "deleting":
+                    raise DirectRegistryError(
+                        "registered direct sandbox is missing physical quota"
+                    )
             if quota is not None:
-                if reservation is None:
+                ownership = reservation
+                if ownership is None and registration.phase == "deleting":
+                    ownership = self._deletion_reservation_for(registration)
+                if ownership is None:
                     raise DirectRegistryError(
                         "physical quota has no logical disk reservation"
                     )
                 if (
-                    quota["project_id"] != reservation.project_id
-                    or quota["hard_limit_mb"] != reservation.total_mb
+                    quota["project_id"] != ownership.project_id
+                    or quota["hard_limit_mb"] != ownership.total_mb
                     or Path(quota["path"]) != self._quota_path(registration)
                 ):
                     raise DirectRegistryError(

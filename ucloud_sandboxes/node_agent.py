@@ -2173,7 +2173,15 @@ def build_direct_node_agent_server(
     DirectBoundHandler.runtime_metrics_provider = staticmethod(
         direct_runtime_metrics
     )
-    return HighBacklogThreadingHTTPServer((host, port), DirectBoundHandler)
+
+    class DirectServiceHTTPServer(HighBacklogThreadingHTTPServer):
+        def server_close(self) -> None:
+            try:
+                service.stop()
+            finally:
+                super().server_close()
+
+    return DirectServiceHTTPServer((host, port), DirectBoundHandler)
 
 
 def sandbox_record_to_dict(record: SandboxRecord) -> dict[str, Any]:

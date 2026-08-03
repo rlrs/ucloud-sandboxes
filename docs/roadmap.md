@@ -191,6 +191,22 @@ parked hard-storage reservation is 33,856 MiB, so one qualified node can own
 at most 42 such parked sandboxes and 64 require at least two nodes even with no
 resident CPU or memory working set.
 
+A 2026-08-03 production follow-up found 44 storage-native volumes behind
+durable node registrations stuck in `deleting`. Failed wakes on the previous
+agent had mounted new COW devices before obsolete remount-device validation
+failed; deletion then encountered the same failure. The node reported only
+one live sandbox but retained 1,441,600 MiB of hard reservations. Nominal route
+accounting overcredited disk, so the autoscaler incorrectly reported zero
+deficit for queued work.
+
+The permanent model keeps node ownership authoritative. Failed wakes discard
+uncommitted COW state, deleting registrations are retried continuously without
+a client retry or node restart, and deletion remains replayable after either
+physical quota or logical-ledger cleanup has already committed. Storage-native
+free disk is clamped to the daemon's hard capacity-minus-reservations metric in
+both placement and autoscaling. Gateway absence alone never authorizes storage
+deletion.
+
 ## Phase 0: durable primary jobs
 
 The runtime init, gateway job state, checkpoint/migration ledger binding, sync

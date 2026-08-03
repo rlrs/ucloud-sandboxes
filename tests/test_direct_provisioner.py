@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 from threading import Event, Lock, Thread
+from time import monotonic, sleep
 from urllib import request
 import hashlib
 import json
@@ -512,6 +513,118 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(results, ())
             self.assertEqual(registry.get("sandbox").phase, "importing")
             self.assertNotIn(("sandbox", 9), warden.records)
+
+    def test_restart_completes_delete_after_ledger_release_boundary(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            created = provisioner.create(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            deleting = registry.begin_delete(
+                created.registration.sandbox_id,
+                expected_revision=created.registration.revision,
+            )
+            reservation = provisioner._reservation_for(deleting)
+
+            warden.delete(deleting.to_direct_sandbox())
+            provisioner.overlays.release_sandbox(deleting.to_direct_sandbox())
+            quota.drop(reservation)
+            ledger.release(
+                sandbox_id=deleting.sandbox_id,
+                sandbox_generation=deleting.sandbox_generation,
+            )
+
+            self.assertEqual(registry.get(deleting.sandbox_id).phase, "deleting")
+            self.assertEqual(ledger.inventory().reservations, ())
+            self.assertEqual(quota.inventory(), ())
+
+            results = provisioner.start()
+
+            self.assertEqual(results, ())
+            self.assertIsNone(registry.get(deleting.sandbox_id))
+
+    def test_service_retries_durable_delete_without_node_restart(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, ledger, quota, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+                deletion_reconcile_interval_seconds=0.01,
+            )
+            service.start()
+            try:
+                created = service.create(self.spec())
+                original_drop = quota.drop
+                failures_remaining = 1
+
+                def transient_drop(reservation):
+                    nonlocal failures_remaining
+                    if failures_remaining:
+                        failures_remaining -= 1
+                        raise OSError("injected transient quota delete failure")
+                    return original_drop(reservation)
+
+                quota.drop = transient_drop
+                with self.assertRaisesRegex(OSError, "transient quota delete"):
+                    service.delete(created.spec.id)
+                self.assertEqual(registry.get(created.spec.id).phase, "deleting")
+
+                deadline = monotonic() + 2
+                while registry.get(created.spec.id) is not None and monotonic() < deadline:
+                    sleep(0.01)
+
+                self.assertIsNone(registry.get(created.spec.id))
+                self.assertEqual(ledger.inventory().reservations, ())
+                self.assertEqual(quota.inventory(), ())
+            finally:
+                service.stop()
+
+    def test_start_serves_while_failed_warden_delete_retries(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            created = provisioner.create(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            registry.begin_delete(
+                created.registration.sandbox_id,
+                expected_revision=created.registration.revision,
+            )
+            original_delete = warden.delete
+            failures_remaining = 1
+
+            def transient_warden_delete(sandbox):
+                nonlocal failures_remaining
+                if failures_remaining:
+                    failures_remaining -= 1
+                    raise OSError("injected mounted-volume cleanup failure")
+                return original_delete(sandbox)
+
+            warden.delete = transient_warden_delete
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+                deletion_reconcile_interval_seconds=0.01,
+            )
+            service.start()
+            try:
+                sandbox_id = created.registration.sandbox_id
+                self.assertEqual(registry.get(sandbox_id).phase, "deleting")
+                deadline = monotonic() + 2
+                while registry.get(sandbox_id) is not None and monotonic() < deadline:
+                    sleep(0.01)
+
+                self.assertIsNone(registry.get(sandbox_id))
+                self.assertEqual(ledger.inventory().reservations, ())
+                self.assertEqual(quota.inventory(), ())
+            finally:
+                service.stop()
 
     def test_start_fails_closed_on_orphan_capacity_owner(self) -> None:
         with TemporaryDirectory() as raw:

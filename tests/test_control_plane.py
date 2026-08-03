@@ -7477,6 +7477,31 @@ class ControlPlaneTests(unittest.TestCase):
             ResourceQuantity(vcpu=3, memory_mb=3_000, disk_mb=3_000),
         )
 
+    def test_node_capacity_clamps_route_accounting_to_storage_authority(self) -> None:
+        heartbeat = build_heartbeat(
+            job_id="job-storage",
+            node_id="node-storage",
+            node_url="http://node-storage:8090",
+            capabilities=("disk-quota", "storage-native-v1"),
+            total_resources=ResourceQuantity(
+                vcpu=32,
+                memory_mb=98_304,
+                disk_mb=1_449_984,
+            ),
+            used_resources=ResourceQuantity(disk_mb=17_472),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                storage_hard_capacity_mb=1_449_984,
+                storage_hard_reserved_mb=1_441_600,
+            ),
+        )
+
+        available = control_plane._node_available_resources(heartbeat, [])
+
+        self.assertEqual(available.disk_mb, 8_384)
+        self.assertEqual(available.vcpu, 32)
+        self.assertEqual(available.memory_mb, 98_304)
+
     def test_control_plane_rejects_unsupported_or_oversized_request_framing(
         self,
     ) -> None:

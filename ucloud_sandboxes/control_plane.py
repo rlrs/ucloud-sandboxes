@@ -6545,31 +6545,11 @@ def _node_available_resources(
     routes: list[SandboxRoute],
 ) -> ResourceQuantity:
     route_reservations = _node_reserved_route_resources(heartbeat, routes)
-    effective = heartbeat.effective_resources
-    accounted_used = ResourceQuantity(
-        vcpu=(
-            heartbeat.used_resources.vcpu
-            + heartbeat.reserved_resources.vcpu
-            + heartbeat.build_reserved_resources.vcpu
-            + route_reservations.vcpu
-        ),
-        memory_mb=(
-            heartbeat.used_resources.memory_mb
-            + heartbeat.reserved_resources.memory_mb
-            + heartbeat.build_reserved_resources.memory_mb
-            + route_reservations.memory_mb
-        ),
-        disk_mb=(
-            heartbeat.used_resources.disk_mb
-            + heartbeat.reserved_resources.disk_mb
-            + heartbeat.build_reserved_resources.disk_mb
-            + route_reservations.disk_mb
-        ),
-    )
+    free = heartbeat.free_resources
     return ResourceQuantity(
-        vcpu=max(0.0, effective.vcpu - accounted_used.vcpu),
-        memory_mb=max(0, effective.memory_mb - accounted_used.memory_mb),
-        disk_mb=max(0, effective.disk_mb - accounted_used.disk_mb),
+        vcpu=max(0.0, free.vcpu - route_reservations.vcpu),
+        memory_mb=max(0, free.memory_mb - route_reservations.memory_mb),
+        disk_mb=max(0, free.disk_mb - route_reservations.disk_mb),
     )
 
 

@@ -2,6 +2,19 @@
 
 This project uses semantic versioning.
 
+## 0.3.88 - 2026-08-03
+
+- Made direct-runtime deletion self-healing: durable `deleting` registrations
+  are retried by the node daemon without requiring a client retry or node
+  restart, and cleanup can replay across the ledger-release crash boundary.
+- Clamped storage-native node capacity to the storage daemon's hard
+  capacity-minus-reservations value so mounted cleanup debt immediately asks
+  the autoscaler for replacement capacity instead of being hidden by nominal
+  route accounting.
+- Kept node startup available while fenced deletion cleanup is temporarily
+  failing and tied direct-service reconciliation threads to HTTP server
+  shutdown.
+
 ## 0.3.87 - 2026-08-03
 
 - Fixed storage-native wake validation across ublk remounts by treating device

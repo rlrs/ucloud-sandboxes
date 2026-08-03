@@ -555,10 +555,29 @@ class NodeHeartbeat:
             + self.reserved_resources
             + self.build_reserved_resources
         )
+        disk_mb = max(0, effective.disk_mb - unavailable.disk_mb)
+        metrics = self.runtime_metrics
+        if (
+            "storage-native-v1" in self.capabilities
+            and metrics is not None
+            and metrics.storage_hard_capacity_mb > 0
+        ):
+            # The storage daemon is the physical admission authority. Route
+            # accounting can lag a mounted volume transition or a durable
+            # deletion retry, so nominal node disk must never over-credit the
+            # bytes the daemon has already promised.
+            disk_mb = min(
+                disk_mb,
+                max(
+                    0,
+                    metrics.storage_hard_capacity_mb
+                    - metrics.storage_hard_reserved_mb,
+                ),
+            )
         return ResourceQuantity(
             vcpu=max(0.0, effective.vcpu - unavailable.vcpu),
             memory_mb=max(0, effective.memory_mb - unavailable.memory_mb),
-            disk_mb=max(0, effective.disk_mb - unavailable.disk_mb),
+            disk_mb=disk_mb,
         )
 
     @property

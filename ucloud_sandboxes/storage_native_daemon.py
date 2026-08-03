@@ -271,6 +271,8 @@ class StorageHostOperations(Protocol):
 
     def unmount(self, target: Path) -> None: ...
 
+    def detach(self, target: Path) -> None: ...
+
     def is_mounted(self, target: Path) -> bool: ...
 
     def ublk_device_ids(self) -> set[int]: ...
@@ -305,6 +307,9 @@ class LinuxStorageHostOperations:
 
     def unmount(self, target: Path) -> None:
         self._run("umount", str(target))
+
+    def detach(self, target: Path) -> None:
+        self._run("umount", "--lazy", str(target))
 
     @staticmethod
     def is_mounted(target: Path) -> bool:
@@ -1622,11 +1627,21 @@ class StorageNativeNodeService:
 
     def _best_effort_release(self, record: StorageVolumeRecord) -> None:
         mount_path = Path(record.mount_path)
+        mounted = True
         try:
-            if self.host.is_mounted(mount_path):
+            mounted = self.host.is_mounted(mount_path)
+            if mounted:
                 self.host.unmount(mount_path)
         except Exception:
-            pass
+            # A missing or failed ublk backend can leave the kernel mount
+            # present but unreadable. Destructive recovery must detach that
+            # stale mount without reading it so DeleteVolume can still reclaim
+            # the hard reservation and remove the mountpoint.
+            if mounted:
+                try:
+                    self.host.detach(mount_path)
+                except Exception:
+                    pass
         if record.device_id is not None:
             try:
                 self.backend.delete(record.device_id)

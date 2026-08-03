@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.93 - 2026-08-03
+
+- Added lazy-detach recovery for unreachable storage-native mounts during
+  destructive cleanup, allowing missing ublk devices to be deleted without
+  reading the dead filesystem and immediately releasing hard capacity.
+
 ## 0.3.92 - 2026-08-03
 
 - Made storage-native deletion independent of reading or remounting the

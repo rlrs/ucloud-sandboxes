@@ -125,6 +125,8 @@ class FakeHost:
         self.mounted: set[Path] = set()
         self.frozen: set[Path] = set()
         self.formatted: list[Path] = []
+        self.fail_next_unmount = False
+        self.detached: list[Path] = []
 
     def format_xfs(self, device: Path) -> None:
         self.formatted.append(device)
@@ -143,7 +145,14 @@ class FakeHost:
         self.frozen.remove(target)
 
     def unmount(self, target: Path) -> None:
+        if self.fail_next_unmount:
+            self.fail_next_unmount = False
+            raise OSError("injected unreachable mount")
         self.mounted.remove(target)
+
+    def detach(self, target: Path) -> None:
+        self.detached.append(target)
+        self.mounted.discard(target)
 
     def is_mounted(self, target: Path) -> bool:
         return target in self.mounted
@@ -583,6 +592,38 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             record = service.journal.load("volume-1")
             assert record is not None
             self.assertEqual(record.state, StorageVolumeState.ERROR)
+
+    def test_delete_detaches_unreachable_mount_and_reclaims_error_volume(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            service, backend, host = self._service(root)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            mount_path = Path(created["record"]["mount_path"])
+            backend.live.remove(1)
+            service.reconcile()
+            failed = service.journal.load("volume-1")
+            assert failed is not None
+            self.assertEqual(failed.state, StorageVolumeState.ERROR)
+            host.fail_next_unmount = True
+
+            deleted = service.delete_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="delete:1",
+                expected_revision=failed.revision,
+            )
+
+            self.assertEqual(deleted["record"]["state"], "deleted")
+            self.assertEqual(host.detached, [mount_path])
+            self.assertNotIn(mount_path, host.mounted)
+            self.assertEqual(service.metrics()["hard_reserved_bytes"], 0)
 
     def test_interrupted_create_is_not_blindly_replayed(self) -> None:
         with TemporaryDirectory() as raw:

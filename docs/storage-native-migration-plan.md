@@ -101,7 +101,8 @@ Storage-native invariants:
 The node storage daemon owns ublk devices, layer references, mounts, local
 cache entries, I/O workers, and crash reconciliation. The Python Warden owns
 sandbox lifecycle policy and talks to the daemon over a root-only Unix socket.
-Docker remains image pull/export infrastructure only.
+Docker remains image pull and content-addressed layer-cache infrastructure
+only; it never owns a sandbox task.
 
 The first implementation should reuse an existing maintained ublk/overlaybd
 implementation if its filesystem semantics, packaging, and process boundary
@@ -741,10 +742,12 @@ seconds destination staging, 25 ms route commit, 59 ms destination activation,
 and 491 ms source finalization. That is an 8.5x reduction from the previous
 15.38-second warm archive protocol, with no whole-snapshot transfer.
 
-Direct-node image warmup must therefore mean both Docker pull and immutable
-rootfs materialization. The image-pull API now performs and times both before
-returning success; if materialization fails it removes the advertised image
-record. This moves cold rootfs CPU/disk work into destination preparation,
+Direct-node image warmup must therefore mean both Docker pull and a mounted,
+identity-checked immutable rootfs view. The image-pull API performs and times
+both before returning success; if rootfs preparation fails it removes the
+advertised image record. The current zero-flatten overlay2 store makes this a
+layer-view mount rather than an export/extract. This moves cold image work
+into destination preparation,
 before the migration timer and source fence, without moving it onto the
 source node or weakening disk admission. A fresh-node production repeat is
 required before the drained rollout is complete.

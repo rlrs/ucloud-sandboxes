@@ -320,6 +320,7 @@ class HibernationManifest:
     created_ns: int
     runtime: HibernationRuntimeFingerprint
     files: tuple[HibernationArtifactFile, ...]
+    managed_process_sha256: str = ""
     version: int = HIBERNATION_MANIFEST_VERSION
 
     def __post_init__(self) -> None:
@@ -335,6 +336,10 @@ class HibernationManifest:
         _validate_positive_int("created_ns", self.created_ns)
         if not isinstance(self.runtime, HibernationRuntimeFingerprint):
             raise ValueError("runtime fingerprint is invalid")
+        if self.managed_process_sha256:
+            _validate_digest(
+                "managed_process_sha256", self.managed_process_sha256
+            )
         if not self.files:
             raise ValueError("hibernation manifest must contain artifact files")
         names = [item.name for item in self.files]
@@ -352,7 +357,7 @@ class HibernationManifest:
                 )
 
     def _unsigned_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "container_id": self.container_id,
             "created_ns": self.created_ns,
             "files": [item.to_dict() for item in self.files],
@@ -364,6 +369,9 @@ class HibernationManifest:
             "spec_sha256": self.spec_sha256,
             "version": self.version,
         }
+        if self.managed_process_sha256:
+            payload["managed_process_sha256"] = self.managed_process_sha256
+        return payload
 
     @property
     def metadata_sha256(self) -> str:
@@ -378,10 +386,7 @@ class HibernationManifest:
     def from_dict(cls, raw: object) -> "HibernationManifest":
         if not isinstance(raw, dict):
             raise ValueError("hibernation manifest must be a JSON object")
-        _require_exact_keys(
-            "hibernation manifest",
-            raw,
-            {
+        required_keys = {
                 "container_id",
                 "created_ns",
                 "files",
@@ -393,8 +398,12 @@ class HibernationManifest:
                 "sandbox_id",
                 "spec_sha256",
                 "version",
-            },
-        )
+            }
+        if frozenset(raw) not in {
+            frozenset(required_keys),
+            frozenset(required_keys | {"managed_process_sha256"}),
+        }:
+            raise ValueError("hibernation manifest has an invalid schema")
         files_raw = raw["files"]
         if not isinstance(files_raw, list):
             raise ValueError("hibernation manifest files must be a list")
@@ -413,6 +422,13 @@ class HibernationManifest:
             created_ns=_validate_positive_int("created_ns", raw["created_ns"]),
             runtime=HibernationRuntimeFingerprint.from_dict(raw["runtime"]),
             files=tuple(HibernationArtifactFile.from_dict(item) for item in files_raw),
+            managed_process_sha256=(
+                _validate_digest(
+                    "managed_process_sha256", raw["managed_process_sha256"]
+                )
+                if "managed_process_sha256" in raw
+                else ""
+            ),
         )
         supplied_digest = _validate_digest("metadata_sha256", raw["metadata_sha256"])
         if supplied_digest != manifest.metadata_sha256:

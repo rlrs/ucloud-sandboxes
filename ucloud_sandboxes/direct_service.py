@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import json
 import subprocess
 import threading
 import time
@@ -16,6 +17,16 @@ from .direct_migration import (
     DirectMigrationArchive,
     DirectMigrationManifest,
     StorageNativeMigration,
+)
+from .managed_process import (
+    MANAGED_PROCESS_BINARY,
+    MAX_LOG_READ_BYTES,
+    ManagedProcessError,
+    ManagedProcessLogChunk,
+    ManagedProcessRecord,
+    ManagedProcessStart,
+    control_request_bytes,
+    parse_control_response,
 )
 from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
@@ -1001,6 +1012,187 @@ class DirectSandboxService:
                 )
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             return result
+
+    def start_managed_process(
+        self,
+        sandbox_id: str,
+        spec: ManagedProcessStart,
+    ) -> ManagedProcessRecord:
+        registration = self._require_managed_registration(sandbox_id)
+        uid, gid = self._managed_workload_credentials(registration)
+        payload = spec.control_payload(uid=uid, gid=gid)
+        raw = self._managed_control(registration, payload, retry_not_ready=True)
+        return ManagedProcessRecord.from_control_response(
+            raw,
+            sandbox_id=sandbox_id,
+            sandbox_generation=registration.sandbox_generation,
+        )
+
+    @staticmethod
+    def _managed_workload_credentials(
+        registration: DirectSandboxRegistration,
+    ) -> tuple[int, int]:
+        try:
+            config = json.loads(
+                (Path(registration.bundle) / "config.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            annotations = config["annotations"]
+            uid = int(annotations["dev.ucloud-sandboxes.managed-process.uid"])
+            gid = int(annotations["dev.ucloud-sandboxes.managed-process.gid"])
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ManagedProcessError(
+                "managed process workload credentials are unavailable"
+            ) from exc
+        if not 0 <= uid <= (2**32 - 1) or not 0 <= gid <= (2**32 - 1):
+            raise ManagedProcessError(
+                "managed process workload credentials are invalid"
+            )
+        return uid, gid
+
+    def managed_process_status(
+        self,
+        sandbox_id: str,
+        job_id: str,
+    ) -> ManagedProcessRecord:
+        registration = self._require_managed_registration(sandbox_id)
+        raw = self._managed_control(
+            registration,
+            {
+                "version": 1,
+                "action": "status",
+                "job_id": job_id,
+            },
+        )
+        return ManagedProcessRecord.from_control_response(
+            raw,
+            sandbox_id=sandbox_id,
+            sandbox_generation=registration.sandbox_generation,
+        )
+
+    def managed_process_logs(
+        self,
+        sandbox_id: str,
+        job_id: str,
+        *,
+        stream: str,
+        offset: int,
+        limit: int,
+    ) -> ManagedProcessLogChunk:
+        registration = self._require_managed_registration(sandbox_id)
+        if stream not in {"stdout", "stderr"}:
+            raise ValueError("managed process stream must be stdout or stderr")
+        if offset < 0:
+            raise ValueError("managed process log offset cannot be negative")
+        if not 1 <= limit <= MAX_LOG_READ_BYTES:
+            raise ValueError(
+                f"managed process log limit must be in [1, {MAX_LOG_READ_BYTES}]"
+            )
+        raw = self._managed_control(
+            registration,
+            {
+                "version": 1,
+                "action": "logs",
+                "job_id": job_id,
+                "stream": stream,
+                "offset": offset,
+                "limit": limit,
+            },
+            max_stdout_bytes=(limit * 2) + 4096,
+        )
+        return ManagedProcessLogChunk.from_control_response(raw)
+
+    def signal_managed_process(
+        self,
+        sandbox_id: str,
+        job_id: str,
+        *,
+        signal: int,
+    ) -> ManagedProcessRecord:
+        registration = self._require_managed_registration(sandbox_id)
+        raw = self._managed_control(
+            registration,
+            {
+                "version": 1,
+                "action": "signal",
+                "job_id": job_id,
+                "signal": signal,
+            },
+        )
+        return ManagedProcessRecord.from_control_response(
+            raw,
+            sandbox_id=sandbox_id,
+            sandbox_generation=registration.sandbox_generation,
+        )
+
+    def _require_managed_registration(self, sandbox_id: str):
+        registration = self._require_registration(sandbox_id)
+        if not registration.spec.managed_process:
+            raise ManagedProcessError(
+                "sandbox was not created in managed_process mode"
+            )
+        return registration
+
+    def _managed_control(
+        self,
+        registration,
+        payload: dict[str, object],
+        *,
+        retry_not_ready: bool = False,
+        max_stdout_bytes: int = 2 * 1024 * 1024,
+    ) -> dict[str, object]:
+        with self._lock(
+            registration.sandbox_id,
+            registration.sandbox_generation,
+        ):
+            sandbox = registration.to_direct_sandbox()
+            lifecycle = self.warden.inspect(sandbox)
+            if lifecycle is None:
+                raise ManagedProcessError(
+                    "managed process sandbox has no lifecycle journal"
+                )
+            if lifecycle.state == HibernationState.PARKED:
+                raise ManagedProcessError(
+                    "managed process is suspended; status is served by the gateway"
+                )
+            self._ensure_running(sandbox)
+            attempts = 50 if retry_not_ready else 1
+            last_error = ""
+            for attempt in range(attempts):
+                with self.warden.exec_lease(
+                    sandbox,
+                    (MANAGED_PROCESS_BINARY, "ctl", "--timeout", "10s"),
+                    user="0:0",
+                ) as command:
+                    result = self.process_runner.run(
+                        command,
+                        input_bytes=control_request_bytes(payload),
+                        timeout_seconds=15,
+                        max_stdout_bytes=max_stdout_bytes,
+                        max_stderr_bytes=64 * 1024,
+                    )
+                if result.exit_code == 0:
+                    self.mark_activity(
+                        registration.sandbox_id,
+                        registration.sandbox_generation,
+                    )
+                    return parse_control_response(result.stdout)
+                try:
+                    failed_response = parse_control_response(result.stdout)
+                    last_error = str(failed_response.get("error") or "").strip()
+                except ManagedProcessError:
+                    last_error = ""
+                if not last_error:
+                    last_error = result.stderr.decode(
+                        "utf-8", errors="replace"
+                    ).strip()
+                if not retry_not_ready or attempt + 1 >= attempts:
+                    break
+                time.sleep(0.02)
+            raise ManagedProcessError(
+                last_error or "managed process control exchange failed"
+            )
 
     def mark_activity(self, sandbox_id: str, generation: int) -> None:
         with self._activity_guard:

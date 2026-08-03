@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import fcntl
+import hashlib
 import json
 import logging
 import os
@@ -477,6 +478,7 @@ class DirectRunscWarden:
                 spec_sha256=sandbox.spec_sha256,
                 runtime_sha256=self._runtime_fingerprint(sandbox).digest,
             )
+            self._require_managed_process_ledger(sandbox, manifest)
             if (
                 manifest.hibernation_generation
                 != parked.hibernation_generation
@@ -525,7 +527,7 @@ class DirectRunscWarden:
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
                 volume_id=sandbox.memory_directory,
-                operation_id=operation_id,
+                operation_id=self._storage_operation_id(sandbox, operation_id),
                 expected_revision=int(record["revision"]),
             )
             raw = result.get("record")
@@ -697,6 +699,10 @@ class DirectRunscWarden:
                 spec_sha256=sandbox.spec_sha256,
                 runtime_sha256=self._runtime_fingerprint(sandbox).digest,
             )
+            # Storage-native resume mounts a new destination-local view above.
+            # Bind that exact rootfs ledger to the checkpoint before runsc is
+            # allowed to construct or resume any workload task.
+            self._require_managed_process_ledger(sandbox, manifest)
             timings["validate_artifact"] = (time.monotonic() - phase) * 1000
             phase = time.monotonic()
             restoring = journal.begin_restore(
@@ -1717,7 +1723,74 @@ class DirectRunscWarden:
             created_ns=time.time_ns(),
             runtime=self._runtime_fingerprint(sandbox),
             files=tuple(files),
+            managed_process_sha256=self._managed_process_ledger_digest(sandbox),
         )
+
+    def _require_managed_process_ledger(
+        self,
+        sandbox: DirectSandbox,
+        manifest: HibernationManifest,
+    ) -> None:
+        actual = self._managed_process_ledger_digest(sandbox)
+        if actual != manifest.managed_process_sha256:
+            raise DirectWardenError(
+                "managed-process ledger does not match the checkpoint manifest"
+            )
+
+    @staticmethod
+    def _managed_process_ledger_digest(sandbox: DirectSandbox) -> str:
+        try:
+            config_payload = (sandbox.bundle / "config.json").read_bytes()
+            if len(config_payload) > 1024 * 1024:
+                raise ValueError("OCI config is too large")
+            config = json.loads(config_payload)
+            annotations = config.get("annotations")
+            managed = (
+                annotations.get("dev.ucloud-sandboxes.managed-process")
+                if isinstance(annotations, dict)
+                else None
+            )
+        except FileNotFoundError:
+            # Legacy non-managed sandboxes and old test fixtures predate this
+            # annotation. A managed sandbox always has a generated OCI config.
+            return ""
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DirectWardenError(
+                "could not verify managed-process OCI identity"
+            ) from exc
+        if managed is None:
+            return ""
+        if managed != "v1":
+            raise DirectWardenError("managed-process OCI identity is invalid")
+        ledger = sandbox.bundle / "rootfs" / ".ucloud-managed" / "state.json"
+        try:
+            info = ledger.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or stat.S_ISLNK(info.st_mode)
+                or info.st_size < 1
+                or info.st_size > 1024 * 1024
+            ):
+                raise ValueError("managed-process ledger file is invalid")
+            payload = ledger.read_bytes()
+            record = json.loads(payload)
+            if (
+                not isinstance(record, dict)
+                or record.get("version") != 1
+                or not isinstance(record.get("job_id"), str)
+                or not re.fullmatch(
+                    r"[0-9a-f]{64}", str(record.get("spec_sha256") or "")
+                )
+                or int(record.get("sequence") or 0) < 1
+            ):
+                raise ValueError("managed-process ledger contents are invalid")
+        except FileNotFoundError:
+            return hashlib.sha256(b"managed-primary-v1:no-job").hexdigest()
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DirectWardenError(
+                "managed-process ledger is unavailable"
+            ) from exc
+        return hashlib.sha256(payload).hexdigest()
 
     def _runtime_fingerprint(
         self,
@@ -1829,6 +1902,25 @@ class DirectRunscWarden:
             )
         return raw
 
+    @staticmethod
+    def _storage_operation_id(
+        sandbox: DirectSandbox,
+        operation_id: str,
+    ) -> str:
+        """Scope storage-daemon idempotency to one sandbox incarnation.
+
+        The storage operation journal is node-global.  Lifecycle revisions and
+        caller request IDs are not necessarily global, so using them directly
+        lets unrelated sandboxes collide (for example, both reaching
+        ``delete:3:storage-mount``).  A fixed digest remains replay-stable while
+        also fitting the daemon's bounded safe-ID grammar.
+        """
+
+        identity = (
+            f"{sandbox.sandbox_id}\0{sandbox.sandbox_generation}\0{operation_id}"
+        )
+        return "warden-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
     def _mount_storage(
         self,
         sandbox: DirectSandbox,
@@ -1845,7 +1937,10 @@ class DirectRunscWarden:
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
                 volume_id=sandbox.memory_directory,
-                operation_id=f"{operation_id}:release-sealed",
+                operation_id=self._storage_operation_id(
+                    sandbox,
+                    f"{operation_id}:release-sealed",
+                ),
                 expected_revision=int(record["revision"]),
             )
             raw_released = released.get("record")
@@ -1860,7 +1955,10 @@ class DirectRunscWarden:
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
                 volume_id=sandbox.memory_directory,
-                operation_id=f"{operation_id}:acquire",
+                operation_id=self._storage_operation_id(
+                    sandbox,
+                    f"{operation_id}:acquire",
+                ),
                 expected_revision=int(record["revision"]),
             )
             raw_mounted = mounted.get("record")
@@ -1891,7 +1989,7 @@ class DirectRunscWarden:
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
             volume_id=sandbox.memory_directory,
-            operation_id=operation_id,
+            operation_id=self._storage_operation_id(sandbox, operation_id),
             expected_revision=int(record["revision"]),
         )
         raw = sealed.get("record")
@@ -1919,7 +2017,7 @@ class DirectRunscWarden:
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
             volume_id=sandbox.memory_directory,
-            operation_id=operation_id,
+            operation_id=self._storage_operation_id(sandbox, operation_id),
             expected_revision=int(record["revision"]),
         )
         raw = released.get("record")

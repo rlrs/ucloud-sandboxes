@@ -27,6 +27,7 @@ from .capabilities import (
     DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
+    MANAGED_PRIMARY_CAPABILITY,
     has_capability,
 )
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
@@ -62,6 +63,7 @@ from .managed_registry import (
     registry_repository_tag_from_image_ref,
     registry_summary,
 )
+from .managed_process import ManagedProcessRecord
 from .metrics import (
     GatewayBusyTraceSampler,
     MetricsStore,
@@ -161,10 +163,34 @@ def _sandbox_request_wakes(path: str, method: str) -> bool:
     normalized = urlparse(path).path
     return bool(
         (method == "POST" and normalized.endswith("/exec"))
+        or (method == "POST" and normalized.endswith("/jobs"))
+        or (method == "POST" and normalized.endswith("/signal"))
+        or (method == "GET" and "/logs/" in normalized and "/jobs/" in normalized)
         or (method == "POST" and normalized.endswith("/wake"))
         or (method in {"GET", "PUT"} and normalized.endswith("/files"))
         or (method == "GET" and normalized.endswith("/ssh"))
     )
+
+
+def _managed_process_path(
+    path: str,
+    sandbox_id: str,
+) -> tuple[str, str] | None:
+    parts = [unquote(item) for item in urlparse(path).path.split("/") if item]
+    if len(parts) < 4 or parts[:2] != ["v1", "sandboxes"]:
+        return None
+    if parts[2] != sandbox_id or parts[3] != "jobs":
+        return None
+    if len(parts) == 4:
+        return "collection", ""
+    job_id = parts[4]
+    if len(parts) == 5:
+        return "status", job_id
+    if len(parts) == 6 and parts[5] == "signal":
+        return "signal", job_id
+    if len(parts) == 7 and parts[5] == "logs" and parts[6] in {"stdout", "stderr"}:
+        return f"logs:{parts[6]}", job_id
+    return None
 
 
 def _sandbox_transport_epoch(
@@ -3715,6 +3741,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
 
         normalized_path = urlparse(path).path
+        managed_path = _managed_process_path(path, sandbox_id)
         transport_reset = False
         lifecycle_payload: dict[str, Any] = {}
         lifecycle_action = (
@@ -3761,6 +3788,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
+
+        if (
+            managed_path is not None
+            and managed_path[0] == "status"
+            and self.command == "GET"
+            and (route.state or "unknown").lower()
+            in {"parking", "parked", "moving", "restoring", "waking"}
+        ):
+            cached = self.routing_store.get_managed_process(
+                sandbox_id,
+                managed_path[1],
+                sandbox_generation=route.generation,
+            )
+            if cached is None:
+                self._write_json(
+                    {"error": "managed process state is not available"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+            else:
+                self._write_json({"job": cached.to_dict()})
+            return
 
         wake_program: ProgramRequestState | None = None
         wake_placement_routes: list[SandboxRoute] | None = None
@@ -3834,6 +3882,44 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             body=body,
             extra_headers=extra_headers,
         )
+        if (
+            managed_path is not None
+            and managed_path[0] == "status"
+            and self.command == "GET"
+            and response.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT}
+            and "lifecycle transition is in progress"
+            in str(response.json().get("error") or "").lower()
+        ):
+            # A concurrent park/wake can acquire the node lifecycle fence while
+            # the gateway route still says ``running``.  The process ledger is
+            # checkpoint-owned, so status polling must stay available from the
+            # last durable gateway observation instead of aborting the harness.
+            cached = self.routing_store.get_managed_process(
+                sandbox_id,
+                managed_path[1],
+                sandbox_generation=route.generation,
+            )
+            if cached is not None:
+                self._write_json({"job": cached.to_dict()})
+                return
+        if (
+            managed_path is not None
+            and managed_path[0] in {"collection", "status", "signal"}
+            and 200 <= response.status < 300
+        ):
+            response_payload = response.json()
+            raw_job = response_payload.get("job")
+            try:
+                managed_record = ManagedProcessRecord.from_dict(raw_job)
+                if managed_path[1] and managed_record.job_id != managed_path[1]:
+                    raise ValueError("node returned another managed process")
+                self.routing_store.upsert_managed_process(route, managed_record)
+            except (SandboxRouteConflictError, TypeError, ValueError) as exc:
+                self._write_json(
+                    {"error": f"invalid managed process state from node: {exc}"},
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
         if (
             self.command == "POST"
             and path.endswith("/exec")
@@ -4649,9 +4735,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         (FORK_LOCAL_CAPABILITY, DISK_QUOTA_CAPABILITY)
                         if bool(spec.get("forkable"))
                         else (
-                            (
-                                HIBERNATE_LOCAL_CAPABILITY,
-                                DISK_QUOTA_CAPABILITY,
+                            tuple(
+                                capability
+                                for capability in (
+                                    HIBERNATE_LOCAL_CAPABILITY,
+                                    DISK_QUOTA_CAPABILITY,
+                                    (
+                                        MANAGED_PRIMARY_CAPABILITY
+                                        if bool(spec.get("managed_process"))
+                                        else ""
+                                    ),
+                                )
+                                if capability
                             )
                             if bool(spec.get("parkable", spec.get("hibernate")))
                             else ()

@@ -13,7 +13,7 @@ from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
 from .hibernation import HibernationDiskLedger, HibernationRuntimeFingerprint
-from .image_rootfs import DockerRootfsStore, OverlayRootfsManager
+from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .runtime_identity import NodeRuntimeIdentityStore
 from .sandbox import HibernationQuotaHelperClient
 from .storage_native_daemon import StorageNativeNodeClient
@@ -26,10 +26,12 @@ from .storage_native_quota import (
 def build_direct_runtime_service(
     *,
     state_root: Path,
+    image_cache_root: Path | None = None,
     quota_root: Path,
     runsc: Path,
     runsc_commit: str,
     init_binary: Path,
+    managed_init_binary: Path | None = None,
     disk_capacity_mb: int,
     disk_headroom_mb: int,
     quota_helper: Path = Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
@@ -43,9 +45,15 @@ def build_direct_runtime_service(
     """Assemble the one production direct-runtime owner for an entire node."""
     for label, path in (
         ("state_root", state_root),
+        ("image_cache_root", image_cache_root or state_root / "image-cache"),
         ("quota_root", quota_root),
         ("runsc", runsc),
         ("init_binary", init_binary),
+        *(
+            (("managed_init_binary", managed_init_binary),)
+            if managed_init_binary is not None
+            else ()
+        ),
         ("quota_helper", quota_helper),
     ):
         if not path.is_absolute():
@@ -55,6 +63,8 @@ def build_direct_runtime_service(
     if storage_native_socket is not None and not storage_native_socket.is_absolute():
         raise ValueError("storage_native_socket must be absolute")
     state_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    resolved_image_cache_root = image_cache_root or state_root / "image-cache"
+    resolved_image_cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     quota_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     runsc_digest = _sha256_file(runsc)
     boot_digest = _canonical_sha256(
@@ -68,6 +78,9 @@ def build_direct_runtime_service(
             "restore_prefetch_memory": False,
             "restore_reflink": False,
             "restore_start_paused": True,
+            # The mounted layer view preserves the same merged OCI filesystem
+            # contract as the former export. Keep the migration fingerprint
+            # stable so only the per-image semantic identity gates restore.
             "rootfs_format": "docker-export-overlay-v2",
             "quota_layout": (
                 "storage-native-v1"
@@ -87,8 +100,8 @@ def build_direct_runtime_service(
         # Replaced with the exact image identity for every artifact manifest.
         rootfs_sha256="0" * 64,
     )
-    image_store = DockerRootfsStore(
-        state_root / "image-cache",
+    image_store = DockerOverlay2RootfsStore(
+        resolved_image_cache_root,
         docker_binary=docker_binary,
     )
     overlays = OverlayRootfsManager(
@@ -162,6 +175,7 @@ def build_direct_runtime_service(
         overlays=overlays,
         oci=DirectOciConfigBuilder(
             init_binary=init_binary,
+            managed_init_binary=managed_init_binary,
             network_mode=network,
         ),
         warden=warden,

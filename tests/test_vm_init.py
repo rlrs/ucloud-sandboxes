@@ -61,6 +61,18 @@ class VmInitTests(unittest.TestCase):
             'chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"',
             script,
         )
+        self.assertIn(
+            "UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache",
+            script,
+        )
+        self.assertIn(
+            "--image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}",
+            script,
+        )
+        self.assertIn(
+            'install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"',
+            script,
+        )
 
     def test_direct_runtime_rejects_fixed_compute_overcommit(self) -> None:
         with self.assertRaisesRegex(ValueError, "CPU and memory overcommit"):

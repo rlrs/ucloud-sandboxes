@@ -111,6 +111,7 @@ class DirectMigrationManifest:
     source_guest_ip: str | None
     connection_policy: str
     files: tuple[PortableArtifactFile, ...]
+    managed_process_sha256: str = ""
     schema: str = DIRECT_MIGRATION_SCHEMA
 
     def __post_init__(self) -> None:
@@ -131,6 +132,14 @@ class DirectMigrationManifest:
             )
         ):
             raise ValueError("source manifest digest is invalid")
+        if self.managed_process_sha256 and (
+            len(self.managed_process_sha256) != _DIGEST_LENGTH
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.managed_process_sha256
+            )
+        ):
+            raise ValueError("managed-process digest is invalid")
         expected_connection_policy = (
             MIGRATION_CONNECTION_POLICY_NONE
             if self.spec.network == "none"
@@ -180,7 +189,7 @@ class DirectMigrationManifest:
         return sandbox_spec_fingerprint(self.spec)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "captured_ns": self.captured_ns,
             "create_operation_id": self.create_operation_id,
             "files": [item.to_dict() for item in self.files],
@@ -196,10 +205,13 @@ class DirectMigrationManifest:
             "spec": self.spec.to_dict(),
             "spec_sha256": self.spec_sha256,
         }
+        if self.managed_process_sha256:
+            payload["managed_process_sha256"] = self.managed_process_sha256
+        return payload
 
     @classmethod
     def from_dict(cls, raw: object) -> "DirectMigrationManifest":
-        if not isinstance(raw, dict) or set(raw) != {
+        required_keys = {
             "captured_ns",
             "create_operation_id",
             "files",
@@ -214,6 +226,10 @@ class DirectMigrationManifest:
             "source_guest_ip",
             "spec",
             "spec_sha256",
+        }
+        if not isinstance(raw, dict) or frozenset(raw) not in {
+            frozenset(required_keys),
+            frozenset(required_keys | {"managed_process_sha256"}),
         }:
             raise ValueError("direct migration manifest has an invalid schema")
         files = raw["files"]
@@ -236,6 +252,7 @@ class DirectMigrationManifest:
                 else None
             ),
             files=tuple(PortableArtifactFile.from_dict(item) for item in files),
+            managed_process_sha256=str(raw.get("managed_process_sha256") or ""),
             schema=str(raw["schema"]),
         )
         if str(raw["spec_sha256"]) != manifest.spec_sha256:
@@ -300,6 +317,7 @@ class DirectMigrationManifest:
                 )
                 for item in manifest.files
             ),
+            managed_process_sha256=manifest.managed_process_sha256,
         )
 
 
@@ -484,6 +502,7 @@ class StorageNativeMigrationStore:
             created_ns=portable.captured_ns,
             runtime=portable.runtime,
             files=local_files,
+            managed_process_sha256=portable.managed_process_sha256,
         )
         published = artifact_store.load_published_metadata(
             sandbox_id=portable.sandbox_id,
@@ -883,6 +902,7 @@ class DirectMigrationArchiveStore:
                 created_ns=portable.captured_ns,
                 runtime=portable.runtime,
                 files=local_files,
+                managed_process_sha256=portable.managed_process_sha256,
             )
             artifact_store.publish_complete(local_manifest)
             return portable, local_manifest

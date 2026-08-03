@@ -810,7 +810,7 @@ drained nodes may run either the legacy Docker-owned release or the direct
 Warden release, but a node never admits a mixture and no sandbox-level runtime
 selector exists. After the direct release passes the production-flow gates,
 the legacy task runtime is deprecated and removed. Docker/containerd remain
-only for image pull/build/cache/export.
+only for image pull/build and content-addressed layer caching.
 
 ```text
 control plane / tool traffic
@@ -824,9 +824,9 @@ control plane / tool traffic
     +-- sandbox B: parked artifact only (no sentry/gofer)
     +-- sandbox C: runsc sentry + gofer + durable OCI bundle
 
-Docker image/build/cache
+Docker image/build/layer cache
            |
-           +-- materialize immutable rootfs inputs for the Warden
+           +-- mount immutable layer views for the Warden
                (never starts the sandbox task)
 ```
 
@@ -874,10 +874,11 @@ scheduler capacity.
 
 The containerd ownership blocker has been removed from the selected path. A
 new privileged `DirectRunscWarden` owns direct runsc create, checkpoint,
-restore, exec, reconciliation, and delete. `DockerRootfsStore` uses Docker only
-for image inspect/create/export and publishes one content-addressed immutable
-rootfs; `OverlayRootfsManager` creates a per-sandbox writable overlay and
-durable OCI bundle. A disabled `DirectNodeCoordinator`, tied to exact runsc and
+restore, exec, reconciliation, and delete. `DockerOverlay2RootfsStore` uses
+Docker only for image resolution and content-addressed layer ownership, pins
+the immutable image ID, and mounts its existing overlay2 layers without
+flattening them; `OverlayRootfsManager` creates a per-sandbox writable overlay
+and durable OCI bundle. A disabled `DirectNodeCoordinator`, tied to exact runsc and
 boot-configuration digests, serializes each sandbox lifecycle and bounds
 node-wide restores. Caller cancellation cannot abandon an in-flight restore.
 
@@ -887,6 +888,7 @@ Measured on the 32-vCPU UCloud node:
 | :--- | :--- |
 | Two-phase Warden, 100 stateful cycles | park p50/p95 61.7/66.1 ms; resume plus readiness 142.4/150.8 ms |
 | Docker image-only path, BusyBox | cold export 321 ms; cached lookup 32 ms; overlay prepare/release 40/7.9 ms; no exporter leak |
+| Zero-flatten Docker overlay2 path, 1.7-GiB pandas | inspect/lease/image mount/sandbox mount 16.7/20.4/3.5/3.3 ms; copy-up verified; no archive or extracted copy |
 | 24-way stateful wake burst, 4 slots | median makespan 1.01 s; request p50/p95 600/998 ms |
 | 24-way stateful wake burst, 8 slots | median makespan 570 ms; request p50/p95 396/557 ms |
 | 24-way stateful wake burst, 24 slots | median makespan 390 ms; request p50/p95 350/387 ms |
@@ -1047,12 +1049,21 @@ real traces justify it.
 violating the latency SLO or disk invariant. Only then consider parking during
 ordinary model-generation gaps.
 
-#### P6: Defer AgentEnv-style expansion
+#### P6: Preserve image layers; defer the remaining AgentEnv expansion
 
-Do not put ublk, OverlayBD, dirty-page delta formats, remote snapshots, or
-forkable layered memory on the critical path. Add them only for a demonstrated
-product requirement:
+The production flattening regression demonstrated one requirement early:
+ordinary OCI image layers must remain shared rather than being exported and
+extracted into a merged directory. The immediate implementation mounts
+Docker's already-local overlay2 chain as the immutable lower. This gives the
+Warden the same essential layer-preservation property without adding a major
+gVisor patch or a second image converter.
 
+Do not yet put registry-range-backed OverlayBD image lowers, layered/dirty-page
+memory formats, remote snapshots, or forkable memory on the critical path. Add
+them only for a demonstrated product requirement:
+
+- OverlayBD/registryfs image lowers when registry pull, rather than local
+  flattening, is the measured cold-start bottleneck;
 - reflink lineage for fan-out or replayable local snapshots;
 - layered/dirty-page generations when repeated artifact retention, rather than
   single-owner park/wake, dominates write cost;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hmac
 from pathlib import Path
 import time
@@ -15,6 +16,7 @@ from .deployment import service_health
 from .images import DockerImageRuntime, ImageManager, ImageStore
 from .hibernation import HibernationDiskLedger
 from .models import ResourceQuantity
+from .managed_process import ManagedProcessError, ManagedProcessStart
 from .node_agent import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     SANDBOX_GENERATION_HEADER,
@@ -412,6 +414,93 @@ async def wake_sandbox(request: web.Request) -> web.Response:
     return web.json_response({"sandbox": record.to_dict()})
 
 
+async def start_managed_process(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    start = getattr(manager, "start_managed_process", None)
+    if start is None:
+        raise web.HTTPNotImplemented(text="managed processes are unavailable")
+    try:
+        raw = await request.json()
+        spec = ManagedProcessStart.from_dict(raw)
+        record = await asyncio.to_thread(
+            start,
+            request.match_info["sandbox_id"],
+            spec,
+        )
+    except ManagedProcessError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    return web.json_response({"job": record.to_dict()}, status=201)
+
+
+async def managed_process_status(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    status = getattr(manager, "managed_process_status", None)
+    if status is None:
+        raise web.HTTPNotImplemented(text="managed processes are unavailable")
+    try:
+        record = await asyncio.to_thread(
+            status,
+            request.match_info["sandbox_id"],
+            request.match_info["job_id"],
+        )
+    except ManagedProcessError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    return web.json_response({"job": record.to_dict()})
+
+
+async def managed_process_logs(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    logs = getattr(manager, "managed_process_logs", None)
+    if logs is None:
+        raise web.HTTPNotImplemented(text="managed processes are unavailable")
+    try:
+        chunk = await asyncio.to_thread(
+            logs,
+            request.match_info["sandbox_id"],
+            request.match_info["job_id"],
+            stream=request.match_info["stream"],
+            offset=int(request.query.get("offset", "0")),
+            limit=int(request.query.get("limit", str(1024 * 1024))),
+        )
+    except ManagedProcessError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    except ValueError as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    return web.json_response(
+        {
+            "stream": chunk.stream,
+            "offset": chunk.offset,
+            "next_offset": chunk.next_offset,
+            "data": base64.b64encode(chunk.data).decode("ascii"),
+            "eof": chunk.eof,
+        }
+    )
+
+
+async def signal_managed_process(request: web.Request) -> web.Response:
+    manager = sandbox_manager(request)
+    signal_process = getattr(manager, "signal_managed_process", None)
+    if signal_process is None:
+        raise web.HTTPNotImplemented(text="managed processes are unavailable")
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise ValueError("signal payload must be a JSON object")
+        record = await asyncio.to_thread(
+            signal_process,
+            request.match_info["sandbox_id"],
+            request.match_info["job_id"],
+            signal=int(raw.get("signal") or 15),
+        )
+    except ManagedProcessError as exc:
+        raise web.HTTPConflict(text=str(exc)) from exc
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=str(exc)) from exc
+    return web.json_response({"job": record.to_dict()})
+
+
 async def configure_drain(request: web.Request) -> web.Response:
     try:
         raw = await request.json()
@@ -736,6 +825,19 @@ def create_async_node_agent_app(
     app.router.add_delete("/v1/sandboxes/{sandbox_id}", delete_sandbox)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/park", park_sandbox)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/wake", wake_sandbox)
+    app.router.add_post("/v1/sandboxes/{sandbox_id}/jobs", start_managed_process)
+    app.router.add_get(
+        "/v1/sandboxes/{sandbox_id}/jobs/{job_id}",
+        managed_process_status,
+    )
+    app.router.add_get(
+        "/v1/sandboxes/{sandbox_id}/jobs/{job_id}/logs/{stream}",
+        managed_process_logs,
+    )
+    app.router.add_post(
+        "/v1/sandboxes/{sandbox_id}/jobs/{job_id}/signal",
+        signal_managed_process,
+    )
     app.router.add_post("/v1/drain", configure_drain)
     app.router.add_post("/v1/sandboxes/{sandbox_id}/exec", start_exec)
     app.router.add_get("/v1/exec/{session_id}", get_exec_session)

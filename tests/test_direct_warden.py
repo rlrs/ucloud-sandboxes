@@ -421,6 +421,59 @@ class DirectRunscWardenTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_managed_process_ledger_is_verified_before_restore(self) -> None:
+        managed_directory = self.bundle / "rootfs" / ".ucloud-managed"
+        managed_directory.mkdir(parents=True)
+        ledger = managed_directory / "state.json"
+        ledger.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "job_id": "rollout-1",
+                    "spec_sha256": DIGEST_A,
+                    "state": "running",
+                    "sequence": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.bundle / "config.json").write_text(
+            json.dumps(
+                {
+                    "annotations": {
+                        "dev.gvisor.internal.application-memory-directory": (
+                            self.memory_directory
+                        ),
+                        "dev.ucloud-sandboxes.managed-process": "v1",
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.warden.create(self.sandbox, operation_id="create:managed")
+        self.warden.park(self.sandbox, operation_id="park:managed")
+        restore_count = sum(
+            "restore" in command for command in self.runner.commands
+        )
+
+        ledger.write_text(
+            ledger.read_text(encoding="utf-8").replace(
+                '"sequence": 2', '"sequence": 3'
+            ),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(DirectWardenError, "ledger does not match"):
+            self.warden.resume(self.sandbox, operation_id="wake:managed")
+        self.assertEqual(
+            sum("restore" in command for command in self.runner.commands),
+            restore_count,
+        )
+        self.assertEqual(
+            self.warden.inspect(self.sandbox).state,
+            HibernationState.PARKED,
+        )
+
     def test_storage_native_park_releases_and_resume_mounts_new_cow(self) -> None:
         storage, _rootfs, incarnation = self._use_storage_native()
         self.warden.create(self.sandbox, operation_id="create:1")
@@ -451,6 +504,24 @@ class DirectRunscWardenTests(unittest.TestCase):
         )
         self.assertEqual(storage.record["state"], "mounted")
         self.assertTrue(incarnation.is_dir())
+
+    def test_storage_operation_ids_are_scoped_to_sandbox_incarnation(self) -> None:
+        first = self.warden._storage_operation_id(
+            self.sandbox,
+            "delete:3:storage-mount:acquire",
+        )
+        replay = self.warden._storage_operation_id(
+            self.sandbox,
+            "delete:3:storage-mount:acquire",
+        )
+        other = self.warden._storage_operation_id(
+            replace(self.sandbox, sandbox_id="sandbox-other"),
+            "delete:3:storage-mount:acquire",
+        )
+
+        self.assertEqual(first, replay)
+        self.assertNotEqual(first, other)
+        self.assertRegex(first, r"\Awarden-[0-9a-f]{64}\Z")
 
     def test_storage_native_reconcile_finishes_failed_seal(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()

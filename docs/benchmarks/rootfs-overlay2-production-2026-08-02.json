@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "completed_at": "2026-08-02T22:55:00Z",
+  "node_job_id": "12362737",
+  "gateway_version": "0.3.84",
+  "image": "namanjain12/pandas_final:93297e07c6646fa92450d6ac0edc8419dd01de23",
+  "image_id": "sha256:5c13f3f97a9785fd1ac3f022a3a6d35099b0f6e4455723a8b5a4cc6ea081a3f0",
+  "image_size_gib": 1.7,
+  "layer_count": 14,
+  "storage": {
+    "docker_driver": "overlay2",
+    "docker_root": "/var/lib/ucloud-sandboxes/docker-xfs",
+    "docker_root_filesystem": "xfs"
+  },
+  "baseline": {
+    "docker_pull_ms": 22311,
+    "virtiofs_export_extract_ms": 76342,
+    "local_xfs_export_extract_ms": 16374
+  },
+  "zero_flatten_overlay2": {
+    "image_inspect_ms": 16.663,
+    "digest_lease_tag_ms": 20.393,
+    "immutable_image_mount_ms": 3.462,
+    "warm_mountpoint_check_ms": 2.989,
+    "sandbox_writable_overlay_mount_ms": 3.261,
+    "verify_and_copy_up_ms": 2.608,
+    "hot_rootfs_setup_ms": 43.779,
+    "docker_create_calls": 0,
+    "docker_export_calls": 0,
+    "archive_bytes_written": 0,
+    "extracted_rootfs_bytes_written": 0
+  },
+  "speedup_over_virtiofs_materialization": 1743.8,
+  "cleanup": {
+    "temporary_mounts_removed": true,
+    "temporary_directory_removed": true,
+    "temporary_image_lease_removed": true
+  },
+  "notes": [
+    "The image mount used Docker's UpperDir followed by its LowerDir chain as a read-only overlayfs lower stack.",
+    "A second ordinary writable overlay was mounted above the image view, matching the direct gVisor runtime layout.",
+    "The test verified /bin/sh and a real copy-up write through the writable overlay.",
+    "The benchmark excludes registry pull time because AgentEnv-style layer preservation removes flattening after pull; it does not make a non-lazy registry pull disappear."
+  ]
+}

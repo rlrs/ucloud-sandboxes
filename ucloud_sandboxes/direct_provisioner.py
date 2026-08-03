@@ -706,7 +706,14 @@ class DirectSandboxProvisioner:
             # committing the rootfs and creating the runsc backend.
             self.oci.install_init(
                 sandbox.bundle / "rootfs",
-                enabled=registration.spec.security.init,
+                enabled=(
+                    registration.spec.security.init
+                    and not registration.spec.managed_process
+                ),
+            )
+            self.oci.install_managed_init(
+                sandbox.bundle / "rootfs",
+                enabled=registration.spec.managed_process,
             )
             record = self.warden.inspect(sandbox)
             if record is None:

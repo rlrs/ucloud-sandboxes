@@ -8,12 +8,17 @@ import json
 from urllib import request
 from urllib.parse import quote
 import unittest
+from types import MethodType
 
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.gateway import NodeGatewayClient
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
 from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
+from ucloud_sandboxes.managed_process import (
+    ManagedProcessLogChunk,
+    ManagedProcessRecord,
+)
 from ucloud_sandboxes.node_agent import (
     SANDBOX_GENERATION_HEADER,
     SANDBOX_OPERATION_ID_HEADER,
@@ -31,6 +36,89 @@ from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class NodeAgentTests(unittest.TestCase):
+    def test_managed_job_http_protocol_is_bounded_and_job_oriented(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=root / "sandboxes.json",
+                image_file=root / "images.json",
+                job_id="vm-1",
+                node_id="node-1",
+            )
+            manager = server.RequestHandlerClass.manager
+
+            def record(state: str = "running", signal: int = 0):
+                return ManagedProcessRecord(
+                    sandbox_id="managed-one",
+                    sandbox_generation=1,
+                    job_id="rollout-1",
+                    spec_sha256="a" * 64,
+                    state=state,
+                    pid=42 if state == "running" else 0,
+                    signal=signal,
+                    sequence=2 if state == "running" else 3,
+                    updated_at="2026-08-03T00:00:00+00:00",
+                )
+
+            observed = {}
+
+            def start(_self, sandbox_id, spec):
+                observed["start"] = (sandbox_id, spec)
+                return record()
+
+            manager.start_managed_process = MethodType(start, manager)
+            manager.managed_process_status = MethodType(
+                lambda _self, _sandbox_id, _job_id: record(), manager
+            )
+            manager.managed_process_logs = MethodType(
+                lambda _self, _sandbox_id, _job_id, **_kwargs: ManagedProcessLogChunk(
+                    stream="stdout",
+                    offset=0,
+                    next_offset=2,
+                    data=b"ok",
+                    eof=True,
+                ),
+                manager,
+            )
+            manager.signal_managed_process = MethodType(
+                lambda _self, _sandbox_id, _job_id, *, signal: record(
+                    "signaled", signal
+                ),
+                manager,
+            )
+            Thread(target=server.serve_forever, daemon=True).start()
+            try:
+                host, port = server.server_address
+                base = f"http://{host}:{port}/v1/sandboxes/managed-one/jobs"
+                started = self._json_request(
+                    base,
+                    method="POST",
+                    payload={
+                        "job_id": "rollout-1",
+                        "argv": ["python", "harness.py"],
+                        "cwd": "/workspace",
+                    },
+                )
+                status = self._json_request(f"{base}/rollout-1")
+                logs = self._json_request(f"{base}/rollout-1/logs/stdout")
+                signaled = self._json_request(
+                    f"{base}/rollout-1/signal",
+                    method="POST",
+                    payload={"signal": 2},
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(observed["start"][0], "managed-one")
+        self.assertEqual(observed["start"][1].argv, ("python", "harness.py"))
+        self.assertEqual(started["job"]["state"], "running")
+        self.assertEqual(status["job"]["job_id"], "rollout-1")
+        self.assertEqual(logs["data"], "b2s=")
+        self.assertEqual(signaled["job"]["signal"], 2)
+
     def test_server_rejects_disk_overcommit(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

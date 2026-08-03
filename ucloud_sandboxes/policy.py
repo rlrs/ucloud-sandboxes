@@ -239,6 +239,11 @@ def evaluate_scale(
 
     if (
         pressure_scale_up
+        # Create saturation is a more specific interpretation of this same
+        # live-pressure sample and owns its bounded headroom calculation
+        # below. Letting the generic branch act first bypasses
+        # create_pressure_max_headroom_nodes on every later cycle.
+        and not create_pressure_scale_up
         and _planned_creates(actions) == 0
         and len(provisioning_nodes) == 0
         and ready_nodes

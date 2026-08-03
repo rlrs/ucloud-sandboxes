@@ -187,6 +187,61 @@ class DirectOciConfigTests(unittest.TestCase):
             self.assertEqual(installed.read_bytes(), b"trusted-init")
             self.assertEqual(installed.stat().st_mode & 0o777, 0o755)
 
+    def test_managed_process_uses_trusted_pid1_and_preserves_workload_identity(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            image = self.image(root)
+            managed_init = root / "ucloud-sandbox-init"
+            managed_init.write_bytes(b"static-managed-init")
+            managed_init.chmod(0o755)
+            builder = DirectOciConfigBuilder(managed_init_binary=managed_init)
+            spec = SandboxSpec(
+                id="managed",
+                image=image.image_ref,
+                memory_mb=512,
+                disk_mb=512,
+                parkable=True,
+                managed_process=True,
+                security=SandboxSecuritySpec(user=None),
+            )
+
+            with (
+                patch.object(DirectOciConfigBuilder, "_validate_init_binary"),
+                patch.object(DirectOciConfigBuilder, "_validate_init_stat"),
+            ):
+                config = builder.build(spec, image)
+                builder.install_managed_init(image.rootfs, enabled=True)
+
+            self.assertEqual(
+                config["process"]["args"],
+                [
+                    "/.ucloud-job-init",
+                    "supervise",
+                    "--state-dir",
+                    "/.ucloud-managed",
+                ],
+            )
+            self.assertEqual(config["process"]["user"], {"uid": 0, "gid": 0})
+            self.assertEqual(
+                config["annotations"][
+                    "dev.ucloud-sandboxes.managed-process.uid"
+                ],
+                "123",
+            )
+            self.assertEqual(
+                config["annotations"][
+                    "dev.ucloud-sandboxes.managed-process.gid"
+                ],
+                "456",
+            )
+            self.assertIn(
+                "CAP_SETUID", config["process"]["capabilities"]["effective"]
+            )
+            self.assertEqual(
+                (image.rootfs / ".ucloud-job-init").read_bytes(),
+                b"static-managed-init",
+            )
+
     def test_init_install_replaces_image_symlink(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

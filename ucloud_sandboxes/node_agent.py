@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import base64
 import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -43,8 +44,10 @@ from .capabilities import (
     DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     FORK_LOCAL_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
+    MANAGED_PRIMARY_CAPABILITY,
     merge_capabilities,
 )
+from .managed_process import ManagedProcessError, ManagedProcessStart
 from .sandbox import (
     HibernationQuotaBackend,
     MAX_FORK_FANOUT,
@@ -206,6 +209,18 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/ssh"):
             self._sandbox_ssh(parsed.path)
             return
+        managed_path = _managed_process_path(parsed.path)
+        if managed_path is not None and managed_path[0] == "status":
+            self._managed_process_status(managed_path[1], managed_path[2])
+            return
+        if managed_path is not None and managed_path[0].startswith("logs:"):
+            self._managed_process_logs(
+                managed_path[1],
+                managed_path[2],
+                managed_path[0].split(":", 1)[1],
+                parsed,
+            )
+            return
         if parsed.path.startswith("/v1/exec/") and parsed.path.endswith("/events"):
             self._exec_events(parsed)
             return
@@ -314,6 +329,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/exec"):
             self._start_exec(parsed.path)
+            return
+        managed_path = _managed_process_path(parsed.path)
+        if managed_path is not None and managed_path[0] == "collection":
+            self._start_managed_process(managed_path[1])
+            return
+        if managed_path is not None and managed_path[0] == "signal":
+            self._signal_managed_process(managed_path[1], managed_path[2])
             return
         if parsed.path.startswith("/v1/exec/") and parsed.path.endswith("/stdin"):
             self._write_exec_stdin(parsed.path)
@@ -520,6 +542,107 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             },
             status=HTTPStatus.CREATED,
         )
+
+    def _start_managed_process(self, sandbox_id: str) -> None:
+        start = getattr(self.manager, "start_managed_process", None)
+        if start is None:
+            self._write_json(
+                {"error": "managed processes are unavailable"},
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+        try:
+            spec = ManagedProcessStart.from_dict(self._read_json_body())
+            record = start(sandbox_id, spec)
+        except ManagedProcessError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"job": record.to_dict()}, status=HTTPStatus.CREATED)
+
+    def _managed_process_status(self, sandbox_id: str, job_id: str) -> None:
+        status = getattr(self.manager, "managed_process_status", None)
+        if status is None:
+            self._write_json(
+                {"error": "managed processes are unavailable"},
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+        try:
+            record = status(sandbox_id, job_id)
+        except ManagedProcessError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"job": record.to_dict()})
+
+    def _managed_process_logs(
+        self,
+        sandbox_id: str,
+        job_id: str,
+        stream: str,
+        parsed: Any,
+    ) -> None:
+        logs = getattr(self.manager, "managed_process_logs", None)
+        if logs is None:
+            self._write_json(
+                {"error": "managed processes are unavailable"},
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        try:
+            chunk = logs(
+                sandbox_id,
+                job_id,
+                stream=stream,
+                offset=int((query.get("offset") or ["0"])[0]),
+                limit=int((query.get("limit") or [str(1024 * 1024)])[0]),
+            )
+        except ManagedProcessError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json(
+            {
+                "stream": chunk.stream,
+                "offset": chunk.offset,
+                "next_offset": chunk.next_offset,
+                "data": base64.b64encode(chunk.data).decode("ascii"),
+                "eof": chunk.eof,
+            }
+        )
+
+    def _signal_managed_process(self, sandbox_id: str, job_id: str) -> None:
+        signal_process = getattr(self.manager, "signal_managed_process", None)
+        if signal_process is None:
+            self._write_json(
+                {"error": "managed processes are unavailable"},
+                status=HTTPStatus.NOT_IMPLEMENTED,
+            )
+            return
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("signal payload must be a JSON object")
+            record = signal_process(
+                sandbox_id,
+                job_id,
+                signal=int(raw.get("signal") or 15),
+            )
+        except ManagedProcessError as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+            return
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"job": record.to_dict()})
 
     def _park_sandbox(self, path: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix="/park")
@@ -1913,6 +2036,8 @@ def build_direct_node_agent_server(
         "direct-runsc-v1",
         "sandbox-migrate-v2",
     ]
+    if service.provisioner.oci.managed_init_binary is not None:
+        direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
     if service.dynamic_active_admission_enabled:
         direct_capabilities.append(DYNAMIC_ACTIVE_ADMISSION_CAPABILITY)
     if getattr(service.warden, "storage", None) is not None:
@@ -2185,6 +2310,23 @@ def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:
     if suffix:
         return unquote(path[len(prefix) : -len(suffix)])
     return unquote(path[len(prefix) :])
+
+
+def _managed_process_path(path: str) -> tuple[str, str, str] | None:
+    parts = [unquote(item) for item in path.split("/") if item]
+    if len(parts) < 4 or parts[:2] != ["v1", "sandboxes"] or parts[3] != "jobs":
+        return None
+    sandbox_id = parts[2]
+    if len(parts) == 4:
+        return "collection", sandbox_id, ""
+    job_id = parts[4]
+    if len(parts) == 5:
+        return "status", sandbox_id, job_id
+    if len(parts) == 6 and parts[5] == "signal":
+        return "signal", sandbox_id, job_id
+    if len(parts) == 7 and parts[5] == "logs" and parts[6] in {"stdout", "stderr"}:
+        return f"logs:{parts[6]}", sandbox_id, job_id
+    return None
 
 
 def _build_context_digest_from_path(path: str) -> str | None:

@@ -8,6 +8,7 @@ from threading import Event
 import unittest
 
 from ucloud_sandboxes.models import ResourceQuantity, utc_now
+from ucloud_sandboxes.managed_process import ManagedProcessRecord
 from ucloud_sandboxes.routing import (
     ExecRoute,
     PENDING_DEMAND_TTL_SECONDS,
@@ -25,6 +26,58 @@ from ucloud_sandboxes.routing import (
 
 
 class RoutingStoreTests(unittest.TestCase):
+    def test_managed_primary_state_survives_route_handoff_and_is_generation_fenced(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="managed-one",
+                    node_id="node-1",
+                    job_id="vm-1",
+                    node_url="http://node-1:8090",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-managed-one",
+                    spec_hash="b" * 64,
+                )
+            )
+            running = ManagedProcessRecord(
+                sandbox_id="managed-one",
+                sandbox_generation=route.generation,
+                job_id="rollout-1",
+                spec_sha256="a" * 64,
+                state="running",
+                pid=42,
+                sequence=2,
+                updated_at="2026-08-03T00:00:00+00:00",
+            )
+            store.upsert_managed_process(route, running)
+
+            moved = store.move_sandbox_if_current(
+                route,
+                destination_node_id="node-2",
+                destination_job_id="vm-2",
+                destination_node_url="http://node-2:8090",
+            )
+            cached = store.get_managed_process("managed-one", "rollout-1")
+
+            self.assertIsNotNone(moved)
+            assert moved is not None
+            self.assertEqual(moved.generation, route.generation)
+            self.assertEqual(cached, running)
+            self.assertIsNone(
+                store.get_managed_process(
+                    "managed-one",
+                    "rollout-1",
+                    sandbox_generation=route.generation + 1,
+                )
+            )
+            with self.assertRaises(SandboxRouteConflictError):
+                store.upsert_managed_process(
+                    replace(moved, generation=moved.generation + 1),
+                    running,
+                )
+
     def test_program_request_transitions_are_durable_and_monotonic(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "routes.sqlite"

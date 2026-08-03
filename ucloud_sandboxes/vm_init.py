@@ -48,6 +48,7 @@ DEFAULT_RUNSC_RESTORE_WRAPPER = "/usr/local/libexec/ucloud-runsc-restore"
 DEFAULT_RUNSC_RESTORE_CONFIG = "/etc/ucloud-sandboxes/runsc-restore.json"
 DEFAULT_RUNSC_RESTORE_STATE_ROOT = "/run/ucloud-sandboxes/runsc-restore"
 DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
+DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
 DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET = (
     "/run/ucloud-sandboxes/storage-native/backend.sock"
@@ -367,6 +368,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --port ${UCLOUD_NODE_AGENT_PORT}"
             f"{deployment_flag}{version_flags}"
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
+            " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
             " --image-file ${UCLOUD_STATE_DIR}/images.json"
             " --quota-root ${UCLOUD_HIBERNATION_QUOTA_ROOT}"
             " --runsc ${UCLOUD_DIRECT_RUNSC}"
@@ -374,6 +376,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --network ${UCLOUD_DIRECT_NETWORK}"
             f"{direct_network_allow_flags}"
             " --init-binary ${UCLOUD_DIRECT_INIT_BINARY}"
+            " --managed-init-binary ${UCLOUD_MANAGED_INIT}"
             " --quota-helper ${UCLOUD_HIBERNATION_QUOTA_HELPER}"
             " --disk-capacity-mb ${UCLOUD_DIRECT_DISK_CAPACITY_MB}"
             " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
@@ -500,8 +503,10 @@ UCLOUD_RUNSC_RESTORE_STATE_ROOT={shlex.quote(runsc_restore_state_root)}
 UCLOUD_NODE_RUNTIME={shlex.quote(options.node_runtime)}
 UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
 UCLOUD_DIRECT_RUNSC_COMMIT={shlex.quote(options.direct_runsc_commit)}
+UCLOUD_MANAGED_INIT={shlex.quote(DEFAULT_MANAGED_INIT)}
 UCLOUD_DIRECT_NETWORK={shlex.quote(options.direct_network)}
 UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
+UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache
 UCLOUD_DIRECT_DISK_CAPACITY_MB={writable_disk_mb}
 UCLOUD_DIRECT_DISK_HEADROOM_MB={options.direct_disk_headroom_mb}
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
@@ -607,6 +612,8 @@ UCLOUD_OFFLINE_KERNEL_MODULE_DIR=""
 UCLOUD_BUNDLED_DIRECT_RUNSC=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT=""
+UCLOUD_BUNDLED_MANAGED_INIT=""
+UCLOUD_BUNDLED_MANAGED_INIT_SHA256=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST=""
@@ -682,6 +689,30 @@ PY
       echo "Bundled direct runsc commit does not match deployment configuration" >&2
       exit 1
     fi
+    UCLOUD_MANAGED_INIT_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+import json
+from pathlib import Path
+import re
+import sys
+
+runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
+managed = runtime.get("managed_init") if isinstance(runtime, dict) else None
+if not isinstance(managed, dict):
+    raise SystemExit("managed-process init metadata is absent")
+if managed.get("file") != "runtime/direct/ucloud-sandbox-init":
+    raise SystemExit("invalid managed-process init filename")
+sha256 = str(managed.get("sha256") or "")
+size = managed.get("size")
+if not re.fullmatch(r"[0-9a-f]{{64}}", sha256) or not isinstance(size, int) or size <= 0:
+    raise SystemExit("invalid managed-process init metadata")
+print(f"{{sha256}}\t{{size}}")
+PY
+)"
+    IFS=$'\t' read -r UCLOUD_BUNDLED_MANAGED_INIT_SHA256 UCLOUD_BUNDLED_MANAGED_INIT_SIZE <<< "$UCLOUD_MANAGED_INIT_SPEC"
+    UCLOUD_BUNDLED_MANAGED_INIT="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/ucloud-sandbox-init"
+    test -f "$UCLOUD_BUNDLED_MANAGED_INIT"
+    test "$(stat -c %s "$UCLOUD_BUNDLED_MANAGED_INIT")" = "$UCLOUD_BUNDLED_MANAGED_INIT_SIZE"
+    printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_BUNDLED_MANAGED_INIT" | sha256sum --check --status -
     UCLOUD_STORAGE_NATIVE_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" "$UCLOUD_PACKAGE_BUNDLE_DIR" "$UCLOUD_ARCHITECTURE" <<'PY'
 import json
 import hashlib
@@ -1263,6 +1294,7 @@ if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
   # is otherwise owned by the unprivileged service account, so explicitly
   # restore this subtree after every idempotent init run.
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
+  $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
   $SUDO chown -R root:root "$UCLOUD_STATE_DIR/direct-runtime"
   $SUDO chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"
   if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
@@ -1273,11 +1305,19 @@ if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
     echo "Direct runtime requires a bundle-verified storage-native backend" >&2
     exit 1
   fi
+  if [ -z "$UCLOUD_BUNDLED_MANAGED_INIT" ]; then
+    echo "Direct runtime requires a bundle-verified managed-process init" >&2
+    exit 1
+  fi
   echo "Installing bundle-verified direct runsc runtime"
   $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
   $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
   printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
   "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
+  echo "Installing bundle-verified managed-process init"
+  $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
+  printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_MANAGED_INIT" | sha256sum --check --status -
+  test "$("$UCLOUD_MANAGED_INIT" version)" = managed-primary-v1
   echo "Installing bundle-verified storage-native backend"
   $SUDO install -m 0755 -o root -g root \
     "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" "$UCLOUD_STORAGE_NATIVE_BACKEND"
@@ -1662,7 +1702,9 @@ UCLOUD_HIBERNATION_QUOTA_ROOT=$UCLOUD_HIBERNATION_QUOTA_ROOT
 UCLOUD_NODE_RUNTIME=$UCLOUD_NODE_RUNTIME
 UCLOUD_DIRECT_RUNSC=$UCLOUD_DIRECT_RUNSC
 UCLOUD_DIRECT_RUNSC_COMMIT=$UCLOUD_DIRECT_RUNSC_COMMIT
+UCLOUD_MANAGED_INIT=$UCLOUD_MANAGED_INIT
 UCLOUD_DIRECT_INIT_BINARY=$UCLOUD_DIRECT_INIT_BINARY
+UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DIRECT_IMAGE_CACHE_ROOT
 UCLOUD_DIRECT_DISK_CAPACITY_MB=$UCLOUD_DIRECT_DISK_CAPACITY_MB
 UCLOUD_DIRECT_DISK_HEADROOM_MB=$UCLOUD_DIRECT_DISK_HEADROOM_MB
 UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB

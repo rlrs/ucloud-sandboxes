@@ -27,6 +27,7 @@ from .direct_warden import (
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
 _ROOTFS_SCHEMA = 2
+_OVERLAY2_ROOTFS_SCHEMA = 1
 _OVERLAY_METADATA = ".ucloud-overlay.json"
 _OVERLAY_METADATA_SCHEMA = 1
 
@@ -572,6 +573,411 @@ class DockerRootfsStore:
             raise DirectWardenError("rootfs store directory must be owned and private")
 
 
+class DockerOverlay2RootfsStore(DockerRootfsStore):
+    """Mount Docker's immutable overlay2 layers without flattening the image.
+
+    Docker remains the OCI image owner, but it never owns a sandbox task. A
+    digest-specific local tag leases every image used by the runtime so Docker
+    pruning cannot remove layers below a live or parked sandbox.
+    """
+
+    PIN_REPOSITORY = "ucloud-sandbox-rootfs-cache"
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        runner: CommandRunner | None = None,
+        docker_binary: str = "docker",
+        docker_root: Path | None = None,
+        mount_binary: str = "mount",
+        mountpoint_binary: str = "mountpoint",
+        umount_binary: str = "umount",
+    ) -> None:
+        super().__init__(
+            root,
+            runner=runner,
+            docker_binary=docker_binary,
+            max_concurrent_exports=32,
+        )
+        if docker_root is not None and not docker_root.is_absolute():
+            raise ValueError("Docker data root must be absolute")
+        self._configured_docker_root = docker_root
+        self._resolved_docker_root: Path | None = None
+        self._docker_root_guard = Lock()
+        self._driver_validated = False
+        self.mount_binary = mount_binary
+        self.mountpoint_binary = mountpoint_binary
+        self.umount_binary = umount_binary
+        # Do not collide with an exported rootfs from an earlier release. The
+        # mounted image view has a different durability contract even though
+        # its semantic rootfs identity deliberately remains compatible.
+        self.images = root / "overlay2-images"
+        self.images.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._require_private_directory(self.images)
+
+    def materialize(self, image_ref: str) -> MaterializedRootfs:
+        image_ref = str(image_ref).strip()
+        if not image_ref or "\0" in image_ref:
+            raise ValueError("image_ref is invalid")
+        image_id, image_config, layers = self._inspect_overlay2(image_ref)
+        digest = image_id[7:]
+        with self._locked(digest):
+            target = self.images / digest
+            if target.exists():
+                existing = self._load_overlay2_complete(
+                    digest,
+                    image_ref=image_ref,
+                    image_config=image_config,
+                )
+                if existing is None:
+                    self._discard_overlay2_target(target)
+                else:
+                    self._ensure_overlay2_mount(existing.rootfs, layers)
+                    return existing
+            self._pin_image(image_id)
+            target.mkdir(mode=0o700)
+            rootfs = target / "rootfs"
+            rootfs.mkdir(mode=0o755)
+            identity = self._rootfs_identity(image_id)
+            mounted = False
+            try:
+                self._mount_overlay2(rootfs, layers)
+                mounted = True
+                manifest = {
+                    "created_ns": time.time_ns(),
+                    "image_id": image_id,
+                    "image_config": image_config.to_dict(),
+                    "image_ref": image_ref,
+                    "rootfs_identity_sha256": identity,
+                    "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                    "store": "docker-overlay2",
+                }
+                self._atomic_write(
+                    target / self.MANIFEST,
+                    _canonical_json(manifest) + b"\n",
+                )
+                self._atomic_write(
+                    target / self.COMPLETE,
+                    _canonical_json(
+                        {
+                            "image_id": image_id,
+                            "rootfs_identity_sha256": identity,
+                            "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                            "store": "docker-overlay2",
+                        }
+                    )
+                    + b"\n",
+                )
+                self._fsync_directory(target)
+                self._fsync_directory(self.images)
+            except Exception as exc:
+                if mounted:
+                    result = self.runner.run(
+                        (self.umount_binary, str(rootfs)),
+                        timeout=60,
+                    )
+                    if result.returncode != 0:
+                        raise DirectWardenError(
+                            "overlay2 image publication failed and its mount "
+                            f"could not be released: {result.stderr or result.stdout}"
+                        ) from exc
+                shutil.rmtree(target, ignore_errors=True)
+                raise
+            return MaterializedRootfs(
+                image_ref=image_ref,
+                image_id=image_id,
+                rootfs_identity_sha256=identity,
+                rootfs=rootfs,
+                image_config=image_config,
+            )
+
+    def reconcile_export_containers(self) -> tuple[str, ...]:
+        """Clean legacy exporters and restore every durable Docker image lease."""
+        self._validate_docker_driver()
+        self._docker_overlay2_root()
+        removed = super().reconcile_export_containers()
+        for target in self.images.iterdir():
+            if target.name.startswith("."):
+                continue
+            if not _DIGEST.fullmatch(target.name):
+                raise DirectWardenError("overlay2 image cache contains an invalid entry")
+            self._require_private_directory(target)
+            try:
+                marker = json.loads(
+                    (target / self.COMPLETE).read_text(encoding="ascii")
+                )
+            except FileNotFoundError:
+                self._discard_overlay2_target(target)
+                continue
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise DirectWardenError("overlay2 rootfs marker is invalid") from exc
+            image_id = f"sha256:{target.name}"
+            if (
+                not isinstance(marker, dict)
+                or marker.get("image_id") != image_id
+                or marker.get("store") != "docker-overlay2"
+                or marker.get("schema") != _OVERLAY2_ROOTFS_SCHEMA
+            ):
+                raise DirectWardenError("overlay2 rootfs marker identity is invalid")
+            self._pin_image(image_id)
+        return removed
+
+    def _pin_image(self, image_id: str) -> None:
+        self._checked(
+            self.docker_binary,
+            "image",
+            "tag",
+            image_id,
+            f"{self.PIN_REPOSITORY}:{image_id[7:]}",
+        )
+
+    def _inspect_overlay2(
+        self,
+        image_ref: str,
+    ) -> tuple[str, DockerImageConfig, tuple[Path, ...]]:
+        inspection = self._checked(
+            self.docker_binary,
+            "image",
+            "inspect",
+            image_ref,
+        )
+        try:
+            raw = json.loads(inspection)
+            record = raw[0]
+            image_id = str(record["Id"])
+            image_config = DockerImageConfig.from_inspection(record.get("Config"))
+            graph = record["GraphDriver"]
+            graph_name = str(graph["Name"])
+            graph_data = graph["Data"]
+            upper = str(graph_data["UpperDir"])
+            lower = str(graph_data.get("LowerDir") or "")
+        except (
+            IndexError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise DirectWardenError(
+                "docker image inspect returned invalid overlay2 metadata"
+            ) from exc
+        if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
+            raise DirectWardenError("docker image inspect returned an invalid image ID")
+        if graph_name != "overlay2":
+            raise DirectWardenError(
+                f"direct runtime requires Docker overlay2, got {graph_name!r}"
+            )
+        raw_layers = (upper, *(item for item in lower.split(":") if item))
+        if not raw_layers or not raw_layers[0]:
+            raise DirectWardenError("Docker overlay2 image has no immutable layers")
+        layers = tuple(self._validate_overlay2_layer(item) for item in raw_layers)
+        option = "ro,lowerdir=" + ":".join(str(item) for item in layers)
+        try:
+            mount_option_limit = os.sysconf("SC_PAGE_SIZE") - 512
+        except (OSError, ValueError):
+            mount_option_limit = 3584
+        if len(os.fsencode(option)) > mount_option_limit:
+            raise DirectWardenError(
+                "Docker overlay2 layer stack exceeds the kernel mount option limit"
+            )
+        return image_id, image_config, layers
+
+    def _validate_docker_driver(self) -> None:
+        if self._driver_validated:
+            return
+        payload = self._checked(
+            self.docker_binary,
+            "info",
+            "--format={{json .Driver}}",
+        )
+        try:
+            driver = json.loads(payload)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("docker info returned an invalid driver") from exc
+        if driver != "overlay2":
+            raise DirectWardenError(
+                f"direct runtime requires Docker overlay2, got {driver!r}"
+            )
+        self._driver_validated = True
+
+    def _validate_overlay2_layer(self, raw: str) -> Path:
+        if not raw or "\0" in raw or "," in raw or ":" in raw or "\\" in raw:
+            raise DirectWardenError("Docker overlay2 returned an unsafe layer path")
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            raise DirectWardenError("Docker overlay2 returned a relative layer path")
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(self._docker_overlay2_root())
+        except (OSError, ValueError) as exc:
+            raise DirectWardenError(
+                "Docker overlay2 layer escaped the Docker data root"
+            ) from exc
+        self._require_real_directory(resolved)
+        info = resolved.stat()
+        if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise DirectWardenError(
+                "Docker overlay2 layer must be root-owned and non-writable"
+            )
+        return resolved
+
+    def _docker_overlay2_root(self) -> Path:
+        with self._docker_root_guard:
+            if self._resolved_docker_root is not None:
+                return self._resolved_docker_root / "overlay2"
+            configured = self._configured_docker_root
+            if configured is None:
+                payload = self._checked(
+                    self.docker_binary,
+                    "info",
+                    "--format={{json .DockerRootDir}}",
+                )
+                try:
+                    configured = Path(str(json.loads(payload)))
+                except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                    raise DirectWardenError(
+                        "docker info returned an invalid data root"
+                    ) from exc
+            if not configured.is_absolute():
+                raise DirectWardenError("Docker data root must be absolute")
+            try:
+                resolved = configured.resolve(strict=True)
+            except OSError as exc:
+                raise DirectWardenError("Docker data root is unavailable") from exc
+            self._require_real_directory(resolved)
+            info = resolved.stat()
+            if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+                raise DirectWardenError("Docker data root is not safely owned")
+            self._resolved_docker_root = resolved
+            overlay2 = resolved / "overlay2"
+            self._require_real_directory(overlay2)
+            overlay_info = overlay2.stat()
+            if overlay_info.st_uid != os.geteuid() or overlay_info.st_mode & 0o022:
+                raise DirectWardenError("Docker overlay2 root is not safely owned")
+            return overlay2
+
+    def _load_overlay2_complete(
+        self,
+        digest: str,
+        *,
+        image_ref: str,
+        image_config: DockerImageConfig,
+    ) -> MaterializedRootfs | None:
+        target = self.images / digest
+        if not target.exists():
+            return None
+        self._require_private_directory(target)
+        rootfs = target / "rootfs"
+        self._require_real_directory(rootfs)
+        try:
+            manifest = json.loads((target / self.MANIFEST).read_text(encoding="ascii"))
+            marker = json.loads((target / self.COMPLETE).read_text(encoding="ascii"))
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("overlay2 rootfs metadata is invalid") from exc
+        image_id = f"sha256:{digest}"
+        identity = self._rootfs_identity(image_id)
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema") != _OVERLAY2_ROOTFS_SCHEMA
+            or manifest.get("store") != "docker-overlay2"
+            or manifest.get("image_id") != image_id
+            or manifest.get("rootfs_identity_sha256") != identity
+            or marker
+            != {
+                "image_id": image_id,
+                "rootfs_identity_sha256": identity,
+                "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                "store": "docker-overlay2",
+            }
+        ):
+            raise DirectWardenError("overlay2 rootfs identity is invalid")
+        return MaterializedRootfs(
+            image_ref=image_ref,
+            image_id=image_id,
+            rootfs_identity_sha256=identity,
+            rootfs=rootfs,
+            image_config=image_config,
+        )
+
+    def _discard_overlay2_target(self, target: Path) -> None:
+        rootfs = target / "rootfs"
+        if rootfs.exists():
+            mounted = self.runner.run(
+                (self.mountpoint_binary, "--quiet", str(rootfs)),
+                timeout=60,
+            )
+            if mounted.returncode == 0:
+                result = self.runner.run(
+                    (self.umount_binary, str(rootfs)),
+                    timeout=60,
+                )
+                if result.returncode != 0:
+                    raise DirectWardenError(
+                        f"could not discard incomplete image mount: "
+                        f"{result.stderr or result.stdout}"
+                    )
+            elif mounted.returncode not in {1, 32}:
+                raise DirectWardenError(
+                    f"could not inspect incomplete image mount: "
+                    f"{mounted.stderr or mounted.stdout}"
+                )
+        shutil.rmtree(target)
+
+    def _ensure_overlay2_mount(
+        self,
+        rootfs: Path,
+        layers: tuple[Path, ...],
+    ) -> None:
+        mounted = self.runner.run(
+            (self.mountpoint_binary, "--quiet", str(rootfs)),
+            timeout=60,
+        )
+        if mounted.returncode == 0:
+            return
+        if mounted.returncode not in {1, 32}:
+            raise DirectWardenError(
+                f"could not inspect overlay2 image mount: "
+                f"{mounted.stderr or mounted.stdout}"
+            )
+        self._mount_overlay2(rootfs, layers)
+
+    def _mount_overlay2(self, rootfs: Path, layers: tuple[Path, ...]) -> None:
+        with self._operation_guard:
+            self._active_exports += 1
+        try:
+            result = self.runner.run(
+                (
+                    self.mount_binary,
+                    "-t",
+                    "overlay",
+                    "overlay",
+                    "-o",
+                    "ro,lowerdir=" + ":".join(str(item) for item in layers),
+                    str(rootfs),
+                ),
+                timeout=60,
+            )
+            if result.returncode != 0:
+                raise DirectWardenError(
+                    f"overlay2 image mount failed: {result.stderr or result.stdout}"
+                )
+        finally:
+            with self._operation_guard:
+                self._active_exports -= 1
+
+    @staticmethod
+    def _rootfs_identity(image_id: str) -> str:
+        # The mounted layer view and the former Docker-exported directory have
+        # identical OCI filesystem semantics. Preserve the identity namespace
+        # so parked sandboxes can migrate across a rolling upgrade.
+        return _sha256(
+            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
+        )
+
+
 @dataclass(frozen=True)
 class OverlayRootfsLease:
     sandbox: DirectSandbox
@@ -584,7 +990,7 @@ class OverlayRootfsLease:
 
 
 class OverlayRootfsManager:
-    """Create per-sandbox overlay mounts over a shared Docker-exported rootfs."""
+    """Create per-sandbox overlays over a shared immutable Docker image view."""
 
     def __init__(
         self,
@@ -846,6 +1252,12 @@ class OverlayRootfsManager:
             or metadata.get("rootfs_identity_sha256") != sandbox.rootfs_sha256
         ):
             raise DirectWardenError("overlay bundle metadata changed")
+        image = self.image_store.materialize(str(metadata["image_id"]))
+        if (
+            image.rootfs_identity_sha256 != sandbox.rootfs_sha256
+            or image.image_id != metadata["image_id"]
+        ):
+            raise DirectWardenError("overlay image identity changed during remount")
         try:
             lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
             lower.relative_to(self.image_store.images.resolve(strict=True))
@@ -854,6 +1266,8 @@ class OverlayRootfsManager:
                 "overlay lower escaped the immutable image store"
             ) from exc
         DockerRootfsStore._require_real_directory(lower)
+        if lower != image.rootfs.resolve(strict=True):
+            raise DirectWardenError("overlay lower changed during remount")
         result = self.runner.run(
             (
                 self.mount_binary,

@@ -440,6 +440,48 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 0)
         self.assertFalse(decision.create_pressure_scale_up)
 
+    def test_create_pressure_headroom_caps_overlapping_live_pressure(self) -> None:
+        resources = ResourceQuantity(
+            vcpu=32,
+            memory_mb=98304,
+            disk_mb=1_449_984,
+        )
+        decision = evaluate_scale(
+            [
+                node(
+                    "busy-1",
+                    active=1,
+                    total_resources=resources,
+                    used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
+                ),
+                node(
+                    "busy-2",
+                    active=1,
+                    total_resources=resources,
+                    used_resources=ResourceQuantity(vcpu=2, memory_mb=4096),
+                ),
+            ],
+            SandboxDemand(prepared_resources=resources),
+            ScalePolicy(
+                max_nodes=10,
+                max_create_per_cycle=4,
+                create_pressure_max_headroom_nodes=1,
+            ),
+            live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=1,
+                rootfs_export_queue_utilization=1.0,
+                create_pressure_samples=2,
+                latest_create_pressure_age_seconds=1,
+                sandbox_create_rejections=17,
+                sandbox_create_limit=32,
+            ),
+        )
+
+        self.assertTrue(decision.pressure_scale_up)
+        self.assertTrue(decision.create_pressure_scale_up)
+        self.assertEqual(decision.creates, 0)
+
     def test_single_create_pressure_sample_does_not_scale(self) -> None:
         decision = evaluate_scale(
             [node("ready")],

@@ -550,6 +550,7 @@ class SandboxSpec:
     ttl_seconds: int | None = None
     forkable: bool = False
     parkable: bool = False
+    managed_process: bool = False
     fork_protocol: SandboxForkProtocolSpec = SandboxForkProtocolSpec()
     ssh: SandboxSshSpec = SandboxSshSpec()
     security: SandboxSecuritySpec = SandboxSecuritySpec()
@@ -596,6 +597,7 @@ class SandboxSpec:
             ),
             forkable=bool(raw.get("forkable", False)),
             parkable=bool(raw.get("parkable", raw.get("hibernate", False))),
+            managed_process=bool(raw.get("managed_process", False)),
             fork_protocol=SandboxForkProtocolSpec.from_dict(raw.get("fork_protocol")),
             ssh=SandboxSshSpec.from_dict(raw.get("ssh", raw.get("ssh_enabled"))),
             security=security,
@@ -660,6 +662,18 @@ class SandboxSpec:
             raise ValueError(
                 "parkable sandboxes cannot expose SSH because direct host-port "
                 "sessions bypass the hibernation lifecycle barrier."
+            )
+        if self.managed_process and not self.parkable:
+            raise ValueError("managed_process requires a parkable sandbox.")
+        if self.managed_process and self.profile != "container":
+            raise ValueError("managed_process currently requires the container profile.")
+        if self.managed_process and self.command:
+            raise ValueError(
+                "managed_process sandboxes start their primary command through the job API."
+            )
+        if self.managed_process and self.security.read_only_rootfs:
+            raise ValueError(
+                "managed_process requires a writable rootfs for its checkpointed ledger."
             )
         self.fork_protocol.validate(required=self.forkable)
         if self.profile not in SANDBOX_PROFILES:

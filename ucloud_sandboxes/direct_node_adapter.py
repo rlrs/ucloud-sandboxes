@@ -11,6 +11,11 @@ import time
 from typing import Iterator
 
 from .direct_service import DirectSandboxService
+from .managed_process import (
+    ManagedProcessLogChunk,
+    ManagedProcessRecord,
+    ManagedProcessStart,
+)
 from .models import ResourceQuantity
 from .sandbox import (
     CommandResult,
@@ -305,6 +310,54 @@ class DirectNodeManagerAdapter:
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
+            )
+
+    def start_managed_process(
+        self,
+        sandbox_id: str,
+        spec: ManagedProcessStart,
+    ) -> ManagedProcessRecord:
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.start_managed_process(sandbox_id, spec)
+
+    def managed_process_status(
+        self,
+        sandbox_id: str,
+        job_id: str,
+    ) -> ManagedProcessRecord:
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.managed_process_status(sandbox_id, job_id)
+
+    def managed_process_logs(
+        self,
+        sandbox_id: str,
+        job_id: str,
+        *,
+        stream: str,
+        offset: int,
+        limit: int,
+    ) -> ManagedProcessLogChunk:
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.managed_process_logs(
+                sandbox_id,
+                job_id,
+                stream=stream,
+                offset=offset,
+                limit=limit,
+            )
+
+    def signal_managed_process(
+        self,
+        sandbox_id: str,
+        job_id: str,
+        *,
+        signal: int,
+    ) -> ManagedProcessRecord:
+        with self.lifecycle.shared(sandbox_id):
+            return self.service.signal_managed_process(
+                sandbox_id,
+                job_id,
+                signal=signal,
             )
 
     def require_activity_sandbox(self, sandbox_id: str) -> SandboxRecord:

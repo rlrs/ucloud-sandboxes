@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "completed_at": "2026-08-02T21:20:00Z",
+  "node_job_id": "12362737",
+  "gateway_version": "0.3.84",
+  "image": "namanjain12/pandas_final:93297e07c6646fa92450d6ac0edc8419dd01de23",
+  "image_id": "sha256:5c13f3f97a9785fd1ac3f022a3a6d35099b0f6e4455723a8b5a4cc6ea081a3f0",
+  "live_virtiofs_trace": {
+    "docker_pull_ms": 22311,
+    "rootfs_materialize_ms": 76342,
+    "total_ensure_image_ms": 98683,
+    "cache_root_filesystem": "virtiofs"
+  },
+  "local_xfs_benchmark": {
+    "rootfs_materialize_ms": 16374,
+    "warm_materialize_ms": 32.982,
+    "materialized_disk_usage_gib": 1.7,
+    "cache_root_filesystem": "xfs",
+    "max_concurrent_exports": 1
+  },
+  "materialization_speedup": 4.66,
+  "capacity": {
+    "local_image_infrastructure_gib": 440,
+    "local_image_infrastructure_used_before_gib": 18,
+    "sandbox_hard_capacity_unchanged": true
+  },
+  "cleanup": {
+    "temporary_cache_removed": true
+  },
+  "notes": [
+    "The local cache used the same bounded XFS filesystem as Docker image infrastructure.",
+    "The 440-GiB image-infrastructure allocation is already excluded from hard sandbox disk capacity.",
+    "The live measurement came from the retained production create trace; the local benchmark ran after node rootfs activity reached zero."
+  ]
+}

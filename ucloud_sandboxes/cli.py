@@ -186,6 +186,7 @@ from .vm_init import (
     DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
     DEFAULT_HIBERNATION_QUOTA_HELPER,
+    DEFAULT_MANAGED_INIT,
     DEFAULT_STORAGE_NATIVE_CACHE_GB,
     DEFAULT_STORAGE_NATIVE_REPOSITORY,
     VmInitOptions,
@@ -613,6 +614,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_node_version_args(direct_node_agent)
     add_resource_args(direct_node_agent)
     direct_node_agent.add_argument("--state-root", type=Path)
+    direct_node_agent.add_argument(
+        "--image-cache-root",
+        type=Path,
+        help=(
+            "Node-local directory for disposable materialized image rootfses. "
+            "Defaults to <state-root>/image-cache."
+        ),
+    )
     direct_node_agent.add_argument("--image-file", type=Path)
     direct_node_agent.add_argument("--quota-root", type=Path, required=True)
     direct_node_agent.add_argument(
@@ -629,6 +638,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--init-binary",
         type=Path,
         default=Path("/usr/libexec/docker-init"),
+    )
+    direct_node_agent.add_argument(
+        "--managed-init-binary",
+        type=Path,
+        default=Path(DEFAULT_MANAGED_INIT),
     )
     direct_node_agent.add_argument(
         "--quota-helper",
@@ -1276,6 +1290,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--direct-runsc-commit",
         default="",
         help="Exact gVisor commit used to build --direct-runsc.",
+    )
+    deploy_all.add_argument(
+        "--managed-init",
+        type=Path,
+        help=(
+            "Statically linked Linux amd64 primary-process supervisor built by "
+            "runtime/managed_process/build.sh."
+        ),
     )
     deploy_all.add_argument(
         "--storage-native-manifest",
@@ -2990,10 +3012,16 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     image_file = args.image_file or config.image_file()
     service = build_direct_runtime_service(
         state_root=state_root.absolute(),
+        image_cache_root=(
+            args.image_cache_root.absolute()
+            if args.image_cache_root is not None
+            else None
+        ),
         quota_root=args.quota_root.absolute(),
         runsc=args.runsc.absolute(),
         runsc_commit=args.runsc_commit,
         init_binary=args.init_binary.absolute(),
+        managed_init_binary=args.managed_init_binary.absolute(),
         disk_capacity_mb=args.disk_capacity_mb,
         disk_headroom_mb=args.disk_headroom_mb,
         quota_helper=args.quota_helper.absolute(),
@@ -3039,6 +3067,10 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     host, port = server.server_address
     print(f"Serving direct-runsc node agent on http://{host}:{port}")
     print(f"Direct state root: {state_root}")
+    print(
+        "Direct image cache root: "
+        f"{args.image_cache_root or state_root / 'image-cache'}"
+    )
     print(f"Direct quota root: {args.quota_root}")
     print(
         "Storage-native volumes: "
@@ -3840,6 +3872,11 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             else None
         ),
         direct_runsc_commit=args.direct_runsc_commit,
+        local_managed_init=(
+            args.managed_init.expanduser().resolve()
+            if args.managed_init is not None
+            else None
+        ),
         local_storage_native_manifest=(
             args.storage_native_manifest.expanduser().resolve()
             if args.storage_native_manifest is not None
@@ -3927,6 +3964,22 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     "localPath": str(plan.local_direct_runsc),
                     "remotePath": plan.remote_direct_runsc_path,
                     "result": staged_direct_runsc.to_dict(),
+                }
+            )
+        if plan.local_managed_init is not None:
+            staged_managed_init = stage_file_over_ssh(
+                ssh_command,
+                plan.local_managed_init,
+                plan.remote_managed_init_path,
+                mode="0755",
+                timeout_seconds=timeout,
+                private_key_file=args.ssh_private_key_file,
+            )
+            result["stagedFiles"].append(
+                {
+                    "localPath": str(plan.local_managed_init),
+                    "remotePath": plan.remote_managed_init_path,
+                    "result": staged_managed_init.to_dict(),
                 }
             )
         if plan.local_storage_native_manifest is not None:

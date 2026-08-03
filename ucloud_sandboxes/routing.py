@@ -19,6 +19,7 @@ from .models import (
     parse_iso_datetime,
     utc_now,
 )
+from .managed_process import ManagedProcessRecord
 
 
 _ROUTE_LOCKS_GUARD = RLock()
@@ -646,6 +647,107 @@ class RoutingStore:
     def get_sandbox_readonly(self, sandbox_id: str) -> SandboxRoute | None:
         with self._connect() as conn:
             return self._get_sandbox_unlocked(conn, sandbox_id)
+
+    def get_managed_process(
+        self,
+        sandbox_id: str,
+        job_id: str = "",
+        *,
+        sandbox_generation: int | None = None,
+    ) -> ManagedProcessRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT sandbox_generation, record_json FROM managed_processes
+                WHERE sandbox_id = ?
+                """,
+                (sandbox_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        if (
+            sandbox_generation is not None
+            and int(row["sandbox_generation"]) != sandbox_generation
+        ):
+            return None
+        try:
+            record = ManagedProcessRecord.from_dict(json.loads(row["record_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+        if job_id and record.job_id != job_id:
+            return None
+        return record
+
+    def upsert_managed_process(
+        self,
+        route: SandboxRoute,
+        record: ManagedProcessRecord,
+    ) -> ManagedProcessRecord:
+        if (
+            record.sandbox_id != route.sandbox_id
+            or record.sandbox_generation != route.generation
+        ):
+            raise SandboxRouteConflictError(
+                "managed process does not belong to the routed sandbox generation"
+            )
+        record.validate()
+        with self._lock:
+            with self._transaction() as conn:
+                current_route = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if current_route is None or current_route.generation != route.generation:
+                    raise SandboxRouteConflictError(
+                        "managed process route generation is no longer current"
+                    )
+                existing_row = conn.execute(
+                    "SELECT record_json FROM managed_processes WHERE sandbox_id = ?",
+                    (route.sandbox_id,),
+                ).fetchone()
+                if existing_row is not None:
+                    existing = ManagedProcessRecord.from_dict(
+                        json.loads(existing_row["record_json"])
+                    )
+                    if existing.sandbox_generation > record.sandbox_generation:
+                        raise SandboxRouteConflictError(
+                            "managed process generation is fenced by newer state"
+                        )
+                    if (
+                        existing.sandbox_generation == record.sandbox_generation
+                        and (
+                            existing.job_id != record.job_id
+                            or existing.spec_sha256 != record.spec_sha256
+                        )
+                    ):
+                        raise SandboxRouteConflictError(
+                            "sandbox generation already owns another managed process"
+                        )
+                    if existing.sandbox_generation == record.sandbox_generation and (
+                        existing.sequence > record.sequence
+                        or (existing.terminal and not record.terminal)
+                    ):
+                        return existing
+                conn.execute(
+                    """
+                    INSERT INTO managed_processes (
+                        sandbox_id, sandbox_generation, job_id,
+                        spec_sha256, record_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(sandbox_id) DO UPDATE SET
+                        sandbox_generation = excluded.sandbox_generation,
+                        job_id = excluded.job_id,
+                        spec_sha256 = excluded.spec_sha256,
+                        record_json = excluded.record_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        record.sandbox_id,
+                        record.sandbox_generation,
+                        record.job_id,
+                        record.spec_sha256,
+                        _object_json(record.to_dict()),
+                        record.updated_at or utc_now().isoformat(),
+                    ),
+                )
+        return record
 
     def sandbox_routes_readonly(self) -> list[SandboxRoute]:
         with self._connect() as conn:
@@ -2776,6 +2878,26 @@ class RoutingStore:
                     node_url TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS managed_processes (
+                    sandbox_id TEXT PRIMARY KEY,
+                    sandbox_generation INTEGER NOT NULL,
+                    job_id TEXT NOT NULL,
+                    spec_sha256 TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS managed_process_identity
+                ON managed_processes (
+                    sandbox_id, sandbox_generation, job_id, spec_sha256
                 )
                 """
             )

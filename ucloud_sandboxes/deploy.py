@@ -112,6 +112,7 @@ class AllInOneDeployPlan:
     local_wheel: Path
     sandbox_runtime: str = "legacy"
     local_direct_runsc: Path | None = None
+    local_managed_init: Path | None = None
     direct_runsc_commit: str = ""
     local_storage_native_manifest: Path | None = None
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
@@ -184,6 +185,10 @@ class AllInOneDeployPlan:
     @property
     def remote_direct_runsc_path(self) -> str:
         return str(PurePosixPath(self.release_dir) / "ucloud-direct-runsc")
+
+    @property
+    def remote_managed_init_path(self) -> str:
+        return str(PurePosixPath(self.release_dir) / "ucloud-sandbox-init")
 
     @property
     def remote_storage_native_backend_path(self) -> str:
@@ -353,6 +358,10 @@ class AllInOneDeployPlan:
                     "direct sandbox runtime requires an exact 40-character "
                     "gVisor commit."
                 )
+            if self.local_managed_init is None or not self.local_managed_init.is_file():
+                raise ValueError(
+                    "direct sandbox runtime requires a local managed-process init binary."
+                )
             if self.local_storage_native_manifest is None:
                 raise ValueError(
                     "direct sandbox runtime requires a pinned storage-native "
@@ -440,6 +449,16 @@ class AllInOneDeployPlan:
                 else None
             ),
             "directRunscCommit": self.direct_runsc_commit,
+            "localManagedInit": (
+                str(self.local_managed_init)
+                if self.local_managed_init is not None
+                else None
+            ),
+            "remoteManagedInitPath": (
+                self.remote_managed_init_path
+                if self.sandbox_runtime == "direct"
+                else None
+            ),
             "localStorageNativeManifest": (
                 str(self.local_storage_native_manifest)
                 if self.local_storage_native_manifest is not None
@@ -661,6 +680,15 @@ def render_remote_deploy_script(
         else None
     )
     unit_texts = units if units is not None else packaged_systemd_units()
+    if plan.install_root != DEFAULT_INSTALL_ROOT:
+        # Packaged units contain the production default as their executable and
+        # working-directory anchor.  ``--install-root`` is also used for
+        # isolated canaries, so rebase those paths together with the env files
+        # instead of leaving services pointed at a nonexistent default tree.
+        unit_texts = {
+            name: content.replace(DEFAULT_INSTALL_ROOT, plan.install_root)
+            for name, content in unit_texts.items()
+        }
     env_files = {
         "/etc/ucloud-sandboxes/gateway.env": render_env_file(gateway_env(plan)),
         "/etc/ucloud-sandboxes/relay.env": render_env_file(relay_env(plan)),
@@ -699,6 +727,7 @@ def render_remote_deploy_script(
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
         f"DIRECT_RUNSC={shlex.quote(plan.remote_direct_runsc_path if plan.sandbox_runtime == 'direct' else '')}",
         f"DIRECT_RUNSC_COMMIT={shlex.quote(plan.direct_runsc_commit)}",
+        f"MANAGED_INIT={shlex.quote(plan.remote_managed_init_path if plan.sandbox_runtime == 'direct' else '')}",
         f"STORAGE_NATIVE_BACKEND={shlex.quote(plan.remote_storage_native_backend_path if storage_artifacts is not None else '')}",
         f"STORAGE_NATIVE_MANIFEST={shlex.quote(plan.remote_storage_native_manifest_path if storage_artifacts is not None else '')}",
         f"STORAGE_NATIVE_LICENSE={shlex.quote(plan.remote_storage_native_license_path if storage_artifacts is not None else '')}",
@@ -727,6 +756,7 @@ def render_remote_deploy_script(
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$RELEASE_DIR"',
         'test -s "$REMOTE_WHEEL"',
         'if [ -n "$DIRECT_RUNSC" ]; then test -x "$DIRECT_RUNSC"; fi',
+        'if [ -n "$MANAGED_INIT" ]; then test -x "$MANAGED_INIT"; fi',
         'if [ -n "$STORAGE_NATIVE_BACKEND" ]; then',
         '  test -x "$STORAGE_NATIVE_BACKEND"',
         '  test -s "$STORAGE_NATIVE_MANIFEST"',
@@ -905,7 +935,7 @@ def render_remote_deploy_script(
         '"$RUNTIME_KERNEL_RELEASE" "$RUNTIME_KERNEL_MODULE_DIR" '
         '"$RUNTIME_KERNEL_MODULES" "$DIRECT_RUNSC" "$DIRECT_RUNSC_COMMIT" '
         '"$STORAGE_NATIVE_BACKEND" "$STORAGE_NATIVE_MANIFEST" '
-        '"$STORAGE_NATIVE_LICENSE" '
+        '"$STORAGE_NATIVE_LICENSE" "$MANAGED_INIT" '
         "<<'PY'",
         "import hashlib",
         "import gzip",
@@ -938,6 +968,7 @@ def render_remote_deploy_script(
         "storage_backend = Path(sys.argv[18]) if len(sys.argv) > 18 and sys.argv[18] else None",
         "storage_manifest = Path(sys.argv[19]) if len(sys.argv) > 19 and sys.argv[19] else None",
         "storage_license = Path(sys.argv[20]) if len(sys.argv) > 20 and sys.argv[20] else None",
+        "managed_init = Path(sys.argv[21]) if len(sys.argv) > 21 and sys.argv[21] else None",
         "package_file = wheel_dir / wheel.name",
         "if not package_file.is_file():",
         "    raise SystemExit(f'pip download did not retain {wheel.name}')",
@@ -988,11 +1019,18 @@ def render_remote_deploy_script(
         "    if runtime_role == 'sandbox' and direct_runsc is not None:",
         "        if not direct_runsc.is_file() or len(direct_runsc_commit) != 40:",
         "            raise SystemExit('direct runsc artifact is invalid')",
+        "        if managed_init is None or not managed_init.is_file():",
+        "            raise SystemExit('managed-process init artifact is absent')",
         "        manifest_payload['runtime']['direct_runsc'] = {",
         "            'commit': direct_runsc_commit,",
         "            'file': 'runtime/direct/runsc',",
         "            'sha256': sha256_file(direct_runsc),",
         "            'size': direct_runsc.stat().st_size,",
+        "        }",
+        "        manifest_payload['runtime']['managed_init'] = {",
+        "            'file': 'runtime/direct/ucloud-sandbox-init',",
+        "            'sha256': sha256_file(managed_init),",
+        "            'size': managed_init.stat().st_size,",
         "        }",
         "        if storage_backend is None or storage_manifest is None or storage_license is None:",
         "            raise SystemExit('storage-native build artifacts are absent')",
@@ -1080,6 +1118,7 @@ def render_remote_deploy_script(
         "                )",
         "                if runtime_role == 'sandbox' and direct_runsc is not None:",
         "                    archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
+        "                    archive_paths.append((managed_init, 'runtime/direct/ucloud-sandbox-init'))",
         "                    archive_paths.extend((",
         "                        (storage_backend, 'runtime/storage-native/backend'),",
         "                        (storage_manifest, 'runtime/storage-native/build-manifest.json'),",
@@ -1305,8 +1344,14 @@ def run_remote_script_over_ssh(
         timeout=timeout_seconds,
     )
     if completed.returncode != 0:
+        diagnostic = "\n".join(
+            part.strip()
+            for part in (completed.stdout[-4096:], completed.stderr[-4096:])
+            if part.strip()
+        )
+        suffix = f":\n{diagnostic}" if diagnostic else ""
         raise ValueError(
-            f"remote all-in-one deploy failed with exit {completed.returncode}"
+            f"remote all-in-one deploy failed with exit {completed.returncode}{suffix}"
         )
     return RemoteCommandResult(
         command=command,

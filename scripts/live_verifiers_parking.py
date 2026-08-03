@@ -10,7 +10,6 @@ import hashlib
 import json
 from pathlib import Path
 from pathlib import PurePosixPath
-import re
 import shlex
 import time
 from typing import Any
@@ -174,20 +173,7 @@ class CountingClient(Client):
 
 
 class UCloudVerifiersRuntime(SubprocessRuntime):
-    """Verifiers Runtime whose harness becomes the sandbox's initial process tree.
-
-    Short setup operations use ordinary SDK exec. The long-running harness does
-    not: gVisor intentionally excludes exec-origin tasks from a restored
-    checkpoint, and an attached exec also holds the sandbox lifecycle lease.
-    The initial process waits for an atomically published launch script, then
-    replaces itself with that script so the harness is checkpointable.
-    """
-
-    _LAUNCH_SCRIPT = "/workspace/.vf-harness-launch.sh"
-    _LAUNCH_READY = "/workspace/.vf-harness-launch.ready"
-    _STDOUT = "/workspace/.vf-harness.stdout"
-    _STDERR = "/workspace/.vf-harness.stderr"
-    _STATUS = "/workspace/.vf-harness.status"
+    """Verifiers Runtime backed by one checkpoint-owned SDK primary job."""
 
     def __init__(
         self,
@@ -212,6 +198,7 @@ class UCloudVerifiersRuntime(SubprocessRuntime):
         self.generation = 0
         self.relay_tunnel_url = ""
         self.last_program_result: ProgramResult | None = None
+        self.job = None
         self.lifecycle_states: list[str] = []
 
     async def start(self) -> None:
@@ -222,21 +209,13 @@ class UCloudVerifiersRuntime(SubprocessRuntime):
                 self.handle = await self.client.create_sandbox(
                     id=self.sandbox_id,
                     image=Image.from_registry(self.image),
-                    command=[
-                        "/bin/sh",
-                        "-c",
-                        (
-                            f"while [ ! -f {self._LAUNCH_READY} ]; do "
-                            "sleep 0.05; done; "
-                            f"exec /bin/sh {self._LAUNCH_SCRIPT}"
-                        ),
-                    ],
                     memory_mb=2048,
                     cpus=0.5,
                     disk_mb=4096,
                     network="bridge",
                     ttl_seconds=900,
                     parkable=True,
+                    managed_process=True,
                     security=SandboxSecuritySpec(user="0:0"),
                     request_timeout_seconds=self.timeout_seconds,
                 )
@@ -350,35 +329,16 @@ class UCloudVerifiersRuntime(SubprocessRuntime):
     ) -> ProgramResult:
         if self.handle is None:
             raise RuntimeError("sandbox runtime is not started")
-        invalid_keys = [
-            key for key in env if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
-        ]
-        if invalid_keys:
-            raise ValueError(f"invalid harness environment keys: {invalid_keys}")
-        exports = "\n".join(
-            f"export {key}={shlex.quote(value)}" for key, value in sorted(env.items())
+        self.job = await self.handle.start_job(
+            argv,
+            job_id=f"verifiers-{uuid4().hex}",
+            env=env,
+            working_dir="/workspace",
         )
-        command = shlex.join(argv)
-        script = (
-            "#!/bin/sh\n"
-            "set +e\n"
-            "cd /workspace\n"
-            f"{exports}\n"
-            f"{command} >{self._STDOUT} 2>{self._STDERR}\n"
-            "vf_status=$?\n"
-            f"cat {self._STDERR} >&2\n"
-            f"printf '%s\\n' \"$vf_status\" >{self._STATUS}.tmp\n"
-            f"mv -f {self._STATUS}.tmp {self._STATUS}\n"
-            # Keep PID 1 alive long enough for the SDK to collect the durable
-            # result. The recorded harness status remains authoritative.
-            "while :; do sleep 3600; done\n"
-        ).encode()
-        await self.handle.upload_file(self._LAUNCH_SCRIPT, script)
-        await self.handle.upload_file(self._LAUNCH_READY, b"ready\n")
 
-        # Gateway inventory polling is control-plane-only and must not wake the
-        # sandbox. Wait for the relay-driven park/wake cycle before using exec
-        # to collect the durable result files.
+        # Both inventory and job status are control-plane reads while parked.
+        # Logs are fetched only after completion, when the relay has restored
+        # the sandbox and the supervisor has durably published terminal state.
         deadline = time.monotonic() + self.timeout_seconds
         saw_parked = False
         last_state = "unknown"
@@ -387,35 +347,24 @@ class UCloudVerifiersRuntime(SubprocessRuntime):
             last_state = sandbox_state(record)
             if last_state == "parked":
                 saw_parked = True
-            elif saw_parked and last_state == "running":
-                try:
-                    status = (
-                        await self.handle.download_file(self._STATUS)
-                    ).decode("utf-8", errors="replace").strip()
-                except SandboxApiError as exc:
-                    missing_result = (
-                        exc.status_code == 404
-                        or "sandbox file read failed with exit 1" in str(exc)
-                    )
-                    if not missing_result:
-                        raise
-                else:
-                    stdout, stderr = await asyncio.gather(
-                        self.handle.download_file(self._STDOUT),
-                        self.handle.download_file(self._STDERR),
-                    )
-                    result = ProgramResult(
-                        exit_code=int(status),
-                        stdout=stdout.decode("utf-8", errors="replace"),
-                        stderr=stderr.decode("utf-8", errors="replace"),
-                    )
-                    self.last_program_result = result
-                    return result
+            job = await self.job.refresh()
+            if job.terminal:
+                stdout, stderr = await asyncio.gather(
+                    self.job.logs("stdout"),
+                    self.job.logs("stderr"),
+                )
+                result = ProgramResult(
+                    exit_code=job.exit_code if job.exit_code is not None else 1,
+                    stdout=stdout.data.decode("utf-8", errors="replace"),
+                    stderr=stderr.data.decode("utf-8", errors="replace"),
+                )
+                self.last_program_result = result
+                return result
             if not self.lifecycle_states or self.lifecycle_states[-1] != last_state:
                 self.lifecycle_states.append(last_state)
             await asyncio.sleep(0.1)
         raise TimeoutError(
-            "checkpointable harness did not finish after a real park/wake cycle; "
+            "durable harness job did not finish after a real park/wake cycle; "
             f"saw_parked={saw_parked}, last_state={last_state}"
         )
 
@@ -617,6 +566,11 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         runtime,
                         timeout_seconds=args.park_timeout_seconds,
                     )
+                    if (
+                        not runtime.lifecycle_states
+                        or runtime.lifecycle_states[-1] != "parked"
+                    ):
+                        runtime.lifecycle_states.append("parked")
                     source_owner = sandbox_owner(parked_record)
                     if not any(source_owner):
                         raise RuntimeError(

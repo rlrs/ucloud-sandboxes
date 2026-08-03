@@ -10,6 +10,7 @@ import unittest
 
 from ucloud_sandboxes.direct_warden import CommandResult, DirectWardenError
 from ucloud_sandboxes.image_rootfs import (
+    DockerOverlay2RootfsStore,
     DockerRootfsStore,
     GnuTarRootfsExtractor,
     OverlayRootfsManager,
@@ -134,7 +135,168 @@ class ConcurrentExtractor(FakeExtractor):
                 self.active -= 1
 
 
+class Overlay2Runner(FakeRunner):
+    def __init__(self, docker_root: Path) -> None:
+        super().__init__()
+        self.docker_root = docker_root.resolve()
+        self.top = self.docker_root / "overlay2" / "top" / "diff"
+        self.middle = self.docker_root / "overlay2" / "middle" / "diff"
+        self.base = self.docker_root / "overlay2" / "base" / "diff"
+        for path in (self.top, self.middle, self.base):
+            path.mkdir(parents=True)
+
+    def run(self, argv, *, timeout):
+        command = tuple(str(item) for item in argv)
+        if command[:3] == ("docker", "image", "inspect"):
+            self.commands.append(command)
+            return CommandResult(
+                command,
+                0,
+                json.dumps(
+                    [
+                        {
+                            "Id": f"sha256:{IMAGE_DIGEST}",
+                            "Config": {"Cmd": ["true"]},
+                            "GraphDriver": {
+                                "Name": "overlay2",
+                                "Data": {
+                                    "UpperDir": str(self.top),
+                                    "LowerDir": (
+                                        f"{self.middle}:{self.base}"
+                                    ),
+                                },
+                            },
+                        }
+                    ]
+                ),
+            )
+        if command == ("docker", "info", "--format={{json .Driver}}"):
+            self.commands.append(command)
+            return CommandResult(command, 0, json.dumps("overlay2"))
+        return super().run(command, timeout=timeout)
+
+
 class ImageRootfsTests(unittest.TestCase):
+    def test_overlay2_rootfs_identity_remains_migration_compatible(self) -> None:
+        image_id = f"sha256:{IMAGE_DIGEST}"
+        legacy_identity = hashlib.sha256(
+            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
+        ).hexdigest()
+
+        self.assertEqual(
+            DockerOverlay2RootfsStore._rootfs_identity(image_id),
+            legacy_identity,
+        )
+
+    def test_overlay2_store_mounts_shared_layers_without_export(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            docker_root = root / "docker"
+            runner = Overlay2Runner(docker_root)
+            store = DockerOverlay2RootfsStore(
+                (root / "cache").resolve(),
+                runner=runner,
+                docker_root=docker_root.resolve(),
+            )
+
+            first = store.materialize("example/image:latest")
+            second = store.materialize("example/image:latest")
+
+            self.assertEqual(first, second)
+            self.assertEqual(first.image_config.command, ("true",))
+            mounts = [command for command in runner.commands if command[0] == "mount"]
+            self.assertEqual(len(mounts), 1)
+            options = mounts[0][mounts[0].index("-o") + 1]
+            self.assertEqual(
+                options,
+                "ro,lowerdir="
+                f"{runner.top}:{runner.middle}:{runner.base}",
+            )
+            self.assertIn(
+                (
+                    "docker",
+                    "image",
+                    "tag",
+                    f"sha256:{IMAGE_DIGEST}",
+                    f"ucloud-sandbox-rootfs-cache:{IMAGE_DIGEST}",
+                ),
+                runner.commands,
+            )
+            self.assertEqual(
+                sum(command[:3] == ("docker", "image", "tag") for command in runner.commands),
+                1,
+            )
+            self.assertFalse(
+                any(command[:2] == ("docker", "create") for command in runner.commands)
+            )
+            self.assertFalse(
+                any(command[:2] == ("docker", "export") for command in runner.commands)
+            )
+
+    def test_overlay2_store_remounts_completed_image_after_restart(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            docker_root = root / "docker"
+            runner = Overlay2Runner(docker_root)
+            store = DockerOverlay2RootfsStore(
+                (root / "cache").resolve(),
+                runner=runner,
+                docker_root=docker_root.resolve(),
+            )
+            first = store.materialize("example/image:latest")
+            runner.mounted.clear()
+
+            restored = store.materialize(f"sha256:{IMAGE_DIGEST}")
+
+            self.assertEqual(restored.rootfs, first.rootfs)
+            self.assertEqual(
+                len([command for command in runner.commands if command[0] == "mount"]),
+                2,
+            )
+
+    def test_overlay2_startup_reconciles_durable_image_lease(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            docker_root = root / "docker"
+            runner = Overlay2Runner(docker_root)
+            store = DockerOverlay2RootfsStore(
+                (root / "cache").resolve(),
+                runner=runner,
+                docker_root=docker_root.resolve(),
+            )
+            store.materialize("example/image:latest")
+            runner.commands.clear()
+
+            store.reconcile_export_containers()
+
+            self.assertIn(
+                (
+                    "docker",
+                    "image",
+                    "tag",
+                    f"sha256:{IMAGE_DIGEST}",
+                    f"ucloud-sandbox-rootfs-cache:{IMAGE_DIGEST}",
+                ),
+                runner.commands,
+            )
+
+    def test_overlay2_store_rejects_layers_outside_docker_root(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            docker_root = root / "docker"
+            runner = Overlay2Runner(docker_root)
+            escaped = root / "escaped"
+            escaped.mkdir()
+            runner.top = escaped
+            store = DockerOverlay2RootfsStore(
+                (root / "cache").resolve(),
+                runner=runner,
+                docker_root=docker_root.resolve(),
+            )
+
+            with self.assertRaisesRegex(DirectWardenError, "escaped"):
+                store.materialize("example/image:latest")
+
     def test_distinct_cold_rootfs_exports_run_concurrently(self) -> None:
         with TemporaryDirectory() as raw:
             runner = ConcurrentRunner()

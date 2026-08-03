@@ -161,7 +161,8 @@ setup must:
 - use the byte-preserving response-commit helper so a temporarily unavailable
   wake is retried idempotently;
 - continue renewing the request lease during long inference;
-- start the harness through the detached job API once that API is available.
+- create the sandbox with `managed_process=True` and start the harness through
+  sync or async SDK `start_job()`.
 
 Packaging those operations as named `UCloudRuntime` and `UCloudTunnel` classes
 inside Verifiers may be convenient, but is not a prerequisite for the current
@@ -221,6 +222,27 @@ cross-node TCP reset, reattached to the original relay request, and returned
 `relay-live-park-ok` with exactly one model call, one trace turn, one transport
 reset, one wake notification, and one reattachment.
 
-This closes the isolated SDK/Verifiers migration gate. It does not authorize a
-production deployment: production still requires an explicit rollout decision,
-health/version verification, and the same flow through the production URLs.
+On 2026-08-03 the updated qualification used the real managed-process SDK path
+instead of the uploaded launch-file workaround. A same-node run parked in 5.78
+seconds, restored, preserved its relay connection, and completed one model call
+and one trace turn. A subsequent clean run began with zero worker nodes, created
+source job `12362748`, parked the SDK-managed harness, provisioned destination
+job `12362749`, and migrated before waking the same primary process. The relay
+observed one intentional transport reset and one reattachment, then returned
+`relay-live-park-ok` with exactly one model call and one trace turn.
+
+The clean migration request waited 54.61 seconds including destination VM
+provisioning. Once the destination was ready, the storage-native protocol took
+1.009 seconds: 25.94 ms prepare/export, 625.41 ms transfer/stage, 15.48 ms route
+commit, 51.26 ms activation, and 251.57 ms source finalization. The portable
+manifest carried and validated the managed-process ledger SHA-256. Results are
+retained in
+[`benchmarks/managed-harness-verifiers-dfm-2026-08-03.json`](benchmarks/managed-harness-verifiers-dfm-2026-08-03.json).
+
+The final fail-closed restore check was then qualified from another zero-node
+deployment. The managed harness moved from job `12362753` to `12362754`; the
+destination mounted the transferred storage, matched the exact ledger SHA-256
+before calling `runsc restore`, and completed with one model call, one trace
+turn, and one expected relay reattachment. The migration protocol took 1.043
+seconds after destination readiness; provisioning made the enclosing request
+54.57 seconds.

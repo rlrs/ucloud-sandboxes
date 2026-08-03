@@ -39,6 +39,7 @@ from ucloud_sandboxes.managed_registry import (
     RegistryManifestLayers,
     RegistryUsageStore,
 )
+from ucloud_sandboxes.managed_process import ManagedProcessRecord
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -157,6 +158,156 @@ class FileRuntime(DockerGvisorRuntime):
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_parked_managed_job_status_is_gateway_state_and_does_not_wake(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "heartbeats.json"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="managed-one",
+                    node_id="node-1",
+                    job_id="vm-1",
+                    node_url="http://node.invalid",
+                    state="parked",
+                    generation=1,
+                    create_operation_id="create-managed-one",
+                    spec_hash="b" * 64,
+                    spec={
+                        "id": "managed-one",
+                        "image": "busybox",
+                        "parkable": True,
+                        "managed_process": True,
+                    },
+                )
+            )
+            routing.upsert_managed_process(
+                route,
+                ManagedProcessRecord(
+                    sandbox_id=route.sandbox_id,
+                    sandbox_generation=route.generation,
+                    job_id="rollout-1",
+                    spec_sha256="a" * 64,
+                    state="running",
+                    pid=42,
+                    sequence=2,
+                    updated_at="2026-08-03T00:00:00+00:00",
+                ),
+            )
+            HeartbeatStore(heartbeat_file).upsert(
+                build_heartbeat(
+                    job_id=route.job_id,
+                    node_id=route.node_id,
+                    node_url=route.node_url,
+                    active_sandboxes=0,
+                    inventory=(
+                        SandboxInventoryEntry(
+                            sandbox_id=route.sandbox_id,
+                            state="parked",
+                        ),
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_file,
+                routing_file=route_file,
+            )
+            proxied = Event()
+
+            def fail_proxy(*_args, **_kwargs):
+                proxied.set()
+                raise AssertionError("parked status must not reach a node")
+
+            gateway.RequestHandlerClass._proxy_request = fail_proxy
+            thread = Thread(target=gateway.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = gateway.server_address
+                payload = self._json_request(
+                    f"http://{host}:{port}/v1/sandboxes/managed-one/jobs/rollout-1"
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                thread.join(timeout=1)
+
+        self.assertFalse(proxied.is_set())
+        self.assertEqual(payload["job"]["state"], "running")
+        self.assertEqual(payload["job"]["sandbox_generation"], 1)
+
+    def test_managed_job_status_uses_gateway_state_during_node_transition(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "heartbeats.json"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="managed-transition",
+                    node_id="node-1",
+                    job_id="vm-1",
+                    node_url="http://node.invalid",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-managed-transition",
+                    spec_hash="b" * 64,
+                    spec={
+                        "id": "managed-transition",
+                        "image": "busybox",
+                        "parkable": True,
+                        "managed_process": True,
+                    },
+                )
+            )
+            routing.upsert_managed_process(
+                route,
+                ManagedProcessRecord(
+                    sandbox_id=route.sandbox_id,
+                    sandbox_generation=route.generation,
+                    job_id="rollout-1",
+                    spec_sha256="a" * 64,
+                    state="running",
+                    pid=42,
+                    sequence=2,
+                    updated_at="2026-08-03T00:00:00+00:00",
+                ),
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_file,
+                routing_file=route_file,
+            )
+
+            def transition_response(_handler, *_args, **_kwargs):
+                return control_plane.ProxiedResponse(
+                    400,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"sandbox lifecycle transition is in progress: '
+                    b'managed-transition"}',
+                )
+
+            gateway.RequestHandlerClass._proxy_request = transition_response
+            thread = Thread(target=gateway.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = gateway.server_address
+                payload = self._json_request(
+                    f"http://{host}:{port}/v1/sandboxes/managed-transition/"
+                    "jobs/rollout-1"
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                thread.join(timeout=1)
+
+        self.assertEqual(payload["job"]["state"], "running")
+        self.assertEqual(payload["job"]["sequence"], 2)
+
     def test_relay_lifecycle_persists_program_request_transitions(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

@@ -1,8 +1,8 @@
 # Production roadmap
 
-Status: **Phase 0 in progress; Phase 1 infrastructure deployed in shadow**
+Status: **Phase 0 qualified for production canary; Phase 1 infrastructure deployed in shadow**
 
-Last reviewed: 2026-08-02
+Last reviewed: 2026-08-03
 
 This is the source of truth for work after the storage-native runtime rollout.
 The detailed parking, direct-runtime, and storage-native plans remain design
@@ -12,7 +12,8 @@ backlogs.
 ## Completed foundation
 
 - One privileged direct Warden owns every sandbox lifecycle on a node.
-- Docker/containerd are image build, pull, cache, and export infrastructure
+- Docker/containerd are image build, pull, and content-addressed layer cache
+  infrastructure
   only.
 - gVisor park/wake works through the qualified SDK and Verifiers relay flow.
 - Parked state is a durable storage-native manifest with lazy remote reads.
@@ -57,7 +58,7 @@ The production design for burst scale-up is deliberately bounded:
    temporary node beyond hard demand; raw gateway occupancy cannot scale alone.
 3. Image locality remains preferred while a cached node has pipeline headroom.
    Once it is saturated, placement may copy the image to a less-loaded node
-   rather than queue every rootfs export behind one host.
+   rather than queue every registry pull behind one host.
 4. Recent create pressure uses the ordinary pressure cooldown. Surplus nodes
    then enter the existing drain workflow; parked storage-native sandboxes are
    migrated only when exact destination disk-fit proofs succeed.
@@ -65,7 +66,42 @@ The production design for burst scale-up is deliberately bounded:
 This is latency headroom, not disk overcommit. Temporary nodes never weaken
 per-route hard disk reservation or node quota admission.
 
-The deterministic 32-image pipeline benchmark is recorded in
+The same production burst also exposed a deeper image-path error. Even after
+per-digest locking removed global serialization, the Warden flattened every
+Docker image through `docker export` and tar extraction. On UCloud VMs the
+original cache was below virtiofs `/work`; moving it to local XFS reduced one
+representative pandas materialization from 76.342 to 16.374 seconds, but still
+rewrote a 1.7-GiB filesystem already present as content-addressed Docker
+layers. That intermediate result is retained in
+[`benchmarks/rootfs-local-xfs-production-2026-08-02.json`](benchmarks/rootfs-local-xfs-production-2026-08-02.json).
+
+The replacement production path preserves the layers. `DockerOverlay2RootfsStore`
+inspects the immutable image ID, pins it with a digest-specific local tag, and
+mounts Docker's existing overlay2 layer chain read-only. The ordinary
+per-sandbox quota-owned overlay remains above that shared image view, so gVisor
+and storage-native migration do not change. A completed image view is
+reconstructed after mount loss, and sandbox resume reconstructs and revalidates
+the image mount before attaching the writable layer. Unsupported graph drivers,
+paths outside Docker's data root, unsafe mount options, and identity changes
+fail closed; there is no silent tar-export fallback.
+
+On production node `12362737`, the same 1.7-GiB, 14-layer pandas image took
+16.663 ms to inspect, 20.393 ms to lease, 3.462 ms to mount, and 3.261 ms to
+attach the sandbox writable overlay. The 43.779-ms hot rootfs setup is 1,743.8x
+faster than the retained 76.342-second virtiofs flattening trace and writes no
+archive or extracted copy. A real copy-up write passed and all temporary
+benchmark state was removed. Raw results are in
+[`benchmarks/rootfs-overlay2-production-2026-08-02.json`](benchmarks/rootfs-overlay2-production-2026-08-02.json).
+
+The burst also showed that the generic live-pressure branch and the more
+specific create-pressure branch could both interpret the same samples. Once
+the bounded create-pressure target had been reached, generic pressure could
+still add one node per cycle, bypassing
+`create_pressure_max_headroom_nodes`. Create pressure now exclusively owns the
+headroom calculation whenever both signals are true.
+
+The superseded export pipeline remains as incident evidence. Its deterministic
+32-image benchmark is recorded in
 [`benchmarks/rootfs-export-pipeline-2026-08-02.json`](benchmarks/rootfs-export-pipeline-2026-08-02.json).
 With four export slots it observed four overlapping exports, a 3.71x makespan
 improvement over the serialized lower bound, and a 16.1 ms makespan for 32
@@ -77,7 +113,9 @@ creates completing in 1.09--1.20 seconds. All 24 exec checks succeeded and the
 run cleaned up every route and reservation. Its retained metrics also exposed
 two policy errors fixed in 0.3.84: the builder warm signal demanded a completely
 empty full-disk node, and three occupied export slots were counted as 75% queue
-pressure despite zero waiters.
+pressure despite zero waiters. The zero-flatten store removes this export
+pipeline from the production create path; the metric field names remain for
+wire compatibility during rollout.
 
 Second, the observed PRIME/TMax traffic eventually created `parkable=true`
 sandboxes but still ran each harness through a long-lived attached exec. Those
@@ -99,11 +137,15 @@ resident CPU or memory working set.
 
 ## Phase 0: durable primary jobs
 
-This is the immediate production blocker. Implement and qualify the runtime
-init, gateway job journal, checkpoint/migration binding, SDK `JobHandle`, and
-real Verifiers harness flow specified in
-[`durable-sandbox-jobs.md`](durable-sandbox-jobs.md). Program-aware scheduler
-actions remain disabled until this gate passes.
+The runtime init, gateway job state, checkpoint/migration ledger binding, sync
+and async SDK `JobHandle`, release bundling, and Verifiers qualification path
+are implemented as specified in
+[`durable-sandbox-jobs.md`](durable-sandbox-jobs.md). On 2026-08-03 an isolated
+DFM deployment passed real same-node park/wake and a clean zero-node cross-node
+migration from UCloud job `12362748` to `12362749`. The migration preserved the
+managed-process ledger identity, reattached the relay, and completed one model
+call and trace turn; its post-readiness protocol took 1.009 seconds. A
+production canary remains before enabling program-aware scheduler actions.
 
 ## Phase 1: live-metrics autoscaling
 
@@ -115,9 +157,10 @@ Implementation status:
   markers, indexed pressure/lifecycle reads, live-pressure headroom action,
   provisioning-p95 idle grace, cooldown hysteresis, decision telemetry, and a
   decision-oriented operations dashboard.
-- **Program-aware extension blocked on Phase 0:** durable rollout/request phase
-  observation and terminal cleanup, per-return and periodic shadow wake
-  planning, and bounded leading demand (action off by default) as specified in
+- **Program-aware extension awaiting the production canary:** durable
+  rollout/request phase observation and terminal cleanup, per-return and
+  periodic shadow wake planning, and bounded leading demand (action off by
+  default) as specified in
   [`program-aware-scheduling-plan.md`](program-aware-scheduling-plan.md).
 - **Verified locally:** focused policy/metrics/config/CLI/lifecycle and
   dashboard contract tests; 857 service tests passed with one skipped and 87

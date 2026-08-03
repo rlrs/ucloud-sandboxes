@@ -89,11 +89,14 @@ class DirectOciConfigBuilder:
     """Translate the product sandbox contract into a deterministic OCI config."""
 
     init_binary: Path | None = None
+    managed_init_binary: Path | None = None
     network_mode: str = "none"
 
     def __post_init__(self) -> None:
         if self.init_binary is not None and not self.init_binary.is_absolute():
             raise ValueError("direct runtime init binary must be absolute")
+        if self.managed_init_binary is not None and not self.managed_init_binary.is_absolute():
+            raise ValueError("managed-process init binary must be absolute")
         if self.network_mode not in {"none", "sandbox"}:
             raise ValueError("direct OCI network mode must be none or sandbox")
 
@@ -117,7 +120,7 @@ class DirectOciConfigBuilder:
             )
 
         image_config = image.image_config
-        args = self._process_args(spec, image_config)
+        args = () if spec.managed_process else self._process_args(spec, image_config)
         environment = self._environment(spec, image_config)
         if spec.profile == "linux_host":
             args = (
@@ -130,7 +133,23 @@ class DirectOciConfigBuilder:
             environment.update(self._linux_host_environment(spec))
 
         mounts = self._mounts(spec)
-        if spec.security.init:
+        managed_uid = managed_gid = 0
+        if spec.managed_process:
+            if self.managed_init_binary is None:
+                raise DirectOciConfigError(
+                    "managed_process requires a configured managed-process init binary"
+                )
+            self._validate_init_binary(self.managed_init_binary)
+            managed_uid, managed_gid = self._numeric_user(
+                spec.security.user or image_config.user or "0"
+            )
+            args = (
+                "/.ucloud-job-init",
+                "supervise",
+                "--state-dir",
+                "/.ucloud-managed",
+            )
+        elif spec.security.init:
             if self.init_binary is None:
                 raise DirectOciConfigError(
                     "security.init requires a configured direct-runtime init binary"
@@ -139,7 +158,11 @@ class DirectOciConfigBuilder:
             args = ("/.ucloud-init", "--", *args)
 
         uid, gid = self._numeric_user(spec.security.user or image_config.user or "0")
+        if spec.managed_process:
+            uid, gid = 0, 0
         capabilities = self._capabilities(spec)
+        if spec.managed_process:
+            capabilities.update({"CAP_SETUID", "CAP_SETGID"})
         memory_bytes = spec.memory_mb * 1024 * 1024
         linux_resources: dict[str, Any] = {
             "memory": {
@@ -162,6 +185,17 @@ class DirectOciConfigBuilder:
             "dev.ucloud-sandboxes.profile": spec.profile,
             "dev.ucloud-sandboxes.sandbox-id": spec.id,
         }
+        if spec.managed_process:
+            annotations.update(
+                {
+                    "dev.ucloud-sandboxes.managed-process": "v1",
+                    "dev.ucloud-sandboxes.managed-process.uid": str(managed_uid),
+                    "dev.ucloud-sandboxes.managed-process.gid": str(managed_gid),
+                    "dev.ucloud-sandboxes.managed-process.cwd": self._working_directory(
+                        spec, image_config
+                    ),
+                }
+            )
         annotations.update(
             {f"dev.ucloud-sandboxes.label.{key}": value for key, value in spec.labels.items()}
         )
@@ -250,23 +284,46 @@ class DirectOciConfigBuilder:
             raise DirectOciConfigError(
                 "security.init requires a configured direct-runtime init binary"
             )
+        self._install_binary(rootfs, self.init_binary, target_name=".ucloud-init")
+
+    def install_managed_init(self, rootfs: Path, *, enabled: bool) -> None:
+        """Install the checkpoint-owned primary-process supervisor."""
+        if not enabled:
+            return
+        if self.managed_init_binary is None:
+            raise DirectOciConfigError(
+                "managed_process requires a configured managed-process init binary"
+            )
+        self._install_binary(
+            rootfs,
+            self.managed_init_binary,
+            target_name=".ucloud-job-init",
+        )
+
+    def _install_binary(
+        self,
+        rootfs: Path,
+        binary: Path,
+        *,
+        target_name: str,
+    ) -> None:
         if not rootfs.is_absolute() or not rootfs.is_dir() or rootfs.is_symlink():
             raise DirectOciConfigError(
                 "direct-runtime init target must be an absolute rootfs directory"
             )
-        self._validate_init_binary(self.init_binary)
+        self._validate_init_binary(binary)
 
         source_fd = -1
         target_fd = -1
         temporary = ""
         try:
             source_fd = os.open(
-                self.init_binary,
+                binary,
                 os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0),
             )
             self._validate_init_stat(os.fstat(source_fd))
             target_fd, temporary = tempfile.mkstemp(
-                prefix=".ucloud-init.",
+                prefix=f".{target_name}.",
                 dir=rootfs,
             )
             with (
@@ -279,7 +336,7 @@ class DirectOciConfigBuilder:
                 target.flush()
                 os.fchmod(target.fileno(), 0o755)
                 os.fsync(target.fileno())
-            os.replace(temporary, rootfs / ".ucloud-init")
+            os.replace(temporary, rootfs / target_name)
             temporary = ""
             directory_fd = os.open(rootfs, os.O_RDONLY | os.O_DIRECTORY)
             try:

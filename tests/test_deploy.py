@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.cli import build_parser
 from ucloud_sandboxes.deploy import (
@@ -20,19 +21,44 @@ from ucloud_sandboxes.deploy import (
     registry_env,
     render_env_file,
     render_remote_deploy_script,
+    run_remote_script_over_ssh,
 )
 from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
 
 class DeployTests(unittest.TestCase):
+    def test_remote_deploy_failure_retains_bounded_diagnostics(self) -> None:
+        with patch(
+            "ucloud_sandboxes.deploy.subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=("ssh",),
+                returncode=1,
+                stdout="x" * 5000,
+                stderr="durable mount is unavailable\n",
+            ),
+        ):
+            with self.assertRaisesRegex(
+                ValueError,
+                "durable mount is unavailable",
+            ) as raised:
+                run_remote_script_over_ssh(
+                    "ssh ucloud@example.org",
+                    "set -eu\n",
+                )
+
+        self.assertLess(len(str(raised.exception)), 8200)
+
     def test_direct_deploy_requires_and_bundles_pinned_runsc(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             wheel = root / "ucloud_sandboxes-0.3.52-py3-none-any.whl"
             runsc = root / "runsc"
+            managed_init = root / "ucloud-sandbox-init"
             wheel.write_bytes(b"wheel")
             runsc.write_bytes(b"patched-runsc")
             runsc.chmod(0o755)
+            managed_init.write_bytes(b"managed-process-init")
+            managed_init.chmod(0o755)
             backend_bytes = b"pinned-storage-native-backend"
             backend_digest = hashlib.sha256(backend_bytes).hexdigest()
             backend = root / f"uvm-ublk-daemon-{backend_digest}"
@@ -69,6 +95,7 @@ class DeployTests(unittest.TestCase):
                 local_wheel=wheel,
                 sandbox_runtime="direct",
                 local_direct_runsc=runsc,
+                local_managed_init=managed_init,
                 direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
                 local_storage_native_manifest=storage_manifest,
                 gateway_private_host="sandbox-gateway-prod",
@@ -85,6 +112,8 @@ class DeployTests(unittest.TestCase):
             "9f653e577965df2ddd13875b5530cd2588661f1c",
         )
         self.assertIn("runtime/direct/runsc", script)
+        self.assertIn("runtime/direct/ucloud-sandbox-init", script)
+        self.assertIn("managed_init", script)
         self.assertIn("DIRECT_RUNSC_COMMIT=", script)
 
     def test_env_rendering_quotes_only_when_needed(self) -> None:
@@ -318,6 +347,7 @@ class DeployTests(unittest.TestCase):
                 registry_private_ip="10.0.0.5",
                 private_network_id="net-1",
             )
+            script = render_remote_deploy_script(plan)
 
         self.assertEqual(plan.state_dir, "/mnt/project-data/ucloud-sandboxes/state")
         self.assertEqual(plan.legacy_state_dir, "/srv/ucloud-sandboxes/state")
@@ -333,6 +363,12 @@ class DeployTests(unittest.TestCase):
             plan.remote_session_file,
             "/mnt/project-data/ucloud-sandboxes/state/ucloud-session.json",
         )
+        self.assertIn("WorkingDirectory=/srv/ucloud-sandboxes", script)
+        self.assertIn(
+            "ExecStart=/srv/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes",
+            script,
+        )
+        self.assertNotIn("WorkingDirectory=/work/ucloud-sandboxes", script)
 
     def test_offline_bundle_builder_python_compiles(self) -> None:
         with TemporaryDirectory() as raw_dir:

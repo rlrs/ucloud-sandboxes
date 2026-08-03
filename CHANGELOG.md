@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.94 - 2026-08-03
+
+- Made storage-native mount detection authoritative from Linux mountinfo
+  instead of statting the mount root, so failed filesystems that return EIO
+  are still recognized and detached during recovery.
+
 ## 0.3.93 - 2026-08-03
 
 - Added lazy-detach recovery for unreachable storage-native mounts during

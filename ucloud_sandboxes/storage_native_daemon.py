@@ -313,7 +313,18 @@ class LinuxStorageHostOperations:
 
     @staticmethod
     def is_mounted(target: Path) -> bool:
-        return os.path.ismount(target)
+        # os.path.ismount() stats the target and returns false when a dead
+        # block backend makes the mount root itself return EIO. Mountinfo is
+        # the kernel authority and remains readable in exactly that case.
+        expected = os.fsencode(str(target))
+        try:
+            lines = Path("/proc/self/mountinfo").read_bytes().splitlines()
+        except OSError:
+            return False
+        return any(
+            len(fields) > 4 and fields[4] == expected
+            for fields in (line.split() for line in lines)
+        )
 
     @staticmethod
     def ublk_device_ids() -> set[int]:

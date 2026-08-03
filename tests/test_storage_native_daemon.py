@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.hibernation import (
     HibernationDiskReservation,
@@ -14,6 +15,7 @@ from ucloud_sandboxes.hibernation import (
 )
 from ucloud_sandboxes.storage_native import StorageNativeDevice
 from ucloud_sandboxes.storage_native_daemon import (
+    LinuxStorageHostOperations,
     StorageNativeConflictError,
     StorageNativeNodeConfig,
     StorageNativeNodeClient,
@@ -624,6 +626,21 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(host.detached, [mount_path])
             self.assertNotIn(mount_path, host.mounted)
             self.assertEqual(service.metrics()["hard_reserved_bytes"], 0)
+
+    def test_linux_mount_detection_uses_mountinfo_without_stating_target(
+        self,
+    ) -> None:
+        target = Path("/storage/dead-volume")
+        mountinfo = (
+            b"36 25 0:31 / / rw,relatime - ext4 /dev/root rw\n"
+            b"91 36 0:54 / /storage/dead-volume rw - xfs /dev/ublkb7 rw\n"
+        )
+
+        with patch.object(Path, "read_bytes", return_value=mountinfo):
+            self.assertTrue(LinuxStorageHostOperations.is_mounted(target))
+            self.assertFalse(
+                LinuxStorageHostOperations.is_mounted(Path("/storage/absent"))
+            )
 
     def test_interrupted_create_is_not_blindly_replayed(self) -> None:
         with TemporaryDirectory() as raw:

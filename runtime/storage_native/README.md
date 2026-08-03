@@ -14,9 +14,16 @@ from an exact, clean checkout:
 ./build_pinned.sh /path/to/AgentENV /path/to/artifacts
 ```
 
-The build runs the daemon protocol tests and emits a content-addressed binary,
-license, and build manifest. A production package must use that manifest and
-must not fetch or build an unpinned branch during node startup.
+The build applies the dense-stream export and pooled-exclusive-delete
+compatibility patches, runs the daemon protocol tests, and emits a
+content-addressed binary, license, and schema-2 build manifest with both patch
+digests. A production package must use that manifest and must not fetch or
+build an unpinned branch during node startup.
+
+The pooled-delete patch is deliberately narrow. AgentEnv continues to own pool
+acquire, target swapping, cache eviction, refill, and release. The patch only
+allows an explicit `Delete` request to permanently destroy an active exclusive
+pooled device after uncertain mount cleanup; it refuses shared pooled devices.
 
 ## Destructive volume qualification
 
@@ -57,3 +64,30 @@ sudo python3 benchmark_io.py \
 The benchmark alternates target order across rounds and applies the Stage 0
 15% gate to sequential write bandwidth, 70/30 random mixed IOPS, and a
 create/stat/rename/delete metadata workload.
+
+## Warm-device churn benchmark
+
+`benchmark_node_service.py` can compare the real journaled XFS lifecycle with
+and without AgentEnv's warm block-device pool:
+
+```bash
+sudo python3 benchmark_node_service.py \
+  --daemon /path/to/uvm-ublk-daemon-<sha256> \
+  --work-root /var/lib/ucloud/storage-native-qualification \
+  --output /tmp/storage-native-unpooled.json \
+  --churn-iterations 100 --parallel-volumes 8 --parallel-rounds 10
+
+sudo python3 benchmark_node_service.py \
+  --daemon /path/to/uvm-ublk-daemon-<sha256> \
+  --work-root /var/lib/ucloud/storage-native-qualification \
+  --output /tmp/storage-native-pooled.json \
+  --churn-iterations 100 --parallel-volumes 8 --parallel-rounds 10 \
+  --enable-pool --pool-low-watermark 2 --pool-high-watermark 16
+```
+
+The benchmark deletes every test volume and fails if any hard reservation
+remains. Raw DFM results are stored in `docs/benchmarks`; the 2/16 pool reduced
+sequential wake-plus-release p50 by about 38%, reduced eight-way release p50 by
+about 65%, and reused a warm device for all 189 measured acquisitions. The
+stock high watermark of 64 eagerly created 64 idle devices and provided no
+eight-way throughput benefit, so production defaults to 16.

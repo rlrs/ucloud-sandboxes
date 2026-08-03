@@ -105,6 +105,8 @@ _IMAGE_PULL_LOCKS: dict[tuple[str, str], RLock] = {}
 _IMAGE_WARMUP_TASKS_GUARD = RLock()
 _IMAGE_WARMUP_TASKS: set[tuple[str, str]] = set()
 _GATEWAY_SCHEDULING_LOCK = RLock()
+_MIGRATION_OPERATION_LOCKS_GUARD = RLock()
+_MIGRATION_OPERATION_LOCKS: dict[str, tuple[RLock, int]] = {}
 _REGISTRY_LEASE_COORDINATION_LOCK = RLock()
 REGISTRY_IMAGE_LEASE_TTL_SECONDS = 60 * 60
 DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES = 32
@@ -861,7 +863,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "migration id belongs to another sandbox"
                 )
             if migration is None:
-                with _GATEWAY_SCHEDULING_LOCK:
+                with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(
+                    self.routing_store.path
+                ):
                     migration = self.routing_store.get_sandbox_migration(migration_id)
                     if migration is not None and migration.sandbox_id != sandbox_id:
                         raise SandboxRouteConflictError(
@@ -903,11 +907,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                                 status=HTTPStatus.SERVICE_UNAVAILABLE,
                             )
                             return
-                        if not self._prepare_migration_destination_image(
-                            source,
-                            destination,
-                        ):
-                            return
+                        # Persist the destination reservation before any image
+                        # pull or transfer. Placement can then continue safely
+                        # while the long-running migration work executes.
                         migration = self.routing_store.begin_sandbox_migration(
                             source,
                             migration_id=migration_id,
@@ -918,10 +920,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             assert migration is not None
             self.routing_store.clear_pending(_migration_pending_demand_id(sandbox_id))
             migration_timings_ms: dict[str, float] = {}
-            migration = self._advance_sandbox_migration(
+            migration = self._prepare_and_advance_sandbox_migration(
                 migration,
                 timings_ms=migration_timings_ms,
             )
+            if migration is None:
+                return
         except (SandboxRouteConflictError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -1067,11 +1071,87 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         return False
 
+    def _prepare_and_advance_sandbox_migration(
+        self,
+        migration,
+        *,
+        timings_ms: dict[str, float] | None = None,
+        wake_on_complete: bool = False,
+    ):
+        """Run network-heavy migration work outside global placement locks."""
+
+        with _migration_operation_lock(migration.migration_id):
+            current = self.routing_store.get_sandbox_migration(
+                migration.migration_id
+            )
+            if current is None:
+                self._write_json(
+                    {"error": "sandbox migration disappeared", "retryable": True},
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(
+                            SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                        ),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return None
+            if current.phase == "complete":
+                return (
+                    self.routing_store.complete_sandbox_migration(
+                        current.migration_id,
+                        wake_destination=wake_on_complete,
+                    )
+                    or current
+                )
+            if current.phase == "planned":
+                source = self.routing_store.get_sandbox_readonly(
+                    current.sandbox_id
+                )
+                destination = next(
+                    (
+                        heartbeat
+                        for heartbeat in self._ready_sandbox_heartbeats()
+                        if heartbeat.node_id == current.destination_node_id
+                        and heartbeat.job_id == current.destination_job_id
+                        and (heartbeat.node_url or "").rstrip("/")
+                        == current.destination_node_url.rstrip("/")
+                    ),
+                    None,
+                )
+                if source is None or destination is None:
+                    self._write_json(
+                        {
+                            "error": "migration source or destination is unavailable",
+                            "retryable": True,
+                            "migration": current.to_dict(),
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={
+                            "Retry-After": str(
+                                SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                            ),
+                            "X-UCloud-Sandbox-Retryable": "true",
+                        },
+                    )
+                    return None
+                if not self._prepare_migration_destination_image(
+                    source,
+                    destination,
+                ):
+                    return None
+            return self._advance_sandbox_migration(
+                current,
+                timings_ms=timings_ms,
+                wake_on_complete=wake_on_complete,
+            )
+
     def _advance_sandbox_migration(
         self,
         migration,
         *,
         timings_ms: dict[str, float] | None = None,
+        wake_on_complete: bool = False,
     ):
         advance_started = time.monotonic()
         measured = timings_ms if timings_ms is not None else {}
@@ -1361,11 +1441,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if migration.storage_schema and not migration.source_fenced:
                 measured["finalize_source"] = 0.0
                 migration = (
-                    self.routing_store.advance_sandbox_migration(
+                    self.routing_store.complete_sandbox_migration(
                         migration.migration_id,
-                        expected_phases={"activated"},
-                        phase="complete",
-                        error="",
+                        wake_destination=wake_on_complete,
                     )
                     or migration
                 )
@@ -1395,11 +1473,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if response.status >= 400:
                 return self._record_migration_error(migration, response)
             migration = (
-                self.routing_store.advance_sandbox_migration(
+                self.routing_store.complete_sandbox_migration(
                     migration.migration_id,
-                    expected_phases={"activated"},
-                    phase="complete",
-                    error="",
+                    wake_destination=wake_on_complete,
                 )
                 or migration
             )
@@ -3858,33 +3934,29 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if (route.state or "unknown").lower() == "parked" and _sandbox_request_wakes(
             path, self.command
         ):
-            with _GATEWAY_SCHEDULING_LOCK:
-                current = self.routing_store.get_sandbox_readonly(sandbox_id)
-                if current is None:
-                    self._write_json(
-                        {"error": "sandbox route not found"},
-                        status=HTTPStatus.NOT_FOUND,
-                    )
+            current = self.routing_store.get_sandbox_readonly(sandbox_id)
+            if current is None:
+                self._write_json(
+                    {"error": "sandbox route not found"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            if (current.state or "unknown").lower() == "parked":
+                previous_owner = (
+                    current.node_id,
+                    current.job_id,
+                    current.node_url,
+                )
+                route = self._ensure_parked_sandbox_wake_placement(current)
+                if route is None:
                     return
-                if (current.state or "unknown").lower() == "parked":
-                    previous_owner = (
-                        current.node_id,
-                        current.job_id,
-                        current.node_url,
-                    )
-                    route = self._ensure_parked_sandbox_wake_placement(
-                        current,
-                        routes=wake_placement_routes,
-                    )
-                    if route is None:
-                        return
-                    transport_reset = previous_owner != (
-                        route.node_id,
-                        route.job_id,
-                        route.node_url,
-                    )
-                else:
-                    route = current
+                transport_reset = previous_owner != (
+                    route.node_id,
+                    route.job_id,
+                    route.node_url,
+                )
+            else:
+                route = current
 
         if lifecycle_action == "wake" and lifecycle_payload.get("request_id"):
             self._record_program_request_transition(
@@ -4319,64 +4391,26 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def _ensure_parked_sandbox_wake_placement(
         self,
         route: SandboxRoute,
-        *,
-        routes: list[SandboxRoute] | None = None,
     ) -> SandboxRoute | None:
-        """Keep a parked sandbox local only when its active shape still fits."""
+        """Reserve wake placement briefly, then relocate without global locks."""
 
-        routes = routes if routes is not None else self._placement_routes()
-        source_heartbeat = self._heartbeat_for_route(
-            node_id=route.node_id,
-            job_id=route.job_id,
-            node_url=route.node_url,
-        )
-        active_request = ResourceQuantity(
-            vcpu=route.resources.vcpu,
-            memory_mb=route.resources.memory_mb,
-        )
-        ready_source_ids = {
-            heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
-        }
-        if (
-            source_heartbeat is not None
-            and source_heartbeat.node_id in ready_source_ids
-            and _node_can_fit_available(
-                source_heartbeat,
-                active_request,
-                _node_available_resources(source_heartbeat, routes),
-            )
+        with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(
+            self.routing_store.path
         ):
-            self.routing_store.clear_pending(_wake_pending_demand_id(route.sandbox_id))
-            return self._mark_sandbox_waking(route)
-
-        active_migration = next(
-            (
-                migration
-                for migration in self.routing_store.sandbox_migrations(active_only=True)
-                if migration.sandbox_id == route.sandbox_id
-            ),
-            None,
-        )
-        if active_migration is None:
-            destination = self._select_migration_destination(
-                route,
-                requested_node_id="",
-                require_active_resources=True,
-            )
-            if destination is None:
-                _pending, demand = self.routing_store.upsert_pending_with_demand(
-                    _wake_pending_demand_id(route.sandbox_id),
-                    route.resources,
-                    failure_reason="wake_destination_unavailable",
+            current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+            if current is None:
+                self._write_json(
+                    {"error": "sandbox route not found"},
+                    status=HTTPStatus.NOT_FOUND,
                 )
+                return None
+            if (current.state or "unknown").lower() in {"waking", "running"}:
+                return current
+            if (current.state or "unknown").lower() != "parked":
                 self._write_json(
                     {
-                        "error": (
-                            "parked sandbox has no node with active CPU, memory, "
-                            "and disk capacity"
-                        ),
+                        "error": "sandbox route changed during wake admission",
                         "retryable": True,
-                        "pending_resources": demand.pending_resources.to_dict(),
                     },
                     status=HTTPStatus.SERVICE_UNAVAILABLE,
                     headers={
@@ -4387,19 +4421,92 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     },
                 )
                 return None
-            if not self._prepare_migration_destination_image(
-                route,
-                destination,
-            ):
-                return None
-            active_migration = self.routing_store.begin_sandbox_migration(
-                route,
-                migration_id=f"wake-{uuid4().hex}",
-                destination_node_id=destination.node_id,
-                destination_job_id=destination.job_id,
-                destination_node_url=destination.node_url or "",
+            route = current
+            routes = self._placement_routes()
+            source_heartbeat = self._heartbeat_for_route(
+                node_id=route.node_id,
+                job_id=route.job_id,
+                node_url=route.node_url,
             )
-        migration = self._advance_sandbox_migration(active_migration)
+            active_request = ResourceQuantity(
+                vcpu=route.resources.vcpu,
+                memory_mb=route.resources.memory_mb,
+            )
+            ready_source_ids = {
+                heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
+            }
+            if (
+                source_heartbeat is not None
+                and source_heartbeat.node_id in ready_source_ids
+                and _node_can_fit_available(
+                    source_heartbeat,
+                    active_request,
+                    _node_available_resources(source_heartbeat, routes),
+                )
+            ):
+                self.routing_store.clear_pending(
+                    _wake_pending_demand_id(route.sandbox_id)
+                )
+                return self._mark_sandbox_waking(route)
+
+            active_migration = next(
+                (
+                    migration
+                    for migration in self.routing_store.sandbox_migrations(
+                        active_only=True
+                    )
+                    if migration.sandbox_id == route.sandbox_id
+                ),
+                None,
+            )
+            if active_migration is None:
+                destination = self._select_migration_destination(
+                    route,
+                    requested_node_id="",
+                    require_active_resources=True,
+                )
+                if destination is None:
+                    _pending, demand = self.routing_store.upsert_pending_with_demand(
+                        _wake_pending_demand_id(route.sandbox_id),
+                        route.resources,
+                        failure_reason="wake_destination_unavailable",
+                    )
+                    self._write_json(
+                        {
+                            "error": (
+                                "parked sandbox has no node with active CPU, memory, "
+                                "and disk capacity"
+                            ),
+                            "retryable": True,
+                            "pending_resources": demand.pending_resources.to_dict(),
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={
+                            "Retry-After": str(
+                                SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                            ),
+                            "X-UCloud-Sandbox-Retryable": "true",
+                        },
+                    )
+                    return None
+                active_migration = self.routing_store.begin_sandbox_migration(
+                    route,
+                    migration_id=f"wake-{uuid4().hex}",
+                    destination_node_id=destination.node_id,
+                    destination_job_id=destination.job_id,
+                    destination_node_url=destination.node_url or "",
+                )
+
+        # The planned migration now reserves the destination shape in normal
+        # placement. Clear capacity demand and release both placement locks
+        # before image pulls, export, transfer, import, or activation.
+        self.routing_store.clear_pending(_wake_pending_demand_id(route.sandbox_id))
+        migration = self._prepare_and_advance_sandbox_migration(
+            active_migration,
+            wake_on_complete=True,
+        )
+        if migration is None:
+            return None
         if migration.phase != "complete":
             self._write_json(
                 {
@@ -4416,7 +4523,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 },
             )
             return None
-        self.routing_store.clear_pending(_wake_pending_demand_id(route.sandbox_id))
         destination_route = self.routing_store.get_sandbox_readonly(route.sandbox_id)
         return (
             self._mark_sandbox_waking(destination_route)
@@ -4747,16 +4853,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         routes = list(self.routing_store.sandbox_routes_readonly())
         routes_by_id = {route.sandbox_id: route for route in routes}
         for migration in self.routing_store.sandbox_migrations(active_only=True):
-            if migration.phase in {"routed", "activated"}:
-                continue
             source = routes_by_id.get(migration.sandbox_id)
             if source is None:
                 continue
             # Before route commit the destination may already be allocating
             # quota and restoring metadata, while its heartbeat still has no
-            # observation. Reserve the complete shape briefly; this is more
-            # conservative than the parked steady state and prevents a create
-            # racing an import into the same capacity.
+            # observation. Reserve the complete shape. After route commit the
+            # parked route owns disk itself, but a wake relocation still needs
+            # its CPU/RAM reservation through activation. Completion can then
+            # atomically turn that parked route into ``waking``.
+            reservation = source.resources
+            if migration.phase in {"routed", "activated"}:
+                reservation = ResourceQuantity(
+                    vcpu=source.resources.vcpu,
+                    memory_mb=source.resources.memory_mb,
+                )
             routes.append(
                 replace(
                     source,
@@ -4764,6 +4875,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     node_id=migration.destination_node_id,
                     job_id=migration.destination_job_id,
                     node_url=migration.destination_node_url,
+                    resources=reservation,
                     state="creating",
                     node_epoch="",
                     activity_epoch=0,
@@ -6783,6 +6895,28 @@ def _image_pull_lock(node_url: str, image: str) -> RLock:
             lock = RLock()
             _IMAGE_PULL_LOCKS[key] = lock
         return lock
+
+
+@contextmanager
+def _migration_operation_lock(migration_id: str):
+    """Serialize one migration without retaining an unbounded keyed-lock cache."""
+
+    key = migration_id.strip()
+    with _MIGRATION_OPERATION_LOCKS_GUARD:
+        lock, users = _MIGRATION_OPERATION_LOCKS.get(key, (RLock(), 0))
+        _MIGRATION_OPERATION_LOCKS[key] = (lock, users + 1)
+    try:
+        with lock:
+            yield
+    finally:
+        with _MIGRATION_OPERATION_LOCKS_GUARD:
+            current = _MIGRATION_OPERATION_LOCKS.get(key)
+            if current is not None and current[0] is lock:
+                remaining = current[1] - 1
+                if remaining <= 0:
+                    _MIGRATION_OPERATION_LOCKS.pop(key, None)
+                else:
+                    _MIGRATION_OPERATION_LOCKS[key] = (lock, remaining)
 
 
 @contextmanager

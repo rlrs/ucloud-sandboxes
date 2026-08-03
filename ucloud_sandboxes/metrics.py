@@ -26,6 +26,7 @@ from .routing import (
     ProgramRequestState,
     RoutingState,
     SandboxRoute,
+    is_portable_parked_route,
 )
 
 
@@ -690,6 +691,7 @@ def record_autoscaler_cycle(
             ),
             "ready_nodes": decision.get("readyNodes", 0),
             "provisioning_nodes": decision.get("provisioningNodes", 0),
+            "unreachable_nodes": decision.get("unreachableNodes", 0),
             "total_nodes": decision.get("totalNodes", 0),
             "actions": decision.get("actions", []),
             "reasons": decision.get("reasons", []),
@@ -1113,6 +1115,15 @@ def build_metrics_snapshot(
         if route.node_id in fresh_sandbox_nodes
     )
     active_routes = len(routing_state.sandboxes)
+    portable_parked_routes = sum(
+        is_portable_parked_route(route)
+        for route in routing_state.sandboxes.values()
+    )
+    stale_routes = sum(
+        route.node_id not in fresh_sandbox_nodes
+        and not is_portable_parked_route(route)
+        for route in routing_state.sandboxes.values()
+    )
     sandbox_state_counts: dict[str, int] = {}
     for route in routing_state.sandboxes.values():
         state = str(route.state or "unknown").strip().lower() or "unknown"
@@ -1201,8 +1212,9 @@ def build_metrics_snapshot(
             "running": sandbox_resources["active_sandboxes"] + provisional_running,
             "active_routes": active_routes,
             "routes_on_fresh_nodes": routes_on_fresh_nodes,
+            "portable_parked_routes": portable_parked_routes,
             "provisional_running_routes": provisional_running,
-            "stale_routes": max(0, active_routes - routes_on_fresh_nodes),
+            "stale_routes": stale_routes,
             "states": dict(sorted(sandbox_state_counts.items())),
             "pending": len(capacity_pending_sandboxes),
             "pending_resources": _sum_pending_resources(
@@ -1341,10 +1353,10 @@ def build_program_state_summary(
             (request.response_ready_at for request in ready),
             now,
         ),
-        "model_wait_p50_ms": _percentile(completed_wait_ms, 0.50),
-        "model_wait_p95_ms": _percentile(completed_wait_ms, 0.95),
-        "response_to_wake_p50_ms": _percentile(completed_wake_ms, 0.50),
-        "response_to_wake_p95_ms": _percentile(completed_wake_ms, 0.95),
+        "model_wait_p50_ms": _percentile(sorted(completed_wait_ms), 0.50),
+        "model_wait_p95_ms": _percentile(sorted(completed_wait_ms), 0.95),
+        "response_to_wake_p50_ms": _percentile(sorted(completed_wake_ms), 0.50),
+        "response_to_wake_p95_ms": _percentile(sorted(completed_wake_ms), 0.95),
         "shadow_wake_queue": [
             {
                 "position": position,

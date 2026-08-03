@@ -71,6 +71,16 @@ def evaluate_scale(
             oldest_pending_seconds,
         )
     ]
+    unreachable_nodes = [
+        node
+        for node in pool_nodes
+        if _counts_as_unreachable(
+            node,
+            policy,
+            now,
+            oldest_pending_seconds,
+        )
+    ]
     total_nodes = len(pool_nodes)
     effective_scale_down_idle_seconds = policy.scale_down_idle_seconds
     if (
@@ -209,7 +219,14 @@ def evaluate_scale(
             if _has_resource_deficit(resource_deficit)
             else 0
         )
-        needed_nodes = max(deficit_nodes, placement_nodes)
+        # A node already planned to restore ``min_nodes`` contributes the same
+        # default schedulable shape as a resource-deficit create.  Count it
+        # once; otherwise loss of the final node produces one replacement for
+        # the minimum and a second replacement for the exact same demand.
+        needed_nodes = max(
+            0,
+            max(deficit_nodes, placement_nodes) - _planned_creates(actions),
+        )
         create_count = min(
             needed_nodes,
             _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
@@ -378,6 +395,7 @@ def evaluate_scale(
         ready_nodes=len(ready_nodes),
         provisioning_nodes=len(provisioning_nodes),
         total_nodes=total_nodes,
+        unreachable_nodes=len(unreachable_nodes),
         pending_resources=demand.pending_resources,
         suppressed_pending_resources=demand.suppressed_pending_resources,
         pending_count=demand.pending_count,
@@ -823,7 +841,11 @@ def _counts_as_pool_node(
     oldest_pending_seconds: int,
 ) -> bool:
     del policy, now, oldest_pending_seconds
-    if node.job.is_final or node.job.is_unexpectedly_suspended:
+    if (
+        node.job.is_final
+        or node.job.is_unexpectedly_suspended
+        or node.permanently_lost
+    ):
         return False
     # Capacity weighting and hard provider limits are separate concerns. A stale
     # provisioning job may contribute no projected resources, but it is still a
@@ -837,11 +859,35 @@ def _counts_as_active_provisioning(
     now: datetime,
     oldest_pending_seconds: int,
 ) -> bool:
-    del policy, now, oldest_pending_seconds
+    del oldest_pending_seconds
     # max_provisioning_nodes is a hard in-flight job limit, not a measure of the
-    # capacity currently credited to that job.
-    return node.job.state == "IN_QUEUE" or node.job.is_initially_suspended or (
-        node.job.state == "RUNNING" and not node.heartbeat_fresh
+    # capacity currently credited to that job. A RUNNING VM that previously
+    # heartbeated is unreachable, not provisioning. A VM that never reached its
+    # first heartbeat receives only a bounded bootstrap grace period.
+    if not node.is_provisioning:
+        return False
+    if node.job.state != "RUNNING":
+        return True
+    stale_after = max(0, policy.stale_provisioning_after_seconds)
+    age = _provisioning_age_seconds(node, now)
+    return bool(stale_after <= 0 or age is None or age < stale_after)
+
+
+def _counts_as_unreachable(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    now: datetime,
+    oldest_pending_seconds: int,
+) -> bool:
+    return bool(
+        node.job.state == "RUNNING"
+        and not node.heartbeat_fresh
+        and not _counts_as_active_provisioning(
+            node,
+            policy,
+            now,
+            oldest_pending_seconds,
+        )
     )
 
 

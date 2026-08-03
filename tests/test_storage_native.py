@@ -85,6 +85,7 @@ class StorageNativeTests(unittest.TestCase):
                     "digest": "sha256:" + "b" * 64,
                     "size": 1222,
                 },
+                {"status": "released"},
                 {"status": "deleted"},
             ]
             with FakeUblkDaemon(socket_path, responses) as daemon:
@@ -103,6 +104,7 @@ class StorageNativeTests(unittest.TestCase):
                     source_layer_path=(root / "snapshot.commit").resolve(),
                     stream_socket_path=(root / "export.sock").resolve(),
                 )
+                client.release(device.device_id)
                 client.delete(device.device_id)
 
             self.assertEqual(device.device_id, 7)
@@ -136,6 +138,10 @@ class StorageNativeTests(unittest.TestCase):
                     ),
                     "stream_socket_path": str((root / "export.sock").resolve()),
                 },
+            )
+            self.assertEqual(
+                daemon.requests[3],
+                {"kind": "release_overlaybd", "dev_id": 7},
             )
 
     def test_errors_are_typed(self) -> None:

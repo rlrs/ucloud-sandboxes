@@ -228,7 +228,9 @@ def evaluate_builder_scale(
     pool_nodes = [
         node
         for node in builder_nodes
-        if not node.job.is_final and not node.job.is_unexpectedly_suspended
+        if not node.job.is_final
+        and not node.job.is_unexpectedly_suspended
+        and not node.permanently_lost
     ]
     ready_nodes = [node for node in pool_nodes if node.is_schedulable]
     provisioning_nodes = [node for node in pool_nodes if node.is_provisioning]

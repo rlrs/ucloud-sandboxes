@@ -120,7 +120,6 @@ class CliTests(unittest.TestCase):
                 for mutation_flag in (
                     "--execute",
                     "--execute-stops",
-                    "--execute-resumes",
                     "--execute-init",
                 ):
                     with self.subTest(command=command, mutation_flag=mutation_flag):
@@ -313,20 +312,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(ambiguous_state, "uncertain")
 
     @allow_fixture_mutations
-    def test_post_run_suspension_is_resumed_once_and_has_zero_pool_capacity(
+    def test_post_run_suspension_is_stopped_and_replaced_without_resume(
         self,
     ) -> None:
-        unsuspend_calls: list[tuple[str, ...]] = []
+        submitted: list[dict] = []
+        terminated: list[tuple[str, ...]] = []
+        provider_calls: list[str] = []
 
-        class ResumeClient:
+        class ReplacementClient:
             def __init__(self, _session_store) -> None:
                 pass
 
-            def unsuspend_jobs(
+            def submit_jobs(self, _project_id: str, payload: dict) -> dict:
+                provider_calls.append("create")
+                submitted.append(payload)
+                return {"responses": [{"id": "replacement-node"}]}
+
+            def terminate_jobs(
                 self, _project_id: str, job_ids: tuple[str, ...]
             ) -> dict:
-                unsuspend_calls.append(tuple(job_ids))
-                return {"responses": [{} for _job_id in job_ids]}
+                provider_calls.append("stop")
+                terminated.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
 
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -355,7 +362,11 @@ class CliTests(unittest.TestCase):
                                     },
                                 },
                                 "status": {
-                                    "state": "SUSPENDED",
+                                    # UCloud browse has already changed the
+                                    # destroyed job back to RUNNING and omits
+                                    # update history. The old resume journal
+                                    # below must keep the loss latched.
+                                    "state": "RUNNING",
                                     "startedAt": 1_700_000_100_000,
                                 },
                             }
@@ -382,7 +393,8 @@ class CliTests(unittest.TestCase):
                     str(root / "heartbeats.json"),
                     "--state-dir",
                     raw_dir,
-                    "--execute-resumes",
+                    "--execute",
+                    "--execute-stops",
                     "--no-private-network",
                     "--max-builder-nodes",
                     "0",
@@ -392,29 +404,52 @@ class CliTests(unittest.TestCase):
                 ]
             )
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+            state.prepare_operation(
+                intent_key="sandbox:suspended-node:old-resume",
+                kind="resume",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={
+                    "type": "bulk",
+                    "items": [{"id": "suspended-node"}],
+                    "lastStartedAt": "2026-08-03T00:00:00+00:00",
+                },
+                target_job_ids=("suspended-node",),
+            )
+            lost_route = SandboxRoute(
+                sandbox_id="lost-sandbox",
+                node_id="lost-node",
+                job_id="suspended-node",
+                node_url="http://lost-node:8090",
+                resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
+                state="running",
+                generation=1,
+                create_operation_id="create-lost",
+                spec_hash="a" * 64,
+            )
 
-            with patch.object(cli, "UCloudClient", ResumeClient):
-                first = cli.run_reconcile_cycle(
+            with patch.object(cli, "UCloudClient", ReplacementClient):
+                result = cli.run_reconcile_cycle(
                     config,
                     args,
                     demand=SandboxDemand(),
                     provider_state=state,
                     provider_mutations_allowed=True,
-                )
-                second = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
+                    route_reservations={"suspended-node": (lost_route,)},
+                    sandbox_routes=(lost_route,),
                 )
 
-        self.assertEqual(unsuspend_calls, [("suspended-node",)])
-        self.assertEqual(first["unexpectedlySuspendedJobIds"], ["suspended-node"])
-        self.assertEqual(first["resumedJobIds"], ["suspended-node"])
-        self.assertEqual(first["rawDecision"].total_nodes, 0)
-        self.assertEqual(first["rawDecision"].creates, 1)
-        self.assertEqual(second["resumeRecoveryResults"][0]["state"], "waiting")
+        self.assertEqual(len(submitted), 1)
+        self.assertEqual(terminated, [("suspended-node",)])
+        self.assertEqual(provider_calls, ["stop", "create"])
+        self.assertEqual(
+            result["destructivePowerCycleJobIds"], ["suspended-node"]
+        )
+        self.assertEqual(result["lostSandboxIds"], ["lost-sandbox"])
+        self.assertEqual(result["resumedJobIds"], [])
+        self.assertEqual(result["destructiveStopJobIds"], ["suspended-node"])
+        self.assertEqual(result["rawDecision"].total_nodes, 0)
+        self.assertEqual(result["rawDecision"].creates, 1)
 
     @allow_fixture_mutations
     def test_initial_suspension_is_booting_and_is_not_resumed(self) -> None:
@@ -494,6 +529,119 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result["rawDecision"].total_nodes, 1)
         self.assertEqual(result["rawDecision"].provisioning_nodes, 1)
         self.assertEqual(result["providerOperationResults"], [])
+
+    @allow_fixture_mutations
+    def test_autoscaler_loop_fences_and_removes_power_cycled_node_routes(self) -> None:
+        submitted: list[dict] = []
+        terminated: list[tuple[str, ...]] = []
+
+        class ReplacementClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def submit_jobs(self, _project_id: str, payload: dict) -> dict:
+                submitted.append(payload)
+                return {"responses": [{"id": "replacement-node"}]}
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminated.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "lost-job",
+                                "createdAt": 1_700_000_000_000,
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-lost",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-32-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                    },
+                                    "parameters": {"diskSize": {"value": 2000}},
+                                },
+                                "status": {
+                                    "state": "SUSPENDED",
+                                    "startedAt": 1_700_000_100_000,
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            route_file = root / "routes.sqlite"
+            RoutingStore(route_file).upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="lost-sandbox",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=4096,
+                        disk_mb=8192,
+                    ),
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-lost",
+                    spec_hash="a" * 64,
+                )
+            )
+            output = io.StringIO()
+            with patch.object(cli, "UCloudClient", ReplacementClient):
+                with redirect_stdout(output):
+                    exit_code = cli.main(
+                        [
+                            "autoscaler-loop",
+                            "--project",
+                            "project-1",
+                            "--deployment-id",
+                            "prod-a",
+                            "--state-dir",
+                            raw_dir,
+                            "--route-file",
+                            str(route_file),
+                            "--jobs-file",
+                            str(jobs_file),
+                            "--no-private-network",
+                            "--max-builder-nodes",
+                            "0",
+                            "--execute",
+                            "--execute-stops",
+                            "--once",
+                            "--output",
+                            "json",
+                        ]
+                    )
+            payload = json.loads(output.getvalue())
+            routes = RoutingStore(route_file).sandbox_routes_readonly()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(submitted), 1)
+        self.assertEqual(terminated, [("lost-job",)])
+        self.assertEqual(routes, [])
+        self.assertEqual(
+            [item["sandbox_id"] for item in payload["removedRoutes"]],
+            ["lost-sandbox"],
+        )
+        self.assertEqual(payload["persistedNodeLossDemand"], [])
 
     def test_control_plane_parser_accepts_distinct_heartbeat_token_file(self) -> None:
         args = cli.build_parser().parse_args(

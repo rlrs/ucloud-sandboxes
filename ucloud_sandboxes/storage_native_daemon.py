@@ -86,6 +86,9 @@ class StorageNativeNodeConfig:
     upper_mode: str = "hybridLogStructured"
     command_timeout_seconds: float = 120.0
     max_concurrent_operations: int = 8
+    device_pool_enabled: bool = False
+    device_pool_low_watermark: int = 2
+    device_pool_high_watermark: int = 16
 
     def __post_init__(self) -> None:
         for label, path in (
@@ -107,6 +110,12 @@ class StorageNativeNodeConfig:
             raise ValueError("command timeout must be positive")
         if self.max_concurrent_operations <= 0:
             raise ValueError("max_concurrent_operations must be positive")
+        if self.device_pool_low_watermark < 0:
+            raise ValueError("device pool low watermark must be non-negative")
+        if self.device_pool_high_watermark <= 0:
+            raise ValueError("device pool high watermark must be positive")
+        if self.device_pool_low_watermark > self.device_pool_high_watermark:
+            raise ValueError("device pool low watermark cannot exceed high watermark")
 
 
 @dataclass(frozen=True)
@@ -233,6 +242,8 @@ class StorageBlockBackend(Protocol):
     ) -> Any: ...
 
     def delete(self, device_id: int) -> None: ...
+
+    def release(self, device_id: int) -> None: ...
 
     def export_dense_layer(
         self,
@@ -855,6 +866,13 @@ class StorageNativeNodeService:
         )
         self.publisher = publisher
         self.journal = StorageNativeJournal(config.journal_path)
+        self._pool_metrics_lock = threading.Lock()
+        self._pool_acquires = 0
+        self._pool_reused_acquires = 0
+        self._pool_new_acquires = 0
+        self._pool_releases = 0
+        self._pool_discards = 0
+        self._released_device_ids: set[int] = set()
         self._ensure_roots()
 
     def metrics(self) -> dict[str, Any]:
@@ -871,8 +889,37 @@ class StorageNativeNodeService:
                     cache_bytes += Path(raw_path).stat().st_size
                 except OSError:
                     continue
+        live_device_ids = self.host.ublk_device_ids()
+        active_device_ids = {
+            record.device_id
+            for record in records
+            if record.device_id is not None
+        }
+        idle_device_ids = (
+            live_device_ids - active_device_ids
+            if self.config.device_pool_enabled
+            else set()
+        )
+        with self._pool_metrics_lock:
+            pool_metrics = {
+                "device_pool_acquires": self._pool_acquires,
+                "device_pool_reused_acquires": self._pool_reused_acquires,
+                "device_pool_new_acquires": self._pool_new_acquires,
+                "device_pool_releases": self._pool_releases,
+                "device_pool_discards": self._pool_discards,
+            }
         return {
             "cache_bytes": cache_bytes,
+            "device_pool_enabled": self.config.device_pool_enabled,
+            "device_pool_low_watermark": (
+                self.config.device_pool_low_watermark
+            ),
+            "device_pool_high_watermark": (
+                self.config.device_pool_high_watermark
+            ),
+            "device_pool_idle_devices": len(idle_device_ids),
+            "ublk_active_devices": len(active_device_ids & live_device_ids),
+            "ublk_live_devices": len(live_device_ids),
             "error_volumes": sum(
                 record.state == StorageVolumeState.ERROR for record in records
             ),
@@ -882,6 +929,7 @@ class StorageNativeNodeService:
                 record.state == StorageVolumeState.PUBLISHED for record in records
             ),
             "volume_count": len(records),
+            **pool_metrics,
         }
 
     @classmethod
@@ -950,12 +998,10 @@ class StorageNativeNodeService:
                 source,
                 {"lowers": [], "resultFile": "", "upper": {}},
             )
-            device = self.backend.create_runtime_device(
+            device = self._acquire_runtime_device(
                 source_image_config=source,
-                global_config=self.global_config_path,
                 runtime_dir=runtime_dir,
                 virtual_size=virtual_size,
-                upper_mode=self.config.upper_mode,
             )
             if device.virtual_size != virtual_size:
                 raise StorageNativeTerminalError(
@@ -1218,12 +1264,10 @@ class StorageNativeNodeService:
             if pending.published_layers:
                 source_config["repoBlobUrl"] = pending.published_repo_blob_url
             _atomic_write_json(source, source_config)
-            device = self.backend.create_runtime_device(
+            device = self._acquire_runtime_device(
                 source_image_config=source,
-                global_config=self.global_config_path,
                 runtime_dir=runtime_dir,
                 virtual_size=pending.virtual_size,
-                upper_mode=self.config.upper_mode,
             )
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
@@ -1296,7 +1340,7 @@ class StorageNativeNodeService:
             if self.host.is_mounted(mount_path):
                 self.host.unmount(mount_path)
             if pending.device_id is not None:
-                self.backend.delete(pending.device_id)
+                self._release_backend_device(pending.device_id)
             record = replace(
                 pending,
                 state=(
@@ -1351,7 +1395,7 @@ class StorageNativeNodeService:
             if self.host.is_mounted(mount_path):
                 self.host.unmount(mount_path)
             if pending.device_id is not None:
-                self.backend.delete(pending.device_id)
+                self._release_backend_device(pending.device_id)
             record = replace(
                 pending,
                 state=StorageVolumeState.RELEASED,
@@ -1541,7 +1585,14 @@ class StorageNativeNodeService:
             for record in records
             if record.device_id is not None
         }
-        orphan_devices = sorted(live_devices - owned_devices)
+        # With pooling enabled, unjournaled live devices are daemon-owned idle
+        # placeholders.  The backend, not this service, owns their high-water
+        # cleanup.  In non-pooled compatibility mode they remain true orphans.
+        orphan_devices = (
+            []
+            if self.config.device_pool_enabled
+            else sorted(live_devices - owned_devices)
+        )
         deleted_orphans: list[int] = []
         for device_id in orphan_devices:
             self.backend.delete(device_id)
@@ -1639,11 +1690,14 @@ class StorageNativeNodeService:
     def _best_effort_release(self, record: StorageVolumeRecord) -> None:
         mount_path = Path(record.mount_path)
         mounted = True
+        safe_to_pool = True
         try:
             mounted = self.host.is_mounted(mount_path)
             if mounted:
                 self.host.unmount(mount_path)
+                mounted = False
         except Exception:
+            safe_to_pool = False
             # A missing or failed ublk backend can leave the kernel mount
             # present but unreadable. Destructive recovery must detach that
             # stale mount without reading it so DeleteVolume can still reclaim
@@ -1655,9 +1709,68 @@ class StorageNativeNodeService:
                     pass
         if record.device_id is not None:
             try:
-                self.backend.delete(record.device_id)
+                if not safe_to_pool:
+                    # A lazy-detached or otherwise questionable mount must
+                    # never be rebound to another sandbox through the pool.
+                    self._discard_backend_device(record.device_id)
+                else:
+                    self._release_backend_device(record.device_id)
             except Exception:
                 pass
+
+    def _acquire_runtime_device(
+        self,
+        *,
+        source_image_config: Path,
+        runtime_dir: Path,
+        virtual_size: int,
+    ) -> StorageNativeDevice:
+        idle_before = (
+            self.host.ublk_device_ids()
+            - {
+                record.device_id
+                for record in self.journal.list()
+                if record.device_id is not None
+            }
+            if self.config.device_pool_enabled
+            else set()
+        )
+        device = self.backend.create_runtime_device(
+            source_image_config=source_image_config,
+            global_config=self.global_config_path,
+            runtime_dir=runtime_dir,
+            virtual_size=virtual_size,
+            upper_mode=self.config.upper_mode,
+        )
+        if self.config.device_pool_enabled:
+            with self._pool_metrics_lock:
+                reused = (
+                    device.device_id in idle_before
+                    or device.device_id in self._released_device_ids
+                )
+                self._released_device_ids.discard(device.device_id)
+                self._pool_acquires += 1
+                if reused:
+                    self._pool_reused_acquires += 1
+                else:
+                    self._pool_new_acquires += 1
+        return device
+
+    def _release_backend_device(self, device_id: int) -> None:
+        if not self.config.device_pool_enabled:
+            self.backend.delete(device_id)
+            return
+        self.backend.release(device_id)
+        with self._pool_metrics_lock:
+            self._pool_releases += 1
+            self._released_device_ids.add(device_id)
+
+    def _discard_backend_device(self, device_id: int) -> None:
+        self.backend.delete(device_id)
+        if self.config.device_pool_enabled:
+            with self._pool_metrics_lock:
+                self._pool_discards += 1
+                self._released_device_ids.discard(device_id)
 
     @staticmethod
     def _remove_local_layers(paths: tuple[Path, ...]) -> None:
@@ -2001,6 +2114,11 @@ class _StorageNativeUnixServer(
     socketserver.UnixStreamServer,
 ):
     daemon_threads = True
+    # The default socketserver backlog is only five. Production permits eight
+    # simultaneous storage operations plus metrics/reconcile traffic, so a
+    # burst could otherwise fail connect() before reaching the explicit
+    # operation semaphore.
+    request_queue_size = 128
 
     def __init__(
         self,

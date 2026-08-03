@@ -21,6 +21,7 @@ from ucloud_sandboxes.routing import (
     RoutingStore,
     SandboxRoute,
     SandboxRouteConflictError,
+    is_portable_parked_route,
     sandbox_demand_from_routing_state,
 )
 
@@ -535,6 +536,71 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(routed[1].node_id, "destination-node")
         self.assertEqual(replayed, routed)
 
+    def test_wake_completion_atomically_marks_destination_waking(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            source = store.allocate_sandbox_create(
+                SandboxRoute(
+                    sandbox_id="wake-move",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=4096,
+                        disk_mb=8192,
+                    ),
+                    spec={"id": "wake-move", "image": "busybox"},
+                ),
+                spec_hash="spec-hash",
+                create_operation_id="create-operation",
+            )
+            source = store.finalize_sandbox_create(
+                replace(source, state="parked")
+            )
+            assert source is not None
+            migration = store.begin_sandbox_migration(
+                source,
+                migration_id="wake-migration",
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination:8090",
+            )
+            migration = store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={"planned"},
+                phase="prepared",
+                archive_sha256="a" * 64,
+                archive_token="token",
+            )
+            assert migration is not None
+            migration = store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={"prepared"},
+                phase="staged",
+            )
+            assert migration is not None
+            routed = store.route_sandbox_migration(migration.migration_id)
+            assert routed is not None
+            activated = store.advance_sandbox_migration(
+                migration.migration_id,
+                expected_phases={"routed"},
+                phase="activated",
+            )
+            assert activated is not None
+
+            completed = store.complete_sandbox_migration(
+                migration.migration_id,
+                wake_destination=True,
+            )
+            destination = store.get_sandbox("wake-move")
+
+        self.assertIsNotNone(completed)
+        self.assertEqual(completed.phase, "complete")
+        self.assertIsNotNone(destination)
+        self.assertEqual(destination.state, "waking")
+        self.assertEqual(destination.node_id, "destination-node")
+
     def test_reconcile_sandboxes_for_node_removes_missing_node_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
@@ -725,6 +791,75 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertIn("keep-me", state.sandboxes)
         self.assertIn("exec-keep", state.exec_sessions)
         self.assertIsNotNone(kept_exec)
+
+    def test_node_loss_keeps_only_fully_published_parked_route(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            live = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="live-lost",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-live",
+                    spec_hash="a" * 64,
+                )
+            )
+            portable = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="portable-parked",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    state="parked",
+                    generation=2,
+                    create_operation_id="create-parked",
+                    spec_hash="b" * 64,
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest="sha256:" + "c" * 64,
+                    snapshot_repository="snapshots",
+                    snapshot_tag="sandbox-2",
+                    storage_snapshot={"schema": "storage-native-v1"},
+                )
+            )
+            local_park = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="local-parked",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    state="parked",
+                    generation=3,
+                    create_operation_id="create-local",
+                    spec_hash="d" * 64,
+                )
+            )
+            for route in (live, portable, local_park):
+                store.upsert_exec(
+                    ExecRoute(
+                        session_id=f"exec-{route.sandbox_id}",
+                        sandbox_id=route.sandbox_id,
+                        node_id=route.node_id,
+                        job_id=route.job_id,
+                        node_url=route.node_url,
+                    )
+                )
+
+            removed = store.delete_sandboxes_for_jobs_with_error(
+                ["lost-job"],
+                terminal_error="node_lost",
+            )
+            state = store.load()
+
+        self.assertTrue(is_portable_parked_route(portable))
+        self.assertEqual(
+            [route.sandbox_id for route in removed],
+            ["live-lost", "local-parked"],
+        )
+        self.assertEqual(set(state.sandboxes), {"portable-parked"})
+        self.assertEqual(state.exec_sessions, {})
 
     def test_readonly_sandbox_queries_return_current_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -39,12 +40,16 @@ class FakeLayer:
 
 
 class FakeBlockBackend:
-    def __init__(self, *, descriptor: bool = False) -> None:
+    def __init__(self, *, descriptor: bool = False, pooled: bool = False) -> None:
         self.descriptor = descriptor
+        self.pooled = pooled
         self.live: set[int] = set()
+        self.idle: set[int] = set()
+        self.next_device_id = 1
         self.create_calls = 0
         self.restack_calls = 0
         self.delete_calls: list[int] = []
+        self.release_calls: list[int] = []
 
     def create_runtime_device(
         self,
@@ -56,7 +61,12 @@ class FakeBlockBackend:
         upper_mode: str,
     ) -> StorageNativeDevice:
         self.create_calls += 1
-        device_id = self.create_calls
+        if self.pooled and self.idle:
+            device_id = min(self.idle)
+            self.idle.remove(device_id)
+        else:
+            device_id = self.next_device_id
+            self.next_device_id += 1
         self.live.add(device_id)
         runtime_dir.mkdir(mode=0o700)
         image = runtime_dir / "image.json"
@@ -82,7 +92,14 @@ class FakeBlockBackend:
 
     def delete(self, device_id: int) -> None:
         self.delete_calls.append(device_id)
+        self.idle.discard(device_id)
         self.live.discard(device_id)
+
+    def release(self, device_id: int) -> None:
+        self.release_calls.append(device_id)
+        if device_id not in self.live:
+            raise RuntimeError("device is missing")
+        self.idle.add(device_id)
 
 
 class FakePublisher:
@@ -171,8 +188,9 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
         capacity: int = 8 << 30,
         descriptor: bool = False,
         publisher: bool = False,
+        pooled: bool = False,
     ) -> tuple[StorageNativeNodeService, FakeBlockBackend, FakeHost]:
-        backend = FakeBlockBackend(descriptor=descriptor)
+        backend = FakeBlockBackend(descriptor=descriptor, pooled=pooled)
         host = FakeHost(backend)
         global_config = root / "global.json"
         global_config.write_text("{}\n", encoding="ascii")
@@ -182,6 +200,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 runtime_root=root / "runtime",
                 mount_root=root / "mounts",
                 hard_capacity_bytes=capacity,
+                device_pool_enabled=pooled,
             ),
             backend=backend,
             global_config_path=global_config,
@@ -297,6 +316,78 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             self.assertEqual(deleted["record"]["state"], "deleted")
             self.assertFalse((Path(raw) / "runtime" / "volume-1").exists())
+
+    def test_pool_reuses_cleanly_released_runtime_device(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(
+                Path(raw),
+                descriptor=True,
+                pooled=True,
+            )
+            first = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            sealed = service.freeze_and_seal(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="seal:1",
+                expected_revision=first["record"]["revision"],
+            )
+            service.release_runtime(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="release:1",
+                expected_revision=sealed["record"]["revision"],
+            )
+
+            second = service.create_volume(
+                sandbox_id="sandbox-2",
+                sandbox_generation=1,
+                volume_id="volume-2",
+                operation_id="create:2",
+                virtual_size=1 << 30,
+            )
+
+            self.assertEqual(first["record"]["device_id"], 1)
+            self.assertEqual(second["record"]["device_id"], 1)
+            self.assertEqual(backend.release_calls, [1])
+            self.assertEqual(backend.delete_calls, [])
+            metrics = service.metrics()
+            self.assertEqual(metrics["device_pool_acquires"], 2)
+            self.assertEqual(metrics["device_pool_new_acquires"], 1)
+            self.assertEqual(metrics["device_pool_reused_acquires"], 1)
+            self.assertEqual(metrics["device_pool_releases"], 1)
+            self.assertEqual(metrics["device_pool_idle_devices"], 0)
+
+    def test_pool_discards_device_after_uncertain_unmount(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, host = self._service(Path(raw), pooled=True)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            host.fail_next_unmount = True
+
+            service.delete_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="delete:1",
+                expected_revision=created["record"]["revision"],
+            )
+
+            self.assertEqual(backend.release_calls, [])
+            self.assertEqual(backend.delete_calls, [1])
+            self.assertEqual(service.metrics()["device_pool_discards"], 1)
 
     def test_failed_local_wake_discards_cow_back_to_released_snapshot(self) -> None:
         with TemporaryDirectory() as raw:
@@ -721,6 +812,38 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 1,
             )
             self.assertEqual(backend.create_calls, 1)
+            server.shutdown()
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+
+    def test_unix_socket_backlog_accepts_operation_burst(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            service, _, _ = self._service(root)
+            socket_path = root / "service" / "storage.sock"
+            server = StorageNativeNodeServer(
+                socket_path,
+                service,
+                require_root_peer=False,
+            )
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            client = StorageNativeNodeClient(socket_path, timeout_seconds=2)
+            _wait_deadline = time.monotonic() + 2
+            while True:
+                try:
+                    client.get_features()
+                    break
+                except OSError:
+                    if time.monotonic() >= _wait_deadline:
+                        raise
+                    time.sleep(0.01)
+
+            with ThreadPoolExecutor(max_workers=32) as pool:
+                results = list(pool.map(lambda _: client.get_features(), range(64)))
+
+            self.assertEqual(len(results), 64)
+            self.assertTrue(all(result["protocol_schema"] == 1 for result in results))
             server.shutdown()
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())

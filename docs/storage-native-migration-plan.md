@@ -906,3 +906,44 @@ debt therefore remains visible, blocks placement on the affected node, and
 creates bounded replacement capacity when queued requests cannot fit. As the
 deletion reconciler releases volumes, the hard reservation falls and ordinary
 scale-down removes any temporary surplus node.
+
+### 2026-08-03: warm ublk devices become the production lifecycle
+
+Four post-start UCloud suspensions occurred across three physical hosts during
+heavy park/wake churn. The affected workers were not CPU- or memory-capacity
+bound, but production was creating and deleting a kernel ublk device for every
+park/wake because the pinned AgentEnv backend was started without its existing
+block-device warm pool. Before two failures, wake latency rose from seconds to
+minutes; one node also reported 12.96% memory PSI full immediately before it
+became unreachable despite using only 7.7% of RAM. This does not prove the
+provider suspension's kernel-level cause, but it identifies avoidable
+privileged device churn that is both a latency problem and the strongest
+node-local stability suspect.
+
+Production direct nodes will therefore start the pinned AgentEnv daemon with
+its warm pool enabled, using low/high idle watermarks of 2/16 by default. The
+upper bound is twice the node's default eight concurrent storage operations;
+AgentEnv's stock high watermark of 64 eagerly created 64 idle kernel devices
+after first use without improving the eight-way benchmark.
+`CreateOverlaybdRuntimeDevice` already acquires an exclusive pooled device and
+retargets it to the sandbox image. A clean storage-native release uses
+`ReleaseOverlaybd`, which clears page cache, retargets the device to a
+daemon-owned same-size sparse placeholder, drops the business image, and
+returns the device to the idle pool. Unjournaled live devices are consequently
+daemon-owned idle capacity, not storage-native orphans.
+
+Only an uncertain cleanup may bypass the pool. If normal unmount fails or a
+mount requires lazy detach, the device is permanently destroyed and counted as
+a discard; it must never be rebound to another sandbox. The sole additional
+AgentEnv compatibility patch extends `Delete` to destroy an active exclusive
+pooled device while refusing shared pooled devices. It does not change acquire,
+release, target swapping, refill, or high-water maintenance.
+
+Node heartbeats expose pool enablement, watermarks, live/active/idle device
+counts, and acquire/reuse/new/release/discard counters. The rollout gate is a
+real Linux ublk/XFS comparison of pooled and unpooled repeated wake/release,
+followed by SDK/Verifiers park/wake and migration churn. Success requires lower
+steady-state wake/release latency, high reuse after warmup, bounded idle count,
+zero cross-sandbox data leakage, zero leaked mounts/devices/reservations, and no
+new node suspension during sustained production observation. Until that gate
+passes, this decision is implemented but not production-qualified.

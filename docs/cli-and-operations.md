@@ -59,7 +59,7 @@ uv run ucloud-sandboxes reconcile \
 `reconcile` is deliberately read-only. To run one mutating production cycle,
 use `autoscaler-loop --once`; it reads pending demand from the routing state and
 uses the same local process lock and provider journal as the recurring service.
-Create, resume, stop, and VM initialization execution remain separate flags:
+Create, stop, and VM initialization execution remain separate flags:
 
 ```bash
 uv run ucloud-sandboxes autoscaler-loop --once \
@@ -74,29 +74,23 @@ uv run ucloud-sandboxes autoscaler-loop --once \
   --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
   --execute-stops
 
-uv run ucloud-sandboxes autoscaler-loop --once \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id prod-a \
-  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
-  --execute-resumes
 ```
 
-The deployed recurring service enables `--execute-resumes`. UCloud reports a
-new VM as `SUSPENDED` before its first transition to `RUNNING`; that is normal
-provisioning and is never resumed explicitly. A `SUSPENDED` VM with a non-empty
-`startedAt` previously ran and is treated as an unexpected power-off. The
-autoscaler keeps its routes, assigns it no schedulable or projected capacity,
-and journals an idempotent `/api/jobs/unsuspend` operation. A successful call
-is confirmed only after exhaustive UCloud inventory reports the job `RUNNING`.
-Ambiguous calls retry after 10 seconds and accepted-but-still-suspended jobs
-retry after 30 seconds, preventing a five-second reconcile loop from flooding
-the provider API.
+UCloud reports a new VM as `SUSPENDED` before its first transition to
+`RUNNING`; that is normal provisioning. Any later `SUSPENDED` transition is a
+destructive power cycle: the job id may return to `RUNNING`, but its ephemeral
+guest disk and every live sandbox are gone. The autoscaler therefore never
+calls `/api/jobs/unsuspend`. It latches the post-start suspension from ordered
+job updates, immediately removes the old heartbeat from gateway placement,
+journals a direct provider stop, and creates replacement capacity for the lost
+resource shapes.
 
-Automatic resume is fail-closed: the job must carry both the matching
-`ucloud-sandboxes/deployment` label and its sandbox or builder ownership label.
-A definite provider rejection is retained for that exact suspension instead of
-being retried indefinitely; normal zero-capacity accounting can provision a
-replacement meanwhile.
+Non-portable running, creating, parking, waking, and legacy parked routes are
+removed with program error `node_lost`. A fully published storage-native parked
+route is retained because its content-addressed Registry snapshot can be
+adopted by another node without the source VM. `--execute-resumes` remains only
+as a deprecated no-op so older manual commands fail safely instead of restoring
+the obsolete behavior.
 
 Render the UCloud job-submission fragment for attaching a VM job to a private
 network. The resulting `hostname` is the DNS name other jobs in that private

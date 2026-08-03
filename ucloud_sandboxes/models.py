@@ -247,6 +247,17 @@ class NodeRuntimeMetrics:
     storage_max_concurrent_operations: int = 0
     storage_published_volumes: int = 0
     storage_error_volumes: int = 0
+    storage_device_pool_enabled: bool = False
+    storage_device_pool_low_watermark: int = 0
+    storage_device_pool_high_watermark: int = 0
+    storage_device_pool_idle_devices: int = 0
+    storage_ublk_active_devices: int = 0
+    storage_ublk_live_devices: int = 0
+    storage_device_pool_acquires: int = 0
+    storage_device_pool_reused_acquires: int = 0
+    storage_device_pool_new_acquires: int = 0
+    storage_device_pool_releases: int = 0
+    storage_device_pool_discards: int = 0
     rootfs_export_active_operations: int = 0
     rootfs_export_waiting_operations: int = 0
     rootfs_export_max_concurrent_operations: int = 0
@@ -354,6 +365,83 @@ class NodeRuntimeMetrics:
                     "storageErrorVolumes",
                 )
             ),
+            storage_device_pool_enabled=bool(
+                _first_present(
+                    raw,
+                    "storage_device_pool_enabled",
+                    "storageDevicePoolEnabled",
+                )
+            ),
+            storage_device_pool_low_watermark=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_low_watermark",
+                    "storageDevicePoolLowWatermark",
+                )
+            ),
+            storage_device_pool_high_watermark=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_high_watermark",
+                    "storageDevicePoolHighWatermark",
+                )
+            ),
+            storage_device_pool_idle_devices=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_idle_devices",
+                    "storageDevicePoolIdleDevices",
+                )
+            ),
+            storage_ublk_active_devices=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_ublk_active_devices",
+                    "storageUblkActiveDevices",
+                )
+            ),
+            storage_ublk_live_devices=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_ublk_live_devices",
+                    "storageUblkLiveDevices",
+                )
+            ),
+            storage_device_pool_acquires=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_acquires",
+                    "storageDevicePoolAcquires",
+                )
+            ),
+            storage_device_pool_reused_acquires=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_reused_acquires",
+                    "storageDevicePoolReusedAcquires",
+                )
+            ),
+            storage_device_pool_new_acquires=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_new_acquires",
+                    "storageDevicePoolNewAcquires",
+                )
+            ),
+            storage_device_pool_releases=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_releases",
+                    "storageDevicePoolReleases",
+                )
+            ),
+            storage_device_pool_discards=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "storage_device_pool_discards",
+                    "storageDevicePoolDiscards",
+                )
+            ),
             rootfs_export_active_operations=_nonnegative_int(
                 _first_present(
                     raw,
@@ -426,6 +514,27 @@ class NodeRuntimeMetrics:
             ),
             "storage_published_volumes": self.storage_published_volumes,
             "storage_error_volumes": self.storage_error_volumes,
+            "storage_device_pool_enabled": self.storage_device_pool_enabled,
+            "storage_device_pool_low_watermark": (
+                self.storage_device_pool_low_watermark
+            ),
+            "storage_device_pool_high_watermark": (
+                self.storage_device_pool_high_watermark
+            ),
+            "storage_device_pool_idle_devices": (
+                self.storage_device_pool_idle_devices
+            ),
+            "storage_ublk_active_devices": self.storage_ublk_active_devices,
+            "storage_ublk_live_devices": self.storage_ublk_live_devices,
+            "storage_device_pool_acquires": self.storage_device_pool_acquires,
+            "storage_device_pool_reused_acquires": (
+                self.storage_device_pool_reused_acquires
+            ),
+            "storage_device_pool_new_acquires": (
+                self.storage_device_pool_new_acquires
+            ),
+            "storage_device_pool_releases": self.storage_device_pool_releases,
+            "storage_device_pool_discards": self.storage_device_pool_discards,
             "rootfs_export_active_operations": (
                 self.rootfs_export_active_operations
             ),
@@ -490,6 +599,31 @@ class VmJob:
         """Return whether a VM that previously ran has been powered off by UCloud."""
 
         return self.state == "SUSPENDED" and self.started_at is not None
+
+    @property
+    def has_post_start_suspension(self) -> bool:
+        """Return whether UCloud powered this VM off after it had run.
+
+        UCloud's VM application initially reports ``SUSPENDED`` while a new
+        guest is being provisioned.  That first transition is harmless.  A
+        later suspension is a destructive power cycle: the resumed job id does
+        not retain the guest's local disk.  Inspect the ordered update history
+        so a later, misleading ``RUNNING`` state cannot resurrect the old node
+        incarnation.
+        """
+
+        seen_running = False
+        raw_updates = self.raw.get("updates")
+        if isinstance(raw_updates, list):
+            for update in raw_updates:
+                if not isinstance(update, dict):
+                    continue
+                state = str(update.get("state") or "").strip().upper()
+                if state == "RUNNING":
+                    seen_running = True
+                elif state == "SUSPENDED" and seen_running:
+                    return True
+        return self.is_unexpectedly_suspended
 
 @dataclass(frozen=True)
 class NodeHeartbeat:
@@ -601,6 +735,7 @@ class SandboxNode:
     active_sandboxes: int
     heartbeat_fresh: bool
     agent_version_compatible: bool = True
+    permanently_lost: bool = False
 
     @property
     def job_id(self) -> str:
@@ -612,7 +747,11 @@ class SandboxNode:
 
     @property
     def is_ready(self) -> bool:
-        return self.job.state == "RUNNING" and self.heartbeat_fresh
+        return bool(
+            not self.permanently_lost
+            and self.job.state == "RUNNING"
+            and self.heartbeat_fresh
+        )
 
     @property
     def is_schedulable(self) -> bool:
@@ -627,8 +766,26 @@ class SandboxNode:
 
     @property
     def is_provisioning(self) -> bool:
-        return self.job.state == "IN_QUEUE" or self.job.is_initially_suspended or (
-            self.job.state == "RUNNING" and not self.heartbeat_fresh
+        return bool(
+            not self.permanently_lost
+            and (
+                self.job.state == "IN_QUEUE"
+                or self.job.is_initially_suspended
+                or (
+                    self.job.state == "RUNNING"
+                    and self.heartbeat is None
+                    and not self.heartbeat_fresh
+                )
+            )
+        )
+
+    @property
+    def is_unreachable(self) -> bool:
+        return bool(
+            not self.permanently_lost
+            and self.job.state == "RUNNING"
+            and self.heartbeat is not None
+            and not self.heartbeat_fresh
         )
 
     @property
@@ -823,6 +980,7 @@ class ScaleDecision:
     provisioning_nodes: int
     total_nodes: int
     reasons: tuple[str, ...]
+    unreachable_nodes: int = 0
     pending_resources: ResourceQuantity = ResourceQuantity()
     suppressed_pending_resources: ResourceQuantity = ResourceQuantity()
     pending_count: int = 0

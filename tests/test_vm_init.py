@@ -79,6 +79,16 @@ class VmInitTests(unittest.TestCase):
             'install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"',
             script,
         )
+        self.assertIn(
+            "--enable-pool --pool-low-watermark "
+            "${UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK} "
+            "--pool-high-watermark "
+            "${UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}",
+            script,
+        )
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=2", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=16", script)
+        self.assertIn("--device-pool-enabled", script)
 
     def test_direct_runtime_rejects_fixed_compute_overcommit(self) -> None:
         with self.assertRaisesRegex(ValueError, "CPU and memory overcommit"):

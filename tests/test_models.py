@@ -67,6 +67,42 @@ class VmJobParsingTests(unittest.TestCase):
         self.assertEqual(job.queue_status, "FULL")
         self.assertFalse(job.ssh_enabled)
 
+    def test_only_post_start_suspension_is_destructive(self) -> None:
+        def job_with_updates(updates, *, state="RUNNING"):
+            return vm_job_from_payload(
+                {
+                    "id": "vm-1",
+                    "createdAt": 1_700_000_000_000,
+                    "owner": {"project": "project-1"},
+                    "specification": {
+                        "application": {"name": "vm-ubuntu", "version": "24.04"},
+                        "product": {"id": "cpu-amd-zen5-2-vcpu"},
+                    },
+                    "status": {
+                        "state": state,
+                        "startedAt": 1_700_000_100_000,
+                    },
+                    "updates": updates,
+                }
+            )
+
+        initial_boot = job_with_updates(
+            [{"state": "SUSPENDED"}, {"state": "RUNNING"}]
+        )
+        power_cycled = job_with_updates(
+            [
+                {"state": "SUSPENDED"},
+                {"state": "RUNNING"},
+                {"state": "SUSPENDED"},
+                {"state": "RUNNING"},
+            ]
+        )
+        currently_suspended = job_with_updates([], state="SUSPENDED")
+
+        self.assertFalse(initial_boot.has_post_start_suspension)
+        self.assertTrue(power_cycled.has_post_start_suspension)
+        self.assertTrue(currently_suspended.has_post_start_suspension)
+
 
 class HeartbeatContractTests(unittest.TestCase):
     def test_runtime_metrics_sanitize_nonfinite_and_malformed_values(self) -> None:
@@ -79,6 +115,10 @@ class HeartbeatContractTests(unittest.TestCase):
                 "imagePullActiveOperations": 3,
                 "imagePullWaitingOperations": -4,
                 "imagePullMaxConcurrentOperations": 8,
+                "storageDevicePoolEnabled": True,
+                "storageDevicePoolIdleDevices": 7,
+                "storageDevicePoolReusedAcquires": 12,
+                "storageDevicePoolDiscards": -1,
             }
         )
 
@@ -90,6 +130,10 @@ class HeartbeatContractTests(unittest.TestCase):
         self.assertEqual(metrics.image_pull_active_operations, 3)
         self.assertEqual(metrics.image_pull_waiting_operations, 0)
         self.assertEqual(metrics.image_pull_max_concurrent_operations, 8)
+        self.assertTrue(metrics.storage_device_pool_enabled)
+        self.assertEqual(metrics.storage_device_pool_idle_devices, 7)
+        self.assertEqual(metrics.storage_device_pool_reused_acquires, 12)
+        self.assertEqual(metrics.storage_device_pool_discards, 0)
         self.assertEqual(
             metrics.to_dict()["image_pull_max_concurrent_operations"],
             8,

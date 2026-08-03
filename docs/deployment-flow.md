@@ -55,8 +55,9 @@ sandboxes. The intended rollout flow is:
 8. Start the private Docker registry service on the control-plane VM. The
    gateway assigns managed tags and builder output must be pushed before
    sandbox nodes can pull it by image id.
-9. Run the autoscaler with `--execute`, `--execute-resumes`, and
-   `--execute-init`.
+9. Run the autoscaler with `--execute`, `--execute-stops`, and
+   `--execute-init`. A post-start UCloud suspension is destructive node loss;
+   never enable provider resume as a recovery mechanism.
 10. Let the autoscaler submit sandbox-node and builder VMs with matching
    deployment/version labels.
 11. Let the autoscaler run post-boot init over the UCloud-announced SSH command
@@ -223,7 +224,7 @@ Current live all-in-one VM:
 - job id: `12362088`
 - name: `ucloud-sandbox-gateway-migration-v2-canary`
 - deployment id: `migration-v2-canary-20260730a`
-- package version: `0.3.94`; it must match the `version` returned by both
+- package version: `0.3.95`; it must match the `version` returned by both
   service health endpoints
 - gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
   `cpu-amd-zen5-32-vcpu`

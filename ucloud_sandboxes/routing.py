@@ -145,6 +145,25 @@ class SandboxRoute:
         }
 
 
+def is_portable_parked_route(route: SandboxRoute) -> bool:
+    """Return whether a route is recoverable without its former node.
+
+    A storage-native park is portable only after both its opaque descriptor and
+    content-addressed Registry publication have reached the gateway.  Merely
+    observing the ``parked`` state is insufficient: older/local park formats
+    still depend on the source node's disk.
+    """
+
+    return bool(
+        (route.state or "unknown").lower() == "parked"
+        and route.storage_schema
+        and route.storage_snapshot
+        and route.snapshot_manifest_digest
+        and route.snapshot_repository
+        and route.snapshot_tag
+    )
+
+
 @dataclass(frozen=True)
 class ProgramRequestState:
     """Current scheduler projection for one relay request.
@@ -1643,6 +1662,70 @@ class RoutingStore:
                 self._write_sandbox_migration(conn, stored)
             return stored
 
+    def complete_sandbox_migration(
+        self,
+        migration_id: str,
+        *,
+        wake_destination: bool = False,
+    ) -> SandboxMigration | None:
+        """Complete activation and optionally reserve the destination for wake.
+
+        Wake relocation must not expose a parked destination after dropping the
+        migration reservation. Updating the route and journal in one SQLite
+        transaction prevents an unrelated create from consuming the CPU/RAM in
+        that gap.
+        """
+
+        with self._lock:
+            with self._transaction() as conn:
+                migration = self._get_sandbox_migration_unlocked(
+                    conn,
+                    migration_id.strip(),
+                )
+                if migration is None:
+                    return None
+                current = self._get_sandbox_unlocked(conn, migration.sandbox_id)
+                if migration.phase == "complete":
+                    if (
+                        wake_destination
+                        and current is not None
+                        and current.node_id == migration.destination_node_id
+                        and current.job_id == migration.destination_job_id
+                        and (current.state or "unknown").lower() == "parked"
+                    ):
+                        current = replace(
+                            current,
+                            state="waking",
+                            updated_at=utc_now().isoformat(),
+                        )
+                        self._write_sandbox(conn, current)
+                    return migration
+                if migration.phase != "activated" or current is None:
+                    return None
+                if (
+                    current.generation != migration.generation
+                    or current.create_operation_id != migration.create_operation_id
+                    or current.spec_hash != migration.spec_hash
+                    or current.node_id != migration.destination_node_id
+                    or current.job_id != migration.destination_job_id
+                    or current.node_url.rstrip("/")
+                    != migration.destination_node_url.rstrip("/")
+                    or bool(current.delete_operation_id)
+                ):
+                    return None
+                now = utc_now().isoformat()
+                if wake_destination:
+                    current = replace(current, state="waking", updated_at=now)
+                    self._write_sandbox(conn, current)
+                completed = replace(
+                    migration,
+                    phase="complete",
+                    updated_at=now,
+                    error="",
+                )
+                self._write_sandbox_migration(conn, completed)
+            return completed
+
     def route_sandbox_migration(
         self,
         migration_id: str,
@@ -1965,11 +2048,28 @@ class RoutingStore:
             self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
+        return self.delete_sandboxes_for_jobs_with_error(job_ids)
+
+    def delete_sandboxes_for_jobs_with_error(
+        self,
+        job_ids: Iterable[str],
+        *,
+        terminal_error: str = "",
+    ) -> list[SandboxRoute]:
+        """Forget non-portable sandboxes owned by terminated VM jobs.
+
+        A fully published storage-native parked route is intentionally retained:
+        it is content-addressed remote state and can be adopted by another node
+        after complete source-node loss.  Every live exec session still belongs
+        to the lost process incarnation and is removed.
+        """
+
         target_ids = tuple(sorted({str(job_id) for job_id in job_ids if str(job_id)}))
         if not target_ids:
             return []
         with self._lock:
             removed: list[SandboxRoute] = []
+            preserved: list[SandboxRoute] = []
             with self._transaction() as conn:
                 for job_id in target_ids:
                     rows = conn.execute(
@@ -1990,7 +2090,15 @@ class RoutingStore:
                     for row in rows:
                         route = _sandbox_route_from_row(row)
                         if route is not None:
-                            removed.append(route)
+                            if is_portable_parked_route(route):
+                                preserved.append(route)
+                            else:
+                                removed.append(route)
+                for route in preserved:
+                    conn.execute(
+                        "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                        (route.sandbox_id,),
+                    )
                 for route in removed:
                     conn.execute(
                         "DELETE FROM sandboxes WHERE sandbox_id = ?",
@@ -2008,10 +2116,11 @@ class RoutingStore:
                         conn,
                         route.sandbox_id,
                         generation=route.generation,
+                        last_error=terminal_error,
                     )
-            if not removed:
+            if not removed and not preserved:
                 return []
-            for route in removed:
+            for route in (*removed, *preserved):
                 self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
 
@@ -2043,6 +2152,8 @@ class RoutingStore:
                 for row in rows:
                     route = _sandbox_route_from_row(row)
                     if route is None:
+                        continue
+                    if is_portable_parked_route(route):
                         continue
                     if route.job_id in keep_jobs or route.node_id in keep_nodes:
                         continue
@@ -2082,18 +2193,25 @@ class RoutingStore:
         sandbox_id: str,
         *,
         generation: int | None = None,
+        last_error: str = "",
     ) -> int:
         """Retain a bounded terminal projection when its sandbox disappears."""
 
         generation_clause = ""
-        parameters: list[object] = [utc_now().isoformat(), sandbox_id]
+        parameters: list[object] = [
+            utc_now().isoformat(),
+            last_error,
+            last_error,
+            sandbox_id,
+        ]
         if generation is not None:
             generation_clause = " AND sandbox_generation = ?"
             parameters.append(generation)
         return conn.execute(
             f"""
             UPDATE program_requests
-            SET state = 'terminal', updated_at = ?
+            SET state = 'terminal', updated_at = ?,
+                last_error = CASE WHEN ? != '' THEN ? ELSE last_error END
             WHERE sandbox_id = ? AND state != 'terminal'
             {generation_clause}
             """,

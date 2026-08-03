@@ -242,6 +242,12 @@ against the hard provider and `max_provisioning_nodes` limits until UCloud
 reports it final. This prevents duplicate submissions from bypassing the cap
 while a billed or provider-visible job still exists.
 
+This weighting applies only to the initial pre-start `SUSPENDED` state. A
+post-start suspension is destructive node loss, contributes neither capacity
+nor a provider-limit slot to replacement planning, and is terminated directly.
+The ordered job update history and provider journal keep that classification
+latched if UCloud later reports the destroyed job as `RUNNING` again.
+
 `unreachable_stop_after_seconds` is a separate, conservative eviction lease for
 a running VM whose heartbeat has disappeared. After the lease expires, the VM
 is eligible for provider termination only when it owns no gateway routes and

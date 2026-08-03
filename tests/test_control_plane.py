@@ -1524,6 +1524,109 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(written[0][1], 503)
         self.assertTrue(written[0][0]["retryable"])
 
+    def test_wake_image_pull_does_not_hold_global_placement_lock(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            resources = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=8192)
+            parked = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="parked",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=resources,
+                    spec={"id": "parked", "image": "cold-image"},
+                    state="parked",
+                )
+            )
+            routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="source-busy",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=resources,
+                    state="running",
+                )
+            )
+            heartbeats = HeartbeatStore(root / "heartbeats.json")
+            for heartbeat in (
+                NodeHeartbeat(
+                    node_id="source-node",
+                    job_id="source-job",
+                    updated_at=utc_now(),
+                    active_sandboxes=1,
+                    node_url="http://source:8090",
+                    agent_version=package_version(),
+                    capabilities=("sandbox", "disk-quota", "sandbox-migrate-v2"),
+                    total_resources=ResourceQuantity(
+                        vcpu=4,
+                        memory_mb=8192,
+                        disk_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                ),
+                NodeHeartbeat(
+                    node_id="destination-node",
+                    job_id="destination-job",
+                    updated_at=utc_now(),
+                    active_sandboxes=0,
+                    node_url="http://destination:8090",
+                    agent_version=package_version(),
+                    capabilities=("sandbox", "disk-quota", "sandbox-migrate-v2"),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                ),
+            ):
+                heartbeats.upsert(heartbeat)
+
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.store = heartbeats
+            handler.heartbeat_ttl_seconds = 120
+            handler.registry_url = ""
+            handler.registry_worker_url = ""
+            handler.registry_layer_cache = None
+            handler._write_json = lambda *_args, **_kwargs: None
+            pull_started = Event()
+            release_pull = Event()
+
+            def slow_prepare(_source, _destination):
+                pull_started.set()
+                release_pull.wait(timeout=2)
+                return False
+
+            handler._prepare_migration_destination_image = slow_prepare
+            wake_thread = Thread(
+                target=handler._ensure_parked_sandbox_wake_placement,
+                args=(parked,),
+                daemon=True,
+            )
+            wake_thread.start()
+            self.assertTrue(pull_started.wait(timeout=1))
+            started = monotonic()
+            placement = handler._select_and_reserve_node(
+                "concurrent-create",
+                ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=1024),
+                image="",
+                spec={"id": "concurrent-create", "image": "busybox"},
+                spec_hash="concurrent-spec",
+            )
+            elapsed = monotonic() - started
+            release_pull.set()
+            wake_thread.join(timeout=2)
+            migrations = routing.sandbox_migrations(active_only=True)
+
+        self.assertIsNotNone(placement)
+        self.assertLess(elapsed, control_plane.SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS)
+        self.assertEqual(len(migrations), 1)
+        self.assertEqual(migrations[0].destination_node_id, "destination-node")
+
     def test_inflight_import_reserves_destination_for_normal_placement(self) -> None:
         with TemporaryDirectory() as raw_dir:
             routing = RoutingStore(Path(raw_dir) / "routes.sqlite")

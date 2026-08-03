@@ -1,0 +1,53 @@
+diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+index 2fbb9d4..8df880f 100644
+--- a/storage/ublk-daemon/src/server.rs
++++ b/storage/ublk-daemon/src/server.rs
+@@ -529,7 +529,9 @@ async fn handle_request(
+         DaemonRequest::CreateCow { origin, cow } => {
+             handle_create_cow(&devices, ctrl_ring, &origin, &cow).await
+         }
+-        DaemonRequest::Delete { dev_id } => handle_delete(&devices, ctrl_ring, dev_id).await,
++        DaemonRequest::Delete { dev_id } => {
++            handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await
++        }
+         DaemonRequest::RestackSnapshot {
+             dev_id,
+             output_layer_path,
+@@ -845,18 +847,32 @@ async fn handle_create_cow(
+ 
+ async fn handle_delete(
+     devices: &DashMap<u32, ManagedDevice>,
++    pool_state: &Option<Arc<PoolState>>,
+     ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+     dev_id: u32,
+ ) -> Result<DaemonResponse> {
+-    let Some((_, mut device)) = devices.remove(&dev_id) else {
+-        bail!("device {dev_id} not found");
+-    };
++    if let Some((_, mut device)) = devices.remove(&dev_id) {
++        quiesce_managed_device(&mut device).await;
++        drop(device);
++    } else if let Some(pool) = pool_state {
++        let Some((_, mut active)) = pool.active_exclusive.remove(&dev_id) else {
++            if pool.shared_by_dev_id.contains_key(&dev_id) {
++                bail!("cannot force-delete shared pooled device {dev_id}");
++            }
++            bail!("device {dev_id} not found");
++        };
+ 
+-    quiesce_managed_device(&mut device).await;
++        quiesce_ublk_device(&mut active.dev).await;
++        // Drop the business image and the ublk character-device fd before
++        // issuing DEL_DEV. Unlike ReleaseOverlaybd, Delete is an explicit
++        // permanent discard and must never put this device back in the pool.
++        drop(active);
++    } else {
++        bail!("device {dev_id} not found");
++    }
+ 
+     // ManagedDevice contains a open fd to the ublk char dev.
+     // We need to drop it first, or else, the DEL_DEV command will stuck
+-    drop(device);
+     tracing::info!(dev_id, "deleting device");
+     delete_dev(ctrl_ring, dev_id)
+         .await

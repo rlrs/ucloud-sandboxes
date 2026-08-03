@@ -2,6 +2,19 @@
 
 This project uses semantic versioning.
 
+## 0.3.95 - 2026-08-03
+
+- Classified every post-start UCloud suspension as destructive node loss,
+  fenced its heartbeat and non-portable routes, retained only published parked
+  snapshots, and carried the lost resource shapes into replacement demand.
+- Made wake placement and migration handoff retryable and atomic without
+  holding the global placement lock across image pulls, while distinguishing
+  unreachable workers from useful provisioning capacity.
+- Enabled AgentEnv's warm ublk pool with measured 2/16 watermarks, safe
+  release-versus-discard handling, live pool metrics, and a larger service
+  socket backlog. Real DFM testing reduced repeated wake/release p50 by about
+  38% and eight-way release p50 by about 65% with no leaked hard reservation.
+
 ## 0.3.94 - 2026-08-03
 
 - Made storage-native mount detection authoritative from Linux mountinfo

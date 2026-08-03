@@ -125,7 +125,7 @@ DASHBOARD_HTML = """<!doctype html>
           <p id="autoscalerSummary" class="decision-summary">No cycle</p>
           <div id="overviewDecisionReasons" class="decision-reasons"></div>
           <div class="decision-facts">
-            <div><span>Ready / provisioning</span><strong id="overviewSupplyValue">-</strong></div>
+            <div><span>Ready / booting / unreachable</span><strong id="overviewSupplyValue">-</strong></div>
             <div><span>Projected free</span><strong id="overviewProjectedValue">-</strong></div>
             <div><span>Deficit</span><strong id="overviewDeficitValue">-</strong></div>
           </div>
@@ -7872,7 +7872,7 @@ function renderMetrics(snapshot) {
   setText("activeNodesValue", formatInteger(latest.activeNodes));
   setText(
     "activeNodesDetail",
-    `${asNumber(autoscaler.ready_nodes)} ready, ${asNumber(autoscaler.provisioning_nodes)} provisioning, ${asNumber(autoscaler.total_nodes || nodes.sandbox)} total`
+    `${asNumber(autoscaler.ready_nodes)} ready, ${asNumber(autoscaler.provisioning_nodes)} booting, ${asNumber(autoscaler.unreachable_nodes)} unreachable, ${asNumber(autoscaler.total_nodes || nodes.sandbox)} total`
   );
 
   setText("runningSandboxesValue", formatInteger(sandboxes.active_routes));
@@ -7995,7 +7995,7 @@ function renderOverviewOperational(snapshot) {
   setText("overviewDecisionTitle", decision);
   els.overviewDecisionBadge.textContent = actionEnabled ? "Active policy" : "Shadow policy";
   els.overviewDecisionBadge.className = `inline-badge ${actionEnabled ? "badge-ok" : "badge-muted"}`;
-  setText("overviewSupplyValue", `${formatInteger(autoscaler.ready_nodes)} / ${formatInteger(autoscaler.provisioning_nodes)}`);
+  setText("overviewSupplyValue", `${formatInteger(autoscaler.ready_nodes)} / ${formatInteger(autoscaler.provisioning_nodes)} / ${formatInteger(autoscaler.unreachable_nodes)}`);
   setText("overviewProjectedValue", formatResources(autoscaler.projected_free_resources || {}));
   setText("overviewDeficitValue", formatResources(autoscaler.resource_deficit || {}));
   els.overviewDecisionReasons.replaceChildren(...(reasons.length ? reasons : ["No additional scale action is required."]).slice(0, 3).map((reason) => {

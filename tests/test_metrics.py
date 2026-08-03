@@ -11,6 +11,7 @@ from ucloud_sandboxes.metrics import (
     MetricsStore,
     build_live_scale_signals,
     build_metrics_snapshot,
+    build_program_state_summary,
     record_autoscaler_cycle,
     record_trace_span,
 )
@@ -261,6 +262,36 @@ class MetricsTests(unittest.TestCase):
             3072,
         )
         self.assertEqual(programs["response_to_wake_p95_ms"], 10_000)
+
+    def test_program_latency_percentiles_sort_samples(self) -> None:
+        now = utc_now()
+        requests = []
+        for index, duration_ms in enumerate((1000, 9000, 5000)):
+            accepted = now - timedelta(seconds=30 + index)
+            response_ready = accepted + timedelta(milliseconds=duration_ms)
+            requests.append(
+                ProgramRequestState(
+                    request_id=f"request-{index}",
+                    rollout_id=f"rollout-{index}",
+                    sandbox_id=f"sandbox-{index}",
+                    sandbox_generation=1,
+                    state="acting",
+                    resources=ResourceQuantity(vcpu=1),
+                    accepted_at=accepted.isoformat(),
+                    response_ready_at=response_ready.isoformat(),
+                    wake_completed_at=(
+                        response_ready + timedelta(milliseconds=duration_ms)
+                    ).isoformat(),
+                    updated_at=now.isoformat(),
+                )
+            )
+
+        summary = build_program_state_summary(requests, now=now)
+
+        self.assertEqual(summary["model_wait_p50_ms"], 5000)
+        self.assertEqual(summary["model_wait_p95_ms"], 9000)
+        self.assertEqual(summary["response_to_wake_p50_ms"], 5000)
+        self.assertEqual(summary["response_to_wake_p95_ms"], 9000)
 
     def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -614,6 +645,35 @@ class MetricsTests(unittest.TestCase):
 
         self.assertEqual(snapshot["sandboxes"]["running"], 1)
         self.assertEqual(snapshot["sandboxes"]["provisional_running_routes"], 1)
+        self.assertEqual(snapshot["sandboxes"]["stale_routes"], 0)
+
+    def test_portable_parked_route_is_not_stale_after_source_node_loss(self) -> None:
+        routing = RoutingState(
+            sandboxes={
+                "portable": SandboxRoute(
+                    sandbox_id="portable",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    state="parked",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest="sha256:" + "a" * 64,
+                    snapshot_repository="snapshots",
+                    snapshot_tag="portable",
+                    storage_snapshot={"schema": "storage-native-v1"},
+                )
+            },
+            exec_sessions={},
+            pending={},
+            image_builds={},
+            prepared={},
+            prepared_builders={},
+        )
+
+        snapshot = build_metrics_snapshot({}, routing, [], heartbeat_ttl_seconds=120)
+
+        self.assertEqual(snapshot["sandboxes"]["active_routes"], 1)
+        self.assertEqual(snapshot["sandboxes"]["portable_parked_routes"], 1)
         self.assertEqual(snapshot["sandboxes"]["stale_routes"], 0)
 
     def test_includes_recent_node_metric_samples(self) -> None:

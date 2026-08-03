@@ -90,6 +90,30 @@ def node(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_minimum_replacement_also_satisfies_one_node_resource_deficit(self) -> None:
+        decision = evaluate_scale(
+            [],
+            SandboxDemand(
+                pending_resources=ResourceQuantity(
+                    vcpu=2,
+                    memory_mb=4096,
+                    disk_mb=8192,
+                ),
+                placement_requests=(
+                    SandboxPlacementRequest(
+                        resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=4096,
+                            disk_mb=8192,
+                        )
+                    ),
+                ),
+            ),
+            ScalePolicy(min_nodes=1, max_nodes=5, max_create_per_cycle=5),
+        )
+
+        self.assertEqual(decision.creates, 1)
+
     def test_storage_native_hard_reservations_trigger_replacement_capacity(
         self,
     ) -> None:
@@ -695,6 +719,53 @@ class ScalePolicyTests(unittest.TestCase):
                     now=now,
                 )
                 self.assertEqual(decision.stops, ())
+
+    def test_lost_heartbeat_is_unreachable_not_provisioning(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "lost",
+                    fresh=False,
+                    heartbeat_updated_at=now - timedelta(minutes=10),
+                    started_at=now - timedelta(hours=1),
+                )
+            ],
+            SandboxDemand(pending_resources=ResourceQuantity(vcpu=2)),
+            ScalePolicy(max_nodes=5, max_create_per_cycle=1),
+            now=now,
+        )
+
+        self.assertEqual(decision.total_nodes, 1)
+        self.assertEqual(decision.ready_nodes, 0)
+        self.assertEqual(decision.provisioning_nodes, 0)
+        self.assertEqual(decision.unreachable_nodes, 1)
+        self.assertEqual(decision.creates, 1)
+
+    def test_never_ready_running_vm_leaves_provisioning_after_grace(self) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "never-ready",
+                    fresh=False,
+                    heartbeat_present=False,
+                    created_at=now - timedelta(minutes=10),
+                    started_at=now - timedelta(minutes=10),
+                )
+            ],
+            SandboxDemand(pending_resources=ResourceQuantity(vcpu=2)),
+            ScalePolicy(
+                max_nodes=5,
+                max_create_per_cycle=1,
+                stale_provisioning_after_seconds=60,
+            ),
+            now=now,
+        )
+
+        self.assertEqual(decision.provisioning_nodes, 0)
+        self.assertEqual(decision.unreachable_nodes, 1)
+        self.assertEqual(decision.creates, 1)
 
     def test_stops_never_ready_vm_after_unreachable_eviction_lease(self) -> None:
         now = utc_now()

@@ -120,6 +120,7 @@ from .models import (
     ResourceQuantity,
     SandboxDemand,
     SandboxNode,
+    SandboxPlacementRequest,
     ScalePolicy,
     VmJob,
     utc_now,
@@ -167,6 +168,7 @@ from .routing import (
     ProgramRequestState,
     RoutingStore,
     SandboxRoute,
+    is_portable_parked_route,
     sandbox_demand_from_routing_state,
 )
 from .runtime_probe import (
@@ -189,6 +191,8 @@ from .vm_init import (
     DEFAULT_HIBERNATION_QUOTA_HELPER,
     DEFAULT_MANAGED_INIT,
     DEFAULT_STORAGE_NATIVE_CACHE_GB,
+    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
     DEFAULT_STORAGE_NATIVE_REPOSITORY,
     VmInitOptions,
     plan_vm_init,
@@ -1327,6 +1331,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum disposable lazy-block cache per storage-native worker.",
     )
     deploy_all.add_argument(
+        "--storage-native-pool-low-watermark",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
+        help="Minimum number of idle warm ublk devices per sandbox node.",
+    )
+    deploy_all.add_argument(
+        "--storage-native-pool-high-watermark",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+        help="Maximum number of idle warm ublk devices per sandbox node.",
+    )
+    deploy_all.add_argument(
         "--storage-native-repository",
         default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
         help="Private Registry repository for durable sandbox snapshots.",
@@ -1672,7 +1688,10 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument(
         "--execute-resumes",
         action="store_true",
-        help="Resume owned VMs that UCloud suspended after they had started.",
+        help=(
+            "Deprecated compatibility flag. Post-start UCloud suspension is "
+            "destructive and is handled as permanent node loss."
+        ),
     )
     reconcile.add_argument(
         "--allow-unlabeled-stops",
@@ -1806,7 +1825,10 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument(
         "--execute-resumes",
         action="store_true",
-        help="Resume owned VMs that UCloud suspended after they had started.",
+        help=(
+            "Deprecated compatibility flag. Post-start UCloud suspension is "
+            "destructive and is handled as permanent node loss."
+        ),
     )
     loop.add_argument(
         "--allow-unlabeled-stops",
@@ -2272,6 +2294,28 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Maximum disposable block cache per storage-native node.",
     )
     parser.add_argument(
+        "--init-storage-native-pool-low-watermark",
+        type=int,
+        default=int(
+            os.environ.get(
+                "UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK",
+                str(DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK),
+            )
+        ),
+        help="Minimum idle warm ublk devices on autoscaled direct nodes.",
+    )
+    parser.add_argument(
+        "--init-storage-native-pool-high-watermark",
+        type=int,
+        default=int(
+            os.environ.get(
+                "UCLOUD_INIT_STORAGE_NATIVE_POOL_HIGH_WATERMARK",
+                str(DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK),
+            )
+        ),
+        help="Maximum idle warm ublk devices on autoscaled direct nodes.",
+    )
+    parser.add_argument(
         "--init-direct-network",
         choices=("none", "sandbox"),
         default="none",
@@ -2511,6 +2555,18 @@ def add_vm_init_args(
         type=int,
         default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
         help="Maximum disposable block cache on this storage-native node.",
+    )
+    parser.add_argument(
+        "--storage-native-pool-low-watermark",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
+        help="Minimum idle warm ublk devices on this direct node.",
+    )
+    parser.add_argument(
+        "--storage-native-pool-high-watermark",
+        type=int,
+        default=DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+        help="Maximum idle warm ublk devices on this direct node.",
     )
     parser.add_argument(
         "--direct-network",
@@ -3933,6 +3989,12 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             else None
         ),
         storage_native_cache_gb=args.storage_native_cache_gb,
+        storage_native_pool_low_watermark=(
+            args.storage_native_pool_low_watermark
+        ),
+        storage_native_pool_high_watermark=(
+            args.storage_native_pool_high_watermark
+        ),
         storage_native_repository=args.storage_native_repository,
         direct_disk_headroom_mb=args.direct_disk_headroom_mb,
         direct_max_concurrent_restores=args.direct_max_concurrent_restores,
@@ -4239,7 +4301,7 @@ def reject_mutating_jobs_fixture(
     if execution_requested and getattr(args, "jobs_file", None) is not None:
         raise ValueError(
             "--jobs-file is dry-run only and cannot be combined with "
-            "--execute, --execute-stops, --execute-resumes, or --execute-init"
+            "--execute, --execute-stops, or --execute-init"
         )
 
 
@@ -4250,7 +4312,6 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     execution_requested = bool(
         args.execute
         or args.execute_stops
-        or getattr(args, "execute_resumes", False)
         or getattr(args, "execute_init", False)
     )
     if execution_requested:
@@ -4306,7 +4367,6 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     execution_requested = bool(
         args.execute
         or args.execute_stops
-        or getattr(args, "execute_resumes", False)
         or getattr(args, "execute_init", False)
     )
     reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
@@ -4395,14 +4455,25 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             consumed_prepared_capacity = []
             consumed_pending_image_builds = []
             consumed_prepared_builders = []
+            persisted_node_loss_demand = []
             if controller_active or not execution_requested:
+                destructive_job_ids = {
+                    str(job_id)
+                    for job_id in result.get("destructivePowerCycleJobIds", [])
+                }
+                removed_routes = routing_store.delete_sandboxes_for_jobs_with_error(
+                    destructive_job_ids,
+                    terminal_error="node_lost",
+                )
                 route_cleanup_job_ids = set(result.get("prunedFinalHeartbeats", []))
                 route_cleanup_job_ids.update(
                     str(job_id)
                     for job_id in result.get("definitelyTerminatedJobIds", [])
                 )
-                removed_routes = routing_store.delete_sandboxes_for_jobs(
-                    route_cleanup_job_ids
+                removed_routes.extend(
+                    routing_store.delete_sandboxes_for_jobs(
+                        route_cleanup_job_ids - destructive_job_ids
+                    )
                 )
                 if args.execute:
                     effective_policy = policy_with_cli_overrides(config.policy, args)
@@ -4447,6 +4518,35 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                             prepared_builder_snapshot
                         )
                     )
+                replacement_deficit = result["rawDecision"].resource_deficit
+                if (
+                    controller_active
+                    and removed_routes
+                    and not result.get("sandboxCapacityOperationSucceeded")
+                    and (
+                        replacement_deficit.vcpu > 0
+                        or replacement_deficit.memory_mb > 0
+                        or replacement_deficit.disk_mb > 0
+                    )
+                ):
+                    for route in removed_routes:
+                        if route.job_id not in destructive_job_ids:
+                            continue
+                        demand_id = (
+                            f"__node_loss__:{route.job_id}:{route.sandbox_id}:"
+                            f"{route.generation}"
+                        )
+                        routing_store.upsert_pending(
+                            demand_id,
+                            route.resources,
+                            generation=route.generation,
+                            operation_id=route.create_operation_id,
+                            spec_hash=route.spec_hash,
+                            failure_reason="node_lost_replacement",
+                        )
+                        pending = routing_store.get_pending(demand_id)
+                        if pending is not None:
+                            persisted_node_loss_demand.append(pending)
             result["cycle"] = cycle
             result["routeFile"] = str(route_file)
             result["metricsFile"] = str(metrics_file)
@@ -4465,6 +4565,9 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             ]
             result["consumedPreparedBuilders"] = [
                 item.to_dict() for item in consumed_prepared_builders
+            ]
+            result["persistedNodeLossDemand"] = [
+                item.to_dict() for item in persisted_node_loss_demand
             ]
             result["removedRoutes"] = [route.to_dict() for route in removed_routes]
             record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
@@ -4690,6 +4793,12 @@ def _stop_operation_has_safety_proof(
 ) -> bool:
     if operation.kind != "stop" or len(operation.target_job_ids) != 1:
         return operation.kind != "stop"
+    if operation.request.get("destructivePowerCycle") is True:
+        return bool(
+            operation.request.get("postStartSuspensionObserved") is True
+            and isinstance(operation.request.get("routeCount"), int)
+            and int(operation.request["routeCount"]) >= 0
+        )
     if operation.request.get("unreachableStaleReady") is True:
         return bool(
             str(operation.request.get("unreachableReference") or "").strip()
@@ -4722,7 +4831,19 @@ def apply_prepared_provider_operations(
     allowed_stop_operation_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
-    for prepared in provider_state.submittable_operations():
+    prepared_operations = provider_state.submittable_operations()
+    # Release a destructively power-cycled VM before submitting its replacement
+    # so a provider-side VM/core quota does not reject otherwise valid recovery.
+    # Python's stable sort retains journal order within both classes.
+    prepared_operations.sort(
+        key=lambda operation: (
+            0
+            if operation.kind == "stop"
+            and operation.request.get("destructivePowerCycle") is True
+            else 1
+        )
+    )
+    for prepared in prepared_operations:
         if prepared.kind not in allowed_kinds:
             continue
         if prepared.kind == "stop" and prepared.operation_id not in (
@@ -4919,7 +5040,6 @@ def run_reconcile_cycle(
     execution_requested = bool(
         args.execute
         or args.execute_stops
-        or getattr(args, "execute_resumes", False)
         or getattr(args, "execute_init", False)
     )
     if (
@@ -5013,8 +5133,6 @@ def run_reconcile_cycle(
         allowed_kinds: set[str] = set()
         if args.execute:
             allowed_kinds.add("create")
-        if getattr(args, "execute_resumes", False):
-            allowed_kinds.add("resume")
         # Stops are replayed only after this cycle has refreshed every active
         # node drain intent below.
         replay_results = apply_prepared_provider_operations(
@@ -5061,22 +5179,93 @@ def run_reconcile_cycle(
     heartbeat_file = args.heartbeats or config.heartbeat_file()
     heartbeat_store = HeartbeatStore(Path(heartbeat_file))
     heartbeats = load_heartbeats(heartbeat_file)
+    effective_policy = policy_with_cli_overrides(config.policy, args)
+
+    # Job browse omits update history.  A powered-off VM may therefore appear
+    # RUNNING again after UCloud has replaced its ephemeral guest.  Current
+    # SUSPENDED state, a previously journaled resume, and our own destructive
+    # stop journal are durable hints.  For a stale RUNNING node, retrieve its
+    # full ordered updates once so the later RUNNING report cannot hide the
+    # post-start suspension.
+    resume_latched_job_ids: set[str] = set()
+    loss_latched_job_ids: set[str] = set()
+    if provider_state is not None:
+        for operation in provider_state.list_operations(kind="resume"):
+            resume_latched_job_ids.update(operation.target_job_ids)
+        for operation in provider_state.list_operations(kind="stop"):
+            if operation.request.get("destructivePowerCycle") is True:
+                loss_latched_job_ids.update(operation.target_job_ids)
+    jobs_by_id = {job.id: job for job in jobs}
+    if not getattr(args, "jobs_file", None):
+        for job in tuple(jobs):
+            heartbeat = heartbeats.get(job.id)
+            stale_heartbeat = bool(
+                heartbeat is not None
+                and not heartbeat.is_fresh(
+                    utc_now(), effective_policy.heartbeat_ttl_seconds
+                )
+            )
+            owns_routes = bool((route_reservations or {}).get(job.id))
+            should_retrieve_history = bool(
+                job.state == "RUNNING"
+                and not job.has_post_start_suspension
+                and job.id not in resume_latched_job_ids
+                and job.id not in loss_latched_job_ids
+                and stale_heartbeat
+                and owns_routes
+            )
+            if not should_retrieve_history:
+                continue
+            try:
+                retrieved = vm_job_from_payload(
+                    get_client().retrieve_job(
+                        config.project_id,
+                        job.id,
+                        include_updates=True,
+                    )
+                )
+            except UCloudError:
+                continue
+            jobs_by_id[job.id] = retrieved
+        jobs = [jobs_by_id[job.id] for job in jobs]
+
+    destructive_power_cycle_job_ids = tuple(
+        sorted(
+            job.id
+            for job in jobs
+            if job.id in loss_latched_job_ids
+            or job.has_post_start_suspension
+            or job.id in resume_latched_job_ids
+        )
+    )
     final_heartbeat_job_ids = tuple(
         sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
     )
-    if final_heartbeat_job_ids and execution_authorized:
-        heartbeat_store.remove(final_heartbeat_job_ids)
+    fenced_heartbeat_job_ids = tuple(
+        sorted(
+            set(final_heartbeat_job_ids)
+            | (set(destructive_power_cycle_job_ids) & set(heartbeats))
+        )
+    )
+    if fenced_heartbeat_job_ids and execution_authorized:
+        heartbeat_store.remove(fenced_heartbeat_job_ids)
         heartbeats = {
             job_id: heartbeat
             for job_id, heartbeat in heartbeats.items()
-            if job_id not in final_heartbeat_job_ids
+            if job_id not in fenced_heartbeat_job_ids
         }
     heartbeats = apply_route_reservations_to_heartbeats(
         heartbeats,
         route_reservations or {},
     )
-    effective_policy = policy_with_cli_overrides(config.policy, args)
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
+    destructive_job_id_set = set(destructive_power_cycle_job_ids)
+    nodes = [
+        replace(node, permanently_lost=True)
+        if node.job_id in destructive_job_id_set
+        else node
+        for node in nodes
+    ]
     nodes = apply_route_reservations_to_nodes(
         nodes,
         route_reservations or {},
@@ -5109,6 +5298,22 @@ def run_reconcile_cycle(
     sandbox_demand = demand_with_build_warm_resources(
         demand,
         build_warm_resources,
+    )
+    destructive_sandbox_job_ids = {
+        node.job_id
+        for node in sandbox_nodes
+        if not node.job.is_final
+        and node.job_id in set(destructive_power_cycle_job_ids)
+    }
+    lost_sandbox_routes = tuple(
+        route
+        for job_id in sorted(destructive_sandbox_job_ids)
+        for route in (route_reservations or {}).get(job_id, ())
+        if not is_portable_parked_route(route)
+    )
+    sandbox_demand = demand_with_lost_sandbox_replacement(
+        sandbox_demand,
+        lost_sandbox_routes,
     )
     live_scale_signals = None
     if metrics_store is not None:
@@ -5290,15 +5495,68 @@ def run_reconcile_cycle(
         allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=BUILDER_LABEL,
     )
-    requested_stop_job_ids = (
-        *requested_sandbox_stop_job_ids,
-        *requested_builder_stop_job_ids,
+    requested_lost_sandbox_job_ids = tuple(
+        node.job_id
+        for node in sandbox_nodes
+        if not node.job.is_final
+        and node.job_id in set(destructive_power_cycle_job_ids)
     )
-    stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
-    blocked_stop_job_ids = (
-        *blocked_sandbox_stop_job_ids,
-        *blocked_evacuation_stop_job_ids,
-        *blocked_builder_stop_job_ids,
+    requested_lost_builder_job_ids = tuple(
+        node.job_id
+        for node in builder_nodes
+        if not node.job.is_final
+        and node.job_id in set(destructive_power_cycle_job_ids)
+    )
+    lost_sandbox_stop_job_ids, blocked_lost_sandbox_job_ids = (
+        partition_safe_stop_job_ids(
+            sandbox_nodes,
+            requested_lost_sandbox_job_ids,
+            deployment_id=config.deployment_id,
+            allow_unlabeled=args.allow_unlabeled_stops,
+            ownership_label=NODE_LABEL,
+        )
+    )
+    lost_builder_stop_job_ids, blocked_lost_builder_job_ids = (
+        partition_safe_stop_job_ids(
+            builder_nodes,
+            requested_lost_builder_job_ids,
+            deployment_id=config.deployment_id,
+            allow_unlabeled=args.allow_unlabeled_stops,
+            ownership_label=BUILDER_LABEL,
+        )
+    )
+    destructive_stop_job_ids = tuple(
+        dict.fromkeys([*lost_sandbox_stop_job_ids, *lost_builder_stop_job_ids])
+    )
+    requested_stop_job_ids = tuple(
+        dict.fromkeys(
+            [
+                *requested_sandbox_stop_job_ids,
+                *requested_builder_stop_job_ids,
+                *requested_lost_sandbox_job_ids,
+                *requested_lost_builder_job_ids,
+            ]
+        )
+    )
+    sandbox_stop_job_ids = tuple(
+        dict.fromkeys([*sandbox_stop_job_ids, *lost_sandbox_stop_job_ids])
+    )
+    builder_stop_job_ids = tuple(
+        dict.fromkeys([*builder_stop_job_ids, *lost_builder_stop_job_ids])
+    )
+    stop_job_ids = tuple(
+        dict.fromkeys([*sandbox_stop_job_ids, *builder_stop_job_ids])
+    )
+    blocked_stop_job_ids = tuple(
+        dict.fromkeys(
+            [
+                *blocked_sandbox_stop_job_ids,
+                *blocked_evacuation_stop_job_ids,
+                *blocked_builder_stop_job_ids,
+                *blocked_lost_sandbox_job_ids,
+                *blocked_lost_builder_job_ids,
+            ]
+        )
     )
     if drain_workflow_enabled:
         canceling_job_ids = {
@@ -5308,17 +5566,22 @@ def run_reconcile_cycle(
         }
         if canceling_job_ids:
             blocked_canceling = tuple(
-                job_id for job_id in stop_job_ids if job_id in canceling_job_ids
+                job_id
+                for job_id in stop_job_ids
+                if job_id in canceling_job_ids
+                and job_id not in destructive_stop_job_ids
             )
             sandbox_stop_job_ids = tuple(
                 job_id
                 for job_id in sandbox_stop_job_ids
                 if job_id not in canceling_job_ids
+                or job_id in destructive_stop_job_ids
             )
             builder_stop_job_ids = tuple(
                 job_id
                 for job_id in builder_stop_job_ids
                 if job_id not in canceling_job_ids
+                or job_id in destructive_stop_job_ids
             )
             stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
             blocked_stop_job_ids = (*blocked_stop_job_ids, *blocked_canceling)
@@ -5360,6 +5623,15 @@ def run_reconcile_cycle(
     )
     if drain_workflow_enabled:
         nodes_by_job_id = {node.job_id: node for node in nodes}
+        for job_id in destructive_stop_job_ids:
+            provider_state.retire_drain_intent(
+                deployment_id=operation_deployment_id,
+                job_id=job_id,
+                reason="destructive-power-cycle",
+            )
+        pending_drain_intents = provider_state.pending_drain_intents(
+            deployment_id=operation_deployment_id,
+        )
         desired_stop_job_ids = set(stop_job_ids)
         for intent in pending_drain_intents:
             node = nodes_by_job_id.get(intent.job_id)
@@ -5378,7 +5650,10 @@ def run_reconcile_cycle(
 
         sandbox_stop_set = set(sandbox_stop_job_ids)
         for job_id in stop_job_ids:
-            if job_id in unreachable_stop_job_id_set:
+            if (
+                job_id in unreachable_stop_job_id_set
+                or job_id in destructive_stop_job_ids
+            ):
                 continue
             provider_state.prepare_drain_intent(
                 deployment_id=operation_deployment_id,
@@ -5596,53 +5871,8 @@ def run_reconcile_cycle(
         if intent.job_id not in set(stop_job_ids) | pending_drain_job_ids
     ]
     journaled_create_operations: list[ProviderOperation] = []
-    journaled_resume_operations: list[ProviderOperation] = []
     journaled_stop_operations: list[ProviderOperation] = []
     if execution_authorized and provider_state is not None:
-        if getattr(args, "execute_resumes", False) and config.deployment_id:
-            failed_resume_markers = {
-                (
-                    operation.target_job_ids[0],
-                    str(operation.request.get("lastStartedAt") or ""),
-                )
-                for operation in provider_state.list_operations(
-                    kind="resume", states={"failed"}
-                )
-                if len(operation.target_job_ids) == 1
-            }
-            for role, role_nodes, ownership_label in (
-                ("sandbox", sandbox_nodes, NODE_LABEL),
-                ("builder", builder_nodes, BUILDER_LABEL),
-            ):
-                for node in role_nodes:
-                    if (
-                        not node.job.is_unexpectedly_suspended
-                        or node.job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
-                        or node.job.labels.get(ownership_label) != "true"
-                    ):
-                        continue
-                    last_started_at = node.job.started_at.isoformat()
-                    if (node.job_id, last_started_at) in failed_resume_markers:
-                        continue
-                    intent_key = provider_state.allocate_operation_intent_key(
-                        deployment_id=operation_deployment_id,
-                        kind="resume",
-                        base_key=f"{role}:{node.job_id}",
-                    )
-                    journaled_resume_operations.append(
-                        provider_state.prepare_operation(
-                            intent_key=intent_key,
-                            kind="resume",
-                            deployment_id=operation_deployment_id,
-                            role=role,
-                            request={
-                                "type": "bulk",
-                                "items": [{"id": node.job_id}],
-                                "lastStartedAt": last_started_at,
-                            },
-                            target_job_ids=(node.job_id,),
-                        )
-                    )
         if args.execute:
             labeled_sandbox_intents: list[VmCreateIntent] = []
             labeled_builder_intents: list[VmCreateIntent] = []
@@ -5680,7 +5910,13 @@ def run_reconcile_cycle(
             create_intents = [*sandbox_create_intents, *builder_create_intents]
         if args.execute_stops:
             stop_ids_to_journal = tuple(
-                dict.fromkeys([*drain_ready_stop_job_ids, *unreachable_stop_job_ids])
+                dict.fromkeys(
+                    [
+                        *drain_ready_stop_job_ids,
+                        *unreachable_stop_job_ids,
+                        *destructive_stop_job_ids,
+                    ]
+                )
             )
             sandbox_stop_set = set(sandbox_stop_job_ids)
             drain_intents_by_job = {
@@ -5688,10 +5924,13 @@ def run_reconcile_cycle(
             }
             for job_id in stop_ids_to_journal:
                 unreachable_ready = job_id in unreachable_stop_job_id_set
+                destructively_lost = job_id in destructive_stop_job_ids
                 drain_intent = drain_intents_by_job.get(job_id)
                 role = (
                     drain_intent.role
-                    if drain_intent is not None and not unreachable_ready
+                    if drain_intent is not None
+                    and not unreachable_ready
+                    and not destructively_lost
                     else ("sandbox" if job_id in sandbox_stop_set else "builder")
                 )
                 request: dict[str, Any] = {
@@ -5715,6 +5954,18 @@ def run_reconcile_cycle(
                             "lastHeartbeatPresent": node.heartbeat is not None,
                         }
                     )
+                elif destructively_lost:
+                    node = stop_nodes_by_job_id[job_id]
+                    request.update(
+                        {
+                            "destructivePowerCycle": True,
+                            "postStartSuspensionObserved": True,
+                            "routeCount": len(
+                                (route_reservations or {}).get(job_id, ())
+                            ),
+                            "lastKnownActiveSandboxes": node.active_sandboxes,
+                        }
+                    )
                 elif drain_intent is None:
                     raise AutoscalerStateError(
                         f"drain-ready job has no durable intent: {job_id}"
@@ -5729,7 +5980,11 @@ def run_reconcile_cycle(
                 intent_key = (
                     f"{role}:{job_id}:unreachable:{request['unreachableReference']}"
                     if unreachable_ready
-                    else f"{role}:{job_id}:{drain_intent.token}"
+                    else (
+                        f"{role}:{job_id}:destructive-power-cycle"
+                        if destructively_lost
+                        else f"{role}:{job_id}:{drain_intent.token}"
+                    )
                 )
                 journaled_stop_operations.append(
                     provider_state.prepare_operation(
@@ -5761,6 +6016,8 @@ def run_reconcile_cycle(
             for node in (*sandbox_nodes, *builder_nodes)
             if node.job.is_unexpectedly_suspended
         ),
+        "destructivePowerCycleJobIds": list(destructive_power_cycle_job_ids),
+        "lostSandboxIds": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
@@ -5779,21 +6036,23 @@ def run_reconcile_cycle(
         "canceledDrainJobIds": sorted(canceled_drain_job_ids),
         "drainReadyStopJobIds": list(drain_ready_stop_job_ids),
         "unreachableReadyStopJobIds": list(unreachable_stop_job_ids),
+        "destructiveStopJobIds": list(destructive_stop_job_ids),
         "drainIntents": [
             _drain_intent_to_dict(intent) for intent in pending_drain_intents
         ],
         "drainResults": drain_results,
         "evacuationResults": evacuation_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
+        "fencedPowerCycleHeartbeats": sorted(
+            set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
+        ),
         "removedStoppedHeartbeats": [],
         "bootstrapIntents": [
             vm_bootstrap_intent_to_dict(intent) for intent in bootstrap_intents
         ],
         "bootstrapResults": list(completed_bootstrap_results),
         "executeCreates": bool(args.execute and execution_authorized),
-        "executeResumes": bool(
-            getattr(args, "execute_resumes", False) and execution_authorized
-        ),
+        "executeResumes": False,
         "executeStops": bool(args.execute_stops and execution_authorized),
         "executeInit": bool(
             getattr(args, "execute_init", False) and execution_authorized
@@ -5828,7 +6087,6 @@ def run_reconcile_cycle(
         and provider_state is not None
         and (
             journaled_create_operations
-            or journaled_resume_operations
             or journaled_stop_operations
             or any(
                 operation.kind == "stop"
@@ -5839,8 +6097,6 @@ def run_reconcile_cycle(
         planned_allowed_kinds: set[str] = set()
         if args.execute:
             planned_allowed_kinds.add("create")
-        if getattr(args, "execute_resumes", False):
-            planned_allowed_kinds.add("resume")
         if args.execute_stops:
             planned_allowed_kinds.add("stop")
         planned_results = apply_prepared_provider_operations(
@@ -5903,20 +6159,9 @@ def run_reconcile_cycle(
         if definitely_terminated:
             removed_stop_heartbeats = heartbeat_store.remove(definitely_terminated)
             result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
-    result["resumeResponse"] = {
-        "operations": [
-            item for item in provider_operation_results if item.get("kind") == "resume"
-        ]
-    }
-    result["resumedJobIds"] = sorted(
-        {
-            str(job_id)
-            for item in provider_operation_results
-            if item.get("kind") == "resume"
-            and item.get("state") in {"accepted", "recovered"}
-            for job_id in item.get("jobIds", [])
-        }
-    )
+    result["retiredResumeOperations"] = [
+        item for item in provider_operation_results if item.get("kind") == "resume"
+    ]
     result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
         provider_operation_results,
         decision.resource_deficit,
@@ -7051,6 +7296,40 @@ def demand_with_build_warm_resources(
     )
 
 
+def demand_with_lost_sandbox_replacement(
+    demand: SandboxDemand,
+    routes: Iterable[SandboxRoute],
+) -> SandboxDemand:
+    """Retain enough capacity to absorb client retries after destructive loss.
+
+    This does not recreate the sandboxes.  Their process and writable state no
+    longer exist.  It only prevents the autoscaler from interpreting route
+    deletion as an idle fleet at exactly the moment replacement capacity is
+    needed.  Dynamic admission keeps CPU/RAM at the largest individual shape
+    while hard disk remains additive.
+    """
+
+    lost = tuple(route for route in routes if not is_portable_parked_route(route))
+    if not lost:
+        return demand
+    resources = ResourceQuantity()
+    requests: list[SandboxPlacementRequest] = []
+    for route in lost:
+        resources = resources + route.resources
+        requests.append(
+            SandboxPlacementRequest(
+                resources=route.resources,
+                excluded_job_ids=((route.job_id,) if route.job_id else ()),
+            )
+        )
+    return replace(
+        demand,
+        pending_resources=demand.pending_resources + resources,
+        pending_count=demand.pending_count + len(lost),
+        placement_requests=(*demand.placement_requests, *requests),
+    )
+
+
 def should_include_job(
     job: VmJob,
     config: AutoscalerConfig,
@@ -7280,6 +7559,26 @@ def vm_init_options_for_autoscaled_node(
                 )
             ),
         ),
+        storage_native_pool_low_watermark=max(
+            0,
+            int(
+                getattr(
+                    args,
+                    "init_storage_native_pool_low_watermark",
+                    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
+                )
+            ),
+        ),
+        storage_native_pool_high_watermark=max(
+            1,
+            int(
+                getattr(
+                    args,
+                    "init_storage_native_pool_high_watermark",
+                    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+                )
+            ),
+        ),
         direct_disk_headroom_mb=max(
             1,
             int(
@@ -7406,12 +7705,15 @@ def print_plan(
     *,
     footer: str | None = "Dry-run only. Mutation commands are not implemented yet.",
 ) -> None:
+    unreachable = getattr(decision, "unreachable_nodes", 0)
+    unreachable_suffix = f", {unreachable} unreachable" if unreachable else ""
     print(f"Project: {config.project_id}")
     print(f"Heartbeat file: {heartbeat_file}")
     print(
         "Nodes: "
         f"{decision.ready_nodes} ready, "
-        f"{decision.provisioning_nodes} provisioning, "
+        f"{decision.provisioning_nodes} provisioning"
+        f"{unreachable_suffix}, "
         f"{decision.total_nodes} total"
     )
     print(
@@ -7498,11 +7800,11 @@ def print_reconcile(
             print(f"- {job_id} (blocked: no net-gain evacuation destination)")
         else:
             print(f"- {job_id} (blocked: missing matching deployment label)")
-    suspended_job_ids = tuple(result.get("unexpectedlySuspendedJobIds", []))
-    print("Resume intents:")
-    if not suspended_job_ids:
+    lost_job_ids = tuple(result.get("destructivePowerCycleJobIds", []))
+    print("Destructive node-loss intents:")
+    if not lost_job_ids:
         print("- none")
-    for job_id in suspended_job_ids:
+    for job_id in lost_job_ids:
         print(f"- {job_id}")
     print("Bootstrap intents:")
     bootstrap_intents = result.get("rawBootstrapIntents", [])
@@ -7529,13 +7831,6 @@ def print_reconcile(
         print(f"Submitted create jobs: {created_label}")
     elif create_intents:
         print("Create dry-run only. Re-run with --execute to submit planned VMs.")
-    resumed_job_ids = tuple(result.get("resumedJobIds", []))
-    if resumed_job_ids:
-        print(f"Accepted resume requests: {', '.join(resumed_job_ids)}")
-    elif suspended_job_ids and not result.get("executeResumes"):
-        print(
-            "Resume dry-run only. Re-run with --execute-resumes to resume suspended VMs."
-        )
     if result.get("stopResponse") is not None:
         print(f"Executed stop requests: {', '.join(stop_job_ids)}")
         if blocked_stop_job_ids:
@@ -7587,6 +7882,8 @@ def node_to_dict(node: Any) -> dict[str, Any]:
         "heartbeatFresh": node.heartbeat_fresh,
         "ready": node.is_ready,
         "provisioning": node.is_provisioning,
+        "unreachable": node.is_unreachable,
+        "permanentlyLost": node.permanently_lost,
     }
     if node.heartbeat is not None:
         raw["heartbeat"] = heartbeat_to_dict(node.heartbeat)
@@ -7598,6 +7895,7 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         "actions": [asdict(action) for action in decision.actions],
         "readyNodes": decision.ready_nodes,
         "provisioningNodes": decision.provisioning_nodes,
+        "unreachableNodes": decision.unreachable_nodes,
         "totalNodes": decision.total_nodes,
         "pendingResources": decision.pending_resources.to_dict(),
         "suppressedPendingResources": (
@@ -8071,6 +8369,20 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
                 DEFAULT_STORAGE_NATIVE_CACHE_GB,
             )
         ),
+        storage_native_pool_low_watermark=int(
+            getattr(
+                args,
+                "storage_native_pool_low_watermark",
+                DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
+            )
+        ),
+        storage_native_pool_high_watermark=int(
+            getattr(
+                args,
+                "storage_native_pool_high_watermark",
+                DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+            )
+        ),
         direct_disk_headroom_mb=int(
             getattr(
                 args,
@@ -8134,6 +8446,12 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeCacheGb": options.storage_native_cache_gb,
+        "storageNativePoolLowWatermark": (
+            options.storage_native_pool_low_watermark
+        ),
+        "storageNativePoolHighWatermark": (
+            options.storage_native_pool_high_watermark
+        ),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "maxConcurrentImagePulls": options.max_concurrent_image_pulls,

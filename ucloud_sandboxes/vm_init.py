@@ -62,6 +62,8 @@ DEFAULT_STORAGE_NATIVE_ROOT = "/var/lib/ucloud-sandboxes/storage-native"
 DEFAULT_STORAGE_NATIVE_CACHE_ROOT = "/var/lib/ucloud-sandboxes/storage-native-cache"
 DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
+DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
+DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = (
     "f41abb21324f6b0520abf34b7720aa260ddd10eb"
 )
@@ -154,6 +156,12 @@ class VmInitOptions:
     storage_native_registry_url: str = ""
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
+    storage_native_pool_low_watermark: int = (
+        DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
+    )
+    storage_native_pool_high_watermark: int = (
+        DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
+    )
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
@@ -531,6 +539,8 @@ UCLOUD_STORAGE_NATIVE_ROOT={shlex.quote(storage_native_root)}
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG={shlex.quote(storage_native_backend_config)}
 UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
+UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_watermark}
+UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
 UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES={writable_disk_mb * 1024 * 1024}
@@ -777,14 +787,23 @@ if digest(paths["manifest_file"]) != storage["manifest_sha256"]:
 if digest(paths["license_file"]) != storage["license_sha256"]:
     raise SystemExit("storage-native license checksum mismatch")
 build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
+patches = build.get("patches")
+expected_patches = [
+    "agentenv-streaming-dense-export.patch",
+    "agentenv-pooled-delete.patch",
+]
 if (
-    build.get("schema") != 1
+    build.get("schema") != 2
     or build.get("agentenv_commit") != storage["agentenv_commit"]
     or build.get("artifact_sha256") != storage["sha256"]
     or build.get("host_architecture") != host_arch
     or build.get("license") != "MIT"
-    or build.get("patch") != "agentenv-streaming-dense-export.patch"
-    or not re.fullmatch(r"[0-9a-f]{{64}}", str(build.get("patch_sha256") or ""))
+    or not isinstance(patches, list)
+    or [item.get("name") for item in patches if isinstance(item, dict)] != expected_patches
+    or not all(
+        re.fullmatch(r"[0-9a-f]{{64}}", str(item.get("sha256") or ""))
+        for item in patches
+    )
 ):
     raise SystemExit("storage-native build manifest provenance mismatch")
 print(
@@ -1761,6 +1780,8 @@ UCLOUD_STORAGE_NATIVE_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT=$UCLOUD_STORAGE_NATIVE_CACHE_ROOT
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG
 UCLOUD_STORAGE_NATIVE_CACHE_GB=$UCLOUD_STORAGE_NATIVE_CACHE_GB
+UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK
+UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL=$UCLOUD_STORAGE_NATIVE_REGISTRY_URL
 UCLOUD_STORAGE_NATIVE_REPOSITORY=$UCLOUD_STORAGE_NATIVE_REPOSITORY
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES=$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES
@@ -1781,7 +1802,7 @@ Group=root
 RuntimeDirectory=ucloud-sandboxes/storage-native
 RuntimeDirectoryMode=0700
 ExecStartPre=/usr/sbin/modprobe ublk_drv
-ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --metrics-listen-addr ""
+ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --metrics-listen-addr "" --enable-pool --pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --pool-startup-prewarm true
 Restart=always
 RestartSec=2
 
@@ -1802,7 +1823,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.json --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.json --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
 Restart=always
 RestartSec=2
 
@@ -1955,6 +1976,17 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError("invalid storage-native repository")
         if options.storage_native_cache_gb < 1:
             raise ValueError("storage-native cache size must be positive.")
+        if options.storage_native_pool_low_watermark < 0:
+            raise ValueError("storage-native pool low watermark cannot be negative.")
+        if options.storage_native_pool_high_watermark < 1:
+            raise ValueError("storage-native pool high watermark must be positive.")
+        if (
+            options.storage_native_pool_low_watermark
+            > options.storage_native_pool_high_watermark
+        ):
+            raise ValueError(
+                "storage-native pool low watermark cannot exceed high watermark."
+            )
         if options.disk_overcommit != 1.0:
             raise ValueError("direct runtime disk overcommit must be exactly 1.0.")
         if options.cpu_overcommit != 1.0 or options.memory_overcommit != 1.0:

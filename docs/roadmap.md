@@ -148,13 +148,18 @@ The small hit-path gain does not justify routing all node traffic through a
 the production path; storage-native/lazy OCI materialization remains the
 larger future opportunity.
 
-The same incident included a node that had rebooted after initialization. Its
-stock Ubuntu kernel configuration supported `virtiofs`, but the module file was
-not retained in the guest, so systemd could no longer mount `/work`,
-`/etc/ucloud`, or `/opt/ucloud`. Future runtime bundles include `virtiofs` and
-its dependency closure alongside the XFS, overlay, networking, and ublk modules.
-This prevents a live UCloud VM job from returning after reboot as permanently
-uninitializable capacity.
+The runtime bundle includes `virtiofs` and its dependency closure alongside the
+XFS, overlay, networking, and ublk modules, which makes an ordinary
+filesystem-preserving guest reboot mount-safe. Production subsequently proved
+that UCloud's post-start `SUSPENDED` transition is not such a reboot: resuming
+replaces or clears the ephemeral guest, and UCloud may report `RUNNING` while
+neither its SSH proxy nor private-network service has a reachable backend. The
+autoscaler now treats that transition as permanent node loss. It fences the
+heartbeat immediately, terminates the old job without a drain handshake,
+removes non-portable routes as `node_lost`, preserves only published portable
+park snapshots, and carries the lost hard-disk shapes into replacement-capacity
+demand. Ordered job history and the provider stop journal latch the loss even
+if UCloud later changes the current state back to `RUNNING`.
 
 The superseded export pipeline remains as incident evidence. Its deterministic
 32-image benchmark is recorded in
@@ -357,6 +362,14 @@ ordinary route snapshot was available.
 
 ## Phase 2: production flow and failure hardening
 
+- Roll out the AgentEnv warm ublk pool at 2/16 idle watermarks and observe a
+  sustained SDK/Verifiers park/wake and migration canary. The disposable DFM
+  XFS benchmark passed 100 sequential plus 80 eight-way wake/release cycles:
+  sequential wake-plus-release p50 fell about 38%, eight-way release p50 fell
+  about 65%, 189/189 acquisitions reused warm devices, and final hard
+  reservation was zero. The [unpooled](benchmarks/storage-native-ublk-unpooled-2026-08-03.json)
+  and [pooled](benchmarks/storage-native-ublk-pooled-2026-08-03.json) results are
+  retained; production stability observation remains open.
 - Representative private registry images and authentication.
 - Cancellation, expiry, gateway restart, Warden restart, ENOSPC, rollback,
   and every drain/migration crash boundary.

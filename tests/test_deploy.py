@@ -80,9 +80,17 @@ class DeployTests(unittest.TestCase):
                         "cargo_package": "uvm-ublk-daemon",
                         "host_architecture": "x86_64",
                         "license": "MIT",
-                        "patch": "agentenv-streaming-dense-export.patch",
-                        "patch_sha256": "a" * 64,
-                        "schema": 1,
+                        "patches": [
+                            {
+                                "name": "agentenv-streaming-dense-export.patch",
+                                "sha256": "a" * 64,
+                            },
+                            {
+                                "name": "agentenv-pooled-delete.patch",
+                                "sha256": "b" * 64,
+                            },
+                        ],
+                        "schema": 2,
                     }
                 )
                 + "\n",
@@ -110,6 +118,14 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(env["UCLOUD_INIT_NODE_RUNTIME"], "direct")
         self.assertEqual(env["UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS"], "7")
         self.assertEqual(
+            env["UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK"],
+            "2",
+        )
+        self.assertEqual(
+            env["UCLOUD_INIT_STORAGE_NATIVE_POOL_HIGH_WATERMARK"],
+            "16",
+        )
+        self.assertEqual(
             env["UCLOUD_INIT_DIRECT_RUNSC_COMMIT"],
             "9f653e577965df2ddd13875b5530cd2588661f1c",
         )
@@ -117,6 +133,7 @@ class DeployTests(unittest.TestCase):
         self.assertIn("runtime/direct/ucloud-sandbox-init", script)
         self.assertIn("managed_init", script)
         self.assertIn("DIRECT_RUNSC_COMMIT=", script)
+        self.assertIn("agentenv-pooled-delete.patch", script)
 
     def test_env_rendering_quotes_only_when_needed(self) -> None:
         text = render_env_file({"A": "plain-value", "B": "two words"})
@@ -661,7 +678,7 @@ class DeployTests(unittest.TestCase):
         args = build_parser().parse_args(argv[1:])
 
         self.assertEqual(args.command, "autoscaler-loop")
-        self.assertTrue(args.execute_resumes)
+        self.assertFalse(args.execute_resumes)
         self.assertEqual(args.init_max_concurrent_image_pulls, 1)
         self.assertEqual(args.gateway_control_bearer_token_file, Path("1"))
         self.assertEqual(args.init_builder_docker_quota_image_gb, 1)

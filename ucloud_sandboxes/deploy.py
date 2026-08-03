@@ -14,6 +14,8 @@ from .deployment import package_version
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
     DEFAULT_STORAGE_NATIVE_CACHE_GB,
+    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
+    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
     DEFAULT_STORAGE_NATIVE_REPOSITORY,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
     RUNTIME_KERNEL_MODULES,
@@ -64,7 +66,7 @@ def storage_native_build_artifacts(
         payload = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError("invalid storage-native build manifest JSON") from exc
-    if not isinstance(payload, dict) or payload.get("schema") != 1:
+    if not isinstance(payload, dict) or payload.get("schema") != 2:
         raise ValueError("unsupported storage-native build manifest")
     artifact_name = str(payload.get("artifact") or "")
     if (
@@ -80,18 +82,29 @@ def storage_native_build_artifacts(
             "storage-native backend binary and license must be beside its manifest"
         )
     expected_digest = str(payload.get("artifact_sha256") or "")
+    patches = payload.get("patches")
+    expected_patches = (
+        "agentenv-streaming-dense-export.patch",
+        "agentenv-pooled-delete.patch",
+    )
+    patches_valid = (
+        isinstance(patches, list)
+        and len(patches) == len(expected_patches)
+        and all(
+            isinstance(item, dict)
+            and item.get("name") == expected_name
+            and re.fullmatch(r"[0-9a-f]{64}", str(item.get("sha256") or ""))
+            for item, expected_name in zip(patches, expected_patches, strict=True)
+        )
+    )
     if (
         payload.get("agentenv_commit")
         != PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
         or payload.get("cargo_package") != "uvm-ublk-daemon"
         or payload.get("license") != "MIT"
         or payload.get("host_architecture") not in {"x86_64", "aarch64"}
-        or payload.get("patch") != "agentenv-streaming-dense-export.patch"
+        or not patches_valid
         or not re.fullmatch(r"[0-9a-f]{64}", expected_digest)
-        or not re.fullmatch(
-            r"[0-9a-f]{64}",
-            str(payload.get("patch_sha256") or ""),
-        )
     ):
         raise ValueError("storage-native backend provenance is not pinned")
     if _sha256_file(backend) != expected_digest:
@@ -116,6 +129,12 @@ class AllInOneDeployPlan:
     direct_runsc_commit: str = ""
     local_storage_native_manifest: Path | None = None
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
+    storage_native_pool_low_watermark: int = (
+        DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
+    )
+    storage_native_pool_high_watermark: int = (
+        DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
+    )
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
@@ -371,6 +390,21 @@ class AllInOneDeployPlan:
             storage_native_build_artifacts(self.local_storage_native_manifest)
             if self.storage_native_cache_gb < 1:
                 raise ValueError("storage-native cache size must be positive.")
+            if self.storage_native_pool_low_watermark < 0:
+                raise ValueError(
+                    "storage-native pool low watermark cannot be negative."
+                )
+            if self.storage_native_pool_high_watermark < 1:
+                raise ValueError(
+                    "storage-native pool high watermark must be positive."
+                )
+            if (
+                self.storage_native_pool_low_watermark
+                > self.storage_native_pool_high_watermark
+            ):
+                raise ValueError(
+                    "storage-native pool low watermark cannot exceed high watermark."
+                )
             if not re.fullmatch(
                 r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
                 self.storage_native_repository,
@@ -468,6 +502,12 @@ class AllInOneDeployPlan:
                 else None
             ),
             "storageNativeCacheGb": self.storage_native_cache_gb,
+            "storageNativePoolLowWatermark": (
+                self.storage_native_pool_low_watermark
+            ),
+            "storageNativePoolHighWatermark": (
+                self.storage_native_pool_high_watermark
+            ),
             "storageNativeRepository": self.storage_native_repository,
             "storageNativeRegistryUrl": self.storage_native_registry_url,
             "directDiskHeadroomMb": self.direct_disk_headroom_mb,
@@ -521,6 +561,12 @@ class AllInOneDeployPlan:
                 "builderDockerQuotaImageGb": self.builder_docker_quota_image_gb,
                 "swapGb": self.swap_gb,
                 "storageNativeCacheGb": self.storage_native_cache_gb,
+                "storageNativePoolLowWatermark": (
+                    self.storage_native_pool_low_watermark
+                ),
+                "storageNativePoolHighWatermark": (
+                    self.storage_native_pool_high_watermark
+                ),
                 "storageNativeRepository": self.storage_native_repository,
                 "nodeRuntime": self.sandbox_runtime,
             },
@@ -654,6 +700,12 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         ),
         "UCLOUD_INIT_STORAGE_NATIVE_CACHE_GB": str(
             plan.storage_native_cache_gb
+        ),
+        "UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK": str(
+            plan.storage_native_pool_low_watermark
+        ),
+        "UCLOUD_INIT_STORAGE_NATIVE_POOL_HIGH_WATERMARK": str(
+            plan.storage_native_pool_high_watermark
         ),
     }
 
@@ -950,6 +1002,7 @@ def render_remote_deploy_script(
         "import json",
         "import os",
         "from pathlib import Path",
+        "import re",
         "import tarfile",
         "import sys",
         "",
@@ -1046,10 +1099,14 @@ def render_remote_deploy_script(
         "        storage_build = json.loads(storage_manifest.read_text(encoding='utf-8'))",
         f"        if storage_build.get('agentenv_commit') != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:",
         "            raise SystemExit('storage-native AgentEnv commit is not pinned')",
-        "        if storage_build.get('schema') != 1 or storage_build.get('license') != 'MIT':",
+        "        if storage_build.get('schema') != 2 or storage_build.get('license') != 'MIT':",
         "            raise SystemExit('invalid storage-native build provenance')",
-        "        if storage_build.get('patch') != 'agentenv-streaming-dense-export.patch':",
+        "        storage_patches = storage_build.get('patches')",
+        "        expected_storage_patches = ['agentenv-streaming-dense-export.patch', 'agentenv-pooled-delete.patch']",
+        "        if not isinstance(storage_patches, list) or [item.get('name') for item in storage_patches if isinstance(item, dict)] != expected_storage_patches:",
         "            raise SystemExit('invalid storage-native compatibility patch')",
+        "        if not all(re.fullmatch(r'[0-9a-f]{64}', str(item.get('sha256') or '')) for item in storage_patches):",
+        "            raise SystemExit('invalid storage-native compatibility patch digest')",
         "        storage_digest = sha256_file(storage_backend)",
         "        if storage_build.get('artifact_sha256') != storage_digest:",
         "            raise SystemExit('storage-native backend digest mismatch')",

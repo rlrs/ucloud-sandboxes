@@ -2168,6 +2168,35 @@ def build_direct_node_agent_server(
             ),
             storage_published_volumes=int(raw.get("published_volumes", 0)),
             storage_error_volumes=int(raw.get("error_volumes", 0)),
+            storage_device_pool_enabled=bool(
+                raw.get("device_pool_enabled", False)
+            ),
+            storage_device_pool_low_watermark=int(
+                raw.get("device_pool_low_watermark", 0)
+            ),
+            storage_device_pool_high_watermark=int(
+                raw.get("device_pool_high_watermark", 0)
+            ),
+            storage_device_pool_idle_devices=int(
+                raw.get("device_pool_idle_devices", 0)
+            ),
+            storage_ublk_active_devices=int(raw.get("ublk_active_devices", 0)),
+            storage_ublk_live_devices=int(raw.get("ublk_live_devices", 0)),
+            storage_device_pool_acquires=int(
+                raw.get("device_pool_acquires", 0)
+            ),
+            storage_device_pool_reused_acquires=int(
+                raw.get("device_pool_reused_acquires", 0)
+            ),
+            storage_device_pool_new_acquires=int(
+                raw.get("device_pool_new_acquires", 0)
+            ),
+            storage_device_pool_releases=int(
+                raw.get("device_pool_releases", 0)
+            ),
+            storage_device_pool_discards=int(
+                raw.get("device_pool_discards", 0)
+            ),
         )
 
     DirectBoundHandler.runtime_metrics_provider = staticmethod(

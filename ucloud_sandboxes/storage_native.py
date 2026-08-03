@@ -225,6 +225,17 @@ class AgentEnvUblkClient:
         if response.get("status") != "deleted":
             raise StorageNativeError("ublk daemon did not delete the device")
 
+    def release(self, device_id: int) -> None:
+        """Return one exclusive runtime device to AgentEnv's warm pool."""
+
+        if device_id < 0:
+            raise ValueError("storage-native device id must be non-negative")
+        response = self._call(
+            {"kind": "release_overlaybd", "dev_id": device_id}
+        )
+        if response.get("status") != "released":
+            raise StorageNativeError("ublk daemon did not release the device")
+
     def shutdown(self) -> None:
         try:
             response = self._call({"kind": "shutdown"})

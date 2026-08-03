@@ -104,17 +104,26 @@ class DirectSandboxProvisioner:
         self._audit_ownership()
         results: list[DirectProvisioningResult] = []
         deletion_failures: list[tuple[str, Exception]] = []
-        for item in self.registry.list():
+        registrations = self.registry.list()
+        # Reclaim every durably deleted sandbox before advancing any pending
+        # create. A node at its hard storage limit must still be able to free
+        # capacity; registry ordering must never let planned work deadlock the
+        # cleanup that makes that work admissible.
+        for item in registrations:
+            if item.phase != "deleting":
+                continue
+            try:
+                self.delete(item.sandbox_id)
+            except Exception as exc:
+                # DELETING is the durable ownership fence. Keep serving
+                # healthy sandboxes and let the service reconciler retry;
+                # a transient cleanup failure must not require a node
+                # restart or hide its still-reserved storage from metrics.
+                deletion_failures.append((item.sandbox_id, exc))
+        for item in registrations:
             if item.phase == "deleting":
-                try:
-                    self.delete(item.sandbox_id)
-                except Exception as exc:
-                    # DELETING is the durable ownership fence. Keep serving
-                    # healthy sandboxes and let the service reconciler retry;
-                    # a transient cleanup failure must not require a node
-                    # restart or hide its still-reserved storage from metrics.
-                    deletion_failures.append((item.sandbox_id, exc))
-            elif item.phase in {
+                continue
+            if item.phase in {
                 "import_planned",
                 "importing",
                 "rootfs_ready",

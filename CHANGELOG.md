@@ -2,6 +2,12 @@
 
 This project uses semantic versioning.
 
+## 0.3.91 - 2026-08-03
+
+- Reconciled every durable sandbox deletion before advancing planned work on
+  node startup, so a full storage backend cannot deadlock the cleanup needed
+  to admit pending sandboxes.
+
 ## 0.3.90 - 2026-08-03
 
 - Replaced the non-portable `chown --one-file-system` bootstrap assumption

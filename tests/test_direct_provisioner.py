@@ -546,6 +546,43 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(results, ())
             self.assertIsNone(registry.get(deleting.sandbox_id))
 
+    def test_restart_reclaims_all_deletions_before_advancing_planned_work(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, quota, _, _ = self.make(root)
+            created = provisioner.create(
+                spec=replace(self.spec(), id="z-deleting"),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            registry.begin_delete(
+                created.registration.sandbox_id,
+                expected_revision=created.registration.revision,
+            )
+            registry.plan(
+                spec=replace(self.spec(), id="a-planned"),
+                sandbox_generation=9,
+                operation_id="create:9",
+                runtime_identity_sha256=provisioner.identity.digest,
+            )
+            original_prepare = quota.prepare
+
+            def prepare_only_after_reclaim(reservation):
+                if quota.items:
+                    raise RuntimeError("storage hard capacity is exhausted")
+                return original_prepare(reservation)
+
+            quota.prepare = prepare_only_after_reclaim
+
+            results = provisioner.start()
+
+            self.assertIsNone(registry.get("z-deleting"))
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].registration.sandbox_id, "a-planned")
+            self.assertEqual(results[0].registration.phase, "owned")
+
     def test_service_retries_durable_delete_without_node_restart(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

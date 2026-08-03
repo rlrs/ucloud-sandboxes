@@ -128,6 +128,56 @@ class RoutingStoreTests(unittest.TestCase):
         )
         self.assertEqual(records[0].resources.disk_mb, 8192)
 
+    def test_duplicate_program_transition_does_not_refresh_or_repeat_error(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            route = store.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                )
+            )
+            first, first_changed = (
+                store.upsert_program_request_transition_with_change(
+                    route,
+                    request_id="request-1",
+                    rollout_id="rollout-1",
+                    state="waking",
+                    transition_at="2026-08-03T10:00:00+00:00",
+                    last_error="HTTP 503: restore failed",
+                )
+            )
+            duplicate, duplicate_changed = (
+                store.upsert_program_request_transition_with_change(
+                    route,
+                    request_id="request-1",
+                    rollout_id="rollout-1",
+                    state="waking",
+                    transition_at="2026-08-03T10:01:00+00:00",
+                    last_error="HTTP 503: restore failed",
+                )
+            )
+            acting, acting_changed = (
+                store.upsert_program_request_transition_with_change(
+                    route,
+                    request_id="request-1",
+                    rollout_id="rollout-1",
+                    state="acting",
+                    transition_at="2026-08-03T10:02:00+00:00",
+                    clear_error=True,
+                )
+            )
+
+        self.assertTrue(first_changed)
+        self.assertFalse(duplicate_changed)
+        self.assertEqual(duplicate.updated_at, first.updated_at)
+        self.assertTrue(acting_changed)
+        self.assertEqual(acting.last_error, "")
+        self.assertEqual(acting.wake_completed_at, "2026-08-03T10:02:00+00:00")
+
     def test_program_request_identity_is_generation_fenced(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

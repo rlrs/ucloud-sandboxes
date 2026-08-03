@@ -287,6 +287,50 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(deleted["record"]["state"], "deleted")
             self.assertFalse((Path(raw) / "runtime" / "volume-1").exists())
 
+    def test_failed_local_wake_discards_cow_back_to_released_snapshot(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _host = self._service(Path(raw))
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=3,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            sealed = service.freeze_and_seal(
+                sandbox_id="sandbox-1",
+                sandbox_generation=3,
+                volume_id="volume-1",
+                operation_id="seal:1",
+                expected_revision=int(created["record"]["revision"]),
+            )
+            released = service.release_runtime(
+                sandbox_id="sandbox-1",
+                sandbox_generation=3,
+                volume_id="volume-1",
+                operation_id="release:1",
+                expected_revision=int(sealed["record"]["revision"]),
+            )
+            mounted = service.mount_snapshot_cow(
+                sandbox_id="sandbox-1",
+                sandbox_generation=3,
+                volume_id="volume-1",
+                operation_id="wake:1",
+                expected_revision=int(released["record"]["revision"]),
+            )
+
+            discarded = service.discard_mounted_cow(
+                sandbox_id="sandbox-1",
+                sandbox_generation=3,
+                volume_id="volume-1",
+                operation_id="wake:1:rollback",
+                expected_revision=int(mounted["record"]["revision"]),
+            )
+
+            self.assertEqual(discarded["record"]["state"], "released")
+            self.assertTrue(discarded["record"]["sealed_layer_paths"])
+            self.assertEqual(backend.delete_calls, [1, 2])
+
     def test_destination_acquires_published_registration_without_capacity(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)

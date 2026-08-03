@@ -2,6 +2,23 @@
 
 This project uses semantic versioning.
 
+## 0.3.87 - 2026-08-03
+
+- Fixed storage-native wake validation across ublk remounts by treating device
+  numbers as mount-local while preserving exact manifest, inode, size,
+  generation, runtime, and ownership checks.
+- Made failed wakes fully transactional: detach the rootfs, discard the
+  uncommitted restore COW, and return the route and storage authority to a
+  retryable parked state when the node can prove rollback completed.
+- Removed registry publication from ordinary same-node park/wake latency;
+  migration now publishes released authority on demand before fencing and
+  handoff.
+- Deduplicated program lifecycle metrics and shadow plans across identical
+  retries, recorded lifecycle errors, and made parked/wake timestamps reflect
+  completed operations.
+- Added read-only bind materialization for single-layer Docker overlay2 images,
+  avoiding the invalid one-lower overlay mount.
+
 ## 0.3.84 - 2026-08-02
 
 - Stopped treating occupied rootfs export slots as queue pressure; only

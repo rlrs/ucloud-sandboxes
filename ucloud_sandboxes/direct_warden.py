@@ -328,6 +328,10 @@ class DirectRunscWarden:
                 storage is not None
                 and config.artifact_root == config.memory_root
             ),
+            require_stable_device=not (
+                storage is not None
+                and config.artifact_root == config.memory_root
+            ),
         )
         self._ensure_roots()
 
@@ -681,28 +685,35 @@ class DirectRunscWarden:
             phase = time.monotonic()
             journal = self._journal(sandbox)
             parked = self._require_state(sandbox, HibernationState.PARKED)
-            if self.storage is not None:
-                self._mount_storage(
-                    sandbox,
-                    operation_id=f"{operation_id}:storage-mount",
+            try:
+                if self.storage is not None:
+                    self._mount_storage(
+                        sandbox,
+                        operation_id=f"{operation_id}:storage-mount",
+                    )
+                    assert self.rootfs_lifecycle is not None
+                    self.rootfs_lifecycle.resume_sandbox(sandbox)
+                manifest = self.artifacts.load_complete(
+                    sandbox_id=sandbox.sandbox_id,
+                    sandbox_generation=sandbox.sandbox_generation,
+                    hibernation_generation=parked.hibernation_generation,
                 )
-                assert self.rootfs_lifecycle is not None
-                self.rootfs_lifecycle.resume_sandbox(sandbox)
-            manifest = self.artifacts.load_complete(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                hibernation_generation=parked.hibernation_generation,
-            )
-            manifest.require_compatible(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                spec_sha256=sandbox.spec_sha256,
-                runtime_sha256=self._runtime_fingerprint(sandbox).digest,
-            )
-            # Storage-native resume mounts a new destination-local view above.
-            # Bind that exact rootfs ledger to the checkpoint before runsc is
-            # allowed to construct or resume any workload task.
-            self._require_managed_process_ledger(sandbox, manifest)
+                manifest.require_compatible(
+                    sandbox_id=sandbox.sandbox_id,
+                    sandbox_generation=sandbox.sandbox_generation,
+                    spec_sha256=sandbox.spec_sha256,
+                    runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+                )
+                # Storage-native resume mounts a new destination-local view above.
+                # Bind that exact rootfs ledger to the checkpoint before runsc is
+                # allowed to construct or resume any workload task.
+                self._require_managed_process_ledger(sandbox, manifest)
+            except Exception:
+                self._rollback_parked_storage_mount(
+                    sandbox,
+                    operation_seed=f"{operation_id}:pre-restore-rollback",
+                )
+                raise
             timings["validate_artifact"] = (time.monotonic() - phase) * 1000
             phase = time.monotonic()
             restoring = journal.begin_restore(
@@ -790,6 +801,10 @@ class DirectRunscWarden:
                         candidate=candidate,
                         restore_started=restore_started,
                         restore_reflinked=restore_reflinked,
+                    )
+                    self._rollback_parked_storage_mount(
+                        sandbox,
+                        operation_seed=f"{operation_id}:restore-rollback",
                     )
                 else:
                     _LOG.exception(
@@ -957,7 +972,7 @@ class DirectRunscWarden:
                     expected_revision=record.revision,
                 )
                 if self.storage is not None:
-                    self._release_parked_storage(
+                    self._rollback_parked_storage_mount(
                         sandbox,
                         operation_seed=f"reconcile:{parked.revision}",
                     )
@@ -2045,6 +2060,48 @@ class DirectRunscWarden:
             sandbox,
             operation_id=f"{operation_seed}:storage-release",
         )
+
+    def _rollback_parked_storage_mount(
+        self,
+        sandbox: DirectSandbox,
+        *,
+        operation_seed: str,
+    ) -> None:
+        """Discard a failed restore's uncommitted COW and stay parked.
+
+        A wake mounts either the node-local released snapshot or a published
+        snapshot.  Until RUNNING commits, that new upper layer has no durable
+        authority and must not survive a failed validation or restore attempt.
+        """
+
+        if self.storage is None:
+            return
+        record = self._storage_record(sandbox)
+        if record.get("state") != "mounted":
+            return
+        assert self.rootfs_lifecycle is not None
+        self.rootfs_lifecycle.park_sandbox(sandbox)
+        record = self._storage_record(sandbox)
+        if record.get("state") != "mounted":
+            return
+        result = self.storage.discard_mounted_cow(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            volume_id=sandbox.memory_directory,
+            operation_id=self._storage_operation_id(
+                sandbox,
+                f"{operation_seed}:storage-discard",
+            ),
+            expected_revision=int(record["revision"]),
+        )
+        raw = result.get("record")
+        if not isinstance(raw, dict) or raw.get("state") not in {
+            "released",
+            "published",
+        }:
+            raise DirectWardenError(
+                "storage-native restore rollback returned invalid authority"
+            )
 
     def _journal(self, sandbox: DirectSandbox) -> HibernationJournal:
         return self.journals.journal(

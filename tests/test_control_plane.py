@@ -380,6 +380,11 @@ class ControlPlaneTests(unittest.TestCase):
                     method="POST",
                     payload=identity,
                 )
+                self._json_request(
+                    f"{base}/wake",
+                    method="POST",
+                    payload=identity,
+                )
                 records = RoutingStore(route_file).program_requests_readonly()
                 wake_events = control_plane.MetricsStore(metrics_file).load_events(
                     max_events=10,
@@ -403,6 +408,114 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             {event.kind for event in wake_events},
             {"program_wake_shadow_plan", "program_wake_actual"},
+        )
+        self.assertEqual(
+            sum(event.kind == "program_wake_shadow_plan" for event in wake_events),
+            1,
+        )
+        self.assertEqual(
+            sum(event.kind == "program_wake_actual" for event in wake_events),
+            1,
+        )
+
+    def test_failed_wake_rolls_route_back_and_deduplicates_program_error(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "heartbeats.json"
+            metrics_file = root / "metrics.sqlite"
+            routing = RoutingStore(route_file)
+            route = routing.upsert_sandbox(
+                SandboxRoute(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=4096),
+                    state="parked",
+                )
+            )
+            HeartbeatStore(heartbeat_file).upsert(
+                build_heartbeat(
+                    job_id=route.job_id,
+                    node_id=route.node_id,
+                    node_url=route.node_url,
+                    capabilities=("sandbox", "disk-quota"),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_file,
+                routing_file=route_file,
+                metrics_file=metrics_file,
+            )
+
+            def failed_wake(_handler, *_args, **_kwargs):
+                return control_plane.ProxiedResponse(
+                    503,
+                    {"Content-Type": "application/json"},
+                    b'{"error":"restore validation failed",'
+                    b'"lifecycle_state":"parked"}',
+                )
+
+            gateway.RequestHandlerClass._proxy_request = failed_wake
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
+                identity = {
+                    "generation": route.generation,
+                    "request_id": "request-1",
+                    "rollout_id": "rollout-1",
+                }
+                first = self._json_request(
+                    f"{base}/wake",
+                    method="POST",
+                    payload=identity,
+                    allow_error=True,
+                )
+                after_first = RoutingStore(route_file).program_requests_readonly()[0]
+                second = self._json_request(
+                    f"{base}/wake",
+                    method="POST",
+                    payload=identity,
+                    allow_error=True,
+                )
+                after_second = RoutingStore(route_file).program_requests_readonly()[0]
+                final_route = RoutingStore(route_file).get_sandbox_readonly(
+                    route.sandbox_id
+                )
+                events = control_plane.MetricsStore(metrics_file).load_events(
+                    max_events=20,
+                    kinds=("program_state_transition", "program_wake_shadow_plan"),
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                gateway_thread.join(timeout=1)
+
+        self.assertEqual(first["status"], 503)
+        self.assertEqual(second["status"], 503)
+        self.assertIsNotNone(final_route)
+        self.assertEqual(final_route.state, "parked")
+        self.assertEqual(after_first.state, "waking")
+        self.assertEqual(after_first.last_error, "HTTP 503: restore validation failed")
+        self.assertEqual(after_second.updated_at, after_first.updated_at)
+        self.assertEqual(
+            sum(event.kind == "program_wake_shadow_plan" for event in events),
+            1,
+        )
+        self.assertEqual(
+            sum(event.kind == "program_state_transition" for event in events),
+            3,
         )
 
     def test_transport_epoch_changes_only_after_committed_route_handoff(

@@ -137,6 +137,67 @@ class HibernationTests(unittest.TestCase):
             ):
                 manifest.validate_files(root)
 
+    def test_storage_native_manifest_allows_device_reassignment_only(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            manifest = self._manifest(root)
+            remounted = replace(
+                manifest,
+                files=tuple(
+                    replace(item, device=item.device + 1)
+                    for item in manifest.files
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                HibernationCompatibilityError,
+                "identity changed",
+            ):
+                remounted.validate_files(root)
+            remounted.validate_files(root, require_stable_device=False)
+
+            changed_inode = root / "replacement"
+            memory = root / "application_memory.img"
+            changed_inode.write_bytes(memory.read_bytes())
+            os.replace(changed_inode, memory)
+            with self.assertRaisesRegex(
+                HibernationCompatibilityError,
+                "identity changed",
+            ):
+                remounted.validate_files(root, require_stable_device=False)
+
+    def test_storage_native_artifact_store_loads_remounted_generation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            store = HibernationArtifactStore(
+                (root / "artifacts").resolve(),
+                require_stable_device=False,
+            )
+            generation = store.prepare_generation(
+                sandbox_id="sandbox-1",
+                sandbox_generation=7,
+                hibernation_generation=1,
+            )
+            manifest = self._manifest(generation)
+            remounted = replace(
+                manifest,
+                files=tuple(
+                    replace(item, device=item.device + 1)
+                    for item in manifest.files
+                ),
+            )
+
+            published = store.publish_complete(remounted)
+
+            self.assertEqual(
+                store.load_complete(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=7,
+                    hibernation_generation=1,
+                ),
+                published,
+            )
+
     def test_manifest_rejects_symlinked_artifact(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

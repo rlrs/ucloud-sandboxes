@@ -391,6 +391,7 @@ async def park_sandbox(request: web.Request) -> web.Response:
 
 async def wake_sandbox(request: web.Request) -> web.Response:
     manager = sandbox_manager(request)
+    sandbox_id = request.match_info["sandbox_id"]
     try:
         raw = await request.json()
         if not isinstance(raw, dict):
@@ -403,12 +404,19 @@ async def wake_sandbox(request: web.Request) -> web.Response:
             raise RuntimeError("sandbox waking is unavailable on this runtime")
         record = await asyncio.to_thread(
             wake,
-            request.match_info["sandbox_id"],
+            sandbox_id,
             generation=generation,
             operation_id=operation_id,
         )
     except RuntimeError as exc:
-        raise web.HTTPServiceUnavailable(text=str(exc)) from exc
+        payload: dict[str, object] = {"error": str(exc)}
+        try:
+            current = await asyncio.to_thread(manager.get, sandbox_id)
+            if current is not None:
+                payload["lifecycle_state"] = current.state
+        except (RuntimeError, ValueError):
+            pass
+        return web.json_response(payload, status=503)
     except ValueError as exc:
         raise web.HTTPBadRequest(text=str(exc)) from exc
     return web.json_response({"sandbox": record.to_dict()})

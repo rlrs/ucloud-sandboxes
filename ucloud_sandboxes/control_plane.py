@@ -3831,9 +3831,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
 
         wake_program: ProgramRequestState | None = None
+        wake_became_ready = False
         wake_placement_routes: list[SandboxRoute] | None = None
         if lifecycle_action and lifecycle_payload.get("request_id"):
-            wake_program = self._record_program_request_transition(
+            wake_program, wake_became_ready = self._record_program_request_transition(
                 route,
                 lifecycle_payload,
                 state=(
@@ -3842,7 +3843,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     else "ready_to_wake"
                 ),
             )
-            if lifecycle_action == "wake" and wake_program is not None:
+            if (
+                lifecycle_action == "wake"
+                and wake_program is not None
+                and wake_became_ready
+            ):
                 wake_placement_routes = self._placement_routes()
                 self._record_program_wake_shadow_plan(
                     lifecycle_payload,
@@ -3978,6 +3983,28 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         ):
             self._send_proxied_response(response)
             return
+        if lifecycle_action and response.status >= 300:
+            if lifecycle_action == "wake":
+                try:
+                    failed_state = str(
+                        response.json().get("lifecycle_state") or ""
+                    ).lower()
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    failed_state = ""
+                if failed_state == "parked":
+                    rolled_back = self.routing_store.set_sandbox_state_if_current(
+                        route,
+                        expected_states={"waking"},
+                        state="parked",
+                    )
+                    if rolled_back is not None:
+                        route = rolled_back
+            self._record_program_request_transition(
+                route,
+                lifecycle_payload,
+                state=("waking" if lifecycle_action == "wake" else "model_wait"),
+                last_error=_lifecycle_proxy_error(response),
+            )
         if lifecycle_action and 200 <= response.status < 300:
             target_state = "running" if lifecycle_action == "wake" else "parked"
             lifecycle_response = response.json()
@@ -4085,15 +4112,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     self._release_registry_snapshot_reference(route)
                 route = updated
             if (
-                lifecycle_action == "wake"
+                lifecycle_action == "park"
                 and lifecycle_payload.get("request_id")
             ):
                 self._record_program_request_transition(
                     route,
                     lifecycle_payload,
-                    state="acting",
+                    state="model_wait",
+                    parked_at=utc_now().isoformat(),
+                    clear_error=True,
                 )
-                if self.metrics_store is not None:
+            if (
+                lifecycle_action == "wake"
+                and lifecycle_payload.get("request_id")
+            ):
+                _program, wake_completed = self._record_program_request_transition(
+                    route,
+                    lifecycle_payload,
+                    state="acting",
+                    clear_error=True,
+                )
+                if self.metrics_store is not None and wake_completed:
                     self.metrics_store.append(
                         "program_wake_actual",
                         {
@@ -4153,11 +4192,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         lifecycle_payload: dict[str, Any],
         *,
         state: str,
-    ) -> ProgramRequestState | None:
+        parked_at: str | None = None,
+        last_error: str = "",
+        clear_error: bool = False,
+    ) -> tuple[ProgramRequestState | None, bool]:
         request_id = str(lifecycle_payload.get("request_id") or "").strip()
         rollout_id = str(lifecycle_payload.get("rollout_id") or "").strip()
         if not request_id or not rollout_id:
-            return None
+            return None, False
         accepted_at = ""
         try:
             raw_created_at = float(lifecycle_payload.get("request_created_at"))
@@ -4169,12 +4211,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except (TypeError, ValueError, OverflowError, OSError):
             pass
         try:
-            program = self.routing_store.upsert_program_request_transition(
-                route,
-                request_id=request_id,
-                rollout_id=rollout_id,
-                state=state,
-                accepted_at=accepted_at or None,
+            program, changed = (
+                self.routing_store.upsert_program_request_transition_with_change(
+                    route,
+                    request_id=request_id,
+                    rollout_id=rollout_id,
+                    state=state,
+                    accepted_at=accepted_at or None,
+                    parked_at=parked_at,
+                    last_error=last_error,
+                    clear_error=clear_error,
+                )
             )
         except (OSError, sqlite3.Error, ValueError, SandboxRouteConflictError) as exc:
             if self.metrics_store is not None:
@@ -4189,13 +4236,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         "error": str(exc),
                     },
                 )
-            return None
-        if self.metrics_store is not None:
+            return None, False
+        if self.metrics_store is not None and changed:
             self.metrics_store.append(
                 "program_state_transition",
                 program.to_dict(),
             )
-        return program
+        return program, changed
 
     def _record_program_wake_shadow_plan(
         self,
@@ -7245,6 +7292,20 @@ def _structured_proxy_error(response: ProxiedResponse) -> dict[str, Any] | None:
         "upstream_content_type": _header_value(response.headers, "Content-Type"),
         "upstream_body_preview": preview,
     }
+
+
+def _lifecycle_proxy_error(response: ProxiedResponse) -> str:
+    detail = ""
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            detail = str(payload.get("error") or payload.get("message") or "").strip()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+    if not detail:
+        detail = response.body[:500].decode("utf-8", errors="replace").strip()
+    prefix = f"HTTP {int(response.status)}"
+    return f"{prefix}: {detail}" if detail else prefix
 
 
 def _response_looks_json(response: ProxiedResponse) -> bool:

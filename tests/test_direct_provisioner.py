@@ -592,6 +592,34 @@ class DirectProvisionerTests(unittest.TestCase):
                 service.storage_native_publication_pending(created.spec.id)
             )
 
+    def test_storage_native_default_park_keeps_publication_off_critical_path(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, warden = self.make(root)
+            publications: list[str] = []
+            warden.storage = object()
+
+            def publish_storage_snapshot(_sandbox, *, operation_id):
+                publications.append(operation_id)
+                return {"state": "published"}
+
+            warden.publish_storage_snapshot = publish_storage_snapshot
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = service.create(self.spec())
+
+            parked = service.park(
+                created.spec.id,
+                operation_id="park:test",
+            )
+
+            self.assertEqual(parked.state, HibernationState.PARKED.value)
+            self.assertEqual(publications, [])
+
     def test_service_quarantines_dead_running_sentry_on_read(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

@@ -136,9 +136,10 @@ class ConcurrentExtractor(FakeExtractor):
 
 
 class Overlay2Runner(FakeRunner):
-    def __init__(self, docker_root: Path) -> None:
+    def __init__(self, docker_root: Path, *, single_layer: bool = False) -> None:
         super().__init__()
         self.docker_root = docker_root.resolve()
+        self.single_layer = single_layer
         self.top = self.docker_root / "overlay2" / "top" / "diff"
         self.middle = self.docker_root / "overlay2" / "middle" / "diff"
         self.base = self.docker_root / "overlay2" / "base" / "diff"
@@ -162,7 +163,9 @@ class Overlay2Runner(FakeRunner):
                                 "Data": {
                                     "UpperDir": str(self.top),
                                     "LowerDir": (
-                                        f"{self.middle}:{self.base}"
+                                        ""
+                                        if self.single_layer
+                                        else f"{self.middle}:{self.base}"
                                     ),
                                 },
                             },
@@ -252,6 +255,41 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertEqual(
                 len([command for command in runner.commands if command[0] == "mount"]),
                 2,
+            )
+
+    def test_overlay2_store_bind_mounts_single_layer_image_read_only(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            docker_root = root / "docker"
+            runner = Overlay2Runner(docker_root, single_layer=True)
+            store = DockerOverlay2RootfsStore(
+                (root / "cache").resolve(),
+                runner=runner,
+                docker_root=docker_root.resolve(),
+            )
+
+            materialized = store.materialize("scratch-derived:latest")
+
+            self.assertEqual(
+                [
+                    command
+                    for command in runner.commands
+                    if command[0] == "mount"
+                ],
+                [
+                    (
+                        "mount",
+                        "--bind",
+                        str(runner.top),
+                        str(materialized.rootfs),
+                    ),
+                    (
+                        "mount",
+                        "-o",
+                        "remount,bind,ro",
+                        str(materialized.rootfs),
+                    ),
+                ],
             )
 
     def test_overlay2_startup_reconciles_durable_image_lease(self) -> None:

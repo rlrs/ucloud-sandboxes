@@ -800,8 +800,36 @@ class RoutingStore:
         state: str,
         transition_at: str | None = None,
         accepted_at: str | None = None,
+        parked_at: str | None = None,
         last_error: str = "",
+        clear_error: bool = False,
     ) -> ProgramRequestState:
+        program, _changed = self.upsert_program_request_transition_with_change(
+            route,
+            request_id=request_id,
+            rollout_id=rollout_id,
+            state=state,
+            transition_at=transition_at,
+            accepted_at=accepted_at,
+            parked_at=parked_at,
+            last_error=last_error,
+            clear_error=clear_error,
+        )
+        return program
+
+    def upsert_program_request_transition_with_change(
+        self,
+        route: SandboxRoute,
+        *,
+        request_id: str,
+        rollout_id: str,
+        state: str,
+        transition_at: str | None = None,
+        accepted_at: str | None = None,
+        parked_at: str | None = None,
+        last_error: str = "",
+        clear_error: bool = False,
+    ) -> tuple[ProgramRequestState, bool]:
         request_id = request_id.strip()
         rollout_id = rollout_id.strip()
         if not request_id or not rollout_id:
@@ -866,15 +894,43 @@ class RoutingStore:
                     timestamps["accepted_at"] = accepted_at
                 if not timestamps["accepted_at"]:
                     timestamps["accepted_at"] = transition_at
+                if parked_at and not timestamps["parked_at"]:
+                    timestamps["parked_at"] = parked_at
                 transition_field = {
-                    "model_wait": "parked_at",
                     "ready_to_wake": "response_ready_at",
                     "waking": "wake_started_at",
                     "acting": "wake_completed_at",
                 }.get(state)
                 if transition_field and not timestamps[transition_field]:
                     timestamps[transition_field] = transition_at
-                error = last_error or (existing.last_error if existing else "")
+                advanced = bool(
+                    existing is not None
+                    and _PROGRAM_STATE_RANK[effective_state]
+                    > _PROGRAM_STATE_RANK[existing.state]
+                )
+                error = (
+                    last_error
+                    if last_error
+                    else (
+                        ""
+                        if clear_error or advanced
+                        else (existing.last_error if existing else "")
+                    )
+                )
+                if existing is not None and (
+                    existing.state == effective_state
+                    and existing.resources == route.resources
+                    and existing.accepted_at == timestamps["accepted_at"]
+                    and existing.parked_at == timestamps["parked_at"]
+                    and existing.response_ready_at
+                    == timestamps["response_ready_at"]
+                    and existing.wake_started_at
+                    == timestamps["wake_started_at"]
+                    and existing.wake_completed_at
+                    == timestamps["wake_completed_at"]
+                    and existing.last_error == error
+                ):
+                    return existing, False
                 conn.execute(
                     """
                     INSERT INTO program_requests (
@@ -924,7 +980,7 @@ class RoutingStore:
                     (request_id,),
                 ).fetchone()
                 assert row is not None
-                return _program_request_from_row(row)
+                return _program_request_from_row(row), True
 
     def program_requests_readonly(
         self,

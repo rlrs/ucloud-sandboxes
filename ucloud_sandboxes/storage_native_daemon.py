@@ -1244,7 +1244,7 @@ class StorageNativeNodeService:
         operation_id: str,
         expected_revision: int,
     ) -> dict[str, Any]:
-        """Drop an uncommitted writable upper and return to published authority."""
+        """Drop an uncommitted writable upper and restore its parent authority."""
 
         request = {
             "expected_revision": expected_revision,
@@ -1267,13 +1267,13 @@ class StorageNativeNodeService:
         )
         if isinstance(pending, OperationReplay):
             return pending.result
-        if not pending.published_layers:
+        if not pending.published_layers and not pending.sealed_layer_paths:
             self.journal.fail(
                 pending,
-                "mounted volume has no published parent authority",
+                "mounted volume has no snapshot parent authority",
             )
             raise StorageNativeTerminalError(
-                "mounted volume has no published parent authority"
+                "mounted volume has no snapshot parent authority"
             )
         try:
             mount_path = Path(pending.mount_path)
@@ -1283,7 +1283,11 @@ class StorageNativeNodeService:
                 self.backend.delete(pending.device_id)
             record = replace(
                 pending,
-                state=StorageVolumeState.PUBLISHED,
+                state=(
+                    StorageVolumeState.PUBLISHED
+                    if pending.published_layers
+                    else StorageVolumeState.RELEASED
+                ),
                 device_id=None,
                 device_path="",
                 runtime_image_config="",

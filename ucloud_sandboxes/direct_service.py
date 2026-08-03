@@ -401,20 +401,17 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
-                if getattr(self.warden, "storage", None) is not None:
+                if (
+                    background
+                    and getattr(self.warden, "storage", None) is not None
+                ):
                     publication_id = (
                         operation_id or f"park-publish:{uuid4().hex}"
                     )
-                    if background:
-                        self._start_storage_publication(
-                            registration,
-                            operation_id=publication_id,
-                        )
-                    else:
-                        self.warden.publish_storage_snapshot(
-                            sandbox,
-                            operation_id=publication_id,
-                        )
+                    self._start_storage_publication(
+                        registration,
+                        operation_id=publication_id,
+                    )
                 return self._record(registration)
             if record.state != HibernationState.RUNNING:
                 record = self.warden.reconcile(sandbox)
@@ -427,17 +424,14 @@ class DirectSandboxService:
                 sandbox,
                 operation_id=park_operation_id,
             )
-            if getattr(self.warden, "storage", None) is not None:
-                if background:
-                    self._start_storage_publication(
-                        registration,
-                        operation_id=f"{park_operation_id}:publish",
-                    )
-                else:
-                    self.warden.publish_storage_snapshot(
-                        sandbox,
-                        operation_id=f"{park_operation_id}:publish",
-                    )
+            if (
+                background
+                and getattr(self.warden, "storage", None) is not None
+            ):
+                self._start_storage_publication(
+                    registration,
+                    operation_id=f"{park_operation_id}:publish",
+                )
             return self._record(registration)
 
     def storage_native_publication_pending(self, sandbox_id: str) -> bool:
@@ -780,8 +774,16 @@ class DirectSandboxService:
         )
         storage = self.warden._storage_record(sandbox)
         if storage.get("state") != "published":
+            storage = self.warden.publish_storage_snapshot(
+                sandbox,
+                operation_id=(
+                    "snapshot:"
+                    f"{lifecycle.hibernation_generation}:publish"
+                ),
+            )
+        if storage.get("state") != "published":
             raise DirectWardenError(
-                "storage-native snapshot is not durably published"
+                "storage-native publication did not return durable authority"
             )
         return StorageNativeMigration(
             manifest=portable,
@@ -1226,11 +1228,6 @@ class DirectSandboxService:
                             registration.to_direct_sandbox(),
                             operation_id=f"idle-park:{uuid4().hex}",
                         )
-                        if self.warden.storage is not None:
-                            self._start_storage_publication(
-                                registration,
-                                operation_id=f"idle-publish:{uuid4().hex}",
-                            )
                 except DirectWardenError:
                     # Reconciliation and node health expose persistent failures;
                     # one failed background park must not kill the daemon.

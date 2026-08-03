@@ -461,7 +461,12 @@ class HibernationManifest:
                 "or runtime"
             )
 
-    def validate_files(self, root: Path) -> None:
+    def validate_files(
+        self,
+        root: Path,
+        *,
+        require_stable_device: bool = True,
+    ) -> None:
         root_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
         root_flags |= getattr(os, "O_NOFOLLOW", 0)
         try:
@@ -484,7 +489,7 @@ class HibernationManifest:
                     info = os.fstat(descriptor)
                     if (
                         not stat.S_ISREG(info.st_mode)
-                        or info.st_dev != item.device
+                        or (require_stable_device and info.st_dev != item.device)
                         or info.st_ino != item.inode
                         or info.st_size != item.logical_bytes
                     ):
@@ -524,12 +529,19 @@ class HibernationArtifactStore:
         *,
         owner_uid: int | None = None,
         preserve_incarnation_roots: bool = False,
+        require_stable_device: bool = True,
     ) -> None:
         if not root.is_absolute():
             raise ValueError("hibernation artifact root must be absolute")
         self.root = root
         self.owner_uid = os.geteuid() if owner_uid is None else int(owner_uid)
         self.preserve_incarnation_roots = bool(preserve_incarnation_roots)
+        # A storage-native snapshot is authenticated by its manifest and
+        # remounted through a newly allocated ublk device.  Its files retain
+        # inode and size identity, but Linux st_dev is intentionally not stable
+        # across those mounts.  Ordinary local artifact stores keep requiring
+        # all three identity fields.
+        self.require_stable_device = bool(require_stable_device)
 
     def prepare_generation(
         self,
@@ -699,7 +711,10 @@ class HibernationArtifactStore:
                 )
                 if (
                     not stat.S_ISREG(source_info.st_mode)
-                    or source_info.st_dev != expected.device
+                    or (
+                        self.require_stable_device
+                        and source_info.st_dev != expected.device
+                    )
                     or source_info.st_ino != expected.inode
                     or source_info.st_size != expected.logical_bytes
                 ):
@@ -751,7 +766,10 @@ class HibernationArtifactStore:
                     )
                 return existing
 
-            manifest.validate_files(generation)
+            manifest.validate_files(
+                generation,
+                require_stable_device=self.require_stable_device,
+            )
             generation_fd = self._open_directory(generation)
             try:
                 # The large memory file is not read, but every named artifact must
@@ -853,7 +871,10 @@ class HibernationArtifactStore:
             sandbox_generation=sandbox_generation,
             hibernation_generation=hibernation_generation,
         )
-        manifest.validate_files(generation)
+        manifest.validate_files(
+            generation,
+            require_stable_device=self.require_stable_device,
+        )
         return manifest
 
     def load_published_metadata(
@@ -967,7 +988,10 @@ class HibernationArtifactStore:
                     info = os.stat(name, dir_fd=generation_fd, follow_symlinks=False)
                     if (
                         not stat.S_ISREG(info.st_mode)
-                        or info.st_dev != item.device
+                        or (
+                            self.require_stable_device
+                            and info.st_dev != item.device
+                        )
                         or info.st_ino != item.inode
                         or info.st_size != item.logical_bytes
                     ):

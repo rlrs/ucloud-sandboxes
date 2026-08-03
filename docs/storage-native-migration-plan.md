@@ -2,7 +2,7 @@
 
 Status: **Production rollout complete**
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-03
 
 This document is the source of truth for the storage-native migration work.
 Before changing the storage format, device lifecycle, park/resume protocol,
@@ -538,12 +538,15 @@ storage reconciliation error. Published parked routes do not reserve node
 disk; `WAKING` immediately reserves their complete writable shape until a
 heartbeat observes the mounted runtime.
 
-Every ordinary storage-native park publishes before returning its durable
-snapshot identity. The gateway stores schema, manifest digest, repository, and
-tag with the route and creates a persistent registry reference before marking
-the route parked. Migration creates the destination reference before route
-CAS and releases the old route reference afterward. This fences registry
-prune/GC independently of node survival.
+An ordinary storage-native park seals and releases node-local authority before
+returning, but no longer puts remote registry publication on the model-wait
+critical path. An unpublished `RELEASED` volume remains fully charged against
+the node's hard disk capacity and can wake locally without waiting for registry
+I/O. Migration preparation publishes it under the source fence before any
+destination can acquire it. Migration still creates the destination registry
+reference before route CAS and releases the old route reference afterward.
+Node drain must migrate every unpublished parked owner before terminating its
+node; a released-only park is not advertised as portable authority.
 
 ### 2026-07-30: persist portable checkpoint metadata outside the parked device
 
@@ -563,10 +566,11 @@ atomically on every park/adoption. The durable registry snapshot remains the
 filesystem authority; the control copy is only the portable description needed
 to verify and rebind its files.
 
-Before production rollout, the ordinary park response and gateway route must
-also durably retain the portable descriptor, not only the OCI manifest digest.
-That makes a published parked sandbox reconstructable after complete source
-node loss rather than merely making its block data durable.
+Once publication is required for migration or another explicit portability
+boundary, the response and gateway migration record durably retain the complete
+portable descriptor, not only the OCI manifest digest. That makes a published
+parked sandbox reconstructable after complete source-node loss rather than
+merely making its block data durable.
 
 The same review found that overlayfs's `work/` directory was being sealed even
 though it is kernel scratch state, not sandbox state, and destination import
@@ -848,3 +852,29 @@ reached `SUCCESS`. Obsolete gateway job `12361919` was already terminal. The
 scoped local gateway/relay test credentials were deleted. This completes the
 production rollout gate; future work may optimize destination provisioning,
 but it is separate from the qualified 1.212-second migration protocol.
+
+### 2026-08-03: remount identity and publication are removed from local wake latency
+
+Production exposed two assumptions that the isolated qualification did not
+exercise. First, ublk device IDs are allocation-local: concurrent restores can
+remount authenticated snapshots on different `st_dev` values even while every
+file retains the exact manifest inode and logical size. Storage-native artifact
+validation now treats device number as a mount property while retaining strict
+regular-file, inode, size, manifest, runtime, generation, and ownership checks.
+Local artifact stores continue to require an exact device match.
+
+Second, gVisor checkpointing itself completed in roughly 0.7--2.2 seconds, but
+ordinary parks then held the sandbox lifecycle fence for 10--40 seconds of
+registry publication. Same-node wakes consequently waited for work they did
+not need. Park now commits node-local `RELEASED` authority and returns;
+migration preparation publishes on demand before fencing portable metadata.
+A failed wake detaches the rootfs and discards its uncommitted mounted COW back
+to the exact released or published parent. A source node may not be drained
+while it still owns any released-only park.
+
+The same incident produced thousands of duplicate program transitions from
+client retries. Program timestamps and wake-plan events now change only on a
+material state, timestamp, resource, or error change. Failed lifecycle calls
+retain their HTTP error, and a node-confirmed parked wake rollback restores the
+gateway route to `parked`; ambiguous failures remain `waking` for durable
+reconciliation.

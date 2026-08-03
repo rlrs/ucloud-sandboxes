@@ -17,6 +17,7 @@ from ucloud_sandboxes.direct_warden import (
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactFile,
     HibernationAuthority,
+    HibernationCompatibilityError,
     HibernationFileRole,
     HibernationManifest,
     HibernationRecoveryAction,
@@ -254,6 +255,16 @@ class FakeStorage:
         self.events.append("mount")
         self.record["revision"] += 1
         self.record["state"] = "mounted"
+        return {"record": dict(self.record)}
+
+    def discard_mounted_cow(self, **kwargs):
+        if self.record["state"] != "mounted":
+            raise AssertionError("discard requires mounted storage")
+        if kwargs["expected_revision"] != self.record["revision"]:
+            raise AssertionError("stale discard")
+        self.events.append("discard")
+        self.record["revision"] += 1
+        self.record["state"] = "released"
         return {"record": dict(self.record)}
 
 
@@ -625,9 +636,36 @@ class DirectRunscWardenTests(unittest.TestCase):
         parked = self.warden.inspect(self.sandbox)
         self.assertIsNotNone(parked)
         self.assertEqual(parked.state, HibernationState.PARKED)
-        self.assertEqual(storage.record["state"], "mounted")
+        self.assertEqual(storage.record["state"], "released")
+        self.assertEqual(storage.events[-2:], ["rootfs-park", "discard"])
         running = self.warden.resume(self.sandbox, operation_id="wake:2")
         self.assertEqual(running.state, HibernationState.RUNNING)
+
+    def test_storage_native_validation_failure_discards_mounted_restore_cow(
+        self,
+    ) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.assertFalse(self.warden.artifacts.require_stable_device)
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+
+        with patch.object(
+            self.warden.artifacts,
+            "load_complete",
+            side_effect=HibernationCompatibilityError("injected identity failure"),
+        ):
+            with self.assertRaisesRegex(
+                HibernationCompatibilityError,
+                "identity failure",
+            ):
+                self.warden.resume(self.sandbox, operation_id="wake:1")
+
+        self.assertEqual(self.warden.inspect(self.sandbox).state, HibernationState.PARKED)
+        self.assertEqual(storage.record["state"], "released")
+        self.assertEqual(
+            storage.events[-4:],
+            ["mount", "rootfs-resume", "rootfs-park", "discard"],
+        )
 
     def test_restore_cpu_startup_burst_is_explicit(self) -> None:
         self.warden = DirectRunscWarden(

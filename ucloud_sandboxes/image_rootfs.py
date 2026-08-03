@@ -948,18 +948,51 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
         with self._operation_guard:
             self._active_exports += 1
         try:
-            result = self.runner.run(
-                (
-                    self.mount_binary,
-                    "-t",
-                    "overlay",
-                    "overlay",
-                    "-o",
-                    "ro,lowerdir=" + ":".join(str(item) for item in layers),
-                    str(rootfs),
-                ),
-                timeout=60,
-            )
+            if len(layers) == 1:
+                result = self.runner.run(
+                    (
+                        self.mount_binary,
+                        "--bind",
+                        str(layers[0]),
+                        str(rootfs),
+                    ),
+                    timeout=60,
+                )
+                if result.returncode == 0:
+                    readonly = self.runner.run(
+                        (
+                            self.mount_binary,
+                            "-o",
+                            "remount,bind,ro",
+                            str(rootfs),
+                        ),
+                        timeout=60,
+                    )
+                    if readonly.returncode != 0:
+                        cleanup = self.runner.run(
+                            (self.umount_binary, str(rootfs)),
+                            timeout=60,
+                        )
+                        if cleanup.returncode != 0:
+                            raise DirectWardenError(
+                                "single-layer image remount failed and its "
+                                "bind mount could not be released: "
+                                f"{cleanup.stderr or cleanup.stdout}"
+                            )
+                        result = readonly
+            else:
+                result = self.runner.run(
+                    (
+                        self.mount_binary,
+                        "-t",
+                        "overlay",
+                        "overlay",
+                        "-o",
+                        "ro,lowerdir=" + ":".join(str(item) for item in layers),
+                        str(rootfs),
+                    ),
+                    timeout=60,
+                )
             if result.returncode != 0:
                 raise DirectWardenError(
                     f"overlay2 image mount failed: {result.stderr or result.stdout}"

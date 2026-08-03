@@ -662,7 +662,17 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
-        except (RuntimeError, ValueError) as exc:
+        except RuntimeError as exc:
+            payload = {"error": str(exc)}
+            try:
+                current = self.manager.get(sandbox_id)
+                if current is not None:
+                    payload["lifecycle_state"] = current.state
+            except (RuntimeError, ValueError):
+                pass
+            self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        except ValueError as exc:
             self._write_exception(exc)
             return
         payload: dict[str, Any] = {"sandbox": record.to_dict()}
@@ -676,6 +686,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 ):
                     payload["publication"] = "pending"
                     self._write_json(payload, status=HTTPStatus.ACCEPTED)
+                    return
+                registration = service._require_registration(sandbox_id)
+                storage_record = warden._storage_record(
+                    registration.to_direct_sandbox()
+                )
+                if storage_record.get("state") != "published":
+                    self._write_json(payload)
                     return
                 snapshot = service.describe_storage_native_snapshot(sandbox_id)
                 payload["storage_schema"] = "storage-native-v1"
@@ -700,6 +717,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if service is None or getattr(warden, "storage", None) is None:
             return payload
         try:
+            registration = service._require_registration(record.spec.id)
+            storage_record = warden._storage_record(
+                registration.to_direct_sandbox()
+            )
+            if storage_record.get("state") != "published":
+                return payload
             snapshot = service.describe_storage_native_snapshot(record.spec.id)
         except (RuntimeError, ValueError):
             return payload
@@ -737,7 +760,17 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
-        except (RuntimeError, ValueError) as exc:
+        except RuntimeError as exc:
+            payload = {"error": str(exc)}
+            try:
+                current = self.manager.get(sandbox_id)
+                if current is not None:
+                    payload["lifecycle_state"] = current.state
+            except (RuntimeError, ValueError):
+                pass
+            self._write_json(payload, status=HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        except ValueError as exc:
             self._write_exception(exc)
             return
         self._write_json({"sandbox": record.to_dict()})

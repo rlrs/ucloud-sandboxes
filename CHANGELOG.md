@@ -2,6 +2,13 @@
 
 This project uses semantic versioning.
 
+## 0.3.92 - 2026-08-03
+
+- Made storage-native deletion independent of reading or remounting the
+  volume being destroyed. The Warden now removes runtime authority first and
+  lets the quota owner delete the opaque volume, so stale ublk mounts and
+  terminal storage records cannot permanently retain hard capacity.
+
 ## 0.3.91 - 2026-08-03
 
 - Reconciled every durable sandbox deletion before advancing planned work on

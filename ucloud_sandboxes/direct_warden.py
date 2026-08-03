@@ -1079,11 +1079,6 @@ class DirectRunscWarden:
             record = journal.load()
             if record is None:
                 return
-            if self.storage is not None and record.state != HibernationState.RUNNING:
-                self._mount_storage(
-                    sandbox,
-                    operation_id=f"delete:{record.revision}:storage-mount",
-                )
             # Deletion can be replayed after a crash that already reaped the
             # sentry but did not remove the journal. Reconcile the durable
             # authority first so a dead exact PID becomes recovery-owned
@@ -1139,54 +1134,64 @@ class DirectRunscWarden:
                     sandbox.container_id,
                 )
 
-            unified_storage = self.config.memory_root == self.config.artifact_root
-            for item in self.artifacts.inventory_incarnation(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                ignored_entries=(
-                    (
-                        "upper",
-                        "work",
-                        _APPLICATION_MEMORY,
-                        _ACTIVE_APPLICATION_MEMORY,
-                        _RESTORE_IMAGE,
-                    )
-                    if unified_storage
-                    else ()
-                ),
-            ):
-                if item.state == "pending":
-                    self.artifacts.discard_pending(
+            # The storage-native quota owner deletes the opaque volume after
+            # this lifecycle fence is removed. Do not remount or traverse it:
+            # a backend restart can leave an old ublk mount returning EIO, and
+            # deletion must remain possible precisely in that recovery case.
+            if self.storage is None:
+                unified_storage = (
+                    self.config.memory_root == self.config.artifact_root
+                )
+                for item in self.artifacts.inventory_incarnation(
+                    sandbox_id=sandbox.sandbox_id,
+                    sandbox_generation=sandbox.sandbox_generation,
+                    ignored_entries=(
+                        (
+                            "upper",
+                            "work",
+                            _APPLICATION_MEMORY,
+                            _ACTIVE_APPLICATION_MEMORY,
+                            _RESTORE_IMAGE,
+                        )
+                        if unified_storage
+                        else ()
+                    ),
+                ):
+                    if item.state == "pending":
+                        self.artifacts.discard_pending(
+                            sandbox_id=sandbox.sandbox_id,
+                            sandbox_generation=sandbox.sandbox_generation,
+                            hibernation_generation=item.hibernation_generation,
+                        )
+                        continue
+                    manifest = self.artifacts.load_published_metadata(
                         sandbox_id=sandbox.sandbox_id,
                         sandbox_generation=sandbox.sandbox_generation,
                         hibernation_generation=item.hibernation_generation,
                     )
-                    continue
-                manifest = self.artifacts.load_published_metadata(
-                    sandbox_id=sandbox.sandbox_id,
-                    sandbox_generation=sandbox.sandbox_generation,
-                    hibernation_generation=item.hibernation_generation,
-                )
-                self.artifacts.delete_published(
-                    manifest,
-                    allow_consumed_main_memory=(
-                        record.state == HibernationState.RUNNING
-                        or item.hibernation_generation != record.hibernation_generation
-                    ),
-                )
+                    self.artifacts.delete_published(
+                        manifest,
+                        allow_consumed_main_memory=(
+                            record.state == HibernationState.RUNNING
+                            or item.hibernation_generation
+                            != record.hibernation_generation
+                        ),
+                    )
 
-            self._discard_restore_image(
-                sandbox,
-                allow_consumed_main_memory=True,
-            )
-            active_memory = self._active_memory_root(sandbox)
-            if active_memory.exists() and self.config.remove_memory_directory_on_delete:
-                try:
-                    active_memory.rmdir()
-                except OSError as exc:
-                    raise DirectWardenError(
-                        "active memory directory is not empty after runtime delete"
-                    ) from exc
+                self._discard_restore_image(
+                    sandbox,
+                    allow_consumed_main_memory=True,
+                )
+                if self.config.remove_memory_directory_on_delete:
+                    active_memory = self._active_memory_root(sandbox)
+                    if active_memory.exists():
+                        try:
+                            active_memory.rmdir()
+                        except OSError as exc:
+                            raise DirectWardenError(
+                                "active memory directory is not empty after "
+                                "runtime delete"
+                            ) from exc
             self.journals.remove(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,

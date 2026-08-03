@@ -516,6 +516,18 @@ class DirectRunscWardenTests(unittest.TestCase):
         self.assertEqual(storage.record["state"], "mounted")
         self.assertTrue(incarnation.is_dir())
 
+    def test_storage_native_delete_does_not_remount_or_traverse_volume(self) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+        self.warden.create(self.sandbox, operation_id="create:1")
+        self.warden.park(self.sandbox, operation_id="park:1")
+        events_before_delete = tuple(storage.events)
+
+        self.warden.delete(self.sandbox)
+
+        self.assertEqual(tuple(storage.events), events_before_delete)
+        self.assertEqual(storage.record["state"], "released")
+        self.assertIsNone(self.warden._journal(self.sandbox).load())
+
     def test_storage_operation_ids_are_scoped_to_sandbox_incarnation(self) -> None:
         first = self.warden._storage_operation_id(
             self.sandbox,

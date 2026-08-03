@@ -185,6 +185,7 @@ from .vm_init import (
     DEFAULT_DIRECT_DISK_HEADROOM_MB,
     DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
+    DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
     DEFAULT_HIBERNATION_QUOTA_HELPER,
     DEFAULT_MANAGED_INIT,
     DEFAULT_STORAGE_NATIVE_CACHE_GB,
@@ -546,6 +547,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Docker-compatible CLI binary.",
     )
     node_agent.add_argument(
+        "--max-concurrent-image-pulls",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+        help="Maximum distinct cold Docker pulls running concurrently on this node.",
+    )
+    node_agent.add_argument(
         "--runtime-name",
         default="runsc",
         help="Docker runtime name for gVisor/runsc.",
@@ -650,6 +657,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
     )
     direct_node_agent.add_argument("--docker-binary", default="docker")
+    direct_node_agent.add_argument(
+        "--max-concurrent-image-pulls",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+        help="Maximum distinct cold Docker pulls running concurrently on this node.",
+    )
     direct_node_agent.add_argument(
         "--disk-capacity-mb",
         type=int,
@@ -1329,6 +1342,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
         help="Maximum simultaneous direct-runtime restores per worker node.",
+    )
+    deploy_all.add_argument(
+        "--max-concurrent-image-pulls",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+        help="Maximum distinct cold Docker pulls per sandbox worker node.",
     )
     deploy_all.add_argument(
         "--ssh-command",
@@ -2285,6 +2304,17 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         help="Maximum simultaneous direct-runtime restores per node.",
     )
     parser.add_argument(
+        "--init-max-concurrent-image-pulls",
+        type=int,
+        default=int(
+            os.environ.get(
+                "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS",
+                str(DEFAULT_MAX_CONCURRENT_IMAGE_PULLS),
+            )
+        ),
+        help="Maximum distinct cold Docker pulls per autoscaled node.",
+    )
+    parser.add_argument(
         "--init-buildx-direct-push",
         action="store_true",
         help="Configure autoscaled builder VMs to push directly with Docker Buildx.",
@@ -2509,6 +2539,12 @@ def add_vm_init_args(
         type=int,
         default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
         help="Maximum simultaneous direct-runtime restores per node.",
+    )
+    parser.add_argument(
+        "--max-concurrent-image-pulls",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+        help="Maximum distinct cold Docker pulls per initialized node.",
     )
     parser.add_argument(
         "--buildx-direct-push",
@@ -2955,6 +2991,13 @@ def cmd_serve_node_agent(args: argparse.Namespace) -> int:
         image_runtime=image_runtime,
         ssh_port_range=(args.ssh_port_start, args.ssh_port_end),
         image_builds_enabled=args.enable_image_builds,
+        max_concurrent_image_pulls=int(
+            getattr(
+                args,
+                "max_concurrent_image_pulls",
+                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+            )
+        ),
         node_control_bearer_token=read_required_token_file(
             getattr(args, "node_control_bearer_token_file", None),
             "node control bearer token",
@@ -3058,6 +3101,13 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         image_runtime=DockerImageRuntime(
             docker_binary=args.docker_binary,
             dry_run=False,
+        ),
+        max_concurrent_image_pulls=int(
+            getattr(
+                args,
+                "max_concurrent_image_pulls",
+                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+            )
         ),
         node_control_bearer_token=read_required_token_file(
             args.node_control_bearer_token_file,
@@ -3886,6 +3936,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         storage_native_repository=args.storage_native_repository,
         direct_disk_headroom_mb=args.direct_disk_headroom_mb,
         direct_max_concurrent_restores=args.direct_max_concurrent_restores,
+        max_concurrent_image_pulls=args.max_concurrent_image_pulls,
         install_root=args.install_root,
         project_mount_dir=args.project_mount_dir,
         service_user=args.service_user,
@@ -4302,6 +4353,9 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             routing_store = RoutingStore(route_file)
             routing_state = routing_store.load()
             pending_snapshot = list(routing_state.pending.values())
+            capacity_pending_snapshot = [
+                item for item in pending_snapshot if item.is_capacity_demand
+            ]
             pending_image_build_snapshot = list(routing_state.image_builds.values())
             prepared_builder_snapshot = list(routing_state.prepared_builders.values())
             program_request_snapshot = routing_store.program_requests_readonly()
@@ -4378,7 +4432,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                     "sandboxCapacityOperationSucceeded"
                 ):
                     consumed_pending_demand = routing_store.consume_pending_demand(
-                        pending_snapshot
+                        capacity_pending_snapshot
                     )
                 if controller_active and result.get(
                     "builderCapacityOperationSucceeded"
@@ -7246,6 +7300,16 @@ def vm_init_options_for_autoscaled_node(
                 )
             ),
         ),
+        max_concurrent_image_pulls=max(
+            1,
+            int(
+                getattr(
+                    args,
+                    "init_max_concurrent_image_pulls",
+                    DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+                )
+            ),
+        ),
         heartbeat_interval_seconds=max(
             1,
             int(getattr(args, "init_heartbeat_interval_seconds", 20)),
@@ -7536,6 +7600,11 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         "provisioningNodes": decision.provisioning_nodes,
         "totalNodes": decision.total_nodes,
         "pendingResources": decision.pending_resources.to_dict(),
+        "suppressedPendingResources": (
+            decision.suppressed_pending_resources.to_dict()
+        ),
+        "pendingCount": decision.pending_count,
+        "suppressedPendingCount": decision.suppressed_pending_count,
         "preparedResources": decision.prepared_resources.to_dict(),
         "desiredResources": decision.desired_resources.to_dict(),
         "projectedFreeResources": decision.projected_free_resources.to_dict(),
@@ -8016,6 +8085,13 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
                 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
             )
         ),
+        max_concurrent_image_pulls=int(
+            getattr(
+                args,
+                "max_concurrent_image_pulls",
+                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
+            )
+        ),
         heartbeat_interval_seconds=args.heartbeat_interval_seconds,
         labels=parse_labels(args.label),
     )
@@ -8060,6 +8136,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "storageNativeCacheGb": options.storage_native_cache_gb,
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
+        "maxConcurrentImagePulls": options.max_concurrent_image_pulls,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,
         "capabilities": list(options.capabilities()),
         "labels": dict(options.labels or {}),

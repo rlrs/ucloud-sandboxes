@@ -250,6 +250,9 @@ class NodeRuntimeMetrics:
     rootfs_export_active_operations: int = 0
     rootfs_export_waiting_operations: int = 0
     rootfs_export_max_concurrent_operations: int = 0
+    image_pull_active_operations: int = 0
+    image_pull_waiting_operations: int = 0
+    image_pull_max_concurrent_operations: int = 0
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
@@ -372,6 +375,27 @@ class NodeRuntimeMetrics:
                     "rootfsExportMaxConcurrentOperations",
                 )
             ),
+            image_pull_active_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "image_pull_active_operations",
+                    "imagePullActiveOperations",
+                )
+            ),
+            image_pull_waiting_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "image_pull_waiting_operations",
+                    "imagePullWaitingOperations",
+                )
+            ),
+            image_pull_max_concurrent_operations=_nonnegative_int(
+                _first_present(
+                    raw,
+                    "image_pull_max_concurrent_operations",
+                    "imagePullMaxConcurrentOperations",
+                )
+            ),
         )
 
     def to_dict(self) -> dict[str, float | int | str | None]:
@@ -410,6 +434,11 @@ class NodeRuntimeMetrics:
             ),
             "rootfs_export_max_concurrent_operations": (
                 self.rootfs_export_max_concurrent_operations
+            ),
+            "image_pull_active_operations": self.image_pull_active_operations,
+            "image_pull_waiting_operations": self.image_pull_waiting_operations,
+            "image_pull_max_concurrent_operations": (
+                self.image_pull_max_concurrent_operations
             ),
         }
 
@@ -600,6 +629,9 @@ class SandboxPlacementRequest:
 @dataclass(frozen=True)
 class SandboxDemand:
     pending_resources: ResourceQuantity = ResourceQuantity()
+    suppressed_pending_resources: ResourceQuantity = ResourceQuantity()
+    pending_count: int = 0
+    suppressed_pending_count: int = 0
     prepared_resources: ResourceQuantity = ResourceQuantity()
     oldest_pending_seconds: int = 0
     placement_requests: tuple[SandboxPlacementRequest, ...] = ()
@@ -773,6 +805,9 @@ class ScaleDecision:
     total_nodes: int
     reasons: tuple[str, ...]
     pending_resources: ResourceQuantity = ResourceQuantity()
+    suppressed_pending_resources: ResourceQuantity = ResourceQuantity()
+    pending_count: int = 0
+    suppressed_pending_count: int = 0
     prepared_resources: ResourceQuantity = ResourceQuantity()
     desired_resources: ResourceQuantity = ResourceQuantity()
     projected_free_resources: ResourceQuantity = ResourceQuantity()

@@ -1435,6 +1435,31 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(replacement.generation, 5)
         self.assertEqual(replacement.operation_id, "create-5")
 
+    def test_post_placement_failures_do_not_request_fleet_capacity(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            capacity = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+            failed = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=33_856)
+            store.upsert_pending("no-node", capacity)
+            store.upsert_pending(
+                "pull-failed",
+                failed,
+                failure_reason="image_pull_http_503",
+            )
+            store.upsert_pending(
+                "lease-failed",
+                failed,
+                failure_reason="registry_lease_unavailable",
+            )
+
+            demand = store.pending_demand()
+
+        self.assertEqual(demand.pending_resources, capacity)
+        self.assertEqual(demand.pending_count, 1)
+        self.assertEqual(demand.suppressed_pending_resources, failed + failed)
+        self.assertEqual(demand.suppressed_pending_count, 2)
+        self.assertEqual(len(demand.placement_requests), 1)
+
     def test_snapshot_consume_does_not_delete_refreshed_signals(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")

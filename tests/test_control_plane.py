@@ -1751,6 +1751,57 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(cached, manifest)
         load.assert_called_once_with("team/image", digest)
 
+    def test_create_hydrates_layer_metadata_off_the_critical_path(self) -> None:
+        class RecordingLayerCache:
+            def __init__(self) -> None:
+                self.loads: list[bool] = []
+                self.hydrated: list[tuple[str, ...]] = []
+
+            def get(self, _image: str, *, load: bool = False) -> None:
+                self.loads.append(load)
+                return None
+
+            def hydrate_async(self, images: tuple[str, ...]) -> None:
+                self.hydrated.append(images)
+
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+            )
+            cache = RecordingLayerCache()
+            gateway.RequestHandlerClass.registry_layer_cache = (  # type: ignore[attr-defined]
+                cache
+            )
+            Thread(target=gateway.serve_forever, daemon=True).start()
+            try:
+                host, port = gateway.server_address
+                created = self._json_request(
+                    f"http://{host}:{port}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "nonblocking-layers",
+                        "image": "registry.example/repo:latest",
+                        "cpus": 1,
+                        "memory_mb": 512,
+                        "disk_mb": 1024,
+                    },
+                    allow_error=True,
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(created["status"], 503)
+        self.assertEqual(cache.loads, [False])
+        self.assertEqual(
+            cache.hydrated,
+            [("registry.example/repo:latest",)],
+        )
+
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):
             calls: list[str] = []
@@ -4472,6 +4523,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 pending = RoutingStore(route_file).get_pending("pull-failed")
                 route = RoutingStore(route_file).get_sandbox("pull-failed")
+                demand = self._json_request(f"{base}/v1/demand")
                 canceled = self._json_request(
                     f"{base}/v1/sandboxes/pull-failed",
                     method="DELETE",
@@ -4491,6 +4543,14 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(pending.operation_id.startswith("create-"))
         self.assertTrue(pending.spec_hash)
         self.assertEqual(pending.failure_reason, "image_pull_http_502")
+        self.assertEqual(demand["pending_resources"]["disk_mb"], 0)
+        self.assertEqual(demand["pending_count"], 0)
+        self.assertEqual(
+            demand["suppressed_pending_resources"]["disk_mb"],
+            1024,
+        )
+        self.assertEqual(demand["suppressed_pending_count"], 1)
+        self.assertFalse(demand["pending"][0]["capacity_demand"])
         self.assertTrue(canceled["ok"])
         self.assertIsNone(pending_after_cancel)
 

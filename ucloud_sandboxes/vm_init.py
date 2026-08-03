@@ -33,6 +33,8 @@ DEFAULT_DOCKER_QUOTA_IMAGE_GB = 200
 DEFAULT_SWAP_GB = 0
 DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
+DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
+DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
 DEFAULT_CHECKPOINT_HELPER = "/usr/local/libexec/ucloud-sandbox-checkpoint"
 DEFAULT_CHECKPOINT_HELPER_CONFIG = "/etc/ucloud-sandboxes/checkpoint-helper.json"
@@ -78,6 +80,11 @@ BUILDER_RUNTIME_PACKAGES = (
     SANDBOX_RUNTIME_PACKAGES[-1],
 )
 RUNTIME_KERNEL_MODULES = (
+    # UCloud project mounts use virtiofs.  The host may have loaded this module
+    # before our init script starts without retaining the module on the guest
+    # filesystem, which makes the node unable to remount /work after a reboot.
+    # Carry it in the same offline closure as the container runtime modules.
+    "virtiofs",
     "xfs",
     "overlay",
     "ublk_drv",
@@ -132,6 +139,8 @@ class VmInitOptions:
     docker_quota_image_gb: int = DEFAULT_DOCKER_QUOTA_IMAGE_GB
     swap_gb: int = DEFAULT_SWAP_GB
     docker_mtu: int = DEFAULT_DOCKER_MTU
+    docker_max_concurrent_downloads: int = DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS
+    max_concurrent_image_pulls: int = DEFAULT_MAX_CONCURRENT_IMAGE_PULLS
     docker_insecure_registries: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
     enable_image_builds: bool = False
@@ -382,6 +391,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
+            " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             " --idle-park-seconds 0"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
@@ -429,6 +439,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --runtime-conformance-file ${UCLOUD_RUNTIME_CONFORMANCE_FILE}"
             " --checkpoint-helper ${UCLOUD_CHECKPOINT_HELPER}"
             " --checkpoint-root ${UCLOUD_CHECKPOINT_ROOT}"
+            " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             f"{build_flag}{runtime_flag}{node_control_auth_flag}"
         )
         node_service_user = "$UCLOUD_SERVICE_USER"
@@ -485,6 +496,8 @@ UCLOUD_DISK_OVERCOMMIT={options.disk_overcommit}
 UCLOUD_DOCKER_QUOTA_IMAGE_GB={options.docker_quota_image_gb}
 UCLOUD_SWAP_GB={options.swap_gb}
 UCLOUD_DOCKER_MTU={options.docker_mtu}
+UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS={options.docker_max_concurrent_downloads}
+UCLOUD_MAX_CONCURRENT_IMAGE_PULLS={options.max_concurrent_image_pulls}
 UCLOUD_DOCKER_QUOTA_IMAGE={shlex.quote(docker_quota_image)}
 UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
 UCLOUD_SWAP_FILE={shlex.quote(swap_file)}
@@ -1423,7 +1436,7 @@ detect_default_route_mtu() {{
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
   UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
 fi
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
+export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
 DOCKER_DAEMON_JSON="$(mktemp)"
@@ -1434,7 +1447,7 @@ import os
 config = {{
     "data-root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
     "experimental": True,
-    "max-concurrent-downloads": 8,
+    "max-concurrent-downloads": int(os.environ["UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS"]),
     "max-concurrent-uploads": 8,
     "runtimes": {{
         "runsc": {{
@@ -1690,6 +1703,7 @@ UCLOUD_DISK_OVERCOMMIT=$UCLOUD_DISK_OVERCOMMIT
 UCLOUD_DOCKER_DATA_ROOT=$UCLOUD_DOCKER_DATA_ROOT
 UCLOUD_DOCKER_QUOTA_IMAGE_GB=$UCLOUD_DOCKER_QUOTA_IMAGE_GB
 UCLOUD_DOCKER_MTU=$UCLOUD_DOCKER_MTU
+UCLOUD_MAX_CONCURRENT_IMAGE_PULLS=$UCLOUD_MAX_CONCURRENT_IMAGE_PULLS
 UCLOUD_DOCKER_QUOTA_IMAGE=$UCLOUD_DOCKER_QUOTA_IMAGE
 UCLOUD_DOCKER_QUOTA_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON=$UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
@@ -1938,6 +1952,10 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("swap size cannot be negative.")
     if options.docker_mtu < 0:
         raise ValueError("docker mtu cannot be negative.")
+    if options.docker_max_concurrent_downloads < 1:
+        raise ValueError("Docker max concurrent downloads must be positive.")
+    if options.max_concurrent_image_pulls < 1:
+        raise ValueError("max concurrent image pulls must be positive.")
     _validate_service_user(options.service_user)
     for value_name, value in {
         "job id": options.job_id,

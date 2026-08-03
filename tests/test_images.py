@@ -1,6 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event
+from threading import Event, Lock, Thread
 import json
 import multiprocessing
 import os
@@ -33,6 +33,62 @@ from ucloud_sandboxes.sandbox import (
 
 
 class ImageTests(unittest.TestCase):
+    def test_cold_pull_slots_bound_concurrency_without_losing_drain_fence(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(dry_run=True),
+                max_concurrent_pulls=2,
+            )
+            release = Event()
+            full = Event()
+            state_lock = Lock()
+            active = 0
+            peak = 0
+            failures: list[BaseException] = []
+
+            def worker() -> None:
+                nonlocal active, peak
+                try:
+                    with manager.image_operation():
+                        with manager.pull_slot():
+                            with state_lock:
+                                active += 1
+                                peak = max(peak, active)
+                                if active == 2:
+                                    full.set()
+                            release.wait(2)
+                            with state_lock:
+                                active -= 1
+                except BaseException as exc:  # pragma: no cover - thread handoff
+                    failures.append(exc)
+
+            threads = [Thread(target=worker) for _ in range(6)]
+            for thread in threads:
+                thread.start()
+            self.assertTrue(full.wait(1))
+            deadline = time.monotonic() + 1
+            snapshot = manager.pull_operation_snapshot()
+            while snapshot["waiting_operations"] < 4 and time.monotonic() < deadline:
+                time.sleep(0.01)
+                snapshot = manager.pull_operation_snapshot()
+
+            self.assertEqual(snapshot["active_operations"], 2)
+            self.assertEqual(snapshot["waiting_operations"], 4)
+            self.assertEqual(snapshot["max_concurrent_operations"], 2)
+            self.assertEqual(manager.active_build_count(), 6)
+            release.set()
+            for thread in threads:
+                thread.join(2)
+
+            self.assertFalse(failures)
+            self.assertEqual(peak, 2)
+            self.assertEqual(manager.active_build_count(), 0)
+            self.assertEqual(
+                manager.pull_operation_snapshot()["active_operations"],
+                0,
+            )
+
     def test_image_record_manifest_digest_is_optional_and_persisted(self) -> None:
         digest = "sha256:" + "b" * 64
         now = utc_now()

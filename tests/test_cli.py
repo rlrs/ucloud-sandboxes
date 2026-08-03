@@ -1549,6 +1549,11 @@ class CliTests(unittest.TestCase):
                     "pending-one",
                     ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
                 )
+                RoutingStore(route_file).upsert_pending(
+                    "failed-image",
+                    ResourceQuantity(vcpu=8.0, memory_mb=16384, disk_mb=32768),
+                    failure_reason="image_pull_http_503",
+                )
 
                 output = io.StringIO()
                 with redirect_stdout(output):
@@ -1573,6 +1578,7 @@ class CliTests(unittest.TestCase):
 
                 payload = json.loads(output.getvalue())
                 remaining_demand = RoutingStore(route_file).pending_demand()
+                remaining_pending = RoutingStore(route_file).pending_sandboxes()
         finally:
             cli.UCloudClient = original_client
 
@@ -1582,6 +1588,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(
             [item["sandbox_id"] for item in payload["consumedPendingDemand"]],
             ["pending-one"],
+        )
+        self.assertEqual(
+            [item.sandbox_id for item in remaining_pending],
+            ["failed-image"],
         )
         self.assertEqual(payload["consumedPreparedCapacity"], [])
         self.assertEqual(remaining_demand.pending_resources, ResourceQuantity())

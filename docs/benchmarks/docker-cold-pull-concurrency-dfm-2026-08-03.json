@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "date": "2026-08-03",
+  "environment": {
+    "project": "DFM",
+    "job_id": "12362842",
+    "product": "cpu-amd-zen5-32-vcpu",
+    "vcpu": 32,
+    "memory_bytes": 94270545920,
+    "disk_gb": 200,
+    "docker_version": "29.1.3",
+    "docker_storage_driver": "overlayfs",
+    "kernel": "6.8.0-53-generic",
+    "max_concurrent_layer_downloads_per_pull": 3
+  },
+  "method": {
+    "script": "scripts/benchmark_image_pull_concurrency.py",
+    "cache_reset": "docker system prune -a -f before every run",
+    "images": "real aweaiteam/scaleswe tags observed in production traces",
+    "notes": [
+      "Each comparison used the same ordered image set.",
+      "Reported image sizes include shared layers and are not network byte counts.",
+      "No pull failed in any retained run."
+    ]
+  },
+  "runs": [
+    {
+      "image_count": 4,
+      "concurrency": 1,
+      "makespan_ms": 52278,
+      "failed": 0,
+      "pull_duration_ms": [13510, 12559, 14401, 11807]
+    },
+    {
+      "image_count": 4,
+      "concurrency": 2,
+      "makespan_ms": 28450,
+      "failed": 0,
+      "pull_duration_ms": [13819, 13221, 15227, 13805]
+    },
+    {
+      "image_count": 4,
+      "concurrency": 4,
+      "makespan_ms": 16298,
+      "failed": 0,
+      "pull_duration_ms": [15342, 14528, 16295, 15338]
+    },
+    {
+      "image_count": 8,
+      "concurrency": 4,
+      "makespan_ms": 39565,
+      "failed": 0,
+      "pull_duration_ms": [16892, 15463, 17950, 16889, 19523, 22672, 18110, 17504]
+    },
+    {
+      "image_count": 8,
+      "concurrency": 8,
+      "makespan_ms": 26380,
+      "failed": 0,
+      "pull_duration_ms": [22976, 21381, 24740, 21382, 22982, 26374, 21380, 18524]
+    },
+    {
+      "image_count": 16,
+      "concurrency": 8,
+      "makespan_ms": 58047,
+      "failed": 0,
+      "pull_duration_ms_sorted": [22728, 22860, 23016, 23062, 23172, 23217, 23320, 25676, 28807, 29979, 30335, 30474, 31473, 34717, 34867, 34974]
+    },
+    {
+      "image_count": 16,
+      "concurrency": 16,
+      "makespan_ms": 54755,
+      "failed": 0,
+      "pull_duration_ms_sorted": [30546, 34768, 54170, 54174, 54178, 54713, 54726, 54728, 54732, 54733, 54737, 54739, 54743, 54743, 54745, 54748]
+    },
+    {
+      "image_count": 8,
+      "concurrency": 8,
+      "path": "empty same-node Distribution pull-through cache",
+      "makespan_ms": 37167,
+      "failed": 0,
+      "pull_duration_ms_sorted": [30126, 32035, 32036, 32051, 34232, 34237, 34240, 37161]
+    },
+    {
+      "image_count": 8,
+      "concurrency": 8,
+      "path": "fully warm same-node Distribution pull-through cache after Docker image prune",
+      "makespan_ms": 24581,
+      "failed": 0,
+      "pull_duration_ms_sorted": [22386, 22389, 22400, 22405, 22410, 22413, 22413, 24569]
+    }
+  ],
+  "conclusion": {
+    "selected_distinct_pull_limit": 8,
+    "selected_layer_download_limit": 3,
+    "enable_shared_pull_through_cache": false,
+    "reason": "Eight retained useful aggregate parallelism. Sixteen improved 16-image makespan by only 5.7 percent while roughly doubling most per-image tail latencies. An idealized fully warm same-node pull-through cache improved the matched direct-origin run by only 6.8 percent, while an empty cache was 40.9 percent slower."
+  }
+}

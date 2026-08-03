@@ -87,6 +87,22 @@ def node(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_non_capacity_failures_do_not_create_nodes(self) -> None:
+        failed = ResourceQuantity(vcpu=400, memory_mb=819_200, disk_mb=3_385_600)
+        decision = evaluate_scale(
+            [node("ready")],
+            SandboxDemand(
+                suppressed_pending_resources=failed,
+                suppressed_pending_count=100,
+            ),
+            ScalePolicy(max_nodes=10, max_create_per_cycle=4),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.pending_resources, ResourceQuantity())
+        self.assertEqual(decision.suppressed_pending_resources, failed)
+        self.assertIn("excluded from fleet demand", decision.reasons[0])
+
     def test_dynamic_admission_does_not_sum_nominal_cpu_and_memory_limits(
         self,
     ) -> None:

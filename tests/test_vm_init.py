@@ -22,6 +22,9 @@ from ucloud_sandboxes.vm_init import (
 
 
 class VmInitTests(unittest.TestCase):
+    def test_runtime_module_closure_keeps_ucloud_mounts_rebootable(self) -> None:
+        self.assertIn("virtiofs", RUNTIME_KERNEL_MODULES)
+
     def test_direct_runtime_is_the_exclusive_node_task_owner(self) -> None:
         script = render_vm_init_script(
             VmInitOptions(
@@ -255,7 +258,7 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("cmp -s \"$DOCKER_DAEMON_JSON\" /etc/docker/daemon.json", script)
         self.assertIn("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON='[\"gateway:5000\"]'", script)
         self.assertIn(
-            "export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON",
+            "export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON",
             script,
         )
         self.assertIn("detect_default_route_mtu()", script)
@@ -286,7 +289,16 @@ class VmInitTests(unittest.TestCase):
             script.index("Installing raw runsc restore wrapper"),
             script.index("Configuring Docker daemon with bridge MTU"),
         )
-        self.assertIn('"max-concurrent-downloads": 8', script)
+        self.assertIn(
+            '"max-concurrent-downloads": int(os.environ["UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS"])',
+            script,
+        )
+        self.assertIn("UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS=3", script)
+        self.assertIn("UCLOUD_MAX_CONCURRENT_IMAGE_PULLS=8", script)
+        self.assertIn(
+            "--max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}",
+            script,
+        )
         self.assertIn('"max-concurrent-uploads": 8', script)
         self.assertIn("runtime-conformance --sudo --execute --output json", script)
         self.assertIn(

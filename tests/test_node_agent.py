@@ -1315,12 +1315,58 @@ class NodeAgentTests(unittest.TestCase):
 
             self.assertTrue(heartbeat["heartbeat"]["cached_images_known"])
             self.assertGreaterEqual(pulled["timings"]["docker_pull_ms"], 0)
+            self.assertGreaterEqual(pulled["timings"]["pull_queue_ms"], 0)
+            self.assertEqual(
+                heartbeat["heartbeat"]["runtime_metrics"][
+                    "image_pull_max_concurrent_operations"
+                ],
+                8,
+            )
             self.assertIn("busybox", heartbeat["heartbeat"]["cached_images"])
             self.assertIn("busybox:latest", heartbeat["heartbeat"]["cached_images"])
             self.assertIn(
                 f"registry.test/team/image@{digest}",
                 heartbeat["heartbeat"]["cached_images"],
             )
+
+    def test_failed_image_pull_reports_phase_and_retryability(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            executor = RecordingExecutor(
+                exit_code=1,
+                stderr="registry connection reset",
+            )
+            server = build_node_agent_server(
+                "127.0.0.1",
+                0,
+                sandbox_file=Path(raw_dir) / "sandboxes.json",
+                image_file=Path(raw_dir) / "images.json",
+                job_id="job-1",
+                node_id="node-1",
+                runtime=DockerGvisorRuntime(dry_run=True),
+                image_runtime=DockerImageRuntime(executor=executor),
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                failed = self._json_request(
+                    f"http://{host}:{port}/v1/images/pull",
+                    method="POST",
+                    payload={"image": "busybox:latest"},
+                    allow_error=True,
+                )
+            finally:
+                server.shutdown()
+                server.server_close()
+
+        self.assertEqual(failed["status"], 503)
+        self.assertEqual(failed["error_code"], "image_pull_failed")
+        self.assertTrue(failed["retryable"])
+        self.assertGreaterEqual(failed["timings"]["pull_queue_ms"], 0)
+        self.assertEqual(
+            failed["timings"]["failed_phase"],
+            "docker_pull",
+        )
 
     def test_rejects_disk_request_without_validated_quota_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:

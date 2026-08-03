@@ -664,6 +664,13 @@ def record_autoscaler_cycle(
         {
             "cycle": cycle,
             "pending_resources": decision.get("pendingResources", {}),
+            "suppressed_pending_resources": decision.get(
+                "suppressedPendingResources", {}
+            ),
+            "pending_count": decision.get("pendingCount", 0),
+            "suppressed_pending_count": decision.get(
+                "suppressedPendingCount", 0
+            ),
             "prepared_resources": decision.get("preparedResources", {}),
             "desired_resources": decision.get("desiredResources", {}),
             "projected_free_resources": decision.get("projectedFreeResources", {}),
@@ -1153,6 +1160,12 @@ def build_metrics_snapshot(
         None,
     )
     program_summary = build_program_state_summary(program_requests or [], now=now)
+    capacity_pending_sandboxes = [
+        item for item in pending_sandboxes if item.is_capacity_demand
+    ]
+    suppressed_pending_sandboxes = [
+        item for item in pending_sandboxes if not item.is_capacity_demand
+    ]
 
     return {
         "generated_at": now.isoformat(),
@@ -1191,10 +1204,23 @@ def build_metrics_snapshot(
             "provisional_running_routes": provisional_running,
             "stale_routes": max(0, active_routes - routes_on_fresh_nodes),
             "states": dict(sorted(sandbox_state_counts.items())),
-            "pending": len(pending_sandboxes),
-            "pending_resources": _sum_pending_resources(pending_sandboxes).to_dict(),
-            "oldest_pending_seconds": _oldest_age_seconds(pending_sandboxes),
-            "pending_attempts": sum(item.attempts for item in pending_sandboxes),
+            "pending": len(capacity_pending_sandboxes),
+            "pending_resources": _sum_pending_resources(
+                capacity_pending_sandboxes
+            ).to_dict(),
+            "oldest_pending_seconds": _oldest_age_seconds(
+                capacity_pending_sandboxes
+            ),
+            "pending_attempts": sum(
+                item.attempts for item in capacity_pending_sandboxes
+            ),
+            "suppressed_pending": len(suppressed_pending_sandboxes),
+            "suppressed_pending_resources": _sum_pending_resources(
+                suppressed_pending_sandboxes
+            ).to_dict(),
+            "suppressed_pending_attempts": sum(
+                item.attempts for item in suppressed_pending_sandboxes
+            ),
         },
         "capacity": {
             "prepared": len(prepared_capacity),

@@ -100,6 +100,62 @@ still add one node per cycle, bypassing
 `create_pressure_max_headroom_nodes`. Create pressure now exclusively owns the
 headroom calculation whenever both signals are true.
 
+The latest production create failures exposed a separate positive feedback
+loop in durable demand. A failed image pull or registry-reference lease was
+persisted in the sandbox pending table, so the autoscaler treated the
+post-placement failure as proof that another node was required. Each successful
+VM submission consumed the row, a client retry recreated it, and a registry or
+image problem could grow the fleet despite ample hard capacity. Pending demand
+is now classified by whether another schedulable node can resolve it. Capacity,
+wake, and migration-placement failures retain their existing scale-up behavior;
+image-pull and registry-lease failures remain durable for retry identity and
+diagnostics but are excluded from desired resources. A successful scale-up
+consumes only the capacity-demand snapshot, and the metrics and demand APIs
+expose the excluded count and resources separately. Optional registry-layer
+overlap metadata is also hydrated asynchronously: a cold metadata request no
+longer adds the registry timeout to sandbox creation merely to improve node
+scoring.
+
+Production traces from the same burst showed a separate image throughput
+failure: a node accepted as many as 32 distinct Docker pulls at once, while
+each pull was configured for eight parallel layer downloads. Create concurrency
+is now decoupled from cold-pull concurrency. Nodes bound distinct pulls,
+preserve all warm-create slots, expose active/queued/max pull telemetry, and
+split pull queue time from Docker transfer time. Docker uses three layer
+downloads per pull, preventing a 32-create burst from becoming roughly 256
+registry streams. The limit is deployment-configurable and deliberately does
+not trigger autoscaling: a transient registry queue is not hard sandbox
+capacity demand.
+
+An isolated 32-vCPU DFM node then pulled cold sets of real production images.
+Four images took 52.278 seconds serially, 28.450 seconds at concurrency two,
+and 16.298 seconds at concurrency four. Eight images improved from 39.565
+seconds at concurrency four to 26.380 seconds at eight. With 16 images,
+increasing concurrency from eight to sixteen improved makespan only from
+58.047 to 54.755 seconds while pushing most individual pulls to roughly 55
+seconds. The selected default is therefore eight distinct pulls with three
+layer downloads each. Raw results are in
+[`benchmarks/docker-cold-pull-concurrency-dfm-2026-08-03.json`](benchmarks/docker-cold-pull-concurrency-dfm-2026-08-03.json).
+
+A Distribution pull-through cache was tested on the same node as an optimistic
+upper-bound for cross-node sharing. Filling an empty cache took 37.167 seconds
+for the matched eight-image set, versus 26.380 seconds direct from Docker Hub.
+After pruning Docker's own images but retaining a fully warm proxy, the run
+took 24.581 seconds: only 6.8% faster than direct. Pull still has to copy,
+decompress, verify, and register every layer in the node-local Docker store.
+The small hit-path gain does not justify routing all node traffic through a
+2-vCPU gateway and slower shared storage. A shared proxy is therefore not in
+the production path; storage-native/lazy OCI materialization remains the
+larger future opportunity.
+
+The same incident included a node that had rebooted after initialization. Its
+stock Ubuntu kernel configuration supported `virtiofs`, but the module file was
+not retained in the guest, so systemd could no longer mount `/work`,
+`/etc/ucloud`, or `/opt/ucloud`. Future runtime bundles include `virtiofs` and
+its dependency closure alongside the XFS, overlay, networking, and ublk modules.
+This prevents a live UCloud VM job from returning after reboot as permanently
+uninitializable capacity.
+
 The superseded export pipeline remains as incident evidence. Its deterministic
 32-image benchmark is recorded in
 [`benchmarks/rootfs-export-pipeline-2026-08-02.json`](benchmarks/rootfs-export-pipeline-2026-08-02.json).

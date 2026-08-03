@@ -40,6 +40,11 @@ what that means for initializing sandbox VM nodes.
   `/var/lib/ucloud-sandboxes/docker-xfs`. Earlier live nodes put the sparse XFS
   image under `/work`, but `/work` is a virtiofs project mount and is a poor fit
   for high-churn Docker layer extraction and container writable-layer I/O.
+- The offline node runtime bundle includes the `virtiofs` kernel module and its
+  dependency closure even though `/work` is already mounted during first boot.
+  Stock UCloud guests may have the module loaded without retaining it under
+  `/lib/modules`; carrying it explicitly keeps `/work`, `/etc/ucloud`, and
+  `/opt/ucloud` mountable after a guest reboot.
 - Docker writable-layer quotas require Docker's supported storage path. The
   first Docker setup used the containerd snapshotter-backed `overlayfs` driver,
   where `--storage-opt size=16m` did not stop a 32 MB write under either `runc`
@@ -221,9 +226,13 @@ The post-boot init script should be safe to re-run:
 - Configure Docker's bridge MTU from the VM default-route interface so
   containers and build steps inherit the UCloud network MTU instead of Docker's
   default `1500`.
-- Raise Docker's per-transfer layer concurrency from its conservative defaults
-  to eight downloads and uploads so multi-layer image pulls and builder exports
-  use the available private-network bandwidth.
+- Keep Docker cold-pull concurrency separate from sandbox-create concurrency.
+  A node admits a bounded number of distinct pulls, exposes active and queued
+  pulls in its heartbeat, and reports pull queue time separately from registry
+  transfer time. Warm creates never consume this limit.
+- Use three concurrent layer downloads per pull and up to eight uploads. The
+  former avoids multiplying a burst of distinct images into hundreds of
+  simultaneous registry streams; the latter preserves builder push throughput.
 - Install the `ucloud-sandboxes` package or sync a release artifact into a
   service-user-owned virtual environment.
 - Record a package fingerprint marker in node state so rerunning init with the

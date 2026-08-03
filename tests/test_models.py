@@ -76,6 +76,9 @@ class HeartbeatContractTests(unittest.TestCase):
                 "cpu_percent": "nan",
                 "cpu_count": "invalid",
                 "memory_total_mb": -1,
+                "imagePullActiveOperations": 3,
+                "imagePullWaitingOperations": -4,
+                "imagePullMaxConcurrentOperations": 8,
             }
         )
 
@@ -84,6 +87,13 @@ class HeartbeatContractTests(unittest.TestCase):
         self.assertIsNone(metrics.cpu_percent)
         self.assertEqual(metrics.cpu_count, 0)
         self.assertEqual(metrics.memory_total_mb, 0)
+        self.assertEqual(metrics.image_pull_active_operations, 3)
+        self.assertEqual(metrics.image_pull_waiting_operations, 0)
+        self.assertEqual(metrics.image_pull_max_concurrent_operations, 8)
+        self.assertEqual(
+            metrics.to_dict()["image_pull_max_concurrent_operations"],
+            8,
+        )
 
     def test_untrusted_resource_values_are_sanitized_without_inflating_capacity(self) -> None:
         quantity = ResourceQuantity.from_dict(

@@ -146,6 +146,12 @@ def evaluate_scale(
     reasons: list[str] = []
     actions: list[ScaleAction] = []
 
+    if demand.suppressed_pending_count > 0:
+        reasons.append(
+            f"{demand.suppressed_pending_count} non-capacity pending failure(s) "
+            "excluded from fleet demand"
+        )
+
     if unreachable_stop_candidates:
         job_ids = tuple(node.job_id for node in unreachable_stop_candidates)
         reason = "unreachable empty sandbox node(s) exceeded the eviction lease"
@@ -373,6 +379,9 @@ def evaluate_scale(
         provisioning_nodes=len(provisioning_nodes),
         total_nodes=total_nodes,
         pending_resources=demand.pending_resources,
+        suppressed_pending_resources=demand.suppressed_pending_resources,
+        pending_count=demand.pending_count,
+        suppressed_pending_count=demand.suppressed_pending_count,
         prepared_resources=demand.prepared_resources,
         desired_resources=desired_resources,
         projected_free_resources=projected_free_resources,

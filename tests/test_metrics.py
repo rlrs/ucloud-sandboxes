@@ -478,7 +478,19 @@ class MetricsTests(unittest.TestCase):
                     created_at=(now - timedelta(seconds=30)).isoformat(),
                     updated_at=now.isoformat(),
                     attempts=2,
-                )
+                ),
+                "failed-image": PendingSandboxDemand(
+                    sandbox_id="failed-image",
+                    resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=32_768,
+                    ),
+                    created_at=(now - timedelta(seconds=45)).isoformat(),
+                    updated_at=now.isoformat(),
+                    attempts=3,
+                    failure_reason="image_pull_http_503",
+                ),
             },
             image_builds={
                 "image-1": PendingImageBuildDemand(
@@ -547,6 +559,12 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["sandboxes"]["pending"], 1)
         self.assertEqual(snapshot["sandboxes"]["pending_resources"]["vcpu"], 2.0)
         self.assertEqual(snapshot["sandboxes"]["pending_attempts"], 2)
+        self.assertEqual(snapshot["sandboxes"]["suppressed_pending"], 1)
+        self.assertEqual(
+            snapshot["sandboxes"]["suppressed_pending_resources"]["vcpu"],
+            8.0,
+        )
+        self.assertEqual(snapshot["sandboxes"]["suppressed_pending_attempts"], 3)
         self.assertEqual(snapshot["capacity"]["prepared"], 1)
         self.assertEqual(snapshot["capacity"]["prepared_sandboxes"], 4)
         self.assertEqual(snapshot["capacity"]["prepared_resources"]["vcpu"], 4.0)

@@ -101,12 +101,14 @@ class DeployTests(unittest.TestCase):
                 gateway_private_host="sandbox-gateway-prod",
                 registry_private_ip="10.0.0.5",
                 private_network_id="net-1",
+                max_concurrent_image_pulls=7,
             )
 
             env = autoscaler_env(plan)
             script = render_remote_deploy_script(plan)
 
         self.assertEqual(env["UCLOUD_INIT_NODE_RUNTIME"], "direct")
+        self.assertEqual(env["UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS"], "7")
         self.assertEqual(
             env["UCLOUD_INIT_DIRECT_RUNSC_COMMIT"],
             "9f653e577965df2ddd13875b5530cd2588661f1c",
@@ -660,6 +662,7 @@ class DeployTests(unittest.TestCase):
 
         self.assertEqual(args.command, "autoscaler-loop")
         self.assertTrue(args.execute_resumes)
+        self.assertEqual(args.init_max_concurrent_image_pulls, 1)
         self.assertEqual(args.gateway_control_bearer_token_file, Path("1"))
         self.assertEqual(args.init_builder_docker_quota_image_gb, 1)
         self.assertEqual(args.init_swap_gb, 1)

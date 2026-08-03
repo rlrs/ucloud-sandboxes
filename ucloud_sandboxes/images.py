@@ -13,7 +13,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
-from threading import Condition, RLock, Thread
+from threading import BoundedSemaphore, Condition, RLock, Thread
 import time
 from typing import Any, Callable, Iterable
 from uuid import uuid4
@@ -686,17 +686,22 @@ class ImageManager:
         *,
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = 4,
+        max_concurrent_pulls: int = 8,
         admission_store: SandboxStore | None = None,
     ) -> None:
         self.store = store
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(default_image_build_file(store.path))
         self.max_active_builds = max(1, max_active_builds)
+        self.max_concurrent_pulls = max(1, max_concurrent_pulls)
         self.admission_store = admission_store
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
         self._active_image_operations = 0
+        self._active_pulls = 0
+        self._waiting_pulls = 0
+        self._pull_slots = BoundedSemaphore(self.max_concurrent_pulls)
         self._pending_build_logs: dict[str, str] = {}
         self._build_log_last_flush: dict[str, float] = {}
         self.reconcile_interrupted_builds()
@@ -728,6 +733,35 @@ class ImageManager:
         finally:
             with self._build_lock:
                 self._active_image_operations -= 1
+
+    @contextmanager
+    def pull_slot(self):
+        """Bound distinct cold pulls without reducing warm-create concurrency."""
+
+        queued_at = time.monotonic()
+        with self._build_lock:
+            self._waiting_pulls += 1
+        self._pull_slots.acquire()
+        admitted_at = time.monotonic()
+        with self._build_lock:
+            self._waiting_pulls -= 1
+            self._active_pulls += 1
+        try:
+            yield {
+                "queue_wait_ms": int(max(0.0, admitted_at - queued_at) * 1000)
+            }
+        finally:
+            with self._build_lock:
+                self._active_pulls -= 1
+            self._pull_slots.release()
+
+    def pull_operation_snapshot(self) -> dict[str, int]:
+        with self._build_lock:
+            return {
+                "active_operations": self._active_pulls,
+                "waiting_operations": self._waiting_pulls,
+                "max_concurrent_operations": self.max_concurrent_pulls,
+            }
 
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         with self._build_lock:

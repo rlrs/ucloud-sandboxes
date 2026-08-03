@@ -119,6 +119,7 @@ class AllInOneDeployPlan:
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
+    max_concurrent_image_pulls: int = 8
     install_root: str = DEFAULT_INSTALL_ROOT
     project_mount_dir: str = DEFAULT_PROJECT_MOUNT_DIR
     service_user: str = "ucloud"
@@ -379,6 +380,8 @@ class AllInOneDeployPlan:
                 raise ValueError("direct disk headroom must be positive.")
             if self.direct_max_concurrent_restores < 1:
                 raise ValueError("direct max concurrent restores must be positive.")
+            if self.max_concurrent_image_pulls < 1:
+                raise ValueError("max concurrent image pulls must be positive.")
         for label, value in {
             "gateway port": self.gateway_port,
             "relay port": self.relay_port,
@@ -469,6 +472,7 @@ class AllInOneDeployPlan:
             "storageNativeRegistryUrl": self.storage_native_registry_url,
             "directDiskHeadroomMb": self.direct_disk_headroom_mb,
             "directMaxConcurrentRestores": self.direct_max_concurrent_restores,
+            "maxConcurrentImagePulls": self.max_concurrent_image_pulls,
             "nodePackageBundlePath": self.node_package_bundle_path,
             "installRoot": self.install_root,
             "stateDir": self.state_dir,
@@ -638,6 +642,9 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         ),
         "UCLOUD_INIT_DIRECT_MAX_CONCURRENT_RESTORES": str(
             plan.direct_max_concurrent_restores
+        ),
+        "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS": str(
+            plan.max_concurrent_image_pulls
         ),
         "UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL": (
             plan.storage_native_registry_url

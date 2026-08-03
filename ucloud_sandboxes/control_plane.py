@@ -1560,6 +1560,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         prepared_builder_count = sum(item.count for item in prepared_builders)
         return {
             "pending_resources": demand.pending_resources.to_dict(),
+            "suppressed_pending_resources": (
+                demand.suppressed_pending_resources.to_dict()
+            ),
+            "pending_count": demand.pending_count,
+            "suppressed_pending_count": demand.suppressed_pending_count,
             "prepared_resources": demand.prepared_resources.to_dict(),
             "desired_resources": demand.desired_resources.to_dict(),
             "oldest_pending_seconds": demand.oldest_pending_seconds,
@@ -2329,7 +2334,15 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     parent_span_id=root.span_id,
                     attributes={"image": spec.image},
                 ) as span:
-                    manifest = self.registry_layer_cache.get(spec.image, load=True)
+                    # Layer overlap only improves placement scoring; it is not
+                    # part of image identity or admission correctness.  A cold
+                    # metadata lookup can take the full registry timeout, so
+                    # never put it in the create critical path.  This request
+                    # uses any already-cached manifest while a later request
+                    # benefits from the asynchronous hydration.
+                    manifest = self.registry_layer_cache.get(spec.image)
+                    if manifest is None:
+                        self.registry_layer_cache.hydrate_async((spec.image,))
                     span.set_attribute("available", manifest is not None)
                     if manifest is not None:
                         span.set_attribute("layer_count", len(manifest.layers))
@@ -2459,9 +2472,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 span.set_attribute("pulled", image_response is not None)
                 if image_response is not None:
                     span.set_attribute("status_code", int(image_response.status))
-                    pull_timings = image_response.json().get("timings")
+                    pull_payload = image_response.json()
+                    pull_timings = pull_payload.get("timings")
                     if isinstance(pull_timings, dict):
                         span.set_attribute("node_timings", pull_timings)
+                    if image_response.status >= 400:
+                        span.status = "error"
+                        span.set_attribute(
+                            "error_code",
+                            str(pull_payload.get("error_code") or ""),
+                        )
             if image_response is not None and image_response.status >= 400:
                 self._release_registry_route_reference(route)
                 self.routing_store.delete_sandbox_if_current(

@@ -290,6 +290,24 @@ class PendingSandboxDemand:
     spec_hash: str = ""
     failure_reason: str = ""
 
+    @property
+    def is_capacity_demand(self) -> bool:
+        """Whether another schedulable node can resolve this pending request.
+
+        Image and registry-reference failures happen after placement selected a
+        node with sufficient hard resources.  Treating those failures as
+        capacity demand creates a positive feedback loop: a pull failure asks
+        for a VM, the VM clears the signal, and the retried pull asks for
+        another VM.  Keep the durable record for retry identity and operator
+        diagnostics, but do not let it scale the fleet.
+        """
+
+        reason = self.failure_reason.strip().lower()
+        return not (
+            reason.startswith("image_pull_http_")
+            or reason == "registry_lease_unavailable"
+        )
+
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "PendingSandboxDemand | None":
         sandbox_id = _string(raw.get("sandbox_id") or raw.get("sandboxId"))
@@ -324,6 +342,7 @@ class PendingSandboxDemand:
             "operation_id": self.operation_id,
             "spec_hash": self.spec_hash,
             "failure_reason": self.failure_reason,
+            "capacity_demand": self.is_capacity_demand,
         }
         expires_at = self.expires_at()
         if expires_at:
@@ -2748,11 +2767,21 @@ class RoutingStore:
             if item is not None and not item.is_expired(now)
         ]
         pending_resources = ResourceQuantity()
+        suppressed_pending_resources = ResourceQuantity()
+        pending_count = 0
+        suppressed_pending_count = 0
         prepared_resources = ResourceQuantity()
         placement_requests: list[SandboxPlacementRequest] = []
         oldest_pending_seconds = 0
         for item in pending:
+            if not item.is_capacity_demand:
+                suppressed_pending_resources = (
+                    suppressed_pending_resources + item.resources
+                )
+                suppressed_pending_count += 1
+                continue
             pending_resources = pending_resources + item.resources
+            pending_count += 1
             excluded_job_ids: tuple[str, ...] = ()
             for prefix in ("__migration__:", "__wake__:"):
                 if item.sandbox_id.startswith(prefix):
@@ -2789,6 +2818,9 @@ class RoutingStore:
                 )
         return SandboxDemand(
             pending_resources=pending_resources,
+            suppressed_pending_resources=suppressed_pending_resources,
+            pending_count=pending_count,
+            suppressed_pending_count=suppressed_pending_count,
             prepared_resources=prepared_resources,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
             placement_requests=tuple(placement_requests),
@@ -3776,13 +3808,21 @@ def sandbox_demand_from_routing_state(
     if now is None:
         now = utc_now()
     pending_total = ResourceQuantity()
+    suppressed_pending_total = ResourceQuantity()
+    pending_count = 0
+    suppressed_pending_count = 0
     prepared_total = ResourceQuantity()
     placement_requests: list[SandboxPlacementRequest] = []
     oldest_pending_seconds = 0
     for item in state.pending.values():
         if item.is_expired(now):
             continue
+        if not item.is_capacity_demand:
+            suppressed_pending_total = suppressed_pending_total + item.resources
+            suppressed_pending_count += 1
+            continue
         pending_total = pending_total + item.resources
+        pending_count += 1
         excluded_job_ids: tuple[str, ...] = ()
         for prefix in ("__migration__:", "__wake__:"):
             if item.sandbox_id.startswith(prefix):
@@ -3818,6 +3858,9 @@ def sandbox_demand_from_routing_state(
             )
     return SandboxDemand(
         pending_resources=pending_total,
+        suppressed_pending_resources=suppressed_pending_total,
+        pending_count=pending_count,
+        suppressed_pending_count=suppressed_pending_count,
         prepared_resources=prepared_total,
         oldest_pending_seconds=max(0, oldest_pending_seconds),
         placement_requests=tuple(placement_requests),

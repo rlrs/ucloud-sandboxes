@@ -37,7 +37,7 @@ from .images import (
     materialize_uploaded_build_context,
 )
 from .registry import heartbeat_to_dict
-from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry
+from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from .runtime_metrics import sample_node_runtime_metrics
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
@@ -1547,6 +1547,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
 
     def _pull_image(self) -> None:
         started = time.monotonic()
+        failed_phase = "read_request"
+        pull_queue_ms = 0
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -1564,10 +1566,15 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 else self.image_manager.image_operation()
             )
             with operation:
-                record, result = self.image_manager.pull(image, image_id=image_id)
+                failed_phase = "docker_pull"
+                with self.image_manager.pull_slot() as pull_admission:
+                    pull_queue_ms = int(pull_admission["queue_wait_ms"])
+                    pull_started = time.monotonic()
+                    record, result = self.image_manager.pull(image, image_id=image_id)
                 pull_finished = time.monotonic()
                 materialize_ms: int | None = None
                 if self.image_materializer is not None:
+                    failed_phase = "rootfs_materialize"
                     try:
                         self.image_materializer(record.tag)
                     except Exception as exc:
@@ -1580,11 +1587,36 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                     materialize_ms = int(
                         max(0.0, time.monotonic() - pull_finished) * 1000
                     )
-        except (RuntimeError, ValueError) as exc:
-            self._write_exception(exc)
+        except RuntimeError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "image_pull_failed",
+                    "retryable": True,
+                    "timings": {
+                        "total_ms": _elapsed_ms(started),
+                        "pull_queue_ms": pull_queue_ms,
+                        "failed_phase": failed_phase,
+                    },
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        except ValueError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "timings": {
+                        "total_ms": _elapsed_ms(started),
+                        "failed_phase": failed_phase,
+                    },
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
             return
         timings = {
-            "docker_pull_ms": int(max(0.0, pull_finished - started) * 1000)
+            "pull_queue_ms": pull_queue_ms,
+            "docker_pull_ms": int(max(0.0, pull_finished - pull_started) * 1000),
         }
         if materialize_ms is not None:
             timings["rootfs_materialize_ms"] = materialize_ms
@@ -1600,13 +1632,26 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
 
     def _runtime_metrics_snapshot(self) -> NodeRuntimeMetrics | None:
         metrics = self.runtime_metrics_provider()
+        pull_snapshot = self.image_manager.pull_operation_snapshot()
+        if metrics is None:
+            metrics = NodeRuntimeMetrics(collected_at=utc_now())
+        metrics = replace(
+            metrics,
+            image_pull_active_operations=max(
+                0, int(pull_snapshot.get("active_operations") or 0)
+            ),
+            image_pull_waiting_operations=max(
+                0, int(pull_snapshot.get("waiting_operations") or 0)
+            ),
+            image_pull_max_concurrent_operations=max(
+                0, int(pull_snapshot.get("max_concurrent_operations") or 0)
+            ),
+        )
         owner = getattr(self.image_materializer, "__self__", None)
         snapshot_provider = getattr(owner, "operation_snapshot", None)
         if snapshot_provider is None:
             return metrics
         snapshot = snapshot_provider()
-        if metrics is None:
-            metrics = NodeRuntimeMetrics()
         return replace(
             metrics,
             rootfs_export_active_operations=max(
@@ -1837,6 +1882,7 @@ def build_node_agent_server(
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     max_active_image_builds: int = 4,
+    max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     node_control_bearer_token: str | None = None,
     build_context_store_dir: Path | None = None,
@@ -1849,6 +1895,7 @@ def build_node_agent_server(
         max_json_body_bytes < 1
         or max_file_body_bytes < 1
         or max_active_image_builds < 1
+        or max_concurrent_image_pulls < 1
     ):
         raise ValueError("node-agent request and build limits must be positive")
     configured_resources = total_resources or ResourceQuantity()
@@ -1890,6 +1937,7 @@ def build_node_agent_server(
         ImageStore(image_file),
         image_runtime or DockerImageRuntime(dry_run=True),
         max_active_builds=max_active_image_builds,
+        max_concurrent_pulls=max_concurrent_image_pulls,
         admission_store=manager.store,
     )
     build_context_store = BuildContextBlobStore(
@@ -1968,12 +2016,15 @@ def build_direct_node_agent_server(
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
+    max_concurrent_image_pulls: int = 8,
 ) -> HighBacklogThreadingHTTPServer:
     """Serve a whole node with direct runsc ownership and no legacy task owner."""
     from .direct_node_adapter import DirectNodeManagerAdapter
 
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
+    if max_concurrent_image_pulls < 1:
+        raise ValueError("max concurrent image pulls must be positive")
     configured_resources = total_resources or ResourceQuantity()
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
@@ -2002,6 +2053,7 @@ def build_direct_node_agent_server(
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime or DockerImageRuntime(dry_run=True),
+        max_concurrent_pulls=max_concurrent_image_pulls,
     )
     build_context_store = BuildContextBlobStore(
         image_file.parent / f"{image_file.stem}-contexts",

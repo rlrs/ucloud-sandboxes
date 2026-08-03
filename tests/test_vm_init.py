@@ -57,13 +57,14 @@ class VmInitTests(unittest.TestCase):
         self.assertIn("Skipping legacy task conformance", script)
         self.assertIn("runtime/direct/runsc", script)
         self.assertIn(
-            'chown -R root:root "$UCLOUD_STATE_DIR/direct-runtime"',
+            'chown -R --one-file-system root:root "$UCLOUD_STATE_DIR/direct-runtime"',
             script,
         )
-        self.assertIn(
-            'chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"',
+        self.assertNotIn(
+            'chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"',
             script,
         )
+        self.assertNotIn('chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"', script)
         self.assertIn(
             "UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache",
             script,

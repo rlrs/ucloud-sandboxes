@@ -2,6 +2,13 @@
 
 This project uses semantic versioning.
 
+## 0.3.89 - 2026-08-03
+
+- Made node re-initialization mount-safe by stopping recursive ownership and
+  permission changes from crossing into live direct-runtime rootfs mounts.
+  Existing direct state is repaired only on its own filesystem, avoiding
+  millions of inode changes and storage-native COW writes during upgrades.
+
 ## 0.3.88 - 2026-08-03
 
 - Made direct-runtime deletion self-healing: durable `deleting` registrations

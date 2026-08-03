@@ -574,10 +574,9 @@ run_as_service_user() {{
   fi
 }}
 
-$SUDO mkdir -p "$UCLOUD_WORK_DIR" "$UCLOUD_STATE_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/ucloud-sandboxes
+$SUDO mkdir -p "$UCLOUD_WORK_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/ucloud-sandboxes
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_WORK_DIR"
-$SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
-$SUDO chmod 700 "$UCLOUD_STATE_DIR"
+$SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
 
 if [ -n "$UCLOUD_INIT_AUTHORIZED_KEYS" ]; then
   $SUDO install -d -m 700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_SERVICE_HOME/.ssh"
@@ -1308,8 +1307,10 @@ if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
   # restore this subtree after every idempotent init run.
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
-  $SUDO chown -R root:root "$UCLOUD_STATE_DIR/direct-runtime"
-  $SUDO chmod -R go-rwx "$UCLOUD_STATE_DIR/direct-runtime"
+  # Repair old bootstrap ownership without descending into rootfs mounts.
+  # Those mounts can contain millions of files and changing them also creates
+  # unnecessary storage-native COW writes.
+  $SUDO chown -R --one-file-system root:root "$UCLOUD_STATE_DIR/direct-runtime"
   if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
     echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
     exit 1

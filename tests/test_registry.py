@@ -290,6 +290,49 @@ class RegistryTests(unittest.TestCase):
 
             self.assertEqual(store.load()["job-1"].idle_since, received_at)
 
+    def test_older_gateway_receipt_cannot_overwrite_newer_node_state(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "heartbeats.json"
+            store = HeartbeatStore(path)
+            older_at = utc_now()
+            newer_at = older_at + timedelta(seconds=1)
+            older = replace(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    active_sandboxes=0,
+                    now=older_at,
+                ),
+                received_at=older_at,
+                node_epoch="old-boot",
+                admission_open=True,
+                idle_since=None,
+            )
+            newer = replace(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    active_sandboxes=1,
+                    now=newer_at,
+                ),
+                received_at=newer_at,
+                node_epoch="new-boot",
+                admission_open=False,
+                idle_since=None,
+            )
+
+            newer_result = store.upsert_received(newer)
+            older_result = store.upsert_received(older)
+            stored = store.load()["job-1"]
+
+            self.assertTrue(newer_result.accepted)
+            self.assertFalse(older_result.accepted)
+            self.assertEqual(stored.received_at, newer_at)
+            self.assertEqual(stored.node_epoch, "new-boot")
+            self.assertFalse(stored.admission_open)
+            self.assertEqual(stored.active_sandboxes, 1)
+            self.assertIsNone(stored.idle_since)
+
     def test_malformed_additive_heartbeat_numbers_fall_back_safely(self) -> None:
         heartbeat = heartbeat_from_dict(
             {

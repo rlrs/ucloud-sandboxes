@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 import fcntl
 import json
 import math
@@ -106,6 +106,13 @@ def heartbeat_to_dict(heartbeat: NodeHeartbeat) -> dict[str, Any]:
     return raw
 
 
+@dataclass(frozen=True)
+class HeartbeatReceiptResult:
+    stored: NodeHeartbeat
+    previous: NodeHeartbeat | None
+    accepted: bool
+
+
 class HeartbeatStore:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -123,6 +130,33 @@ class HeartbeatStore:
             heartbeats[heartbeat.job_id] = heartbeat
             _save_heartbeats_unlocked(self.path, heartbeats)
             return heartbeats
+
+    def upsert_received(self, heartbeat: NodeHeartbeat) -> HeartbeatReceiptResult:
+        """Atomically persist a gateway-stamped heartbeat if it is still current."""
+
+        if heartbeat.received_at is None:
+            raise ValueError("received heartbeat requires a gateway receipt timestamp")
+        with _heartbeat_file_lock(self.path):
+            heartbeats = _load_heartbeats_unlocked(self.path)
+            previous = heartbeats.get(heartbeat.job_id)
+            if (
+                previous is not None
+                and previous.received_at is not None
+                and heartbeat.received_at < previous.received_at
+            ):
+                return HeartbeatReceiptResult(
+                    stored=previous,
+                    previous=previous,
+                    accepted=False,
+                )
+            stored = normalize_idle_since(heartbeat, previous=previous)
+            heartbeats[heartbeat.job_id] = stored
+            _save_heartbeats_unlocked(self.path, heartbeats)
+            return HeartbeatReceiptResult(
+                stored=stored,
+                previous=previous,
+                accepted=True,
+            )
 
     def remove(self, job_ids: Iterable[str]) -> dict[str, NodeHeartbeat]:
         target_ids = {str(job_id) for job_id in job_ids if str(job_id)}

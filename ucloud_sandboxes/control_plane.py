@@ -573,13 +573,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         received_at = utc_now()
         reported_at = heartbeat.reported_at or heartbeat.updated_at
-        previous = self.store.load().get(heartbeat.job_id)
-        if heartbeat.active_workloads > 0:
-            idle_since = None
-        elif previous is not None and previous.active_workloads == 0:
-            idle_since = previous.idle_since or previous.freshness_at
-        else:
-            idle_since = received_at
         # The sender controls neither freshness nor the idle-grace clock. Keep
         # its timestamp as reported_at for diagnostics while overwriting the
         # legacy timestamp for old readers and recording the explicit receipt.
@@ -588,48 +581,49 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             updated_at=received_at,
             reported_at=reported_at,
             received_at=received_at,
-            idle_since=idle_since,
+            idle_since=None,
         )
 
-        heartbeats = self.store.upsert(heartbeat)
-        stored_heartbeat = heartbeats.get(heartbeat.job_id, heartbeat)
-        record_node_heartbeat(
-            self.metrics_store,
-            stored_heartbeat,
-            first=previous is None,
-        )
-        if self.registry_layer_cache is not None:
-            self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
-        if (
-            self.routing_store is not None
-            and stored_heartbeat.inventory_complete
-            and stored_heartbeat.node_url
-        ):
-            inventory_routes = [
-                SandboxRoute(
-                    sandbox_id=item.sandbox_id,
-                    node_id=stored_heartbeat.node_id,
-                    job_id=stored_heartbeat.job_id,
-                    node_url=stored_heartbeat.node_url,
-                    resources=item.resources,
-                    state=item.state or "running",
-                    generation=item.generation,
-                    create_operation_id=item.operation_id,
-                    spec_hash=item.spec_hash,
+        receipt = self.store.upsert_received(heartbeat)
+        stored_heartbeat = receipt.stored
+        if receipt.accepted:
+            record_node_heartbeat(
+                self.metrics_store,
+                stored_heartbeat,
+                first=receipt.previous is None,
+            )
+            if self.registry_layer_cache is not None:
+                self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
+            if (
+                self.routing_store is not None
+                and stored_heartbeat.inventory_complete
+                and stored_heartbeat.node_url
+            ):
+                inventory_routes = [
+                    SandboxRoute(
+                        sandbox_id=item.sandbox_id,
+                        node_id=stored_heartbeat.node_id,
+                        job_id=stored_heartbeat.job_id,
+                        node_url=stored_heartbeat.node_url,
+                        resources=item.resources,
+                        state=item.state or "running",
+                        generation=item.generation,
+                        create_operation_id=item.operation_id,
+                        spec_hash=item.spec_hash,
+                        node_epoch=stored_heartbeat.node_epoch,
+                        activity_epoch=stored_heartbeat.activity_epoch,
+                    )
+                    for item in stored_heartbeat.inventory
+                ]
+                self.routing_store.reconcile_sandboxes_for_node(
+                    stored_heartbeat.node_url,
+                    inventory_routes,
+                    observed_at=stored_heartbeat.freshness_at.isoformat(),
                     node_epoch=stored_heartbeat.node_epoch,
                     activity_epoch=stored_heartbeat.activity_epoch,
+                    inventory_complete=True,
                 )
-                for item in stored_heartbeat.inventory
-            ]
-            self.routing_store.reconcile_sandboxes_for_node(
-                stored_heartbeat.node_url,
-                inventory_routes,
-                observed_at=stored_heartbeat.freshness_at.isoformat(),
-                node_epoch=stored_heartbeat.node_epoch,
-                activity_epoch=stored_heartbeat.activity_epoch,
-                inventory_complete=True,
-            )
-        self._schedule_image_warmups()
+            self._schedule_image_warmups()
         self._write_json({"ok": True, "node": heartbeat_to_dict(stored_heartbeat)})
 
     def do_PUT(self) -> None:

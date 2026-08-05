@@ -57,6 +57,10 @@ class StorageNativePendingOperation(StorageNativeConflictError):
     pass
 
 
+class _StorageNativeBackendReleasePending(StorageNativeNodeError):
+    pass
+
+
 class StorageNativeTerminalError(StorageNativeNodeError):
     pass
 
@@ -1543,39 +1547,20 @@ class StorageNativeNodeService:
         if isinstance(pending, OperationReplay):
             return pending.result
         try:
-            self._best_effort_release(pending)
-            volume_root = self._volume_root(volume_id)
-            if volume_root.exists():
-                if volume_root.is_symlink() or not volume_root.is_dir():
-                    raise StorageNativeTerminalError(
-                        "volume root is not a real directory"
-                    )
-                shutil.rmtree(volume_root)
-            mount_path = Path(pending.mount_path)
-            if mount_path.exists():
-                mount_path.rmdir()
-            record = replace(
+            return self._complete_delete(pending)
+        except _StorageNativeBackendReleasePending as exc:
+            waiting = replace(
                 pending,
-                state=StorageVolumeState.DELETED,
-                device_id=None,
-                device_path="",
-                runtime_image_config="",
-                sealed_layer_path="",
-                sealed_layer_bytes=0,
-                sealed_layer_paths=(),
-                cached_layer_paths=(),
-                published_manifest_digest="",
-                published_tag="",
-                published_repository="",
-                published_repo_blob_url="",
-                published_layers=(),
+                error=f"{type(exc).__name__}: {exc}"[:4096],
                 updated_ns=time.time_ns(),
             )
-            result = self._record_result(record)
-            self.journal.finish(record, result)
-            return result
+            self.journal.update_pending(waiting)
+            raise StorageNativePendingOperation(
+                "delete is waiting for backend device release"
+            ) from exc
         except BaseException as exc:
-            self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
+            current = self.journal.load(volume_id) or pending
+            self.journal.fail(current, f"{type(exc).__name__}: {exc}")
             raise
 
     def reconcile(self) -> dict[str, Any]:
@@ -1675,12 +1660,23 @@ class StorageNativeNodeService:
                     tuple(Path(path) for path in record.cached_layer_paths)
                 )
             elif record.state == StorageVolumeState.DELETING:
-                self._best_effort_release(record)
-                updated = self.journal.mark_reconcile_error(
-                    record,
-                    "delete was interrupted and requires an idempotent retry",
-                )
-                errors.append(self._record_result(updated))
+                try:
+                    self._complete_delete(record)
+                except _StorageNativeBackendReleasePending as exc:
+                    waiting = replace(
+                        record,
+                        error=f"{type(exc).__name__}: {exc}"[:4096],
+                        updated_ns=time.time_ns(),
+                    )
+                    self.journal.update_pending(waiting)
+                    errors.append(self._record_result(waiting))
+                except BaseException as exc:
+                    current = self.journal.load(record.volume_id) or record
+                    updated = self.journal.mark_reconcile_error(
+                        current,
+                        f"delete reconciliation failed: {type(exc).__name__}: {exc}",
+                    )
+                    errors.append(self._record_result(updated))
 
         return {
             "deleted_orphan_device_ids": deleted_orphans,
@@ -1688,7 +1684,55 @@ class StorageNativeNodeService:
             "volume_count": len(records),
         }
 
-    def _best_effort_release(self, record: StorageVolumeRecord) -> None:
+    def _complete_delete(self, record: StorageVolumeRecord) -> dict[str, Any]:
+        self._best_effort_release(record, require_backend=True)
+        released = replace(
+            record,
+            device_id=None,
+            device_path="",
+            runtime_image_config="",
+            error="",
+            updated_ns=time.time_ns(),
+        )
+        if released != record:
+            # Persist the backend ownership transfer before local cleanup. A
+            # crash after an acknowledged release must not retry the release
+            # against a device that is already idle in the warm pool.
+            self.journal.update_pending(released)
+        volume_root = self._volume_root(record.volume_id)
+        if volume_root.exists():
+            if volume_root.is_symlink() or not volume_root.is_dir():
+                raise StorageNativeTerminalError(
+                    "volume root is not a real directory"
+                )
+            shutil.rmtree(volume_root)
+        mount_path = Path(record.mount_path)
+        if mount_path.exists():
+            mount_path.rmdir()
+        deleted = replace(
+            released,
+            state=StorageVolumeState.DELETED,
+            sealed_layer_path="",
+            sealed_layer_bytes=0,
+            sealed_layer_paths=(),
+            cached_layer_paths=(),
+            published_manifest_digest="",
+            published_tag="",
+            published_repository="",
+            published_repo_blob_url="",
+            published_layers=(),
+            updated_ns=time.time_ns(),
+        )
+        result = self._record_result(deleted)
+        self.journal.finish(deleted, result)
+        return result
+
+    def _best_effort_release(
+        self,
+        record: StorageVolumeRecord,
+        *,
+        require_backend: bool = False,
+    ) -> None:
         mount_path = Path(record.mount_path)
         mounted = True
         safe_to_pool = True
@@ -1709,6 +1753,14 @@ class StorageNativeNodeService:
                 except Exception:
                     pass
         if record.device_id is not None:
+            if require_backend:
+                try:
+                    if record.device_id not in self.host.ublk_device_ids():
+                        return
+                except Exception as exc:
+                    raise _StorageNativeBackendReleasePending(
+                        f"cannot inspect backend device {record.device_id}: {exc}"
+                    ) from exc
             try:
                 if not safe_to_pool:
                     # A lazy-detached or otherwise questionable mount must
@@ -1716,8 +1768,11 @@ class StorageNativeNodeService:
                     self._discard_backend_device(record.device_id)
                 else:
                     self._release_backend_device(record.device_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                if require_backend:
+                    raise _StorageNativeBackendReleasePending(
+                        f"cannot release backend device {record.device_id}: {exc}"
+                    ) from exc
 
     def _acquire_runtime_device(
         self,

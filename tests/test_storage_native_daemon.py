@@ -19,6 +19,7 @@ from ucloud_sandboxes.storage_native_daemon import (
     LinuxStorageHostOperations,
     StorageNativeConflictError,
     StorageNativeNodeConfig,
+    StorageNativePendingOperation,
     StorageNativeNodeClient,
     StorageNativeNodeServer,
     StorageNativeNodeService,
@@ -50,6 +51,7 @@ class FakeBlockBackend:
         self.restack_calls = 0
         self.delete_calls: list[int] = []
         self.release_calls: list[int] = []
+        self.fail_next_release = False
 
     def create_runtime_device(
         self,
@@ -97,6 +99,9 @@ class FakeBlockBackend:
 
     def release(self, device_id: int) -> None:
         self.release_calls.append(device_id)
+        if self.fail_next_release:
+            self.fail_next_release = False
+            raise RuntimeError("injected release failure")
         if device_id not in self.live:
             raise RuntimeError("device is missing")
         self.idle.add(device_id)
@@ -852,6 +857,55 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())
+
+    def test_pooled_delete_retries_backend_release_before_forgetting_device(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(Path(raw), pooled=True)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            backend.fail_next_release = True
+
+            with self.assertRaisesRegex(
+                StorageNativePendingOperation,
+                "waiting for backend device release",
+            ):
+                service.delete_volume(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=1,
+                    volume_id="volume-1",
+                    operation_id="delete:1",
+                    expected_revision=int(created["record"]["revision"]),
+                )
+
+            waiting = service.journal.load("volume-1")
+            assert waiting is not None
+            self.assertEqual(waiting.state, StorageVolumeState.DELETING)
+            self.assertEqual(waiting.device_id, 1)
+            self.assertEqual(backend.live, {1})
+            self.assertEqual(backend.idle, set())
+            self.assertEqual(service.metrics()["device_pool_idle_devices"], 0)
+
+            reconciled = service.reconcile()
+            deleted = service.journal.load("volume-1")
+            assert deleted is not None
+            self.assertEqual(reconciled["terminal_records"], [])
+            self.assertEqual(deleted.state, StorageVolumeState.DELETED)
+            self.assertIsNone(deleted.device_id)
+            self.assertEqual(backend.idle, {1})
+            self.assertEqual(service.metrics()["device_pool_idle_devices"], 1)
+            replay = service.delete_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="delete:1",
+                expected_revision=int(created["record"]["revision"]),
+            )
+            self.assertEqual(replay["record"]["state"], "deleted")
 
     def test_unix_socket_backlog_accepts_operation_burst(self) -> None:
         with TemporaryDirectory() as raw:

@@ -16,7 +16,7 @@ Status values: `pending`, `in progress`, `complete`, or `blocked`.
 | 6 | P1 | complete | Polling a stale legacy exec route can delete the entire sandbox route. | Delete only the exec route and make stale detection inventory-aware. | `fix: scope stale exec route cleanup` |
 | 7 | P1 | complete | A fresh replacement heartbeat can hide a destructive VM replacement. | Retrieve/latch replacement history on owned-route epoch mismatch regardless of freshness. | `fix: detect fresh node epoch replacement` |
 | 8 | P1 | complete | A maximum/default managed-process log read exceeds the control response limit. | Separate bounded request and encoded-response limits and test the maximum chunk. | `fix: size managed log responses after encoding` |
-| 9 | P1 | pending | Async-exec cancellation can leak a lifecycle lease. | Make thread-backed acquisition and every subsequent stage cancellation-safe with unconditional cleanup. | — |
+| 9 | P1 | complete | Async-exec cancellation can leak a lifecycle lease. | Make thread-backed acquisition and every subsequent stage cancellation-safe with unconditional cleanup. | `fix: make async exec startup cancellation-safe` |
 | 10 | P1 | pending | Gateway node responses are buffered without a byte limit. | Stream bulk responses and enforce bounded buffering for structured control/error responses. | — |
 | 11 | P1 | pending | Completed model-relay requests have no byte budget and persistence blocks the event loop. | Add byte-aware retention, prune before restore, discard redundant bodies, and isolate durable writes from the event loop. | — |
 | 12 | P2 | pending | SQLite metrics ignore the configured byte budget. | Enforce a logical/physical SQLite budget including WAL growth and reclaim old pages. | — |

@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 import subprocess
-from typing import Any
+from typing import Any, Callable, TypeVar, cast
 
 from .models import utc_now
 from .sandbox import SandboxManager
@@ -19,6 +19,7 @@ STREAM_IDS = {
     "stderr": STDERR_STREAM_ID,
 }
 STREAM_NAMES = {value: key for key, value in STREAM_IDS.items()}
+_ThreadResult = TypeVar("_ThreadResult")
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class AsyncExecSession:
     )
     tasks: list[asyncio.Task[None]] = field(default_factory=list, repr=False, compare=False)
     activity_lease: bool = field(default=False, repr=False, compare=False)
+    start_hook_pending: bool = field(default=False, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -104,13 +106,14 @@ class AsyncExecSessionManager:
 
     async def start(self, spec: SandboxExecSpec) -> AsyncExecSession:
         spec.validate()
-        await asyncio.to_thread(
-            self.sandbox_manager.lifecycle.acquire_shared,
-            spec.sandbox_id,
-        )
         runtime = self.sandbox_manager.runtime
+        lease_acquired = False
+        start_hook_pending = False
+        session: AsyncExecSession | None = None
         try:
-            await asyncio.to_thread(
+            await self._acquire_activity_lease(spec.sandbox_id)
+            lease_acquired = True
+            await self._run_thread_to_completion(
                 self.sandbox_manager.require_activity_sandbox,
                 spec.sandbox_id,
             )
@@ -122,48 +125,51 @@ class AsyncExecSessionManager:
                 interactive=spec.stdin,
                 tty=spec.tty,
             )
-        except Exception:
-            await asyncio.to_thread(
-                self.sandbox_manager.lifecycle.release_shared,
-                spec.sandbox_id,
+            start_hook_pending = bool(
+                not runtime.dry_run
+                and getattr(runtime, "exec_start_failed", None) is not None
             )
-            raise
-        now = utc_now()
-        session = AsyncExecSession(
-            id=new_exec_session_id(
-                spec.sandbox_id,
-                node_id=self.route_node_id,
-                job_id=self.route_job_id,
-            ),
-            spec=spec,
-            argv=argv,
-            status="running",
-            created_at=now,
-            updated_at=now,
-            stdin_open=spec.stdin,
-            output_queue=asyncio.Queue(maxsize=self.max_queue_events),
-            events=deque(maxlen=self.max_events_per_session),
-            activity_lease=True,
-        )
-        try:
+            now = utc_now()
+            session = AsyncExecSession(
+                id=new_exec_session_id(
+                    spec.sandbox_id,
+                    node_id=self.route_node_id,
+                    job_id=self.route_job_id,
+                ),
+                spec=spec,
+                argv=argv,
+                status="running",
+                created_at=now,
+                updated_at=now,
+                stdin_open=spec.stdin,
+                output_queue=asyncio.Queue(maxsize=self.max_queue_events),
+                events=deque(maxlen=self.max_events_per_session),
+                activity_lease=True,
+                start_hook_pending=start_hook_pending,
+            )
+            start_hook_pending = False
             async with self._sessions_lock:
                 await self._make_session_room_locked()
                 self._sessions[session.id] = session
-        except Exception:
-            await asyncio.to_thread(
-                self.sandbox_manager.lifecycle.release_shared,
-                spec.sandbox_id,
-            )
-            session.activity_lease = False
-            raise
-        await self._append_event(session, "status", b"started")
-        if runtime.dry_run:
-            await self._append_event(session, "status", b"dry-run")
-            if not session.stdin_open:
-                await self._complete(session, 0)
+            await self._append_event(session, "status", b"started")
+            if runtime.dry_run:
+                await self._append_event(session, "status", b"dry-run")
+                if not session.stdin_open:
+                    await self._complete(session, 0)
+                return session
+            await self._start_process(session)
             return session
-        await self._start_process(session)
-        return session
+        except BaseException:
+            if session is not None:
+                await self._abort_start(session)
+            else:
+                try:
+                    if start_hook_pending:
+                        await self._notify_exec_start_failed(spec.sandbox_id)
+                finally:
+                    if lease_acquired:
+                        await self._release_untracked_activity_lease(spec.sandbox_id)
+            raise
 
     def get(self, session_id: str) -> AsyncExecSession | None:
         return self._sessions.get(session_id)
@@ -227,32 +233,18 @@ class AsyncExecSessionManager:
 
     async def _start_process(self, session: AsyncExecSession) -> None:
         try:
-            process = await asyncio.create_subprocess_exec(
-                *session.argv,
-                stdin=subprocess.PIPE if session.spec.stdin else None,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            process = await self._spawn_process(session)
         except OSError as exc:
-            exec_start_failed = getattr(
-                self.sandbox_manager.runtime,
-                "exec_start_failed",
-                None,
-            )
-            if exec_start_failed is not None:
-                await asyncio.to_thread(
-                    exec_start_failed,
-                    session.spec.sandbox_id,
-                )
+            await self._notify_session_exec_start_failed(session)
             await self._append_event(session, "error", str(exc).encode("utf-8"))
             await self._complete(session, 1)
             return
-        session.process = process
         exec_started = getattr(self.sandbox_manager.runtime, "exec_started", None)
         if exec_started is not None:
             try:
-                await asyncio.to_thread(exec_started, session.spec.sandbox_id)
+                await self._notify_exec_started(session, exec_started)
             except Exception as exc:
+                await self._notify_session_exec_start_failed(session)
                 try:
                     process.kill()
                 except ProcessLookupError:
@@ -265,6 +257,8 @@ class AsyncExecSessionManager:
                 )
                 await self._complete(session, 1)
                 return
+        else:
+            session.start_hook_pending = False
         stream_tasks = [
             asyncio.create_task(self._pump_stream(session, "stdout", process.stdout)),
             asyncio.create_task(self._pump_stream(session, "stderr", process.stderr)),
@@ -336,6 +330,140 @@ class AsyncExecSessionManager:
             await asyncio.gather(*tasks, return_exceptions=True)
         session.tasks.clear()
 
+    async def _acquire_activity_lease(self, sandbox_id: str) -> None:
+        acquisition = asyncio.create_task(
+            asyncio.to_thread(
+                self.sandbox_manager.lifecycle.acquire_shared,
+                sandbox_id,
+            )
+        )
+        try:
+            await asyncio.shield(acquisition)
+        except asyncio.CancelledError:
+            result = await asyncio.gather(acquisition, return_exceptions=True)
+            if result and not isinstance(result[0], BaseException):
+                await self._release_untracked_activity_lease(sandbox_id)
+            raise
+
+    async def _release_untracked_activity_lease(self, sandbox_id: str) -> None:
+        await self._run_thread_to_completion(
+            self.sandbox_manager.lifecycle.release_shared,
+            sandbox_id,
+        )
+
+    async def _release_session_activity_lease(
+        self,
+        session: AsyncExecSession,
+    ) -> None:
+        if not session.activity_lease:
+            return
+        release = asyncio.create_task(
+            asyncio.to_thread(
+                self.sandbox_manager.lifecycle.release_shared,
+                session.spec.sandbox_id,
+            )
+        )
+        try:
+            await asyncio.shield(release)
+        except asyncio.CancelledError:
+            result = await asyncio.gather(release, return_exceptions=True)
+            if result and not isinstance(result[0], BaseException):
+                session.activity_lease = False
+            raise
+        else:
+            session.activity_lease = False
+
+    @staticmethod
+    async def _run_thread_to_completion(
+        function: Callable[..., _ThreadResult],
+        *args: object,
+    ) -> _ThreadResult:
+        work = asyncio.create_task(asyncio.to_thread(function, *args))
+        try:
+            return await asyncio.shield(work)
+        except asyncio.CancelledError:
+            await asyncio.gather(work, return_exceptions=True)
+            raise
+
+    async def _spawn_process(
+        self,
+        session: AsyncExecSession,
+    ) -> asyncio.subprocess.Process:
+        spawn = asyncio.create_task(
+            asyncio.create_subprocess_exec(
+                *session.argv,
+                stdin=subprocess.PIPE if session.spec.stdin else None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        )
+        try:
+            process = await asyncio.shield(spawn)
+        except asyncio.CancelledError:
+            result = await asyncio.gather(spawn, return_exceptions=True)
+            if result and not isinstance(result[0], BaseException):
+                session.process = cast(asyncio.subprocess.Process, result[0])
+            raise
+        session.process = process
+        return process
+
+    async def _notify_exec_start_failed(self, sandbox_id: str) -> None:
+        exec_start_failed = getattr(
+            self.sandbox_manager.runtime,
+            "exec_start_failed",
+            None,
+        )
+        if exec_start_failed is not None:
+            await self._run_thread_to_completion(exec_start_failed, sandbox_id)
+
+    async def _notify_exec_started(
+        self,
+        session: AsyncExecSession,
+        exec_started: Callable[[str], None],
+    ) -> None:
+        notification = asyncio.create_task(
+            asyncio.to_thread(exec_started, session.spec.sandbox_id)
+        )
+        try:
+            await asyncio.shield(notification)
+        except asyncio.CancelledError:
+            result = await asyncio.gather(notification, return_exceptions=True)
+            if result and not isinstance(result[0], BaseException):
+                session.start_hook_pending = False
+            raise
+        else:
+            session.start_hook_pending = False
+
+    async def _notify_session_exec_start_failed(
+        self,
+        session: AsyncExecSession,
+    ) -> None:
+        if not session.start_hook_pending:
+            return
+        session.start_hook_pending = False
+        await self._notify_exec_start_failed(session.spec.sandbox_id)
+
+    async def _abort_start(self, session: AsyncExecSession) -> None:
+        try:
+            try:
+                process = session.process
+                if process is not None:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+                    await process.wait()
+            finally:
+                await self._cleanup_session_tasks(session)
+                async with self._sessions_lock:
+                    if self._sessions.get(session.id) is session:
+                        self._sessions.pop(session.id, None)
+        finally:
+            try:
+                await self._notify_session_exec_start_failed(session)
+            finally:
+                await self._release_session_activity_lease(session)
+
     def _require_session(self, session_id: str) -> AsyncExecSession:
         session = self._sessions.get(session_id)
         if session is None:
@@ -385,8 +513,4 @@ class AsyncExecSessionManager:
         session.status = "exited" if exit_code == 0 else "failed"
         await self._append_event(session, "exit", b"", exit_code=exit_code)
         if session.activity_lease:
-            session.activity_lease = False
-            await asyncio.to_thread(
-                self.sandbox_manager.lifecycle.release_shared,
-                session.spec.sandbox_id,
-            )
+            await self._release_session_activity_lease(session)

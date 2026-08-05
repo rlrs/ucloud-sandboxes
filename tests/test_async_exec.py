@@ -3,7 +3,9 @@ from dataclasses import replace
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
+from threading import Event, Lock
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.async_exec import AsyncExecSessionManager
 from ucloud_sandboxes.sandbox import DockerGvisorRuntime, SandboxManager, SandboxSpec, SandboxStore
@@ -11,6 +13,82 @@ from ucloud_sandboxes.sandbox_exec import SandboxExecSpec
 
 
 class AsyncExecTests(unittest.TestCase):
+    def test_cancellation_during_threaded_lease_acquisition_releases_lease(self) -> None:
+        async def scenario() -> int:
+            with TemporaryDirectory() as raw_dir:
+                manager = SandboxManager(
+                    SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                    DockerGvisorRuntime(dry_run=True),
+                )
+                manager.create(SandboxSpec(id="sbx-1", image="busybox", memory_mb=128))
+                lifecycle = BlockingLifecycle()
+                manager.lifecycle = lifecycle
+                exec_manager = AsyncExecSessionManager(manager)
+                task = asyncio.create_task(
+                    exec_manager.start(
+                        SandboxExecSpec(sandbox_id="sbx-1", command=("true",))
+                    )
+                )
+                await asyncio.to_thread(lifecycle.started.wait)
+                task.cancel()
+                lifecycle.proceed.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                return lifecycle.shared
+
+        self.assertEqual(asyncio.run(scenario()), 0)
+
+    def test_cancellation_during_spawn_removes_session_and_kills_process(self) -> None:
+        async def scenario() -> tuple[int, int, bool, list[str]]:
+            with TemporaryDirectory() as raw_dir:
+                manager = SandboxManager(
+                    SandboxStore(Path(raw_dir) / "sandboxes.json"),
+                    DockerGvisorRuntime(dry_run=True),
+                )
+                record, _result = manager.create(
+                    SandboxSpec(id="sbx-1", image="busybox", memory_mb=128)
+                )
+                manager.store.upsert(replace(record, state="running"))
+                lifecycle = TrackingLifecycle()
+                manager.lifecycle = lifecycle
+                runtime = CancelledSpawnRuntime()
+                manager.runtime = runtime  # type: ignore[assignment]
+                exec_manager = AsyncExecSessionManager(manager)
+                spawn_started = asyncio.Event()
+                finish_spawn = asyncio.Event()
+                process = FakeAsyncProcess()
+
+                async def create_process(*_args, **_kwargs):
+                    spawn_started.set()
+                    await finish_spawn.wait()
+                    return process
+
+                with patch(
+                    "ucloud_sandboxes.async_exec.asyncio.create_subprocess_exec",
+                    side_effect=create_process,
+                ):
+                    task = asyncio.create_task(
+                        exec_manager.start(
+                            SandboxExecSpec(
+                                sandbox_id="sbx-1",
+                                command=("ignored",),
+                            )
+                        )
+                    )
+                    await spawn_started.wait()
+                    task.cancel()
+                    finish_spawn.set()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+                return (
+                    lifecycle.shared,
+                    len(exec_manager._sessions),  # noqa: SLF001
+                    process.killed,
+                    runtime.failed,
+                )
+
+        self.assertEqual(asyncio.run(scenario()), (0, 0, True, ["sbx-1"]))
+
     def test_session_and_event_history_are_bounded_without_evicting_active(self) -> None:
         async def scenario() -> tuple[int, bool, bool, list[str]]:
             with TemporaryDirectory() as raw_dir:
@@ -254,6 +332,54 @@ class HookedLocalExecRuntime(LocalExecRuntime):
 
     def exec_started(self, sandbox_id: str) -> None:
         self.started.append(sandbox_id)
+
+
+class BlockingLifecycle:
+    def __init__(self) -> None:
+        self.started = Event()
+        self.proceed = Event()
+        self.guard = Lock()
+        self.shared = 0
+
+    def acquire_shared(self, _sandbox_id: str) -> None:
+        self.started.set()
+        self.proceed.wait()
+        with self.guard:
+            self.shared += 1
+
+    def release_shared(self, _sandbox_id: str) -> None:
+        with self.guard:
+            self.shared -= 1
+
+
+class TrackingLifecycle(BlockingLifecycle):
+    def __init__(self) -> None:
+        super().__init__()
+        self.proceed.set()
+
+
+class CancelledSpawnRuntime(LocalExecRuntime):
+    def __init__(self) -> None:
+        self.failed: list[str] = []
+
+    def exec_start_failed(self, sandbox_id: str) -> None:
+        self.failed.append(sandbox_id)
+
+
+class FakeAsyncProcess:
+    def __init__(self) -> None:
+        self.stdin = None
+        self.stdout = None
+        self.stderr = None
+        self.returncode: int | None = None
+        self.killed = False
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        return self.returncode or 0
 
 
 if __name__ == "__main__":

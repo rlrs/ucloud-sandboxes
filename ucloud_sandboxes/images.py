@@ -199,6 +199,12 @@ class ImageBuildRecord:
         push_command = raw.get("push_command") or raw.get("pushCommand") or ()
         image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
         timings = raw.get("timings") if isinstance(raw.get("timings"), dict) else {}
+        exit_code = raw["exit_code"] if "exit_code" in raw else raw.get("exitCode")
+        push_exit_code = (
+            raw["push_exit_code"]
+            if "push_exit_code" in raw
+            else raw.get("pushExitCode")
+        )
         return cls(
             build_id=build_id,
             image_id=image_id,
@@ -211,8 +217,8 @@ class ImageBuildRecord:
             push=bool(raw.get("push", False)),
             command=tuple(str(item) for item in command),
             push_command=tuple(str(item) for item in push_command),
-            exit_code=_optional_int(raw.get("exit_code") or raw.get("exitCode")),
-            push_exit_code=_optional_int(raw.get("push_exit_code") or raw.get("pushExitCode")),
+            exit_code=_optional_int(exit_code),
+            push_exit_code=_optional_int(push_exit_code),
             error=str(raw.get("error") or ""),
             log_tail=str(raw.get("log_tail") or raw.get("logTail") or ""),
             started_at=str(raw.get("started_at") or raw.get("startedAt") or ""),

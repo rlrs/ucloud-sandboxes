@@ -119,6 +119,40 @@ class ImageTests(unittest.TestCase):
             f"registry.test/image@{digest}",
         )
 
+    def test_successful_build_exit_codes_survive_alias_round_trips(self) -> None:
+        common = {
+            "build_id": "build-1",
+            "image_id": "image-1",
+            "tag": "local/image-1:latest",
+            "status": "succeeded",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:01+00:00",
+        }
+        snake = ImageBuildRecord.from_dict(
+            {
+                **common,
+                "exit_code": 0,
+                "exitCode": 17,
+                "push_exit_code": 0,
+                "pushExitCode": 19,
+            }
+        )
+        camel = ImageBuildRecord.from_dict(
+            {
+                **common,
+                "exitCode": 0,
+                "pushExitCode": 0,
+            }
+        )
+
+        self.assertIsNotNone(snake)
+        self.assertIsNotNone(camel)
+        assert snake is not None
+        assert camel is not None
+        self.assertEqual((snake.exit_code, snake.push_exit_code), (0, 0))
+        self.assertEqual((camel.exit_code, camel.push_exit_code), (0, 0))
+        self.assertEqual(ImageBuildRecord.from_dict(snake.to_dict()), snake)
+
     def test_image_state_fails_closed_on_malformed_or_duplicate_records(self) -> None:
         with TemporaryDirectory() as raw_dir:
             image_path = Path(raw_dir) / "images.json"

@@ -5187,7 +5187,8 @@ def run_reconcile_cycle(
     # SUSPENDED state, a previously journaled resume, and our own destructive
     # stop journal are durable hints.  For a stale RUNNING node, retrieve its
     # full ordered updates once so the later RUNNING report cannot hide the
-    # post-start suspension.
+    # post-start suspension. A fresh heartbeat is not sufficient evidence of
+    # continuity when its guest epoch differs from an owned route.
     resume_latched_job_ids: set[str] = set()
     loss_latched_job_ids: set[str] = set()
     if provider_state is not None:
@@ -5200,20 +5201,30 @@ def run_reconcile_cycle(
     if not getattr(args, "jobs_file", None):
         for job in tuple(jobs):
             heartbeat = heartbeats.get(job.id)
+            owned_routes = (route_reservations or {}).get(job.id, ())
             stale_heartbeat = bool(
                 heartbeat is not None
                 and not heartbeat.is_fresh(
                     utc_now(), effective_policy.heartbeat_ttl_seconds
                 )
             )
-            owns_routes = bool((route_reservations or {}).get(job.id))
+            route_epoch_mismatch = bool(
+                heartbeat is not None
+                and heartbeat.node_epoch
+                and any(
+                    route.node_epoch
+                    and route.node_epoch != heartbeat.node_epoch
+                    for route in owned_routes
+                )
+            )
+            owns_routes = bool(owned_routes)
             should_retrieve_history = bool(
                 job.state == "RUNNING"
                 and not job.has_post_start_suspension
                 and job.id not in resume_latched_job_ids
                 and job.id not in loss_latched_job_ids
-                and stale_heartbeat
                 and owns_routes
+                and (stale_heartbeat or route_epoch_mismatch)
             )
             if not should_retrieve_history:
                 continue

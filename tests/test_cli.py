@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes import cli
+from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.autoscaler_state import AutoscalerStateStore
 from ucloud_sandboxes.cli import (
     find_ucloud_ssh_key,
@@ -450,6 +451,130 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result["destructiveStopJobIds"], ["suspended-node"])
         self.assertEqual(result["rawDecision"].total_nodes, 0)
         self.assertEqual(result["rawDecision"].creates, 1)
+
+    @allow_fixture_mutations
+    def test_fresh_replacement_epoch_still_retrieves_power_cycle_history(
+        self,
+    ) -> None:
+        retrieve_calls: list[tuple[str, str, bool]] = []
+
+        def job_payload(*, include_updates: bool) -> dict:
+            payload = {
+                "id": "replaced-job",
+                "owner": {"project": "project-1"},
+                "createdAt": 1_700_000_000_000,
+                "specification": {
+                    "name": "ucloud-sandbox-node-replaced",
+                    "application": {
+                        "name": "vm-ubuntu",
+                        "version": "24.04",
+                    },
+                    "product": {
+                        "id": "cpu-amd-zen5-32-vcpu",
+                        "category": "cpu-amd-zen5",
+                    },
+                    "labels": {
+                        "ucloud-sandboxes/node": "true",
+                        "ucloud-sandboxes/deployment": "prod-a",
+                    },
+                },
+                "status": {
+                    "state": "RUNNING",
+                    "startedAt": 1_700_000_100_000,
+                },
+            }
+            if include_updates:
+                payload["updates"] = [
+                    {"state": "RUNNING"},
+                    {"state": "SUSPENDED"},
+                    {"state": "RUNNING"},
+                ]
+            return payload
+
+        class HistoryClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def browse_all_jobs(self, *_args, **_kwargs) -> list[dict]:
+                return [job_payload(include_updates=False)]
+
+            def retrieve_job(
+                self,
+                project_id: str,
+                job_id: str,
+                *,
+                include_updates: bool = False,
+            ) -> dict:
+                retrieve_calls.append((project_id, job_id, include_updates))
+                return job_payload(include_updates=include_updates)
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            heartbeat_path = root / "heartbeats.json"
+            HeartbeatStore(heartbeat_path).upsert(
+                build_heartbeat(
+                    job_id="replaced-job",
+                    node_id="new-node",
+                    node_epoch="new-boot",
+                    active_sandboxes=0,
+                    now=utc_now(),
+                )
+            )
+            route = SandboxRoute(
+                sandbox_id="lost-sandbox",
+                node_id="old-node",
+                job_id="replaced-job",
+                node_url="http://old-node:8090",
+                resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
+                state="running",
+                generation=1,
+                create_operation_id="create-lost",
+                spec_hash="a" * 64,
+                node_epoch="old-boot",
+            )
+            config = AutoscalerConfig(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                state_dir=raw_dir,
+                policy=ScalePolicy(min_nodes=1, max_nodes=2),
+            )
+            args = cli.build_parser().parse_args(
+                [
+                    "autoscaler-loop",
+                    "--project",
+                    "project-1",
+                    "--deployment-id",
+                    "prod-a",
+                    "--heartbeats",
+                    str(heartbeat_path),
+                    "--state-dir",
+                    raw_dir,
+                    "--no-private-network",
+                    "--max-builder-nodes",
+                    "0",
+                    "--once",
+                ]
+            )
+
+            with patch.object(cli, "UCloudClient", HistoryClient):
+                result = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    route_reservations={"replaced-job": (route,)},
+                    sandbox_routes=(route,),
+                )
+
+        self.assertEqual(
+            retrieve_calls,
+            [("project-1", "replaced-job", True)],
+        )
+        self.assertEqual(
+            result["destructivePowerCycleJobIds"],
+            ["replaced-job"],
+        )
+        self.assertEqual(result["lostSandboxIds"], ["lost-sandbox"])
 
     @allow_fixture_mutations
     def test_initial_suspension_is_booting_and_is_not_resumed(self) -> None:

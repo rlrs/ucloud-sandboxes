@@ -4640,7 +4640,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             return
         if session_route is None and self._exec_route_is_proven_stale(route):
-            self.routing_store.delete_sandbox(route.sandbox_id)
+            self.routing_store.delete_exec(route.session_id)
             self._write_json(
                 {
                     "error": "exec route is stale",
@@ -4760,6 +4760,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         return _heartbeat_proves_route_absent(
             heartbeat,
+            sandbox_id=route.sandbox_id,
             route_created_at=route.created_at,
             route_updated_at=route.updated_at,
             heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,

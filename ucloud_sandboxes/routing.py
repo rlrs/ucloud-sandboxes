@@ -2253,6 +2253,19 @@ class RoutingStore:
                 self._write_exec(conn, stored)
             self._cache_exec_route_unlocked(stored)
 
+    def delete_exec(self, session_id: str) -> ExecRoute | None:
+        with self._lock:
+            with self._transaction() as conn:
+                existing = self._get_exec_unlocked(conn, session_id)
+                conn.execute(
+                    "DELETE FROM exec_sessions WHERE session_id = ?",
+                    (session_id,),
+                )
+            cached = self._exec_route_cache.pop(session_id, None)
+            if cached is not None:
+                self._remove_exec_route_from_sandbox_index_unlocked(cached)
+            return existing or cached
+
     def _cache_exec_route_unlocked(self, route: ExecRoute) -> None:
         previous = self._exec_route_cache.pop(route.session_id, None)
         if previous is not None:

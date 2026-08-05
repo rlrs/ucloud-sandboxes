@@ -3077,6 +3077,72 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response["body"]["error"], "exec route not found")
         self.assertTrue(response["body"]["retryable"])
 
+    def test_stale_legacy_exec_cleanup_preserves_sandbox_route(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            sandbox = SandboxRoute(
+                sandbox_id="parked-one",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                state="parked",
+            )
+            store.upsert_sandbox(sandbox)
+            route = control_plane.ExecRoute(
+                session_id="exec-legacy",
+                sandbox_id=sandbox.sandbox_id,
+                node_id=sandbox.node_id,
+                job_id=sandbox.job_id,
+                node_url=sandbox.node_url,
+            )
+            store.upsert_exec(route)
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = store
+            handler._exec_route_is_proven_stale = lambda _route: True
+            responses: list[tuple[dict[str, object], int]] = []
+            handler._write_json = lambda payload, status=200, **_kwargs: responses.append(
+                (payload, int(status))
+            )
+
+            handler._route_exec_request(route.session_id, "/v1/exec/exec-legacy")
+
+            self.assertIsNone(store.get_exec(route.session_id))
+            self.assertIsNotNone(store.get_sandbox(sandbox.sandbox_id))
+            self.assertEqual(responses[-1][1], 404)
+
+    def test_exec_staleness_respects_complete_parked_inventory(self) -> None:
+        now = utc_now()
+        heartbeat = replace(
+            build_heartbeat(
+                job_id="job-1",
+                node_id="node-1",
+                active_sandboxes=0,
+                now=now,
+            ),
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id="parked-one",
+                    state="parked",
+                ),
+            ),
+            inventory_complete=True,
+        )
+        route = control_plane.ExecRoute(
+            session_id="exec-legacy",
+            sandbox_id="parked-one",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            created_at=(now - timedelta(seconds=30)).isoformat(),
+            updated_at=(now - timedelta(seconds=30)).isoformat(),
+        )
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.heartbeat_ttl_seconds = 120
+        handler._heartbeat_for_route = lambda **_kwargs: heartbeat
+
+        self.assertFalse(handler._exec_route_is_proven_stale(route))
+
     def test_multi_node_gateway_places_and_routes_by_resource_fit(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

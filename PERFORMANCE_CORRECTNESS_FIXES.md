@@ -13,7 +13,7 @@ Status values: `pending`, `in progress`, `complete`, or `blocked`.
 | 3 | P1 | complete | A stale provisioning VM can suppress fragmentation replacement indefinitely. | Apply the aggregate stale-provisioning eligibility rule to placement bins. | `fix: weight provisioning placement capacity` |
 | 4 | P1 | complete | Waking a released storage-native volume double-counts its capacity. | Reserve only the transition's incremental capacity; do not count the current volume twice. | `fix: avoid double reserving storage wake capacity` |
 | 5 | P1 | complete | A pooled-backend release failure can permanently leak an active ublk device. | Preserve durable device ownership until backend release/delete succeeds and retry reconciliation. | `fix: retain pooled devices until delete completes` |
-| 6 | P1 | pending | Polling a stale legacy exec route can delete the entire sandbox route. | Delete only the exec route and make stale detection inventory-aware. | — |
+| 6 | P1 | complete | Polling a stale legacy exec route can delete the entire sandbox route. | Delete only the exec route and make stale detection inventory-aware. | `fix: scope stale exec route cleanup` |
 | 7 | P1 | pending | A fresh replacement heartbeat can hide a destructive VM replacement. | Retrieve/latch replacement history on owned-route epoch mismatch regardless of freshness. | — |
 | 8 | P1 | pending | A maximum/default managed-process log read exceeds the control response limit. | Separate bounded request and encoded-response limits and test the maximum chunk. | — |
 | 9 | P1 | pending | Async-exec cancellation can leak a lifecycle lease. | Make thread-backed acquisition and every subsequent stage cancellation-safe with unconditional cleanup. | — |

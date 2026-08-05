@@ -40,6 +40,7 @@ DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
 DEFAULT_METRICS_MAX_FILES = 5
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
 DEFAULT_METRICS_MAX_EVENTS = 100_000
+MIN_SQLITE_METRICS_MAX_BYTES = 64 * 1024
 _METRICS_LOCKS_GUARD = RLock()
 _METRICS_LOCKS: dict[Path, RLock] = {}
 
@@ -94,6 +95,11 @@ class MetricsStore:
         self._max_event_bytes = max(1, min(max_event_bytes, self._max_bytes))
         self._max_events = max(1, max_events)
         self._sqlite = self.path.suffix.lower() != ".jsonl"
+        if self._sqlite and self._max_bytes < MIN_SQLITE_METRICS_MAX_BYTES:
+            raise ValueError(
+                "SQLite metrics max_bytes must be at least "
+                f"{MIN_SQLITE_METRICS_MAX_BYTES}"
+            )
         self._sqlite_connection: sqlite3.Connection | None = None
         self._sqlite_pid = 0
         self._dropped_sqlite_events = 0
@@ -131,33 +137,41 @@ class MetricsStore:
                 connection = self._sqlite_connect_locked()
                 try:
                     if self._dropped_sqlite_events:
+                        dropped_data = {
+                            "count": self._dropped_sqlite_events,
+                            "reason": "sqlite_busy",
+                        }
                         connection.execute(
                             """
                             INSERT INTO metric_events(
-                                timestamp, timestamp_epoch, kind, data_json
+                                timestamp, timestamp_epoch, kind, data_json,
+                                payload_bytes
                             )
-                            VALUES (?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?)
                             """,
                             (
                                 event.timestamp,
                                 _timestamp_epoch(event.timestamp),
                                 "metrics_dropped_events",
                                 json.dumps(
-                                    {
-                                        "count": self._dropped_sqlite_events,
-                                        "reason": "sqlite_busy",
-                                    },
+                                    dropped_data,
                                     sort_keys=True,
                                     separators=(",", ":"),
+                                ),
+                                _metric_event_bytes(
+                                    event.timestamp,
+                                    "metrics_dropped_events",
+                                    dropped_data,
                                 ),
                             ),
                         )
                     cursor = connection.execute(
                         """
                         INSERT INTO metric_events(
-                            timestamp, timestamp_epoch, kind, data_json
+                            timestamp, timestamp_epoch, kind, data_json,
+                            payload_bytes
                         )
-                        VALUES (?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?)
                         """,
                         (
                             event.timestamp,
@@ -168,12 +182,19 @@ class MetricsStore:
                                 sort_keys=True,
                                 separators=(",", ":"),
                             ),
+                            len(line),
                         ),
                     )
-                    sequence = int(cursor.lastrowid or 0)
-                    if sequence > 0 and sequence % 512 == 0:
-                        self._prune_sqlite_locked(connection)
+                    del cursor
+                    self._prune_sqlite_locked(connection)
                     connection.commit()
+                    try:
+                        self._reclaim_sqlite_space_locked(connection)
+                    except sqlite3.OperationalError:
+                        # The logical budget is already committed. A reader may
+                        # temporarily prevent checkpoint/vacuum; retry physical
+                        # reclamation on a later append.
+                        pass
                     self._dropped_sqlite_events = 0
                 except sqlite3.OperationalError:
                     connection.rollback()
@@ -287,9 +308,22 @@ class MetricsStore:
             timeout=5.0,
             check_same_thread=False,
         )
+        existing_tables = bool(
+            connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' LIMIT 1"
+            ).fetchone()
+        )
+        if int(connection.execute("PRAGMA auto_vacuum").fetchone()[0]) != 2:
+            connection.execute("PRAGMA auto_vacuum=INCREMENTAL")
+            if existing_tables:
+                connection.execute("VACUUM")
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA synchronous=NORMAL")
         connection.execute("PRAGMA busy_timeout=1000")
+        page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
+        connection.execute(
+            f"PRAGMA wal_autocheckpoint={max(1, self._max_bytes // page_size // 8)}"
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS metric_events (
@@ -297,8 +331,83 @@ class MetricsStore:
                 timestamp TEXT NOT NULL,
                 timestamp_epoch REAL NOT NULL,
                 kind TEXT NOT NULL,
-                data_json TEXT NOT NULL
+                data_json TEXT NOT NULL,
+                payload_bytes INTEGER NOT NULL DEFAULT 0
             )
+            """
+        )
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(metric_events)")
+        }
+        if "payload_bytes" not in columns:
+            connection.execute(
+                "ALTER TABLE metric_events "
+                "ADD COLUMN payload_bytes INTEGER NOT NULL DEFAULT 0"
+            )
+        connection.execute(
+            """
+            UPDATE metric_events
+            SET payload_bytes = (
+                length(CAST(timestamp AS BLOB))
+                + length(CAST(kind AS BLOB))
+                + length(CAST(data_json AS BLOB))
+                + 48
+            )
+            WHERE payload_bytes <= 0
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metric_store_meta (
+                singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+                retained_events INTEGER NOT NULL,
+                retained_payload_bytes INTEGER NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO metric_store_meta(
+                singleton, retained_events, retained_payload_bytes
+            )
+            VALUES (
+                1,
+                (SELECT count(*) FROM metric_events),
+                (SELECT COALESCE(sum(payload_bytes), 0) FROM metric_events)
+            )
+            ON CONFLICT(singleton) DO UPDATE SET
+                retained_events = excluded.retained_events,
+                retained_payload_bytes = excluded.retained_payload_bytes
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS metric_events_track_insert
+            AFTER INSERT ON metric_events
+            BEGIN
+                UPDATE metric_store_meta
+                SET retained_events = retained_events + 1,
+                    retained_payload_bytes = (
+                        retained_payload_bytes + NEW.payload_bytes
+                    )
+                WHERE singleton = 1;
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER IF NOT EXISTS metric_events_track_delete
+            AFTER DELETE ON metric_events
+            BEGIN
+                UPDATE metric_store_meta
+                SET retained_events = MAX(0, retained_events - 1),
+                    retained_payload_bytes = MAX(
+                        0,
+                        retained_payload_bytes - OLD.payload_bytes
+                    )
+                WHERE singleton = 1;
+            END
             """
         )
         connection.execute(
@@ -314,6 +423,9 @@ class MetricsStore:
             """
         )
         connection.commit()
+        self._prune_sqlite_locked(connection)
+        connection.commit()
+        self._reclaim_sqlite_space_locked(connection)
         try:
             os.chmod(self.path, 0o600)
         except OSError:
@@ -365,19 +477,96 @@ class MetricsStore:
         return events
 
     def _prune_sqlite_locked(self, connection: sqlite3.Connection) -> None:
-        cutoff = connection.execute(
+        retained = connection.execute(
             """
-            SELECT sequence FROM metric_events
-            ORDER BY sequence DESC
-            LIMIT 1 OFFSET ?
-            """,
-            (self._max_events - 1,),
+            SELECT retained_events, retained_payload_bytes
+            FROM metric_store_meta
+            WHERE singleton = 1
+            """
         ).fetchone()
-        if cutoff is not None:
-            connection.execute(
-                "DELETE FROM metric_events WHERE sequence < ?",
-                (int(cutoff[0]),),
+        if retained is None:
+            return
+        retained_events = max(0, int(retained[0]))
+        retained_bytes = max(0, int(retained[1]))
+        if (
+            retained_events <= self._max_events
+            and retained_bytes <= self._max_bytes
+        ):
+            return
+        evicted: list[tuple[int]] = []
+        for sequence, payload_bytes in connection.execute(
+            """
+            SELECT sequence, payload_bytes
+            FROM metric_events
+            ORDER BY sequence
+            """
+        ):
+            if (
+                retained_events <= self._max_events
+                and retained_bytes <= self._max_bytes
+            ):
+                break
+            evicted.append((int(sequence),))
+            retained_events -= 1
+            retained_bytes = max(0, retained_bytes - max(0, int(payload_bytes)))
+        if evicted:
+            connection.executemany(
+                "DELETE FROM metric_events WHERE sequence = ?",
+                evicted,
             )
+
+    def _reclaim_sqlite_space_locked(self, connection: sqlite3.Connection) -> None:
+        if _sqlite_storage_bytes(self.path) <= self._max_bytes:
+            return
+        checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if checkpoint is not None and int(checkpoint[0]) != 0:
+            # A concurrent reader can temporarily pin WAL frames. Logical
+            # retention is already bounded; retry physical reclamation on the
+            # next append instead of deleting useful rows while the same WAL
+            # cannot yet be truncated.
+            return
+        free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+        if free_pages:
+            connection.execute(f"PRAGMA incremental_vacuum({free_pages})")
+            checkpoint = connection.execute(
+                "PRAGMA wal_checkpoint(TRUNCATE)"
+            ).fetchone()
+            if checkpoint is not None and int(checkpoint[0]) != 0:
+                return
+        attempts = 0
+        while _sqlite_storage_bytes(self.path) > self._max_bytes:
+            retained = connection.execute(
+                "SELECT retained_events FROM metric_store_meta WHERE singleton = 1"
+            ).fetchone()
+            retained_events = int(retained[0]) if retained is not None else 0
+            if retained_events <= 0:
+                break
+            batch = max(1, min(4096, (retained_events + 9) // 10))
+            connection.execute(
+                """
+                DELETE FROM metric_events
+                WHERE sequence IN (
+                    SELECT sequence FROM metric_events
+                    ORDER BY sequence
+                    LIMIT ?
+                )
+                """,
+                (batch,),
+            )
+            connection.commit()
+            free_pages = int(
+                connection.execute("PRAGMA freelist_count").fetchone()[0]
+            )
+            if free_pages:
+                connection.execute(f"PRAGMA incremental_vacuum({free_pages})")
+            checkpoint = connection.execute(
+                "PRAGMA wal_checkpoint(TRUNCATE)"
+            ).fetchone()
+            if checkpoint is not None and int(checkpoint[0]) != 0:
+                return
+            attempts += 1
+            if attempts >= 64:
+                break
 
     def _rotate_if_needed(self, additional_bytes: int) -> None:
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -402,6 +591,23 @@ class MetricsStore:
 def _timestamp_epoch(value: str) -> float:
     parsed = parse_iso_datetime(value)
     return parsed.timestamp() if parsed is not None else time.time()
+
+
+def _metric_event_bytes(timestamp: str, kind: str, data: dict[str, Any]) -> int:
+    return len(
+        (json.dumps({"timestamp": timestamp, "kind": kind, "data": data}, sort_keys=True)
+        + "\n").encode("utf-8")
+    )
+
+
+def _sqlite_storage_bytes(path: Path) -> int:
+    total = 0
+    for candidate in (path, path.with_name(path.name + "-wal")):
+        try:
+            total += candidate.stat().st_size
+        except FileNotFoundError:
+            continue
+    return total
 
 
 @contextmanager

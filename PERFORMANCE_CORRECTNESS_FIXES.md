@@ -19,7 +19,7 @@ Status values: `pending`, `in progress`, `complete`, or `blocked`.
 | 9 | P1 | complete | Async-exec cancellation can leak a lifecycle lease. | Make thread-backed acquisition and every subsequent stage cancellation-safe with unconditional cleanup. | `fix: make async exec startup cancellation-safe` |
 | 10 | P1 | complete | Gateway node responses are buffered without a byte limit. | Stream bulk responses and enforce bounded buffering for structured control/error responses. | `fix: bound gateway node response buffering` |
 | 11 | P1 | complete | Completed model-relay requests have no byte budget and persistence blocks the event loop. | Add byte-aware retention, prune before restore, discard redundant bodies, and isolate durable writes from the event loop. | `fix: bound relay retention and isolate persistence` |
-| 12 | P2 | pending | SQLite metrics ignore the configured byte budget. | Enforce a logical/physical SQLite budget including WAL growth and reclaim old pages. | — |
+| 12 | P2 | complete | SQLite metrics ignore the configured byte budget. | Enforce a logical/physical SQLite budget including WAL growth and reclaim old pages. | `fix: enforce sqlite metrics byte budget` |
 | 13 | P2 | pending | Direct-runtime restart performs quadratic registry work and repeated node-global networking checks. | Reconcile from one registry snapshot and perform node-global network setup once. | — |
 | 14 | P2 | pending | Complete heartbeats scan all historical exec routes. | Query only required sandbox routes and avoid loading exec sessions. | — |
 | 15 | P2 | pending | Permanent direct-registry tombstones eventually exceed the hard read ceiling. | Add generation-safe bounded compaction and prevent writes that make the registry unreadable. | — |

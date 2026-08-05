@@ -72,6 +72,89 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(events[0].data["count"], 1)
         self.assertEqual(events[1].data["index"], 2)
 
+    def test_sqlite_store_enforces_logical_and_physical_byte_budget(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            max_bytes = 128 * 1024
+            store = MetricsStore(
+                path,
+                max_bytes=max_bytes,
+                max_event_bytes=8 * 1024,
+                max_events=10_000,
+            )
+            for index in range(200):
+                store.append(
+                    "bounded",
+                    {"index": index, "padding": "x" * 2048},
+                )
+
+            events = store.load_events(max_events=10_000)
+            with sqlite3.connect(path) as connection:
+                retained_bytes, retained_events = connection.execute(
+                    """
+                    SELECT retained_payload_bytes, retained_events
+                    FROM metric_store_meta
+                    WHERE singleton = 1
+                    """
+                ).fetchone()
+                auto_vacuum = connection.execute("PRAGMA auto_vacuum").fetchone()[0]
+            physical_bytes = sum(
+                candidate.stat().st_size
+                for candidate in (path, path.with_name(path.name + "-wal"))
+                if candidate.exists()
+            )
+
+        self.assertTrue(events)
+        self.assertEqual(events[-1].data["index"], 199)
+        self.assertLess(retained_events, 200)
+        self.assertLessEqual(retained_bytes, max_bytes)
+        self.assertLessEqual(physical_bytes, max_bytes)
+        self.assertEqual(auto_vacuum, 2)
+
+    def test_sqlite_store_migrates_legacy_rows_into_byte_accounting(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            with sqlite3.connect(path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE metric_events (
+                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT NOT NULL,
+                        timestamp_epoch REAL NOT NULL,
+                        kind TEXT NOT NULL,
+                        data_json TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    INSERT INTO metric_events(
+                        timestamp, timestamp_epoch, kind, data_json
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (utc_now().isoformat(), 1.0, "legacy", '{"index":1}'),
+                )
+
+            store = MetricsStore(path, max_bytes=128 * 1024)
+            store.append("current", {"index": 2})
+            events = store.load_events()
+            with sqlite3.connect(path) as connection:
+                columns = {
+                    row[1]
+                    for row in connection.execute("PRAGMA table_info(metric_events)")
+                }
+                retained_bytes = connection.execute(
+                    """
+                    SELECT retained_payload_bytes
+                    FROM metric_store_meta
+                    WHERE singleton = 1
+                    """
+                ).fetchone()[0]
+
+        self.assertEqual([event.kind for event in events], ["legacy", "current"])
+        self.assertIn("payload_bytes", columns)
+        self.assertGreater(retained_bytes, 0)
+
     def test_builds_live_pressure_and_provisioning_signals(self) -> None:
         now = utc_now()
         heartbeat_data = {

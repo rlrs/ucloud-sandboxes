@@ -28,6 +28,9 @@ const (
 	buildVersion    = "managed-primary-v1"
 	maxRequestBytes = 1024 * 1024
 	maxLogReadBytes = 1024 * 1024
+	// Log data is JSON-base64 encoded. Keep responses independently bounded
+	// while leaving room for a maximum raw chunk plus protocol framing.
+	maxResponseBytes = 2 * 1024 * 1024
 )
 
 var (
@@ -595,11 +598,11 @@ func runControl(arguments []string) error {
 	if unix, ok := connection.(*net.UnixConn); ok {
 		_ = unix.CloseWrite()
 	}
-	reply, err := io.ReadAll(io.LimitReader(connection, maxRequestBytes+1))
+	reply, err := io.ReadAll(io.LimitReader(connection, maxResponseBytes+1))
 	if err != nil {
 		return err
 	}
-	if len(reply) > maxRequestBytes {
+	if len(reply) > maxResponseBytes {
 		return errors.New("control response exceeds limit")
 	}
 	var decoded response

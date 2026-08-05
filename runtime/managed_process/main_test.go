@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -21,6 +24,8 @@ func TestMain(m *testing.M) {
 			err = runSupervisor(os.Args[2:])
 		case "launch":
 			err = runLaunch()
+		case "ctl":
+			err = runControl(os.Args[2:])
 		default:
 			os.Exit(2)
 		}
@@ -30,6 +35,69 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestControlAcceptsMaximumLogResponse(t *testing.T) {
+	stateDir := t.TempDir()
+	socket := filepath.Join(stateDir, "control.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	serverErrors := make(chan error, 1)
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErrors <- acceptErr
+			return
+		}
+		defer connection.Close()
+		if _, readErr := io.ReadAll(connection); readErr != nil {
+			serverErrors <- readErr
+			return
+		}
+		payload, marshalErr := json.Marshal(response{
+			Version: protocolVersion,
+			OK:      true,
+			Stream:  "stdout",
+			Next:    maxLogReadBytes,
+			EOF:     true,
+			Data:    bytes.Repeat([]byte{0xa5}, maxLogReadBytes),
+		})
+		if marshalErr != nil {
+			serverErrors <- marshalErr
+			return
+		}
+		if len(payload) <= maxRequestBytes || len(payload) > maxResponseBytes {
+			serverErrors <- fmt.Errorf("unexpected encoded response size: %d", len(payload))
+			return
+		}
+		_, writeErr := io.Copy(connection, bytes.NewReader(payload))
+		serverErrors <- writeErr
+	}()
+
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "ctl", "--socket", socket)
+	command.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	command.Stdin = bytes.NewBufferString(`{"version":1,"action":"logs"}`)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("maximum log response was rejected: %v", err)
+	}
+	if serverErr := <-serverErrors; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+	var decoded response
+	if err := json.Unmarshal(output, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Data) != maxLogReadBytes {
+		t.Fatalf("expected %d log bytes, got %d", maxLogReadBytes, len(decoded.Data))
+	}
 }
 
 func TestSupervisorOwnsIdempotentBoundedPrimaryProcess(t *testing.T) {

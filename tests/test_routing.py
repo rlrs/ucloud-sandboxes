@@ -1922,9 +1922,14 @@ class RoutingStoreTests(unittest.TestCase):
             snapshot_reached = Event()
             allow_reconcile_to_continue = Event()
             original_load = reconciling_store._load_unlocked
+            loaded_exec_sessions: list[bool] = []
 
-            def pause_at_snapshot(conn):
-                snapshot = original_load(conn)
+            def pause_at_snapshot(conn, *, include_exec_sessions=True):
+                loaded_exec_sessions.append(include_exec_sessions)
+                snapshot = original_load(
+                    conn,
+                    include_exec_sessions=include_exec_sessions,
+                )
                 snapshot_reached.set()
                 self.assertTrue(allow_reconcile_to_continue.wait(timeout=5))
                 return snapshot
@@ -1972,6 +1977,7 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(stored.generation, 2)
         self.assertEqual(stored.create_operation_id, "create-2")
         self.assertEqual(stored.spec_hash, "hash-2")
+        self.assertEqual(loaded_exec_sessions, [False])
 
     def test_concurrent_different_spec_allocation_rejects_loser_atomically(self) -> None:
         with TemporaryDirectory() as raw_dir:

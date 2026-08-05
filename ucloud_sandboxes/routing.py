@@ -1973,7 +1973,7 @@ class RoutingStore:
                         (observed.sandbox_id,),
                     )
 
-                current = self._load_unlocked(conn)
+                current = self._load_unlocked(conn, include_exec_sessions=False)
                 for sandbox_id, route in current.sandboxes.items():
                     if route.node_url != node_url or sandbox_id in reported_ids:
                         continue

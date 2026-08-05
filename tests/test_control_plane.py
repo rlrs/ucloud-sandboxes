@@ -6483,6 +6483,47 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(demand_after_cleanup["pending_resources"]["disk_mb"], 0)
             self.assertEqual(demand_after_cleanup["pending"], [])
 
+    def test_gateway_rejects_shape_larger_than_autoscaled_node(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            raw_path = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                raw_path / "heartbeats.json",
+                routing_file=raw_path / "routes.sqlite",
+                max_sandbox_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=8192,
+                    disk_mb=16_384,
+                ),
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                base = f"http://{host}:{port}"
+                result = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    method="POST",
+                    payload={
+                        "id": "too-large",
+                        "image": "busybox",
+                        "cpus": 5,
+                        "memory_mb": 512,
+                        "disk_mb": 1024,
+                    },
+                    allow_error=True,
+                )
+                demand = self._json_request(f"{base}/v1/demand")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(result["status"], 422)
+        self.assertEqual(result["body"]["error_code"], "sandbox_shape_unschedulable")
+        self.assertFalse(result["body"]["retryable"])
+        self.assertEqual(demand["pending"], [])
+
     def test_gateway_prepares_capacity_as_expiring_demand_signal(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

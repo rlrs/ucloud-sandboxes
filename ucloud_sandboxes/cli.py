@@ -2830,6 +2830,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
         max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
         max_http_request_threads=args.max_http_request_threads,
+        max_sandbox_resources=config.policy.schedulable_node_resources,
     )
     host, port = server.server_address
     print(f"Serving heartbeat receiver on http://{host}:{port}")

@@ -110,22 +110,56 @@ def evaluate_scale(
         live_signals,
     )
 
-    demand_resources = (
-        _dynamic_demand_resources(demand)
-        if policy.dynamic_active_admission_enabled
-        else demand.desired_resources
+    maximum_request = policy.schedulable_node_resources
+    demand_placement_requests = tuple(
+        request
+        for request in demand.placement_requests
+        if request.resources.fits_within(maximum_request)
     )
+    unschedulable_placements = len(demand.placement_requests) - len(
+        demand_placement_requests
+    )
+    if demand.placement_requests:
+        demand_resources = _placement_request_resources(
+            demand_placement_requests,
+            dynamic=policy.dynamic_active_admission_enabled,
+            include_disk=True,
+        )
+    else:
+        # Older state backends cannot reconstruct individual shapes. Retain
+        # conservative aggregation rather than guessing at request boundaries.
+        demand_resources = demand.desired_resources
+    program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     if (
         policy.program_aware_autoscaling_enabled
         and program_signals is not None
     ):
-        demand_resources = _add_resources(
-            demand_resources,
-            (
+        program_placement_requests = tuple(
+            request
+            for request in program_signals.ready_placement_requests
+            if request.resources.fits_within(maximum_request)
+        )
+        unschedulable_placements += len(
+            program_signals.ready_placement_requests
+        ) - len(program_placement_requests)
+        if program_signals.ready_placement_requests:
+            program_resources = _add_resources(
+                _placement_request_resources(
+                    program_placement_requests,
+                    dynamic=policy.dynamic_active_admission_enabled,
+                    include_disk=False,
+                ),
+                program_signals.weighted_model_wait_resources,
+            )
+        else:
+            program_resources = (
                 _dynamic_program_resources(program_signals)
                 if policy.dynamic_active_admission_enabled
                 else program_signals.effective_resources
-            ),
+            )
+        demand_resources = _add_resources(
+            demand_resources,
+            program_resources,
         )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
     projected_free_resources = _projected_free_resources(
@@ -138,15 +172,10 @@ def evaluate_scale(
         desired_resources,
         projected_free_resources,
     )
-    placement_requests = demand.placement_requests
-    if (
-        policy.program_aware_autoscaling_enabled
-        and program_signals is not None
-    ):
-        placement_requests = (
-            *placement_requests,
-            *program_signals.ready_placement_requests,
-        )
+    placement_requests = (
+        *demand_placement_requests,
+        *program_placement_requests,
+    )
     placement_nodes = _nodes_for_unplaced_requests(
         capacity_nodes,
         placement_requests,
@@ -155,6 +184,12 @@ def evaluate_scale(
     )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
+
+    if unschedulable_placements > 0:
+        reasons.append(
+            f"{unschedulable_placements} placement request(s) exceed the "
+            "configured schedulable node shape and were excluded from create demand"
+        )
 
     if demand.suppressed_pending_count > 0:
         reasons.append(
@@ -717,29 +752,38 @@ def _nodes_for_unplaced_requests(
     return missing
 
 
-def _dynamic_demand_resources(demand: SandboxDemand) -> ResourceQuantity:
-    """Reduce dynamic CPU/RAM demand without weakening hard disk ownership.
+def _placement_request_resources(
+    requests: tuple[SandboxPlacementRequest, ...],
+    *,
+    dynamic: bool,
+    include_disk: bool,
+) -> ResourceQuantity:
+    """Aggregate exact schedulable shapes without weakening hard disk ownership."""
 
-    Pending and prepared requests retain additive disk demand. CPU and memory
-    limits describe the largest single sandbox that must fit; they are not
-    steady-state reservations for every resident sandbox. Placement requests
-    preserve the exact individual shapes for bin fitting.
-    """
-
-    if not demand.placement_requests:
-        # Older state backends cannot reconstruct individual shapes. Retain
-        # conservative aggregation rather than guessing a maximum.
-        return demand.desired_resources
+    if not dynamic:
+        total = ResourceQuantity()
+        for request in requests:
+            resources = request.resources
+            total = total + ResourceQuantity(
+                vcpu=resources.vcpu,
+                memory_mb=resources.memory_mb,
+                disk_mb=resources.disk_mb if include_disk else 0,
+            )
+        return total
     return ResourceQuantity(
         vcpu=max(
-            (item.resources.vcpu for item in demand.placement_requests),
+            (item.resources.vcpu for item in requests),
             default=0.0,
         ),
         memory_mb=max(
-            (item.resources.memory_mb for item in demand.placement_requests),
+            (item.resources.memory_mb for item in requests),
             default=0,
         ),
-        disk_mb=demand.desired_resources.disk_mb,
+        disk_mb=(
+            sum(item.resources.disk_mb for item in requests)
+            if include_disk
+            else 0
+        ),
     )
 
 

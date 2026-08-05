@@ -73,7 +73,13 @@ from .metrics import (
     record_sandbox_scheduled,
     trace_span,
 )
-from .models import NodeHeartbeat, ResourceQuantity, parse_iso_datetime, utc_now
+from .models import (
+    NodeHeartbeat,
+    ResourceQuantity,
+    ScalePolicy,
+    parse_iso_datetime,
+    utc_now,
+)
 from .program_scheduler import (
     WakeNodeCandidate,
     node_pressure_score,
@@ -354,6 +360,17 @@ class GatewaySchedulingBusyError(RuntimeError):
     """Placement serialization is occupied and the caller should retry."""
 
 
+class SandboxShapeUnschedulableError(ValueError):
+    def __init__(
+        self,
+        requested: ResourceQuantity,
+        maximum: ResourceQuantity,
+    ) -> None:
+        super().__init__("sandbox resources exceed the schedulable node shape")
+        self.requested = requested
+        self.maximum = maximum
+
+
 class RegistryImageReferenceUnavailable(RuntimeError):
     pass
 
@@ -431,6 +448,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     sandbox_create_limiter: BoundedSemaphore | None
     sandbox_create_busy_traces: GatewayBusyTraceSampler
     max_concurrent_sandbox_creates: int
+    max_sandbox_resources: ResourceQuantity
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
     def do_GET(self) -> None:
@@ -2276,7 +2294,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("sandbox payload must be a JSON object")
             spec = SandboxSpec.from_dict(raw)
             spec.validate()
+            requested = spec.requested_resources()
+            if not requested.fits_within(self.max_sandbox_resources):
+                raise SandboxShapeUnschedulableError(
+                    requested,
+                    self.max_sandbox_resources,
+                )
             parsed_ok = True
+        except SandboxShapeUnschedulableError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "sandbox_shape_unschedulable",
+                    "retryable": False,
+                    "requested_resources": exc.requested.to_dict(),
+                    "maximum_resources": exc.maximum.to_dict(),
+                },
+                status=HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
+            return
         except (json.JSONDecodeError, ValueError) as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
@@ -5718,6 +5754,7 @@ def build_server(
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
     max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     build_context_store_dir: Path | None = None,
+    max_sandbox_resources: ResourceQuantity | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     if node_control_bearer_token is not None and not node_control_bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
@@ -5787,6 +5824,9 @@ def build_server(
     BoundHandler.max_concurrent_sandbox_creates = max(
         0,
         int(max_concurrent_sandbox_creates),
+    )
+    BoundHandler.max_sandbox_resources = (
+        max_sandbox_resources or ScalePolicy().schedulable_node_resources
     )
     BoundHandler.sandbox_create_limiter = (
         BoundedSemaphore(BoundHandler.max_concurrent_sandbox_creates)

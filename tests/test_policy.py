@@ -90,6 +90,25 @@ def node(
 
 
 class ScalePolicyTests(unittest.TestCase):
+    def test_oversized_request_is_excluded_from_create_demand(self) -> None:
+        oversized = ResourceQuantity(vcpu=33, memory_mb=4096, disk_mb=8192)
+
+        decision = evaluate_scale(
+            [],
+            SandboxDemand(
+                pending_resources=oversized,
+                pending_count=1,
+                placement_requests=(
+                    SandboxPlacementRequest(resources=oversized),
+                ),
+            ),
+            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertEqual(decision.desired_resources, ResourceQuantity())
+        self.assertIn("exceed", decision.reasons[0])
+
     def test_minimum_replacement_also_satisfies_one_node_resource_deficit(self) -> None:
         decision = evaluate_scale(
             [],

@@ -132,6 +132,9 @@ SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS = 10 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
+DEFAULT_MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
+DEFAULT_MAX_PROXY_ERROR_BYTES = 1024 * 1024
+PROXY_STREAM_CHUNK_BYTES = 64 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
 DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
@@ -372,6 +375,10 @@ class SandboxShapeUnschedulableError(ValueError):
 
 
 class RegistryImageReferenceUnavailable(RuntimeError):
+    pass
+
+
+class ProxyResponseTooLargeError(RuntimeError):
     pass
 
 
@@ -4002,6 +4009,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 SANDBOX_GENERATION_HEADER: str(route.generation),
                 SANDBOX_OPERATION_ID_HEADER: route.delete_operation_id,
             }
+        if self.command == "GET" and normalized_path.endswith("/files"):
+            self._stream_proxy_request(
+                route.node_url,
+                self.path,
+                method=self.command,
+                extra_headers=extra_headers,
+            )
+            return
         response = self._proxy_request(
             route.node_url,
             self.path,
@@ -5567,6 +5582,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.BAD_REQUEST,
                     )
                     return True
+            if self.command == "GET" and urlparse(self.path).path.endswith("/files"):
+                self._stream_proxy_request(
+                    self.upstream_node_url,
+                    self.path,
+                    method=self.command,
+                )
+                return True
             response = self._proxy_request(
                 self.upstream_node_url,
                 self.path,
@@ -5594,6 +5616,56 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         timeout_seconds: float = DEFAULT_PROXY_TIMEOUT_SECONDS,
         extra_headers: dict[str, str] | None = None,
     ) -> ProxiedResponse:
+        proxied = self._build_proxy_request(
+            node_url,
+            path,
+            method=method,
+            body=body,
+            extra_headers=extra_headers,
+        )
+        try:
+            with _open_node_request(
+                proxied,
+                timeout=timeout_seconds,
+                authenticated=self.node_control_bearer_token is not None,
+            ) as response:
+                try:
+                    response_body = _read_bounded_proxy_body(
+                        response,
+                        max_bytes=DEFAULT_MAX_PROXY_RESPONSE_BYTES,
+                    )
+                except ProxyResponseTooLargeError:
+                    return _proxy_response_too_large(
+                        DEFAULT_MAX_PROXY_RESPONSE_BYTES
+                    )
+                return ProxiedResponse(
+                    response.status,
+                    response.headers,
+                    response_body,
+                )
+        except error.HTTPError as exc:
+            try:
+                response_body = _read_bounded_proxy_body(
+                    exc,
+                    max_bytes=DEFAULT_MAX_PROXY_ERROR_BYTES,
+                )
+            except ProxyResponseTooLargeError:
+                return _proxy_response_too_large(DEFAULT_MAX_PROXY_ERROR_BYTES)
+            return ProxiedResponse(exc.code, exc.headers, response_body)
+        except error.URLError as exc:
+            return _node_transport_error_response(exc.reason)
+        except OSError as exc:
+            return _node_transport_error_response(exc)
+
+    def _build_proxy_request(
+        self,
+        node_url: str,
+        path: str,
+        *,
+        method: str,
+        body: Any = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> request.Request:
         headers = {
             key: value
             for key, value in self.headers.items()
@@ -5619,27 +5691,92 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 del headers[key]
         if self.node_control_bearer_token is not None:
             headers["Authorization"] = f"Bearer {self.node_control_bearer_token}"
-        proxied = request.Request(
+        return request.Request(
             node_url.rstrip("/") + path,
             data=body,
             method=method,
             headers=headers,
         )
+
+    def _stream_proxy_request(
+        self,
+        node_url: str,
+        path: str,
+        *,
+        method: str,
+        body: Any = None,
+        timeout_seconds: float = DEFAULT_PROXY_TIMEOUT_SECONDS,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        proxied = self._build_proxy_request(
+            node_url,
+            path,
+            method=method,
+            body=body,
+            extra_headers=extra_headers,
+        )
         try:
-            with _open_node_request(
+            response = _open_node_request(
                 proxied,
                 timeout=timeout_seconds,
                 authenticated=self.node_control_bearer_token is not None,
-            ) as response:
-                return ProxiedResponse(
-                    response.status, response.headers, response.read()
-                )
+            )
         except error.HTTPError as exc:
-            return ProxiedResponse(exc.code, exc.headers, exc.read())
+            try:
+                response_body = _read_bounded_proxy_body(
+                    exc,
+                    max_bytes=DEFAULT_MAX_PROXY_ERROR_BYTES,
+                )
+            except ProxyResponseTooLargeError:
+                proxied_error = _proxy_response_too_large(
+                    DEFAULT_MAX_PROXY_ERROR_BYTES
+                )
+            else:
+                proxied_error = ProxiedResponse(exc.code, exc.headers, response_body)
+            self._send_proxied_response(proxied_error)
+            return
         except error.URLError as exc:
-            return _node_transport_error_response(exc.reason)
+            self._send_proxied_response(_node_transport_error_response(exc.reason))
+            return
         except OSError as exc:
-            return _node_transport_error_response(exc)
+            self._send_proxied_response(_node_transport_error_response(exc))
+            return
+
+        with response:
+            if response.status >= 400:
+                try:
+                    response_body = _read_bounded_proxy_body(
+                        response,
+                        max_bytes=DEFAULT_MAX_PROXY_ERROR_BYTES,
+                    )
+                except ProxyResponseTooLargeError:
+                    proxied_error = _proxy_response_too_large(
+                        DEFAULT_MAX_PROXY_ERROR_BYTES
+                    )
+                else:
+                    proxied_error = ProxiedResponse(
+                        response.status,
+                        response.headers,
+                        response_body,
+                    )
+                self._send_proxied_response(proxied_error)
+                return
+            try:
+                content_length = _proxy_content_length(response.headers)
+            except ValueError as exc:
+                self._write_json(
+                    {"error": f"invalid upstream node response: {exc}"},
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+            self.send_response(response.status)
+            self._copy_streaming_response_headers(
+                response.headers,
+                content_length=content_length,
+            )
+            self.end_headers()
+            while chunk := response.read(PROXY_STREAM_CHUNK_BYTES):
+                self.wfile.write(chunk)
 
     def _send_proxied_response(
         self,
@@ -5680,6 +5817,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         for key, value in (extra_headers or {}).items():
             self.send_header(key, value)
         self.send_header("Content-Length", str(content_length))
+
+    def _copy_streaming_response_headers(
+        self,
+        headers: Any,
+        *,
+        content_length: int | None,
+    ) -> None:
+        for key, value in headers.items():
+            if key.lower() in {"connection", "transfer-encoding", "content-length"}:
+                continue
+            self.send_header(key, value)
+        if content_length is None:
+            self.close_connection = True
+        else:
+            self.send_header("Content-Length", str(content_length))
 
     def _check_authorized(self) -> bool:
         if self.gateway_bearer_token is None:
@@ -7394,6 +7546,67 @@ def _node_transport_error_response(reason: object) -> ProxiedResponse:
         body,
         transport_error_kind=kind,
     )
+
+
+def _proxy_response_too_large(max_bytes: int) -> ProxiedResponse:
+    body = json.dumps(
+        {
+            "error": "upstream sandbox node response exceeded the gateway limit",
+            "max_bytes": max_bytes,
+            "retryable": False,
+        }
+    ).encode("utf-8")
+    return ProxiedResponse(
+        HTTPStatus.BAD_GATEWAY,
+        {"Content-Type": "application/json"},
+        body,
+    )
+
+
+def _proxy_content_length(headers: Any) -> int | None:
+    raw = _header_value(headers, "Content-Length").strip()
+    if not raw:
+        return None
+    try:
+        length = int(raw)
+    except ValueError as exc:
+        raise ValueError("invalid Content-Length") from exc
+    if length < 0:
+        raise ValueError("negative Content-Length")
+    return length
+
+
+def _read_bounded_proxy_body(response: Any, *, max_bytes: int) -> bytes:
+    content_length = _proxy_content_length(response.headers)
+    if content_length is not None and content_length > max_bytes:
+        raise ProxyResponseTooLargeError(
+            f"upstream response exceeds the {max_bytes} byte limit"
+        )
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        try:
+            chunk = response.read(
+                min(PROXY_STREAM_CHUNK_BYTES, max_bytes + 1 - total)
+            )
+        except TypeError:
+            # Compatibility with lightweight file-like test doubles. urllib
+            # response objects always accept the bounded size argument above.
+            chunk = response.read()
+            if len(chunk) > max_bytes:
+                raise ProxyResponseTooLargeError(
+                    f"upstream response exceeds the {max_bytes} byte limit"
+                )
+            return chunk
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise ProxyResponseTooLargeError(
+                f"upstream response exceeds the {max_bytes} byte limit"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _node_fork_intent_states(

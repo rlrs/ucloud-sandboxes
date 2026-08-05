@@ -5169,6 +5169,126 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(downloaded["body"], b"via gateway\n")
         self.assertEqual(downloaded["headers"]["X-Sandbox-Path"], "/tmp/out.txt")
 
+    def test_gateway_bounds_buffered_node_responses(self) -> None:
+        read_sizes: list[int | None] = []
+
+        class OversizedResponse:
+            status = 200
+            headers: dict[str, str] = {"Content-Type": "application/json"}
+
+            def __enter__(self) -> "OversizedResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, size: int | None = None) -> bytes:
+                read_sizes.append(size)
+                return b"x" * 9
+
+        with TemporaryDirectory() as raw_dir:
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                Path(raw_dir) / "heartbeats.json",
+                upstream_node_url="http://node.invalid:8090",
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                with (
+                    patch.object(control_plane, "DEFAULT_MAX_PROXY_RESPONSE_BYTES", 8),
+                    patch.object(
+                        control_plane.request,
+                        "urlopen",
+                        return_value=OversizedResponse(),
+                    ),
+                ):
+                    conn = HTTPConnection(host, port, timeout=5)
+                    try:
+                        conn.request("GET", "/v1/sandboxes")
+                        response = conn.getresponse()
+                        payload = json.loads(response.read().decode("utf-8"))
+                    finally:
+                        conn.close()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response.status, 502)
+        self.assertEqual(payload["max_bytes"], 8)
+        self.assertEqual(read_sizes, [9])
+
+    def test_gateway_streams_file_downloads_in_bounded_chunks(self) -> None:
+        body = b"a" * (control_plane.PROXY_STREAM_CHUNK_BYTES * 2 + 7)
+        remaining = bytearray(body)
+        read_sizes: list[int | None] = []
+
+        class StreamingResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(body)),
+                "X-Sandbox-Path": "/tmp/large.bin",
+            }
+
+            def __enter__(self) -> "StreamingResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, size: int | None = None) -> bytes:
+                read_sizes.append(size)
+                assert size is not None
+                chunk = bytes(remaining[:size])
+                del remaining[:size]
+                return chunk
+
+        with TemporaryDirectory() as raw_dir:
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                Path(raw_dir) / "heartbeats.json",
+                upstream_node_url="http://node.invalid:8090",
+            )
+            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
+            gateway_thread.start()
+            try:
+                host, port = gateway.server_address
+                with patch.object(
+                    control_plane.request,
+                    "urlopen",
+                    return_value=StreamingResponse(),
+                ):
+                    conn = HTTPConnection(host, port, timeout=5)
+                    try:
+                        conn.request(
+                            "GET",
+                            "/v1/sandboxes/file-one/files?path=/tmp/large.bin",
+                        )
+                        response = conn.getresponse()
+                        downloaded = response.read()
+                        response_path = response.headers["X-Sandbox-Path"]
+                    finally:
+                        conn.close()
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(downloaded, body)
+        self.assertEqual(response_path, "/tmp/large.bin")
+        self.assertGreater(len(read_sizes), 2)
+        self.assertTrue(
+            all(
+                size is not None
+                and size <= control_plane.PROXY_STREAM_CHUNK_BYTES
+                for size in read_sizes
+            )
+        )
+
     def test_gateway_deduplicates_concurrent_cold_image_pull(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)

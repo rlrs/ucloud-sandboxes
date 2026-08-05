@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -187,6 +189,71 @@ func TestSupervisorOwnsIdempotentBoundedPrimaryProcess(t *testing.T) {
 	conflicted := callSupervisor(t, socket, conflict)
 	if conflicted.OK || conflicted.Error == "" {
 		t.Fatalf("second primary process was admitted: %#v", conflicted)
+	}
+}
+
+func TestStatusSurfacesAndRetriesDurabilityFailures(t *testing.T) {
+	for _, state := range []string{"running", "exited"} {
+		t.Run(state, func(t *testing.T) {
+			stateDir := t.TempDir()
+			s := &supervisor{
+				stateDir: stateDir,
+				state: &jobRecord{
+					Version:    protocolVersion,
+					JobID:      "job-1",
+					SpecSHA256: strings.Repeat("a", 64),
+					State:      state,
+					Sequence:   2,
+				},
+			}
+			injected := errors.New("injected persistence failure")
+			failing := true
+			s.persistHook = func(_ *jobRecord) error {
+				if failing {
+					return injected
+				}
+				return nil
+			}
+
+			s.mu.Lock()
+			if err := s.persistStateLocked(); !errors.Is(err, injected) {
+				t.Fatalf("expected injected persistence failure, got %v", err)
+			}
+			s.mu.Unlock()
+
+			degraded := s.status("job-1")
+			if degraded.OK || degraded.Job == nil || degraded.Job.State != state {
+				t.Fatalf("durability failure was not visible: %#v", degraded)
+			}
+			if !strings.Contains(degraded.Error, "durability is degraded") {
+				t.Fatalf("unexpected durability error: %q", degraded.Error)
+			}
+			degradedLogs := s.logs(request{
+				JobID:  "job-1",
+				Stream: "stdout",
+				Limit:  1,
+			})
+			if degradedLogs.OK || degradedLogs.Job == nil {
+				t.Fatalf("log request hid durability failure: %#v", degradedLogs)
+			}
+
+			failing = false
+			recovered := s.status("job-1")
+			if !recovered.OK || recovered.Error != "" || recovered.Job == nil {
+				t.Fatalf("durability retry did not recover: %#v", recovered)
+			}
+			payload, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var persisted jobRecord
+			if err := json.Unmarshal(payload, &persisted); err != nil {
+				t.Fatal(err)
+			}
+			if persisted.State != state || persisted.Sequence != 2 {
+				t.Fatalf("unexpected persisted state: %#v", persisted)
+			}
+		})
 	}
 }
 

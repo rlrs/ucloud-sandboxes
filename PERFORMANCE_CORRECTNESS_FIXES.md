@@ -23,7 +23,7 @@ Status values: `pending`, `in progress`, `complete`, or `blocked`.
 | 13 | P2 | complete | Direct-runtime restart performs quadratic registry work and repeated node-global networking checks. | Reconcile from one registry snapshot and perform node-global network setup once. | `fix: make direct restart reconciliation linear` |
 | 14 | P2 | complete | Complete heartbeats scan all historical exec routes. | Query only required sandbox routes and avoid loading exec sessions. | `fix: skip exec history during heartbeat reconcile` |
 | 15 | P2 | complete | Permanent direct-registry tombstones eventually exceed the hard read ceiling. | Add generation-safe bounded compaction and prevent writes that make the registry unreadable. | `fix: compact direct registry tombstones safely` |
-| 16 | P2 | pending | Managed-process running and terminal persistence failures are ignored. | Surface/retry durability failures and enter a visible degraded state instead of reporting false success. | — |
+| 16 | P2 | complete | Managed-process running and terminal persistence failures are ignored. | Surface/retry durability failures and enter a visible degraded state instead of reporting false success. | `fix: surface managed process durability failures` |
 | 17 | P2 | pending | Successful image-build exit codes deserialize as missing. | Select snake/camel-case fields by presence so integer zero survives round trips. | — |
 
 ## Baseline verification

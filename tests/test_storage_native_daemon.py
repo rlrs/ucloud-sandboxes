@@ -475,6 +475,43 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     expected_revision=1,
                 )
 
+    def test_released_volume_wakes_without_reserving_its_capacity_twice(self) -> None:
+        with TemporaryDirectory() as raw:
+            capacity = 1 << 30
+            service, _, _ = self._service(Path(raw), capacity=capacity)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=capacity,
+            )
+            sealed = service.freeze_and_seal(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="seal:1",
+                expected_revision=int(created["record"]["revision"]),
+            )
+            released = service.release_runtime(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="release:1",
+                expected_revision=int(sealed["record"]["revision"]),
+            )
+
+            mounted = service.mount_snapshot_cow(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="mount:1",
+                expected_revision=int(released["record"]["revision"]),
+            )
+
+            self.assertEqual(mounted["record"]["state"], "mounted")
+            self.assertEqual(mounted["record"]["virtual_size"], capacity)
+
     def test_deleted_import_tombstone_allows_same_incarnation_retry(self) -> None:
         with TemporaryDirectory() as raw:
             service, _, _ = self._service(Path(raw), publisher=True)

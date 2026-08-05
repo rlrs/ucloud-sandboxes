@@ -533,9 +533,10 @@ class StorageNativeJournal:
                 reserved = connection.execute(
                     (
                         "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
-                        f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)})"
+                        f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)}) "
+                        "AND volume_id != ?"
                     ),
-                    tuple(sorted(_ACTIVE_CAPACITY_STATES)),
+                    (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
                 if int(reserved) + record.virtual_size > hard_capacity_bytes:
                     raise StorageNativeConflictError(

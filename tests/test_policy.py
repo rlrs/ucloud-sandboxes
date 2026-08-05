@@ -1324,6 +1324,54 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.projected_free_resources, ResourceQuantity())
         self.assertEqual(decision.creates, 1)
 
+    def test_zero_credit_provisioning_node_does_not_hide_fragmentation(self) -> None:
+        now = utc_now()
+        requested = ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=1024)
+        ready_nodes = [
+            node(
+                job_id,
+                total_resources=ResourceQuantity(
+                    vcpu=4,
+                    memory_mb=8192,
+                    disk_mb=16_384,
+                ),
+                used_resources=ResourceQuantity(
+                    vcpu=3,
+                    memory_mb=4096,
+                    disk_mb=8192,
+                ),
+            )
+            for job_id in ("ready-a", "ready-b")
+        ]
+        stale = node(
+            "stale-queued",
+            state="IN_QUEUE",
+            fresh=False,
+            created_at=now - timedelta(hours=1),
+        )
+
+        decision = evaluate_scale(
+            [*ready_nodes, stale],
+            SandboxDemand(
+                pending_resources=requested,
+                pending_count=1,
+                placement_requests=(
+                    SandboxPlacementRequest(resources=requested),
+                ),
+            ),
+            ScalePolicy(
+                max_nodes=5,
+                max_create_per_cycle=1,
+                stale_provisioning_after_seconds=60,
+                stale_provisioning_capacity_weight=0.0,
+            ),
+            now=now,
+        )
+
+        self.assertEqual(decision.resource_deficit, ResourceQuantity())
+        self.assertEqual(decision.creates, 1)
+        self.assertIn("do not fit", decision.reasons[-1])
+
     def test_running_provisioning_uses_created_time_when_start_time_is_missing(
         self,
     ) -> None:

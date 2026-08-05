@@ -181,6 +181,7 @@ def evaluate_scale(
         placement_requests,
         policy,
         now=now,
+        oldest_pending_seconds=oldest_pending_seconds,
     )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
@@ -611,27 +612,15 @@ def _projected_free_resources(
                     node.heartbeat.free_resources,
                 )
             elif node.is_provisioning:
-                free = node.heartbeat.free_resources
-                if _has_resource_demand(node.heartbeat.effective_resources):
-                    total = total + _scale_resources(
-                        _security_adjusted_resources(node, free),
-                        _provisioning_weight(
-                            node,
-                            policy,
-                            now,
-                            oldest_pending_seconds,
-                        ),
-                    )
-                else:
-                    total = total + _weighted_estimated_node_resources(
-                        node,
-                        policy,
-                        now,
-                        oldest_pending_seconds,
-                    )
+                total = total + _projected_provisioning_resources(
+                    node,
+                    policy,
+                    now,
+                    oldest_pending_seconds,
+                )
             continue
         if node.is_provisioning:
-            total = total + _weighted_estimated_node_resources(
+            total = total + _projected_provisioning_resources(
                 node,
                 policy,
                 now,
@@ -646,12 +635,12 @@ def _nodes_for_unplaced_requests(
     policy: ScalePolicy,
     *,
     now: datetime,
+    oldest_pending_seconds: int,
 ) -> int:
     """Bin-pack accepted request shapes so aggregate free space cannot lie."""
 
     if not requests:
         return 0
-    del now
     bins: list[tuple[str, ResourceQuantity, bool]] = []
     for node in nodes:
         if node.job.is_final:
@@ -670,16 +659,18 @@ def _nodes_for_unplaced_requests(
                 )
             )
         elif node.is_provisioning:
-            # A queued node is a real future placement bin. Aggregate capacity
-            # remains weighted separately, but starting another identical VM
-            # cannot repair fragmentation any sooner.
+            available = _projected_provisioning_resources(
+                node,
+                policy,
+                now,
+                oldest_pending_seconds,
+            )
+            if not _has_resource_demand(available):
+                continue
             bins.append(
                 (
                     node.job_id,
-                    _security_adjusted_resources(
-                        node,
-                        _estimated_node_resources(node, policy),
-                    ),
+                    available,
                     policy.dynamic_active_admission_enabled,
                 )
             )
@@ -816,15 +807,28 @@ def _dynamic_program_resources(
     return _add_resources(ready, signals.weighted_model_wait_resources)
 
 
-def _weighted_estimated_node_resources(
+def _projected_provisioning_resources(
     node: SandboxNode,
     policy: ScalePolicy,
     now: datetime,
     oldest_pending_seconds: int,
 ) -> ResourceQuantity:
+    weight = _provisioning_weight(
+        node,
+        policy,
+        now,
+        oldest_pending_seconds,
+    )
+    if node.heartbeat is not None and _has_resource_demand(
+        node.heartbeat.effective_resources
+    ):
+        return _scale_resources(
+            _security_adjusted_resources(node, node.heartbeat.free_resources),
+            weight,
+        )
     return _scale_resources(
         _security_adjusted_resources(node, _estimated_node_resources(node, policy)),
-        _provisioning_weight(node, policy, now, oldest_pending_seconds),
+        weight,
     )
 
 

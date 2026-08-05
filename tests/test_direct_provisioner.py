@@ -10,7 +10,9 @@ import hashlib
 import json
 import shutil
 import unittest
+from unittest.mock import patch
 
+from ucloud_sandboxes.direct_network import DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
 from ucloud_sandboxes.direct_node_adapter import (
     DirectNodeManagerAdapter,
@@ -476,6 +478,69 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertTrue(images.reconciled)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].registration.phase, "owned")
+
+    def test_restart_uses_one_registry_snapshot_and_one_host_network_pass(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _, warden = self.make(root)
+            network = DirectNetworkManager(
+                root / "network-slots.json",
+                namespace_root=root / "netns",
+            )
+            provisioner.network_manager = network
+            provisioner.oci = DirectOciConfigBuilder(network_mode="sandbox")
+            warden.config.network = "sandbox"
+            original_prepare = provisioner.overlays.prepare
+
+            def prepare_with_etc(**kwargs):
+                lease = original_prepare(**kwargs)
+                (lease.merged / "etc").mkdir()
+                return lease
+
+            provisioner.overlays.prepare = prepare_with_etc
+            with (
+                patch.object(network, "_ensure_host_rules") as ensure_host_rules,
+                patch.object(network, "_ensure_kernel_lease") as ensure_kernel_lease,
+            ):
+                for index in range(3):
+                    provisioner.create(
+                        spec=replace(
+                            self.spec(),
+                            id=f"sandbox-{index}",
+                            network="bridge",
+                        ),
+                        sandbox_generation=7,
+                        operation_id=f"create:{index}",
+                    )
+                ensure_host_rules.reset_mock()
+                ensure_kernel_lease.reset_mock()
+                original_list = registry.list
+                original_get = registry.get
+                list_calls = 0
+                get_calls = 0
+
+                def counted_list():
+                    nonlocal list_calls
+                    list_calls += 1
+                    return original_list()
+
+                def counted_get(sandbox_id: str):
+                    nonlocal get_calls
+                    get_calls += 1
+                    return original_get(sandbox_id)
+
+                registry.list = counted_list  # type: ignore[method-assign]
+                registry.get = counted_get  # type: ignore[method-assign]
+
+                results = provisioner.start()
+
+            self.assertEqual(len(results), 3)
+            self.assertEqual(list_calls, 1)
+            self.assertEqual(get_calls, 0)
+            ensure_host_rules.assert_called_once_with()
+            self.assertEqual(ensure_kernel_lease.call_count, 3)
 
     def test_restart_never_turns_interrupted_import_into_new_sandbox(self) -> None:
         with TemporaryDirectory() as raw:

@@ -101,10 +101,13 @@ class DirectSandboxProvisioner:
         """Bind node identity, audit all owners, and reconcile every incarnation."""
         self.identity_store.bind(self.identity)
         self.image_store.reconcile_export_containers()
-        self._audit_ownership()
+        registrations = self.registry.list()
+        self._audit_ownership(registrations)
+        host_rules_ready = self.network_manager is not None
+        if self.network_manager is not None:
+            self.network_manager.reconcile()
         results: list[DirectProvisioningResult] = []
         deletion_failures: list[tuple[str, Exception]] = []
-        registrations = self.registry.list()
         # Reclaim every durably deleted sandbox before advancing any pending
         # create. A node at its hard storage limit must still be able to free
         # capacity; registry ordering must never let planned work deadlock the
@@ -113,7 +116,7 @@ class DirectSandboxProvisioner:
             if item.phase != "deleting":
                 continue
             try:
-                self.delete(item.sandbox_id)
+                self._delete_registration(item)
             except Exception as exc:
                 # DELETING is the durable ownership fence. Keep serving
                 # healthy sandboxes and let the service reconciler retry;
@@ -141,7 +144,12 @@ class DirectSandboxProvisioner:
                     )
                 results.append(DirectProvisioningResult(item, record.state))
             else:
-                results.append(self.reconcile(item.sandbox_id))
+                results.append(
+                    self._advance(
+                        item,
+                        host_rules_ready=host_rules_ready,
+                    )
+                )
         if deletion_failures:
             first_id, first_error = deletion_failures[0]
             _LOG.warning(
@@ -737,6 +745,7 @@ class DirectSandboxProvisioner:
         *,
         image=None,
         config: dict[str, Any] | None = None,
+        host_rules_ready: bool = False,
     ) -> DirectProvisioningResult:
         if registration.runtime_identity_sha256 != self.identity.digest:
             raise DirectRegistryError(
@@ -745,7 +754,10 @@ class DirectSandboxProvisioner:
         if registration.phase == "planned":
             reservation = self._reserve(registration)
             registration = self._prepare_quota(registration, reservation)
-        network_namespace_path = self._network_namespace(registration)
+        network_namespace_path = self._network_namespace(
+            registration,
+            host_rules_ready=host_rules_ready,
+        )
         if registration.phase == "quota_ready":
             image = image or self.image_store.materialize(registration.spec.image)
             config = config or self.oci.build(
@@ -923,10 +935,13 @@ class DirectSandboxProvisioner:
             f"{registration.sandbox_id}.sandbox-{registration.sandbox_generation}"
         )
 
-    def _audit_ownership(self) -> None:
+    def _audit_ownership(
+        self,
+        registrations_snapshot: tuple[DirectSandboxRegistration, ...],
+    ) -> None:
         registrations = {
             (item.sandbox_id, item.sandbox_generation): item
-            for item in self.registry.list()
+            for item in registrations_snapshot
         }
         reservations = {
             (item.sandbox_id, item.sandbox_generation): item
@@ -1021,6 +1036,8 @@ class DirectSandboxProvisioner:
     def _network_namespace(
         self,
         registration: DirectSandboxRegistration,
+        *,
+        host_rules_ready: bool = False,
     ) -> Path | None:
         if registration.spec.network == "none":
             return None
@@ -1029,6 +1046,7 @@ class DirectSandboxProvisioner:
         return self.network_manager.ensure(
             registration.sandbox_id,
             registration.sandbox_generation,
+            host_rules_ready=host_rules_ready,
         ).namespace_path
 
     def ensure_network(

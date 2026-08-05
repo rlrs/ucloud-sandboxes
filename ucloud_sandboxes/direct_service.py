@@ -278,7 +278,6 @@ class DirectSandboxService:
             self._deletion_thread.start()
         network_manager = self.provisioner.network_manager
         if network_manager is not None:
-            network_manager.reconcile()
             if (
                 network_manager.has_dynamic_tcp_egress
                 and (

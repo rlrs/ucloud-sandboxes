@@ -57,13 +57,19 @@ uv run ucloud-sandboxes serve-model-relay \
   --gateway-bearer-token-file /work/data/ucloud-sandboxes/state/gateway-token \
   --request-timeout-seconds 7200 \
   --worker-lease-seconds 600 \
-  --completed-request-retention-seconds 3600
+  --completed-request-retention-seconds 3600 \
+  --max-completed-bytes 268435456
 ```
 
 Use the worker bearer token for `/register_rollout`, `/worker/poll`,
 `/worker/respond`, and `/worker/error`. Direct OpenAI relay clients use the
 sandbox bearer token. General tunnels use their registration-scoped URL and
 preserve `Authorization` for the upstream protocol.
+
+The relay retains completed responses for idempotent replay, bounded by both
+the retention interval and `--max-completed-bytes` (256 MiB by default). Once a
+request completes, its original request body is removed from the retained and
+durable record.
 
 Live development relay:
 

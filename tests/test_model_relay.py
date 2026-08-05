@@ -4,7 +4,9 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from pathlib import Path
+import sqlite3
 import tempfile
+from threading import Event, Timer
 import time
 from typing import Any, AsyncIterator
 import unittest
@@ -220,6 +222,127 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_responses_obey_byte_budget_and_drop_request_bodies(
+        self,
+    ) -> None:
+        state = ModelRelayState(
+            max_completed_requests=10,
+            max_completed_bytes=1200,
+        )
+        await state.register_rollout("completed-bytes")
+        completed_requests = []
+        for index in range(3):
+            request = await state.enqueue(
+                rollout_id="completed-bytes",
+                endpoint="/v1/responses",
+                body={"request": "y" * 400, "index": index},
+                headers={"Content-Type": "application/json"},
+            )
+            completed_requests.append(request)
+            await state.cancel_request(
+                request_id=request.request_id,
+                response=RelayWorkerResponse(499, b"x" * 700),
+            )
+
+        stats = await state.stats()
+
+        self.assertEqual(stats["completed_retained"], 1)
+        self.assertLessEqual(stats["completed_bytes"], 1200)
+        self.assertTrue(
+            all(
+                request.body is None
+                and request.body_bytes == b""
+                and request.headers == {}
+                and request.payload_bytes == 0
+                for request in completed_requests
+            )
+        )
+
+    async def test_restart_prunes_completed_byte_budget_before_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(
+                state_path=state_path,
+                max_completed_requests=10,
+                max_completed_bytes=10_000,
+            )
+            await state.register_rollout("restore-budget")
+            for index in range(3):
+                request = await state.enqueue(
+                    rollout_id="restore-budget",
+                    endpoint="/v1/responses",
+                    body={"index": index},
+                    headers={},
+                )
+                await state.cancel_request(
+                    request_id=request.request_id,
+                    response=RelayWorkerResponse(499, b"x" * 700),
+                )
+            await state.aclose()
+
+            restored = ModelRelayState(
+                state_path=state_path,
+                max_completed_requests=10,
+                max_completed_bytes=1200,
+            )
+            stats = await restored.stats()
+            await restored.aclose()
+            with sqlite3.connect(state_path) as connection:
+                completed_rows = connection.execute(
+                    "SELECT count(*) FROM relay_requests WHERE state = 'completed'"
+                ).fetchone()[0]
+
+        self.assertEqual(stats["completed_retained"], 1)
+        self.assertLessEqual(stats["completed_bytes"], 1200)
+        self.assertEqual(completed_rows, 1)
+
+    async def test_sqlite_writes_do_not_block_the_event_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(
+                state_path=Path(directory) / "relay.sqlite3",
+            )
+            await state.register_rollout("nonblocking-store")
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            original_save = store.save_request
+            started = Event()
+            release = Event()
+
+            def blocking_save(request) -> None:
+                started.set()
+                release.wait()
+                original_save(request)
+
+            store.save_request = blocking_save  # type: ignore[method-assign]
+            safety_release = Timer(0.5, release.set)
+            safety_release.start()
+            started_at = time.monotonic()
+            ticked_at: float | None = None
+
+            async def ticker() -> None:
+                nonlocal ticked_at
+                await asyncio.sleep(0.05)
+                ticked_at = time.monotonic()
+
+            ticker_task = asyncio.create_task(ticker())
+            enqueue_task = asyncio.create_task(
+                state.enqueue(
+                    rollout_id="nonblocking-store",
+                    endpoint="/v1/responses",
+                    body={"model": "m"},
+                    headers={},
+                )
+            )
+            await asyncio.to_thread(started.wait)
+            await ticker_task
+            release.set()
+            await enqueue_task
+            safety_release.cancel()
+            await state.aclose()
+
+        assert ticked_at is not None
+        self.assertLess(ticked_at - started_at, 0.2)
+
     async def test_transient_worker_disconnect_requeues_without_failing_caller(
         self,
     ) -> None:

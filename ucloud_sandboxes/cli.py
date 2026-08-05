@@ -109,6 +109,7 @@ from .metrics import (
     record_vm_submitted,
 )
 from .model_relay import (
+    DEFAULT_MAX_COMPLETED_BYTES,
     DEFAULT_MAX_INFLIGHT_BYTES,
     DEFAULT_MAX_INFLIGHT_REQUESTS,
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
@@ -840,6 +841,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_MAX_INFLIGHT_BYTES,
         help="Global serialized active request-envelope byte limit.",
+    )
+    model_relay.add_argument(
+        "--max-completed-bytes",
+        type=int,
+        default=DEFAULT_MAX_COMPLETED_BYTES,
+        help="Global retained completed-response byte limit.",
     )
     model_relay.add_argument(
         "--request-timeout-seconds",
@@ -3313,6 +3320,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         "max_inflight_requests",
         "max_inflight_requests_per_rollout",
         "max_inflight_bytes",
+        "max_completed_bytes",
     ):
         if int(getattr(args, name)) < 1:
             raise ValueError(f"{name.replace('_', '-')} must be positive")
@@ -3329,6 +3337,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         max_inflight_requests=args.max_inflight_requests,
         max_inflight_requests_per_rollout=(args.max_inflight_requests_per_rollout),
         max_inflight_bytes=args.max_inflight_bytes,
+        max_completed_bytes=args.max_completed_bytes,
         state_path=args.state_path,
         accepted_notifier=accepted_notifier if gateway_url else None,
         result_notifier=result_notifier if gateway_url else None,

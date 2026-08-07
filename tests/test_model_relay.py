@@ -83,7 +83,7 @@ class RelayHarness:
     ) -> str:
         _status, payload = await self.request(
             "POST",
-            "/register_rollout",
+            "/v1/relay/rollouts",
             expected=201,
             headers=headers,
             json={"rollout_id": rollout_id},
@@ -222,6 +222,18 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_registration_metadata_rejects_aliases_and_coercion(self) -> None:
+        state = ModelRelayState()
+        for metadata in (
+            {"sandboxId": "sandbox-1", "sandbox_generation": 1},
+            {"sandbox_id": "sandbox-1", "sandboxGeneration": 1},
+            {"sandbox_id": "sandbox-1", "sandbox_generation": "1"},
+        ):
+            with self.subTest(metadata=metadata), self.assertRaises(
+                web.HTTPBadRequest
+            ):
+                await state.register_rollout("strict-metadata", metadata)
+
     async def test_completed_responses_obey_byte_budget_and_drop_request_bodies(
         self,
     ) -> None:
@@ -544,10 +556,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         ) as relay:
             _status, registration = await relay.request(
                 "POST",
-                "/v1/tunnels/register",
+                "/v1/relay/rollouts",
                 expected=201,
                 json={
-                    "tunnel_id": "lifecycle",
+                    "rollout_id": "lifecycle",
                     "metadata": {
                         "sandbox_id": "sandbox-9",
                         "sandbox_generation": 4,
@@ -725,9 +737,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             for method, path, kwargs in (
                 ("GET", "/worker/poll", {"params": {"rollout_id": "token-required"}}),
                 (
-                    "POST",
-                    "/unregister_rollout",
-                    {"json": {"rollout_id": "token-required"}},
+                    "DELETE",
+                    "/v1/relay/rollouts/token-required",
+                    {"json": {}},
                 ),
             ):
                 status, _payload = await relay.request(method, path, **kwargs)
@@ -944,10 +956,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             worker_headers = {"Authorization": "Bearer worker-token"}
             _status, registered = await relay.request(
                 "POST",
-                "/v1/tunnels/register",
+                "/v1/relay/rollouts",
                 expected=201,
                 headers=worker_headers,
-                json={"tunnel_id": "tunnel-1", "metadata": {"kind": "http"}},
+                json={"rollout_id": "tunnel-1", "metadata": {"kind": "http"}},
             )
             token = registered["rollout"]["registration_token"]
             request_body = b"\x00\xffbinary-request"
@@ -974,7 +986,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 expected=200,
                 headers=worker_headers,
                 params={
-                    "tunnel_id": "tunnel-1",
+                    "rollout_id": "tunnel-1",
                     "registration_token": token,
                 },
             )
@@ -998,7 +1010,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             key.lower(): value for key, value in response_headers.items()
         }
         self.assertEqual(request["rollout_id"], "tunnel-1")
-        self.assertEqual(request["tunnel_id"], "tunnel-1")
         self.assertEqual(request["method"], "PUT")
         self.assertEqual(
             request["endpoint"],
@@ -1060,28 +1071,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invalid_status, 400)
         self.assertEqual((status, body), (200, b'{"echo":true}'))
 
-    async def test_plain_v1_endpoint_accepts_rollout_header(self) -> None:
-        async with relay_app(request_timeout_seconds=5) as relay:
-            token = await relay.register("rollout-2")
-            sandbox_task = asyncio.create_task(
-                relay.model_call(
-                    "rollout-2",
-                    path="/v1/chat/completions",
-                    headers={"X-Relay-Rollout-Id": "rollout-2"},
-                )
-            )
-            request = (await relay.poll("rollout-2", token))["request"]
-            await relay.respond(request, token, {"ok": True})
-            result = await sandbox_task
-        self.assertEqual(result, (200, {"ok": True}))
-
     async def test_auth_is_enforced_when_configured(self) -> None:
         async with relay_app(sandbox_bearer_token="sandbox-token") as relay:
             await relay.register("rollout-1")
             status, _payload = await relay.model_call(
                 "rollout-1",
-                path="/v1/chat/completions",
-                headers={"X-Relay-Rollout-Id": "rollout-1"},
             )
         self.assertEqual(status, 401)
 

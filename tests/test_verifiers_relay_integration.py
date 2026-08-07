@@ -140,7 +140,7 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         sandbox_token = "sandbox-token"
         worker_token = "worker-token"
-        tunnel_id = "verifiers-e2e"
+        rollout_id = "verifiers-e2e"
         sandbox_id = "sandbox-e2e"
         sandbox_generation = 7
         parked = asyncio.Event()
@@ -186,7 +186,7 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
             runtime = PausableRelayRuntime(
                 SubprocessConfig(),
-                http_tunnel_url(relay_url, tunnel_id).rstrip("/"),
+                http_tunnel_url(relay_url, rollout_id).rstrip("/"),
             )
             await runtime.start()
             assert runtime.workdir is not None
@@ -202,11 +202,13 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         relay_url,
                         worker_token=worker_token,
                     ) as sdk:
-                        registration = await sdk.register_sandbox_tunnel(
-                            tunnel_id,
-                            sandbox_id=sandbox_id,
-                            sandbox_generation=sandbox_generation,
-                            metadata={"integration": "verifiers-null-harness"},
+                        registration = await sdk.register_rollout(
+                            rollout_id,
+                            metadata={
+                                "integration": "verifiers-null-harness",
+                                "sandbox_id": sandbox_id,
+                                "sandbox_generation": sandbox_generation,
+                            },
                         )
                         runtime.relay_tunnel_url = str(
                             registration["tunnel_url"]
@@ -214,7 +216,7 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         registered.set()
                         while True:
                             polled = await sdk.poll(
-                                tunnel_id,
+                                rollout_id,
                                 worker_id="verifiers-worker",
                                 timeout_seconds=0.1,
                                 lease_seconds=30,

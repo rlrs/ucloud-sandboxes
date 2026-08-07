@@ -112,12 +112,25 @@ class DashboardTests(unittest.TestCase):
         self.assertIn('id="sandboxStateFilter"', DASHBOARD_HTML)
         self.assertIn('class="activity-grid overview-section"', DASHBOARD_HTML)
         self.assertNotIn('id="terminateAllSandboxesButton"', DASHBOARD_HTML)
-        self.assertIn("--rail-width: 228px", DASHBOARD_CSS)
+        self.assertIn("--rail-width: 0px", DASHBOARD_CSS)
+        self.assertNotIn("--rail-width: 228px", DASHBOARD_CSS)
+        self.assertIn("Canonical operator dashboard stylesheet", DASHBOARD_CSS)
         self.assertIn(".overview-workbench", DASHBOARD_CSS)
         self.assertIn("prefers-reduced-motion", DASHBOARD_CSS)
         self.assertIn('setNavBadge("nodesNavBadge"', DASHBOARD_JS)
         self.assertIn('setText("readyWakeValue"', DASHBOARD_JS)
         self.assertNotIn('setText("cpuUtilizationValue"', DASHBOARD_JS)
+
+    def test_dashboard_has_one_canonical_visual_system(self) -> None:
+        self.assertIn("Canonical operator dashboard stylesheet", DASHBOARD_CSS)
+        for obsolete_pass in (
+            "Operations cockpit",
+            "Operations workspace v2",
+            "Operations ledger visual system",
+            "Desktop density pass",
+            "Coherent visual system",
+        ):
+            self.assertNotIn(obsolete_pass, DASHBOARD_CSS)
 
     def test_dashboard_keeps_transport_and_fleet_health_separate(self) -> None:
         health = re.search(

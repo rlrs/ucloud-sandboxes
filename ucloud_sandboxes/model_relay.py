@@ -27,6 +27,7 @@ ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
 REGISTRATION_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,127}$")
+SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
 DEFAULT_WORKER_LEASE_SECONDS = 600.0
@@ -119,7 +120,6 @@ class RelayRequest:
         return {
             "request_id": self.request_id,
             "rollout_id": self.rollout_id,
-            "tunnel_id": self.rollout_id,
             "registration_token": self.registration_token,
             "endpoint": self.endpoint,
             "method": self.method,
@@ -266,10 +266,7 @@ class RelaySqliteStore:
                 """
             ):
                 size = max(0, int(completed_bytes or payload_bytes or 0))
-                if (
-                    retained_count >= max_count
-                    or retained_bytes + size > max_bytes
-                ):
+                if retained_count >= max_count or retained_bytes + size > max_bytes:
                     evicted.append(str(request_id))
                     continue
                 retained_count += 1
@@ -426,6 +423,7 @@ class ModelRelayState:
         metadata: JsonObject | None = None,
     ) -> JsonObject:
         validate_rollout_id(rollout_id)
+        _validate_registration_metadata(metadata)
         async with self._condition:
             await self._ensure_loaded_locked()
             now = time.time()
@@ -442,7 +440,6 @@ class ModelRelayState:
                 )
             record = {
                 "rollout_id": rollout_id,
-                "tunnel_id": rollout_id,
                 "registration_token": registration_token,
                 "metadata": dict(metadata or {}),
                 "registered_at": time.time(),
@@ -489,11 +486,11 @@ class ModelRelayState:
         rollout_id: str,
         registration_token: str,
     ) -> None:
-        """Authorize a caller against one exact tunnel incarnation."""
+        """Authorize a caller against one exact rollout incarnation."""
 
         validate_rollout_id(rollout_id)
         if not REGISTRATION_TOKEN_RE.fullmatch(registration_token):
-            raise web.HTTPUnauthorized(text="invalid tunnel access token")
+            raise web.HTTPUnauthorized(text="invalid rollout registration token")
         async with self._condition:
             await self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
@@ -501,7 +498,7 @@ class ModelRelayState:
                 str(current["registration_token"]),
                 registration_token,
             ):
-                raise web.HTTPUnauthorized(text="invalid tunnel access token")
+                raise web.HTTPUnauthorized(text="invalid rollout registration token")
 
     async def list_rollouts(self) -> list[JsonObject]:
         async with self._condition:
@@ -842,10 +839,7 @@ class ModelRelayState:
             if request.state != "leased" or request.lease_id != lease_id:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
-            if (
-                request.lease_expires_at is not None
-                and request.lease_expires_at <= now
-            ):
+            if request.lease_expires_at is not None and request.lease_expires_at <= now:
                 await self._requeue_expired_leases_locked(now)
                 raise web.HTTPConflict(text="request lease has expired")
             if worker_id:
@@ -1572,18 +1566,16 @@ def create_model_relay_app(
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/v1/relay/stats", relay_stats)
     app.router.add_get("/v1/relay/rollouts", list_rollouts)
-    app.router.add_get("/v1/tunnels", list_rollouts)
-    app.router.add_post("/register_rollout", register_rollout)
-    app.router.add_post("/v1/tunnels/register", register_rollout)
-    app.router.add_post("/unregister_rollout", unregister_rollout)
-    app.router.add_post("/v1/tunnels/unregister", unregister_rollout)
+    app.router.add_post("/v1/relay/rollouts", register_rollout)
+    app.router.add_delete(
+        "/v1/relay/rollouts/{rollout_id}",
+        unregister_rollout,
+    )
     app.router.add_post("/worker/heartbeat", worker_heartbeat)
     app.router.add_get("/worker/poll", worker_poll)
     app.router.add_post("/worker/renew", worker_renew)
     app.router.add_post("/worker/respond", worker_respond)
     app.router.add_post("/worker/error", worker_error)
-    app.router.add_post("/v1/chat/completions", openai_chat_completions)
-    app.router.add_post("/v1/responses", openai_responses)
     app.router.add_post(
         "/rollouts/{rollout_id}/v1/chat/completions",
         openai_chat_completions,
@@ -1591,18 +1583,18 @@ def create_model_relay_app(
     app.router.add_post("/rollouts/{rollout_id}/v1/responses", openai_responses)
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/_relay/{tunnel_token}",
+        "/tunnels/{rollout_id}/_relay/{registration_token}",
         tunnel_http_proxy,
     )
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/_relay/{tunnel_token}/{tunnel_path:.*}",
+        "/tunnels/{rollout_id}/_relay/{registration_token}/{tunnel_path:.*}",
         tunnel_http_proxy,
     )
-    app.router.add_route("*", "/tunnels/{tunnel_id}", tunnel_http_proxy)
+    app.router.add_route("*", "/tunnels/{rollout_id}", tunnel_http_proxy)
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/{tunnel_path:.*}",
+        "/tunnels/{rollout_id}/{tunnel_path:.*}",
         tunnel_http_proxy,
     )
     return app
@@ -1625,9 +1617,7 @@ async def list_rollouts(request: web.Request) -> web.Response:
 async def register_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(payload.get("rollout_id") or "")
     metadata = payload.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise web.HTTPBadRequest(text="metadata must be a JSON object")
@@ -1638,9 +1628,7 @@ async def register_rollout(request: web.Request) -> web.Response:
 async def unregister_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(request.match_info.get("rollout_id") or "")
     registration_token = _registration_token_from_payload(payload)
     existed = await _state(request).unregister_rollout(
         rollout_id,
@@ -1650,7 +1638,6 @@ async def unregister_rollout(request: web.Request) -> web.Response:
         {
             "ok": True,
             "rollout_id": rollout_id,
-            "tunnel_id": rollout_id,
             "existed": existed,
         }
     )
@@ -1658,9 +1645,7 @@ async def unregister_rollout(request: web.Request) -> web.Response:
 
 async def worker_poll(request: web.Request) -> web.Response:
     _require_worker_token(request)
-    rollout_id = str(
-        request.query.get("rollout_id") or request.query.get("tunnel_id") or ""
-    )
+    rollout_id = str(request.query.get("rollout_id") or "")
     registration_token = _registration_token_from_request(request)
     worker_id = _worker_id_from_request(request)
     timeout_seconds = _float_query(
@@ -1694,9 +1679,7 @@ async def worker_poll(request: web.Request) -> web.Response:
 async def worker_heartbeat(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(payload.get("rollout_id") or "")
     registration_token = _registration_token_from_payload(payload)
     worker_id = str(payload.get("worker_id") or "")
     metadata = payload.get("metadata")
@@ -1858,15 +1841,15 @@ async def openai_responses(request: web.Request) -> web.Response:
 async def tunnel_http_proxy(request: web.Request) -> web.Response:
     if request.method not in TUNNEL_HTTP_METHODS:
         raise web.HTTPMethodNotAllowed(request.method, sorted(TUNNEL_HTTP_METHODS))
-    tunnel_id = str(request.match_info.get("tunnel_id") or "")
-    validate_rollout_id(tunnel_id)
-    tunnel_token = request.match_info.get("tunnel_token")
-    if tunnel_token is None:
+    rollout_id = str(request.match_info.get("rollout_id") or "")
+    validate_rollout_id(rollout_id)
+    registration_token = request.match_info.get("registration_token")
+    if registration_token is None:
         _require_sandbox_token(request)
     else:
         await _state(request).require_current_registration(
-            tunnel_id,
-            str(tunnel_token),
+            rollout_id,
+            str(registration_token),
         )
     endpoint = _tunnel_endpoint(request)
     body_bytes = await request.read()
@@ -1877,7 +1860,7 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
         )
     explicit_request_id = request.headers.get(RELAY_REQUEST_ID_HEADER)
     relay_request = await _state(request).enqueue(
-        rollout_id=tunnel_id,
+        rollout_id=rollout_id,
         endpoint=endpoint,
         method=request.method,
         body=_decode_tunnel_json(request.content_type, body_bytes),
@@ -1887,7 +1870,7 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
             explicit_request_id
             or _implicit_idempotency_key(
                 request,
-                rollout_id=tunnel_id,
+                rollout_id=rollout_id,
                 endpoint=endpoint,
                 body_bytes=body_bytes,
             )
@@ -2072,17 +2055,7 @@ async def _json_object(request: web.Request) -> JsonObject:
 
 
 def _rollout_id_from_request(request: web.Request) -> str:
-    path_rollout_id = request.match_info.get("rollout_id")
-    if path_rollout_id:
-        rollout_id = path_rollout_id
-    else:
-        rollout_id = (
-            request.headers.get("X-UCloud-Rollout-Id")
-            or request.headers.get("X-Relay-Rollout-Id")
-            or request.headers.get("X-Rollout-Id")
-            or request.query.get("rollout_id")
-            or ""
-        )
+    rollout_id = str(request.match_info.get("rollout_id") or "")
     validate_rollout_id(rollout_id)
     return rollout_id
 
@@ -2227,21 +2200,18 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
     expected = request.app[SANDBOX_TOKEN_KEY]
     relay_header = request.headers.get(RELAY_TOKEN_HEADER) or ""
     relay_header_authenticated = (
-        request.match_info.get("tunnel_token") is not None
+        request.match_info.get("registration_token") is not None
         or expected is None
         or relay_header in {expected, f"Bearer {expected}"}
     )
     if not relay_header_authenticated:
-        # Backward-compatible OpenAI clients use Authorization for relay auth;
-        # never leak that credential to the worker-local upstream.
+        # OpenAI clients carry relay authentication in Authorization; never
+        # leak that credential to the worker-local upstream.
         blocked.add("authorization")
     return {
         key: value
         for key, value in request.headers.items()
-        if (
-            key.lower() not in blocked
-            and not key.lower().startswith("x-forwarded-")
-        )
+        if (key.lower() not in blocked and not key.lower().startswith("x-forwarded-"))
     }
 
 
@@ -2307,7 +2277,7 @@ def _tunnel_endpoint(request: web.Request) -> str:
     # Work from raw_path rather than match_info so percent-encoding, repeated
     # query parameters, and literal '+' characters reach the upstream exactly.
     raw_path, separator, raw_query = request.raw_path.partition("?")
-    if request.match_info.get("tunnel_token") is None:
+    if request.match_info.get("registration_token") is None:
         path_parts = raw_path.split("/", 3)
         tunnel_path = path_parts[3] if len(path_parts) == 4 else ""
     else:
@@ -2395,9 +2365,26 @@ def _registration_sandbox_id(record: JsonObject) -> str | None:
     metadata = record.get("metadata")
     if not isinstance(metadata, dict):
         return None
-    raw = metadata.get("sandbox_id") or metadata.get("sandboxId")
-    value = str(raw or "").strip()
-    return value or None
+    raw = metadata.get("sandbox_id")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or SANDBOX_ID_RE.fullmatch(raw) is None:
+        raise web.HTTPBadRequest(text="sandbox_id registration metadata is invalid")
+    return raw
+
+
+def _validate_registration_metadata(metadata: JsonObject | None) -> None:
+    if metadata is None:
+        return
+    if "sandboxId" in metadata or "sandboxGeneration" in metadata:
+        raise web.HTTPBadRequest(text="registration metadata must use snake_case")
+    record: JsonObject = {"metadata": metadata}
+    sandbox_id = _registration_sandbox_id(record)
+    generation = _registration_sandbox_generation(record)
+    if (sandbox_id is None) != (generation is None):
+        raise web.HTTPBadRequest(
+            text="sandbox_id and sandbox_generation must be supplied together"
+        )
 
 
 def _registration_sandbox_generation(record: JsonObject) -> int | None:
@@ -2406,20 +2393,16 @@ def _registration_sandbox_generation(record: JsonObject) -> int | None:
         return None
     raw = metadata.get("sandbox_generation")
     if raw is None:
-        raw = metadata.get("sandboxGeneration")
-    if raw is None:
         return None
-    try:
-        generation = int(raw)
-    except (TypeError, ValueError) as exc:
+    if isinstance(raw, bool) or not isinstance(raw, int):
         raise web.HTTPBadRequest(
             text="sandbox_generation registration metadata must be an integer"
-        ) from exc
-    if generation < 1:
+        )
+    if raw < 1:
         raise web.HTTPBadRequest(
             text="sandbox_generation registration metadata must be positive"
         )
-    return generation
+    return raw
 
 
 def _json_mapping(raw: str) -> JsonObject:
@@ -2463,9 +2446,7 @@ def _persisted_request_payload(request: RelayRequest) -> JsonObject:
         "method": request.method,
         "body": None if completed else request.body,
         "body_bytes": (
-            ""
-            if completed
-            else base64.b64encode(request.body_bytes).decode("ascii")
+            "" if completed else base64.b64encode(request.body_bytes).decode("ascii")
         ),
         "headers": {} if completed else request.headers,
         "created_at": request.created_at,
@@ -2554,9 +2535,7 @@ def _request_from_persisted_payload(
         completed_bytes=int(payload.get("completed_bytes") or 0),
         wake_notified_at=_optional_float(payload.get("wake_notified_at")),
         accepted_notified_at=_optional_float(payload.get("accepted_notified_at")),
-        parked_transport_epoch=_optional_string(
-            payload.get("parked_transport_epoch")
-        ),
+        parked_transport_epoch=_optional_string(payload.get("parked_transport_epoch")),
         reattachable=bool(payload.get("reattachable")),
     )
 

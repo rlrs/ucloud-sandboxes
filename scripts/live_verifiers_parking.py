@@ -482,7 +482,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     gateway_token = token(args.gateway_token_file)
     sandbox_relay_url = args.sandbox_relay_url or args.relay_url
     suffix = uuid4().hex[:10]
-    tunnel_id = f"vf-live-{suffix}"
+    rollout_id = f"vf-live-{suffix}"
     sandbox_id = f"vf-live-{suffix}"
     runtime = UCloudVerifiersRuntime(
         SubprocessConfig(),
@@ -500,7 +500,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     model = CountingClient()
     worker_task: asyncio.Task[dict[str, Any]] | None = None
     rollout: RolloutRun | None = None
-    tunnel_registered = False
+    rollout_registered = False
     started_at = time.monotonic()
     try:
         await runtime.start()
@@ -524,26 +524,28 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 f"{relay_probe.stderr.strip()[-2000:]}"
             )
         async with relay, InterceptionServer() as interception:
-            registration = await relay.register_sandbox_tunnel(
-                tunnel_id,
-                sandbox_id=sandbox_id,
-                sandbox_generation=runtime.generation,
-                metadata={"integration": "live-verifiers-parking"},
+            registration = await relay.register_rollout(
+                rollout_id,
+                metadata={
+                    "integration": "live-verifiers-parking",
+                    "sandbox_id": sandbox_id,
+                    "sandbox_generation": runtime.generation,
+                },
             )
-            tunnel_registered = True
+            rollout_registered = True
             registration_token = str(
                 registration["rollout"]["registration_token"]
             )
             runtime.relay_tunnel_url = http_tunnel_url(
                 sandbox_relay_url,
-                tunnel_id,
+                rollout_id,
                 registration_token=registration_token,
             ).rstrip("/")
 
             async def relay_worker() -> dict[str, Any]:
                 while True:
                     polled = await relay.poll(
-                        tunnel_id,
+                        rollout_id,
                         worker_id="live-verifiers-worker",
                         timeout_seconds=1,
                         lease_seconds=600,
@@ -708,14 +710,14 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             worker = await asyncio.wait_for(worker_task, timeout=30)
             stats = await relay.stats()
             final_record = await runtime.client.get_sandbox(sandbox_id)
-            await relay.unregister_tunnel(tunnel_id)
-            tunnel_registered = False
+            await relay.unregister_rollout(rollout_id)
+            rollout_registered = False
             reattached = stats["counters"].get("reattached") or 0
             return {
                 "ok": trace.ok,
                 "sandbox_id": sandbox_id,
                 "sandbox_generation": runtime.generation,
-                "tunnel_id": tunnel_id,
+                "rollout_id": rollout_id,
                 "model_calls": model.calls,
                 "trace_turns": trace.num_turns,
                 "assistant": trace.branches[-1].messages[-1].content,
@@ -745,9 +747,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         if worker_task is not None and not worker_task.done():
             worker_task.cancel()
             await asyncio.gather(worker_task, return_exceptions=True)
-        if tunnel_registered:
+        if rollout_registered:
             with contextlib.suppress(Exception):
-                await relay.unregister_tunnel(tunnel_id)
+                await relay.unregister_rollout(rollout_id)
         await relay.close()
         await runtime.stop()
 

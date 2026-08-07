@@ -175,7 +175,7 @@ def main() -> int:
                 raise RuntimeError(f"{len(failed_builds)} image build(s) failed")
 
             registry_images = [
-                Image.from_gateway_id(str(item["image"])) for item in build_results
+                Image.from_name(str(item["image"])) for item in build_results
             ]
             summary["metrics"]["after_builds"] = metrics_snapshot(client)
 
@@ -402,7 +402,7 @@ CMD [\"sleep\", \"900\"]
         (context / "payload.bin").write_bytes(payload)
         images.append(
             Image.from_dockerfile(
-                image_id=f"bench-{run_id}-{slug}",
+                name=f"bench-{run_id}-{slug}",
                 context_path=context,
                 build_args={"BENCH_RUN_ID": run_id},
                 labels={"ucloud-sandboxes.benchmark.run-id": run_id},

@@ -21,7 +21,7 @@ class StorageNativeReservationLedger(HibernationDiskLedger):
     """Allocate stable accounting IDs; the storage daemon owns hard admission.
 
     Published volumes deliberately remain registered while charging zero local
-    bytes. Reusing the legacy ledger's physical-capacity sum would pin every
+    bytes. Reusing the volume ledger's physical-capacity sum would pin every
     parked sandbox to its old node, so this ledger is identity-only. Every
     create/mount still fails closed in StorageNativeNodeService against the
     real hard byte capacity.

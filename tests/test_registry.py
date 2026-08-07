@@ -33,7 +33,7 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertIn("job-1", HeartbeatStore(path).load())
 
-    def test_rejects_malformed_legacy_heartbeat_accounting_fields(self) -> None:
+    def test_rejects_malformed_heartbeat_accounting_fields(self) -> None:
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         invalid_payloads = (
             {**raw, "active_sandboxes": "not-an-integer"},
@@ -229,7 +229,7 @@ class RegistryTests(unittest.TestCase):
                         sandbox_id="sandbox-1",
                         generation=4,
                         operation_id="operation-1",
-                        spec_hash="sha256:spec",
+                        spec_hash="a" * 64,
                         state="running",
                         resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=2048),
                     ),
@@ -333,23 +333,133 @@ class RegistryTests(unittest.TestCase):
             self.assertEqual(stored.active_sandboxes, 1)
             self.assertIsNone(stored.idle_since)
 
-    def test_malformed_additive_heartbeat_numbers_fall_back_safely(self) -> None:
-        heartbeat = heartbeat_from_dict(
+    def test_retired_boot_epoch_cannot_return_with_a_later_receipt(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            first = replace(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    node_url="http://node-1:8090",
+                    deployment_id="prod",
+                ),
+                received_at=utc_now(),
+                node_epoch="boot-a",
+                activity_epoch=100,
+            )
+            assert first.received_at is not None
+            second = replace(
+                first,
+                received_at=first.received_at + timedelta(seconds=1),
+                node_epoch="boot-b",
+                activity_epoch=200,
+            )
+            delayed_first = replace(
+                first,
+                received_at=first.received_at + timedelta(seconds=2),
+                activity_epoch=150,
+            )
+
+            self.assertTrue(store.upsert_received(first).accepted)
+            self.assertTrue(store.upsert_received(second).accepted)
+            self.assertFalse(store.upsert_received(delayed_first).accepted)
+            stored = store.load()["job-1"]
+
+        self.assertEqual(stored.node_epoch, "boot-b")
+        self.assertEqual(stored.retired_node_epochs, ("boot-a",))
+
+    def test_heartbeat_identity_is_immutable_for_a_job(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            original = replace(
+                build_heartbeat(
+                    job_id="job-1",
+                    node_id="node-1",
+                    node_url="http://node-1:8090",
+                    deployment_id="prod",
+                ),
+                received_at=utc_now(),
+                node_epoch="boot-a",
+                activity_epoch=100,
+            )
+            assert original.received_at is not None
+            spoofed = replace(
+                original,
+                node_url="http://attacker.invalid:8090",
+                received_at=original.received_at + timedelta(seconds=1),
+                activity_epoch=101,
+            )
+
+            self.assertTrue(store.upsert_received(original).accepted)
+            self.assertFalse(store.upsert_received(spoofed).accepted)
+            stored = store.load()["job-1"]
+
+        self.assertEqual(stored.node_url, original.node_url)
+
+    def test_malformed_heartbeat_numbers_are_rejected(self) -> None:
+        malformed = (
             {
                 "node_id": "node-1",
                 "job_id": "job-1",
                 "updated_at": utc_now().isoformat(),
                 "activity_epoch": "not-an-integer",
+            },
+            {
+                "node_id": "node-1",
+                "job_id": "job-1",
+                "updated_at": utc_now().isoformat(),
                 "physical_disk_total_mb": "unknown",
+            },
+            {
+                "node_id": "node-1",
+                "job_id": "job-1",
+                "updated_at": utc_now().isoformat(),
                 "physical_disk_free_mb": [],
-            }
+            },
         )
 
-        self.assertIsNotNone(heartbeat)
-        assert heartbeat is not None
-        self.assertEqual(heartbeat.activity_epoch, 0)
-        self.assertEqual(heartbeat.physical_disk_total_mb, 0)
-        self.assertEqual(heartbeat.physical_disk_free_mb, 0)
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                self.assertIsNone(heartbeat_from_dict(payload))
+
+    def test_heartbeat_rejects_unknown_fields_and_string_list_aliases(self) -> None:
+        raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
+        malformed = (
+            {**raw, "future_field": True},
+            {**raw, "capabilities": "sandbox,image-cache"},
+            {**raw, "cached_images": "image-1"},
+            {**raw, "retired_node_epochs": [1]},
+        )
+
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                self.assertIsNone(heartbeat_from_dict(payload))
+
+    def test_heartbeat_rejects_noncanonical_resource_fields(self) -> None:
+        timestamp = utc_now().isoformat()
+        payloads = (
+            {
+                "node_id": "node-1",
+                "job_id": "job-1",
+                "updated_at": timestamp,
+                "totalResources": {"vcpu": 4},
+            },
+            {
+                "node_id": "node-1",
+                "job_id": "job-1",
+                "updated_at": timestamp,
+                "total_resources": {"cpu": 4},
+            },
+            {
+                "node_id": "node-1",
+                "job_id": "job-1",
+                "updated_at": timestamp,
+                "total_resources": {"memoryMb": 4096},
+            },
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                self.assertIsNone(heartbeat_from_dict(payload))
 
     def test_heartbeat_store_removes_jobs(self) -> None:
         with TemporaryDirectory() as raw_dir:

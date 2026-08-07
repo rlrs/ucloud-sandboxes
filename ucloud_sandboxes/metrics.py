@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -37,7 +36,6 @@ DEFAULT_TRACE_SPAN_LIMIT = 250
 DEFAULT_TRACE_LIMIT = 50
 DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT = 100
 DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
-DEFAULT_METRICS_MAX_FILES = 5
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
 DEFAULT_METRICS_MAX_EVENTS = 100_000
 MIN_SQLITE_METRICS_MAX_BYTES = 64 * 1024
@@ -84,18 +82,17 @@ class MetricsStore:
         path: Path,
         *,
         max_bytes: int = DEFAULT_METRICS_MAX_BYTES,
-        max_files: int = DEFAULT_METRICS_MAX_FILES,
         max_event_bytes: int = DEFAULT_METRICS_MAX_EVENT_BYTES,
         max_events: int = DEFAULT_METRICS_MAX_EVENTS,
     ) -> None:
+        if path.suffix != ".sqlite":
+            raise ValueError("metrics path must use the .sqlite suffix")
         self.path = path
         self._lock = _metrics_lock(path)
         self._max_bytes = max(1, max_bytes)
-        self._max_files = max(1, max_files)
         self._max_event_bytes = max(1, min(max_event_bytes, self._max_bytes))
         self._max_events = max(1, max_events)
-        self._sqlite = self.path.suffix.lower() != ".jsonl"
-        if self._sqlite and self._max_bytes < MIN_SQLITE_METRICS_MAX_BYTES:
+        if self._max_bytes < MIN_SQLITE_METRICS_MAX_BYTES:
             raise ValueError(
                 "SQLite metrics max_bytes must be at least "
                 f"{MIN_SQLITE_METRICS_MAX_BYTES}"
@@ -103,9 +100,8 @@ class MetricsStore:
         self._sqlite_connection: sqlite3.Connection | None = None
         self._sqlite_pid = 0
         self._dropped_sqlite_events = 0
-        if self._sqlite:
-            with self._lock:
-                self._sqlite_connect_locked()
+        with self._lock:
+            self._sqlite_connect_locked()
 
     def append(
         self,
@@ -129,43 +125,16 @@ class MetricsStore:
                     "original_bytes": len(line),
                 },
             )
-            line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode(
-                "utf-8"
-            )
-        if self._sqlite:
-            with self._lock:
-                connection = self._sqlite_connect_locked()
-                try:
-                    if self._dropped_sqlite_events:
-                        dropped_data = {
-                            "count": self._dropped_sqlite_events,
-                            "reason": "sqlite_busy",
-                        }
-                        connection.execute(
-                            """
-                            INSERT INTO metric_events(
-                                timestamp, timestamp_epoch, kind, data_json,
-                                payload_bytes
-                            )
-                            VALUES (?, ?, ?, ?, ?)
-                            """,
-                            (
-                                event.timestamp,
-                                _timestamp_epoch(event.timestamp),
-                                "metrics_dropped_events",
-                                json.dumps(
-                                    dropped_data,
-                                    sort_keys=True,
-                                    separators=(",", ":"),
-                                ),
-                                _metric_event_bytes(
-                                    event.timestamp,
-                                    "metrics_dropped_events",
-                                    dropped_data,
-                                ),
-                            ),
-                        )
-                    cursor = connection.execute(
+            line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode("utf-8")
+        with self._lock:
+            connection = self._sqlite_connect_locked()
+            try:
+                if self._dropped_sqlite_events:
+                    dropped_data = {
+                        "count": self._dropped_sqlite_events,
+                        "reason": "sqlite_busy",
+                    }
+                    connection.execute(
                         """
                         INSERT INTO metric_events(
                             timestamp, timestamp_epoch, kind, data_json,
@@ -176,47 +145,49 @@ class MetricsStore:
                         (
                             event.timestamp,
                             _timestamp_epoch(event.timestamp),
-                            event.kind,
+                            "metrics_dropped_events",
                             json.dumps(
-                                event.data,
+                                dropped_data,
                                 sort_keys=True,
                                 separators=(",", ":"),
                             ),
-                            len(line),
+                            _metric_event_bytes(
+                                event.timestamp,
+                                "metrics_dropped_events",
+                                dropped_data,
+                            ),
                         ),
                     )
-                    del cursor
-                    self._prune_sqlite_locked(connection)
-                    connection.commit()
-                    try:
-                        self._reclaim_sqlite_space_locked(connection)
-                    except sqlite3.OperationalError:
-                        # The logical budget is already committed. A reader may
-                        # temporarily prevent checkpoint/vacuum; retry physical
-                        # reclamation on a later append.
-                        pass
-                    self._dropped_sqlite_events = 0
+                connection.execute(
+                    """
+                    INSERT INTO metric_events(
+                        timestamp, timestamp_epoch, kind, data_json,
+                        payload_bytes
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.timestamp,
+                        _timestamp_epoch(event.timestamp),
+                        event.kind,
+                        json.dumps(
+                            event.data,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                        len(line),
+                    ),
+                )
+                self._prune_sqlite_locked(connection)
+                connection.commit()
+                try:
+                    self._reclaim_sqlite_space_locked(connection)
                 except sqlite3.OperationalError:
-                    connection.rollback()
-                    # Metrics are observational. A brief writer collision must
-                    # never fail a heartbeat, gateway request, or autoscaler
-                    # cycle. The next successful transaction records the loss.
-                    self._dropped_sqlite_events += 1
-            return event
-        with _metrics_file_lock(self.path, self._lock):
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self._rotate_if_needed(len(line))
-            fd = os.open(self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-            try:
-                os.fchmod(fd, 0o600)
-                view = memoryview(line)
-                while view:
-                    written = os.write(fd, view)
-                    if written <= 0:
-                        raise OSError("failed to append metrics event")
-                    view = view[written:]
-            finally:
-                os.close(fd)
+                    pass
+                self._dropped_sqlite_events = 0
+            except sqlite3.OperationalError:
+                connection.rollback()
+                self._dropped_sqlite_events += 1
         return event
 
     def load_events(
@@ -226,75 +197,11 @@ class MetricsStore:
         kinds: tuple[str, ...] = (),
         since_seconds: int | None = None,
     ) -> list[MetricEvent]:
-        if self._sqlite:
-            return self._load_sqlite_events(
-                max_events=max_events,
-                kinds=kinds,
-                since_seconds=since_seconds,
-            )
-        result_limit = max_events
-        if (kinds or since_seconds is not None) and max_events > 0:
-            # JSONL is rollback compatibility only. Scan a bounded superset so
-            # callers still get useful filtered results without restoring the
-            # old whole-file dashboard behavior.
-            max_events = max(1000, max_events * 20)
-        # Metrics are observational and may tolerate an incomplete final line.
-        # Avoid taking the writer lock while reading: on network-backed state
-        # directories a dashboard read can otherwise block every request trace
-        # append for seconds and turn overload telemetry into a lock convoy.
-        if max_events > 0:
-            remaining = max_events
-            newest_first = [self.path] + [
-                self._rotated_path(index)
-                for index in range(1, self._max_files + 1)
-            ]
-            chunks: list[list[str]] = []
-            for path in newest_first:
-                if remaining <= 0:
-                    break
-                try:
-                    chunk = _read_recent_lines(path, remaining)
-                except OSError:
-                    # Rotation can rename a segment between discovery and open.
-                    continue
-                chunks.append(chunk)
-                remaining -= len(chunk)
-            lines = [line for chunk in reversed(chunks) for line in chunk]
-        else:
-            oldest_first = [
-                self._rotated_path(index)
-                for index in range(self._max_files, 0, -1)
-            ] + [self.path]
-            lines = []
-            for path in oldest_first:
-                try:
-                    lines.extend(_read_recent_lines(path, max_events))
-                except OSError:
-                    continue
-        events: list[MetricEvent] = []
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                parsed = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            event = MetricEvent.from_dict(parsed)
-            if event is not None:
-                events.append(event)
-        normalized_kinds = {kind for kind in kinds if kind}
-        if normalized_kinds:
-            events = [event for event in events if event.kind in normalized_kinds]
-        if since_seconds is not None:
-            cutoff = time.time() - max(0, since_seconds)
-            events = [
-                event
-                for event in events
-                if _timestamp_epoch(event.timestamp) >= cutoff
-            ]
-        if result_limit <= 0:
-            return events
-        return events[-result_limit:]
+        return self._load_sqlite_events(
+            max_events=max_events,
+            kinds=kinds,
+            since_seconds=since_seconds,
+        )
 
     def _sqlite_connect_locked(self) -> sqlite3.Connection:
         pid = os.getpid()
@@ -340,23 +247,17 @@ class MetricsStore:
             str(row[1])
             for row in connection.execute("PRAGMA table_info(metric_events)")
         }
-        if "payload_bytes" not in columns:
-            connection.execute(
-                "ALTER TABLE metric_events "
-                "ADD COLUMN payload_bytes INTEGER NOT NULL DEFAULT 0"
-            )
-        connection.execute(
-            """
-            UPDATE metric_events
-            SET payload_bytes = (
-                length(CAST(timestamp AS BLOB))
-                + length(CAST(kind AS BLOB))
-                + length(CAST(data_json AS BLOB))
-                + 48
-            )
-            WHERE payload_bytes <= 0
-            """
-        )
+        expected_event_columns = {
+            "sequence",
+            "timestamp",
+            "timestamp_epoch",
+            "kind",
+            "data_json",
+            "payload_bytes",
+        }
+        if columns != expected_event_columns:
+            connection.close()
+            raise sqlite3.DatabaseError("metrics database schema is invalid")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS metric_store_meta (
@@ -366,6 +267,17 @@ class MetricsStore:
             )
             """
         )
+        meta_columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(metric_store_meta)")
+        }
+        if meta_columns != {
+            "singleton",
+            "retained_events",
+            "retained_payload_bytes",
+        }:
+            connection.close()
+            raise sqlite3.DatabaseError("metrics database schema is invalid")
         connection.execute(
             """
             INSERT INTO metric_store_meta(
@@ -488,10 +400,7 @@ class MetricsStore:
             return
         retained_events = max(0, int(retained[0]))
         retained_bytes = max(0, int(retained[1]))
-        if (
-            retained_events <= self._max_events
-            and retained_bytes <= self._max_bytes
-        ):
+        if retained_events <= self._max_events and retained_bytes <= self._max_bytes:
             return
         evicted: list[tuple[int]] = []
         for sequence, payload_bytes in connection.execute(
@@ -554,9 +463,7 @@ class MetricsStore:
                 (batch,),
             )
             connection.commit()
-            free_pages = int(
-                connection.execute("PRAGMA freelist_count").fetchone()[0]
-            )
+            free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
             if free_pages:
                 connection.execute(f"PRAGMA incremental_vacuum({free_pages})")
             checkpoint = connection.execute(
@@ -568,25 +475,6 @@ class MetricsStore:
             if attempts >= 64:
                 break
 
-    def _rotate_if_needed(self, additional_bytes: int) -> None:
-        if not self.path.exists() or self.path.stat().st_size == 0:
-            return
-        if self.path.stat().st_size + additional_bytes <= self._max_bytes:
-            return
-        oldest = self._rotated_path(self._max_files)
-        try:
-            oldest.unlink()
-        except FileNotFoundError:
-            pass
-        for index in range(self._max_files - 1, 0, -1):
-            source = self._rotated_path(index)
-            if source.exists():
-                source.replace(self._rotated_path(index + 1))
-        self.path.replace(self._rotated_path(1))
-
-    def _rotated_path(self, index: int) -> Path:
-        return self.path.with_name(f"{self.path.name}.{index}")
-
 
 def _timestamp_epoch(value: str) -> float:
     parsed = parse_iso_datetime(value)
@@ -595,8 +483,12 @@ def _timestamp_epoch(value: str) -> float:
 
 def _metric_event_bytes(timestamp: str, kind: str, data: dict[str, Any]) -> int:
     return len(
-        (json.dumps({"timestamp": timestamp, "kind": kind, "data": data}, sort_keys=True)
-        + "\n").encode("utf-8")
+        (
+            json.dumps(
+                {"timestamp": timestamp, "kind": kind, "data": data}, sort_keys=True
+            )
+            + "\n"
+        ).encode("utf-8")
     )
 
 
@@ -608,47 +500,6 @@ def _sqlite_storage_bytes(path: Path) -> int:
         except FileNotFoundError:
             continue
     return total
-
-
-@contextmanager
-def _metrics_file_lock(path: Path, local_lock: RLock) -> Any:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with local_lock:
-        lock_path = path.with_name(path.name + ".lock")
-        with lock_path.open("a+", encoding="utf-8") as lock_file:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-
-
-def _read_recent_lines(
-    path: Path,
-    max_lines: int,
-    *,
-    chunk_size: int = 256 * 1024,
-) -> list[str]:
-    if max_lines <= 0:
-        return path.read_text(encoding="utf-8").splitlines()
-
-    chunks: list[bytes] = []
-    newline_count = 0
-    with path.open("rb") as handle:
-        handle.seek(0, 2)
-        position = handle.tell()
-        while position > 0 and newline_count <= max_lines:
-            read_size = min(chunk_size, position)
-            position -= read_size
-            handle.seek(position)
-            chunk = handle.read(read_size)
-            chunks.append(chunk)
-            newline_count += chunk.count(b"\n")
-
-    if not chunks:
-        return []
-    data = b"".join(reversed(chunks))
-    return data.decode("utf-8", errors="replace").splitlines()[-max_lines:]
 
 
 @dataclass
@@ -875,9 +726,7 @@ def record_autoscaler_cycle(
                 "suppressedPendingResources", {}
             ),
             "pending_count": decision.get("pendingCount", 0),
-            "suppressed_pending_count": decision.get(
-                "suppressedPendingCount", 0
-            ),
+            "suppressed_pending_count": decision.get("suppressedPendingCount", 0),
             "prepared_resources": decision.get("preparedResources", {}),
             "desired_resources": decision.get("desiredResources", {}),
             "projected_free_resources": decision.get("projectedFreeResources", {}),
@@ -889,9 +738,7 @@ def record_autoscaler_cycle(
             ),
             "effective_policy": result.get("effectivePolicy", {}),
             "pressure_scale_up": bool(decision.get("pressureScaleUp")),
-            "create_pressure_scale_up": bool(
-                decision.get("createPressureScaleUp")
-            ),
+            "create_pressure_scale_up": bool(decision.get("createPressureScaleUp")),
             "effective_scale_down_idle_seconds": decision.get(
                 "effectiveScaleDownIdleSeconds"
             ),
@@ -922,13 +769,9 @@ def _bounded_program_wake_plan(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     placements = (
-        value.get("placements")
-        if isinstance(value.get("placements"), list)
-        else []
+        value.get("placements") if isinstance(value.get("placements"), list) else []
     )
-    unplaced = (
-        value.get("unplaced") if isinstance(value.get("unplaced"), list) else []
-    )
+    unplaced = value.get("unplaced") if isinstance(value.get("unplaced"), list) else []
     limit = DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT
     return {
         "mode": str(value.get("mode") or "shadow"),
@@ -1123,10 +966,8 @@ def build_live_scale_signals(
     latest_memory: float | None = None
     latest_psi: float | None = None
     latest_storage_queue: float | None = None
-    latest_rootfs_export_queue: float | None = None
-    create_cutoff = now.timestamp() - max(
-        1, policy.create_pressure_window_seconds
-    )
+    latest_image_materialization_queue: float | None = None
+    create_cutoff = now.timestamp() - max(1, policy.create_pressure_window_seconds)
     create_pressure_samples = 0
     latest_create_pressure_epoch: float | None = None
     sandbox_create_rejections = 0
@@ -1154,9 +995,7 @@ def build_live_scale_signals(
                     latest_create_pressure_epoch = event_epoch
                     sandbox_create_limit = max(
                         0,
-                        _optional_int(
-                            attributes.get("max_concurrent_sandbox_creates")
-                        )
+                        _optional_int(attributes.get("max_concurrent_sandbox_creates"))
                         or 0,
                     )
             continue
@@ -1173,16 +1012,16 @@ def build_live_scale_signals(
             active_workloads = _optional_int(data.get("active_sandboxes"))
         storage_active = _optional_int(actual.get("storage_active_operations")) or 0
         storage_waiting = _optional_int(actual.get("storage_waiting_operations")) or 0
-        rootfs_active = (
-            _optional_int(actual.get("rootfs_export_active_operations")) or 0
+        materialization_active = (
+            _optional_int(actual.get("image_materialization_active_operations")) or 0
         )
-        rootfs_waiting = (
-            _optional_int(actual.get("rootfs_export_waiting_operations")) or 0
+        materialization_waiting = (
+            _optional_int(actual.get("image_materialization_waiting_operations")) or 0
         )
         if (
             (active_workloads or 0) <= 0
             and storage_active + storage_waiting <= 0
-            and rootfs_active + rootfs_waiting <= 0
+            and materialization_active + materialization_waiting <= 0
         ):
             continue
 
@@ -1197,19 +1036,17 @@ def build_live_scale_signals(
             if storage_limit > 0
             else None
         )
-        rootfs_limit = (
+        materialization_limit = (
             _optional_int(
-                actual.get("rootfs_export_max_concurrent_operations")
+                actual.get("image_materialization_max_concurrent_operations")
             )
             or 0
         )
-        # Occupied export slots are useful work, not queue pressure. Only work
-        # waiting behind those slots proves that another pipeline could reduce
-        # latency. This distinction matters now that distinct images export
-        # concurrently instead of serializing behind one host-wide lock.
-        rootfs_queue = (
-            min(1.0, rootfs_waiting / rootfs_limit)
-            if rootfs_limit > 0
+        # Occupied materialization slots are useful work, not queue pressure.
+        # Only queued work proves that another pipeline could reduce latency.
+        materialization_queue = (
+            min(1.0, materialization_waiting / materialization_limit)
+            if materialization_limit > 0
             else None
         )
         is_pressure = any(
@@ -1219,8 +1056,9 @@ def build_live_scale_signals(
                 psi is not None and psi >= policy.max_memory_psi_full_avg10,
                 storage_queue is not None
                 and storage_queue >= policy.target_storage_queue_utilization,
-                rootfs_queue is not None
-                and rootfs_queue >= policy.target_storage_queue_utilization,
+                materialization_queue is not None
+                and materialization_queue
+                >= policy.target_storage_queue_utilization,
             )
         )
         if not is_pressure:
@@ -1232,7 +1070,7 @@ def build_live_scale_signals(
             latest_memory = memory
             latest_psi = psi
             latest_storage_queue = storage_queue
-            latest_rootfs_export_queue = rootfs_queue
+            latest_image_materialization_queue = materialization_queue
 
     lifecycle = _vm_lifecycle_summary(events)
     provisioning_values = sorted(
@@ -1260,7 +1098,9 @@ def build_live_scale_signals(
         memory_utilization=latest_memory,
         memory_psi_full_avg10=latest_psi,
         storage_queue_utilization=latest_storage_queue,
-        rootfs_export_queue_utilization=latest_rootfs_export_queue,
+        image_materialization_queue_utilization=(
+            latest_image_materialization_queue
+        ),
         create_pressure_samples=create_pressure_samples,
         latest_create_pressure_age_seconds=(
             max(0, int(now.timestamp() - latest_create_pressure_epoch))
@@ -1322,12 +1162,10 @@ def build_metrics_snapshot(
     )
     active_routes = len(routing_state.sandboxes)
     portable_parked_routes = sum(
-        is_portable_parked_route(route)
-        for route in routing_state.sandboxes.values()
+        is_portable_parked_route(route) for route in routing_state.sandboxes.values()
     )
     stale_routes = sum(
-        route.node_id not in fresh_sandbox_nodes
-        and not is_portable_parked_route(route)
+        route.node_id not in fresh_sandbox_nodes and not is_portable_parked_route(route)
         for route in routing_state.sandboxes.values()
     )
     sandbox_state_counts: dict[str, int] = {}
@@ -1356,7 +1194,9 @@ def build_metrics_snapshot(
         item for item in routing_state.image_builds.values() if not item.is_expired(now)
     ]
     image_warmups = [
-        item for item in routing_state.image_warmups.values() if not item.is_expired(now)
+        item
+        for item in routing_state.image_warmups.values()
+        if not item.is_expired(now)
     ]
     scale_events = [
         event
@@ -1369,11 +1209,7 @@ def build_metrics_snapshot(
     ]
     scale_values = [int(event.data["scale_up_wait_ms"]) for event in scale_events]
     latest_autoscaler = next(
-        (
-            event
-            for event in reversed(events)
-            if event.kind == "autoscaler_cycle"
-        ),
+        (event for event in reversed(events) if event.kind == "autoscaler_cycle"),
         None,
     )
     program_summary = build_program_state_summary(program_requests or [], now=now)
@@ -1426,9 +1262,7 @@ def build_metrics_snapshot(
             "pending_resources": _sum_pending_resources(
                 capacity_pending_sandboxes
             ).to_dict(),
-            "oldest_pending_seconds": _oldest_age_seconds(
-                capacity_pending_sandboxes
-            ),
+            "oldest_pending_seconds": _oldest_age_seconds(capacity_pending_sandboxes),
             "pending_attempts": sum(
                 item.attempts for item in capacity_pending_sandboxes
             ),

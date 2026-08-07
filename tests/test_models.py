@@ -105,46 +105,25 @@ class VmJobParsingTests(unittest.TestCase):
 
 
 class HeartbeatContractTests(unittest.TestCase):
-    def test_runtime_metrics_sanitize_nonfinite_and_malformed_values(self) -> None:
-        metrics = NodeRuntimeMetrics.from_dict(
-            {
-                "collected_at": utc_now().isoformat(),
-                "cpu_percent": "nan",
-                "cpu_count": "invalid",
-                "memory_total_mb": -1,
-                "imagePullActiveOperations": 3,
-                "imagePullWaitingOperations": -4,
-                "imagePullMaxConcurrentOperations": 8,
-                "storageDevicePoolEnabled": True,
-                "storageDevicePoolIdleDevices": 7,
-                "storageDevicePoolReusedAcquires": 12,
-                "storageDevicePoolDiscards": -1,
-            }
+    def test_runtime_metrics_reject_malformed_or_noncanonical_values(self) -> None:
+        timestamp = utc_now().isoformat()
+        malformed = (
+            {"collected_at": timestamp, "cpu_percent": "nan"},
+            {"collected_at": timestamp, "cpu_count": "invalid"},
+            {"collected_at": timestamp, "memory_total_mb": -1},
+            {"collected_at": timestamp, "imagePullActiveOperations": 3},
+            {"collected_at": timestamp, "storage_device_pool_enabled": 1},
         )
 
-        self.assertIsNotNone(metrics)
-        assert metrics is not None
-        self.assertIsNone(metrics.cpu_percent)
-        self.assertEqual(metrics.cpu_count, 0)
-        self.assertEqual(metrics.memory_total_mb, 0)
-        self.assertEqual(metrics.image_pull_active_operations, 3)
-        self.assertEqual(metrics.image_pull_waiting_operations, 0)
-        self.assertEqual(metrics.image_pull_max_concurrent_operations, 8)
-        self.assertTrue(metrics.storage_device_pool_enabled)
-        self.assertEqual(metrics.storage_device_pool_idle_devices, 7)
-        self.assertEqual(metrics.storage_device_pool_reused_acquires, 12)
-        self.assertEqual(metrics.storage_device_pool_discards, 0)
-        self.assertEqual(
-            metrics.to_dict()["image_pull_max_concurrent_operations"],
-            8,
-        )
+        for payload in malformed:
+            with self.subTest(payload=payload):
+                self.assertIsNone(NodeRuntimeMetrics.from_dict(payload))
 
-    def test_untrusted_resource_values_are_sanitized_without_inflating_capacity(self) -> None:
-        quantity = ResourceQuantity.from_dict(
-            {"vcpu": "nan", "memory_mb": -1, "disk_mb": "invalid"}
-        )
-
-        self.assertEqual(quantity, ResourceQuantity())
+    def test_resource_quantity_rejects_permissive_values(self) -> None:
+        with self.assertRaises(ValueError):
+            ResourceQuantity.from_dict(
+                {"vcpu": "nan", "memory_mb": -1, "disk_mb": "invalid"}
+            )
 
     def test_gateway_receipt_time_controls_freshness(self) -> None:
         now = utc_now()
@@ -158,7 +137,7 @@ class HeartbeatContractTests(unittest.TestCase):
 
         self.assertFalse(heartbeat.is_fresh(now, ttl_seconds=10))
 
-    def test_future_legacy_timestamp_does_not_stay_fresh_forever(self) -> None:
+    def test_untrusted_future_timestamp_does_not_stay_fresh_forever(self) -> None:
         now = utc_now()
         heartbeat = NodeHeartbeat(
             node_id="node-1",
@@ -174,13 +153,13 @@ class HeartbeatContractTests(unittest.TestCase):
             sandbox_id="sandbox-1",
             generation=3,
             operation_id="operation-7",
-            spec_hash="sha256:abc",
+            spec_hash="a" * 64,
             state="running",
         )
 
         self.assertEqual(SandboxInventoryEntry.from_dict(entry.to_dict()), entry)
 
-    def test_versioned_inventory_requires_complete_incarnation_identity(self) -> None:
+    def test_inventory_requires_complete_incarnation_identity(self) -> None:
         base = {
             "sandbox_id": "sandbox-1",
             "generation": 3,
@@ -193,11 +172,10 @@ class HeartbeatContractTests(unittest.TestCase):
             malformed[missing] = ""
             self.assertIsNone(SandboxInventoryEntry.from_dict(malformed))
 
-        self.assertEqual(
+        self.assertIsNone(
             SandboxInventoryEntry.from_dict(
-                {"sandbox_id": "legacy-sandbox", "generation": 0}
-            ),
-            SandboxInventoryEntry(sandbox_id="legacy-sandbox"),
+                {"sandbox_id": "sandbox-1", "generation": 0}
+            )
         )
 
     def test_estimates_cpu_from_vm_product_id_when_resolved_product_is_absent(self) -> None:

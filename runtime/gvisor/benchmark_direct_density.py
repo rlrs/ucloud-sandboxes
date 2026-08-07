@@ -17,7 +17,7 @@ from ucloud_sandboxes.direct_warden import (
     DirectRunscWardenConfig,
 )
 from ucloud_sandboxes.hibernation import HibernationRuntimeFingerprint
-from ucloud_sandboxes.image_rootfs import DockerRootfsStore, OverlayRootfsManager
+from ucloud_sandboxes.image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 
 
 RUNSC_COMMIT = "9f653e577965df2ddd13875b5530cd2588661f1c"
@@ -81,7 +81,9 @@ def main() -> int:
     template = json.loads(args.config_template.read_text(encoding="utf-8"))
     template["process"]["args"] = ["/conformance-workload", "server"]
     template["process"]["terminal"] = False
-    image_store = DockerRootfsStore((args.state_root / "image-cache").resolve())
+    image_store = DockerOverlay2RootfsStore(
+        (args.state_root / "image-cache").resolve()
+    )
     image = image_store.materialize(args.image)
     overlays = OverlayRootfsManager(
         image_store,

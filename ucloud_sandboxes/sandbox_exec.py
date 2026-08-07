@@ -13,10 +13,9 @@ from typing import Any
 from uuid import uuid4
 
 from .models import utc_now
-from .sandbox import SANDBOX_ID_RE, SandboxManager
+from .sandbox import SANDBOX_ID_RE
 
 
-EXEC_SESSION_ID_PREFIX = "exec-"
 ROUTABLE_EXEC_SESSION_ID_PREFIX = "exec-v1."
 MAX_ROUTABLE_EXEC_SESSION_ID_LENGTH = 1024
 
@@ -34,8 +33,12 @@ def new_exec_session_id(
     node_id: str = "",
     job_id: str = "",
 ) -> str:
-    if not node_id or not job_id:
-        return EXEC_SESSION_ID_PREFIX + uuid4().hex
+    if SANDBOX_ID_RE.fullmatch(sandbox_id) is None:
+        raise ValueError("sandbox id is invalid")
+    if not node_id or len(node_id) > 128:
+        raise ValueError("node id is invalid")
+    if not job_id or len(job_id) > 128:
+        raise ValueError("job id is invalid")
     encoded = _exec_session_route_payload(sandbox_id, node_id, job_id)
     return f"{ROUTABLE_EXEC_SESSION_ID_PREFIX}{encoded}.{uuid4().hex}"
 
@@ -105,25 +108,37 @@ class SandboxExecSpec:
     @classmethod
     def from_dict(
         cls,
-        raw: dict[str, Any],
+        raw: object,
         *,
-        sandbox_id: str | None = None,
+        sandbox_id: str,
     ) -> "SandboxExecSpec":
-        command = raw.get("command", ())
-        if isinstance(command, str):
-            command_items = (command,)
-        elif isinstance(command, list) and all(isinstance(item, str) for item in command):
-            command_items = tuple(command)
-        else:
-            command_items = ()
-        env = raw.get("env") or {}
+        if not isinstance(raw, dict):
+            raise ValueError("exec payload must be a JSON object")
+        if set(raw) != {"command", "env", "working_dir", "stdin", "tty"}:
+            raise ValueError("exec payload has an invalid schema")
+        command = raw["command"]
+        if not isinstance(command, list) or not all(
+            isinstance(item, str) for item in command
+        ):
+            raise ValueError("exec command must be a JSON string array")
+        env = raw["env"]
+        if not isinstance(env, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in env.items()
+        ):
+            raise ValueError("exec env must be a JSON string map")
+        working_dir = raw["working_dir"]
+        if working_dir is not None and not isinstance(working_dir, str):
+            raise ValueError("exec working_dir must be a string or null")
+        if not isinstance(raw["stdin"], bool) or not isinstance(raw["tty"], bool):
+            raise ValueError("exec stdin and tty must be booleans")
         return cls(
-            sandbox_id=str(sandbox_id or raw.get("sandbox_id") or ""),
-            command=command_items,
-            env={str(k): str(v) for k, v in dict(env).items()},
-            working_dir=str(raw["working_dir"]) if raw.get("working_dir") else None,
-            stdin=bool(raw.get("stdin", False)),
-            tty=bool(raw.get("tty", False)),
+            sandbox_id=sandbox_id,
+            command=tuple(command),
+            env=dict(env),
+            working_dir=working_dir,
+            stdin=raw["stdin"],
+            tty=raw["tty"],
         )
 
     def validate(self) -> None:
@@ -174,7 +189,9 @@ class ExecSession:
     stdin_open: bool = False
     events: deque[ExecEvent] = field(default_factory=deque)
     next_sequence: int = 1
-    process: subprocess.Popen[str] | None = field(default=None, repr=False, compare=False)
+    process: subprocess.Popen[str] | None = field(
+        default=None, repr=False, compare=False
+    )
     activity_lease: bool = field(default=False, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
@@ -193,13 +210,17 @@ class ExecSession:
 class ExecSessionManager:
     def __init__(
         self,
-        sandbox_manager: SandboxManager,
+        sandbox_manager: Any,
         *,
         max_sessions: int = 128,
         max_events_per_session: int = 512,
         route_node_id: str = "",
         route_job_id: str = "",
     ) -> None:
+        if not route_node_id or len(route_node_id) > 128:
+            raise ValueError("exec route node id is invalid")
+        if not route_job_id or len(route_job_id) > 128:
+            raise ValueError("exec route job id is invalid")
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
@@ -251,9 +272,6 @@ class ExecSessionManager:
             self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
             session.activity_lease = False
             raise
-        if runtime.dry_run:
-            self._finish_dry_run(session)
-            return session
         self._start_process(session)
         return session
 
@@ -356,12 +374,6 @@ class ExecSessionManager:
     async def aclose_stdin(self, session_id: str) -> ExecSession:
         return await asyncio.to_thread(self.close_stdin, session_id)
 
-    def _finish_dry_run(self, session: ExecSession) -> None:
-        with self._lock:
-            self._append_event_locked(session, "status", "dry-run")
-            if not session.stdin_open:
-                self._complete_locked(session, 0)
-
     def _start_process(self, session: ExecSession) -> None:
         try:
             process = subprocess.Popen(
@@ -373,33 +385,25 @@ class ExecSessionManager:
                 bufsize=1,
             )
         except OSError as exc:
-            exec_start_failed = getattr(
-                self.sandbox_manager.runtime,
-                "exec_start_failed",
-                None,
-            )
-            if exec_start_failed is not None:
-                exec_start_failed(session.spec.sandbox_id)
+            self.sandbox_manager.runtime.exec_start_failed(session.spec.sandbox_id)
             with self._lock:
                 self._append_event_locked(session, "error", str(exc))
                 self._complete_locked(session, 1)
             return
         with self._lock:
             session.process = process
-        exec_started = getattr(self.sandbox_manager.runtime, "exec_started", None)
-        if exec_started is not None:
+        try:
+            self.sandbox_manager.runtime.exec_started(session.spec.sandbox_id)
+        except Exception as exc:
             try:
-                exec_started(session.spec.sandbox_id)
-            except Exception as exc:
-                try:
-                    process.kill()
-                except ProcessLookupError:
-                    pass
-                process.wait()
-                with self._lock:
-                    self._append_event_locked(session, "error", str(exc))
-                    self._complete_locked(session, 1)
-                return
+                process.kill()
+            except ProcessLookupError:
+                pass
+            process.wait()
+            with self._lock:
+                self._append_event_locked(session, "error", str(exc))
+                self._complete_locked(session, 1)
+            return
         stdout_thread = Thread(
             target=self._pump_stream,
             args=(session.id, "stdout", process.stdout),

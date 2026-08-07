@@ -75,11 +75,9 @@ class DirectSandboxRegistration:
     def __post_init__(self) -> None:
         if self.version != DIRECT_REGISTRATION_VERSION:
             raise ValueError("unsupported direct registration version")
-        if self.spec.forkable:
-            raise ValueError("fork is deferred from the direct runtime")
         self.spec.validate()
-        if self.sandbox_generation < 0:
-            raise ValueError("sandbox generation cannot be negative")
+        if self.sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         if not self.operation_id or not OPERATION_ID_RE.fullmatch(self.operation_id):
             raise ValueError("direct registration operation id is invalid")
         if not _DIGEST.fullmatch(self.runtime_identity_sha256):
@@ -102,7 +100,7 @@ class DirectSandboxRegistration:
         if migration_phase and not self.migration_id:
             raise ValueError("migration registration has no migration id")
         if migration_phase and not self.migration_sha256:
-            raise ValueError("migration registration has no archive digest")
+            raise ValueError("migration registration has no snapshot digest")
         if not migration_phase and (self.migration_id or self.migration_sha256):
             raise ValueError("ordinary registration has migration ownership")
         if self.revision < 1 or self.created_ns < 1 or self.updated_ns < 1:
@@ -112,10 +110,7 @@ class DirectSandboxRegistration:
             self.quota_total_mb,
             self.quota_path,
         )
-        quota_present = all(
-            value not in {None, ""}
-            for value in quota_values
-        )
+        quota_present = all(value not in {None, ""} for value in quota_values)
         if any(value not in {None, ""} for value in quota_values) != quota_present:
             raise ValueError("direct registration quota identity is incomplete")
         if quota_present:
@@ -162,9 +157,7 @@ class DirectSandboxRegistration:
             "owned",
             "moving_out",
             "deleting",
-        } and (
-            not quota_present or not rootfs_present
-        ):
+        } and (not quota_present or not rootfs_present):
             raise ValueError("direct registration is missing owned resources")
 
     @property
@@ -248,11 +241,8 @@ class DirectSandboxRegistration:
             "updated_ns",
             "version",
         }
-        raw_version = int(raw.get("version", 0))
-        if raw_version == 1:
-            expected -= {"migration_id", "migration_sha256"}
         if (
-            raw_version not in {1, DIRECT_REGISTRATION_VERSION}
+            raw.get("version") != DIRECT_REGISTRATION_VERSION
             or set(raw) != expected
             or not isinstance(raw["spec"], dict)
         ):
@@ -346,6 +336,8 @@ class DirectSandboxRegistry:
         operation_id: str,
         runtime_identity_sha256: str,
     ) -> DirectSandboxRegistration:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         candidate = DirectSandboxRegistration(
             spec=spec,
             sandbox_generation=sandbox_generation,
@@ -364,8 +356,7 @@ class DirectSandboxRegistry:
                     existing.sandbox_generation == sandbox_generation
                     and existing.operation_id == operation_id
                     and existing.spec == spec
-                    and existing.runtime_identity_sha256
-                    == runtime_identity_sha256
+                    and existing.runtime_identity_sha256 == runtime_identity_sha256
                 ):
                     return existing
                 raise DirectRegistryConflictError(
@@ -373,8 +364,7 @@ class DirectSandboxRegistry:
                 )
             if (
                 state.tombstones.get(spec.id, -1) >= sandbox_generation
-                or self._archived_generation_unlocked(spec.id)
-                >= sandbox_generation
+                or self._archived_generation_unlocked(spec.id) >= sandbox_generation
             ):
                 raise DirectRegistryConflictError(
                     "direct registration is fenced by a tombstone"
@@ -392,6 +382,8 @@ class DirectSandboxRegistry:
         migration_id: str,
         migration_sha256: str,
     ) -> DirectSandboxRegistration:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         candidate = DirectSandboxRegistration(
             spec=spec,
             sandbox_generation=sandbox_generation,
@@ -412,8 +404,7 @@ class DirectSandboxRegistry:
                     existing.sandbox_generation == sandbox_generation
                     and existing.operation_id == operation_id
                     and existing.spec == spec
-                    and existing.runtime_identity_sha256
-                    == runtime_identity_sha256
+                    and existing.runtime_identity_sha256 == runtime_identity_sha256
                     and existing.migration_id == migration_id
                     and existing.migration_sha256 == migration_sha256
                 ):
@@ -522,8 +513,7 @@ class DirectSandboxRegistry:
                 replace(
                     state,
                     records=tuple(
-                        item for item in state.records
-                        if item.sandbox_id != sandbox_id
+                        item for item in state.records if item.sandbox_id != sandbox_id
                     ),
                     migration_tombstones=migration_tombstones,
                 )
@@ -696,9 +686,7 @@ class DirectSandboxRegistry:
                 or record.migration_id != migration_id
                 or record.migration_sha256 != migration_sha256
             ):
-                raise DirectRegistryConflictError(
-                    "move abort lost its ownership fence"
-                )
+                raise DirectRegistryConflictError("move abort lost its ownership fence")
             return self._replace_record_unlocked(
                 state,
                 record,
@@ -792,6 +780,8 @@ class DirectSandboxRegistry:
         sandbox_generation: int,
         expected_revision: int,
     ) -> None:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         with self._locked():
             state = self._load_unlocked()
             record = self._require(state, sandbox_id)
@@ -851,10 +841,7 @@ class DirectSandboxRegistry:
         with self._locked():
             state = self._load_unlocked()
             record = self._require(state, sandbox_id)
-            if (
-                record.revision != expected_revision
-                or record.phase != expected_phase
-            ):
+            if record.revision != expected_revision or record.phase != expected_phase:
                 raise DirectRegistryConflictError(
                     "direct registration transition lost its ownership fence"
                 )
@@ -977,22 +964,17 @@ class DirectSandboxRegistry:
         payload_version = (
             int(payload.get("version", 0)) if isinstance(payload, dict) else 0
         )
-        expected_keys = {"records", "tombstones", "version"}
-        if payload_version == DIRECT_REGISTRY_VERSION:
-            expected_keys.add("migration_tombstones")
+        expected_keys = {"migration_tombstones", "records", "tombstones", "version"}
         if (
             not isinstance(payload, dict)
             or set(payload) != expected_keys
-            or payload_version not in {1, DIRECT_REGISTRY_VERSION}
+            or payload_version != DIRECT_REGISTRY_VERSION
             or not isinstance(payload["records"], list)
             or not isinstance(payload["tombstones"], dict)
-            or (
-                payload_version == DIRECT_REGISTRY_VERSION
-                and not isinstance(payload["migration_tombstones"], dict)
-            )
+            or not isinstance(payload["migration_tombstones"], dict)
         ):
             raise DirectRegistryError("direct registry schema is invalid")
-        raw_migration_tombstones = payload.get("migration_tombstones", {})
+        raw_migration_tombstones = payload["migration_tombstones"]
         if any(
             not isinstance(key, str)
             or not isinstance(values, list)
@@ -1005,12 +987,10 @@ class DirectSandboxRegistry:
             )
         try:
             records = tuple(
-                DirectSandboxRegistration.from_dict(item)
-                for item in payload["records"]
+                DirectSandboxRegistration.from_dict(item) for item in payload["records"]
             )
             tombstones = {
-                str(key): int(value)
-                for key, value in payload["tombstones"].items()
+                str(key): int(value) for key, value in payload["tombstones"].items()
             }
             migration_tombstones = {
                 str(key): tuple(str(item) for item in values)
@@ -1021,7 +1001,7 @@ class DirectSandboxRegistry:
         ids = [item.sandbox_id for item in records]
         if (
             len(ids) != len(set(ids))
-            or any(value < 0 for value in tombstones.values())
+            or any(value <= 0 for value in tombstones.values())
             or any(
                 not OPERATION_ID_RE.fullmatch(migration_id)
                 for values in migration_tombstones.values()
@@ -1092,7 +1072,7 @@ class DirectSandboxRegistry:
                     """
                     CREATE TABLE IF NOT EXISTS ordinary_tombstones (
                         sandbox_id TEXT PRIMARY KEY,
-                        generation INTEGER NOT NULL CHECK (generation >= 0)
+                        generation INTEGER NOT NULL CHECK (generation > 0)
                     )
                     """
                 )
@@ -1139,7 +1119,7 @@ class DirectSandboxRegistry:
         if row is None:
             return -1
         generation = int(row[0])
-        if generation < 0:
+        if generation <= 0:
             raise DirectRegistryError("direct tombstone archive is invalid")
         return generation
 

@@ -1,21 +1,15 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import hashlib
-import io
-import json
 import shutil
-import tarfile
 import time
 import unittest
 
-from ucloud_sandboxes.direct_migration import (
-    DIRECT_MIGRATION_METADATA,
-    DirectMigrationArchiveStore,
-    DirectMigrationError,
-    DirectMigrationManifest,
-    PortableArtifactFile,
+from ucloud_sandboxes.storage_native_migration import (
+    StorageNativeArtifactFile,
     StorageNativeMigration,
     StorageNativeMigrationStore,
+    StorageNativeSandboxManifest,
 )
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistration
 from ucloud_sandboxes.hibernation import (
@@ -33,7 +27,7 @@ from ucloud_sandboxes.storage_native_registry import (
 )
 
 
-class DirectMigrationTests(unittest.TestCase):
+class StorageNativeMigrationTests(unittest.TestCase):
     @staticmethod
     def runtime() -> HibernationRuntimeFingerprint:
         return HibernationRuntimeFingerprint(
@@ -143,105 +137,6 @@ class DirectMigrationTests(unittest.TestCase):
         )
         return registration, manifest, identity, incarnation
 
-    def test_archive_rebinds_local_inode_manifest_on_destination(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            source_root = root / "source"
-            destination_root = root / "destination"
-            source_root.mkdir()
-            destination_root.mkdir()
-            registration, source_manifest, identity, source = self.make_source(
-                source_root
-            )
-            archive_path = root / "sandbox-move.tar"
-            store = DirectMigrationArchiveStore()
-
-            exported = store.export(
-                registration=registration,
-                local_manifest=source_manifest,
-                runtime_identity=identity,
-                writable_incarnation=source,
-                archive_path=archive_path,
-            )
-            with tarfile.open(archive_path, "r:*") as archive:
-                first = archive.next()
-                self.assertIsNotNone(first)
-                assert first is not None
-                self.assertEqual(first.name, DIRECT_MIGRATION_METADATA)
-            self.assertEqual(
-                store.read_manifest(
-                    archive_path,
-                    expected_sha256=exported.sha256,
-                ),
-                exported.manifest,
-            )
-            destination = destination_root / source.name
-            portable, imported = store.import_archive(
-                archive_path,
-                expected_sha256=exported.sha256,
-                expected_runtime_identity=identity,
-                expected_runtime=self.runtime(),
-                artifact_store=HibernationArtifactStore(destination_root),
-                writable_incarnation=destination,
-            )
-
-            self.assertEqual(portable.sandbox_id, "sandbox")
-            self.assertNotEqual(
-                source_manifest.metadata_sha256,
-                imported.metadata_sha256,
-            )
-            self.assertNotEqual(
-                source_manifest.files[0].inode,
-                imported.files[0].inode,
-            )
-            self.assertEqual(
-                (destination / "upper" / "workspace" / "answer.txt").read_text(),
-                "portable\n",
-            )
-            self.assertEqual(
-                (
-                    destination
-                    / "hibernate-3"
-                    / "application_memory.img"
-                ).stat().st_size,
-                16 * 1024 * 1024,
-            )
-            reloaded = HibernationArtifactStore(destination_root).load_complete(
-                sandbox_id="sandbox",
-                sandbox_generation=7,
-                hibernation_generation=3,
-            )
-            self.assertEqual(reloaded, imported)
-
-    def test_archive_digest_is_required_before_extraction(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            source_root = root / "source"
-            destination_root = root / "destination"
-            source_root.mkdir()
-            destination_root.mkdir()
-            registration, manifest, identity, source = self.make_source(source_root)
-            archive_path = root / "sandbox-move.tar"
-            store = DirectMigrationArchiveStore()
-            store.export(
-                registration=registration,
-                local_manifest=manifest,
-                runtime_identity=identity,
-                writable_incarnation=source,
-                archive_path=archive_path,
-            )
-
-            with self.assertRaisesRegex(DirectMigrationError, "digest"):
-                store.import_archive(
-                    archive_path,
-                    expected_sha256="0" * 64,
-                    expected_runtime_identity=identity,
-                    expected_runtime=self.runtime(),
-                    artifact_store=HibernationArtifactStore(destination_root),
-                    writable_incarnation=destination_root / source.name,
-                )
-            self.assertFalse((destination_root / source.name).exists())
-
     def test_storage_snapshot_metadata_is_durable_and_rebound_locally(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -252,7 +147,7 @@ class DirectMigrationTests(unittest.TestCase):
             registration, source_manifest, identity, source = self.make_source(
                 source_root
             )
-            portable = DirectMigrationManifest.from_local(
+            portable = StorageNativeSandboxManifest.from_local(
                 registration,
                 source_manifest,
                 runtime_identity=identity,
@@ -311,57 +206,6 @@ class DirectMigrationTests(unittest.TestCase):
                 rebound,
             )
 
-    def test_rejects_archive_member_outside_portable_inventory(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            archive_path = root / "unsafe.tar"
-            runtime = self.runtime()
-            spec = self.spec()
-            portable = DirectMigrationManifest(
-                spec=spec,
-                sandbox_generation=7,
-                create_operation_id="create:7",
-                runtime_identity=NodeRuntimeIdentity.from_fingerprint(runtime),
-                hibernation_generation=3,
-                park_operation_id="park:test",
-                captured_ns=time.time_ns(),
-                runtime=runtime,
-                source_manifest_sha256="a" * 64,
-                source_guest_ip=None,
-                connection_policy="none",
-                files=(
-                    PortableArtifactFile(
-                        "application_memory.img",
-                        HibernationFileRole.MAIN_MEMORY,
-                        1,
-                        1,
-                    ),
-                    PortableArtifactFile(
-                        "checkpoint.img",
-                        HibernationFileRole.KERNEL_STATE,
-                        1,
-                        1,
-                    ),
-                    PortableArtifactFile(
-                        "pages_meta.img",
-                        HibernationFileRole.ALLOCATOR_METADATA,
-                        1,
-                        1,
-                    ),
-                ),
-            )
-            with tarfile.open(archive_path, "w") as archive:
-                metadata = json.dumps(portable.to_dict()).encode("ascii")
-                info = tarfile.TarInfo(DIRECT_MIGRATION_METADATA)
-                info.size = len(metadata)
-                archive.addfile(info, io.BytesIO(metadata))
-                unsafe = tarfile.TarInfo("../../escape")
-                unsafe.size = 1
-                archive.addfile(unsafe, io.BytesIO(b"x"))
-
-            with self.assertRaisesRegex(DirectMigrationError, "unsafe path"):
-                DirectMigrationArchiveStore().inspect(archive_path)
-
     def test_networked_manifest_requires_disconnect_policy_and_source_ip(
         self,
     ) -> None:
@@ -374,7 +218,7 @@ class DirectMigrationTests(unittest.TestCase):
             security=SandboxSecuritySpec(init=False),
         )
         with self.assertRaisesRegex(ValueError, "source guest IP"):
-            DirectMigrationManifest(
+            StorageNativeSandboxManifest(
                 spec=spec,
                 sandbox_generation=7,
                 create_operation_id="create:7",
@@ -387,19 +231,56 @@ class DirectMigrationTests(unittest.TestCase):
                 source_guest_ip=None,
                 connection_policy="disconnect",
                 files=(
-                    PortableArtifactFile(
+                    StorageNativeArtifactFile(
                         "application_memory.img",
                         HibernationFileRole.MAIN_MEMORY,
                         1,
                         1,
                     ),
-                    PortableArtifactFile(
+                    StorageNativeArtifactFile(
                         "checkpoint.img",
                         HibernationFileRole.KERNEL_STATE,
                         1,
                         1,
                     ),
-                    PortableArtifactFile(
+                    StorageNativeArtifactFile(
+                        "pages_meta.img",
+                        HibernationFileRole.ALLOCATOR_METADATA,
+                        1,
+                        1,
+                    ),
+                ),
+            )
+
+    def test_runtime_manifest_requires_positive_sandbox_generation(self) -> None:
+        runtime = self.runtime()
+        with self.assertRaisesRegex(ValueError, "generations are invalid"):
+            StorageNativeSandboxManifest(
+                spec=self.spec(),
+                sandbox_generation=0,
+                create_operation_id="create:zero",
+                runtime_identity=NodeRuntimeIdentity.from_fingerprint(runtime),
+                hibernation_generation=1,
+                park_operation_id="park:zero",
+                captured_ns=1,
+                runtime=runtime,
+                source_manifest_sha256="a" * 64,
+                source_guest_ip=None,
+                connection_policy="none",
+                files=(
+                    StorageNativeArtifactFile(
+                        "application_memory.img",
+                        HibernationFileRole.MAIN_MEMORY,
+                        1,
+                        1,
+                    ),
+                    StorageNativeArtifactFile(
+                        "checkpoint.img",
+                        HibernationFileRole.KERNEL_STATE,
+                        1,
+                        1,
+                    ),
+                    StorageNativeArtifactFile(
                         "pages_meta.img",
                         HibernationFileRole.ALLOCATOR_METADATA,
                         1,

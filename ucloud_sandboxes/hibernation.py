@@ -38,7 +38,7 @@ class HibernationConflictError(HibernationError):
     pass
 
 
-class HibernationCompatibilityError(HibernationError):
+class HibernationValidationError(HibernationError):
     pass
 
 
@@ -327,7 +327,7 @@ class HibernationManifest:
         if self.version != HIBERNATION_MANIFEST_VERSION:
             raise ValueError("unsupported hibernation manifest version")
         _validate_safe_id("sandbox_id", self.sandbox_id)
-        _validate_nonnegative_int("sandbox_generation", self.sandbox_generation)
+        _validate_positive_int("sandbox_generation", self.sandbox_generation)
         _validate_positive_int("hibernation_generation", self.hibernation_generation)
         _validate_safe_id("operation_id", self.operation_id)
         _validate_digest("spec_sha256", self.spec_sha256)
@@ -435,7 +435,7 @@ class HibernationManifest:
             raise ValueError("hibernation manifest metadata digest does not match")
         return manifest
 
-    def require_compatible(
+    def validate_identity(
         self,
         *,
         sandbox_id: str,
@@ -445,7 +445,7 @@ class HibernationManifest:
     ) -> None:
         expected = (
             _validate_safe_id("sandbox_id", sandbox_id),
-            _validate_nonnegative_int("sandbox_generation", sandbox_generation),
+            _validate_positive_int("sandbox_generation", sandbox_generation),
             _validate_digest("spec_sha256", spec_sha256),
             _validate_digest("runtime_sha256", runtime_sha256),
         )
@@ -456,8 +456,8 @@ class HibernationManifest:
             self.runtime.digest,
         )
         if actual != expected:
-            raise HibernationCompatibilityError(
-                "hibernation artifact is incompatible with the requested sandbox "
+            raise HibernationValidationError(
+                "hibernation artifact does not match the requested sandbox "
                 "or runtime"
             )
 
@@ -472,7 +472,7 @@ class HibernationManifest:
         try:
             root_fd = os.open(root, root_flags)
         except OSError as exc:
-            raise HibernationCompatibilityError(
+            raise HibernationValidationError(
                 "cannot safely open hibernation artifact directory"
             ) from exc
         try:
@@ -482,7 +482,7 @@ class HibernationManifest:
                 try:
                     descriptor = os.open(item.name, flags, dir_fd=root_fd)
                 except OSError as exc:
-                    raise HibernationCompatibilityError(
+                    raise HibernationValidationError(
                         f"cannot safely open hibernation artifact file: {item.name}"
                     ) from exc
                 try:
@@ -493,7 +493,7 @@ class HibernationManifest:
                         or info.st_ino != item.inode
                         or info.st_size != item.logical_bytes
                     ):
-                        raise HibernationCompatibilityError(
+                        raise HibernationValidationError(
                             f"hibernation artifact file identity changed: {item.name}"
                         )
                 finally:
@@ -916,7 +916,7 @@ class HibernationArtifactStore:
             "sandbox_id": sandbox_id,
             "version": HIBERNATION_MANIFEST_VERSION,
         }:
-            raise HibernationCompatibilityError(
+            raise HibernationValidationError(
                 "hibernation COMPLETE marker identity is invalid"
             )
         manifest = HibernationManifest.from_dict(
@@ -932,7 +932,7 @@ class HibernationArtifactStore:
             or manifest.sandbox_generation != sandbox_generation
             or manifest.hibernation_generation != hibernation_generation
         ):
-            raise HibernationCompatibilityError(
+            raise HibernationValidationError(
                 "hibernation COMPLETE marker does not match its manifest"
             )
         return manifest
@@ -977,7 +977,7 @@ class HibernationArtifactStore:
                     if item.role == HibernationFileRole.MAIN_MEMORY
                 }
             if missing:
-                raise HibernationCompatibilityError(
+                raise HibernationValidationError(
                     f"published generation is missing files: {sorted(missing)}"
                 )
             generation_fd = self._open_directory(generation)
@@ -995,7 +995,7 @@ class HibernationArtifactStore:
                         or info.st_ino != item.inode
                         or info.st_size != item.logical_bytes
                     ):
-                        raise HibernationCompatibilityError(
+                        raise HibernationValidationError(
                             f"published artifact identity changed: {name}"
                         )
                 # Removing COMPLETE first makes a crash fail closed as an
@@ -1274,23 +1274,23 @@ class HibernationArtifactStore:
                     dir_fd=root_fd,
                 )
             except FileNotFoundError as exc:
-                raise HibernationCompatibilityError(f"{label} is absent") from exc
+                raise HibernationValidationError(f"{label} is absent") from exc
             except OSError as exc:
-                raise HibernationCompatibilityError(
+                raise HibernationValidationError(
                     f"{label} cannot be safely opened"
                 ) from exc
             try:
                 info = os.fstat(descriptor)
                 if not stat.S_ISREG(info.st_mode):
-                    raise HibernationCompatibilityError(
+                    raise HibernationValidationError(
                         f"{label} must be a regular file"
                     )
                 if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-                    raise HibernationCompatibilityError(
+                    raise HibernationValidationError(
                         f"{label} cannot be group/world writable"
                     )
                 if info.st_size > MAX_HIBERNATION_JSON_BYTES:
-                    raise HibernationCompatibilityError(f"{label} is too large")
+                    raise HibernationValidationError(f"{label} is too large")
                 payload = bytearray()
                 while len(payload) <= MAX_HIBERNATION_JSON_BYTES:
                     block = os.read(
@@ -1304,7 +1304,7 @@ class HibernationArtifactStore:
                         break
                     payload.extend(block)
                 if len(payload) > MAX_HIBERNATION_JSON_BYTES:
-                    raise HibernationCompatibilityError(f"{label} is too large")
+                    raise HibernationValidationError(f"{label} is too large")
             finally:
                 os.close(descriptor)
         finally:
@@ -1312,9 +1312,9 @@ class HibernationArtifactStore:
         try:
             raw = json.loads(bytes(payload).decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise HibernationCompatibilityError(f"{label} is invalid JSON") from exc
+            raise HibernationValidationError(f"{label} is invalid JSON") from exc
         if not isinstance(raw, dict):
-            raise HibernationCompatibilityError(f"{label} must be a JSON object")
+            raise HibernationValidationError(f"{label} must be a JSON object")
         return raw
 
 
@@ -1342,7 +1342,7 @@ class HibernationRecord:
         if self.version != HIBERNATION_SCHEMA_VERSION:
             raise ValueError("unsupported hibernation state version")
         _validate_safe_id("sandbox_id", self.sandbox_id)
-        _validate_nonnegative_int("sandbox_generation", self.sandbox_generation)
+        _validate_positive_int("sandbox_generation", self.sandbox_generation)
         _validate_nonnegative_int("hibernation_generation", self.hibernation_generation)
         _validate_digest("spec_sha256", self.spec_sha256)
         if not isinstance(self.state, HibernationState):
@@ -2254,21 +2254,21 @@ class HibernationReconciler:
                         sandbox_generation=record.sandbox_generation,
                         hibernation_generation=record.hibernation_generation,
                     )
-                    manifest.require_compatible(
+                    manifest.validate_identity(
                         sandbox_id=record.sandbox_id,
                         sandbox_generation=record.sandbox_generation,
                         spec_sha256=record.spec_sha256,
                         runtime_sha256=self.runtime_sha256,
                     )
                     if manifest.hibernation_generation != record.hibernation_generation:
-                        raise HibernationCompatibilityError(
+                        raise HibernationValidationError(
                             "complete artifact does not match the journal generation"
                         )
                     if (
                         record.state == HibernationState.HIBERNATING
                         and manifest.operation_id != record.operation_id
                     ):
-                        raise HibernationCompatibilityError(
+                        raise HibernationValidationError(
                             "complete artifact does not match the pending operation"
                         )
                     if (
@@ -2279,7 +2279,7 @@ class HibernationReconciler:
                         }
                         and manifest.metadata_sha256 != record.manifest_sha256
                     ):
-                        raise HibernationCompatibilityError(
+                        raise HibernationValidationError(
                             "complete artifact does not match the authoritative "
                             "journal digest"
                         )
@@ -2608,7 +2608,7 @@ class HibernationDiskReservation:
 
     def __post_init__(self) -> None:
         _validate_safe_id("sandbox_id", self.sandbox_id)
-        _validate_nonnegative_int("sandbox_generation", self.sandbox_generation)
+        _validate_positive_int("sandbox_generation", self.sandbox_generation)
         _validate_positive_int("project_id", self.project_id)
         _validate_positive_int("memory_mb", self.memory_mb)
         _validate_positive_int("writable_disk_mb", self.writable_disk_mb)
@@ -2984,7 +2984,7 @@ class HibernationDiskLedger:
         expected = {
             (
                 _validate_safe_id("sandbox_id", sandbox_id),
-                _validate_nonnegative_int("sandbox_generation", sandbox_generation),
+                _validate_positive_int("sandbox_generation", sandbox_generation),
             )
             for sandbox_id, sandbox_generation in expected_incarnations
         }

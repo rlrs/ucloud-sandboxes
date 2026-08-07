@@ -23,18 +23,14 @@ from ucloud_sandboxes.direct_warden import (  # noqa: E402
     DirectRunscWarden,
     DirectRunscWardenConfig,
 )
-from ucloud_sandboxes.direct_migration import (  # noqa: E402
-    DirectMigrationArchiveStore,
-    DirectMigrationManifest,
+from ucloud_sandboxes.storage_native_migration import (  # noqa: E402
     MIGRATION_CONNECTION_POLICY_NONE,
-    PortableArtifactFile,
+    StorageNativeArtifactFile,
     StorageNativeMigration,
     StorageNativeMigrationStore,
+    StorageNativeSandboxManifest,
 )
-from ucloud_sandboxes.direct_registry import DirectSandboxRegistration  # noqa: E402
 from ucloud_sandboxes.hibernation import (  # noqa: E402
-    HibernationArtifactFile,
-    HibernationManifest,
     HibernationRuntimeFingerprint,
 )
 from ucloud_sandboxes.image_rootfs import (  # noqa: E402
@@ -520,7 +516,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         source_deleted_before_destination_resume = False
         if publisher is not None:
             source_manifest = warden.load_parked_manifest(sandbox)
-            portable = DirectMigrationManifest(
+            portable = StorageNativeSandboxManifest(
                 spec=spec,
                 sandbox_generation=sandbox_generation,
                 create_operation_id="create-runtime:1",
@@ -535,7 +531,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 source_guest_ip=None,
                 connection_policy=MIGRATION_CONNECTION_POLICY_NONE,
                 files=tuple(
-                    PortableArtifactFile(
+                    StorageNativeArtifactFile(
                         name=item.name,
                         role=item.role,
                         logical_bytes=item.logical_bytes,
@@ -717,90 +713,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
             migration_timings["destination_layer_count"] = len(
                 destination_published_layers
-            )
-            started = time.monotonic()
-            rollback_mounted = client.mount_snapshot_cow(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                volume_id=volume_id,
-                operation_id="rollback:mount",
-                expected_revision=int(
-                    destination_published_record["revision"]
-                ),
-            )
-            rollback_generation = (
-                destination_mount_root
-                / volume_id
-                / f"hibernate-{local_manifest.hibernation_generation}"
-            )
-            rollback_files = tuple(
-                HibernationArtifactFile.from_path(
-                    rollback_generation / item.name,
-                    role=item.role,
-                )
-                for item in local_manifest.files
-            )
-            rollback_manifest = HibernationManifest(
-                sandbox_id=local_manifest.sandbox_id,
-                sandbox_generation=local_manifest.sandbox_generation,
-                hibernation_generation=local_manifest.hibernation_generation,
-                operation_id=local_manifest.operation_id,
-                spec_sha256=local_manifest.spec_sha256,
-                container_id=local_manifest.container_id,
-                created_ns=local_manifest.created_ns,
-                runtime=local_manifest.runtime,
-                files=rollback_files,
-            )
-            now_ns = time.time_ns()
-            rollback_registration = DirectSandboxRegistration(
-                spec=spec,
-                sandbox_generation=sandbox_generation,
-                operation_id="create-runtime:1",
-                runtime_identity_sha256=portable.runtime_identity.digest,
-                phase="owned",
-                revision=1,
-                created_ns=now_ns,
-                updated_ns=now_ns,
-                quota_project_id=1,
-                quota_total_mb=1024,
-                quota_path=str(destination_mount_root / volume_id),
-                image_id=image.image_id,
-                rootfs_sha256=image.rootfs_identity_sha256,
-                container_id=destination_sandbox.container_id,
-                bundle=str(destination_sandbox.bundle),
-                memory_directory=volume_id,
-            )
-            rollback_archive = DirectMigrationArchiveStore().export(
-                registration=rollback_registration,
-                local_manifest=rollback_manifest,
-                runtime_identity=portable.runtime_identity,
-                writable_incarnation=destination_mount_root / volume_id,
-                archive_path=root / "rollback-v2.tar.gz",
-            )
-            inspected_rollback = DirectMigrationArchiveStore().inspect(
-                rollback_archive.path,
-                expected_sha256=rollback_archive.sha256,
-            )
-            if inspected_rollback.spec_sha256 != spec_sha256:
-                raise RuntimeError("rollback archive changed sandbox metadata")
-            rollback_discarded = client.discard_mounted_cow(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                volume_id=volume_id,
-                operation_id="rollback:discard",
-                expected_revision=int(
-                    rollback_mounted["record"]["revision"]
-                ),
-            )
-            if rollback_discarded["record"]["state"] != "published":
-                raise RuntimeError(
-                    "rollback export did not restore published authority"
-                )
-            migration_timings["rollback_v2_export_seconds"] = (
-                time.monotonic() - started
-            )
-            migration_timings["rollback_v2_archive_bytes"] = (
-                rollback_archive.path.stat().st_size
             )
             overlay = destination_overlay
             sandbox = destination_sandbox

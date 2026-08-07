@@ -16,12 +16,9 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 PROVIDER_OPERATION_LABEL = "ucloud-sandboxes/provider-operation"
 DEPLOYMENT_LABEL = "ucloud-sandboxes/deployment"
 
-OPERATION_KINDS = frozenset({"create", "resume", "stop"})
-OPERATION_STATES = frozenset(
-    {"prepared", "uncertain", "accepted", "settled", "failed"}
-)
+OPERATION_KINDS = frozenset({"create", "stop"})
+OPERATION_STATES = frozenset({"prepared", "uncertain", "accepted", "settled", "failed"})
 RECOVERABLE_CREATE_STATES = frozenset({"uncertain"})
-RECOVERABLE_RESUME_STATES = frozenset({"prepared", "uncertain", "accepted"})
 RECOVERABLE_STOP_STATES = frozenset({"uncertain"})
 DRAIN_INTENT_STATES = frozenset({"active", "canceling"})
 
@@ -197,7 +194,14 @@ class AutoscalerStateStore:
                         created_at_us, updated_at_us
                     ) VALUES (?, ?, ?, ?, 'active', ?, ?)
                     """,
-                    (deployment, job, role_value, f"drain-{uuid4().hex}", now_us, now_us),
+                    (
+                        deployment,
+                        job,
+                        role_value,
+                        f"drain-{uuid4().hex}",
+                        now_us,
+                        now_us,
+                    ),
                 )
             else:
                 intent = _drain_from_row(row)
@@ -282,9 +286,7 @@ class AutoscalerStateStore:
         job_id: str,
     ) -> DrainIntent | None:
         with self._connect() as conn:
-            row = self._drain_row(
-                conn, str(deployment_id), str(job_id), required=False
-            )
+            row = self._drain_row(conn, str(deployment_id), str(job_id), required=False)
         return _drain_from_row(row) if row is not None else None
 
     def list_drain_intents(
@@ -411,7 +413,9 @@ class AutoscalerStateStore:
                     now_us,
                 ),
             )
-            self._update_slot_state(conn, deployment, operation_kind, key, "prepared", now_us)
+            self._update_slot_state(
+                conn, deployment, operation_kind, key, "prepared", now_us
+            )
             row = self._operation_row(conn, operation_id)
         return _operation_from_row(row)
 
@@ -498,7 +502,9 @@ class AutoscalerStateStore:
         if state_values:
             invalid = set(state_values) - OPERATION_STATES
             if invalid:
-                raise ValueError(f"invalid provider operation states: {sorted(invalid)}")
+                raise ValueError(
+                    f"invalid provider operation states: {sorted(invalid)}"
+                )
             clauses.append("state IN (" + ",".join("?" for _ in state_values) + ")")
             parameters.extend(state_values)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
@@ -524,7 +530,9 @@ class AutoscalerStateStore:
             if not isinstance(job, dict):
                 continue
             specification = job.get("specification")
-            labels = specification.get("labels") if isinstance(specification, dict) else None
+            labels = (
+                specification.get("labels") if isinstance(specification, dict) else None
+            )
             if not isinstance(labels, dict):
                 continue
             operation_id = str(labels.get(PROVIDER_OPERATION_LABEL) or "").strip()
@@ -574,7 +582,9 @@ class AutoscalerStateStore:
         observed = set(_job_ids(observed_job_ids))
         settled: list[ProviderOperation] = []
         for operation in self.list_operations(kind="create", states={"accepted"}):
-            if operation.target_job_ids and set(operation.target_job_ids).issubset(observed):
+            if operation.target_job_ids and set(operation.target_job_ids).issubset(
+                observed
+            ):
                 settled.append(
                     self._transition_operation(
                         operation.operation_id,
@@ -630,7 +640,9 @@ class AutoscalerStateStore:
         finals = set(_job_ids(final_job_ids))
         settled: list[ProviderOperation] = []
         for operation in self.list_operations(kind="stop", states={"accepted"}):
-            if operation.target_job_ids and set(operation.target_job_ids).issubset(finals):
+            if operation.target_job_ids and set(operation.target_job_ids).issubset(
+                finals
+            ):
                 settled.append(
                     self._transition_operation(
                         operation.operation_id,
@@ -640,75 +652,6 @@ class AutoscalerStateStore:
                     )
                 )
         return settled
-
-    def reconcile_resume_operations(
-        self,
-        job_states: dict[str, str],
-        *,
-        uncertain_retry_seconds: int = 10,
-        accepted_retry_seconds: int = 30,
-        now: datetime | None = None,
-    ) -> list[ProviderRecovery]:
-        """Confirm or rate-limit replay of idempotent UCloud unsuspend calls."""
-
-        current_time = _normalized_now(now)
-        retries = {
-            "uncertain": max(0, int(uncertain_retry_seconds)),
-            "accepted": max(0, int(accepted_retry_seconds)),
-        }
-        results: list[ProviderRecovery] = []
-        for operation in self.list_operations(
-            kind="resume", states=RECOVERABLE_RESUME_STATES
-        ):
-            job_ids = operation.target_job_ids
-            states = tuple(str(job_states.get(job_id) or "") for job_id in job_ids)
-            if job_ids and all(state == "RUNNING" for state in states):
-                response = dict(operation.response)
-                response["recoveredFromRunningJobInventory"] = True
-                transitioned = self._transition_operation(
-                    operation.operation_id,
-                    expected_states=RECOVERABLE_RESUME_STATES,
-                    new_state="settled",
-                    response=response,
-                    last_error="",
-                    now=current_time,
-                )
-                status = "recovered"
-            elif any(state in {"SUCCESS", "FAILURE", "EXPIRED"} for state in states):
-                transitioned = self._transition_operation(
-                    operation.operation_id,
-                    expected_states=RECOVERABLE_RESUME_STATES,
-                    new_state="failed",
-                    last_error="suspended job became final before it resumed",
-                    now=current_time,
-                )
-                status = "failed"
-            elif job_ids and all(state == "SUSPENDED" for state in states):
-                age = max(0.0, (current_time - operation.updated_at).total_seconds())
-                if operation.state != "prepared" and age >= retries[operation.state]:
-                    transitioned = self._transition_operation(
-                        operation.operation_id,
-                        expected_states={operation.state},
-                        new_state="prepared",
-                        last_error=operation.last_error,
-                        now=current_time,
-                    )
-                    status = "retry"
-                else:
-                    transitioned = operation
-                    status = "waiting"
-            else:
-                transitioned = operation
-                status = "waiting"
-            results.append(
-                ProviderRecovery(
-                    operation_id=transitioned.operation_id,
-                    kind="resume",
-                    status=status,
-                    job_ids=transitioned.target_job_ids,
-                )
-            )
-        return results
 
     def compact_terminal_history(self, *, keep: int = 1000) -> int:
         """Bound settled/failed audit rows; slot state preserves incarnation."""
@@ -756,7 +699,9 @@ class AutoscalerStateStore:
             raise ValueError(f"invalid provider operation state: {new_state}")
         expected = tuple(dict.fromkeys(str(value) for value in expected_states))
         if not expected or set(expected) - OPERATION_STATES:
-            raise ValueError("expected_states contains invalid provider operation states")
+            raise ValueError(
+                "expected_states contains invalid provider operation states"
+            )
         now_us = _datetime_to_us(_normalized_now(now))
         with self._transaction() as conn:
             row = self._operation_row(conn, operation_id)
@@ -765,13 +710,19 @@ class AutoscalerStateStore:
                 raise OperationStateError(
                     f"operation {operation_id} is {operation.state}; expected {expected}"
                 )
-            response_value = operation.response if response is None else _json_object(
-                "response", response
+            response_value = (
+                operation.response
+                if response is None
+                else _json_object("response", response)
             )
-            job_ids = operation.target_job_ids if target_job_ids is None else _job_ids(
-                target_job_ids
+            job_ids = (
+                operation.target_job_ids
+                if target_job_ids is None
+                else _job_ids(target_job_ids)
             )
-            error_value = operation.last_error if last_error is None else str(last_error)
+            error_value = (
+                operation.last_error if last_error is None else str(last_error)
+            )
             conn.execute(
                 "UPDATE provider_operations SET state = ?, response_json = ?, "
                 "target_job_ids_json = ?, updated_at_us = ?, last_error = ? "
@@ -1012,7 +963,9 @@ def _operation_kind(value: object) -> str:
 
 
 def _job_ids(values: Iterable[str]) -> tuple[str, ...]:
-    return tuple(dict.fromkeys(value for item in values if (value := str(item).strip())))
+    return tuple(
+        dict.fromkeys(value for item in values if (value := str(item).strip()))
+    )
 
 
 def _validate_create_request_labels(

@@ -4,8 +4,8 @@ from ucloud_sandboxes.config import AutoscalerConfig
 
 
 class ConfigTests(unittest.TestCase):
-    def test_disk_overcommit_above_one_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "cannot exceed 1.0"):
+    def test_non_exact_overcommit_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exactly 1.0"):
             AutoscalerConfig.from_dict(
                 {
                     "project_id": "project-1",
@@ -40,13 +40,13 @@ class ConfigTests(unittest.TestCase):
                     "model_wait_capacity_weight": 0.2,
                     "model_wait_max_headroom_nodes": 2,
                     "dynamic_active_admission_enabled": True,
-                    "cpu_overcommit": 2.0,
-                    "memory_overcommit": 1.2,
+                    "cpu_overcommit": 1.0,
+                    "memory_overcommit": 1.0,
                     "disk_overcommit": 1.0,
                 },
                 "gateway_public_link_id": "12345368",
                 "gateway_public_link_port": 8090,
-                "metrics_file": "/tmp/ucloud-sandboxes-metrics.jsonl",
+                "metrics_file": "/tmp/ucloud-sandboxes-metrics.sqlite",
             }
         )
 
@@ -68,14 +68,14 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.model_wait_capacity_weight, 0.2)
         self.assertEqual(config.policy.model_wait_max_headroom_nodes, 2)
         self.assertTrue(config.policy.dynamic_active_admission_enabled)
-        self.assertEqual(config.policy.cpu_overcommit, 2.0)
-        self.assertEqual(config.policy.memory_overcommit, 1.2)
+        self.assertEqual(config.policy.cpu_overcommit, 1.0)
+        self.assertEqual(config.policy.memory_overcommit, 1.0)
         self.assertEqual(config.policy.disk_overcommit, 1.0)
-        self.assertEqual(config.policy.schedulable_node_resources.vcpu, 64)
-        self.assertEqual(config.policy.schedulable_node_resources.memory_mb, 117964)
+        self.assertEqual(config.policy.schedulable_node_resources.vcpu, 32)
+        self.assertEqual(config.policy.schedulable_node_resources.memory_mb, 98304)
         self.assertEqual(config.gateway_public_link_id, "12345368")
         self.assertEqual(config.gateway_public_link_port, 8090)
-        self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.jsonl")
+        self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.sqlite")
 
     def test_rejects_invalid_policy_numbers_and_impossible_ranges(self) -> None:
         invalid_configs = {
@@ -135,6 +135,29 @@ class ConfigTests(unittest.TestCase):
     def test_rejects_boolean_for_integer_policy_field(self) -> None:
         with self.assertRaises(ValueError):
             AutoscalerConfig.from_dict({"policy": {"max_nodes": True}})
+
+    def test_rejects_unknown_config_and_policy_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "config contains unknown fields: typo"):
+            AutoscalerConfig.from_dict({"typo": True})
+        with self.assertRaisesRegex(ValueError, "policy contains unknown fields: max_node"):
+            AutoscalerConfig.from_dict({"policy": {"max_node": 20}})
+        with self.assertRaisesRegex(ValueError, "metrics_file.*sqlite"):
+            AutoscalerConfig.from_dict({"metrics_file": "/tmp/metrics.jsonl"})
+
+    def test_rejects_resource_aliases_and_unknown_fields(self) -> None:
+        for resources in (
+            {"cpu": 2},
+            {"memoryMb": 1024},
+            {"diskMb": 4096},
+            {"vcpu": 2, "vendor_extension": 1},
+        ):
+            with self.subTest(resources=resources), self.assertRaisesRegex(
+                ValueError,
+                "must contain exactly",
+            ):
+                AutoscalerConfig.from_dict(
+                    {"policy": {"warm_resources": resources}}
+                )
 
 
 if __name__ == "__main__":

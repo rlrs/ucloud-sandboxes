@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 import math
 import re
@@ -66,13 +66,6 @@ def string_value(value: object) -> str | None:
     return None
 
 
-def _first_present(raw: dict[str, Any], *keys: str) -> object:
-    for key in keys:
-        if key in raw:
-            return raw[key]
-    return None
-
-
 def _optional_float(value: object) -> float | None:
     if value is None or value == "":
         return None
@@ -81,22 +74,6 @@ def _optional_float(value: object) -> float | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return parsed if math.isfinite(parsed) else None
-
-
-def _nonnegative_finite_float(value: object) -> float:
-    try:
-        parsed = float(value or 0.0)
-    except (TypeError, ValueError, OverflowError):
-        return 0.0
-    return parsed if math.isfinite(parsed) and parsed >= 0 else 0.0
-
-
-def _nonnegative_int(value: object) -> int:
-    try:
-        parsed = int(value or 0)
-    except (TypeError, ValueError, OverflowError):
-        return 0
-    return max(0, parsed)
 
 
 def cpu_count_from_product_id(product_id: str) -> int | None:
@@ -115,12 +92,34 @@ class ResourceQuantity:
 
     @classmethod
     def from_dict(cls, raw: object) -> "ResourceQuantity":
-        if not isinstance(raw, dict):
-            return cls()
+        if not isinstance(raw, dict) or set(raw) != {
+            "vcpu",
+            "memory_mb",
+            "disk_mb",
+        }:
+            raise ValueError("resource quantity has an invalid schema")
+        vcpu = raw["vcpu"]
+        memory_mb = raw["memory_mb"]
+        disk_mb = raw["disk_mb"]
+        if (
+            isinstance(vcpu, bool)
+            or not isinstance(vcpu, (int, float))
+            or not math.isfinite(float(vcpu))
+            or float(vcpu) < 0
+        ):
+            raise ValueError("resource vcpu must be non-negative and finite")
+        if (
+            isinstance(memory_mb, bool)
+            or not isinstance(memory_mb, int)
+            or memory_mb < 0
+        ):
+            raise ValueError("resource memory_mb must be a non-negative integer")
+        if isinstance(disk_mb, bool) or not isinstance(disk_mb, int) or disk_mb < 0:
+            raise ValueError("resource disk_mb must be a non-negative integer")
         return cls(
-            vcpu=_nonnegative_finite_float(raw.get("vcpu") or raw.get("cpu")),
-            memory_mb=_nonnegative_int(raw.get("memory_mb") or raw.get("memoryMb")),
-            disk_mb=_nonnegative_int(raw.get("disk_mb") or raw.get("diskMb")),
+            vcpu=float(vcpu),
+            memory_mb=memory_mb,
+            disk_mb=disk_mb,
         )
 
     @property
@@ -167,47 +166,80 @@ class SandboxInventoryEntry:
 
     The generation and operation ID let the control plane distinguish a delayed
     response from the current incarnation of a sandbox with the same public ID.
-    Older agents can omit the inventory entirely; ``inventory_complete`` on the
-    enclosing heartbeat makes that ambiguity explicit.
     """
 
     sandbox_id: str
-    generation: int = 0
-    operation_id: str = ""
-    spec_hash: str = ""
+    generation: int
+    operation_id: str
+    spec_hash: str
     state: str = ""
     resources: ResourceQuantity = ResourceQuantity()
+
+    def __post_init__(self) -> None:
+        if not self.sandbox_id:
+            raise ValueError("sandbox inventory id is required")
+        if self.generation < 1:
+            raise ValueError("sandbox inventory generation must be positive")
+        if re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", self.operation_id
+        ) is None:
+            raise ValueError("sandbox inventory operation_id is invalid")
+        if re.fullmatch(r"[0-9a-f]{64}", self.spec_hash) is None:
+            raise ValueError("sandbox inventory spec_hash is invalid")
+        if not self.state:
+            raise ValueError("sandbox inventory state is required")
+        if not self.resources.is_valid:
+            raise ValueError("sandbox inventory resources are invalid")
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxInventoryEntry | None":
         if not isinstance(raw, dict):
             return None
-        sandbox_id = str(_first_present(raw, "sandbox_id", "sandboxId") or "").strip()
+        sandbox_id = str(raw.get("sandbox_id") or "").strip()
         if not sandbox_id:
             return None
+        if set(raw) != {
+            "sandbox_id",
+            "generation",
+            "operation_id",
+            "spec_hash",
+            "state",
+            "resources",
+        }:
+            return None
+        generation_raw = raw.get("generation")
+        if isinstance(generation_raw, bool):
+            return None
         try:
-            generation = int(raw.get("generation") or 0)
+            generation = int(generation_raw)
         except (TypeError, ValueError):
             return None
-        if generation < 0:
+        if generation < 1:
             return None
-        operation_id = str(
-            _first_present(raw, "operation_id", "operationId") or ""
-        ).strip()
-        spec_hash = str(_first_present(raw, "spec_hash", "specHash") or "").strip()
-        # A positive generation is only useful as a fencing token when the
-        # complete incarnation identity accompanies it.  Treat a partially
-        # versioned observation as malformed instead of allowing it to match a
-        # current route by public sandbox ID alone.
-        if generation > 0 and (not operation_id or not spec_hash):
+        operation_id = raw.get("operation_id")
+        spec_hash = raw.get("spec_hash")
+        state = raw.get("state")
+        if (
+            not isinstance(operation_id, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", operation_id)
+            is None
+            or not isinstance(spec_hash, str)
+            or re.fullmatch(r"[0-9a-f]{64}", spec_hash) is None
+            or not isinstance(state, str)
+            or not state
+        ):
+            return None
+        try:
+            resources = ResourceQuantity.from_dict(raw["resources"])
+        except ValueError:
             return None
         return cls(
             sandbox_id=sandbox_id,
             generation=generation,
             operation_id=operation_id,
             spec_hash=spec_hash,
-            state=str(raw.get("state") or "").strip(),
-            resources=ResourceQuantity.from_dict(raw.get("resources")),
+            state=state,
+            resources=resources,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -258,9 +290,9 @@ class NodeRuntimeMetrics:
     storage_device_pool_new_acquires: int = 0
     storage_device_pool_releases: int = 0
     storage_device_pool_discards: int = 0
-    rootfs_export_active_operations: int = 0
-    rootfs_export_waiting_operations: int = 0
-    rootfs_export_max_concurrent_operations: int = 0
+    image_materialization_active_operations: int = 0
+    image_materialization_waiting_operations: int = 0
+    image_materialization_max_concurrent_operations: int = 0
     image_pull_active_operations: int = 0
     image_pull_waiting_operations: int = 0
     image_pull_max_concurrent_operations: int = 0
@@ -269,222 +301,52 @@ class NodeRuntimeMetrics:
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
         if not isinstance(raw, dict):
             return None
-        collected_at = parse_iso_datetime(_first_present(raw, "collected_at", "collectedAt"))
+        field_names = {item.name for item in fields(cls)}
+        if set(raw) - field_names:
+            return None
+        collected_at = parse_iso_datetime(raw.get("collected_at"))
         if collected_at is None:
             return None
-        return cls(
-            collected_at=collected_at,
-            cpu_percent=_optional_float(_first_present(raw, "cpu_percent", "cpuPercent")),
-            cpu_vcpu=_optional_float(_first_present(raw, "cpu_vcpu", "cpuVcpu")),
-            cpu_count=_nonnegative_int(_first_present(raw, "cpu_count", "cpuCount")),
-            memory_total_mb=_nonnegative_int(
-                _first_present(raw, "memory_total_mb", "memoryTotalMb")
-            ),
-            memory_used_mb=_nonnegative_int(
-                _first_present(raw, "memory_used_mb", "memoryUsedMb")
-            ),
-            memory_available_mb=_nonnegative_int(
-                _first_present(raw, "memory_available_mb", "memoryAvailableMb")
-            ),
-            memory_percent=_optional_float(
-                _first_present(raw, "memory_percent", "memoryPercent")
-            ),
-            swap_total_mb=_nonnegative_int(
-                _first_present(raw, "swap_total_mb", "swapTotalMb")
-            ),
-            swap_used_mb=_nonnegative_int(
-                _first_present(raw, "swap_used_mb", "swapUsedMb")
-            ),
-            swap_free_mb=_nonnegative_int(
-                _first_present(raw, "swap_free_mb", "swapFreeMb")
-            ),
-            memory_psi_some_avg10=_optional_float(
-                _first_present(raw, "memory_psi_some_avg10", "memoryPsiSomeAvg10")
-            ),
-            memory_psi_full_avg10=_optional_float(
-                _first_present(raw, "memory_psi_full_avg10", "memoryPsiFullAvg10")
-            ),
-            load_average_1m=_optional_float(
-                _first_present(raw, "load_average_1m", "loadAverage1m")
-            ),
-            load_average_5m=_optional_float(
-                _first_present(raw, "load_average_5m", "loadAverage5m")
-            ),
-            load_average_15m=_optional_float(
-                _first_present(raw, "load_average_15m", "loadAverage15m")
-            ),
-            storage_hard_capacity_mb=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_hard_capacity_mb",
-                    "storageHardCapacityMb",
-                )
-            ),
-            storage_hard_reserved_mb=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_hard_reserved_mb",
-                    "storageHardReservedMb",
-                )
-            ),
-            storage_cache_mb=_nonnegative_int(
-                _first_present(raw, "storage_cache_mb", "storageCacheMb")
-            ),
-            storage_active_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_active_operations",
-                    "storageActiveOperations",
-                )
-            ),
-            storage_waiting_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_waiting_operations",
-                    "storageWaitingOperations",
-                )
-            ),
-            storage_max_concurrent_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_max_concurrent_operations",
-                    "storageMaxConcurrentOperations",
-                )
-            ),
-            storage_published_volumes=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_published_volumes",
-                    "storagePublishedVolumes",
-                )
-            ),
-            storage_error_volumes=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_error_volumes",
-                    "storageErrorVolumes",
-                )
-            ),
-            storage_device_pool_enabled=bool(
-                _first_present(
-                    raw,
-                    "storage_device_pool_enabled",
-                    "storageDevicePoolEnabled",
-                )
-            ),
-            storage_device_pool_low_watermark=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_low_watermark",
-                    "storageDevicePoolLowWatermark",
-                )
-            ),
-            storage_device_pool_high_watermark=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_high_watermark",
-                    "storageDevicePoolHighWatermark",
-                )
-            ),
-            storage_device_pool_idle_devices=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_idle_devices",
-                    "storageDevicePoolIdleDevices",
-                )
-            ),
-            storage_ublk_active_devices=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_ublk_active_devices",
-                    "storageUblkActiveDevices",
-                )
-            ),
-            storage_ublk_live_devices=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_ublk_live_devices",
-                    "storageUblkLiveDevices",
-                )
-            ),
-            storage_device_pool_acquires=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_acquires",
-                    "storageDevicePoolAcquires",
-                )
-            ),
-            storage_device_pool_reused_acquires=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_reused_acquires",
-                    "storageDevicePoolReusedAcquires",
-                )
-            ),
-            storage_device_pool_new_acquires=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_new_acquires",
-                    "storageDevicePoolNewAcquires",
-                )
-            ),
-            storage_device_pool_releases=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_releases",
-                    "storageDevicePoolReleases",
-                )
-            ),
-            storage_device_pool_discards=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "storage_device_pool_discards",
-                    "storageDevicePoolDiscards",
-                )
-            ),
-            rootfs_export_active_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "rootfs_export_active_operations",
-                    "rootfsExportActiveOperations",
-                )
-            ),
-            rootfs_export_waiting_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "rootfs_export_waiting_operations",
-                    "rootfsExportWaitingOperations",
-                )
-            ),
-            rootfs_export_max_concurrent_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "rootfs_export_max_concurrent_operations",
-                    "rootfsExportMaxConcurrentOperations",
-                )
-            ),
-            image_pull_active_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "image_pull_active_operations",
-                    "imagePullActiveOperations",
-                )
-            ),
-            image_pull_waiting_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "image_pull_waiting_operations",
-                    "imagePullWaitingOperations",
-                )
-            ),
-            image_pull_max_concurrent_operations=_nonnegative_int(
-                _first_present(
-                    raw,
-                    "image_pull_max_concurrent_operations",
-                    "imagePullMaxConcurrentOperations",
-                )
-            ),
-        )
+        float_fields = {
+            "cpu_percent",
+            "cpu_vcpu",
+            "memory_percent",
+            "memory_psi_some_avg10",
+            "memory_psi_full_avg10",
+            "load_average_1m",
+            "load_average_5m",
+            "load_average_15m",
+        }
+        values: dict[str, object] = {"collected_at": collected_at}
+        for name in field_names - {"collected_at"}:
+            value = raw.get(name)
+            if name in float_fields:
+                parsed = _optional_float(value)
+                if value is not None and parsed is None:
+                    return None
+                values[name] = parsed
+            elif name == "storage_device_pool_enabled":
+                if value is not None and not isinstance(value, bool):
+                    return None
+                values[name] = value if value is not None else False
+            else:
+                if value is None:
+                    values[name] = 0
+                    continue
+                if isinstance(value, bool):
+                    return None
+                try:
+                    parsed_int = int(value)
+                except (TypeError, ValueError, OverflowError):
+                    return None
+                if (
+                    parsed_int < 0
+                    or isinstance(value, float)
+                    and not value.is_integer()
+                ):
+                    return None
+                values[name] = parsed_int
+        return cls(**values)
 
     def to_dict(self) -> dict[str, float | int | str | None]:
         return {
@@ -521,28 +383,24 @@ class NodeRuntimeMetrics:
             "storage_device_pool_high_watermark": (
                 self.storage_device_pool_high_watermark
             ),
-            "storage_device_pool_idle_devices": (
-                self.storage_device_pool_idle_devices
-            ),
+            "storage_device_pool_idle_devices": (self.storage_device_pool_idle_devices),
             "storage_ublk_active_devices": self.storage_ublk_active_devices,
             "storage_ublk_live_devices": self.storage_ublk_live_devices,
             "storage_device_pool_acquires": self.storage_device_pool_acquires,
             "storage_device_pool_reused_acquires": (
                 self.storage_device_pool_reused_acquires
             ),
-            "storage_device_pool_new_acquires": (
-                self.storage_device_pool_new_acquires
-            ),
+            "storage_device_pool_new_acquires": (self.storage_device_pool_new_acquires),
             "storage_device_pool_releases": self.storage_device_pool_releases,
             "storage_device_pool_discards": self.storage_device_pool_discards,
-            "rootfs_export_active_operations": (
-                self.rootfs_export_active_operations
+            "image_materialization_active_operations": (
+                self.image_materialization_active_operations
             ),
-            "rootfs_export_waiting_operations": (
-                self.rootfs_export_waiting_operations
+            "image_materialization_waiting_operations": (
+                self.image_materialization_waiting_operations
             ),
-            "rootfs_export_max_concurrent_operations": (
-                self.rootfs_export_max_concurrent_operations
+            "image_materialization_max_concurrent_operations": (
+                self.image_materialization_max_concurrent_operations
             ),
             "image_pull_active_operations": self.image_pull_active_operations,
             "image_pull_waiting_operations": self.image_pull_waiting_operations,
@@ -625,6 +483,7 @@ class VmJob:
                     return True
         return self.is_unexpectedly_suspended
 
+
 @dataclass(frozen=True)
 class NodeHeartbeat:
     node_id: str
@@ -652,6 +511,7 @@ class NodeHeartbeat:
     reported_at: datetime | None = None
     received_at: datetime | None = None
     node_epoch: str = ""
+    retired_node_epochs: tuple[str, ...] = ()
     activity_epoch: int = 0
     inventory: tuple[SandboxInventoryEntry, ...] = ()
     inventory_complete: bool = False
@@ -704,8 +564,7 @@ class NodeHeartbeat:
                 disk_mb,
                 max(
                     0,
-                    metrics.storage_hard_capacity_mb
-                    - metrics.storage_hard_reserved_mb,
+                    metrics.storage_hard_capacity_mb - metrics.storage_hard_reserved_mb,
                 ),
             )
         return ResourceQuantity(
@@ -833,7 +692,7 @@ class LiveScaleSignals:
     memory_utilization: float | None = None
     memory_psi_full_avg10: float | None = None
     storage_queue_utilization: float | None = None
-    rootfs_export_queue_utilization: float | None = None
+    image_materialization_queue_utilization: float | None = None
     create_pressure_samples: int = 0
     latest_create_pressure_age_seconds: int | None = None
     sandbox_create_rejections: int = 0
@@ -852,8 +711,8 @@ class LiveScaleSignals:
             "memory_utilization": self.memory_utilization,
             "memory_psi_full_avg10": self.memory_psi_full_avg10,
             "storage_queue_utilization": self.storage_queue_utilization,
-            "rootfs_export_queue_utilization": (
-                self.rootfs_export_queue_utilization
+            "image_materialization_queue_utilization": (
+                self.image_materialization_queue_utilization
             ),
             "create_pressure_samples": self.create_pressure_samples,
             "latest_create_pressure_age_seconds": (
@@ -1040,7 +899,9 @@ def vm_job_from_payload(payload: dict[str, Any]) -> VmJob:
     raw_labels = specification.get("labels")
     labels = raw_labels if isinstance(raw_labels, dict) else {}
     cpu_value = resolved_product.get("cpu", machine_type.get("cpu"))
-    memory_value = resolved_product.get("memoryInGigs", machine_type.get("memoryInGigs"))
+    memory_value = resolved_product.get(
+        "memoryInGigs", machine_type.get("memoryInGigs")
+    )
     product_id = str(product.get("id") or "")
     cpu = int(cpu_value) if isinstance(cpu_value, (int, float)) else None
     if cpu is None:
@@ -1048,11 +909,14 @@ def vm_job_from_payload(payload: dict[str, Any]) -> VmJob:
 
     updates = payload.get("updates")
     latest_update = updates[-1] if isinstance(updates, list) and updates else {}
-    latest_note = latest_update.get("status") if isinstance(latest_update, dict) else None
+    latest_note = (
+        latest_update.get("status") if isinstance(latest_update, dict) else None
+    )
 
     ssh_enabled = nested_get(status, ("jobParametersJson", "request", "sshEnabled"))
     queue_status = nested_get(
-        status, ("jobParametersJson", "request", "resolvedSupport", "support", "queueStatus")
+        status,
+        ("jobParametersJson", "request", "resolvedSupport", "support", "queueStatus"),
     )
 
     return VmJob(

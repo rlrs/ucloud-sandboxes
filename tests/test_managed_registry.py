@@ -30,6 +30,9 @@ from ucloud_sandboxes.managed_registry import (
 )
 
 
+LEASE_DIGEST = "sha256:" + "d" * 64
+
+
 def _acquire_lease_in_process(
     path: str,
     repository: str,
@@ -42,6 +45,7 @@ def _acquire_lease_in_process(
         tag,
         owner,
         ttl_seconds=60,
+        digest=LEASE_DIGEST,
     )
     result_queue.put(lease.owner)  # type: ignore[attr-defined]
 
@@ -494,6 +498,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "v1",
                 "sandbox:one",
                 ttl_seconds=30,
+                digest=LEASE_DIGEST,
                 now=started,
             )
             self.assertEqual(store.snapshot(now=started).generation, 1)
@@ -502,6 +507,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "v1",
                 "sandbox:one",
                 ttl_seconds=60,
+                digest=LEASE_DIGEST,
                 now=started + timedelta(seconds=10),
             )
             self.assertEqual(acquired.acquired_at, renewed.acquired_at)
@@ -528,6 +534,7 @@ class ManagedRegistryTests(unittest.TestCase):
                     "v1",
                     "sandbox:one",
                     ttl_seconds=60,
+                    digest=LEASE_DIGEST,
                     now=started + timedelta(seconds=12),
                 )
 
@@ -536,6 +543,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "v1",
                 "sandbox:two",
                 ttl_seconds=1,
+                digest=LEASE_DIGEST,
                 now=started + timedelta(seconds=20),
             )
             before_expiry = store.snapshot(now=started + timedelta(seconds=20))
@@ -554,6 +562,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "repo/a",
                 "v1",
                 "sandbox:one",
+                digest=LEASE_DIGEST,
                 now=started,
             )
             loaded = RegistryUsageStore(store.path).snapshot(
@@ -562,7 +571,58 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(reference.expires_at, "")
             self.assertIn(("repo/a", "v1", "sandbox:one"), loaded.leases)
-            self.assertEqual(loaded.active_lease_tags(), {("repo/a", "v1")})
+            self.assertEqual(
+                loaded.active_lease_digests(),
+                {("repo/a", LEASE_DIGEST)},
+            )
+
+    def test_registry_lease_digest_is_required_and_immutable(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            with self.assertRaisesRegex(ValueError, "digest is required"):
+                store.acquire_reference(
+                    "repo/a",
+                    "v1",
+                    "sandbox:one",
+                    digest="",
+                )
+            store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                digest=LEASE_DIGEST,
+            )
+            with self.assertRaisesRegex(ValueError, "digest is immutable"):
+                store.acquire_reference(
+                    "repo/a",
+                    "v1",
+                    "sandbox:one",
+                    digest="sha256:" + "e" * 64,
+                )
+
+    def test_registry_usage_file_rejects_camel_case_fields(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "generation": 1,
+                        "images": [
+                            {
+                                "imageRef": "registry/repo/a:v1",
+                                "repository": "repo/a",
+                                "tag": "v1",
+                                "lastUsedAt": "2026-07-01T00:00:00+00:00",
+                            }
+                        ],
+                        "leases": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "invalid image"):
+                RegistryUsageStore(path).snapshot()
 
     def test_usage_updates_preserve_active_leases(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -572,6 +632,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "v1",
                 "sandbox:one",
                 ttl_seconds=60,
+                digest=LEASE_DIGEST,
             )
 
             store.touch_image("localhost:5000/repo/a:v1")
@@ -593,9 +654,10 @@ class ManagedRegistryTests(unittest.TestCase):
                         "v1",
                         "sandbox:one",
                         ttl_seconds=ttl,
+                        digest=LEASE_DIGEST,
                     )
 
-    def test_old_usage_file_loads_without_lease_fields(self) -> None:
+    def test_usage_file_requires_generation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "usage.json"
             path.write_text(
@@ -614,14 +676,10 @@ class ManagedRegistryTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            snapshot = RegistryUsageStore(path).snapshot()
+            with self.assertRaisesRegex(ValueError, "invalid schema"):
+                RegistryUsageStore(path).snapshot()
 
-            self.assertEqual(snapshot.generation, 0)
-            self.assertIn(("repo/a", "v1"), snapshot.records)
-            self.assertEqual(snapshot.leases, {})
-
-    def test_tag_only_lease_migrates_to_digest_protection_on_reacquire(self) -> None:
-        digest = "sha256:" + "2" * 64
+    def test_digestless_lease_is_rejected(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "usage.json"
             path.write_text(
@@ -644,19 +702,8 @@ class ManagedRegistryTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            store = RegistryUsageStore(path)
-            legacy = store.snapshot()
-            updated = store.acquire_reference(
-                "repo/a",
-                "v1",
-                "sandbox:one",
-                digest=digest,
-            )
-            migrated = store.snapshot()
-
-        self.assertEqual(legacy.leases[("repo/a", "v1", "sandbox:one")].digest, "")
-        self.assertEqual(updated.digest, digest)
-        self.assertEqual(migrated.active_lease_digests(), {("repo/a", digest)})
+            with self.assertRaisesRegex(ValueError, "invalid lease"):
+                RegistryUsageStore(path).snapshot()
 
     def test_malformed_lease_state_fails_closed(self) -> None:
         valid = {
@@ -731,7 +778,7 @@ class ManagedRegistryTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "usage.json"
             store = RegistryUsageStore(path)
-            records = [RegistryTag("repo/a", "v1", "sha256:1")]
+            records = [RegistryTag("repo/a", "v1", LEASE_DIGEST)]
             planned = select_prune_candidates(records, keep_per_repository=0)
             self.assertEqual(planned, records)
 
@@ -847,7 +894,7 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(client.deleted, [("repo/a", "sha256:2")])
         self.assertEqual([record.tag for record in deleted], ["old"])
 
-    def test_alias_lease_fences_digest_in_plan_and_execution(self) -> None:
+    def test_digest_lease_fences_all_aliases_in_plan_and_execution(self) -> None:
         class FakeRegistryClient:
             def __init__(self) -> None:
                 self.deleted: list[tuple[str, str]] = []
@@ -857,16 +904,18 @@ class ManagedRegistryTests(unittest.TestCase):
 
         with TemporaryDirectory() as raw_dir:
             store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            shared_digest = "sha256:" + "6" * 64
             store.acquire_lease(
                 "repo/a",
                 "alias-v2",
                 "sandbox:one",
                 ttl_seconds=60,
+                digest=shared_digest,
             )
             snapshot = store.snapshot()
             records = [
-                RegistryTag("repo/a", "alias-v1", "sha256:shared"),
-                RegistryTag("repo/a", "alias-v2", "sha256:shared"),
+                RegistryTag("repo/a", "alias-v1", shared_digest),
+                RegistryTag("repo/a", "alias-v2", shared_digest),
             ]
 
             planned = select_prune_candidates(
@@ -973,7 +1022,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 return ["v1"]
 
             def tag_record(self, repository: str, tag: str) -> RegistryTag:
-                return RegistryTag(repository, tag, "sha256:1")
+                return RegistryTag(repository, tag, "sha256:" + "1" * 64)
 
         with TemporaryDirectory() as raw_dir:
             store = RegistryUsageStore(Path(raw_dir) / "usage.json")
@@ -982,6 +1031,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 "v1",
                 "sandbox:one",
                 ttl_seconds=60,
+                digest="sha256:" + "1" * 64,
             )
             snapshot = store.snapshot()
 

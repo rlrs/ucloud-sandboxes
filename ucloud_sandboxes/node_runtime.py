@@ -25,7 +25,6 @@ from .sandbox import (
     SandboxActivitySnapshot,
     SandboxAdmissionClosedError,
     SandboxConflictError,
-    SandboxForkUnsupportedError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
     SandboxRecord,
@@ -33,14 +32,14 @@ from .sandbox import (
 )
 
 
-class DirectNodeStateStore:
+class NodeStateStore:
     """Small crash-durable node state that is independent of sandbox ownership."""
 
     VERSION = 1
 
     def __init__(self, path: Path) -> None:
         if not path.is_absolute():
-            raise ValueError("direct node state path must be absolute")
+            raise ValueError("node state path must be absolute")
         self.path = path
         self._lock = Lock()
 
@@ -50,9 +49,9 @@ class DirectNodeStateStore:
                 return NodeDrainState()
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict) or set(raw) != {"version", "drain"}:
-                raise ValueError("direct node state has an invalid schema")
+                raise ValueError("node state has an invalid schema")
             if raw["version"] != self.VERSION:
-                raise ValueError("direct node state has an unsupported version")
+                raise ValueError("node state has an unsupported version")
             return NodeDrainState.from_dict(raw["drain"])
 
     def save_drain(self, drain: NodeDrainState) -> None:
@@ -88,12 +87,76 @@ class DirectNodeStateStore:
                     pass
 
 
-class DirectExecRuntimeAdapter:
-    dry_run = False
-    fork_enabled = False
-    hibernate_enabled = True
+class BuilderNodeRuntime:
+    """Durable drain and admission state for an image-builder node."""
 
-    def __init__(self, owner: DirectNodeManagerAdapter) -> None:
+    def __init__(self, state_store: NodeStateStore) -> None:
+        self._state_store = state_store
+        self._drain_guard = RLock()
+        self._drain = state_store.load_drain()
+
+    def configure_drain(
+        self,
+        token: str,
+        draining: bool,
+        *,
+        active_build_count,
+    ) -> NodeDrainSnapshot:
+        token = token.strip()
+        if not token or not OPERATION_ID_RE.fullmatch(token):
+            raise ValueError("drain token contains unsupported characters")
+        with self._drain_guard:
+            current = self._drain
+            if current.draining and current.token != token:
+                raise SandboxConflictError("node is draining with another token")
+            if not draining and current.token != token:
+                raise SandboxConflictError("node is not draining with this token")
+            self._drain = NodeDrainState(
+                draining=draining,
+                token=token,
+                drain_activity_epoch=0,
+                admission_open=not draining,
+            )
+            self._state_store.save_drain(self._drain)
+            return self._heartbeat_snapshot_locked(
+                active_build_count=active_build_count,
+            )
+
+    @contextmanager
+    def image_operation(self, image_manager):
+        with self._drain_guard:
+            if self._drain.draining:
+                raise SandboxAdmissionClosedError("builder node admission is closed")
+            operation = image_manager.image_operation()
+            operation.__enter__()
+        try:
+            yield
+        finally:
+            operation.__exit__(None, None, None)
+
+    def heartbeat_snapshot(self, *, active_build_count) -> NodeDrainSnapshot:
+        with self._drain_guard:
+            return self._heartbeat_snapshot_locked(
+                active_build_count=active_build_count,
+            )
+
+    def _heartbeat_snapshot_locked(self, *, active_build_count) -> NodeDrainSnapshot:
+        activity = SandboxActivitySnapshot(
+            records=(),
+            active_sandboxes=0,
+            used_resources=ResourceQuantity(),
+            reserved_resources=ResourceQuantity(),
+            activity_revision=0,
+        )
+        return NodeDrainSnapshot(
+            activity=activity,
+            drain=self._drain,
+            active_image_builds=max(0, active_build_count()),
+        )
+
+
+class DirectExecRuntime:
+    def __init__(self, owner: DirectNodeRuntime) -> None:
         self.owner = owner
 
     def exec_command(
@@ -154,10 +217,8 @@ class DirectExecRuntimeAdapter:
         self.owner._release_exec_start(sandbox_id)
 
 
-class DirectLifecycleAdapter:
-    """Bridge existing exec-session streaming onto direct lifecycle ownership."""
-
-    def __init__(self, owner: DirectNodeManagerAdapter) -> None:
+class DirectLifecycle:
+    def __init__(self, owner: DirectNodeRuntime) -> None:
         self.owner = owner
         self._coordinator = SandboxLifecycleCoordinator()
 
@@ -212,25 +273,25 @@ class DirectLifecycleAdapter:
             yield
 
 
-class DirectNodeManagerAdapter:
-    """Temporary wire-compatible facade while the legacy manager is removed."""
+class DirectNodeRuntime:
+    """Node-level orchestration for the direct sandbox service."""
 
     def __init__(
         self,
         service: DirectSandboxService,
         *,
-        state_store: DirectNodeStateStore | None = None,
+        state_store: NodeStateStore | None = None,
     ) -> None:
         self.service = service
-        self.lifecycle = DirectLifecycleAdapter(self)
-        self.runtime = DirectExecRuntimeAdapter(self)
+        self.lifecycle = DirectLifecycle(self)
+        self.runtime = DirectExecRuntime(self)
         self._exec_leases: dict[str, object] = {}
         self._exec_start_locks: dict[str, Lock] = {}
         self._exec_start_users: dict[str, int] = {}
         self._activity_guard = Lock()
         self._exec_start_state = local()
         self._drain_guard = RLock()
-        self._state_store = state_store or DirectNodeStateStore(
+        self._state_store = state_store or NodeStateStore(
             service.provisioner.registry.path.parent / "direct-node-state.json"
         )
         self._drain = self._state_store.load_drain()
@@ -243,7 +304,7 @@ class DirectNodeManagerAdapter:
         self,
         spec: SandboxSpec,
         *,
-        operation: SandboxOperation | None = None,
+        operation: SandboxOperation,
     ) -> tuple[SandboxRecord, CommandResult, dict[str, object]]:
         existing = self.service.get(spec.id)
         started = time.monotonic()
@@ -261,19 +322,24 @@ class DirectNodeManagerAdapter:
         self,
         sandbox_id: str,
         *,
-        generation: int = 0,
-        operation_id: str = "",
+        generation: int,
+        operation_id: str,
     ) -> tuple[SandboxRecord | None, CommandResult]:
-        del operation_id
+        if generation <= 0:
+            raise ValueError("delete generation must be positive")
+        if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
+            operation_id
+        ):
+            raise ValueError("delete operation id is invalid")
         record = self.service.get(sandbox_id)
         if record is not None and record.generation != generation:
             raise SandboxConflictError("delete generation does not own direct sandbox")
         # Deletion is a hard revocation boundary. It closes new activity but is
-        # allowed to sever attached execs, matching the legacy runtime contract.
+        # allowed to sever attached exec sessions during sandbox deletion.
         with self.lifecycle.exclusive(sandbox_id, allow_shared=True):
             self.service.delete(
                 sandbox_id,
-                generation=generation if record else None,
+                generation=generation,
             )
         return record, CommandResult(("direct-warden", "delete", sandbox_id), 0)
 
@@ -288,9 +354,13 @@ class DirectNodeManagerAdapter:
         self,
         sandbox_id: str,
         *,
-        operation_id: str | None = None,
+        operation_id: str,
         background: bool = False,
     ) -> SandboxRecord:
+        if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
+            operation_id
+        ):
+            raise ValueError("park operation id is invalid")
         with self.lifecycle.exclusive(sandbox_id):
             return self.service.park(
                 sandbox_id,
@@ -302,9 +372,15 @@ class DirectNodeManagerAdapter:
         self,
         sandbox_id: str,
         *,
-        generation: int | None = None,
-        operation_id: str | None = None,
+        generation: int,
+        operation_id: str,
     ) -> SandboxRecord:
+        if generation <= 0:
+            raise ValueError("wake generation must be positive")
+        if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
+            operation_id
+        ):
+            raise ValueError("wake operation id is invalid")
         with self.lifecycle.exclusive(sandbox_id):
             return self.service.wake(
                 sandbox_id,
@@ -402,18 +478,6 @@ class DirectNodeManagerAdapter:
             stdout_bytes=content,
         )
 
-    def fork_with_timings(self, *args, **kwargs):
-        del args, kwargs
-        raise SandboxForkUnsupportedError("fork is deferred from the direct runtime")
-
-    def fork_many_with_timings(self, *args, **kwargs):
-        del args, kwargs
-        raise SandboxForkUnsupportedError("fork is deferred from the direct runtime")
-
-    def snapshot(self, *args, **kwargs):
-        del args, kwargs
-        raise RuntimeError("image snapshot is not implemented by the direct runtime")
-
     def cleanup_expired(self, *, blocking: bool = True) -> list[SandboxRecord]:
         records = self.service.list() if blocking else self.service.list_snapshot()
         expired = [record for record in records if record.is_expired()]
@@ -472,9 +536,7 @@ class DirectNodeManagerAdapter:
 
         with self._drain_guard:
             if self._drain.draining or not self.service.admission_open:
-                raise SandboxAdmissionClosedError(
-                    "direct node admission is closed"
-                )
+                raise SandboxAdmissionClosedError("direct node admission is closed")
             operation = image_manager.image_operation()
             operation.__enter__()
         try:
@@ -500,9 +562,7 @@ class DirectNodeManagerAdapter:
             self.service.active_reservations_snapshot()
         )
         records = self.service.list_snapshot()
-        registered_keys = {
-            (record.spec.id, record.generation) for record in records
-        }
+        registered_keys = {(record.spec.id, record.generation) for record in records}
         used = ResourceQuantity()
         reserved = ResourceQuantity()
         for record in records:
@@ -512,25 +572,23 @@ class DirectNodeManagerAdapter:
                 if registration is not None and registration.quota_total_mb is not None
                 else record.spec.disk_mb or 0
             )
+            if self.service.warden.storage is None:
+                raise RuntimeError(
+                    "direct node storage-native ownership is unavailable"
+                )
+            if registration is None:
+                raise RuntimeError("direct activity has no storage-native registration")
             disk_charged = True
-            if getattr(self.service.warden, "storage", None) is not None:
-                if registration is None:
-                    raise RuntimeError(
-                        "direct activity has no storage-native registration"
-                    )
-                # Planned and quota-ready registrations are valid, durable
-                # create reservations but do not own a runsc sandbox yet.
-                # They must remain visible in heartbeat capacity accounting
-                # without making the entire node heartbeat fail while a cold
-                # image is materialized.
-                if registration.has_direct_sandbox:
-                    storage = self.service.warden._storage_record(
-                        registration.to_direct_sandbox()
-                    )
-                    disk_charged = storage.get("state") != "published"
-            resources = ResourceQuantity(
-                disk_mb=quota_disk if disk_charged else 0
-            )
+            # Planned and quota-ready registrations are valid, durable create
+            # reservations but do not own a runsc sandbox yet. They remain
+            # visible in heartbeat capacity accounting while a cold image is
+            # materialized.
+            if registration.has_direct_sandbox:
+                storage = self.service.warden._storage_record(
+                    registration.to_direct_sandbox()
+                )
+                disk_charged = storage.get("state") != "published"
+            resources = ResourceQuantity(disk_mb=quota_disk if disk_charged else 0)
             if record.state == "running":
                 # Direct-runtime CPU and memory limits bound an individual
                 # sandbox; they are not permanent node reservations. Actual
@@ -555,10 +613,13 @@ class DirectNodeManagerAdapter:
                 vcpu=resources.vcpu,
                 memory_mb=resources.memory_mb,
             )
-        revision = max(
-            (item.revision for item in self.service.provisioner.registry.list()),
-            default=0,
-        ) + transient_epoch
+        revision = (
+            max(
+                (item.revision for item in self.service.provisioner.registry.list()),
+                default=0,
+            )
+            + transient_epoch
+        )
         activity = SandboxActivitySnapshot(
             records=records,
             active_sandboxes=sum(record.state == "running" for record in records),

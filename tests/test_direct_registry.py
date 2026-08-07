@@ -142,7 +142,7 @@ class DirectRegistryTests(unittest.TestCase):
                     runtime_identity_sha256="b" * 64,
                 )
 
-    def test_version_one_registration_is_upgraded_on_read(self) -> None:
+    def test_rejects_noncanonical_registry_schema(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
             path = (root / "registry.json").resolve()
@@ -153,14 +153,14 @@ class DirectRegistryTests(unittest.TestCase):
                 operation_id="create:7",
                 runtime_identity_sha256="b" * 64,
             )
-            legacy = planned.to_dict()
-            legacy.pop("migration_id")
-            legacy.pop("migration_sha256")
-            legacy["version"] = 1
+            noncanonical = planned.to_dict()
+            noncanonical.pop("migration_id")
+            noncanonical.pop("migration_sha256")
+            noncanonical["version"] = 1
             path.write_text(
                 json.dumps(
                     {
-                        "records": [legacy],
+                        "records": [noncanonical],
                         "tombstones": {},
                         "version": 1,
                     }
@@ -169,11 +169,33 @@ class DirectRegistryTests(unittest.TestCase):
             )
             os.chmod(path, 0o600)
 
-            loaded = DirectSandboxRegistry(path).get("sandbox")
+            with self.assertRaisesRegex(
+                DirectRegistryError,
+                "schema is invalid",
+            ):
+                DirectSandboxRegistry(path).get("sandbox")
 
-            self.assertIsNotNone(loaded)
-            self.assertEqual(loaded.version, 2)
-            self.assertEqual(loaded.migration_id, "")
+    def test_rejects_nonpositive_generations(self) -> None:
+        with TemporaryDirectory() as raw:
+            registry = DirectSandboxRegistry(
+                (Path(raw) / "registry.json").resolve()
+            )
+            with self.assertRaisesRegex(ValueError, "positive"):
+                registry.plan(
+                    spec=self.spec(),
+                    sandbox_generation=0,
+                    operation_id="create:zero",
+                    runtime_identity_sha256="b" * 64,
+                )
+            with self.assertRaisesRegex(ValueError, "positive"):
+                registry.plan_import(
+                    spec=self.spec(),
+                    sandbox_generation=0,
+                    operation_id="create:zero",
+                    runtime_identity_sha256="b" * 64,
+                    migration_id="move:zero",
+                    migration_sha256="c" * 64,
+                )
 
     def test_migration_phases_are_generation_and_digest_fenced(self) -> None:
         with TemporaryDirectory() as raw:
@@ -469,26 +491,6 @@ class DirectRegistryTests(unittest.TestCase):
 
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(DirectSandboxRegistry(path).list(), (first,))
-
-    def test_fork_is_explicitly_deferred(self) -> None:
-        with TemporaryDirectory() as raw:
-            registry = DirectSandboxRegistry(
-                (Path(raw) / "registry.json").resolve()
-            )
-            with self.assertRaisesRegex(ValueError, "fork is deferred"):
-                registry.plan(
-                    spec=SandboxSpec(
-                        id="fork",
-                        image="image",
-                        memory_mb=1024,
-                        disk_mb=1024,
-                        forkable=True,
-                    ),
-                    sandbox_generation=1,
-                    operation_id="create:1",
-                    runtime_identity_sha256="b" * 64,
-                )
-
 
 if __name__ == "__main__":
     unittest.main()

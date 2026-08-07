@@ -41,7 +41,6 @@ class ManagedProcessProtocolTests(unittest.TestCase):
         start = ManagedProcessStart.from_dict(
             {
                 "job_id": "rollout-1",
-                "operation_id": "submit-1",
                 "argv": ["python", "harness.py"],
                 "env": {"Z": "last", "A": "first"},
                 "cwd": "/workspace",

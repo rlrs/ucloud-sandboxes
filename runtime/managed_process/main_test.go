@@ -40,7 +40,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestControlAcceptsMaximumLogResponse(t *testing.T) {
-	stateDir := t.TempDir()
+	stateDir, err := os.MkdirTemp("/tmp", "ucmp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
 	socket := filepath.Join(stateDir, "control.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {

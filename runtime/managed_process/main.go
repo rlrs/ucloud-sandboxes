@@ -43,7 +43,6 @@ type request struct {
 	Version        int               `json:"version"`
 	Action         string            `json:"action"`
 	JobID          string            `json:"job_id,omitempty"`
-	OperationID    string            `json:"operation_id,omitempty"`
 	Argv           []string          `json:"argv,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Cwd            string            `json:"cwd,omitempty"`

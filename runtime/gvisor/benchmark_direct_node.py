@@ -23,7 +23,7 @@ from ucloud_sandboxes.direct_warden import (
     DirectRunscWardenConfig,
 )
 from ucloud_sandboxes.hibernation import HibernationRuntimeFingerprint
-from ucloud_sandboxes.image_rootfs import DockerRootfsStore, OverlayRootfsManager
+from ucloud_sandboxes.image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
 
 
@@ -77,7 +77,9 @@ async def wake_round(
 
 
 async def benchmark(args: argparse.Namespace) -> dict[str, object]:
-    image_store = DockerRootfsStore((args.state_root / "image-cache").resolve())
+    image_store = DockerOverlay2RootfsStore(
+        (args.state_root / "image-cache").resolve()
+    )
     image = image_store.materialize(args.image)
     if args.config_template is None:
         template = DirectOciConfigBuilder().build(

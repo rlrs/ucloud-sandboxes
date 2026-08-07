@@ -1,10 +1,9 @@
-# Storage-native migration compatibility spike
+# Storage-native backend
 
-This directory implements Stage 0 of
-[`docs/storage-native-migration-plan.md`](../../docs/storage-native-migration-plan.md).
-It evaluates AgentEnv's node-wide ublk/OverlayBD storage daemon as a narrowly
-versioned storage dependency. AgentEnv does not own sandbox lifecycle; the
-direct Warden remains the sole sandbox runtime owner.
+This directory builds and qualifies the node-wide ublk/OverlayBD storage
+dependency used by the storage-native runtime. AgentEnv supplies the block
+device implementation; the direct Warden remains the sole sandbox lifecycle
+owner.
 
 The dependency is pinned to AgentEnv commit
 `f41abb21324f6b0520abf34b7720aa260ddd10eb` under its MIT license. Build it
@@ -14,16 +13,20 @@ from an exact, clean checkout:
 ./build_pinned.sh /path/to/AgentENV /path/to/artifacts
 ```
 
-The build applies the dense-stream export and pooled-exclusive-delete
-compatibility patches, runs the daemon protocol tests, and emits a
-content-addressed binary, license, and schema-2 build manifest with both patch
-digests. A production package must use that manifest and must not fetch or
-build an unpinned branch during node startup.
+The build applies the dense-stream export, pooled-exclusive-delete, and
+owner-identity patches, runs the daemon protocol tests, and emits a
+content-addressed binary, license, and schema-3 build manifest with every patch
+digest. A production package must use that manifest and must not fetch or build
+an unpinned branch during node startup.
 
 The pooled-delete patch is deliberately narrow. AgentEnv continues to own pool
 acquire, target swapping, cache eviction, refill, and release. The patch only
 allows an explicit `Delete` request to permanently destroy an active exclusive
 pooled device after uncertain mount cleanup; it refuses shared pooled devices.
+The owner-identity patch makes runtime-device acquisition idempotent and
+reports active owner bindings separately from idle devices, allowing the
+UCloud journal to recover an acquisition interrupted before the device id was
+recorded.
 
 ## Destructive volume qualification
 
@@ -45,12 +48,8 @@ Required host tools are `mkfs.ext4`, `mount`, `umount`, `fsfreeze`,
 dedicated directory; the qualifier creates a unique child and never removes
 the supplied root.
 
-This test is a storage compatibility gate, not proof of production readiness.
-The next Stage 0 gate runs the pinned gVisor hibernation workload on the same
-volume and traces restore reads before the first lightweight tool call.
-
 Pass `--runsc`, `--conformance-workload`, and `--noop-workload` together to
-run that gVisor gate as part of the same destroy/reconstruct cycle.
+run the pinned gVisor workload as part of the same destroy/reconstruct cycle.
 
 Compare steady-state XFS behavior against a same-disk native loopback XFS:
 
@@ -61,8 +60,8 @@ sudo python3 benchmark_io.py \
   --output /tmp/storage-native-io.json
 ```
 
-The benchmark alternates target order across rounds and applies the Stage 0
-15% gate to sequential write bandwidth, 70/30 random mixed IOPS, and a
+The benchmark alternates target order across rounds and applies a 15% gate to
+sequential write bandwidth, 70/30 random mixed IOPS, and a
 create/stat/rename/delete metadata workload.
 
 ## Warm-device churn benchmark

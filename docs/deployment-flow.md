@@ -1,441 +1,165 @@
 # Deployment flow
 
-This project should deploy as a versioned control plane plus versioned VM nodes.
-Each node should advertise enough metadata for the control plane to decide
-whether it is usable, stale, foreign, or safe to terminate.
+A deployment consists of one durable control-plane VM and two autoscaled node
+roles. The control plane runs the public gateway, model relay, private registry,
+registry maintenance, and autoscaler. Sandbox nodes run the direct gVisor
+Warden and storage-native service. Builder nodes run Docker image operations.
 
 ## Deployment identity
 
-Every production-like run should choose a deployment id, for example
-`dfm-sandboxes-dev-20260629` or `prod-a`.
+Choose one non-empty deployment ID and use it everywhere:
 
-Use that id consistently:
+- control-plane and autoscaler configuration;
+- UCloud job labels;
+- node bootstrap inputs;
+- authenticated heartbeats.
 
-- control-plane config: `deployment_id`
-- CLI override: `--deployment-id <id>`
-- UCloud job labels: `ucloud-sandboxes/deployment=<id>`
-- heartbeat field: `deployment_id=<id>`
+The control plane admits only jobs and heartbeats with that exact identity.
+Package and init versions are also carried in job labels and heartbeats so a
+node built from a different release never receives new work.
 
-When `deployment_id` is configured, pool discovery ignores VM jobs from other
-deployments. Scale-down execution also refuses to terminate jobs without the
-matching deployment label unless `--allow-unlabeled-stops` is passed.
+## Persistent and ephemeral state
 
-## Versioning contract
+Mount durable project storage at `/work/data`. The deployment stores gateway
+databases, operation journals, registry data, credentials, and the gateway SSH
+bootstrap key below that mount. Systemd units require the mount before starting;
+a missing mount is a deployment failure.
 
-Nodes now advertise:
+Sandbox and builder VM disks are ephemeral. They contain runtime state, image
+caches, and storage-native caches only. The registry and published
+storage-native objects are the durable authorities.
 
-- `agent_version`: Python package/node-agent version
-- `init_version`: VM init script contract version
-- `deployment_id`: owning deployment
+## Release inputs
 
-VM job submissions are also labelled with:
-
-- `ucloud-sandboxes/agent-version`
-- `ucloud-sandboxes/init-version`
-- `ucloud-sandboxes/deployment`
-
-The control plane should treat mismatched versions as not ready for new
-sandboxes. The intended rollout flow is:
-
-1. Choose a package version, update `pyproject.toml` and
-   `ucloud_sandboxes/__init__.py`, and tag the release, for example `v0.2.0`.
-2. Build a wheel: `uv build`.
-3. Upload the wheel to a release location reachable from VM init, initially
-   `/work/ucloud-sandboxes/release/`.
-4. Start or update the control-plane VM with the new wheel and deployment id.
-5. Verify the gateway and relay public health endpoints report the new package
-   version before allowing new nodes:
-   `curl -fsS https://app-sandboxes.cloud.sdu.dk/healthz` and
-   `curl -fsS https://app-sandboxes-relay.cloud.sdu.dk/healthz`.
-6. Generate a dedicated gateway SSH keypair under gateway state and run
-   `ensure-ucloud-ssh-key` with the public key so first-boot node SSH accepts
-   the gateway key.
-7. Start the public gateway service, model relay service, and autoscaler service
-   from the same installed wheel.
-8. Start the private Docker registry service on the control-plane VM. The
-   gateway assigns managed tags and builder output must be pushed before
-   sandbox nodes can pull it by image id.
-9. Run the autoscaler with `--execute`, `--execute-stops`, and
-   `--execute-init`. A post-start UCloud suspension is destructive node loss;
-   never enable provider resume as a recovery mechanism.
-10. Let the autoscaler submit sandbox-node and builder VMs with matching
-   deployment/version labels.
-11. Let the autoscaler run post-boot init over the UCloud-announced SSH command
-   using `--init-package-spec /work/...whl`,
-   `--init-authorized-key-file`, and `--init-ssh-private-key-file`.
-12. Wait for matching heartbeats before scheduling sandboxes to those nodes.
-13. Drain old/mismatched nodes, then scale them down only after they are idle.
-14. Before changing production traffic, run the SDK/Verifiers qualification
-    against an isolated gateway and relay with an empty worker pool. Require a
-    fresh source and a distinct fresh destination, actual relay-driven parking,
-    route handoff, transport reset, request reattachment, exactly one model
-    call, and successful harness completion.
-15. Treat the production rollout as a separate, explicit decision. Re-run
-    health/version checks and the same qualification through the production
-    URLs before deprecating the previous runtime.
-
-## Credentials
-
-The current live tests use the imported UCloud browser/CLI session. That works
-for development, but it is not a clean production trust model:
-
-- it is effectively a user session, not a narrowly scoped service credential
-- anyone with read access to the control-plane VM session file can submit or
-  terminate jobs as that user within the accessible project scope
-- refresh lifetime and revocation behavior are tied to UCloud session behavior,
-  not to this autoscaler's deployment lifecycle
-- it is easy to accidentally copy the credential into images, logs, or release
-  artifacts if the deployment flow is not strict
-
-For the first control-plane VM test, copying an imported session file is
-acceptable if it is treated as a secret: store it outside the repo, mode `0600`,
-owned by the service user, and rotate it after testing.
-
-For production, prefer a dedicated UCloud service user or service credential if
-UCloud supports one. It should have only the required project permissions for
-the sandbox project, and its session/token should be injected as deployment
-secret state, not baked into VM images or wheels.
-
-## Cleanup safety
-
-Termination must only target nodes known to belong to the active deployment.
-The safe default is:
-
-- observe only jobs with matching `deployment_id` when one is configured
-- create sandbox nodes with `ucloud-sandboxes/node=true`
-- create builder nodes with `ucloud-sandboxes/builder=true`
-- create nodes with `ucloud-sandboxes/deployment=<id>`
-- block `--execute-stops` for jobs lacking that exact label
-
-Manual cleanup can still use `--allow-unlabeled-stops`, but that should remain
-an explicit operator action, not part of the autoscaler loop.
-
-## All-In-One Deployment
-
-The control-plane deployment is intentionally one UCloud VM. It runs the public
-gateway, model relay, private registry, registry GC timer, and autoscaler on the
-same machine. Autoscaled sandbox and builder VMs are separate and only exist
-when there is sandbox or image-build demand.
-
-There are two phases:
-
-1. Create or choose the UCloud VM and attach its durable resources.
-2. Run `deploy-all-in-one` to converge the VM contents and systemd services.
-
-The second phase is the deterministic one. It stages the wheel and session file,
-writes `/etc/ucloud-sandboxes/*.env`, installs the packaged systemd units,
-creates independent gateway, heartbeat, node-control, relay-sandbox, and
-relay-worker tokens,
-creates the gateway init SSH key, registers that
-public key with UCloud, starts/restarts services, and opens the gateway and
-relay VM web ports.
-
-## Create The VM
-
-The VM needs:
-
-- private network `12345327`
-- project drive `/998037`, mounted by UCloud as `/work/data`
-- gateway public link bound to port `8090`
-- relay public link bound to port `8092`
-
-Submit a new all-in-one VM from the source checkout:
-
-```bash
-uv run ucloud-sandboxes submit-vm \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id live-20260629 \
-  --role gateway \
-  --private-network-id 12345327 \
-  --public-link-id 12345368 \
-  --public-link-port 8090 \
-  --mount /998037 \
-  --hostname-seed gateway-allinone-$(date +%Y%m%d)-v030 \
-  --disk-gb 50 \
-  --time-hours 0 \
-  --time-minutes 0 \
-  --time-seconds 0 \
-  --execute
-```
-
-If the relay public link is not already attached to the VM, attach it to port
-`8092` using UCloud's job resource API or the UCloud UI. The canonical relay
-link is `12346842`.
-
-Wait for the VM to be `RUNNING` and resolve its SSH command:
-
-```bash
-ucloud jobs ssh <job-id> \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --print-only
-```
-
-## Converge The VM
-
-Build the wheel locally:
+Build the Python wheel locally:
 
 ```bash
 uv build
 ```
 
-Dry-run the convergence plan first:
+`deploy-all-in-one` also requires the sandbox runtime artifacts:
+
+- the exact patched direct `runsc` binary and its 40-character source commit;
+- the managed PID 1 binary;
+- the pinned storage-native backend manifest, binary, provenance, patches, and
+  license.
+
+The remote deployment host assembles two role-specific node bundles. Both
+contain a preassembled Python runtime, pinned Debian packages, and the exact
+host-kernel module closure. The sandbox bundle additionally contains the direct
+runtime and storage-native artifacts. The builder bundle contains Docker Buildx.
+Bundle construction is mandatory; deployment stops if any input cannot be
+built, downloaded, or verified.
+
+Nodes never contact package repositories. The autoscaler stages one bundle over
+SSH, supplies its SHA-256 digest to VM init, and the node verifies the archive,
+manifest, role, platform, kernel, packages, modules, and artifacts before
+installing anything.
+
+## Create the control-plane VM
+
+The VM must join the worker private network, mount the durable project drive,
+and bind public links to the gateway and relay ports. Render a job first, then
+submit it explicitly:
 
 ```bash
-uv run ucloud-sandboxes deploy-all-in-one <job-id> \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id live-20260629 \
-  --private-network-id 12345327 \
-  --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
-  --output text
-```
-
-If the plan cannot infer the private-network hostname from the UCloud job, pass
-it explicitly. The registry IP normally does not need to be passed; the remote
-deployment detects the all-in-one VM's private IPv4 from inside the VM and writes
-that value into the autoscaler environment. Do not use the
-`ucloud.dk/serviceipaddress` label for this alias, since that address is not
-necessarily reachable by builder and sandbox nodes.
-
-```bash
-  --gateway-private-host sandbox-gateway-allinone-20260704-v020 \
-  --registry-private-ip <optional-gateway-private-ip-override>
-```
-
-Execute the deployment:
-
-```bash
-uv run ucloud-sandboxes deploy-all-in-one <job-id> \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --deployment-id live-20260629 \
-  --private-network-id 12345327 \
-  --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
-  --execute
-```
-
-Use `--output script` to inspect the exact remote install script. Use
-`--ssh-command 'ssh ...'` if UCloud job updates do not expose the SSH command.
-Use `--no-copy-session` only when the VM already has
-`/work/data/ucloud-sandboxes/state/ucloud-session.json`.
-
-## Live Deployment
-
-Current live all-in-one VM:
-
-- job id: `12362088`
-- name: `ucloud-sandbox-gateway-migration-v2-canary`
-- deployment id: `migration-v2-canary-20260730a`
-- package version: `0.3.95`; it must match the `version` returned by both
-  service health endpoints
-- gateway product: `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB); sandbox workers use
-  `cpu-amd-zen5-32-vcpu`
-- compute project: `DFM` (`5530ccd4-2828-4031-9275-d51aa231cc01`)
-- private network: `12345327`
-- private registry IPv4 observed on the VM: `10.36.144.34`
-- persistent project drive: `/998037`, mounted by UCloud as `/work/data`
-- SSH: resolve with `ucloud jobs ssh 12362088 --print-only`
-
-The private network, persistent drive, and ingresses remain resources of
-`DFM Pretraining`, but UCloud attaches them to the DFM-funded gateway job. This
-keeps the production domains and private node network unchanged.
-
-Public links:
-
-- gateway ingress `12345368`: `https://app-sandboxes.cloud.sdu.dk` -> VM port
-  `8090`
-- relay ingress `12346842`: `https://app-sandboxes-relay.cloud.sdu.dk` -> VM
-  port `8092`
-- fallback relay ingress `12349454`: `https://app-sandboxes-relay-v2.cloud.sdu.dk`
-  -> VM port `8092`
-
-Services on the all-in-one VM:
-
-- `ucloud-sandbox-gateway.service`
-- `ucloud-sandbox-relay.service`
-- `ucloud-sandbox-registry.service`
-- `ucloud-sandbox-registry-prune.timer`
-- `ucloud-sandbox-registry-gc.timer`
-- `ucloud-sandbox-autoscaler.service`
-
-The registry is intentionally local to the all-in-one VM and persistent on the
-project drive. The gateway reaches it as `http://127.0.0.1:5000`; autoscaled
-builder and sandbox nodes reach the same registry using the gateway's
-restart-stable private DNS name. `UCLOUD_REGISTRY_WORKER_URL` holds that
-worker-facing URL. Managed clients submit only image ids and never receive this
-address as configuration.
-
-The deployment stores gateway state under
-`/work/data/ucloud-sandboxes/state` on the attached project drive. During the
-first convergence with this layout, it stops all state writers and atomically
-migrates the previous `/work/ucloud-sandboxes/state` directory if the persistent
-target is empty. A marker makes the migration one-shot; a non-empty unmarked
-target fails closed instead of merging ambiguous state. The original directory
-is retained as `/work/ucloud-sandboxes/state.pre-persistent-v1`, while the old
-`/work/ucloud-sandboxes/state` path becomes a symlink to persistent state so a
-package downgrade continues using current state rather than the stale backup.
-
-This includes `images.json`, `registry-usage.json`, routes, autoscaler journals,
-service credentials, and the gateway SSH bootstrap key. The registry prune
-policy keeps tags with no usage record and deletes only tags whose last
-successful sandbox creation is older than the configured retention window, 30
-days by default.
-
-```bash
---init-docker-insecure-registry <gateway-private-host>:5000
-```
-
-Registry data lives at:
-
-```text
-/work/data/ucloud-sandbox-registry/docker-registry
-```
-
-As of 2026-07-12 this path contains the surviving catalog from earlier gateway
-VMs. Do not infer catalog loss from an empty gateway `images.json`; inspect the
-registry API and this directory separately.
-
-## Autoscaled Nodes
-
-Sandbox-node VMs:
-
-- autoscaled from pending sandbox resource demand or
-  `POST /v1/sandboxes/prepare` signals
-- initialized over the announced UCloud SSH proxy
-- initialized with the worker registry URL's restart-stable private DNS name as
-  Docker's insecure registry endpoint
-- heartbeat back to the all-in-one gateway private-network URL with the
-  dedicated heartbeat bearer token; the public gateway token is not copied to
-  nodes
-- require the separately generated node-control token for every non-health
-  node-agent request; gateway proxying, image warmup, local heartbeat reads, and
-  autoscaler drain calls authenticate with it
-- carry `ucloud-sandboxes/deployment=<deployment-id>`
-
-Builder-node VMs:
-
-- autoscaled from pending image-build demand or `POST /v1/builders/prepare`
-  signals
-- initialized over the announced UCloud SSH proxy
-- initialized with the same worker registry URL
-- advertise `image-build` only, not `sandbox`
-- advertise physical CPU, memory, and disk capacity; sandbox admission settings
-  are ignored for builder nodes
-- build and push gateway-assigned registry tags; sandbox nodes later pull/cache
-  digest-pinned references
-- carry `ucloud-sandboxes/deployment=<deployment-id>`
-
-Managed builds submit an image id without `tag` or registry port. The gateway
-forces `push=true`, assigns a tag under `UCLOUD_REGISTRY_WORKER_URL`, and later
-resolves sandbox creation by image id. If the all-in-one VM is replaced, its
-restart-stable private DNS name remains the transport identity even if the
-private IP changes. A deployment that deliberately changes that DNS name must
-update the gateway/autoscaler environment and reinitialize Docker trust on
-still-running builder and sandbox nodes.
-
-### 2026-07-12 registry alias incident
-
-All 20 observed TMax builds completed their Docker build but failed while
-pushing to `ucloud-sandbox-registry:5000`. Builder job `12353729` still mapped
-the alias to the superseded gateway address `10.36.129.153`, while the live
-registry was reachable at `10.36.128.97`. The UCloud
-`ucloud.dk/serviceipaddress` value was not a working registry path. The failures
-were registry connection timeouts, not Dockerfile, build-context, SDK, or tag
-errors.
-
-The immediate production repair was:
-
-1. Back up and replace the stale alias in the gateway's
-   `/etc/ucloud-sandboxes/autoscaler.env`.
-2. Restart `ucloud-sandbox-autoscaler.service` and inspect its process arguments
-   to confirm `--init-host-alias ucloud-sandbox-registry=10.36.128.97`.
-3. Back up and replace the stale address in `/etc/hosts` and
-   `/etc/ucloud-sandboxes/node.env` on the ready builder and every reachable
-   running sandbox node. Nodes not yet SSH-ready will be initialized from the
-   corrected autoscaler environment.
-4. Verify alias resolution and registry readiness from each repaired node:
-
-   ```bash
-   getent hosts ucloud-sandbox-registry
-   curl -fsS http://ucloud-sandbox-registry:5000/v2/
-   ```
-
-5. Prove the full data path with an actual builder push, a sandbox-node pull,
-   and a gateway manifest lookup. The smoke tag
-   `ucloud-sandbox-registry:5000/codex/status-smoke:registry-alias-fix-20260712`
-   pushed and pulled successfully with digest
-   `sha256:92b1d1cae5f235812184415e63d9b24464116c58d3ba3c460b1eb0247f0f46e3`.
-
-Completed build records are terminal: repairing connectivity does not retry the
-20 failed requests. TMax or the caller must submit those builds again. The
-smoke tag can be removed by normal registry retention. This was a live
-configuration repair only; the code still needs dynamic alias refresh or a
-stable private registry endpoint, plus a registry reachability gate before a
-builder advertises `image-build` readiness.
-
-The same inspection confirmed that the registry blobs were not lost during the
-power cycle. `/work/data` was mounted from the project drive before the registry
-started, the container's `/var/lib/registry` bind mount matched the project-drive
-directory, and 9.3 GiB containing 77 tagged manifests remained, including tags
-dated 2026-06-30 through 2026-07-04. What did not migrate from the replaced
-gateway was `/work/ucloud-sandboxes/state/images.json`, the gateway's image-id
-to registry-tag index. It contained only the two newly successful TMax builds,
-so SDK image-id lookup could appear to have lost the registry even though the
-manifests were still present.
-
-The durability fix implemented after the incident, but not yet deployed at the
-time of this note, does both of the following:
-
-- atomically migrates the entire gateway state directory to
-  `/work/data/ucloud-sandboxes/state`; and
-- installs systemd drop-ins with `RequiresMountsFor=/work/data` plus a
-  `mountpoint` preflight for the gateway, relay, registry, registry maintenance,
-  and autoscaler services.
-
-The 2026-07-12 boot happened in the safe order, but the deployed 0.3.48 units
-did not yet contain those mount gates.
-
-The gateway VM cannot SSH into node VMs through `ssh.cloud.sdu.dk` unless it has
-an accepted private key. The bootstrap path is to generate a dedicated keypair
-on the gateway, keep the private key in gateway state, register the public key
-with UCloud using `ensure-ucloud-ssh-key`, pass the public key into autoscaled
-node init with `--init-authorized-key-file`, and have the autoscaler use
-`--init-ssh-private-key-file` when it runs post-boot initialization. The
-autoscaler records attempts in `<state_dir>/vm-bootstrap.json` and retries after
-`--init-retry-seconds` (30 seconds in the live setup). SSH exit status 255 is
-treated as boot-time transport readiness and uses a bounded 1, 2, 4, 8, 16,
-then 30 second retry schedule; script/package failures retain the normal
-backoff. Readiness still comes only from fresh node heartbeats.
-
-Deployment emits separate sandbox and builder node bundles. Both contain the
-wheel closure, Docker Engine, gVisor, XFS tools, and the conformance image;
-only the builder bundle contains Buildx. Neither bundle installs the distro
-`python3-pip`, compiler toolchain, or Docker Compose because the bundled wheel
-closure installs into `python3-venv` without them.
-
-The persistent all-in-one gateway key is registered in UCloud as SSH key id
-`3236` with title `ucloud-sandboxes gateway init live-20260629`.
-
-## Verify
-
-Current live checks:
-
-```bash
-curl -fsS https://app-sandboxes.cloud.sdu.dk/healthz
-curl -fsS https://app-sandboxes-relay.cloud.sdu.dk/healthz
-curl -i https://app-sandboxes.cloud.sdu.dk/v1/sandboxes
-ucloud jobs browse \
-  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
-  --filter-state RUNNING \
-  --no-include-application \
+uv run ucloud-sandboxes submit-vm \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --role gateway \
+  --private-network-id <network-id> \
+  --public-link-id <gateway-link-id> \
+  --public-link-port 8090 \
+  --mount <project-drive-id> \
+  --hostname-seed gateway-1 \
   --output json
 ```
 
-Expected current state:
+Add `--execute` only after inspecting the payload. Attach the relay link to port
+`8092` through UCloud when it is a separate ingress resource.
 
-- gateway health reports `{"ok": true, "service": "control-plane", "version": "<installed-version>"}`
-- relay health reports `{"ok": true, "service": "model-relay", "version": "<installed-version>"}`
-- unauthenticated `GET /v1/sandboxes` returns `401`
-- running-job browse shows only all-in-one job `12361919` for this service when
-  there is no sandbox or builder demand
-- gateway-local `GET http://127.0.0.1:5000/v2/_catalog` returns registry JSON
-- zero demand plus idle timeout produces safe labelled stop intents for sandbox
-  and builder nodes
+## Converge the control plane
+
+Render the remote convergence script first:
+
+```bash
+uv run ucloud-sandboxes deploy-all-in-one <gateway-job-id> \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --private-network-id <network-id> \
+  --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --direct-runsc /path/to/ucloud-direct-runsc \
+  --direct-runsc-commit <40-character-commit> \
+  --managed-init /path/to/managed-init \
+  --storage-native-manifest /path/to/storage-native-manifest.json \
+  --output script
+```
+
+Run the same command with `--execute` to stage the release, build the verified
+node bundles, write deployment environment files, create credentials, install
+systemd units, restart services, register the gateway SSH key, and open the
+configured web ports.
+
+The deployment creates independent secrets for:
+
+- public gateway access;
+- node heartbeats;
+- privileged node control;
+- sandbox-to-relay access;
+- relay workers.
+
+They are mandatory and authorize different routes. Do not copy the public
+gateway credential to nodes or reuse one token for multiple channels.
+
+## Autoscaled nodes
+
+Run the autoscaler with create, stop, and initialization execution enabled.
+Create, stop, and bootstrap remain separate explicit permissions so operators
+can inspect each mutation class independently.
+
+Sandbox nodes:
+
+- carry `ucloud-sandboxes/node=true` and the deployment/version labels;
+- use exact physical CPU, memory, and disk accounting;
+- start the direct Warden and required storage-native services;
+- report readiness only after authenticated bootstrap and health checks.
+
+Builder nodes:
+
+- carry `ucloud-sandboxes/builder=true` and never the sandbox-node label;
+- expose image pull, build, cache, health, heartbeat, and drain operations;
+- push gateway-assigned tags to the private registry with Buildx;
+- scale independently from sandbox capacity.
+
+The gateway resolves managed image IDs to immutable registry digests. Clients do
+not receive or construct the worker-private registry address.
+
+## Provider and cleanup safety
+
+Provider mutations are journaled and deployment-scoped. Automatic termination
+targets only jobs with the exact deployment and role labels. Unlabelled cleanup
+requires an explicit operator override and is not part of the service loop.
+
+A worker suspension after the VM has started is node loss: the guest disk and
+live sandbox processes are not trusted afterward. Placement excludes the lost
+node and replacement capacity is created from durable demand. The service does
+not recover a worker by booting an earlier guest state.
+
+A drain closes admission before the node reports progress. The autoscaler may
+stop a node only after a fresh authenticated heartbeat confirms the matching
+drain token, complete empty inventory, and zero resource ownership.
+
+## Verification
+
+After deployment, verify:
+
+```bash
+curl -fsS https://<gateway-domain>/healthz
+curl -fsS https://<relay-domain>/healthz
+curl -i https://<gateway-domain>/v1/sandboxes
+```
+
+Both health endpoints must report the installed package version. The
+unauthenticated sandbox request must return `401`. Also verify the local registry
+`/v2/` endpoint, systemd service state, the autoscaler journal, and one complete
+builder-push plus sandbox-pull flow before accepting production traffic.

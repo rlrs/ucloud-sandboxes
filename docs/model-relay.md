@@ -61,7 +61,7 @@ uv run ucloud-sandboxes serve-model-relay \
   --max-completed-bytes 268435456
 ```
 
-Use the worker bearer token for `/register_rollout`, `/worker/poll`,
+Use the worker bearer token for `/v1/relay/rollouts`, `/worker/poll`,
 `/worker/respond`, and `/worker/error`. Direct OpenAI relay clients use the
 sandbox bearer token. General tunnels use their registration-scoped URL and
 preserve `Authorization` for the upstream protocol.
@@ -70,16 +70,6 @@ The relay retains completed responses for idempotent replay, bounded by both
 the retention interval and `--max-completed-bytes` (256 MiB by default). Once a
 request completes, its original request body is removed from the retained and
 durable record.
-
-Live development relay:
-
-- URL: `https://app-sandboxes-relay.cloud.sdu.dk`
-- UCloud ingress id: `12346842`
-- all-in-one gateway VM job id: `12361919`
-- VM-local port: `8092`
-- token files on the gateway VM:
-  `/work/data/ucloud-sandboxes/state/relay-sandbox-token` and
-  `/work/data/ucloud-sandboxes/state/relay-worker-token`
 
 ## Sandbox Environment
 
@@ -112,54 +102,47 @@ sandbox = client.create_sandbox(
 )
 ```
 
-The relay also accepts `POST /v1/chat/completions` and `POST /v1/responses` if a
-custom transport sets one of these rollout selectors:
-
-- `X-UCloud-Rollout-Id`
-- `X-Relay-Rollout-Id`
-- `X-Rollout-Id`
-- `?rollout_id=<id>`
-
 ## General HTTP Reverse Tunnel
 
 The relay can also expose a worker-local HTTP service without an OpenAI API
-shape. Register a tunnel through `POST /v1/tunnels/register`, then send public
+shape. Register its rollout through `POST /v1/relay/rollouts`, then send public
 traffic to:
 
 ```text
-https://relay.example.org/tunnels/<tunnel-id>/<upstream-path>
+https://relay.example.org/tunnels/<rollout-id>/<upstream-path>
 ```
 
-`register_sandbox_tunnel` returns a URL shaped as:
+The registration response includes a URL shaped as:
 
 ```text
-https://relay.example.org/tunnels/<tunnel-id>/_relay/<registration-token>/
+https://relay.example.org/tunnels/<rollout-id>/_relay/<registration-token>/
 ```
 
 The capability is scoped to that registration incarnation and becomes invalid
-when the tunnel is replaced or unregistered. Calls through it preserve the
+when the rollout is replaced or unregistered. Calls through it preserve the
 upstream `Authorization` header unchanged. The shared
 `X-UCloud-Relay-Token` header remains available for direct/manual clients but
 is not required by arbitrary harnesses using the capability URL.
 
-Workers use the same long-poll, lease, renewal, and fenced-response protocol as
-model calls. A tunnel request envelope adds `tunnel_id`, `body_base64`, and
-`body_size`; `body_base64` is authoritative for arbitrary bytes. Workers return
+Workers use the same rollout identity, long-poll, lease, renewal, and
+fenced-response protocol as model calls. A tunnel request envelope uses the
+canonical `rollout_id` and adds `body_base64` and `body_size`; `body_base64` is
+authoritative for arbitrary bytes. Workers return
 binary bodies with `body_base64` on `/worker/respond`. Methods, raw
 percent-encoded paths, query strings, safe end-to-end headers, status codes, and
 request/response bodies are preserved.
 
 This implementation is buffered HTTP. Request and response bodies are limited
-to 32 MiB each. Hop-by-hop headers are removed. WebSockets, streaming/SSE, HTTP
-trailers, and raw TCP are not implemented by this protocol. An SSE body can be
-transported as buffered bytes, but it is not delivered token-by-token.
+to 32 MiB each. Hop-by-hop headers are removed. Streaming/SSE, HTTP trailers,
+and raw TCP are not implemented by this protocol. An SSE body can be transported
+as buffered bytes, but it is not delivered token-by-token.
 
-For Verifiers v1, use one tunnel registration per sandbox generation and include
-trusted registration metadata:
+Use one tunnel registration per sandbox generation and include trusted
+registration metadata:
 
 ```json
 {
-  "tunnel_id": "vf-run-001-sandbox-007",
+  "rollout_id": "vf-run-001-sandbox-007",
   "metadata": {
     "sandbox_id": "sandbox-007",
     "sandbox_generation": 3
@@ -168,15 +151,14 @@ trusted registration metadata:
 ```
 
 That binding lets the relay park exactly that generation after durable request
-acceptance and wake its current placement after committing the response. See
-[Verifiers v1 and Parked Sandboxes](verifiers-v1.md) for the complete contract.
+acceptance and wake its current placement after committing the response.
 
 ## Worker API
 
 Register a rollout before the sandbox starts making model calls:
 
 ```bash
-curl -sS -X POST https://relay.example.org/register_rollout \
+curl -sS -X POST https://relay.example.org/v1/relay/rollouts \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"rollout_id":"run-001"}'
@@ -301,10 +283,10 @@ The relay currently handles non-streaming requests. If a sandbox sends
 When a rollout finishes:
 
 ```bash
-curl -sS -X POST https://relay.example.org/unregister_rollout \
+curl -sS -X DELETE https://relay.example.org/v1/relay/rollouts/run-001 \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"rollout_id\":\"run-001\",\"registration_token\":\"$REGISTRATION_TOKEN\"}"
+  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\"}"
 ```
 
 Unregistering a rollout fails any pending model calls for that rollout with an
@@ -323,7 +305,8 @@ The relay uses explicit request leases:
   classification with an explicit `retryable` boolean
 - stale responses with old leases are rejected
 - rollout registration tokens fence unregister, poll, heartbeat, renew,
-  response, and error calls from older incarnations of a reused rollout id
+  response, and error calls from superseded registrations of a reused rollout
+  id
 - responses are rejected when the matching lease has already expired, even if
   no intervening worker poll has requeued the request
 - completed request IDs and worker heartbeat diagnostics are bounded by both
@@ -334,23 +317,20 @@ The relay uses explicit request leases:
 - a disconnected caller does not cancel accepted work; its byte-identical retry
   reattaches and receives the committed response without resampling
 - `X-UCloud-Relay-Request-Id` supplies an explicit stable attempt identity;
-  otherwise an implicit fingerprint becomes reattachable after disconnect,
-  relay restart, or a migration transport-epoch change, so normal identical
-  calls remain distinct
-- park records the gateway's durable transport epoch and wake compares it after
-  any autoscaler or wake-triggered relocation; an epoch change publishes the
-  retry identity before the migrated harness resumes
+  otherwise an implicit fingerprint becomes reattachable after disconnect or
+  relay restart, so normal identical calls remain distinct
 - SQLite/WAL durably stores registrations, pending/leased requests, exact
   completed response bytes, and lifecycle notification state
 - trusted per-sandbox registration metadata enables generation-fenced park and
   wake notifications through the gateway
+- a wake may move the same parked generation through storage-native migration;
+  the relay request, rollout registration, and idempotency identity do not change
 
 Run one relay process per SQLite journal. All admission, claim, response, and
 notification transitions are serialized by that process. A restart drops live
 TCP connections but restores registrations and requests from the journal;
 callers retry and reattach. SQLite provides single-host crash durability, not
-multi-process or multi-host HA. That later requires a transactional
-server-backed broker with the same idempotency and reattachment contract.
+multi-process or multi-host HA.
 
 Worker execution remains at-least-once: after a lease expires, a replacement
 worker may start the request while the original computation is still running.

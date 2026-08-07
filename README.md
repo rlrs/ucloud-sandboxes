@@ -2,11 +2,11 @@
 
 Autoscaler for secure CPU sandboxes on top of SDU UCloud.
 
-The service manages UCloud VM jobs as pool nodes. Sandbox nodes run a node
-agent that starts per-request containers under gVisor. Builder nodes build and
-push custom Docker images to a private registry. The public gateway accepts
-sandbox create/exec/file/image requests, records demand when capacity is not
-ready, and an autoscaler loop reconciles that demand into UCloud VM jobs.
+The service manages UCloud VM jobs as pool nodes. Sandbox nodes run one direct
+gVisor Warden backed by storage-native volumes. Builder nodes build and push
+custom images to a private registry. The public gateway owns placement,
+routing, operation fencing and demand; the autoscaler reconciles that demand
+into UCloud VM jobs.
 
 The project currently has a live development deployment with a public gateway,
 private registry, model relay, autoscaler loop, sandbox nodes, and builder
@@ -28,22 +28,18 @@ under `docs/`, not in this overview.
 
 ## Focused Docs
 
-- [Deployment flow](docs/deployment-flow.md): live rollout, service layout,
-  versioning, cleanup safety, public links, and registry/relay deployment.
+- [Deployment flow](docs/deployment-flow.md): release inputs, service layout,
+  verified node bundles, credentials, and cleanup safety.
 - [Managed registry](docs/managed-registry.md): private Docker registry setup,
   persistence, tagging, pruning, and GC.
 - [Model relay](docs/model-relay.md): outbound-only OpenAI-compatible relay for
   sandboxes that need to reach model workers behind outbound-only networking.
-- [Verifiers v1 and parked sandboxes](docs/verifiers-v1.md): no-sidecar relay,
-  park/wake, retry, streaming, and detached-harness lifecycle contract.
-- [Durable sandbox jobs](docs/durable-sandbox-jobs.md): generation-fenced
-  primary-job ownership across park, restore, migration, and node restart.
 - [Routing gateway](docs/routing-gateway.md): gateway and exec/SSH routing
   design, performance expectations, and concurrency notes.
 - [Scaling policy](docs/scaling-policy.md): scale-to-zero policy, prepare
   signals, builder policy, overcommit, and observed scale-up metrics.
 - [Security stance](docs/security-stance.md): gVisor/container security model,
-  disk quota enforcement, and runtime conformance checks.
+  storage authority, authentication boundaries, and verified bootstrap.
 - [VM init](docs/vm-init.md): UCloud VM bootstrap findings and post-boot init
   strategy.
 
@@ -55,28 +51,12 @@ Run tests:
 uv run python -m unittest
 ```
 
-Run a local gateway:
+Inspect the canonical configuration:
 
 ```bash
-uv run ucloud-sandboxes serve-control-plane --host 127.0.0.1 --port 8080
+uv run ucloud-sandboxes sample-config
 ```
 
-Run a local dry-run node agent:
-
-```bash
-uv run ucloud-sandboxes serve-node-agent \
-  --job-id local-job \
-  --node-id local-dev \
-  --total-vcpu 2 \
-  --total-memory-mb 6144 \
-  --total-disk-mb 51200 \
-  --host 127.0.0.1 \
-  --port 8090
-```
-
-Run the sandbox runtime conformance probe on an initialized VM node before
-trusting it for hostile workloads:
-
-```bash
-uv run ucloud-sandboxes runtime-conformance --sudo --execute --output json
-```
+Control-plane and node processes intentionally have no unauthenticated local
+mode. Use the deployment/bootstrap flow to create their distinct gateway,
+heartbeat and node-control credentials and their pinned runtime artifacts.

@@ -189,7 +189,6 @@ The VM-side node agent exposes:
 - `POST /v1/images/pull`
 - `GET /v1/sandboxes`
 - `POST /v1/sandboxes`
-- `POST /v1/sandboxes/<sandbox-id>/forks` (requires `fork-local-v1`)
 - `DELETE /v1/sandboxes/<sandbox-id>`
 - `PUT /v1/sandboxes/<sandbox-id>/files?path=<absolute-container-path>`
 - `GET /v1/sandboxes/<sandbox-id>/files?path=<absolute-container-path>`
@@ -202,8 +201,8 @@ The VM-side node agent exposes:
 - `POST /v1/sandboxes/<sandbox-id>/snapshot` (requires `--enable-image-builds`)
 
 `GET /healthz` is public and returns the service identity and package version.
-The `service` value is `control-plane`, `node-agent`, `async-node-agent`, or
-`model-relay` depending on which process serves the endpoint:
+The `service` value identifies the `control-plane`, `node-agent`,
+`builder-agent`, or `model-relay` process serving the endpoint:
 
 ```json
 {
@@ -224,6 +223,8 @@ The gateway/control plane additionally exposes:
 - `GET /v1/builders/prepare`
 - `POST /v1/builders/prepare`
 - `DELETE /v1/builders/prepare/<prepare-id>`
+- `POST /v1/sandboxes/<sandbox-id>/migration`
+- `DELETE /v1/sandboxes/<sandbox-id>/migration?migration_id=<id>`
 
 Build clients upload a deterministic `tar.gz` context to
 `PUT /v1/image-contexts/sha256:<digest>` with `Content-Type:
@@ -232,8 +233,7 @@ application/gzip` and `Content-Length`, then submit the small build JSON with
 `context_archive_format: "tar.gz"`. The gateway verifies and stores the blob,
 so it survives a no-builder retry, and streams it to the selected builder only
 when absent there. Stores are bounded and content-addressed; temporary extracted
-directories are removed after the tracked build. The legacy
-`context_archive_base64` build field remains accepted for older SDKs.
+directories are removed after the tracked build.
 
 Managed `POST /v1/images/build` requests provide `id`, the context reference,
 and optional Dockerfile/build arguments, but omit `tag`. The gateway generates
@@ -283,13 +283,6 @@ failures.
   },
   "network": "bridge",
   "ttl_seconds": 600,
-  "forkable": true,
-  "fork_protocol": {
-    "version": "agent-v1",
-    "prepare_command": ["/usr/local/bin/ucloud-fork-agent", "prepare"],
-    "ready_command": ["/usr/local/bin/ucloud-fork-agent", "ready"],
-    "timeout_seconds": 30
-  },
   "ssh": {
     "enabled": true,
     "user": "sandbox",
@@ -303,146 +296,11 @@ failures.
 }
 ```
 
-## Live sandbox fork
-
-`POST /v1/sandboxes/<source-id>/forks` creates a distinct sandbox by restoring
-the source's live gVisor process and memory state. The gateway always pins the
-operation to the source node and reserves the child's resources there before
-checkpointing. A minimal request supplies the new ID and optional restore-time
-environment, labels, TTL, CPU, or memory overrides:
-
-```json
-{
-  "sandbox": {
-    "id": "agent-child-1",
-    "env": {
-      "AGENT_BRANCH": "child-1"
-    },
-    "ttl_seconds": 900
-  }
-}
-```
-
-The source must have explicit `memory_mb` and `disk_mb` limits,
-`"forkable": true`, and a versioned `fork_protocol`; the derived child retains
-that protocol. Image,
-command/entrypoint, working directory, user,
-capabilities, mount layout, network mode, filesystem configuration, and disk
-size cannot change because runsc validates those fields against the checkpoint.
-The resumable agent must be in the container's initial process tree. Processes
-started through the `/exec` API are deliberately not part of the resumed child,
-and an active exec session causes the fork to return a conflict rather than
-silently losing the session.
-
-The node appends `<checkpoint-id> <64-hex-nonce> <role>` to each hook command.
-Before saving it invokes the source `prepare_command` with role `prepare`. That
-hook must synchronously tell the initial process tree to stop accepting work,
-drain in-flight side effects, and open `/proc/gvisor/checkpoint`. After saving,
-the source `ready_command` acknowledges role `resume`. After restore, the child
-`ready_command` must query PID 1 and only acknowledge role `restore` after PID 1
-read its new identity from `/proc/gvisor/spec_environ`, discarded inherited
-connections and credentials, and rekeyed. Hooks have a configurable 1-60 second
-deadline (30 seconds by default). The child remains `restoring` and its
-checkpoint remains replayable until acknowledgment.
-The prepare hook must print `UCLOUD_FORK_PREPARED=<nonce>`; ready hooks must
-print `UCLOUD_FORK_READY=<nonce>:<role>`. If a known failure happens before a
-checkpoint is taken, the node invokes the ready hook with role `cancel` so PID 1
-can discard the pending request and resume. Other output is ignored.
-
-On success the response contains the normal destination `sandbox` record and a
-fork result:
-
-```json
-{
-  "intent_persisted": true,
-  "sandbox": {
-    "id": "agent-child-1",
-    "state": "running",
-    "creation_kind": "restore",
-    "source_sandbox_id": "agent-parent",
-    "source_generation": 3,
-    "checkpoint_id": "fork-..."
-  },
-  "fork": {
-    "checkpoint_id": "fork-...",
-    "restored": true,
-    "commands": []
-  }
-}
-```
-
-For fast same-instant fan-out, send up to 64 child overlays in `sandboxes` on
-the same endpoint:
-
-```json
-{
-  "sandboxes": [
-    {"id": "agent-child-1", "env": {"AGENT_BRANCH": "child-1"}},
-    {"id": "agent-child-2", "env": {"AGENT_BRANCH": "child-2"}}
-  ]
-}
-```
-
-The gateway atomically reserves every child on the source node before calling
-the node. The node durably records every restore intent, takes one checkpoint,
-and restores every child from that immutable artifact with up to eight restores
-in flight. Results remain in request order. After a restore failure, no new
-queued child starts; already-running children finish into their durable intents
-for exact replay. A successful batch
-returns parallel `sandboxes` and `forks` arrays in request order; each fork
-entry includes its `sandbox_id`, and every entry has the same `checkpoint_id`.
-The top-level `intent_persisted` applies to the whole atomic intent set. Exact
-replay returns `200`; a new batch returns `201`.
-The gateway's 55-minute request deadline is derived from the maximum 64-child
-fan-out, eight restore workers, bounded checkpoint/restore commands, parallel
-retry inspection/readiness, cleanup overhead, and an explicit proxy and
-serialization margin.
-
-The public control-plane request accepts only the overlay fields shown above.
-It rejects caller-supplied `_ucloud_*` fields and mixed `sandbox`, `target`, and
-`sandboxes` shapes. The VM node endpoint is gateway-internal: it requires the
-complete normalized child specs plus `_ucloud_source` and one fenced
-`_ucloud_operation` per child. The Python gateway clients likewise target the
-public control plane for fork calls; they do not construct node fencing data.
-
-On an error, `intent_persisted: true` means every requested intent is durable,
-`false` means none is durable, and an absent value means the aggregate is
-ambiguous. Batch errors additionally return `intents` entries with per-sandbox
-`true`, `false`, or `null` state so the gateway can release only children proven
-not to exist. Clients should replay the identical request for durable or
-ambiguous children. Keep the source sandbox running until the fork response has
-been acknowledged; if it disappears earlier, the node still reports any exact
-child intents it can prove, but it cannot take a new checkpoint. The gateway
-rejects an expanded internal request before reserving capacity when duplicating
-the source spec across the batch would exceed the node JSON-body limit.
-
-Forking is local-only in `fork-local-v1`. The checkpoint is uncompressed,
-sealed as an immutable operation artifact, and reflink-staged on the node's XFS
-Docker volume before Docker/containerd create the child with the dedicated
-`runsc-restore` OCI runtime. Its root-owned wrapper substitutes raw
-`runsc restore` for the child's ordinary start. Nodes advertise the capability
-only after writable-layer and
-tmpfs quota probes pass and a runtime-fingerprinted live probe restores an
-initial-workload in-memory sentinel into a distinct container, verifies restore-time
-identity through `/proc/gvisor/spec_environ`, adopts its distinct Docker bridge
-address inside the restored sandbox, proves an established socket is
-disconnected, and confirms the source can be checkpointed again.
-
-External TCP and Unix-domain connections are disconnected at checkpoint; they
-are not duplicated into both branches. The restore-time spec environment
-contains the child's fresh `UCLOUD_SANDBOX_ID`, `UCLOUD_SANDBOX_FORK_PARENT`,
-checkpoint identity, and readiness nonce. Values already held in process
-memory, including credentials, remain inherited; the mandatory ready handshake
-is where the agent replaces and clears them.
-
-Thread groups originating from `docker exec` are source-only. This includes
-background descendants that outlive a completed exec request: gVisor retains
-them in the resumed source and excludes them from the restored child.
 
 ## Sandbox creation, profiles, and listing
 
 At least one resource field (`cpus`, `memory_mb`, or `disk_mb`) is required for
-ordinary sandbox creation. Fork overlays inherit the source resource limits.
+ordinary sandbox creation.
 
 Sandbox creation is idempotent for a supplied `id` and matching normalized spec.
 If a client times out while the node is still creating the Docker container, a
@@ -475,10 +333,10 @@ use the explicit `"linux_host"` profile:
 ```
 
 `linux_host` starts the container through a shell bootstrap that prepares common
-host-like writable paths, installs a small `service` compatibility shim when the
+host-like writable paths, installs a small `service` command shim when the
 image does not provide one, optionally starts cron/sshd when those binaries
 exist in the image, and keeps the container alive when no command is supplied.
-If no explicit `security` object is supplied, this profile uses root-compatible
+If no explicit `security` object is supplied, this profile uses root-oriented
 defaults rather than the hardened non-root defaults. It still runs under gVisor;
 it is not equivalent to a real VM or full `systemd` boot.
 
@@ -513,38 +371,31 @@ When the gateway receives a non-JSON error response from an upstream node, such
 as an HTML `503 Job is unavailable` page, it returns structured JSON with the
 original status, `retryable`, upstream content type, and a short body preview.
 
-`POST /v1/sandboxes/<id>/migration` relocates an already parked direct-runtime
-sandbox. The optional JSON fields are `migration_id` for idempotent retry and
-`destination_node_id` for an operator-selected destination. Without a
-destination, the gateway selects a ready migration-capable node with enough
-hard disk capacity. The durable phase journal is returned as `migration`; a
-retry continues the existing phase rather than starting a second transfer.
-`DELETE` on the same path with `?migration_id=<id>` may cancel only before the
-atomic route commit. After commit, retries always drive activation and source
-cleanup forward.
+## Park, wake, and migration
 
-For a networked sandbox, migration is deliberately a reconnect boundary. The
-portable manifest records the source guest IP and the destination must allocate
-a different guest IP. This makes gVisor reject the old TCP route during restore
-instead of reviving a connection whose host NAT state remained on the source
-node. Successful park and wake responses carry an opaque transport epoch
-derived from committed route handoffs. Relay-integrated clients use an epoch
-change to retry the same durable request and receive its already-committed
-response without another model sample. Same-node park/wake retains its guest IP
-and remains connection-transparent.
+`POST /v1/sandboxes/<sandbox-id>/park` and
+`POST /v1/sandboxes/<sandbox-id>/wake` carry the sandbox generation and a stable
+operation id. Park publishes a verified `storage-native-v1` snapshot before the
+node releases compute. Wake uses the current route when that node has active
+capacity; otherwise the gateway migrates the parked snapshot and wakes it on the
+destination.
 
-Normal SDK tool, file, and SSH requests do not need to call this endpoint. If a
-parked sandbox's current owner lacks active CPU/RAM headroom, the gateway
-performs the same relocation before forwarding the wake-causing request. A
-`503` response with `retryable: true` and `pending_resources` means no current
-node can fit the complete placement; the autoscaler has received that demand.
+`POST /v1/sandboxes/<sandbox-id>/migration` moves a parked sandbox between
+nodes that both advertise `storage-native-v1` and
+`sandbox-migrate-storage-native-v1`. The optional JSON fields are
+`migration_id` for idempotent retries and `destination_node_id` to require a
+specific ready destination. The response returns the migration journal and the
+current sandbox route. A retryable `503` retains the journal phase for the next
+identical request.
+
+`DELETE /v1/sandboxes/<sandbox-id>/migration?migration_id=<id>` aborts only
+before the atomic route switch. Once routing has committed, retry `POST` until
+source finalization completes.
 
 SSH-enabled sandboxes must use `"network": "bridge"`. The node agent binds SSH
 to localhost on the VM by default; external access should go through the
 gateway/tunnel layer rather than exposing container SSH ports publicly.
 
-Exec commands are session-based and async-capable. The compatibility node-agent
-HTTP API records ordered stdout/stderr/status/exit events and accepts stdin
-writes. The high-performance path uses the aiohttp async node agent with
-WebSocket binary streaming and bounded per-session queues. See
-[routing-gateway.md](routing-gateway.md).
+Exec commands are session-based. The node records ordered
+stdout/stderr/status/exit events, accepts stdin writes, and supports bounded
+long-poll reads. See [routing-gateway.md](routing-gateway.md).

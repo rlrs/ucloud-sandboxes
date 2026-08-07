@@ -1,8 +1,8 @@
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import dataclass
 from datetime import timedelta
 from functools import wraps
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -43,10 +43,11 @@ from ucloud_sandboxes.models import (
 from ucloud_sandboxes.registry import HeartbeatStore
 from ucloud_sandboxes.routing import RoutingState, RoutingStore, SandboxRoute
 from ucloud_sandboxes.ucloud import UCloudError, UCloudHttpError
+from ucloud_sandboxes.vm_init import VmInitPackageStageResult
 
 
 def allow_fixture_mutations(test):
-    """Keep legacy provider-journal unit cases on deterministic fixtures."""
+    """Run provider-journal unit cases against deterministic fixtures."""
 
     @wraps(test)
     def wrapped(*args, **kwargs):
@@ -56,24 +57,49 @@ def allow_fixture_mutations(test):
     return wrapped
 
 
-@dataclass(frozen=True)
-class FakeProbeReport:
-    ok: bool = False
-    runtime_name: str = "runsc"
-    image: str = "busybox"
-    executed: bool = True
-    results: tuple = ()
-
-    def to_dict(self) -> dict:
-        return {"ok": self.ok}
-
-
-class FailingProbe:
-    def __init__(self, **_kwargs) -> None:
-        pass
-
-    def run(self) -> FakeProbeReport:
-        return FakeProbeReport(ok=False)
+def write_deploy_runtime_artifacts(root: Path) -> tuple[Path, Path, Path]:
+    runsc = root / "runsc"
+    runsc.write_bytes(b"patched-runsc")
+    runsc.chmod(0o755)
+    managed_init = root / "ucloud-sandbox-init"
+    managed_init.write_bytes(b"managed-init")
+    managed_init.chmod(0o755)
+    backend_bytes = b"storage-native-backend"
+    backend_digest = hashlib.sha256(backend_bytes).hexdigest()
+    backend = root / f"uvm-ublk-daemon-{backend_digest}"
+    backend.write_bytes(backend_bytes)
+    backend.chmod(0o755)
+    (root / f"{backend.name}.LICENSE").write_text("MIT\n", encoding="utf-8")
+    manifest = root / f"{backend.name}.manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+                "artifact": backend.name,
+                "artifact_sha256": backend_digest,
+                "cargo_package": "uvm-ublk-daemon",
+                "host_architecture": "x86_64",
+                "license": "MIT",
+                "patches": [
+                    {
+                        "name": "agentenv-streaming-dense-export.patch",
+                        "sha256": "a" * 64,
+                    },
+                    {
+                        "name": "agentenv-pooled-delete.patch",
+                        "sha256": "b" * 64,
+                    },
+                    {
+                        "name": "agentenv-owner-identity.patch",
+                        "sha256": "c" * 64,
+                    },
+                ],
+                "schema": 3,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return runsc, managed_init, manifest
 
 
 class CliTests(unittest.TestCase):
@@ -176,7 +202,7 @@ class CliTests(unittest.TestCase):
                 return ["v1"]
 
             def tag_record(self, repository: str, tag: str) -> RegistryTag:
-                return RegistryTag(repository, tag, "sha256:one")
+                return RegistryTag(repository, tag, "sha256:" + "1" * 64)
 
             def delete_manifest(self, repository: str, digest: str) -> None:
                 self.deleted.append((repository, digest))
@@ -188,6 +214,7 @@ class CliTests(unittest.TestCase):
                 "v1",
                 "sandbox:1:generation:2",
                 ttl_seconds=60,
+                digest="sha256:" + "1" * 64,
             )
             output = io.StringIO()
             FakeRegistryClient.deleted = []
@@ -313,7 +340,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(ambiguous_state, "uncertain")
 
     @allow_fixture_mutations
-    def test_post_run_suspension_is_stopped_and_replaced_without_resume(
+    def test_post_run_suspension_is_stopped_and_replaced_as_node_loss(
         self,
     ) -> None:
         submitted: list[dict] = []
@@ -363,13 +390,14 @@ class CliTests(unittest.TestCase):
                                     },
                                 },
                                 "status": {
-                                    # UCloud browse has already changed the
-                                    # destroyed job back to RUNNING and omits
-                                    # update history. The old resume journal
-                                    # below must keep the loss latched.
                                     "state": "RUNNING",
                                     "startedAt": 1_700_000_100_000,
                                 },
+                                "updates": [
+                                    {"state": "RUNNING"},
+                                    {"state": "SUSPENDED"},
+                                    {"state": "RUNNING"},
+                                ],
                             }
                         ]
                     }
@@ -405,18 +433,6 @@ class CliTests(unittest.TestCase):
                 ]
             )
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
-            state.prepare_operation(
-                intent_key="sandbox:suspended-node:old-resume",
-                kind="resume",
-                deployment_id="prod-a",
-                role="sandbox",
-                request={
-                    "type": "bulk",
-                    "items": [{"id": "suspended-node"}],
-                    "lastStartedAt": "2026-08-03T00:00:00+00:00",
-                },
-                target_job_ids=("suspended-node",),
-            )
             lost_route = SandboxRoute(
                 sandbox_id="lost-sandbox",
                 node_id="lost-node",
@@ -443,12 +459,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(len(submitted), 1)
         self.assertEqual(terminated, [("suspended-node",)])
         self.assertEqual(provider_calls, ["stop", "create"])
-        self.assertEqual(
-            result["destructivePowerCycleJobIds"], ["suspended-node"]
-        )
-        self.assertEqual(result["lostSandboxIds"], ["lost-sandbox"])
-        self.assertEqual(result["resumedJobIds"], [])
-        self.assertEqual(result["destructiveStopJobIds"], ["suspended-node"])
+        self.assertEqual(result["destructive_power_cycle_job_ids"], ["suspended-node"])
+        self.assertEqual(result["lost_sandbox_ids"], ["lost-sandbox"])
+        self.assertEqual(result["destructive_stop_job_ids"], ["suspended-node"])
         self.assertEqual(result["rawDecision"].total_nodes, 0)
         self.assertEqual(result["rawDecision"].creates, 1)
 
@@ -571,19 +584,16 @@ class CliTests(unittest.TestCase):
             [("project-1", "replaced-job", True)],
         )
         self.assertEqual(
-            result["destructivePowerCycleJobIds"],
+            result["destructive_power_cycle_job_ids"],
             ["replaced-job"],
         )
-        self.assertEqual(result["lostSandboxIds"], ["lost-sandbox"])
+        self.assertEqual(result["lost_sandbox_ids"], ["lost-sandbox"])
 
     @allow_fixture_mutations
-    def test_initial_suspension_is_booting_and_is_not_resumed(self) -> None:
-        class ResumeClient:
+    def test_initial_suspension_is_booting(self) -> None:
+        class ProvisioningClient:
             def __init__(self, _session_store) -> None:
                 pass
-
-            def unsuspend_jobs(self, *_args, **_kwargs) -> dict:
-                raise AssertionError("a never-started VM must not be unsuspended")
 
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -629,7 +639,6 @@ class CliTests(unittest.TestCase):
                     str(root / "heartbeats.json"),
                     "--state-dir",
                     raw_dir,
-                    "--execute-resumes",
                     "--no-private-network",
                     "--max-builder-nodes",
                     "0",
@@ -639,7 +648,7 @@ class CliTests(unittest.TestCase):
                 ]
             )
 
-            with patch.object(cli, "UCloudClient", ResumeClient):
+            with patch.object(cli, "UCloudClient", ProvisioningClient):
                 result = cli.run_reconcile_cycle(
                     config,
                     args,
@@ -650,7 +659,7 @@ class CliTests(unittest.TestCase):
                     provider_mutations_allowed=True,
                 )
 
-        self.assertEqual(result["unexpectedlySuspendedJobIds"], [])
+        self.assertEqual(result["unexpectedly_suspended_job_ids"], [])
         self.assertEqual(result["rawDecision"].total_nodes, 1)
         self.assertEqual(result["rawDecision"].provisioning_nodes, 1)
         self.assertEqual(result["providerOperationResults"], [])
@@ -723,6 +732,7 @@ class CliTests(unittest.TestCase):
                         memory_mb=4096,
                         disk_mb=8192,
                     ),
+                    spec={"id": "lost-sandbox"},
                     state="running",
                     generation=1,
                     create_operation_id="create-lost",
@@ -772,8 +782,12 @@ class CliTests(unittest.TestCase):
         args = cli.build_parser().parse_args(
             [
                 "serve-control-plane",
+                "--gateway-bearer-token-file",
+                "/tmp/gateway-token",
                 "--heartbeat-bearer-token-file",
                 "/tmp/heartbeat-token",
+                "--node-control-bearer-token-file",
+                "/tmp/node-control-token",
             ]
         )
 
@@ -781,119 +795,6 @@ class CliTests(unittest.TestCase):
             args.heartbeat_bearer_token_file,
             Path("/tmp/heartbeat-token"),
         )
-
-    def test_runtime_conformance_parser_accepts_optional_live_fork_probe(self) -> None:
-        args = cli.build_parser().parse_args(
-            [
-                "runtime-conformance",
-                "--probe-live-fork",
-                "--checkpoint-helper",
-                "/test/checkpoint-helper",
-                "--checkpoint-root",
-                "/test/checkpoints",
-            ]
-        )
-
-        self.assertTrue(args.probe_live_fork)
-        self.assertEqual(args.checkpoint_helper, "/test/checkpoint-helper")
-        self.assertEqual(args.checkpoint_root, Path("/test/checkpoints"))
-
-    def test_node_agent_parsers_accept_checkpoint_runtime_options(self) -> None:
-        for command in ("serve-node-agent", "serve-async-node-agent"):
-            with self.subTest(command=command):
-                args = cli.build_parser().parse_args(
-                    [
-                        command,
-                        "--runtime-conformance-file",
-                        "/test/conformance.json",
-                        "--checkpoint-helper",
-                        "/test/checkpoint-helper",
-                        "--checkpoint-root",
-                        "/test/checkpoints",
-                    ]
-                )
-
-                self.assertEqual(
-                    args.runtime_conformance_file,
-                    Path("/test/conformance.json"),
-                )
-                self.assertEqual(args.checkpoint_helper, "/test/checkpoint-helper")
-                self.assertEqual(args.checkpoint_root, Path("/test/checkpoints"))
-
-    def test_node_agent_parsers_accept_explicit_local_hibernation_options(
-        self,
-    ) -> None:
-        for command in ("serve-node-agent", "serve-async-node-agent"):
-            with self.subTest(command=command):
-                args = cli.build_parser().parse_args(
-                    [
-                        command,
-                        "--enable-local-hibernation",
-                        "--hibernate-runtime-name",
-                        "runsc-hibernate-pinned",
-                        "--expected-hibernate-runtime-fingerprint",
-                        "a" * 64,
-                        "--hibernation-disk-ledger",
-                        "/state/hibernate-ledger.json",
-                        "--hibernation-disk-capacity-mb",
-                        "1900000",
-                        "--hibernation-disk-headroom-mb",
-                        "100000",
-                        "--hibernation-quota-helper",
-                        "/test/quota-helper",
-                    ]
-                )
-
-                self.assertTrue(args.enable_local_hibernation)
-                self.assertEqual(
-                    args.hibernate_runtime_name,
-                    "runsc-hibernate-pinned",
-                )
-                self.assertEqual(
-                    args.hibernation_disk_ledger,
-                    Path("/state/hibernate-ledger.json"),
-                )
-                self.assertEqual(args.hibernation_disk_capacity_mb, 1_900_000)
-                self.assertEqual(args.hibernation_disk_headroom_mb, 100_000)
-
-    def test_local_hibernation_storage_is_fail_closed_and_explicit(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            args = argparse.Namespace(
-                enable_local_hibernation=True,
-                execute_runtime=True,
-                enable_image_builds=False,
-                hibernation_disk_capacity_mb=9_000,
-                hibernation_disk_headroom_mb=1_000,
-                total_disk_mb=10_000,
-                hibernation_disk_ledger=None,
-                hibernation_quota_helper="/test/quota-helper",
-            )
-            runtime = cli.DockerGvisorRuntime(dry_run=False)
-
-            ledger, backend = cli._node_hibernation_storage(
-                args,
-                sandbox_file=root / "sandboxes.json",
-                conformance_capabilities=("hibernate-local-v1",),
-                runtime=runtime,
-            )
-
-            self.assertEqual(
-                ledger.path,
-                root / "hibernation-disk-ledger.json",
-            )
-            self.assertEqual(ledger.capacity_mb, 9_000)
-            self.assertEqual(ledger.safety_headroom_mb, 1_000)
-            self.assertEqual(backend.helper, "/test/quota-helper")
-
-            args.execute_runtime = False
-            with self.assertRaisesRegex(ValueError, "requires --execute-runtime"):
-                cli._node_hibernation_storage(
-                    args,
-                    sandbox_file=root / "sandboxes.json",
-                    conformance_capabilities=("hibernate-local-v1",),
-                    runtime=runtime,
-                )
 
     def test_model_relay_cli_wires_admission_limits(self) -> None:
         args = cli.build_parser().parse_args(
@@ -1571,6 +1472,10 @@ class CliTests(unittest.TestCase):
                     job_id="old-node",
                     node_url="http://node-old:8090",
                     resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                    spec={"id": "stale-sandbox"},
+                    generation=1,
+                    create_operation_id="create-" + "1" * 32,
+                    spec_hash="a" * 64,
                 )
             )
 
@@ -1626,6 +1531,10 @@ class CliTests(unittest.TestCase):
                             node_id="old-node",
                             job_id="old-job",
                             node_url="http://old-node:8090",
+                            spec={"id": "old-orphan"},
+                            generation=1,
+                            create_operation_id="create-" + "2" * 32,
+                            spec_hash="b" * 64,
                             created_at=old,
                             updated_at=old,
                         ),
@@ -1634,6 +1543,10 @@ class CliTests(unittest.TestCase):
                             node_id="recent-node",
                             job_id="recent-job",
                             node_url="http://recent-node:8090",
+                            spec={"id": "recent-orphan"},
+                            generation=1,
+                            create_operation_id="create-" + "3" * 32,
+                            spec_hash="c" * 64,
                             created_at=recent,
                             updated_at=recent,
                         ),
@@ -1679,8 +1592,10 @@ class CliTests(unittest.TestCase):
 
     def test_deploy_all_in_one_dry_run_outputs_plan_without_ucloud_lookup(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+            root = Path(raw_dir)
+            wheel = root / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
             wheel.write_bytes(b"wheel")
+            runsc, managed_init, storage_manifest = write_deploy_runtime_artifacts(root)
             output = io.StringIO()
             with redirect_stdout(output):
                 result = cli.main(
@@ -1701,8 +1616,14 @@ class CliTests(unittest.TestCase):
                         "ssh ucloud@example.org -p 2222",
                         "--wheel",
                         str(wheel),
-                        "--sandbox-runtime",
-                        "legacy",
+                        "--direct-runsc",
+                        str(runsc),
+                        "--direct-runsc-commit",
+                        "9f653e577965df2ddd13875b5530cd2588661f1c",
+                        "--managed-init",
+                        str(managed_init),
+                        "--storage-native-manifest",
+                        str(storage_manifest),
                         "--output",
                         "json",
                     ]
@@ -1724,27 +1645,6 @@ class CliTests(unittest.TestCase):
             payload["plan"]["stateDir"],
             "/work/data/ucloud-sandboxes/state",
         )
-        self.assertEqual(
-            payload["plan"]["legacyStateDir"],
-            "/work/ucloud-sandboxes/state",
-        )
-
-    def test_deploy_all_in_one_requires_explicit_sandbox_runtime(self) -> None:
-        stderr = io.StringIO()
-        with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
-            cli.main(
-                [
-                    "deploy-all-in-one",
-                    "job-1",
-                    "--project",
-                    "project-1",
-                    "--wheel",
-                    "package.whl",
-                ]
-            )
-
-        self.assertEqual(raised.exception.code, 2)
-        self.assertIn("--sandbox-runtime", stderr.getvalue())
 
     def test_deploy_all_in_one_does_not_infer_registry_from_ucloud_job_label(
         self,
@@ -1760,8 +1660,12 @@ class CliTests(unittest.TestCase):
         cli.UCloudClient = FailingUCloudClient
         try:
             with TemporaryDirectory() as raw_dir:
-                wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+                root = Path(raw_dir)
+                wheel = root / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
                 wheel.write_bytes(b"wheel")
+                runsc, managed_init, storage_manifest = write_deploy_runtime_artifacts(
+                    root
+                )
                 output = io.StringIO()
                 with redirect_stdout(output):
                     result = cli.main(
@@ -1780,8 +1684,14 @@ class CliTests(unittest.TestCase):
                             "ssh ucloud@example.org -p 2222",
                             "--wheel",
                             str(wheel),
-                            "--sandbox-runtime",
-                            "legacy",
+                            "--direct-runsc",
+                            str(runsc),
+                            "--direct-runsc-commit",
+                            "9f653e577965df2ddd13875b5530cd2588661f1c",
+                            "--managed-init",
+                            str(managed_init),
+                            "--storage-native-manifest",
+                            str(storage_manifest),
                             "--output",
                             "json",
                         ]
@@ -2524,7 +2434,7 @@ class CliTests(unittest.TestCase):
                             ),
                             spec={"id": f"sandbox-{index}", "image": "busybox"},
                         ),
-                        spec_hash=f"spec-{index}",
+                        spec_hash=f"{index + 1:064x}",
                     )
                 demand_after_claims = store.pending_demand()
         finally:
@@ -2720,7 +2630,7 @@ class CliTests(unittest.TestCase):
             ResourceQuantity(vcpu=49, memory_mb=39321, disk_mb=204800),
         )
 
-    def test_policy_cli_overcommit_matches_node_init_capacity(self) -> None:
+    def test_policy_cli_uses_exact_sandbox_capacity(self) -> None:
         policy = cli.policy_with_cli_overrides(
             ScalePolicy(),
             argparse.Namespace(
@@ -2734,7 +2644,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(
             policy.schedulable_node_resources,
-            ResourceQuantity(vcpu=64, memory_mb=117964, disk_mb=1_449_984),
+            ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=1_449_984),
         )
 
     def test_direct_runtime_enables_dynamic_active_admission_policy(self) -> None:
@@ -2746,7 +2656,6 @@ class CliTests(unittest.TestCase):
                 init_cpu_overcommit=3.0,
                 init_memory_overcommit=2.0,
                 init_disk_overcommit=1.0,
-                init_node_runtime="direct",
             ),
         )
 
@@ -2755,7 +2664,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(policy.memory_overcommit, 1.0)
         self.assertEqual(policy.disk_overcommit, 1.0)
 
-    def test_unspecified_cli_overcommit_preserves_configured_capacity(self) -> None:
+    def test_configured_sandbox_overcommit_is_ignored(self) -> None:
         configured = ScalePolicy(
             cpu_overcommit=2.0,
             memory_overcommit=1.2,
@@ -2772,7 +2681,10 @@ class CliTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(policy, configured)
+        self.assertEqual(policy.cpu_overcommit, 1.0)
+        self.assertEqual(policy.memory_overcommit, 1.0)
+        self.assertEqual(policy.disk_overcommit, 1.0)
+        self.assertTrue(policy.dynamic_active_admission_enabled)
 
     def test_policy_cli_live_feedback_overrides_are_runtime_tunable(self) -> None:
         policy = cli.policy_with_cli_overrides(
@@ -2951,7 +2863,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(reconciled[0].active_sandboxes, 1)
 
-    def test_fresh_movable_parked_inventory_is_not_active_compute(self) -> None:
+    def test_parked_inventory_keeps_its_node_owned(self) -> None:
         job = VmJob(
             id="job-1",
             project_id="project-1",
@@ -2967,12 +2879,15 @@ class CliTests(unittest.TestCase):
             job_id="job-1",
             updated_at=utc_now(),
             active_sandboxes=0,
-            capabilities=("disk-quota", "sandbox-migrate-v2"),
+            capabilities=("disk-quota",),
             inventory_complete=True,
             inventory=(
                 SandboxInventoryEntry(
                     sandbox_id="sandbox-1",
                     state="parked",
+                    generation=1,
+                    operation_id="00000000-0000-4000-8000-000000000001",
+                    spec_hash="a" * 64,
                 ),
             ),
             used_resources=ResourceQuantity(disk_mb=8192),
@@ -2996,11 +2911,11 @@ class CliTests(unittest.TestCase):
             {"job-1": (route,)},
         )
 
-        self.assertEqual(reconciled[0].active_sandboxes, 0)
-        self.assertTrue(reconciled[0].is_idle)
+        self.assertEqual(reconciled[0].active_sandboxes, 1)
+        self.assertFalse(reconciled[0].is_idle)
 
     @allow_fixture_mutations
-    def test_direct_runtime_drain_evacuates_parked_inventory(self) -> None:
+    def test_direct_runtime_drain_keeps_owned_parked_inventory(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             jobs_file = root / "jobs.json"
@@ -3047,7 +2962,7 @@ class CliTests(unittest.TestCase):
                                     },
                                 },
                                 "status": {"state": "RUNNING"},
-                            }
+                            },
                         ]
                     }
                 ),
@@ -3076,7 +2991,7 @@ class CliTests(unittest.TestCase):
                         idle_since=utc_now() - timedelta(minutes=10),
                         node_url=route.node_url,
                         agent_version=package_version(),
-                        capabilities=("disk-quota", "sandbox-migrate-v2"),
+                        capabilities=("disk-quota",),
                         total_resources=ResourceQuantity(
                             vcpu=2,
                             memory_mb=6144,
@@ -3089,6 +3004,9 @@ class CliTests(unittest.TestCase):
                                 sandbox_id=route.sandbox_id,
                                 state="parked",
                                 resources=route.resources,
+                                generation=1,
+                                operation_id=("00000000-0000-4000-8000-000000000001"),
+                                spec_hash="a" * 64,
                             ),
                         ),
                     ),
@@ -3096,12 +3014,11 @@ class CliTests(unittest.TestCase):
                         node_id="node-destination",
                         job_id="destination",
                         updated_at=utc_now(),
-                        # Keep this ready node out of the scale-down candidate
-                        # set while it remains a valid evacuation destination.
+                        # Keep this ready node out of the scale-down candidate set.
                         active_sandboxes=1,
                         node_url="http://node-destination:8090",
                         agent_version=package_version(),
-                        capabilities=("disk-quota", "sandbox-migrate-v2"),
+                        capabilities=("disk-quota",),
                         total_resources=ResourceQuantity(
                             vcpu=2,
                             memory_mb=6144,
@@ -3134,65 +3051,15 @@ class CliTests(unittest.TestCase):
                 pending_image_builds=0,
                 max_builder_nodes=0,
                 seed_prefix="test",
-                gateway_control_url="http://gateway.internal:8080",
-                gateway_control_bearer_token_file=root / "gateway-token",
                 init_heartbeat_url="",
-                max_migrations_per_cycle=2,
-            )
-            args.gateway_control_bearer_token_file.write_text(
-                "gateway-secret\n",
-                encoding="utf-8",
             )
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
-            migrations: list[tuple[str, str]] = []
-
-            def post_drain(
-                _url: str,
-                token: str,
-                *,
-                draining: bool = True,
-                bearer_token: str | None = None,
-            ) -> dict:
-                del bearer_token
-                return {
-                    "drain": {
-                        "token": token,
-                        "draining": draining,
-                        "admission_open": not draining,
-                    }
-                }
-
-            def post_migration(
-                gateway_url: str,
-                sandbox_id: str,
-                *,
-                bearer_token: str | None = None,
-            ) -> dict:
-                migrations.append((gateway_url, sandbox_id, bearer_token))
-                return {
-                    "migration": {
-                        "migration_id": "migration-1",
-                        "phase": "complete",
-                    }
-                }
 
             class UnusedUCloudClient:
                 def __init__(self, _session_store) -> None:
                     pass
 
-            with patch.object(
-                cli,
-                "_post_node_drain",
-                side_effect=post_drain,
-            ), patch.object(
-                cli,
-                "_post_gateway_sandbox_migration",
-                side_effect=post_migration,
-            ), patch.object(
-                cli,
-                "UCloudClient",
-                UnusedUCloudClient,
-            ):
+            with patch.object(cli, "UCloudClient", UnusedUCloudClient):
                 result = cli.run_reconcile_cycle(
                     config,
                     args,
@@ -3202,14 +3069,8 @@ class CliTests(unittest.TestCase):
                     route_reservations={"owned": (route,)},
                 )
 
-        self.assertEqual(
-            migrations,
-            [("http://gateway.internal:8080", "parked-one", "gateway-secret")],
-            result,
-        )
-        self.assertEqual(result["drainingJobIds"], ["owned"])
-        self.assertFalse(result["drainResults"][0]["heartbeatReady"])
-        self.assertTrue(result["evacuationResults"][0]["requestSucceeded"])
+        self.assertEqual(result["requestedStopJobIds"], [])
+        self.assertEqual(result["drainingJobIds"], [])
         self.assertEqual(result["drainReadyStopJobIds"], [])
 
     def test_last_direct_disk_owner_is_not_replaced_just_to_scale_down(self) -> None:
@@ -3226,7 +3087,7 @@ class CliTests(unittest.TestCase):
             job_id="owned",
             updated_at=utc_now(),
             active_sandboxes=0,
-            capabilities=("disk-quota", "sandbox-migrate-v2"),
+            capabilities=("disk-quota",),
             total_resources=ResourceQuantity(disk_mb=51200),
             used_resources=route.resources,
             inventory_complete=True,
@@ -3235,6 +3096,9 @@ class CliTests(unittest.TestCase):
                     sandbox_id=route.sandbox_id,
                     state="parked",
                     resources=route.resources,
+                    generation=1,
+                    operation_id="00000000-0000-4000-8000-000000000001",
+                    spec_hash="a" * 64,
                 ),
             ),
         )
@@ -3254,7 +3118,7 @@ class CliTests(unittest.TestCase):
             heartbeat_fresh=True,
         )
 
-        allowed, blocked = cli.partition_evacuatable_direct_stop_job_ids(
+        allowed, blocked = cli.partition_storage_native_migratable_stop_job_ids(
             [owner],
             ("owned",),
             {"owned": (route,)},
@@ -3467,13 +3331,35 @@ class CliTests(unittest.TestCase):
             )
             return FakeInitResult()
 
+        def fake_stage_package(
+            _ssh_command: str,
+            options,
+            **_kwargs,
+        ) -> VmInitPackageStageResult:
+            local_path = Path(options.package_spec)
+            return VmInitPackageStageResult(
+                local_path=local_path,
+                remote_path=f"/tmp/staged/{local_path.name}",
+                command=("scp", str(local_path)),
+                returncode=0,
+                package_sha256="a" * 64,
+            )
+
         original = cli.run_init_over_ssh
+        original_stage = cli.stage_vm_init_package_over_ssh
         cli.run_init_over_ssh = fake_run_init_over_ssh
+        cli.stage_vm_init_package_over_ssh = fake_stage_package
         try:
             with TemporaryDirectory() as raw_dir:
                 root = Path(raw_dir)
                 token_source = root / "gateway-token"
                 token_source.write_text("SECRET", encoding="utf-8")
+                node_token_source = root / "node-token"
+                node_token_source.write_text("NODESECRET", encoding="utf-8")
+                sandbox_bundle = root / "sandbox.tar.gz"
+                sandbox_bundle.write_bytes(b"sandbox-bundle")
+                builder_bundle = root / "builder.tar.gz"
+                builder_bundle.write_bytes(b"builder-bundle")
                 state_file = root / "bootstrap.json"
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text(
@@ -3539,12 +3425,16 @@ class CliTests(unittest.TestCase):
                             "/work/ucloud-sandboxes/state/gateway-token",
                             "--init-heartbeat-bearer-token-source-file",
                             str(token_source),
+                            "--init-node-control-bearer-token-file",
+                            "/work/ucloud-sandboxes/state/node-token",
+                            "--init-node-control-bearer-token-source-file",
+                            str(node_token_source),
                             "--init-ssh-private-key-file",
                             "/work/ucloud-sandboxes/state/ssh/gateway-init",
                             "--init-package-spec",
-                            "/release/sandbox.tar.gz",
+                            str(sandbox_bundle),
                             "--init-builder-package-spec",
-                            "/release/builder.tar.gz",
+                            str(builder_bundle),
                             "--init-cpu-overcommit",
                             "2",
                             "--init-memory-overcommit",
@@ -3561,6 +3451,7 @@ class CliTests(unittest.TestCase):
                 state = json.loads(state_file.read_text(encoding="utf-8"))
         finally:
             cli.run_init_over_ssh = original
+            cli.stage_vm_init_package_over_ssh = original_stage
 
         self.assertEqual(result, 0)
         self.assertEqual(len(calls), 1)
@@ -3585,10 +3476,11 @@ class CliTests(unittest.TestCase):
         self.assertIn("UCLOUD_DISK_OVERCOMMIT=1.0", calls[0]["script"])
         self.assertIn("UCLOUD_HEARTBEAT_BEARER_TOKEN=SECRET", calls[0]["script"])
         self.assertIn(
-            "UCLOUD_PACKAGE_SPEC=/release/builder.tar.gz",
+            "UCLOUD_PACKAGE_SPEC=/tmp/staged/builder.tar.gz",
             calls[0]["script"],
         )
-        self.assertIn("--enable-image-builds --execute-runtime", calls[0]["script"])
+        self.assertIn("serve-builder-agent", calls[0]["script"])
+        self.assertNotIn("--execute-runtime", calls[0]["script"])
         self.assertEqual(payload["bootstrapResults"][0]["status"], "succeeded")
         self.assertEqual(state["jobs"]["job-1"]["status"], "succeeded")
         self.assertEqual(state["jobs"]["job-1"]["attempts"], 1)
@@ -3629,6 +3521,20 @@ class CliTests(unittest.TestCase):
                 with active_lock:
                     active -= 1
 
+        def fake_stage_package(
+            _ssh_command: str,
+            options,
+            **_kwargs,
+        ) -> VmInitPackageStageResult:
+            local_path = Path(options.package_spec)
+            return VmInitPackageStageResult(
+                local_path=local_path,
+                remote_path=f"/tmp/staged/{local_path.name}",
+                command=("scp", str(local_path)),
+                returncode=0,
+                package_sha256="b" * 64,
+            )
+
         def raw_job(index: int) -> dict:
             return {
                 "id": f"job-{index}",
@@ -3658,10 +3564,18 @@ class CliTests(unittest.TestCase):
             }
 
         original = cli.run_init_over_ssh
+        original_stage = cli.stage_vm_init_package_over_ssh
         cli.run_init_over_ssh = fake_run_init_over_ssh
+        cli.stage_vm_init_package_over_ssh = fake_stage_package
         try:
             with TemporaryDirectory() as raw_dir:
                 root = Path(raw_dir)
+                heartbeat_token = root / "heartbeat-token"
+                heartbeat_token.write_text("HEARTBEAT", encoding="utf-8")
+                node_token = root / "node-token"
+                node_token.write_text("NODE", encoding="utf-8")
+                bundle = root / "sandbox.tar.gz"
+                bundle.write_bytes(b"sandbox-bundle")
                 state_file = root / "bootstrap.json"
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text(
@@ -3691,6 +3605,22 @@ class CliTests(unittest.TestCase):
                             "--once",
                             "--init-heartbeat-url",
                             "http://sandbox-gateway:8090/v1/nodes/heartbeat",
+                            "--init-heartbeat-bearer-token-file",
+                            "/work/ucloud-sandboxes/state/heartbeat-token",
+                            "--init-heartbeat-bearer-token-source-file",
+                            str(heartbeat_token),
+                            "--init-node-control-bearer-token-file",
+                            "/work/ucloud-sandboxes/state/node-token",
+                            "--init-node-control-bearer-token-source-file",
+                            str(node_token),
+                            "--init-package-spec",
+                            str(bundle),
+                            "--init-builder-package-spec",
+                            str(bundle),
+                            "--init-direct-runsc-commit",
+                            "9f653e577965df2ddd13875b5530cd2588661f1c",
+                            "--init-storage-native-registry-url",
+                            "http://registry.internal:5000",
                             "--output",
                             "json",
                         ]
@@ -3703,6 +3633,7 @@ class CliTests(unittest.TestCase):
                 ]
         finally:
             cli.run_init_over_ssh = original
+            cli.stage_vm_init_package_over_ssh = original_stage
 
         self.assertEqual(result, 0)
         self.assertEqual(peak_active, 3)
@@ -3767,7 +3698,6 @@ class CliTests(unittest.TestCase):
                 enable_image_builds=True,
                 buildx_direct_push=True,
                 buildx_cache_ref="gateway:5000/cache/buildkit",
-                runtime_dry_run=False,
                 heartbeat_interval_seconds=20,
                 label=[],
             ),
@@ -4358,6 +4288,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(rising["definitelyTerminatedJobIds"], [])
         self.assertEqual(acknowledged["cancelingDrainJobIds"], [])
         self.assertEqual(acknowledged["canceledDrainJobIds"], ["owned"])
+        self.assertEqual(acknowledged["drainingJobIds"], [])
         self.assertEqual(terminate_calls, [])
         self.assertEqual(
             [draining for _token, draining in drain_actions],
@@ -4650,179 +4581,6 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result["prunedFinalHeartbeats"], ["finished-node"])
         self.assertIn("finished-node", remaining_heartbeats)
-
-    def test_runtime_conformance_json_failure_returns_nonzero(self) -> None:
-        original = cli.DockerRuntimeProbe
-        cli.DockerRuntimeProbe = FailingProbe
-        try:
-            with redirect_stdout(io.StringIO()):
-                result = cli.cmd_runtime_conformance(
-                    argparse.Namespace(
-                        docker_binary="docker",
-                        runtime_name="runsc",
-                        image="busybox",
-                        sudo=False,
-                        execute=True,
-                        output="json",
-                    )
-                )
-        finally:
-            cli.DockerRuntimeProbe = original
-
-        self.assertEqual(result, 1)
-
-    def test_async_node_agent_enables_fork_only_from_conformance(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            conformance_file = root / "runtime-conformance.json"
-            conformance_file.write_text(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "results": [
-                            {"name": "storage-opt-quota-enforced", "ok": True},
-                            {"name": "tmpfs-quota-enforced", "ok": True},
-                            {
-                                "name": "gvisor-live-fork-v1",
-                                "ok": True,
-                                "runtime_fingerprint": "a" * 64,
-                            },
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            args = cli.build_parser().parse_args(
-                [
-                    "serve-async-node-agent",
-                    "--sandbox-file",
-                    str(root / "sandboxes.json"),
-                    "--image-file",
-                    str(root / "images.json"),
-                    "--runtime-conformance-file",
-                    str(conformance_file),
-                    "--checkpoint-helper",
-                    "/test/checkpoint-helper",
-                    "--checkpoint-root",
-                    str(root / "checkpoints"),
-                ]
-            )
-            captured: dict = {}
-
-            def fake_create_async_node_agent_app(*_args, **kwargs):
-                captured.update(kwargs)
-                return object()
-
-            with (
-                patch.object(
-                    cli,
-                    "create_async_node_agent_app",
-                    side_effect=fake_create_async_node_agent_app,
-                ),
-                patch.object(
-                    cli.DockerRuntimeProbe,
-                    "live_fork_runtime_fingerprint",
-                    return_value="a" * 64,
-                ),
-                patch("aiohttp.web.run_app"),
-                redirect_stdout(io.StringIO()),
-            ):
-                result = cli.cmd_serve_async_node_agent(args)
-
-        self.assertEqual(result, 0)
-        runtime = captured["runtime"]
-        self.assertTrue(runtime.fork_enabled)
-        self.assertEqual(runtime.checkpoint_root, root / "checkpoints")
-        self.assertEqual(runtime.checkpoint_helper, "/test/checkpoint-helper")
-
-    def test_serve_node_agent_enables_tmpfs_workspace_from_conformance(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            conformance_file = root / "runtime-conformance.json"
-            conformance_file.write_text(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "results": [
-                            {"name": "storage-opt-quota-enforced", "ok": True},
-                            {"name": "tmpfs-quota-enforced", "ok": True},
-                            {
-                                "name": "gvisor-live-fork-v1",
-                                "ok": True,
-                                "runtime_fingerprint": "a" * 64,
-                            },
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            captured: dict = {}
-
-            class FakeServer:
-                server_address = ("127.0.0.1", 0)
-
-                def serve_forever(self) -> None:
-                    return None
-
-                def server_close(self) -> None:
-                    return None
-
-            def fake_build_node_agent_server(*_args, **kwargs):
-                captured.update(kwargs)
-                return FakeServer()
-
-            original = cli.build_node_agent_server
-            cli.build_node_agent_server = fake_build_node_agent_server
-            try:
-                with (
-                    patch.object(
-                        cli.DockerRuntimeProbe,
-                        "live_fork_runtime_fingerprint",
-                        return_value="a" * 64,
-                    ),
-                    redirect_stdout(io.StringIO()),
-                ):
-                    cli.cmd_serve_node_agent(
-                        argparse.Namespace(
-                            config=None,
-                            session_file=None,
-                            deployment_id=None,
-                            state_dir=raw_dir,
-                            sandbox_file=root / "sandboxes.json",
-                            image_file=root / "images.json",
-                            job_id="job-1",
-                            node_id="node-1",
-                            runtime_conformance_file=conformance_file,
-                            checkpoint_helper="/test/checkpoint-helper",
-                            checkpoint_root=root / "checkpoints",
-                            docker_binary="docker",
-                            runtime_name="runsc",
-                            execute_runtime=True,
-                            host="127.0.0.1",
-                            port=0,
-                            node_url="http://node-1:8090",
-                            agent_version="0.1.0",
-                            init_version="2",
-                            total_vcpu=2.0,
-                            total_memory_mb=4096,
-                            total_disk_mb=10_000,
-                            cpu_overcommit=1.0,
-                            memory_overcommit=1.0,
-                            disk_overcommit=1.0,
-                            ssh_port_start=22000,
-                            ssh_port_end=22999,
-                            enable_image_builds=True,
-                        )
-                    )
-            finally:
-                cli.build_node_agent_server = original
-
-        runtime = captured["runtime"]
-        self.assertTrue(runtime.allow_storage_opt_quota)
-        self.assertTrue(runtime.allow_tmpfs_workspace)
-        self.assertTrue(runtime.fork_enabled)
-        self.assertEqual(runtime.checkpoint_root, root / "checkpoints")
-        self.assertEqual(runtime.checkpoint_helper, "/test/checkpoint-helper")
 
 
 if __name__ == "__main__":

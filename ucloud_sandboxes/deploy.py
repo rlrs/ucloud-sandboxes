@@ -66,7 +66,7 @@ def storage_native_build_artifacts(
         payload = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError("invalid storage-native build manifest JSON") from exc
-    if not isinstance(payload, dict) or payload.get("schema") != 2:
+    if not isinstance(payload, dict) or payload.get("schema") != 3:
         raise ValueError("unsupported storage-native build manifest")
     artifact_name = str(payload.get("artifact") or "")
     if (
@@ -86,6 +86,7 @@ def storage_native_build_artifacts(
     expected_patches = (
         "agentenv-streaming-dense-export.patch",
         "agentenv-pooled-delete.patch",
+        "agentenv-owner-identity.patch",
     )
     patches_valid = (
         isinstance(patches, list)
@@ -98,8 +99,7 @@ def storage_native_build_artifacts(
         )
     )
     if (
-        payload.get("agentenv_commit")
-        != PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
+        payload.get("agentenv_commit") != PINNED_STORAGE_NATIVE_AGENTENV_COMMIT
         or payload.get("cargo_package") != "uvm-ublk-daemon"
         or payload.get("license") != "MIT"
         or payload.get("host_architecture") not in {"x86_64", "aarch64"}
@@ -123,18 +123,13 @@ class AllInOneDeployPlan:
     project_id: str
     deployment_id: str
     local_wheel: Path
-    sandbox_runtime: str = "legacy"
     local_direct_runsc: Path | None = None
     local_managed_init: Path | None = None
     direct_runsc_commit: str = ""
     local_storage_native_manifest: Path | None = None
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
-    storage_native_pool_low_watermark: int = (
-        DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
-    )
-    storage_native_pool_high_watermark: int = (
-        DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
-    )
+    storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
+    storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
@@ -177,18 +172,6 @@ class AllInOneDeployPlan:
     @property
     def state_dir(self) -> str:
         return str(PurePosixPath(self.project_mount_dir) / "ucloud-sandboxes" / "state")
-
-    @property
-    def legacy_state_dir(self) -> str:
-        return str(PurePosixPath(self.install_root) / "state")
-
-    @property
-    def legacy_state_backup_dir(self) -> str:
-        return str(PurePosixPath(self.install_root) / "state.pre-persistent-v1")
-
-    @property
-    def persistent_state_marker_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / ".persistent-state-v1")
 
     @property
     def release_dir(self) -> str:
@@ -336,9 +319,7 @@ class AllInOneDeployPlan:
 
     @property
     def direct_network_relay_endpoint(self) -> str:
-        gateway_private_endpoint = (
-            self.registry_private_ip or self.gateway_private_host
-        )
+        gateway_private_endpoint = self.registry_private_ip or self.gateway_private_host
         return f"{gateway_private_endpoint}:{self.relay_port}"
 
     def validate(self) -> None:
@@ -366,56 +347,41 @@ class AllInOneDeployPlan:
         _reject_bad_text("registry private IP", self.registry_private_ip)
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
-        if self.sandbox_runtime not in {"legacy", "direct"}:
-            raise ValueError("sandbox runtime must be either legacy or direct.")
-        if self.sandbox_runtime == "direct":
-            if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
-                raise ValueError(
-                    "direct sandbox runtime requires a local patched runsc binary."
-                )
-            if not re.fullmatch(r"[0-9a-f]{40}", self.direct_runsc_commit):
-                raise ValueError(
-                    "direct sandbox runtime requires an exact 40-character "
-                    "gVisor commit."
-                )
-            if self.local_managed_init is None or not self.local_managed_init.is_file():
-                raise ValueError(
-                    "direct sandbox runtime requires a local managed-process init binary."
-                )
-            if self.local_storage_native_manifest is None:
-                raise ValueError(
-                    "direct sandbox runtime requires a pinned storage-native "
-                    "backend build manifest."
-                )
-            storage_native_build_artifacts(self.local_storage_native_manifest)
-            if self.storage_native_cache_gb < 1:
-                raise ValueError("storage-native cache size must be positive.")
-            if self.storage_native_pool_low_watermark < 0:
-                raise ValueError(
-                    "storage-native pool low watermark cannot be negative."
-                )
-            if self.storage_native_pool_high_watermark < 1:
-                raise ValueError(
-                    "storage-native pool high watermark must be positive."
-                )
-            if (
-                self.storage_native_pool_low_watermark
-                > self.storage_native_pool_high_watermark
-            ):
-                raise ValueError(
-                    "storage-native pool low watermark cannot exceed high watermark."
-                )
-            if not re.fullmatch(
-                r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
-                self.storage_native_repository,
-            ):
-                raise ValueError("invalid storage-native repository.")
-            if self.direct_disk_headroom_mb < 1:
-                raise ValueError("direct disk headroom must be positive.")
-            if self.direct_max_concurrent_restores < 1:
-                raise ValueError("direct max concurrent restores must be positive.")
-            if self.max_concurrent_image_pulls < 1:
-                raise ValueError("max concurrent image pulls must be positive.")
+        if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
+            raise ValueError("deployment requires a local patched runsc binary.")
+        if not re.fullmatch(r"[0-9a-f]{40}", self.direct_runsc_commit):
+            raise ValueError("deployment requires an exact 40-character gVisor commit.")
+        if self.local_managed_init is None or not self.local_managed_init.is_file():
+            raise ValueError("deployment requires a local managed-process init binary.")
+        if self.local_storage_native_manifest is None:
+            raise ValueError(
+                "deployment requires a pinned storage-native backend build manifest."
+            )
+        storage_native_build_artifacts(self.local_storage_native_manifest)
+        if self.storage_native_cache_gb < 1:
+            raise ValueError("storage-native cache size must be positive.")
+        if self.storage_native_pool_low_watermark < 0:
+            raise ValueError("storage-native pool low watermark cannot be negative.")
+        if self.storage_native_pool_high_watermark < 1:
+            raise ValueError("storage-native pool high watermark must be positive.")
+        if (
+            self.storage_native_pool_low_watermark
+            > self.storage_native_pool_high_watermark
+        ):
+            raise ValueError(
+                "storage-native pool low watermark cannot exceed high watermark."
+            )
+        if not re.fullmatch(
+            r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
+            self.storage_native_repository,
+        ):
+            raise ValueError("invalid storage-native repository.")
+        if self.direct_disk_headroom_mb < 1:
+            raise ValueError("direct disk headroom must be positive.")
+        if self.direct_max_concurrent_restores < 1:
+            raise ValueError("direct max concurrent restores must be positive.")
+        if self.max_concurrent_image_pulls < 1:
+            raise ValueError("max concurrent image pulls must be positive.")
         for label, value in {
             "gateway port": self.gateway_port,
             "relay port": self.relay_port,
@@ -440,18 +406,17 @@ class AllInOneDeployPlan:
                 "sandbox disk must leave at least 32 GB outside the Docker quota "
                 "image and swap file."
             )
-        if self.sandbox_runtime == "direct":
-            reserved_mb = (
-                self.docker_quota_image_gb * 1024
-                + self.swap_gb * 1024
-                + self.storage_native_cache_gb * 1024
-                + self.direct_disk_headroom_mb
+        reserved_mb = (
+            self.docker_quota_image_gb * 1024
+            + self.swap_gb * 1024
+            + self.storage_native_cache_gb * 1024
+            + self.direct_disk_headroom_mb
+        )
+        if self.sandbox_disk_gb * 1024 <= reserved_mb:
+            raise ValueError(
+                "sandbox disk must exceed the bounded Docker image, swap, "
+                "storage cache, and safety headroom."
             )
-            if self.sandbox_disk_gb * 1024 <= reserved_mb:
-                raise ValueError(
-                    "direct sandbox disk must exceed the bounded Docker image, "
-                    "swap, storage cache, and safety headroom."
-                )
         if self.builder_disk_gb < self.builder_docker_quota_image_gb + 32:
             raise ValueError(
                 "builder disk must leave at least 32 GB outside the Docker quota image."
@@ -474,40 +439,27 @@ class AllInOneDeployPlan:
             "packageVersion": self.package_version,
             "localWheel": str(self.local_wheel),
             "remoteWheelPath": self.remote_wheel_path,
-            "sandboxRuntime": self.sandbox_runtime,
             "localDirectRunsc": (
                 str(self.local_direct_runsc)
                 if self.local_direct_runsc is not None
                 else None
             ),
-            "remoteDirectRunscPath": (
-                self.remote_direct_runsc_path
-                if self.sandbox_runtime == "direct"
-                else None
-            ),
+            "remoteDirectRunscPath": self.remote_direct_runsc_path,
             "directRunscCommit": self.direct_runsc_commit,
             "localManagedInit": (
                 str(self.local_managed_init)
                 if self.local_managed_init is not None
                 else None
             ),
-            "remoteManagedInitPath": (
-                self.remote_managed_init_path
-                if self.sandbox_runtime == "direct"
-                else None
-            ),
+            "remoteManagedInitPath": self.remote_managed_init_path,
             "localStorageNativeManifest": (
                 str(self.local_storage_native_manifest)
                 if self.local_storage_native_manifest is not None
                 else None
             ),
             "storageNativeCacheGb": self.storage_native_cache_gb,
-            "storageNativePoolLowWatermark": (
-                self.storage_native_pool_low_watermark
-            ),
-            "storageNativePoolHighWatermark": (
-                self.storage_native_pool_high_watermark
-            ),
+            "storageNativePoolLowWatermark": (self.storage_native_pool_low_watermark),
+            "storageNativePoolHighWatermark": (self.storage_native_pool_high_watermark),
             "storageNativeRepository": self.storage_native_repository,
             "storageNativeRegistryUrl": self.storage_native_registry_url,
             "directDiskHeadroomMb": self.direct_disk_headroom_mb,
@@ -516,9 +468,6 @@ class AllInOneDeployPlan:
             "nodePackageBundlePath": self.node_package_bundle_path,
             "installRoot": self.install_root,
             "stateDir": self.state_dir,
-            "legacyStateDir": self.legacy_state_dir,
-            "legacyStateBackupDir": self.legacy_state_backup_dir,
-            "persistentStateMarkerFile": self.persistent_state_marker_file,
             "projectMountDir": self.project_mount_dir,
             "registryDataDir": self.registry_data_dir,
             "gatewayPort": self.gateway_port,
@@ -568,7 +517,6 @@ class AllInOneDeployPlan:
                     self.storage_native_pool_high_watermark
                 ),
                 "storageNativeRepository": self.storage_native_repository,
-                "nodeRuntime": self.sandbox_runtime,
             },
         }
 
@@ -675,32 +623,17 @@ def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
         "UCLOUD_INIT_CPU_OVERCOMMIT": f"{plan.cpu_overcommit:g}",
         "UCLOUD_INIT_MEMORY_OVERCOMMIT": f"{plan.memory_overcommit:g}",
         "UCLOUD_INIT_DISK_OVERCOMMIT": f"{plan.disk_overcommit:g}",
-        "UCLOUD_INIT_NODE_RUNTIME": plan.sandbox_runtime,
-        "UCLOUD_INIT_DIRECT_RUNSC_COMMIT": plan.direct_runsc_commit or ("0" * 40),
-        "UCLOUD_INIT_DIRECT_NETWORK": (
-            "sandbox" if plan.sandbox_runtime == "direct" else "none"
-        ),
-        "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP": (
-            plan.direct_network_relay_endpoint
-        ),
-        "UCLOUD_INIT_DIRECT_DISK_HEADROOM_MB": str(
-            plan.direct_disk_headroom_mb
-        ),
+        "UCLOUD_INIT_DIRECT_RUNSC_COMMIT": plan.direct_runsc_commit,
+        "UCLOUD_INIT_DIRECT_NETWORK": "sandbox",
+        "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP": (plan.direct_network_relay_endpoint),
+        "UCLOUD_INIT_DIRECT_DISK_HEADROOM_MB": str(plan.direct_disk_headroom_mb),
         "UCLOUD_INIT_DIRECT_MAX_CONCURRENT_RESTORES": str(
             plan.direct_max_concurrent_restores
         ),
-        "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS": str(
-            plan.max_concurrent_image_pulls
-        ),
-        "UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL": (
-            plan.storage_native_registry_url
-        ),
-        "UCLOUD_INIT_STORAGE_NATIVE_REPOSITORY": (
-            plan.storage_native_repository
-        ),
-        "UCLOUD_INIT_STORAGE_NATIVE_CACHE_GB": str(
-            plan.storage_native_cache_gb
-        ),
+        "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS": str(plan.max_concurrent_image_pulls),
+        "UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL": (plan.storage_native_registry_url),
+        "UCLOUD_INIT_STORAGE_NATIVE_REPOSITORY": (plan.storage_native_repository),
+        "UCLOUD_INIT_STORAGE_NATIVE_CACHE_GB": str(plan.storage_native_cache_gb),
         "UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK": str(
             plan.storage_native_pool_low_watermark
         ),
@@ -768,7 +701,7 @@ def render_remote_deploy_script(
             "",
         )
     )
-    sandbox_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
+    node_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
     script_parts = [
@@ -777,16 +710,13 @@ def render_remote_deploy_script(
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"STATE_DIR={shlex.quote(plan.state_dir)}",
-        f"LEGACY_STATE_DIR={shlex.quote(plan.legacy_state_dir)}",
-        f"LEGACY_STATE_BACKUP_DIR={shlex.quote(plan.legacy_state_backup_dir)}",
-        f"PERSISTENT_STATE_MARKER={shlex.quote(plan.persistent_state_marker_file)}",
         f"REGISTRY_USAGE_FILE={shlex.quote(plan.registry_usage_file)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
-        f"DIRECT_RUNSC={shlex.quote(plan.remote_direct_runsc_path if plan.sandbox_runtime == 'direct' else '')}",
+        f"DIRECT_RUNSC={shlex.quote(plan.remote_direct_runsc_path)}",
         f"DIRECT_RUNSC_COMMIT={shlex.quote(plan.direct_runsc_commit)}",
-        f"MANAGED_INIT={shlex.quote(plan.remote_managed_init_path if plan.sandbox_runtime == 'direct' else '')}",
+        f"MANAGED_INIT={shlex.quote(plan.remote_managed_init_path)}",
         f"STORAGE_NATIVE_BACKEND={shlex.quote(plan.remote_storage_native_backend_path if storage_artifacts is not None else '')}",
         f"STORAGE_NATIVE_MANIFEST={shlex.quote(plan.remote_storage_native_manifest_path if storage_artifacts is not None else '')}",
         f"STORAGE_NATIVE_LICENSE={shlex.quote(plan.remote_storage_native_license_path if storage_artifacts is not None else '')}",
@@ -803,12 +733,8 @@ def render_remote_deploy_script(
         '  echo "Persistent project drive is not mounted at $PROJECT_MOUNT_DIR" >&2',
         "  exit 1",
         "fi",
-        'if [ ! -f "$PERSISTENT_STATE_MARKER" ] && [ -d "$STATE_DIR" ] && find "$STATE_DIR" -mindepth 1 -print -quit | grep -q .; then',
-        '  echo "Persistent state exists without its migration marker: $STATE_DIR" >&2',
-        "  exit 1",
-        "fi",
-        'if [ ! -s "$STAGED_SESSION_FILE" ] && [ ! -s "$SESSION_FILE" ] && [ ! -s "$LEGACY_STATE_DIR/ucloud-session.json" ]; then',
-        '  echo "No staged, persistent, or legacy UCloud session is available" >&2',
+        'if [ ! -s "$STAGED_SESSION_FILE" ] && [ ! -s "$SESSION_FILE" ]; then',
+        '  echo "No staged or persistent UCloud session is available" >&2',
         "  exit 1",
         "fi",
         'sudo install -d -m 0755 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$INSTALL_ROOT"',
@@ -823,7 +749,7 @@ def render_remote_deploy_script(
         "fi",
         "sudo apt-get update",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-        "binutils ca-certificates curl docker.io gnupg openssh-client openssl "
+        "ca-certificates curl docker.io openssh-client openssl "
         'python3-venv "linux-modules-extra-$(uname -r)"',
         "",
         'if [ ! -x "$VENV_DIR/bin/python" ]; then',
@@ -833,9 +759,6 @@ def render_remote_deploy_script(
         '"$VENV_DIR/bin/pip" install --upgrade pip',
         'NODE_PACKAGE_WORK="$(mktemp -d)"',
         "trap 'rm -rf \"$NODE_PACKAGE_WORK\"' EXIT",
-        'mkdir -p "$NODE_PACKAGE_WORK/wheels"',
-        '"$VENV_DIR/bin/pip" download --disable-pip-version-check '
-        '--only-binary=:all: --dest "$NODE_PACKAGE_WORK/wheels" "$REMOTE_WHEEL"',
         'NODE_AGENT_RUNTIME_DIR="$NODE_PACKAGE_WORK/node-agent-runtime"',
         'NODE_AGENT_RUNTIME_ARCHIVE="$NODE_PACKAGE_WORK/node-agent-runtime.tar"',
         'mkdir -p "$NODE_AGENT_RUNTIME_DIR/site-packages"',
@@ -850,8 +773,6 @@ def render_remote_deploy_script(
         'RUNTIME_KERNEL_RELEASE="$(uname -r)"',
         'RUNTIME_KERNEL_MODULE_DIR="$NODE_PACKAGE_WORK/kernel-modules/$RUNTIME_KERNEL_RELEASE"',
         f"RUNTIME_KERNEL_MODULES={shlex.quote(runtime_kernel_modules)}",
-        "RUNTIME_BUNDLE_READY=0",
-        "BUILDER_RUNTIME_BUNDLE_READY=0",
         "download_runtime_packages() {",
         '  runtime_name="$1"',
         "  shift",
@@ -864,30 +785,6 @@ def render_remote_deploy_script(
         '-o Dir::State::status="$status_file" '
         '-o Dir::Cache::archives="$archive_dir" install "$@" || return 1',
         "  find \"$archive_dir\" -maxdepth 1 -type f -name '*.deb' -print -quit | grep -q .",
-        "}",
-        "prune_runsc_package() {",
-        '  archive_dir="$1/debs"',
-        '  runsc_package=""',
-        '  for package_file in "$archive_dir"/*.deb; do',
-        '    if [ "$(dpkg-deb -f "$package_file" Package)" = runsc ]; then',
-        '      runsc_package="$package_file"',
-        "      break",
-        "    fi",
-        "  done",
-        '  [ -n "$runsc_package" ] || return 1',
-        '  unpack_dir="$1/runsc-pruned"',
-        '  rm -rf "$unpack_dir"',
-        '  dpkg-deb --raw-extract "$runsc_package" "$unpack_dir" || return 1',
-        '  rm -f "$unpack_dir/usr/bin/containerd-shim-runsc-v1"',
-        '  rm -f "$unpack_dir/usr/bin/runsc-metric-server"',
-        '  strip --strip-debug "$unpack_dir/usr/bin/runsc" || return 1',
-        '  "$unpack_dir/usr/bin/runsc" --version >/dev/null || return 1',
-        '  rm -f "$unpack_dir/DEBIAN/md5sums"',
-        '  replacement="$runsc_package.pruned"',
-        "  SOURCE_DATE_EPOCH=0 dpkg-deb --build --root-owner-group -Zgzip -z1 "
-        '"$unpack_dir" "$replacement" >/dev/null || return 1',
-        '  mv "$replacement" "$runsc_package"',
-        '  rm -rf "$unpack_dir"',
         "}",
         "collect_runtime_kernel_modules() {",
         '  rm -rf "$RUNTIME_KERNEL_MODULE_DIR"',
@@ -909,7 +806,7 @@ def render_remote_deploy_script(
         "}",
         "build_runtime_bundle() {",
         '  if [ "$RUNTIME_OS_ID" != ubuntu ] || [ -z "$RUNTIME_CODENAME" ]; then',
-        '    echo "Offline runtime bundle is supported only for Ubuntu; nodes will use repository fallback" >&2',
+        '    echo "Verified runtime bundles require Ubuntu" >&2',
         "    return 1",
         "  fi",
         "  sudo install -m 0755 -d /etc/apt/keyrings || return 1",
@@ -926,69 +823,26 @@ def render_remote_deploy_script(
         "Signed-By: /etc/apt/keyrings/docker.asc",
         "DOCKER_SOURCES",
         "  [ -s /etc/apt/sources.list.d/docker.sources ] || return 1",
-        "  if [ ! -s /usr/share/keyrings/gvisor-archive-keyring.gpg ]; then",
-        "    curl -fsSL https://gvisor.dev/archive.key | sudo gpg --dearmor --yes -o /usr/share/keyrings/gvisor-archive-keyring.gpg || return 1",
-        "  fi",
-        '  echo "deb [arch=$RUNTIME_ARCHITECTURE signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | sudo tee /etc/apt/sources.list.d/gvisor.list >/dev/null || return 1',
         "  sudo apt-get update || return 1",
         "  collect_runtime_kernel_modules || return 1",
-        f"  download_runtime_packages runtime {sandbox_runtime_packages} || return 1",
-        '  prune_runsc_package "$NODE_PACKAGE_WORK/runtime" || return 1',
+        f"  download_runtime_packages runtime {node_runtime_packages} || return 1",
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
-        "if build_runtime_bundle; then",
-        "  RUNTIME_BUNDLE_READY=1",
-        "else",
-        '  echo "WARNING: could not build offline Docker/gVisor bundle; cold nodes will use repository fallback" >&2',
-        '  rm -rf "$NODE_PACKAGE_WORK/runtime"',
-        "fi",
-        'if [ -n "$DIRECT_RUNSC" ] && [ "$RUNTIME_BUNDLE_READY" -ne 1 ]; then',
-        '  echo "Direct runtime deployment requires a complete offline node bundle" >&2',
-        "  exit 1",
-        "fi",
-        "build_probe_image_bundle() {",
-        '  probe_dir="$NODE_PACKAGE_WORK/runtime/images"',
-        '  mkdir -p "$probe_dir"',
-        "  sudo systemctl start docker || return 1",
-        "  sudo docker pull busybox || return 1",
-        "  probe_architecture=\"$(sudo docker image inspect --format '{{.Architecture}}' busybox)\"",
-        '  [ "$probe_architecture" = "$RUNTIME_ARCHITECTURE" ] || return 1',
-        '  sudo docker image inspect busybox > "$probe_dir/runtime-conformance-busybox.inspect.json" || return 1',
-        '  sudo docker save --output "$probe_dir/runtime-conformance-busybox.tar" busybox || return 1',
-        '  sudo chmod a+r "$probe_dir/runtime-conformance-busybox.tar" || return 1',
-        "}",
-        'if [ "$RUNTIME_BUNDLE_READY" -eq 1 ] && ! build_probe_image_bundle; then',
-        '  echo "WARNING: could not bundle the busybox conformance image; cold nodes may pull it" >&2',
-        '  rm -rf "$NODE_PACKAGE_WORK/runtime/images"',
-        "fi",
-        'if [ "$RUNTIME_BUNDLE_READY" -eq 1 ]; then',
-        '  cp -a "$NODE_PACKAGE_WORK/runtime" "$NODE_PACKAGE_WORK/runtime-builder"',
-        "  if download_runtime_packages runtime-builder docker-buildx-plugin; then",
-        '    sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime-builder"',
-        "    BUILDER_RUNTIME_BUNDLE_READY=1",
-        "  else",
-        '    echo "WARNING: could not add Buildx to builder bundle; cold builders will use repository fallback" >&2',
-        '    rm -rf "$NODE_PACKAGE_WORK/runtime-builder"',
-        "  fi",
-        "fi",
-        'if [ -n "$STORAGE_NATIVE_BACKEND" ] && [ "$RUNTIME_BUNDLE_READY" -ne 1 ]; then',
-        '  echo "Direct storage-native nodes require a complete offline runtime bundle" >&2',
-        "  exit 1",
-        "fi",
+        "build_runtime_bundle",
+        'cp -a "$NODE_PACKAGE_WORK/runtime" "$NODE_PACKAGE_WORK/runtime-builder"',
+        "download_runtime_packages runtime-builder docker-buildx-plugin",
+        'sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime-builder"',
         "for BUNDLE_ROLE in sandbox builder; do",
         '  if [ "$BUNDLE_ROLE" = builder ]; then',
         '    BUNDLE_TARGET="$BUILDER_NODE_PACKAGE_BUNDLE"',
         '    BUNDLE_RUNTIME_DIR="$NODE_PACKAGE_WORK/runtime-builder"',
-        '    BUNDLE_RUNTIME_READY="$BUILDER_RUNTIME_BUNDLE_READY"',
         f"    BUNDLE_PACKAGES={shlex.quote(builder_runtime_packages)}",
         "  else",
         '    BUNDLE_TARGET="$SANDBOX_NODE_PACKAGE_BUNDLE"',
         '    BUNDLE_RUNTIME_DIR="$NODE_PACKAGE_WORK/runtime"',
-        '    BUNDLE_RUNTIME_READY="$RUNTIME_BUNDLE_READY"',
-        f"    BUNDLE_PACKAGES={shlex.quote(sandbox_runtime_packages)}",
+        f"    BUNDLE_PACKAGES={shlex.quote(node_runtime_packages)}",
         "  fi",
-        '  python3 - "$REMOTE_WHEEL" "$NODE_PACKAGE_WORK/wheels" "$BUNDLE_TARGET" '
-        '"$BUNDLE_RUNTIME_DIR" "$BUNDLE_RUNTIME_READY" "$RUNTIME_OS_ID" '
+        '  python3 - "$BUNDLE_TARGET" "$BUNDLE_RUNTIME_DIR" "$RUNTIME_OS_ID" '
         '"$RUNTIME_VERSION_ID" "$RUNTIME_CODENAME" "$RUNTIME_ARCHITECTURE" '
         '"$BUNDLE_ROLE" "$BUNDLE_PACKAGES" "$NODE_AGENT_RUNTIME_ARCHIVE" '
         '"$RUNTIME_KERNEL_RELEASE" "$RUNTIME_KERNEL_MODULE_DIR" '
@@ -1006,32 +860,26 @@ def render_remote_deploy_script(
         "import tarfile",
         "import sys",
         "",
-        "wheel = Path(sys.argv[1])",
-        "wheel_dir = Path(sys.argv[2])",
-        "target = Path(sys.argv[3])",
-        "runtime_dir = Path(sys.argv[4])",
-        "runtime_ready = sys.argv[5] == '1'",
+        "target = Path(sys.argv[1])",
+        "runtime_dir = Path(sys.argv[2])",
         "runtime_platform = {",
-        "    'os_id': sys.argv[6],",
-        "    'version_id': sys.argv[7],",
-        "    'codename': sys.argv[8],",
-        "    'architecture': sys.argv[9],",
+        "    'os_id': sys.argv[3],",
+        "    'version_id': sys.argv[4],",
+        "    'codename': sys.argv[5],",
+        "    'architecture': sys.argv[6],",
         "}",
-        "runtime_role = sys.argv[10]",
-        "packages = sys.argv[11].split()",
-        "agent_runtime_archive = Path(sys.argv[12])",
-        "kernel_release = sys.argv[13]",
-        "kernel_module_dir = Path(sys.argv[14])",
-        "kernel_load_modules = sys.argv[15].split()",
-        "direct_runsc = Path(sys.argv[16]) if len(sys.argv) > 16 and sys.argv[16] else None",
-        "direct_runsc_commit = sys.argv[17] if len(sys.argv) > 17 else ''",
-        "storage_backend = Path(sys.argv[18]) if len(sys.argv) > 18 and sys.argv[18] else None",
-        "storage_manifest = Path(sys.argv[19]) if len(sys.argv) > 19 and sys.argv[19] else None",
-        "storage_license = Path(sys.argv[20]) if len(sys.argv) > 20 and sys.argv[20] else None",
-        "managed_init = Path(sys.argv[21]) if len(sys.argv) > 21 and sys.argv[21] else None",
-        "package_file = wheel_dir / wheel.name",
-        "if not package_file.is_file():",
-        "    raise SystemExit(f'pip download did not retain {wheel.name}')",
+        "runtime_role = sys.argv[7]",
+        "packages = sys.argv[8].split()",
+        "agent_runtime_archive = Path(sys.argv[9])",
+        "kernel_release = sys.argv[10]",
+        "kernel_module_dir = Path(sys.argv[11])",
+        "kernel_load_modules = sys.argv[12].split()",
+        "direct_runsc = Path(sys.argv[13]) if sys.argv[13] else None",
+        "direct_runsc_commit = sys.argv[14]",
+        "storage_backend = Path(sys.argv[15]) if sys.argv[15] else None",
+        "storage_manifest = Path(sys.argv[16]) if sys.argv[16] else None",
+        "storage_license = Path(sys.argv[17]) if sys.argv[17] else None",
+        "managed_init = Path(sys.argv[18]) if sys.argv[18] else None",
         "def sha256_file(path):",
         "    digest = hashlib.sha256()",
         "    with path.open('rb') as handle:",
@@ -1039,116 +887,87 @@ def render_remote_deploy_script(
         "            digest.update(chunk)",
         "    return digest.hexdigest()",
         "",
-        "manifest_payload = {'version': 1, 'package_file': wheel.name}",
-        "if runtime_ready:",
-        "    files = [",
-        "        {'name': path.name, 'sha256': sha256_file(path), 'size': path.stat().st_size}",
-        "        for path in sorted((runtime_dir / 'debs').glob('*.deb'), key=lambda item: item.name)",
-        "    ]",
-        "    if not files:",
-        "        raise SystemExit('offline runtime package set is empty')",
-        "    manifest_payload['runtime'] = {",
-        "        'role': runtime_role,",
-        "        'platform': runtime_platform,",
-        "        'packages': packages,",
-        "        'files': files,",
+        "manifest_payload = {'version': 1}",
+        "files = [",
+        "    {'name': path.name, 'sha256': sha256_file(path), 'size': path.stat().st_size}",
+        "    for path in sorted((runtime_dir / 'debs').glob('*.deb'), key=lambda item: item.name)",
+        "]",
+        "if not files:",
+        "    raise SystemExit('bundled runtime package set is empty')",
+        "manifest_payload['runtime'] = {",
+        "    'role': runtime_role,",
+        "    'platform': runtime_platform,",
+        "    'packages': packages,",
+        "    'files': files,",
+        "}",
+        "if not agent_runtime_archive.is_file():",
+        "    raise SystemExit('preassembled node-agent runtime is absent')",
+        "manifest_payload['runtime']['agent'] = {",
+        "    'file': 'runtime/agent/node-agent-runtime.tar',",
+        "    'python': f'{sys.version_info.major}.{sys.version_info.minor}',",
+        "    'sha256': sha256_file(agent_runtime_archive),",
+        "    'size': agent_runtime_archive.stat().st_size,",
+        "}",
+        "kernel_module_files = sorted(kernel_module_dir.glob('*.ko*'))",
+        "if not kernel_module_files or not kernel_load_modules:",
+        "    raise SystemExit('kernel module closure is absent')",
+        "manifest_payload['runtime']['kernel'] = {",
+        "    'release': kernel_release,",
+        "    'load': kernel_load_modules,",
+        "    'files': [",
+        "        {",
+        "            'name': module_path.name,",
+        "            'sha256': sha256_file(module_path),",
+        "            'size': module_path.stat().st_size,",
+        "        }",
+        "        for module_path in kernel_module_files",
+        "    ],",
+        "}",
+        "if runtime_role == 'sandbox':",
+        "    if direct_runsc is None or not direct_runsc.is_file() or len(direct_runsc_commit) != 40:",
+        "        raise SystemExit('direct runsc artifact is invalid')",
+        "    if managed_init is None or not managed_init.is_file():",
+        "        raise SystemExit('managed-process init artifact is absent')",
+        "    manifest_payload['runtime']['direct_runsc'] = {",
+        "        'commit': direct_runsc_commit,",
+        "        'file': 'runtime/direct/runsc',",
+        "        'sha256': sha256_file(direct_runsc),",
+        "        'size': direct_runsc.stat().st_size,",
         "    }",
-        "    if not agent_runtime_archive.is_file():",
-        "        raise SystemExit('preassembled node-agent runtime is absent')",
-        "    manifest_payload['runtime']['agent'] = {",
-        "        'file': 'runtime/agent/node-agent-runtime.tar',",
-        "        'python': f'{sys.version_info.major}.{sys.version_info.minor}',",
-        "        'sha256': sha256_file(agent_runtime_archive),",
-        "        'size': agent_runtime_archive.stat().st_size,",
+        "    manifest_payload['runtime']['managed_init'] = {",
+        "        'file': 'runtime/direct/ucloud-sandbox-init',",
+        "        'sha256': sha256_file(managed_init),",
+        "        'size': managed_init.stat().st_size,",
         "    }",
-        "    kernel_module_files = sorted(kernel_module_dir.glob('*.ko*'))",
-        "    if not kernel_module_files or not kernel_load_modules:",
-        "        raise SystemExit('kernel module closure is absent')",
-        "    manifest_payload['runtime']['kernel'] = {",
-        "        'release': kernel_release,",
-        "        'load': kernel_load_modules,",
-        "        'files': [",
-        "            {",
-        "                'name': module_path.name,",
-        "                'sha256': sha256_file(module_path),",
-        "                'size': module_path.stat().st_size,",
-        "            }",
-        "            for module_path in kernel_module_files",
-        "        ],",
+        "    if storage_backend is None or storage_manifest is None or storage_license is None:",
+        "        raise SystemExit('storage-native build artifacts are absent')",
+        "    if not all(path.is_file() for path in (storage_backend, storage_manifest, storage_license)):",
+        "        raise SystemExit('storage-native build artifact is missing')",
+        "    storage_build = json.loads(storage_manifest.read_text(encoding='utf-8'))",
+        f"    if storage_build.get('agentenv_commit') != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:",
+        "        raise SystemExit('storage-native AgentEnv commit is not pinned')",
+        "    if storage_build.get('schema') != 3 or storage_build.get('license') != 'MIT':",
+        "        raise SystemExit('invalid storage-native build provenance')",
+        "    storage_patches = storage_build.get('patches')",
+        "    expected_storage_patches = ['agentenv-streaming-dense-export.patch', 'agentenv-pooled-delete.patch', 'agentenv-owner-identity.patch']",
+        "    if not isinstance(storage_patches, list) or [item.get('name') for item in storage_patches if isinstance(item, dict)] != expected_storage_patches:",
+        "        raise SystemExit('invalid storage-native patch set')",
+        "    if not all(re.fullmatch(r'[0-9a-f]{64}', str(item.get('sha256') or '')) for item in storage_patches):",
+        "        raise SystemExit('invalid storage-native patch digest')",
+        "    storage_digest = sha256_file(storage_backend)",
+        "    if storage_build.get('artifact_sha256') != storage_digest:",
+        "        raise SystemExit('storage-native backend digest mismatch')",
+        "    manifest_payload['runtime']['storage_native'] = {",
+        "        'agentenv_commit': storage_build['agentenv_commit'],",
+        "        'file': 'runtime/storage-native/backend',",
+        "        'host_architecture': storage_build.get('host_architecture'),",
+        "        'license_file': 'runtime/storage-native/LICENSE',",
+        "        'license_sha256': sha256_file(storage_license),",
+        "        'manifest_file': 'runtime/storage-native/build-manifest.json',",
+        "        'manifest_sha256': sha256_file(storage_manifest),",
+        "        'sha256': storage_digest,",
+        "        'size': storage_backend.stat().st_size,",
         "    }",
-        "    if runtime_role == 'sandbox' and direct_runsc is not None:",
-        "        if not direct_runsc.is_file() or len(direct_runsc_commit) != 40:",
-        "            raise SystemExit('direct runsc artifact is invalid')",
-        "        if managed_init is None or not managed_init.is_file():",
-        "            raise SystemExit('managed-process init artifact is absent')",
-        "        manifest_payload['runtime']['direct_runsc'] = {",
-        "            'commit': direct_runsc_commit,",
-        "            'file': 'runtime/direct/runsc',",
-        "            'sha256': sha256_file(direct_runsc),",
-        "            'size': direct_runsc.stat().st_size,",
-        "        }",
-        "        manifest_payload['runtime']['managed_init'] = {",
-        "            'file': 'runtime/direct/ucloud-sandbox-init',",
-        "            'sha256': sha256_file(managed_init),",
-        "            'size': managed_init.stat().st_size,",
-        "        }",
-        "        if storage_backend is None or storage_manifest is None or storage_license is None:",
-        "            raise SystemExit('storage-native build artifacts are absent')",
-        "        if not all(path.is_file() for path in (storage_backend, storage_manifest, storage_license)):",
-        "            raise SystemExit('storage-native build artifact is missing')",
-        "        storage_build = json.loads(storage_manifest.read_text(encoding='utf-8'))",
-        f"        if storage_build.get('agentenv_commit') != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:",
-        "            raise SystemExit('storage-native AgentEnv commit is not pinned')",
-        "        if storage_build.get('schema') != 2 or storage_build.get('license') != 'MIT':",
-        "            raise SystemExit('invalid storage-native build provenance')",
-        "        storage_patches = storage_build.get('patches')",
-        "        expected_storage_patches = ['agentenv-streaming-dense-export.patch', 'agentenv-pooled-delete.patch']",
-        "        if not isinstance(storage_patches, list) or [item.get('name') for item in storage_patches if isinstance(item, dict)] != expected_storage_patches:",
-        "            raise SystemExit('invalid storage-native compatibility patch')",
-        "        if not all(re.fullmatch(r'[0-9a-f]{64}', str(item.get('sha256') or '')) for item in storage_patches):",
-        "            raise SystemExit('invalid storage-native compatibility patch digest')",
-        "        storage_digest = sha256_file(storage_backend)",
-        "        if storage_build.get('artifact_sha256') != storage_digest:",
-        "            raise SystemExit('storage-native backend digest mismatch')",
-        "        manifest_payload['runtime']['storage_native'] = {",
-        "            'agentenv_commit': storage_build['agentenv_commit'],",
-        "            'file': 'runtime/storage-native/backend',",
-        "            'host_architecture': storage_build.get('host_architecture'),",
-        "            'license_file': 'runtime/storage-native/LICENSE',",
-        "            'license_sha256': sha256_file(storage_license),",
-        "            'manifest_file': 'runtime/storage-native/build-manifest.json',",
-        "            'manifest_sha256': sha256_file(storage_manifest),",
-        "            'sha256': storage_digest,",
-        "            'size': storage_backend.stat().st_size,",
-        "        }",
-        "    probe_archive = runtime_dir / 'images' / 'runtime-conformance-busybox.tar'",
-        "    probe_inspect = runtime_dir / 'images' / 'runtime-conformance-busybox.inspect.json'",
-        "    if probe_archive.is_file() and probe_inspect.is_file():",
-        "        image = json.loads(probe_inspect.read_text(encoding='utf-8'))[0]",
-        "        accepted_ids = {str(image.get('Id') or '')}",
-        "        accepted_ids.update(",
-        "            str(item).rsplit('@', 1)[-1]",
-        "            for item in image.get('RepoDigests') or []",
-        "            if '@sha256:' in str(item)",
-        "        )",
-        "        with tarfile.open(probe_archive, mode='r') as saved:",
-        "            saved_manifest = json.load(saved.extractfile('manifest.json'))",
-        "        config_name = Path(saved_manifest[0]['Config']).name.removesuffix('.json')",
-        "        if len(config_name) == 64:",
-        "            accepted_ids.add(f'sha256:{config_name}')",
-        "        accepted_ids = sorted(",
-        "            item for item in accepted_ids if item.startswith('sha256:')",
-        "        )",
-        "        manifest_payload['runtime']['probe_image'] = {",
-        "            'reference': 'busybox',",
-        "            'file': 'runtime/images/runtime-conformance-busybox.tar',",
-        "            'image_id': image['Id'],",
-        "            'accepted_ids': accepted_ids,",
-        "            'os': image['Os'],",
-        "            'architecture': image['Architecture'],",
-        "            'sha256': sha256_file(probe_archive),",
-        "            'size': probe_archive.stat().st_size,",
-        "        }",
         "manifest = json.dumps(",
         "    manifest_payload,",
         "    sort_keys=True,",
@@ -1163,31 +982,24 @@ def render_remote_deploy_script(
         "            info.mode = 0o644",
         "            info.mtime = 0",
         "            archive.addfile(info, io.BytesIO(manifest))",
-        "            archive_paths = [",
-        "                (path, f'wheels/{path.name}')",
-        "                for path in sorted(wheel_dir.iterdir(), key=lambda item: item.name)",
-        "            ]",
-        "            if runtime_ready:",
-        "                archive_paths.extend(",
-        "                    (path, f'runtime/debs/{path.name}')",
-        "                    for path in sorted((runtime_dir / 'debs').glob('*.deb'), key=lambda item: item.name)",
-        "                )",
-        "                probe_archive = runtime_dir / 'images' / 'runtime-conformance-busybox.tar'",
-        "                if probe_archive.is_file():",
-        "                    archive_paths.append((probe_archive, 'runtime/images/runtime-conformance-busybox.tar'))",
-        "                archive_paths.append((agent_runtime_archive, 'runtime/agent/node-agent-runtime.tar'))",
-        "                archive_paths.extend(",
-        "                    (path, f'runtime/kernel/{kernel_release}/{path.name}')",
-        "                    for path in kernel_module_files",
-        "                )",
-        "                if runtime_role == 'sandbox' and direct_runsc is not None:",
-        "                    archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
-        "                    archive_paths.append((managed_init, 'runtime/direct/ucloud-sandbox-init'))",
-        "                    archive_paths.extend((",
-        "                        (storage_backend, 'runtime/storage-native/backend'),",
-        "                        (storage_manifest, 'runtime/storage-native/build-manifest.json'),",
-        "                        (storage_license, 'runtime/storage-native/LICENSE'),",
-        "                    ))",
+        "            archive_paths = []",
+        "            archive_paths.extend(",
+        "                (path, f'runtime/debs/{path.name}')",
+        "                for path in sorted((runtime_dir / 'debs').glob('*.deb'), key=lambda item: item.name)",
+        "            )",
+        "            archive_paths.append((agent_runtime_archive, 'runtime/agent/node-agent-runtime.tar'))",
+        "            archive_paths.extend(",
+        "                (path, f'runtime/kernel/{kernel_release}/{path.name}')",
+        "                for path in kernel_module_files",
+        "            )",
+        "            if runtime_role == 'sandbox':",
+        "                archive_paths.append((direct_runsc, 'runtime/direct/runsc'))",
+        "                archive_paths.append((managed_init, 'runtime/direct/ucloud-sandbox-init'))",
+        "                archive_paths.extend((",
+        "                    (storage_backend, 'runtime/storage-native/backend'),",
+        "                    (storage_manifest, 'runtime/storage-native/build-manifest.json'),",
+        "                    (storage_license, 'runtime/storage-native/LICENSE'),",
+        "                ))",
         "            for path, arcname in archive_paths:",
         "                info = archive.gettarinfo(str(path), arcname=arcname)",
         "                info.uid = info.gid = 0",
@@ -1202,10 +1014,7 @@ def render_remote_deploy_script(
         "done",
         'rm -rf "$NODE_PACKAGE_WORK"',
         "trap - EXIT",
-        # Keep the running services on their old package metadata until every
-        # expensive node artifact is complete. Otherwise an old autoscaler can
-        # observe the new version mid-deploy and bootstrap a mislabeled node
-        # from the previous bundle.
+        # Publish package metadata only after every node artifact is complete.
         '"$VENV_DIR/bin/pip" install --force-reinstall "$REMOTE_WHEEL"',
         "",
         "for unit in \\",
@@ -1220,40 +1029,7 @@ def render_remote_deploy_script(
         '    sudo systemctl stop "$unit"',
         "  fi",
         "done",
-        'if [ ! -f "$PERSISTENT_STATE_MARKER" ]; then',
-        '  if [ -d "$STATE_DIR" ] && find "$STATE_DIR" -mindepth 1 -print -quit | grep -q .; then',
-        '    echo "Persistent state exists without its migration marker: $STATE_DIR" >&2',
-        "    exit 1",
-        "  fi",
-        '  MIGRATION_DIR="${STATE_DIR}.migrate.$$"',
-        '  sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$MIGRATION_DIR"',
-        '  if [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ] && [ -d "$LEGACY_STATE_DIR" ]; then',
-        '    sudo cp -a "$LEGACY_STATE_DIR/." "$MIGRATION_DIR/"',
-        "  fi",
-        '  sudo touch "$MIGRATION_DIR/.persistent-state-v1"',
-        '  sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$MIGRATION_DIR"',
-        '  if [ -d "$STATE_DIR" ]; then',
-        '    sudo rmdir "$STATE_DIR"',
-        "  fi",
-        '  sudo mv "$MIGRATION_DIR" "$STATE_DIR"',
-        "fi",
-        'if [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ]; then',
-        '  if [ -L "$LEGACY_STATE_DIR" ]; then',
-        '    if [ "$(readlink -f "$LEGACY_STATE_DIR")" != "$STATE_DIR" ]; then',
-        '      echo "Legacy state symlink does not target persistent state: $LEGACY_STATE_DIR" >&2',
-        "      exit 1",
-        "    fi",
-        '  elif [ -e "$LEGACY_STATE_DIR" ]; then',
-        '    if [ -e "$LEGACY_STATE_BACKUP_DIR" ] || [ -L "$LEGACY_STATE_BACKUP_DIR" ]; then',
-        '      echo "Legacy state backup already exists: $LEGACY_STATE_BACKUP_DIR" >&2',
-        "      exit 1",
-        "    fi",
-        '    sudo mv "$LEGACY_STATE_DIR" "$LEGACY_STATE_BACKUP_DIR"',
-        '    sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"',
-        "  else",
-        '    sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"',
-        "  fi",
-        "fi",
+        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"',
         'sudo chmod 0700 "$STATE_DIR"',
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR/ssh"',
@@ -1262,7 +1038,7 @@ def render_remote_deploy_script(
         '  rm -f "$STAGED_SESSION_FILE"',
         "fi",
         'if [ ! -s "$SESSION_FILE" ]; then',
-        '  echo "UCloud session file is missing after persistent-state migration: $SESSION_FILE" >&2',
+        '  echo "UCloud session file is missing from persistent state: $SESSION_FILE" >&2',
         "  exit 1",
         "fi",
         'chmod 600 "$SESSION_FILE"',
@@ -1329,7 +1105,7 @@ def render_remote_deploy_script(
             '  name="$1"',
             '  url="$2"',
             "  attempt=1",
-            "  while [ \"$attempt\" -le 30 ]; do",
+            '  while [ "$attempt" -le 30 ]; do',
             '    if curl -fsS "$url"; then',
             "      printf '\\n'",
             "      return 0",

@@ -12,14 +12,9 @@ import subprocess
 import sys
 from typing import Any
 
-from .checkpoint_helper import render_checkpoint_helper_script
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
-from .hibernation_quota_helper import (
-    render_hibernation_quota_helper_script,
-)
 from .models import ResourceQuantity, VmJob, vm_job_from_payload
-from .runsc_restore import render_runsc_restore_script
 
 
 DEFAULT_WORK_DIR = "/work/ucloud-sandboxes"
@@ -36,19 +31,6 @@ DEFAULT_DOCKER_MTU = 0
 DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
 DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
 DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
-DEFAULT_CHECKPOINT_HELPER = "/usr/local/libexec/ucloud-sandbox-checkpoint"
-DEFAULT_CHECKPOINT_HELPER_CONFIG = "/etc/ucloud-sandboxes/checkpoint-helper.json"
-DEFAULT_CHECKPOINT_HELPER_SUDOERS = "/etc/sudoers.d/ucloud-sandbox-checkpoint"
-DEFAULT_HIBERNATION_QUOTA_HELPER = "/usr/local/libexec/ucloud-sandbox-hibernation-quota"
-DEFAULT_HIBERNATION_QUOTA_HELPER_CONFIG = (
-    "/etc/ucloud-sandboxes/hibernation-quota-helper.json"
-)
-DEFAULT_HIBERNATION_QUOTA_HELPER_SUDOERS = (
-    "/etc/sudoers.d/ucloud-sandbox-hibernation-quota"
-)
-DEFAULT_RUNSC_RESTORE_WRAPPER = "/usr/local/libexec/ucloud-runsc-restore"
-DEFAULT_RUNSC_RESTORE_CONFIG = "/etc/ucloud-sandboxes/runsc-restore.json"
-DEFAULT_RUNSC_RESTORE_STATE_ROOT = "/run/ucloud-sandboxes/runsc-restore"
 DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
 DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
@@ -64,9 +46,7 @@ DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
 DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
 DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
-PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = (
-    "f41abb21324f6b0520abf34b7720aa260ddd10eb"
-)
+PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "f41abb21324f6b0520abf34b7720aa260ddd10eb"
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 SANDBOX_RUNTIME_PACKAGES = (
@@ -74,18 +54,16 @@ SANDBOX_RUNTIME_PACKAGES = (
     "docker-ce",
     "docker-ce-cli",
     "containerd.io",
-    "runsc",
 )
 BUILDER_RUNTIME_PACKAGES = (
-    *SANDBOX_RUNTIME_PACKAGES[:-1],
+    *SANDBOX_RUNTIME_PACKAGES,
     "docker-buildx-plugin",
-    SANDBOX_RUNTIME_PACKAGES[-1],
 )
 RUNTIME_KERNEL_MODULES = (
     # UCloud project mounts use virtiofs.  The host may have loaded this module
     # before our init script starts without retaining the module on the guest
     # filesystem, which makes the node unable to remount /work after a reboot.
-    # Carry it in the same offline closure as the container runtime modules.
+    # Carry it in the same verified closure as the container runtime modules.
     "virtiofs",
     "xfs",
     "overlay",
@@ -148,20 +126,14 @@ class VmInitOptions:
     enable_image_builds: bool = False
     buildx_direct_push: bool = False
     buildx_cache_ref: str = ""
-    runtime_dry_run: bool = False
-    node_runtime: str = "legacy"
     direct_runsc_commit: str = ""
     direct_network: str = "none"
     direct_network_allow_tcp: tuple[str, ...] = ()
     storage_native_registry_url: str = ""
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
-    storage_native_pool_low_watermark: int = (
-        DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
-    )
-    storage_native_pool_high_watermark: int = (
-        DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
-    )
+    storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
+    storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
@@ -273,7 +245,6 @@ def extract_ssh_command_from_text(text: str) -> str | None:
 def render_vm_init_script(options: VmInitOptions) -> str:
     validate_vm_init_options(options)
     work_dir = _clean_posix_path(options.work_dir)
-    venv_dir = str(PurePosixPath(work_dir) / "venv")
     agent_bin = str(PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes")
     storage_agent_bin = str(
         PurePosixPath(work_dir) / "bin" / "ucloud-sandboxes-storage"
@@ -284,34 +255,13 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     swap_file = str(PurePosixPath(docker_storage_dir) / "swapfile")
     state_dir = str(PurePosixPath(work_dir) / "state")
-    runtime_conformance_file = str(
-        PurePosixPath(state_dir) / "runtime-conformance.json"
-    )
-    checkpoint_helper = DEFAULT_CHECKPOINT_HELPER
-    checkpoint_helper_config = DEFAULT_CHECKPOINT_HELPER_CONFIG
-    checkpoint_helper_sudoers = DEFAULT_CHECKPOINT_HELPER_SUDOERS
-    checkpoint_helper_source = render_checkpoint_helper_script(
-        config_path=checkpoint_helper_config
-    )
-    hibernation_quota_helper = DEFAULT_HIBERNATION_QUOTA_HELPER
-    hibernation_quota_helper_config = DEFAULT_HIBERNATION_QUOTA_HELPER_CONFIG
-    hibernation_quota_helper_sudoers = DEFAULT_HIBERNATION_QUOTA_HELPER_SUDOERS
-    hibernation_quota_helper_source = render_hibernation_quota_helper_script(
-        config_path=hibernation_quota_helper_config
-    )
-    runsc_restore_wrapper = DEFAULT_RUNSC_RESTORE_WRAPPER
-    runsc_restore_config = DEFAULT_RUNSC_RESTORE_CONFIG
-    runsc_restore_state_root = DEFAULT_RUNSC_RESTORE_STATE_ROOT
-    runsc_restore_source = render_runsc_restore_script(config_path=runsc_restore_config)
     direct_runsc = DEFAULT_DIRECT_RUNSC
     storage_native_backend = DEFAULT_STORAGE_NATIVE_BACKEND
     storage_native_backend_socket = DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET
     storage_native_service_socket = DEFAULT_STORAGE_NATIVE_SERVICE_SOCKET
     storage_native_root = DEFAULT_STORAGE_NATIVE_ROOT
     storage_native_cache_root = DEFAULT_STORAGE_NATIVE_CACHE_ROOT
-    storage_native_backend_config = (
-        "/etc/ucloud-sandboxes/storage-native-backend.json"
-    )
+    storage_native_backend_config = "/etc/ucloud-sandboxes/storage-native-backend.json"
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
     storage_backend_service = (
@@ -336,29 +286,20 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         f"--label {shlex.quote(key + '=' + value)}"
         for key, value in sorted((options.labels or {}).items())
     )
-    build_flag = " --enable-image-builds" if options.enable_image_builds else ""
+    builder_flags = ""
     if options.enable_image_builds and options.buildx_direct_push:
-        build_flag += " --buildx-direct-push"
+        builder_flags += " --buildx-direct-push"
     if options.enable_image_builds and options.buildx_cache_ref:
-        build_flag += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
-    runtime_flag = "" if options.runtime_dry_run else " --execute-runtime"
-    deployment_flag = (
-        " --deployment-id ${UCLOUD_DEPLOYMENT_ID}" if options.deployment_id else ""
-    )
-    heartbeat_auth_flag = (
-        " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
-        if options.heartbeat_bearer_token_file
-        else ""
-    )
+        builder_flags += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
+    deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}"
+    heartbeat_auth_flag = " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
     node_control_auth_flag = (
         " --node-control-bearer-token-file ${UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE}"
-        if options.node_control_bearer_token_file
-        else ""
     )
     version_flags = (
         " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
     )
-    if options.node_runtime == "direct":
+    if not options.enable_image_builds:
         writable_disk_mb = (
             int(options.total_resources.disk_mb)
             - options.docker_quota_image_gb * 1024
@@ -372,8 +313,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
                 "swap, storage cache, and safety headroom"
             )
         direct_network_allow_flags = "".join(
-            " --direct-network-allow-tcp "
-            + shlex.quote(endpoint)
+            " --direct-network-allow-tcp " + shlex.quote(endpoint)
             for endpoint in options.direct_network_allow_tcp
         )
         direct_agent_command = (
@@ -387,16 +327,13 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
             " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
             " --image-file ${UCLOUD_STATE_DIR}/images.json"
-            " --quota-root ${UCLOUD_HIBERNATION_QUOTA_ROOT}"
+            " --volume-mount-root ${UCLOUD_STORAGE_NATIVE_MOUNT_ROOT}"
             " --runsc ${UCLOUD_DIRECT_RUNSC}"
             " --runsc-commit ${UCLOUD_DIRECT_RUNSC_COMMIT}"
             " --network ${UCLOUD_DIRECT_NETWORK}"
             f"{direct_network_allow_flags}"
             " --init-binary ${UCLOUD_DIRECT_INIT_BINARY}"
             " --managed-init-binary ${UCLOUD_MANAGED_INIT}"
-            " --quota-helper ${UCLOUD_HIBERNATION_QUOTA_HELPER}"
-            " --disk-capacity-mb ${UCLOUD_DIRECT_DISK_CAPACITY_MB}"
-            " --disk-headroom-mb ${UCLOUD_DIRECT_DISK_HEADROOM_MB}"
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
@@ -414,48 +351,37 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         node_service_supplementary_groups = ""
         node_service_exec_start_pre = ""
         node_service_wants = (
-            "network-online.target docker.service "
-            "ucloud-storage-native.service"
+            "network-online.target docker.service " "ucloud-storage-native.service"
         )
         node_service_after = (
-            "network-online.target docker.service "
-            "ucloud-storage-native.service"
+            "network-online.target docker.service " "ucloud-storage-native.service"
         )
-        node_service_requires = (
-            "docker.service ucloud-storage-native.service"
-        )
+        node_service_requires = "docker.service ucloud-storage-native.service"
     else:
         writable_disk_mb = int(options.total_resources.disk_mb)
         direct_agent_command = (
-            f"{agent_bin} serve-node-agent"
+            f"{agent_bin} serve-builder-agent"
             " --job-id ${UCLOUD_JOB_ID}"
             " --node-id ${UCLOUD_NODE_ID}"
             " --node-url ${UCLOUD_NODE_URL}"
             " --host ${UCLOUD_NODE_AGENT_HOST}"
             " --port ${UCLOUD_NODE_AGENT_PORT}"
             f"{deployment_flag}{version_flags}"
-            " --sandbox-file ${UCLOUD_STATE_DIR}/sandboxes.json"
+            " --state-file ${UCLOUD_STATE_DIR}/builder-node.json"
             " --image-file ${UCLOUD_STATE_DIR}/images.json"
-            " --ssh-port-start ${UCLOUD_SSH_PORT_START}"
-            " --ssh-port-end ${UCLOUD_SSH_PORT_END}"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_TOTAL_DISK_MB}"
             " --cpu-overcommit ${UCLOUD_CPU_OVERCOMMIT}"
             " --memory-overcommit ${UCLOUD_MEMORY_OVERCOMMIT}"
             " --disk-overcommit ${UCLOUD_DISK_OVERCOMMIT}"
-            " --runtime-conformance-file ${UCLOUD_RUNTIME_CONFORMANCE_FILE}"
-            " --checkpoint-helper ${UCLOUD_CHECKPOINT_HELPER}"
-            " --checkpoint-root ${UCLOUD_CHECKPOINT_ROOT}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
-            f"{build_flag}{runtime_flag}{node_control_auth_flag}"
+            f"{builder_flags}{node_control_auth_flag}"
         )
         node_service_user = "$UCLOUD_SERVICE_USER"
         node_service_group = "$UCLOUD_SERVICE_GROUP"
         node_service_supplementary_groups = "SupplementaryGroups=docker"
-        node_service_exec_start_pre = (
-            "ExecStartPre=/usr/bin/sudo -n ${UCLOUD_CHECKPOINT_HELPER} gc"
-        )
+        node_service_exec_start_pre = ""
         node_service_wants = "network-online.target docker.service"
         node_service_after = "network-online.target docker.service"
         node_service_requires = "docker.service"
@@ -480,7 +406,6 @@ UCLOUD_NODE_CONTROL_BEARER_TOKEN_FILE={shlex.quote(options.node_control_bearer_t
 UCLOUD_NODE_CONTROL_BEARER_TOKEN={shlex.quote(options.node_control_bearer_token)}
 UCLOUD_SERVICE_USER={shlex.quote(options.service_user)}
 UCLOUD_WORK_DIR={shlex.quote(work_dir)}
-UCLOUD_VENV_DIR={shlex.quote(venv_dir)}
 UCLOUD_AGENT_BIN={shlex.quote(agent_bin)}
 UCLOUD_STORAGE_AGENT_BIN={shlex.quote(storage_agent_bin)}
 UCLOUD_STATE_DIR={shlex.quote(state_dir)}
@@ -511,31 +436,20 @@ UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
 UCLOUD_SWAP_FILE={shlex.quote(swap_file)}
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON={shlex.quote(json.dumps(list(options.docker_insecure_registries)))}
 UCLOUD_HOST_ALIASES_JSON={shlex.quote(json.dumps(list(options.host_aliases)))}
-UCLOUD_RUNTIME_CONFORMANCE_FILE={shlex.quote(runtime_conformance_file)}
-UCLOUD_CHECKPOINT_HELPER={shlex.quote(checkpoint_helper)}
-UCLOUD_CHECKPOINT_HELPER_CONFIG={shlex.quote(checkpoint_helper_config)}
-UCLOUD_CHECKPOINT_HELPER_SUDOERS={shlex.quote(checkpoint_helper_sudoers)}
-UCLOUD_HIBERNATION_QUOTA_HELPER={shlex.quote(hibernation_quota_helper)}
-UCLOUD_HIBERNATION_QUOTA_HELPER_CONFIG={shlex.quote(hibernation_quota_helper_config)}
-UCLOUD_HIBERNATION_QUOTA_HELPER_SUDOERS={shlex.quote(hibernation_quota_helper_sudoers)}
-UCLOUD_RUNSC_RESTORE_WRAPPER={shlex.quote(runsc_restore_wrapper)}
-UCLOUD_RUNSC_RESTORE_CONFIG={shlex.quote(runsc_restore_config)}
-UCLOUD_RUNSC_RESTORE_STATE_ROOT={shlex.quote(runsc_restore_state_root)}
-UCLOUD_NODE_RUNTIME={shlex.quote(options.node_runtime)}
+UCLOUD_NODE_ROLE={shlex.quote(runtime_role)}
 UCLOUD_DIRECT_RUNSC={shlex.quote(direct_runsc)}
 UCLOUD_DIRECT_RUNSC_COMMIT={shlex.quote(options.direct_runsc_commit)}
 UCLOUD_MANAGED_INIT={shlex.quote(DEFAULT_MANAGED_INIT)}
 UCLOUD_DIRECT_NETWORK={shlex.quote(options.direct_network)}
 UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache
-UCLOUD_DIRECT_DISK_CAPACITY_MB={writable_disk_mb}
-UCLOUD_DIRECT_DISK_HEADROOM_MB={options.direct_disk_headroom_mb}
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
 UCLOUD_STORAGE_NATIVE_BACKEND={shlex.quote(storage_native_backend)}
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)}
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET={shlex.quote(storage_native_service_socket)}
 UCLOUD_STORAGE_NATIVE_ROOT={shlex.quote(storage_native_root)}
+UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT/mounts
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG={shlex.quote(storage_native_backend_config)}
 UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
@@ -574,16 +488,6 @@ if [ -z "$UCLOUD_SERVICE_HOME" ]; then
   exit 1
 fi
 
-run_as_service_user() {{
-  if [ "$(id -un)" = "$UCLOUD_SERVICE_USER" ]; then
-    "$@"
-  elif [ "$(id -u)" -eq 0 ]; then
-    runuser -u "$UCLOUD_SERVICE_USER" -- "$@"
-  else
-    sudo -u "$UCLOUD_SERVICE_USER" "$@"
-  fi
-}}
-
 $SUDO mkdir -p "$UCLOUD_WORK_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/ucloud-sandboxes
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_WORK_DIR"
 $SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
@@ -621,16 +525,11 @@ UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
 UCLOUD_OS_VERSION_ID="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
 UCLOUD_OS_CODENAME="$(. /etc/os-release && printf '%s' "${{UBUNTU_CODENAME:-${{VERSION_CODENAME:-}}}}")"
 UCLOUD_ARCHITECTURE="$(dpkg --print-architecture)"
-UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_SPEC"
-UCLOUD_PACKAGE_INSTALL_ARGS=()
 UCLOUD_PACKAGE_BUNDLE_DIR=""
 UCLOUD_PACKAGE_BUNDLE_SHA256=""
-UCLOUD_OFFLINE_RUNTIME_AVAILABLE=0
-UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE=""
-UCLOUD_OFFLINE_PROBE_IMAGE_IDS=""
 UCLOUD_PREBUILT_AGENT_ARCHIVE=""
 UCLOUD_PREBUILT_AGENT_SHA256=""
-UCLOUD_OFFLINE_KERNEL_MODULE_DIR=""
+UCLOUD_BUNDLED_KERNEL_MODULE_DIR=""
 UCLOUD_BUNDLED_DIRECT_RUNSC=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256=""
 UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT=""
@@ -640,43 +539,32 @@ UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST=""
 UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE=""
-if [ -f "$UCLOUD_PACKAGE_SPEC" ] \
-  && tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
-  UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
-  if [ -n "$UCLOUD_PACKAGE_EXPECTED_SHA256" ] \
-    && [ "$UCLOUD_PACKAGE_BUNDLE_SHA256" != "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
-    echo "Node package bundle checksum does not match the staged artifact" >&2
-    exit 1
-  fi
-  UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
-  if [ ! -f "$UCLOUD_PACKAGE_BUNDLE_DIR/.complete" ]; then
-    UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
-    rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    tar --no-same-owner --no-same-permissions -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
-    touch "$UCLOUD_PACKAGE_BUNDLE_TMP/.complete"
-    rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
-    mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
-  fi
-  UCLOUD_PACKAGE_BUNDLE_FILE="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if manifest.get("version") != 1:
-    raise SystemExit("unsupported node package bundle version")
-package_file = str(manifest.get("package_file") or "")
-if not package_file or Path(package_file).name != package_file or not package_file.endswith(".whl"):
-    raise SystemExit("invalid package_file in node package bundle")
-print(package_file)
-PY
-)"
-  UCLOUD_PACKAGE_INSTALL_SPEC="$UCLOUD_PACKAGE_BUNDLE_DIR/wheels/$UCLOUD_PACKAGE_BUNDLE_FILE"
-  test -f "$UCLOUD_PACKAGE_INSTALL_SPEC"
-  UCLOUD_PACKAGE_INSTALL_ARGS=(--no-index --find-links "$UCLOUD_PACKAGE_BUNDLE_DIR/wheels")
-  echo "Using offline node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
-  if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+if [ ! -f "$UCLOUD_PACKAGE_SPEC" ]; then
+  echo "A staged node package bundle is required" >&2
+  exit 1
+fi
+if [ -z "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+  echo "The staged node package bundle requires an expected SHA-256 digest" >&2
+  exit 1
+fi
+UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+if [ "$UCLOUD_PACKAGE_BUNDLE_SHA256" != "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+  echo "Node package bundle checksum does not match the staged artifact" >&2
+  exit 1
+fi
+if ! tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
+  echo "The staged node package bundle is invalid" >&2
+  exit 1
+fi
+UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
+UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
+rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
+mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
+tar --no-same-owner --no-same-permissions -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
+rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
+mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
+echo "Using verified node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     UCLOUD_DIRECT_RUNSC_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
 import json
 from pathlib import Path
@@ -791,9 +679,10 @@ patches = build.get("patches")
 expected_patches = [
     "agentenv-streaming-dense-export.patch",
     "agentenv-pooled-delete.patch",
+    "agentenv-owner-identity.patch",
 ]
 if (
-    build.get("schema") != 2
+    build.get("schema") != 3
     or build.get("agentenv_commit") != storage["agentenv_commit"]
     or build.get("artifact_sha256") != storage["sha256"]
     or build.get("host_architecture") != host_arch
@@ -818,13 +707,12 @@ PY
       UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST \
       UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE \
       <<< "$UCLOUD_STORAGE_NATIVE_SPEC"
-  fi
-  if [ -d "$UCLOUD_PACKAGE_BUNDLE_DIR/runtime" ]; then
-    if python3 - \
+fi
+python3 - \
       "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
       "$UCLOUD_PACKAGE_BUNDLE_DIR" \
       "$UCLOUD_OS_ID" "$UCLOUD_OS_VERSION_ID" "$UCLOUD_OS_CODENAME" \
-      "$UCLOUD_ARCHITECTURE" "$UCLOUD_PACKAGE_EXPECTED_SHA256" <<'PY'
+      "$UCLOUD_ARCHITECTURE" <<'PY'
 import hashlib
 import json
 import os
@@ -840,41 +728,41 @@ expected_platform = {{
     "codename": sys.argv[5],
     "architecture": sys.argv[6],
 }}
-archive_digest_verified = bool(sys.argv[7])
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("version") != 1:
+    raise SystemExit("unsupported node package bundle version")
 runtime = manifest.get("runtime")
 if not isinstance(runtime, dict) or runtime.get("platform") != expected_platform:
-    raise SystemExit("offline runtime platform does not match this VM")
+    raise SystemExit("bundled runtime platform does not match this VM")
 if runtime.get("role") != {runtime_role!r}:
-    raise SystemExit("offline runtime role does not match this VM")
+    raise SystemExit("bundled runtime role does not match this VM")
 expected_packages = {runtime_packages_python}
 if runtime.get("packages") != expected_packages:
-    raise SystemExit("invalid offline runtime package list")
+    raise SystemExit("invalid bundled runtime package list")
 package_dir = bundle_dir / "runtime" / "debs"
 actual_files = {{path.name for path in package_dir.glob("*.deb")}}
 declared_files = set()
 files = runtime.get("files")
 if not isinstance(files, list) or not files:
-    raise SystemExit("offline runtime package set is empty")
+    raise SystemExit("bundled runtime package set is empty")
 for item in files:
     if not isinstance(item, dict):
-        raise SystemExit("invalid offline runtime file")
+        raise SystemExit("invalid bundled runtime file")
     filename = str(item.get("name") or "")
     if Path(filename).name != filename or not filename.endswith(".deb"):
-        raise SystemExit("invalid offline runtime filename")
+        raise SystemExit("invalid bundled runtime filename")
     declared_files.add(filename)
     path = package_dir / filename
     if not path.is_file() or path.stat().st_size != item.get("size"):
-        raise SystemExit(f"offline runtime file size mismatch: {{filename}}")
-    if not archive_digest_verified:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        if digest.hexdigest() != item.get("sha256"):
-            raise SystemExit(f"offline runtime file checksum mismatch: {{filename}}")
+        raise SystemExit(f"bundled runtime file size mismatch: {{filename}}")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != item.get("sha256"):
+        raise SystemExit(f"runtime file checksum mismatch: {{filename}}")
 if actual_files != declared_files:
-    raise SystemExit("offline runtime file set mismatch")
+    raise SystemExit("bundled runtime file set mismatch")
 agent = runtime.get("agent")
 if not isinstance(agent, dict):
     raise SystemExit("preassembled node-agent runtime metadata is absent")
@@ -893,44 +781,41 @@ if agent_digest.hexdigest() != agent.get("sha256"):
     raise SystemExit("preassembled node-agent runtime checksum mismatch")
 kernel = runtime.get("kernel")
 if not isinstance(kernel, dict):
-    raise SystemExit("offline kernel metadata is absent")
+    raise SystemExit("bundled kernel metadata is absent")
 kernel_release = os.uname().release
 if kernel.get("release") != kernel_release:
-    raise SystemExit("offline kernel module release does not match this VM")
+    raise SystemExit("bundled kernel module release does not match this VM")
 if kernel.get("load") != {runtime_kernel_modules_python}:
-    raise SystemExit("offline kernel module load list does not match this runtime")
+    raise SystemExit("bundled kernel module load list does not match this runtime")
 module_dir = bundle_dir / "runtime" / "kernel" / kernel_release
 actual_modules = {{path.name for path in module_dir.glob("*.ko*")}}
 declared_modules = set()
 modules = kernel.get("files")
 if not isinstance(modules, list) or not modules:
-    raise SystemExit("offline kernel module closure is absent")
+    raise SystemExit("bundled kernel module closure is absent")
 for module in modules:
     if not isinstance(module, dict):
-        raise SystemExit("offline kernel module metadata is invalid")
+        raise SystemExit("bundled kernel module metadata is invalid")
     file_name = str(module.get("name") or "")
     if Path(file_name).name != file_name or not re.fullmatch(
         r"[A-Za-z0-9_.-]+\\.ko(?:\\.(?:gz|xz|zst))?", file_name
     ):
-        raise SystemExit("invalid offline kernel module filename")
+        raise SystemExit("invalid bundled kernel module filename")
     declared_modules.add(file_name)
     module_path = module_dir / file_name
     if not module_path.is_file() or module_path.stat().st_size != module.get("size"):
-        raise SystemExit(f"offline kernel module size mismatch: {{file_name}}")
-    if not archive_digest_verified:
-        module_digest = hashlib.sha256()
-        with module_path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                module_digest.update(chunk)
-        if module_digest.hexdigest() != module.get("sha256"):
-            raise SystemExit(f"offline kernel module checksum mismatch: {{file_name}}")
+        raise SystemExit(f"bundled kernel module size mismatch: {{file_name}}")
+    module_digest = hashlib.sha256()
+    with module_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            module_digest.update(chunk)
+    if module_digest.hexdigest() != module.get("sha256"):
+        raise SystemExit(f"kernel module checksum mismatch: {{file_name}}")
 if actual_modules != declared_modules:
-    raise SystemExit("offline kernel module file set mismatch")
+    raise SystemExit("bundled kernel module file set mismatch")
 PY
-    then
-      UCLOUD_OFFLINE_RUNTIME_AVAILABLE=1
-      echo "Verified offline Docker/gVisor packages for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
-      UCLOUD_AGENT_RUNTIME_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
+echo "Verified pinned Docker/gVisor bundle for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
+UCLOUD_AGENT_RUNTIME_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
 import json
 from pathlib import Path
 import sys
@@ -940,65 +825,14 @@ agent = runtime["agent"]
 print(f"{{agent['sha256']}}\\t{{agent['size']}}")
 PY
 )"
-      IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
-      UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
-      UCLOUD_OFFLINE_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(uname -r)"
-      UCLOUD_PROBE_IMAGE_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/images/runtime-conformance-busybox.tar"
-      if [ -f "$UCLOUD_PROBE_IMAGE_ARCHIVE" ]; then
-        if UCLOUD_PROBE_IMAGE_SPEC="$(python3 - \
-          "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
-          "$UCLOUD_ARCHITECTURE" <<'PY'
-import json
-from pathlib import Path
-import sys
-
-runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
-probe = runtime.get("probe_image") if isinstance(runtime, dict) else None
-if not isinstance(probe, dict):
-    raise SystemExit("offline probe image metadata is absent")
-if probe.get("reference") != "busybox":
-    raise SystemExit("invalid offline probe image reference")
-if probe.get("file") != "runtime/images/runtime-conformance-busybox.tar":
-    raise SystemExit("invalid offline probe image filename")
-if probe.get("os") != "linux" or probe.get("architecture") != sys.argv[2]:
-    raise SystemExit("offline probe image platform does not match this VM")
-accepted_ids = probe.get("accepted_ids")
-if not isinstance(accepted_ids, list):
-    accepted_ids = [probe.get("image_id")]
-accepted_ids = [str(item or "") for item in accepted_ids]
-checksum = str(probe.get("sha256") or "")
-size = probe.get("size")
-if (
-    not accepted_ids
-    or any(not item.startswith("sha256:") for item in accepted_ids)
-    or len(checksum) != 64
-    or not isinstance(size, int)
-    or size <= 0
-):
-    raise SystemExit("invalid offline probe image metadata")
-print(f"{{checksum}}\t{{size}}\t{{','.join(sorted(set(accepted_ids)))}}")
-PY
-)" \
-          && IFS=$'\t' read -r UCLOUD_PROBE_IMAGE_SHA256 UCLOUD_PROBE_IMAGE_SIZE UCLOUD_PROBE_IMAGE_IDS <<< "$UCLOUD_PROBE_IMAGE_SPEC" \
-          && [ "$(stat -c %s "$UCLOUD_PROBE_IMAGE_ARCHIVE")" = "$UCLOUD_PROBE_IMAGE_SIZE" ] \
-          && printf '%s  %s\\n' "$UCLOUD_PROBE_IMAGE_SHA256" "$UCLOUD_PROBE_IMAGE_ARCHIVE" | sha256sum --check --status -; then
-          UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE="$UCLOUD_PROBE_IMAGE_ARCHIVE"
-          UCLOUD_OFFLINE_PROBE_IMAGE_IDS="$UCLOUD_PROBE_IMAGE_IDS"
-          echo "Verified offline busybox conformance image"
-        else
-          echo "WARNING: offline busybox conformance image is invalid; the probe may pull it" >&2
-        fi
-      fi
-    else
-      echo "WARNING: offline runtime bundle is incompatible or corrupt; using package repositories" >&2
-    fi
-  fi
-fi
+IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
+UCLOUD_BUNDLED_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(uname -r)"
 log_init_phase "package-bundle"
 
-install_offline_runtime() {{
+install_bundled_runtime() {{
   local package_dir="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/debs"
-  local package_file package_name candidate_version installed_version install_status
+  local package_file package_name install_status
   local policy_rc_d_created=0
   local -a local_packages=()
   local -a portable_packages=()
@@ -1007,26 +841,11 @@ install_offline_runtime() {{
   shopt -u nullglob
   for package_file in "${{package_files[@]}}"; do
     package_name="$(dpkg-deb -f "$package_file" Package)"
-    candidate_version="$(dpkg-deb -f "$package_file" Version)"
-    installed_version=""
-    if dpkg-query -W -f='${{Status}}' "$package_name" 2>/dev/null | grep -q "install ok installed"; then
-      installed_version="$(dpkg-query -W -f='${{Version}}' "$package_name")"
-    fi
     case "$package_name" in
       docker-ce|docker-ce-cli|containerd.io|docker-buildx-plugin|runsc)
-        if [ -n "$installed_version" ] \
-          && dpkg --compare-versions "$installed_version" ge "$candidate_version"; then
-          continue
-        fi
         portable_packages+=("$package_file")
         ;;
       *)
-        # The stock VM already contains a coherent Ubuntu base. Do not turn
-        # the portable bundle into a partial distribution upgrade merely
-        # because the gateway downloaded a newer patch version.
-        if [ -n "$installed_version" ]; then
-          continue
-        fi
         local_packages+=("$package_file")
         ;;
     esac
@@ -1053,10 +872,9 @@ install_offline_runtime() {{
   if [ "$install_status" -ne 0 ]; then
     return "$install_status"
   fi
-  # These vendor packages contain self-contained Go binaries and systemd
-  # units. Extracting their bundle-verified payloads avoids dpkg database/fsync and
-  # maintainer-script overhead on every ephemeral VM. The normal repository
-  # path below remains the fallback if any command is unusable afterwards.
+  # Runtime packages contain self-contained binaries and systemd units. Install
+  # their verified payloads exactly; the host package database is not runtime
+  # authority.
   for package_file in "${{portable_packages[@]}}"; do
     if ! dpkg-deb --fsys-tarfile "$package_file" \
       | $SUDO tar --extract --file=- --directory=/; then
@@ -1072,79 +890,14 @@ install_offline_runtime() {{
   if ! getent group docker >/dev/null 2>&1; then
     $SUDO groupadd --system docker
   fi
-  return "$install_status"
+  return 0
 }}
 
-required_packages_installed() {{
-  local package
-  for package in "$@"; do
-    if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-      return 1
-    fi
-  done
-}}
-
-OFFLINE_REQUIRED_PACKAGES=(xfsprogs)
-NEED_DOCKER_REPOSITORY=0
-NEED_GVISOR_REPOSITORY=0
-command -v docker >/dev/null 2>&1 || NEED_DOCKER_REPOSITORY=1
-command -v runsc >/dev/null 2>&1 || NEED_GVISOR_REPOSITORY=1
-OFFLINE_RUNTIME_FAILED=0
-if [ "$UCLOUD_OFFLINE_RUNTIME_AVAILABLE" -eq 1 ] \
-  && [ "$NEED_DOCKER_REPOSITORY" -eq 1 ] \
-  && [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
-  echo "Installing base packages, Docker Engine, and gVisor from verified offline packages"
-  if install_offline_runtime \
-    && required_packages_installed "${{OFFLINE_REQUIRED_PACKAGES[@]}}" \
-    && command -v docker >/dev/null 2>&1 \
-    && command -v runsc >/dev/null 2>&1; then
-    NEED_DOCKER_REPOSITORY=0
-    NEED_GVISOR_REPOSITORY=0
-    echo "Sandbox runtime installed without repository access"
-  else
-    OFFLINE_RUNTIME_FAILED=1
-    echo "WARNING: offline runtime install failed; using package repository fallback" >&2
-  fi
-fi
-log_init_phase "offline-runtime"
-
-BASE_PACKAGES=(python3 xfsprogs)
-if [ -z "$UCLOUD_PREBUILT_AGENT_ARCHIVE" ]; then
-  BASE_PACKAGES+=(python3-venv)
-fi
-MISSING_BASE_PACKAGES=()
-for package in "${{BASE_PACKAGES[@]}}"; do
-  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    MISSING_BASE_PACKAGES+=("$package")
-  fi
-done
-NEED_BASE_REPOSITORY=0
-if [ "${{#MISSING_BASE_PACKAGES[@]}}" -gt 0 ]; then
-  NEED_BASE_REPOSITORY=1
-fi
-if [ "$OFFLINE_RUNTIME_FAILED" -eq 1 ]; then
-  NEED_BASE_REPOSITORY=1
-  NEED_DOCKER_REPOSITORY=1
-  NEED_GVISOR_REPOSITORY=1
-fi
-
-APT_REPOSITORY_PACKAGES=()
-if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ] || [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
-  APT_REPOSITORY_PACKAGES=(ca-certificates curl gnupg)
-fi
-MISSING_APT_REPOSITORY_PACKAGES=()
-for package in "${{APT_REPOSITORY_PACKAGES[@]}}"; do
-  if ! dpkg-query -W -f='${{Status}}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-    MISSING_APT_REPOSITORY_PACKAGES+=("$package")
-  fi
-done
-if [ "${{#MISSING_APT_REPOSITORY_PACKAGES[@]}}" -gt 0 ]; then
-  echo "Installing package-repository prerequisites: ${{MISSING_APT_REPOSITORY_PACKAGES[*]}}"
-  $SUDO apt-get update
-  $SUDO apt-get install --no-install-recommends -y \
-    -o Dpkg::Use-Pty=0 "${{MISSING_APT_REPOSITORY_PACKAGES[@]}}"
-fi
-log_init_phase "repository-prerequisites"
+echo "Installing Docker, gVisor, and host support from the verified bundle"
+install_bundled_runtime
+command -v docker >/dev/null 2>&1
+command -v runsc >/dev/null 2>&1
+log_init_phase "runtime-bundle"
 
 if [ "$UCLOUD_HOST_ALIASES_JSON" != "[]" ]; then
   echo "Installing host aliases"
@@ -1176,79 +929,26 @@ PY
 fi
 log_init_phase "host-aliases"
 
-CONTAINER_PACKAGES=()
-$SUDO install -m 0755 -d /etc/apt/keyrings
-UBUNTU_CODENAME="$UCLOUD_OS_CODENAME"
-ARCHITECTURE="$UCLOUD_ARCHITECTURE"
-
-if [ "$NEED_DOCKER_REPOSITORY" -eq 1 ]; then
-  echo "Preparing Docker Engine repository"
-  if [ ! -s /etc/apt/keyrings/docker.asc ]; then
-    $SUDO curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    $SUDO chmod a+r /etc/apt/keyrings/docker.asc
-  fi
-  $SUDO tee /etc/apt/sources.list.d/docker.sources >/dev/null <<DOCKER_SOURCES
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $UBUNTU_CODENAME
-Components: stable
-Architectures: $ARCHITECTURE
-Signed-By: /etc/apt/keyrings/docker.asc
-DOCKER_SOURCES
-  CONTAINER_PACKAGES+=(docker-ce docker-ce-cli containerd.io)
-  if [ "{runtime_role}" = builder ]; then
-    CONTAINER_PACKAGES+=(docker-buildx-plugin)
-  fi
-fi
-
-if [ "$NEED_GVISOR_REPOSITORY" -eq 1 ]; then
-  echo "Preparing gVisor runsc repository"
-  if [ ! -s /usr/share/keyrings/gvisor-archive-keyring.gpg ]; then
-    curl -fsSL https://gvisor.dev/archive.key | $SUDO gpg --dearmor -o /usr/share/keyrings/gvisor-archive-keyring.gpg
-  fi
-  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gvisor-archive-keyring.gpg] https://storage.googleapis.com/gvisor/releases release main" | $SUDO tee /etc/apt/sources.list.d/gvisor.list >/dev/null
-  CONTAINER_PACKAGES+=(runsc)
-fi
-
-PACKAGES_TO_INSTALL=("${{MISSING_BASE_PACKAGES[@]}}" "${{CONTAINER_PACKAGES[@]}}")
-if [ "${{#PACKAGES_TO_INSTALL[@]}}" -gt 0 ]; then
-  echo "Installing base and container packages: ${{PACKAGES_TO_INSTALL[*]}}"
-  $SUDO apt-get update
-  $SUDO apt-get install --no-install-recommends -y \
-    -o Dpkg::Use-Pty=0 "${{PACKAGES_TO_INSTALL[@]}}"
-else
-  echo "Base and container packages already installed"
-fi
-log_init_phase "base-packages"
-log_init_phase "container-packages"
-
 UCLOUD_RUNTIME_KERNEL_MODULES=({runtime_kernel_modules_shell})
-if [ -n "$UCLOUD_OFFLINE_KERNEL_MODULE_DIR" ]; then
-  UCLOUD_KERNEL_MODULE_TARGET="/lib/modules/$(uname -r)/updates/ucloud-sandboxes"
-  UCLOUD_KERNEL_MODULE_MARKER="$UCLOUD_KERNEL_MODULE_TARGET/.bundle-sha256"
-  if [ ! -f "$UCLOUD_KERNEL_MODULE_MARKER" ] \
-    || [ "$(cat "$UCLOUD_KERNEL_MODULE_MARKER")" != "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
-    echo "Installing bundled container-runtime kernel module closure"
-    $SUDO rm -rf "$UCLOUD_KERNEL_MODULE_TARGET"
-    $SUDO mkdir -p "$UCLOUD_KERNEL_MODULE_TARGET"
-    for module_file in "$UCLOUD_OFFLINE_KERNEL_MODULE_DIR"/*.ko*; do
-      [ -f "$module_file" ] || {{ echo "Bundled kernel module closure is empty" >&2; exit 1; }}
-      $SUDO install -m 0644 "$module_file" "$UCLOUD_KERNEL_MODULE_TARGET/${{module_file##*/}}"
-    done
-    for module_metadata in modules.order modules.builtin modules.builtin.modinfo; do
-      if [ ! -e "/lib/modules/$(uname -r)/$module_metadata" ]; then
-        $SUDO touch "/lib/modules/$(uname -r)/$module_metadata"
-      fi
-    done
-    $SUDO depmod -a "$(uname -r)"
-    printf '%s\n' "$UCLOUD_PACKAGE_BUNDLE_SHA256" \
-      | $SUDO tee "$UCLOUD_KERNEL_MODULE_MARKER" >/dev/null
-  fi
-else
-  echo "Installing container-runtime kernel module fallback"
-  $SUDO apt-get update
-  $SUDO apt-get install --no-install-recommends -y \
-    -o Dpkg::Use-Pty=0 "linux-modules-extra-$(uname -r)"
+UCLOUD_KERNEL_MODULE_TARGET="/lib/modules/$(uname -r)/updates/ucloud-sandboxes"
+UCLOUD_KERNEL_MODULE_MARKER="$UCLOUD_KERNEL_MODULE_TARGET/.bundle-sha256"
+if [ ! -f "$UCLOUD_KERNEL_MODULE_MARKER" ] \
+  || [ "$(cat "$UCLOUD_KERNEL_MODULE_MARKER")" != "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
+  echo "Installing bundled container-runtime kernel module closure"
+  $SUDO rm -rf "$UCLOUD_KERNEL_MODULE_TARGET"
+  $SUDO mkdir -p "$UCLOUD_KERNEL_MODULE_TARGET"
+  for module_file in "$UCLOUD_BUNDLED_KERNEL_MODULE_DIR"/*.ko*; do
+    [ -f "$module_file" ] || {{ echo "Bundled kernel module closure is empty" >&2; exit 1; }}
+    $SUDO install -m 0644 "$module_file" "$UCLOUD_KERNEL_MODULE_TARGET/${{module_file##*/}}"
+  done
+  for module_metadata in modules.order modules.builtin modules.builtin.modinfo; do
+    if [ ! -e "/lib/modules/$(uname -r)/$module_metadata" ]; then
+      $SUDO touch "/lib/modules/$(uname -r)/$module_metadata"
+    fi
+  done
+  $SUDO depmod -a "$(uname -r)"
+  printf '%s\n' "$UCLOUD_PACKAGE_BUNDLE_SHA256" \
+    | $SUDO tee "$UCLOUD_KERNEL_MODULE_MARKER" >/dev/null
 fi
 for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
   $SUDO modprobe "$module"
@@ -1307,11 +1007,6 @@ if [ "$UCLOUD_DOCKER_QUOTA_IMAGE_GB" -gt 0 ]; then
   fi
   UCLOUD_DOCKER_DATA_ROOT="$UCLOUD_DOCKER_QUOTA_ROOT"
 fi
-UCLOUD_CHECKPOINT_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-checkpoints"
-UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_DOCKER_DATA_ROOT/ucloud-hibernation"
-if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
-  UCLOUD_HIBERNATION_QUOTA_ROOT="$UCLOUD_STORAGE_NATIVE_ROOT/mounts"
-fi
 log_init_phase "docker-storage"
 
 if ! grep -qw overlay /proc/filesystems; then
@@ -1319,47 +1014,11 @@ if ! grep -qw overlay /proc/filesystems; then
   exit 1
 fi
 
-if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
-  # The direct daemon runs as root and is the sole owner of its durable
-  # registry, OCI bundles, and lifecycle journals. The shared bootstrap state
-  # is otherwise owned by the unprivileged service account, so explicitly
-  # restore this subtree after every idempotent init run.
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  # The direct daemon is the sole owner of its registry, OCI bundles, and
+  # lifecycle journals.
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
-  # Repair old bootstrap ownership without descending into rootfs mounts.
-  # Those mounts can contain millions of files and changing them also creates
-  # unnecessary storage-native COW writes. Coreutils chown has no portable
-  # filesystem-boundary option, so prune by st_dev before changing anything.
-  $SUDO python3 - "$UCLOUD_STATE_DIR/direct-runtime" <<'UCLOUD_CHOWN_DIRECT_STATE_PY'
-import os
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1])
-root_device = os.lstat(root).st_dev
-os.chown(root, 0, 0, follow_symlinks=False)
-for current, directories, filenames in os.walk(
-    root, topdown=True, followlinks=False
-):
-    retained = []
-    for name in directories:
-        path = Path(current) / name
-        try:
-            if os.lstat(path).st_dev != root_device:
-                continue
-            os.chown(path, 0, 0, follow_symlinks=False)
-        except FileNotFoundError:
-            continue
-        retained.append(name)
-    directories[:] = retained
-    for name in filenames:
-        path = Path(current) / name
-        try:
-            if os.lstat(path).st_dev == root_device:
-                os.chown(path, 0, 0, follow_symlinks=False)
-        except FileNotFoundError:
-            pass
-UCLOUD_CHOWN_DIRECT_STATE_PY
   if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
     echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
     exit 1
@@ -1439,35 +1098,6 @@ PY
 fi
 log_init_phase "direct-runtime"
 
-RUNSC_PATH="$(command -v runsc)"
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
-
-echo "Installing raw runsc restore wrapper"
-$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_RUNSC_RESTORE_WRAPPER")" /etc/ucloud-sandboxes
-$SUDO install -d -m 0700 -o root -g root "$UCLOUD_CHECKPOINT_ROOT"
-UCLOUD_RUNSC_RESTORE_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_RUNSC_RESTORE_WRAPPER")/.ucloud-runsc-restore.XXXXXX")"
-$SUDO tee "$UCLOUD_RUNSC_RESTORE_TMP" >/dev/null <<'UCLOUD_RUNSC_RESTORE_PY'
-{runsc_restore_source}UCLOUD_RUNSC_RESTORE_PY
-$SUDO chown root:root "$UCLOUD_RUNSC_RESTORE_TMP"
-$SUDO chmod 0755 "$UCLOUD_RUNSC_RESTORE_TMP"
-$SUDO mv -f "$UCLOUD_RUNSC_RESTORE_TMP" "$UCLOUD_RUNSC_RESTORE_WRAPPER"
-UCLOUD_RUNSC_RESTORE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.runsc-restore.XXXXXX")"
-python3 - <<'PY' | $SUDO tee "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP" >/dev/null
-import json
-import os
-
-print(json.dumps({{
-    "version": 1,
-    "real_runsc": os.environ["RUNSC_PATH"],
-    "docker_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
-    "checkpoint_root": os.environ["UCLOUD_CHECKPOINT_ROOT"],
-    "state_root": os.environ["UCLOUD_RUNSC_RESTORE_STATE_ROOT"],
-}}, sort_keys=True))
-PY
-$SUDO chown root:root "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP"
-$SUDO chmod 0600 "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP"
-$SUDO mv -f "$UCLOUD_RUNSC_RESTORE_CONFIG_TMP" "$UCLOUD_RUNSC_RESTORE_CONFIG"
-
 detect_default_route_mtu() {{
   local iface mtu
   iface="$(ip -o route get 1.1.1.1 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
@@ -1486,7 +1116,7 @@ detect_default_route_mtu() {{
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
   UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
 fi
-export RUNSC_PATH UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON UCLOUD_CHECKPOINT_HELPER UCLOUD_CHECKPOINT_ROOT UCLOUD_HIBERNATION_QUOTA_ROOT UCLOUD_RUNSC_RESTORE_WRAPPER UCLOUD_RUNSC_RESTORE_STATE_ROOT
+export UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
 $SUDO mkdir -p /etc/docker
 DOCKER_DAEMON_JSON="$(mktemp)"
@@ -1499,24 +1129,6 @@ config = {{
     "experimental": True,
     "max-concurrent-downloads": int(os.environ["UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS"]),
     "max-concurrent-uploads": 8,
-    "runtimes": {{
-        "runsc": {{
-            "path": os.environ["RUNSC_PATH"],
-            "runtimeArgs": [
-                "--allow-live-tcp-migration=false",
-                "--net-disconnect-ok=true",
-                "--allow-connected-on-save=false",
-            ],
-        }},
-        "runsc-restore": {{
-            "path": os.environ["UCLOUD_RUNSC_RESTORE_WRAPPER"],
-            "runtimeArgs": [
-                "--allow-live-tcp-migration=false",
-                "--net-disconnect-ok=true",
-                "--allow-connected-on-save=false",
-            ],
-        }},
-    }},
 }}
 insecure_registries = json.loads(os.environ.get("UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON") or "[]")
 if insecure_registries:
@@ -1560,170 +1172,27 @@ fi
 $SUDO usermod -aG docker "$UCLOUD_SERVICE_USER"
 log_init_phase "docker-daemon"
 
-echo "Installing ucloud-sandboxes package: $UCLOUD_PACKAGE_SPEC"
-UCLOUD_PACKAGE_MARKER="$UCLOUD_STATE_DIR/installed-package.fingerprint"
-UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC"
-if [ -n "$UCLOUD_PACKAGE_BUNDLE_SHA256" ]; then
-  UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC $UCLOUD_PACKAGE_BUNDLE_SHA256"
-elif [ -f "$UCLOUD_PACKAGE_SPEC" ]; then
-  UCLOUD_PACKAGE_FINGERPRINT="$UCLOUD_PACKAGE_SPEC $(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
-fi
-if [ -n "$UCLOUD_PREBUILT_AGENT_ARCHIVE" ]; then
-  echo "Activating preassembled ucloud-sandboxes runtime"
-  UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_STATE_DIR/agent-runtimes/$UCLOUD_PREBUILT_AGENT_SHA256"
-  if [ ! -f "$UCLOUD_AGENT_RUNTIME_DIR/.complete" ]; then
-    UCLOUD_AGENT_RUNTIME_TMP="$UCLOUD_AGENT_RUNTIME_DIR.tmp.$$"
-    rm -rf "$UCLOUD_AGENT_RUNTIME_TMP"
-    mkdir -p "$UCLOUD_AGENT_RUNTIME_TMP"
-    tar --no-same-owner --no-same-permissions -xf "$UCLOUD_PREBUILT_AGENT_ARCHIVE" -C "$UCLOUD_AGENT_RUNTIME_TMP"
-    test -d "$UCLOUD_AGENT_RUNTIME_TMP/site-packages/ucloud_sandboxes"
-    touch "$UCLOUD_AGENT_RUNTIME_TMP/.complete"
-    rm -rf "$UCLOUD_AGENT_RUNTIME_DIR"
-    mv "$UCLOUD_AGENT_RUNTIME_TMP" "$UCLOUD_AGENT_RUNTIME_DIR"
-  fi
-  $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
-  UCLOUD_AGENT_LAUNCHER="$(mktemp)"
-  printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.cli "$@"\n' \
-    "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_AGENT_LAUNCHER"
-  $SUDO install -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_AGENT_LAUNCHER" "$UCLOUD_AGENT_BIN"
-  rm -f "$UCLOUD_AGENT_LAUNCHER"
-  UCLOUD_STORAGE_AGENT_LAUNCHER="$(mktemp)"
-  printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.storage_native_service "$@"\n' \
-    "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_STORAGE_AGENT_LAUNCHER"
-  $SUDO install -m 0755 -o root -g root "$UCLOUD_STORAGE_AGENT_LAUNCHER" "$UCLOUD_STORAGE_AGENT_BIN"
-  rm -f "$UCLOUD_STORAGE_AGENT_LAUNCHER"
-else
-  echo "Preassembled runtime unavailable; installing ucloud-sandboxes into a virtual environment"
-  if [ -d "$UCLOUD_VENV_DIR" ]; then
-    $SUDO chown -R "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_VENV_DIR"
-  fi
-  run_as_service_user python3 -m venv "$UCLOUD_VENV_DIR"
-  if [ -x "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" ] \
-    && [ -f "$UCLOUD_PACKAGE_MARKER" ] \
-    && grep -Fx -- "$UCLOUD_PACKAGE_FINGERPRINT" "$UCLOUD_PACKAGE_MARKER" >/dev/null 2>&1; then
-    echo "ucloud-sandboxes package already installed for current fingerprint"
-  else
-    run_as_service_user "$UCLOUD_VENV_DIR/bin/python" -m pip install --disable-pip-version-check --upgrade "${{UCLOUD_PACKAGE_INSTALL_ARGS[@]}}" "$UCLOUD_PACKAGE_INSTALL_SPEC"
-    printf '%s\n' "$UCLOUD_PACKAGE_FINGERPRINT" | $SUDO tee "$UCLOUD_PACKAGE_MARKER" >/dev/null
-    $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_PACKAGE_MARKER"
-  fi
-  $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
-  $SUDO ln -sfn "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes" "$UCLOUD_AGENT_BIN"
-  $SUDO ln -sfn "$UCLOUD_VENV_DIR/bin/ucloud-sandboxes-storage" "$UCLOUD_STORAGE_AGENT_BIN"
-fi
+echo "Activating bundled ucloud-sandboxes runtime"
+UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_STATE_DIR/agent-runtimes/$UCLOUD_PREBUILT_AGENT_SHA256"
+UCLOUD_AGENT_RUNTIME_TMP="$UCLOUD_AGENT_RUNTIME_DIR.tmp.$$"
+rm -rf "$UCLOUD_AGENT_RUNTIME_TMP"
+mkdir -p "$UCLOUD_AGENT_RUNTIME_TMP"
+tar --no-same-owner --no-same-permissions -xf "$UCLOUD_PREBUILT_AGENT_ARCHIVE" -C "$UCLOUD_AGENT_RUNTIME_TMP"
+test -d "$UCLOUD_AGENT_RUNTIME_TMP/site-packages/ucloud_sandboxes"
+rm -rf "$UCLOUD_AGENT_RUNTIME_DIR"
+mv "$UCLOUD_AGENT_RUNTIME_TMP" "$UCLOUD_AGENT_RUNTIME_DIR"
+$SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
+UCLOUD_AGENT_LAUNCHER="$(mktemp)"
+printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.cli "$@"\n' \
+  "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_AGENT_LAUNCHER"
+$SUDO install -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_AGENT_LAUNCHER" "$UCLOUD_AGENT_BIN"
+rm -f "$UCLOUD_AGENT_LAUNCHER"
+UCLOUD_STORAGE_AGENT_LAUNCHER="$(mktemp)"
+printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.storage_native_service "$@"\n' \
+  "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_STORAGE_AGENT_LAUNCHER"
+$SUDO install -m 0755 -o root -g root "$UCLOUD_STORAGE_AGENT_LAUNCHER" "$UCLOUD_STORAGE_AGENT_BIN"
+rm -f "$UCLOUD_STORAGE_AGENT_LAUNCHER"
 log_init_phase "python-package"
-
-echo "Installing privileged checkpoint helper"
-$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_CHECKPOINT_HELPER")"
-$SUDO install -d -m 0700 -o root -g root "$UCLOUD_CHECKPOINT_ROOT"
-UCLOUD_CHECKPOINT_HELPER_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_CHECKPOINT_HELPER")/.ucloud-checkpoint-helper.XXXXXX")"
-$SUDO tee "$UCLOUD_CHECKPOINT_HELPER_TMP" >/dev/null <<'UCLOUD_CHECKPOINT_HELPER_PY'
-{checkpoint_helper_source}UCLOUD_CHECKPOINT_HELPER_PY
-$SUDO chown root:root "$UCLOUD_CHECKPOINT_HELPER_TMP"
-$SUDO chmod 0755 "$UCLOUD_CHECKPOINT_HELPER_TMP"
-$SUDO mv -f "$UCLOUD_CHECKPOINT_HELPER_TMP" "$UCLOUD_CHECKPOINT_HELPER"
-
-UCLOUD_CHECKPOINT_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.checkpoint-helper.XXXXXX")"
-python3 - <<'PY' | $SUDO tee "$UCLOUD_CHECKPOINT_CONFIG_TMP" >/dev/null
-import json
-import os
-
-print(json.dumps({{
-    "version": 1,
-    "docker_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
-    "checkpoint_root": os.environ["UCLOUD_CHECKPOINT_ROOT"],
-}}, sort_keys=True))
-PY
-$SUDO chown root:root "$UCLOUD_CHECKPOINT_CONFIG_TMP"
-$SUDO chmod 0600 "$UCLOUD_CHECKPOINT_CONFIG_TMP"
-$SUDO mv -f "$UCLOUD_CHECKPOINT_CONFIG_TMP" "$UCLOUD_CHECKPOINT_HELPER_CONFIG"
-
-UCLOUD_CHECKPOINT_SUDOERS_TMP="$($SUDO mktemp "/etc/sudoers.d/.ucloud-sandbox-checkpoint.XXXXXX")"
-printf '%s ALL=(root) NOPASSWD: %s\n' "$UCLOUD_SERVICE_USER" "$UCLOUD_CHECKPOINT_HELPER" | $SUDO tee "$UCLOUD_CHECKPOINT_SUDOERS_TMP" >/dev/null
-$SUDO chown root:root "$UCLOUD_CHECKPOINT_SUDOERS_TMP"
-$SUDO chmod 0440 "$UCLOUD_CHECKPOINT_SUDOERS_TMP"
-$SUDO visudo -cf "$UCLOUD_CHECKPOINT_SUDOERS_TMP" >/dev/null
-$SUDO mv -f "$UCLOUD_CHECKPOINT_SUDOERS_TMP" "$UCLOUD_CHECKPOINT_HELPER_SUDOERS"
-$SUDO "$UCLOUD_CHECKPOINT_HELPER" gc >/dev/null
-log_init_phase "checkpoint-helper"
-
-echo "Installing privileged hibernation quota helper"
-$SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_HIBERNATION_QUOTA_HELPER")"
-$SUDO install -d -m 0700 -o root -g root "$UCLOUD_HIBERNATION_QUOTA_ROOT"
-UCLOUD_HIBERNATION_QUOTA_HELPER_TMP="$($SUDO mktemp "$(dirname "$UCLOUD_HIBERNATION_QUOTA_HELPER")/.ucloud-hibernation-quota-helper.XXXXXX")"
-$SUDO tee "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP" >/dev/null <<'UCLOUD_HIBERNATION_QUOTA_HELPER_PY'
-{hibernation_quota_helper_source}UCLOUD_HIBERNATION_QUOTA_HELPER_PY
-$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP"
-$SUDO chmod 0755 "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP"
-$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_HELPER_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER"
-
-UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.hibernation-quota-helper.XXXXXX")"
-python3 - <<'PY' | $SUDO tee "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP" >/dev/null
-import json
-import os
-
-print(json.dumps({{
-    "version": 1,
-    "mount_root": os.environ["UCLOUD_DOCKER_DATA_ROOT"],
-    "quota_root": os.environ["UCLOUD_HIBERNATION_QUOTA_ROOT"],
-    "xfs_io": "/usr/sbin/xfs_io",
-    "xfs_quota": "/usr/sbin/xfs_quota",
-    "findmnt": "/usr/bin/findmnt",
-}}, sort_keys=True))
-PY
-$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP"
-$SUDO chmod 0600 "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP"
-$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_CONFIG_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER_CONFIG"
-
-UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP="$($SUDO mktemp "/etc/sudoers.d/.ucloud-sandbox-hibernation-quota.XXXXXX")"
-printf '%s ALL=(root) NOPASSWD: %s\n' "$UCLOUD_SERVICE_USER" "$UCLOUD_HIBERNATION_QUOTA_HELPER" | $SUDO tee "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" >/dev/null
-$SUDO chown root:root "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP"
-$SUDO chmod 0440 "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP"
-$SUDO visudo -cf "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" >/dev/null
-$SUDO mv -f "$UCLOUD_HIBERNATION_QUOTA_SUDOERS_TMP" "$UCLOUD_HIBERNATION_QUOTA_HELPER_SUDOERS"
-log_init_phase "hibernation-quota-helper"
-
-if [ -n "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" ]; then
-  echo "Loading offline busybox conformance image"
-  LOADED_PROBE_IMAGE_IDS=""
-  probe_image_identity_matches() {{
-    local expected actual
-    IFS=',' read -ra expected_ids <<< "$UCLOUD_OFFLINE_PROBE_IMAGE_IDS"
-    for expected in "${{expected_ids[@]}}"; do
-      while read -r actual; do
-        actual="${{actual##*@}}"
-        if [ "$actual" = "$expected" ]; then
-          return 0
-        fi
-      done < <(tr ' ' '\n' <<< "$LOADED_PROBE_IMAGE_IDS")
-    done
-    return 1
-  }}
-  if $SUDO docker load --input "$UCLOUD_OFFLINE_PROBE_IMAGE_ARCHIVE" >/dev/null \
-    && LOADED_PROBE_IMAGE_IDS="$($SUDO docker image inspect --format '{{{{.Id}}}} {{{{range .RepoDigests}}}}{{{{.}}}} {{{{end}}}}' busybox 2>/dev/null)" \
-    && probe_image_identity_matches; then
-    echo "Loaded verified busybox conformance image without registry access"
-  else
-    echo "WARNING: offline busybox image load failed; the conformance probe may pull it" >&2
-    $SUDO docker image rm --force busybox >/dev/null 2>&1 || true
-  fi
-fi
-
-if [ "$UCLOUD_NODE_RUNTIME" = legacy ]; then
-  echo "Running runtime conformance probe"
-  set +e
-  $SUDO "$UCLOUD_AGENT_BIN" runtime-conformance --sudo --execute --output json --probe-live-fork --checkpoint-helper "$UCLOUD_CHECKPOINT_HELPER" --checkpoint-root "$UCLOUD_CHECKPOINT_ROOT" | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
-  CONFORMANCE_STATUS=${{PIPESTATUS[0]}}
-  set -e
-  if [ "$CONFORMANCE_STATUS" -ne 0 ]; then
-    echo "Runtime conformance failed; node will not advertise conformance-derived capabilities"
-  fi
-  $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_RUNTIME_CONFORMANCE_FILE" 2>/dev/null || true
-else
-  echo "Skipping legacy task conformance on direct-runtime node"
-  printf '%s\n' '{{"capabilities":[],"directRuntime":true,"results":{{}},"version":1}}' | $SUDO tee "$UCLOUD_RUNTIME_CONFORMANCE_FILE" >/dev/null
-fi
-log_init_phase "runtime-conformance"
 
 echo "Writing node environment"
 $SUDO tee {shlex.quote(env_file)} >/dev/null <<NODE_ENV
@@ -1758,25 +1227,19 @@ UCLOUD_DOCKER_QUOTA_IMAGE=$UCLOUD_DOCKER_QUOTA_IMAGE
 UCLOUD_DOCKER_QUOTA_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT
 UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON=$UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
 UCLOUD_HOST_ALIASES_JSON=$UCLOUD_HOST_ALIASES_JSON
-UCLOUD_RUNTIME_CONFORMANCE_FILE=$UCLOUD_RUNTIME_CONFORMANCE_FILE
-UCLOUD_CHECKPOINT_HELPER=$UCLOUD_CHECKPOINT_HELPER
-UCLOUD_CHECKPOINT_ROOT=$UCLOUD_CHECKPOINT_ROOT
-UCLOUD_HIBERNATION_QUOTA_HELPER=$UCLOUD_HIBERNATION_QUOTA_HELPER
-UCLOUD_HIBERNATION_QUOTA_ROOT=$UCLOUD_HIBERNATION_QUOTA_ROOT
-UCLOUD_NODE_RUNTIME=$UCLOUD_NODE_RUNTIME
+UCLOUD_NODE_ROLE=$UCLOUD_NODE_ROLE
 UCLOUD_DIRECT_RUNSC=$UCLOUD_DIRECT_RUNSC
 UCLOUD_DIRECT_RUNSC_COMMIT=$UCLOUD_DIRECT_RUNSC_COMMIT
 UCLOUD_MANAGED_INIT=$UCLOUD_MANAGED_INIT
 UCLOUD_DIRECT_INIT_BINARY=$UCLOUD_DIRECT_INIT_BINARY
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DIRECT_IMAGE_CACHE_ROOT
-UCLOUD_DIRECT_DISK_CAPACITY_MB=$UCLOUD_DIRECT_DISK_CAPACITY_MB
-UCLOUD_DIRECT_DISK_HEADROOM_MB=$UCLOUD_DIRECT_DISK_HEADROOM_MB
 UCLOUD_DIRECT_WRITABLE_DISK_MB=$UCLOUD_DIRECT_WRITABLE_DISK_MB
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES=$UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES
 UCLOUD_STORAGE_NATIVE_BACKEND=$UCLOUD_STORAGE_NATIVE_BACKEND
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET=$UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET=$UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET
 UCLOUD_STORAGE_NATIVE_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT
+UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_MOUNT_ROOT
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT=$UCLOUD_STORAGE_NATIVE_CACHE_ROOT
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG
 UCLOUD_STORAGE_NATIVE_CACHE_GB=$UCLOUD_STORAGE_NATIVE_CACHE_GB
@@ -1787,7 +1250,7 @@ UCLOUD_STORAGE_NATIVE_REPOSITORY=$UCLOUD_STORAGE_NATIVE_REPOSITORY
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES=$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES
 NODE_ENV
 
-if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   echo "Writing storage-native backend and service units"
   $SUDO tee {shlex.quote(storage_backend_service)} >/dev/null <<STORAGE_BACKEND_SERVICE
 [Unit]
@@ -1888,7 +1351,7 @@ WantedBy=timers.target
 HEARTBEAT_TIMER
 
 $SUDO systemctl daemon-reload
-if [ "$UCLOUD_NODE_RUNTIME" = direct ]; then
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   $SUDO systemctl enable ucloud-storage-native-backend.service
   $SUDO systemctl enable ucloud-storage-native.service
   $SUDO systemctl restart ucloud-storage-native-backend.service
@@ -1935,11 +1398,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("ssh port start must be <= ssh port end.")
     if options.heartbeat_interval_seconds < 1:
         raise ValueError("heartbeat interval must be positive.")
-    if options.node_runtime not in {"legacy", "direct"}:
-        raise ValueError("node runtime must be either 'legacy' or 'direct'.")
-    if options.enable_image_builds and options.node_runtime != "legacy":
-        raise ValueError("builder nodes must use the legacy Docker image runtime.")
-    if options.node_runtime == "direct":
+    if not options.enable_image_builds:
         if not re.fullmatch(r"[0-9a-f]{40}", options.direct_runsc_commit):
             raise ValueError(
                 "direct runtime requires an exact 40-character runsc commit"
@@ -1951,11 +1410,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         for endpoint in options.direct_network_allow_tcp:
             DirectNetworkTcpEgress.parse(endpoint)
         if options.direct_network == "none" and options.direct_network_allow_tcp:
-            raise ValueError(
-                "direct network TCP egress requires sandbox networking."
-            )
-        if options.runtime_dry_run:
-            raise ValueError("direct runtime does not support dry-run node service mode.")
+            raise ValueError("direct network TCP egress requires sandbox networking.")
         if options.docker_quota_image_gb < 1:
             raise ValueError(
                 "direct runtime requires bounded Docker image infrastructure."
@@ -2041,17 +1496,21 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "storage-native repository": options.storage_native_repository,
     }.items():
         _reject_newline(value_name, value)
-    if options.package_sha256 and (
-        len(options.package_sha256) != 64
-        or any(
-            character not in "0123456789abcdef" for character in options.package_sha256
-        )
+    if not options.package_sha256:
+        raise ValueError("package sha256 is required.")
+    if len(options.package_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in options.package_sha256
     ):
         raise ValueError("package sha256 must be a lowercase SHA-256 digest.")
-    if options.node_control_bearer_token_file and not options.node_control_bearer_token:
-        raise ValueError(
-            "node control bearer token is required when its file is configured."
-        )
+    for name, value in (
+        ("deployment id", options.deployment_id),
+        ("heartbeat bearer token file", options.heartbeat_bearer_token_file),
+        ("heartbeat bearer token", options.heartbeat_bearer_token),
+        ("node control bearer token file", options.node_control_bearer_token_file),
+        ("node control bearer token", options.node_control_bearer_token),
+    ):
+        if not value.strip():
+            raise ValueError(f"{name} is required")
     for registry in options.docker_insecure_registries:
         if not registry.strip():
             raise ValueError("docker insecure registry cannot be empty.")
@@ -2196,16 +1655,10 @@ def parse_vm_init_phases(output: str) -> tuple[dict[str, int], int | None]:
     return phases, total_duration_ms
 
 
-def local_package_spec_path(package_spec: str) -> Path | None:
-    if not package_spec:
-        return None
-    if "://" in package_spec or package_spec.startswith(
-        ("git+", "hg+", "svn+", "bzr+")
-    ):
-        return None
+def local_package_spec_path(package_spec: str) -> Path:
     path = Path(package_spec).expanduser()
     if not path.is_file():
-        return None
+        raise ValueError("node package spec must be a local bundle path")
     return path
 
 
@@ -2260,10 +1713,8 @@ def stage_vm_init_package_over_ssh(
     private_key_file: str | None = None,
     known_hosts_file: str | None = None,
     remote_package_dir: str = DEFAULT_REMOTE_PACKAGE_DIR,
-) -> VmInitPackageStageResult | None:
+) -> VmInitPackageStageResult:
     local_path = local_package_spec_path(options.package_spec)
-    if local_path is None:
-        return None
     remote_path = remote_package_spec_for_local_path(
         options,
         local_path,

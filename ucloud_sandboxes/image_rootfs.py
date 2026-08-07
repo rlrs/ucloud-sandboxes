@@ -6,15 +6,12 @@ import fcntl
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shutil
-import tarfile
 import tempfile
-from threading import Lock, Semaphore
-import time
-from typing import Any, Iterator, Protocol
-from uuid import uuid4
+from threading import Lock
+from typing import Any, Iterator
 
 from .direct_warden import (
     CommandRunner,
@@ -26,7 +23,6 @@ from .direct_warden import (
 
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
-_ROOTFS_SCHEMA = 2
 _OVERLAY2_ROOTFS_SCHEMA = 1
 _OVERLAY_METADATA = ".ucloud-overlay.json"
 _OVERLAY_METADATA_SCHEMA = 1
@@ -43,6 +39,50 @@ def _canonical_json(payload: object) -> bytes:
 
 def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    descriptor, raw = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    temporary = Path(raw)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+    )
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _require_real_directory(path: Path) -> None:
+    if not path.is_dir() or path.is_symlink():
+        raise DirectWardenError("rootfs path must be a real directory")
+
+
+def _require_private_directory(path: Path) -> None:
+    _require_real_directory(path)
+    info = path.lstat()
+    if info.st_uid != os.geteuid() or info.st_mode & 0o022:
+        raise DirectWardenError("rootfs store directory must be owned and private")
 
 
 @dataclass(frozen=True)
@@ -79,44 +119,21 @@ class DockerImageConfig:
                 raise ValueError(f"Docker image Config.{name} is invalid")
             return tuple(value)
 
+        def optional_string(name: str) -> str:
+            value = raw.get(name)
+            if value is None:
+                return ""
+            if not isinstance(value, str):
+                raise ValueError(f"Docker image Config.{name} is invalid")
+            return value
+
         return cls(
             entrypoint=string_tuple("Entrypoint"),
             command=string_tuple("Cmd"),
             env=string_tuple("Env"),
-            working_dir=str(raw.get("WorkingDir") or ""),
-            user=str(raw.get("User") or ""),
+            working_dir=optional_string("WorkingDir"),
+            user=optional_string("User"),
         )
-
-    @classmethod
-    def from_dict(cls, raw: object) -> DockerImageConfig:
-        if not isinstance(raw, dict) or set(raw) != {
-            "command",
-            "entrypoint",
-            "env",
-            "user",
-            "working_dir",
-        }:
-            raise ValueError("materialized Docker image config is invalid")
-        for name in ("command", "entrypoint", "env"):
-            if not isinstance(raw[name], list):
-                raise ValueError("materialized Docker image config is invalid")
-        return cls(
-            command=tuple(raw["command"]),
-            entrypoint=tuple(raw["entrypoint"]),
-            env=tuple(raw["env"]),
-            user=str(raw["user"]),
-            working_dir=str(raw["working_dir"]),
-        )
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "command": list(self.command),
-            "entrypoint": list(self.entrypoint),
-            "env": list(self.env),
-            "user": self.user,
-            "working_dir": self.working_dir,
-        }
-
 
 @dataclass(frozen=True)
 class MaterializedRootfs:
@@ -127,373 +144,50 @@ class MaterializedRootfs:
     image_config: DockerImageConfig
 
 
-class RootfsExtractor(Protocol):
-    def extract(self, archive: Path, destination: Path) -> None: ...
+class DockerOverlay2RootfsStore:
+    """Mount Docker's immutable overlay2 layers without flattening the image.
 
+    Docker remains the OCI image owner, but it never owns a sandbox task. A
+    digest-specific local tag leases every image used by the runtime so Docker
+    pruning cannot remove layers below a live or parked sandbox.
+    """
 
-class GnuTarRootfsExtractor:
-    """Validate Docker's export stream before privileged GNU tar extraction."""
-
-    def __init__(
-        self,
-        *,
-        runner: CommandRunner | None = None,
-        tar_binary: str = "tar",
-        sync_binary: str = "sync",
-    ) -> None:
-        self.runner = runner or SubprocessCommandRunner()
-        self.tar_binary = tar_binary
-        self.sync_binary = sync_binary
-
-    def extract(self, archive: Path, destination: Path) -> None:
-        self._validate_archive(archive)
-        self._checked(
-            self.tar_binary,
-            "--extract",
-            f"--file={archive}",
-            f"--directory={destination}",
-            "--numeric-owner",
-            "--same-owner",
-            "--same-permissions",
-            "--xattrs",
-            "--delay-directory-restore",
-        )
-        self._checked(self.sync_binary, "-f", str(destination))
-
-    @staticmethod
-    def _validate_archive(archive: Path) -> None:
-        symlinks: set[PurePosixPath] = set()
-        with tarfile.open(archive, mode="r:*") as source:
-            for member in source:
-                path = PurePosixPath(member.name)
-                if (
-                    not member.name
-                    or path.is_absolute()
-                    or ".." in path.parts
-                    or "\\" in member.name
-                ):
-                    raise DirectWardenError(
-                        f"image export contains an unsafe path: {member.name!r}"
-                    )
-                normalized = PurePosixPath(
-                    *(part for part in path.parts if part not in {"", "."})
-                )
-                if not normalized.parts:
-                    continue
-                for parent in normalized.parents:
-                    if parent in symlinks:
-                        raise DirectWardenError(
-                            "image export writes through an archived symlink"
-                        )
-                if member.issym():
-                    symlinks.add(normalized)
-                if member.islnk():
-                    target = PurePosixPath(member.linkname)
-                    if target.is_absolute() or ".." in target.parts:
-                        raise DirectWardenError(
-                            "image export contains an unsafe hard link"
-                        )
-
-    def _checked(self, *argv: str) -> None:
-        result = self.runner.run(argv, timeout=600)
-        if result.returncode != 0:
-            raise DirectWardenError(
-                f"rootfs extraction command failed: {result.argv!r}; "
-                f"stdout={result.stdout!r}; stderr={result.stderr!r}"
-            )
-
-
-class DockerRootfsStore:
-    """Use Docker for image resolution/export, never for sandbox tasks."""
-
-    MANIFEST = "manifest.json"
+    PIN_REPOSITORY = "ucloud-sandbox-rootfs-cache"
+    MAX_CONCURRENT_OPERATIONS = 32
     COMPLETE = "COMPLETE"
-    EXPORT_LABEL = "dev.ucloud-sandboxes.image-export=true"
 
     def __init__(
         self,
         root: Path,
         *,
         runner: CommandRunner | None = None,
-        extractor: RootfsExtractor | None = None,
         docker_binary: str = "docker",
-        max_concurrent_exports: int = 4,
+        docker_root: Path | None = None,
+        mount_binary: str = "mount",
+        mountpoint_binary: str = "mountpoint",
+        umount_binary: str = "umount",
     ) -> None:
         if not root.is_absolute():
             raise ValueError("rootfs store root must be absolute")
+        if docker_root is not None and not docker_root.is_absolute():
+            raise ValueError("Docker data root must be absolute")
         self.root = root
         self.runner = runner or SubprocessCommandRunner()
-        self.extractor = extractor or GnuTarRootfsExtractor()
         self.docker_binary = docker_binary
-        if max_concurrent_exports < 1:
-            raise ValueError("max_concurrent_exports must be positive")
-        self.max_concurrent_exports = int(max_concurrent_exports)
-        self._export_slots = Semaphore(self.max_concurrent_exports)
         self._operation_guard = Lock()
-        self._active_exports = 0
-        self._waiting_exports = 0
-        self._exports_reconcile_guard = Lock()
-        self._exports_reconciled = False
+        self._active_operations = 0
+        self._configured_docker_root = docker_root
+        self._resolved_docker_root: Path | None = None
+        self._docker_root_guard = Lock()
+        self._driver_validated = False
+        self.mount_binary = mount_binary
+        self.mountpoint_binary = mountpoint_binary
+        self.umount_binary = umount_binary
         self.images = root / "images"
         self.locks = root / "locks"
         for path in (root, self.images, self.locks):
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
-            self._require_private_directory(path)
-
-    def materialize(self, image_ref: str) -> MaterializedRootfs:
-        image_ref = str(image_ref).strip()
-        if not image_ref or "\0" in image_ref:
-            raise ValueError("image_ref is invalid")
-        inspection = self._checked(
-            self.docker_binary,
-            "image",
-            "inspect",
-            image_ref,
-        )
-        try:
-            raw = json.loads(inspection)
-            image_id = str(raw[0]["Id"])
-            image_config = DockerImageConfig.from_inspection(raw[0].get("Config"))
-        except (
-            IndexError,
-            KeyError,
-            TypeError,
-            ValueError,
-            json.JSONDecodeError,
-        ) as exc:
-            raise DirectWardenError(
-                "docker image inspect returned invalid JSON"
-            ) from exc
-        if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
-            raise DirectWardenError("docker image inspect returned an invalid image ID")
-        digest = image_id[7:]
-        # The digest lock deduplicates identical images. Distinct cold images
-        # may export concurrently; a shared process lease prevents a restarted
-        # Warden's orphan reconciliation from deleting their exporter
-        # containers. The old global exclusive lock serialized every distinct
-        # image in a burst and produced multi-minute queues.
-        with self._locked(digest):
-            existing = self._load_complete(digest, image_ref=image_ref)
-            if existing is not None:
-                return existing
-            self._ensure_export_reconciliation()
-            self._discard_pending_exports(digest)
-            with self._operation_guard:
-                self._waiting_exports += 1
-            self._export_slots.acquire()
-            with self._operation_guard:
-                self._waiting_exports -= 1
-                self._active_exports += 1
-            try:
-                with self._locked("exports", shared=True):
-                    return self._export(
-                        digest,
-                        image_id=image_id,
-                        image_ref=image_ref,
-                        image_config=image_config,
-                    )
-            except Exception:
-                self._discard_pending_exports(digest)
-                raise
-            finally:
-                with self._operation_guard:
-                    self._active_exports -= 1
-                self._export_slots.release()
-
-    def operation_snapshot(self) -> dict[str, int]:
-        with self._operation_guard:
-            return {
-                "active_operations": self._active_exports,
-                "waiting_operations": self._waiting_exports,
-                "max_concurrent_operations": self.max_concurrent_exports,
-            }
-
-    def _ensure_export_reconciliation(self) -> None:
-        with self._exports_reconcile_guard:
-            if self._exports_reconciled:
-                return
-            with self._locked("exports"):
-                self._reconcile_export_containers_locked()
-            self._exports_reconciled = True
-
-    def reconcile_export_containers(self) -> tuple[str, ...]:
-        """Remove exporter containers orphaned by an earlier Warden process."""
-        with self._locked("exports"):
-            removed = self._reconcile_export_containers_locked()
-        with self._exports_reconcile_guard:
-            self._exports_reconciled = True
-        return removed
-
-    def _reconcile_export_containers_locked(self) -> tuple[str, ...]:
-        listing = self._checked(
-            self.docker_binary,
-            "ps",
-            "--all",
-            f"--filter=label={self.EXPORT_LABEL}",
-            "--format={{.ID}} {{.State}}",
-        )
-        removed: list[str] = []
-        for line in listing.splitlines():
-            fields = line.split()
-            if len(fields) != 2 or not re.fullmatch(r"[0-9a-f]{12,64}", fields[0]):
-                raise DirectWardenError("docker returned invalid exporter inventory")
-            container_id, state = fields
-            if state not in {"created", "exited", "dead"}:
-                raise DirectWardenError(
-                    "refusing to remove an exporter container in state "
-                    f"{state!r}: {container_id}"
-                )
-            self._checked(
-                self.docker_binary,
-                "rm",
-                "--force",
-                "--volumes",
-                container_id,
-            )
-            removed.append(container_id)
-        return tuple(removed)
-
-    def _export(
-        self,
-        digest: str,
-        *,
-        image_id: str,
-        image_ref: str,
-        image_config: DockerImageConfig,
-    ) -> MaterializedRootfs:
-        pending = self.images / f".{digest}.{uuid4().hex}.pending"
-        pending.mkdir(mode=0o700)
-        rootfs = pending / "rootfs"
-        rootfs.mkdir(mode=0o755)
-        archive = pending / "rootfs.tar"
-        container_id = ""
-        try:
-            container_id = self._checked(
-                self.docker_binary,
-                "create",
-                "--network=none",
-                "--entrypoint=/bin/true",
-                f"--label={self.EXPORT_LABEL}",
-                image_id,
-            ).strip()
-            if not re.fullmatch(r"[0-9a-f]{12,64}", container_id):
-                raise DirectWardenError(
-                    "docker create returned an invalid container ID"
-                )
-            self._checked(
-                self.docker_binary,
-                "export",
-                f"--output={archive}",
-                container_id,
-                timeout=600,
-            )
-            self.extractor.extract(archive, rootfs)
-        finally:
-            if container_id:
-                self.runner.run(
-                    (
-                        self.docker_binary,
-                        "rm",
-                        "--force",
-                        "--volumes",
-                        container_id,
-                    ),
-                    timeout=60,
-                )
-        archive.unlink()
-        identity = _sha256(
-            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
-        )
-        manifest = {
-            "created_ns": time.time_ns(),
-            "image_id": image_id,
-            "image_config": image_config.to_dict(),
-            "image_ref": image_ref,
-            "rootfs_identity_sha256": identity,
-            "schema": _ROOTFS_SCHEMA,
-        }
-        self._atomic_write(pending / self.MANIFEST, _canonical_json(manifest) + b"\n")
-        self._atomic_write(
-            pending / self.COMPLETE,
-            _canonical_json(
-                {
-                    "image_id": image_id,
-                    "rootfs_identity_sha256": identity,
-                    "schema": _ROOTFS_SCHEMA,
-                }
-            )
-            + b"\n",
-        )
-        self._fsync_directory(pending)
-        target = self.images / digest
-        try:
-            pending.replace(target)
-        except FileExistsError:
-            shutil.rmtree(pending)
-            existing = self._load_complete(digest, image_ref=image_ref)
-            if existing is None:
-                raise DirectWardenError("concurrent rootfs publication is incomplete")
-            return existing
-        self._fsync_directory(self.images)
-        return MaterializedRootfs(
-            image_ref=image_ref,
-            image_id=image_id,
-            rootfs_identity_sha256=identity,
-            rootfs=target / "rootfs",
-            image_config=image_config,
-        )
-
-    def _load_complete(
-        self,
-        digest: str,
-        *,
-        image_ref: str,
-    ) -> MaterializedRootfs | None:
-        target = self.images / digest
-        if not target.exists():
-            return None
-        self._require_private_directory(target)
-        rootfs = target / "rootfs"
-        self._require_real_directory(rootfs)
-        try:
-            manifest = json.loads((target / self.MANIFEST).read_text(encoding="ascii"))
-            marker = json.loads((target / self.COMPLETE).read_text(encoding="ascii"))
-            image_config = DockerImageConfig.from_dict(manifest.get("image_config"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise DirectWardenError("materialized rootfs metadata is invalid") from exc
-        except (TypeError, ValueError) as exc:
-            raise DirectWardenError("materialized rootfs image config is invalid") from exc
-        image_id = f"sha256:{digest}"
-        expected_identity = _sha256(
-            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
-        )
-        if (
-            manifest.get("schema") != _ROOTFS_SCHEMA
-            or manifest.get("image_id") != image_id
-            or manifest.get("rootfs_identity_sha256") != expected_identity
-            or marker
-            != {
-                "image_id": image_id,
-                "rootfs_identity_sha256": expected_identity,
-                "schema": _ROOTFS_SCHEMA,
-            }
-        ):
-            raise DirectWardenError("materialized rootfs identity is invalid")
-        return MaterializedRootfs(
-            image_ref=image_ref,
-            image_id=image_id,
-            rootfs_identity_sha256=expected_identity,
-            rootfs=rootfs,
-            image_config=image_config,
-        )
-
-    def _discard_pending_exports(self, digest: str) -> None:
-        pattern = re.compile(rf"\.{re.escape(digest)}\.[0-9a-f]{{32}}\.pending\Z")
-        for path in self.images.iterdir():
-            if pattern.fullmatch(path.name):
-                self._require_private_directory(path)
-                shutil.rmtree(path)
-        self._fsync_directory(self.images)
+            _require_private_directory(path)
 
     def _checked(
         self,
@@ -509,7 +203,7 @@ class DockerRootfsStore:
         return result.stdout.strip()
 
     @contextmanager
-    def _locked(self, digest: str, *, shared: bool = False) -> Iterator[None]:
+    def _locked(self, digest: str) -> Iterator[None]:
         descriptor = os.open(
             self.locks / f"{digest}.lock",
             os.O_RDWR
@@ -519,102 +213,19 @@ class DockerRootfsStore:
             0o600,
         )
         try:
-            fcntl.flock(
-                descriptor,
-                fcntl.LOCK_SH if shared else fcntl.LOCK_EX,
-            )
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
             yield
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
             os.close(descriptor)
 
-    @staticmethod
-    def _atomic_write(path: Path, payload: bytes) -> None:
-        descriptor, raw = tempfile.mkstemp(
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=path.parent,
-        )
-        temporary = Path(raw)
-        try:
-            os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            temporary.replace(path)
-        finally:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
-
-    @staticmethod
-    def _fsync_directory(path: Path) -> None:
-        descriptor = os.open(
-            path,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
-        )
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _require_real_directory(path: Path) -> None:
-        if not path.is_dir() or path.is_symlink():
-            raise DirectWardenError("rootfs path must be a real directory")
-
-    @classmethod
-    def _require_private_directory(cls, path: Path) -> None:
-        cls._require_real_directory(path)
-        info = path.lstat()
-        if info.st_uid != os.geteuid() or info.st_mode & 0o022:
-            raise DirectWardenError("rootfs store directory must be owned and private")
-
-
-class DockerOverlay2RootfsStore(DockerRootfsStore):
-    """Mount Docker's immutable overlay2 layers without flattening the image.
-
-    Docker remains the OCI image owner, but it never owns a sandbox task. A
-    digest-specific local tag leases every image used by the runtime so Docker
-    pruning cannot remove layers below a live or parked sandbox.
-    """
-
-    PIN_REPOSITORY = "ucloud-sandbox-rootfs-cache"
-
-    def __init__(
-        self,
-        root: Path,
-        *,
-        runner: CommandRunner | None = None,
-        docker_binary: str = "docker",
-        docker_root: Path | None = None,
-        mount_binary: str = "mount",
-        mountpoint_binary: str = "mountpoint",
-        umount_binary: str = "umount",
-    ) -> None:
-        super().__init__(
-            root,
-            runner=runner,
-            docker_binary=docker_binary,
-            max_concurrent_exports=32,
-        )
-        if docker_root is not None and not docker_root.is_absolute():
-            raise ValueError("Docker data root must be absolute")
-        self._configured_docker_root = docker_root
-        self._resolved_docker_root: Path | None = None
-        self._docker_root_guard = Lock()
-        self._driver_validated = False
-        self.mount_binary = mount_binary
-        self.mountpoint_binary = mountpoint_binary
-        self.umount_binary = umount_binary
-        # Do not collide with an exported rootfs from an earlier release. The
-        # mounted image view has a different durability contract even though
-        # its semantic rootfs identity deliberately remains compatible.
-        self.images = root / "overlay2-images"
-        self.images.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._require_private_directory(self.images)
+    def operation_snapshot(self) -> dict[str, int]:
+        with self._operation_guard:
+            return {
+                "active_operations": self._active_operations,
+                "waiting_operations": 0,
+                "max_concurrent_operations": self.MAX_CONCURRENT_OPERATIONS,
+            }
 
     def materialize(self, image_ref: str) -> MaterializedRootfs:
         image_ref = str(image_ref).strip()
@@ -644,33 +255,18 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
             try:
                 self._mount_overlay2(rootfs, layers)
                 mounted = True
-                manifest = {
-                    "created_ns": time.time_ns(),
+                marker = {
                     "image_id": image_id,
-                    "image_config": image_config.to_dict(),
-                    "image_ref": image_ref,
                     "rootfs_identity_sha256": identity,
                     "schema": _OVERLAY2_ROOTFS_SCHEMA,
                     "store": "docker-overlay2",
                 }
-                self._atomic_write(
-                    target / self.MANIFEST,
-                    _canonical_json(manifest) + b"\n",
-                )
-                self._atomic_write(
+                _atomic_write(
                     target / self.COMPLETE,
-                    _canonical_json(
-                        {
-                            "image_id": image_id,
-                            "rootfs_identity_sha256": identity,
-                            "schema": _OVERLAY2_ROOTFS_SCHEMA,
-                            "store": "docker-overlay2",
-                        }
-                    )
-                    + b"\n",
+                    _canonical_json(marker) + b"\n",
                 )
-                self._fsync_directory(target)
-                self._fsync_directory(self.images)
+                _fsync_directory(target)
+                _fsync_directory(self.images)
             except Exception as exc:
                 if mounted:
                     result = self.runner.run(
@@ -692,17 +288,18 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
                 image_config=image_config,
             )
 
-    def reconcile_export_containers(self) -> tuple[str, ...]:
-        """Clean legacy exporters and restore every durable Docker image lease."""
+    def reconcile_images(self) -> None:
+        """Validate cached images and restore their durable Docker leases."""
         self._validate_docker_driver()
         self._docker_overlay2_root()
-        removed = super().reconcile_export_containers()
         for target in self.images.iterdir():
             if target.name.startswith("."):
                 continue
             if not _DIGEST.fullmatch(target.name):
-                raise DirectWardenError("overlay2 image cache contains an invalid entry")
-            self._require_private_directory(target)
+                raise DirectWardenError(
+                    "overlay2 image cache contains an invalid entry"
+                )
+            _require_private_directory(target)
             try:
                 marker = json.loads(
                     (target / self.COMPLETE).read_text(encoding="ascii")
@@ -713,15 +310,14 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise DirectWardenError("overlay2 rootfs marker is invalid") from exc
             image_id = f"sha256:{target.name}"
-            if (
-                not isinstance(marker, dict)
-                or marker.get("image_id") != image_id
-                or marker.get("store") != "docker-overlay2"
-                or marker.get("schema") != _OVERLAY2_ROOTFS_SCHEMA
-            ):
+            if marker != {
+                "image_id": image_id,
+                "rootfs_identity_sha256": self._rootfs_identity(image_id),
+                "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                "store": "docker-overlay2",
+            }:
                 raise DirectWardenError("overlay2 rootfs marker identity is invalid")
             self._pin_image(image_id)
-        return removed
 
     def _pin_image(self, image_id: str) -> None:
         self._checked(
@@ -814,7 +410,7 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
             raise DirectWardenError(
                 "Docker overlay2 layer escaped the Docker data root"
             ) from exc
-        self._require_real_directory(resolved)
+        _require_real_directory(resolved)
         info = resolved.stat()
         if info.st_uid != os.geteuid() or info.st_mode & 0o022:
             raise DirectWardenError(
@@ -845,13 +441,13 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
                 resolved = configured.resolve(strict=True)
             except OSError as exc:
                 raise DirectWardenError("Docker data root is unavailable") from exc
-            self._require_real_directory(resolved)
+            _require_real_directory(resolved)
             info = resolved.stat()
             if info.st_uid != os.geteuid() or info.st_mode & 0o022:
                 raise DirectWardenError("Docker data root is not safely owned")
             self._resolved_docker_root = resolved
             overlay2 = resolved / "overlay2"
-            self._require_real_directory(overlay2)
+            _require_real_directory(overlay2)
             overlay_info = overlay2.stat()
             if overlay_info.st_uid != os.geteuid() or overlay_info.st_mode & 0o022:
                 raise DirectWardenError("Docker overlay2 root is not safely owned")
@@ -867,11 +463,10 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
         target = self.images / digest
         if not target.exists():
             return None
-        self._require_private_directory(target)
+        _require_private_directory(target)
         rootfs = target / "rootfs"
-        self._require_real_directory(rootfs)
+        _require_real_directory(rootfs)
         try:
-            manifest = json.loads((target / self.MANIFEST).read_text(encoding="ascii"))
             marker = json.loads((target / self.COMPLETE).read_text(encoding="ascii"))
         except FileNotFoundError:
             return None
@@ -880,12 +475,7 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
         image_id = f"sha256:{digest}"
         identity = self._rootfs_identity(image_id)
         if (
-            not isinstance(manifest, dict)
-            or manifest.get("schema") != _OVERLAY2_ROOTFS_SCHEMA
-            or manifest.get("store") != "docker-overlay2"
-            or manifest.get("image_id") != image_id
-            or manifest.get("rootfs_identity_sha256") != identity
-            or marker
+            marker
             != {
                 "image_id": image_id,
                 "rootfs_identity_sha256": identity,
@@ -946,7 +536,7 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
 
     def _mount_overlay2(self, rootfs: Path, layers: tuple[Path, ...]) -> None:
         with self._operation_guard:
-            self._active_exports += 1
+            self._active_operations += 1
         try:
             if len(layers) == 1:
                 result = self.runner.run(
@@ -999,16 +589,11 @@ class DockerOverlay2RootfsStore(DockerRootfsStore):
                 )
         finally:
             with self._operation_guard:
-                self._active_exports -= 1
+                self._active_operations -= 1
 
     @staticmethod
     def _rootfs_identity(image_id: str) -> str:
-        # The mounted layer view and the former Docker-exported directory have
-        # identical OCI filesystem semantics. Preserve the identity namespace
-        # so parked sandboxes can migrate across a rolling upgrade.
-        return _sha256(
-            b"ucloud-docker-export-rootfs-v1\0" + image_id.encode("ascii")
-        )
+        return _sha256(b"ucloud-overlay2-rootfs-v1\0" + image_id.encode("ascii"))
 
 
 @dataclass(frozen=True)
@@ -1027,7 +612,7 @@ class OverlayRootfsManager:
 
     def __init__(
         self,
-        image_store: DockerRootfsStore,
+        image_store: DockerOverlay2RootfsStore,
         *,
         writable_root: Path,
         bundle_root: Path,
@@ -1049,7 +634,7 @@ class OverlayRootfsManager:
             if not path.is_absolute():
                 raise ValueError("overlay roots must be absolute")
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
-            DockerRootfsStore._require_private_directory(path)
+            _require_private_directory(path)
 
     def prepare(
         self,
@@ -1061,7 +646,7 @@ class OverlayRootfsManager:
         spec_sha256: str | None = None,
         imported_parked: bool = False,
     ) -> OverlayRootfsLease:
-        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 0:
+        if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 1:
             raise ValueError("sandbox incarnation is invalid")
         image = self.image_store.materialize(image_ref)
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
@@ -1078,7 +663,7 @@ class OverlayRootfsManager:
                 raise DirectWardenError(
                     "quota-owned writable incarnation was not prepared"
                 )
-            DockerRootfsStore._require_private_directory(writable)
+            _require_private_directory(writable)
             existing_names = {item.name for item in writable.iterdir()}
             if imported_parked:
                 generations = {
@@ -1094,15 +679,11 @@ class OverlayRootfsManager:
                     raise DirectWardenError(
                         "imported writable incarnation has an invalid layout"
                     )
-                DockerRootfsStore._require_real_directory(upper)
+                _require_real_directory(upper)
                 for generation in generations:
-                    DockerRootfsStore._require_private_directory(
-                        writable / generation
-                    )
+                    _require_private_directory(writable / generation)
             elif existing_names:
-                raise DirectWardenError(
-                    "quota-owned writable incarnation is not empty"
-                )
+                raise DirectWardenError("quota-owned writable incarnation is not empty")
         elif writable.exists():
             raise DirectWardenError("overlay sandbox incarnation already exists")
         if writable_owned_by_manager:
@@ -1150,11 +731,11 @@ class OverlayRootfsManager:
                 "dev.gvisor.internal.application-memory-directory"
             ] = memory_directory
             config_path = bundle / "config.json"
-            DockerRootfsStore._atomic_write(
+            _atomic_write(
                 config_path,
                 json.dumps(config, indent=2, sort_keys=True).encode("utf-8") + b"\n",
             )
-            DockerRootfsStore._atomic_write(
+            _atomic_write(
                 bundle / _OVERLAY_METADATA,
                 _canonical_json(
                     {
@@ -1166,7 +747,7 @@ class OverlayRootfsManager:
                 )
                 + b"\n",
             )
-            DockerRootfsStore._fsync_directory(bundle)
+            _fsync_directory(bundle)
         except Exception as exc:
             if mounted:
                 cleanup = self.runner.run(
@@ -1241,20 +822,20 @@ class OverlayRootfsManager:
             self._unmount_if_mounted(merged)
         work = writable / "work"
         if work.exists():
-            DockerRootfsStore._require_real_directory(work)
+            _require_real_directory(work)
             shutil.rmtree(work)
 
     def resume_sandbox(self, sandbox: DirectSandbox) -> None:
         """Reconstruct the overlay mount after its writable volume is mounted."""
         bundle, writable, merged = self._sandbox_paths(sandbox)
-        DockerRootfsStore._require_private_directory(bundle)
-        DockerRootfsStore._require_private_directory(writable)
+        _require_private_directory(bundle)
+        _require_private_directory(writable)
         upper = writable / "upper"
         work = writable / "work"
-        DockerRootfsStore._require_real_directory(upper)
+        _require_real_directory(upper)
         work.mkdir(mode=0o700, exist_ok=True)
-        DockerRootfsStore._require_private_directory(work)
-        DockerRootfsStore._require_real_directory(merged)
+        _require_private_directory(work)
+        _require_real_directory(merged)
         mounted = self.runner.run(
             (self.mountpoint_binary, "--quiet", str(merged)),
             timeout=60,
@@ -1269,9 +850,7 @@ class OverlayRootfsManager:
         try:
             metadata = json.loads(metadata_path.read_text(encoding="ascii"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise DirectWardenError(
-                "overlay bundle metadata is invalid"
-            ) from exc
+            raise DirectWardenError("overlay bundle metadata is invalid") from exc
         if (
             not isinstance(metadata, dict)
             or set(metadata)
@@ -1298,7 +877,7 @@ class OverlayRootfsManager:
             raise DirectWardenError(
                 "overlay lower escaped the immutable image store"
             ) from exc
-        DockerRootfsStore._require_real_directory(lower)
+        _require_real_directory(lower)
         if lower != image.rootfs.resolve(strict=True):
             raise DirectWardenError("overlay lower changed during remount")
         result = self.runner.run(
@@ -1366,9 +945,7 @@ class OverlayRootfsManager:
         self,
         sandbox: DirectSandbox,
     ) -> tuple[Path, Path, Path]:
-        incarnation = (
-            f"{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}"
-        )
+        incarnation = f"{sandbox.sandbox_id}.sandbox-{sandbox.sandbox_generation}"
         bundle = self.bundle_root / incarnation
         if sandbox.bundle != bundle:
             raise DirectWardenError("registered sandbox bundle escaped overlay root")

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import base64
-import binascii
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
-import io
 import json
 import os
 from pathlib import Path
@@ -28,12 +25,9 @@ from .models import parse_iso_datetime, utc_now
 from .sandbox import (
     CommandExecutor,
     CommandResult,
-    SandboxAdmissionClosedError,
-    SandboxStore,
     SubprocessExecutor,
     _AdvisoryFileLock,
     _atomic_write_json,
-    _sandbox_create_lock,
 )
 
 
@@ -106,6 +100,25 @@ class ImageRecord:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageRecord":
+        unsupported = sorted(
+            set(raw)
+            - {
+                "available_to_sandboxes",
+                "created_at",
+                "id",
+                "labels",
+                "manifest_digest",
+                "pushed",
+                "source",
+                "state",
+                "tag",
+                "updated_at",
+            }
+        )
+        if unsupported:
+            raise ValueError(
+                "unsupported image record fields: " + ", ".join(unsupported)
+            )
         created_at = parse_iso_datetime(raw.get("created_at"))
         updated_at = parse_iso_datetime(raw.get("updated_at"))
         if created_at is None or updated_at is None:
@@ -121,9 +134,14 @@ class ImageRecord:
         labels = raw.get("labels") or {}
         if not isinstance(labels, dict):
             raise ValueError("image record labels must be a JSON object.")
-        raw_manifest_digest = str(
-            raw.get("manifest_digest") or raw.get("manifestDigest") or ""
-        )
+        if not isinstance(raw.get("pushed", False), bool):
+            raise ValueError("image record pushed must be a boolean.")
+        if any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in labels.items()
+        ):
+            raise ValueError("image record labels must contain strings.")
+        raw_manifest_digest = str(raw.get("manifest_digest") or "")
         manifest_digest = normalize_manifest_digest(raw_manifest_digest)
         if raw_manifest_digest and not manifest_digest:
             raise ValueError("image record has an invalid manifest digest.")
@@ -134,8 +152,8 @@ class ImageRecord:
             state=state,
             created_at=created_at,
             updated_at=updated_at,
-            labels={str(k): str(v) for k, v in dict(labels).items()},
-            pushed=bool(raw.get("pushed", False)),
+            labels=dict(labels),
+            pushed=raw.get("pushed", False),
             manifest_digest=manifest_digest,
         )
 
@@ -187,24 +205,49 @@ class ImageBuildRecord:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
-        build_id = str(raw.get("build_id") or raw.get("buildId") or "")
-        image_id = str(raw.get("image_id") or raw.get("imageId") or "")
+        if set(raw) - {
+            "build_id",
+            "command",
+            "context_path",
+            "created_at",
+            "dockerfile",
+            "error",
+            "exit_code",
+            "finished_at",
+            "image",
+            "image_id",
+            "log_tail",
+            "owner_pid",
+            "push",
+            "push_command",
+            "push_exit_code",
+            "started_at",
+            "status",
+            "tag",
+            "timings",
+            "updated_at",
+        }:
+            return None
+        build_id = str(raw.get("build_id") or "")
+        image_id = str(raw.get("image_id") or "")
         tag = str(raw.get("tag") or "")
         status = str(raw.get("status") or "")
-        created_at = str(raw.get("created_at") or raw.get("createdAt") or "")
-        updated_at = str(raw.get("updated_at") or raw.get("updatedAt") or "")
-        if not build_id or not image_id or not status or not created_at or not updated_at:
+        created_at = str(raw.get("created_at") or "")
+        updated_at = str(raw.get("updated_at") or "")
+        if (
+            not build_id
+            or not image_id
+            or not status
+            or not created_at
+            or not updated_at
+        ):
             return None
         command = raw.get("command") or ()
-        push_command = raw.get("push_command") or raw.get("pushCommand") or ()
+        push_command = raw.get("push_command") or ()
         image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
         timings = raw.get("timings") if isinstance(raw.get("timings"), dict) else {}
-        exit_code = raw["exit_code"] if "exit_code" in raw else raw.get("exitCode")
-        push_exit_code = (
-            raw["push_exit_code"]
-            if "push_exit_code" in raw
-            else raw.get("pushExitCode")
-        )
+        exit_code = raw.get("exit_code")
+        push_exit_code = raw.get("push_exit_code")
         return cls(
             build_id=build_id,
             image_id=image_id,
@@ -212,7 +255,7 @@ class ImageBuildRecord:
             status=status,
             created_at=created_at,
             updated_at=updated_at,
-            context_path=str(raw.get("context_path") or raw.get("contextPath") or ""),
+            context_path=str(raw.get("context_path") or ""),
             dockerfile=str(raw.get("dockerfile") or "Dockerfile"),
             push=bool(raw.get("push", False)),
             command=tuple(str(item) for item in command),
@@ -220,9 +263,9 @@ class ImageBuildRecord:
             exit_code=_optional_int(exit_code),
             push_exit_code=_optional_int(push_exit_code),
             error=str(raw.get("error") or ""),
-            log_tail=str(raw.get("log_tail") or raw.get("logTail") or ""),
-            started_at=str(raw.get("started_at") or raw.get("startedAt") or ""),
-            finished_at=str(raw.get("finished_at") or raw.get("finishedAt") or ""),
+            log_tail=str(raw.get("log_tail") or ""),
+            started_at=str(raw.get("started_at") or ""),
+            finished_at=str(raw.get("finished_at") or ""),
             image={str(key): value for key, value in image.items()},
             timings={str(key): value for key, value in timings.items()},
             owner_pid=max(0, _optional_int(raw.get("owner_pid")) or 0),
@@ -458,9 +501,7 @@ class ImageStore:
             return []
         with self._lock.hold(exclusive=True):
             records = self._load_unlocked()
-            removed = [
-                record for record in records.values() if record.tag in tag_set
-            ]
+            removed = [record for record in records.values() if record.tag in tag_set]
             if removed:
                 self._save_unlocked(
                     {
@@ -488,19 +529,16 @@ class ImageStore:
                 )
             record = ImageRecord.from_dict(item)
             if record.id in records:
-                raise ValueError(f"image store contains duplicate image id {record.id!r}.")
+                raise ValueError(
+                    f"image store contains duplicate image id {record.id!r}."
+                )
             records[record.id] = record
         return records
 
     def _save_unlocked(self, records: dict[str, ImageRecord]) -> None:
         _atomic_write_json(
             self.path,
-            {
-                "images": [
-                    records[image_id].to_dict()
-                    for image_id in sorted(records)
-                ]
-            },
+            {"images": [records[image_id].to_dict() for image_id in sorted(records)]},
         )
 
 
@@ -551,7 +589,9 @@ class ImageBuildStore:
             )
             if matching:
                 return matching[-1], False
-            active_count = sum(1 for existing in records.values() if not existing.terminal)
+            active_count = sum(
+                1 for existing in records.values() if not existing.terminal
+            )
             if active_count >= max_active_builds:
                 raise ImageBuildCapacityError(
                     f"image build capacity reached ({max_active_builds})"
@@ -591,7 +631,8 @@ class ImageBuildStore:
         if exact is not None:
             return exact
         matches = [
-            record for record in records.values()
+            record
+            for record in records.values()
             if record.image_id == build_id_or_image_id
         ]
         if not matches:
@@ -693,14 +734,14 @@ class ImageManager:
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = 4,
         max_concurrent_pulls: int = 8,
-        admission_store: SandboxStore | None = None,
     ) -> None:
         self.store = store
         self.runtime = runtime
-        self.build_store = build_store or ImageBuildStore(default_image_build_file(store.path))
+        self.build_store = build_store or ImageBuildStore(
+            default_image_build_file(store.path)
+        )
         self.max_active_builds = max(1, max_active_builds)
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
-        self.admission_store = admission_store
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
@@ -753,9 +794,7 @@ class ImageManager:
             self._waiting_pulls -= 1
             self._active_pulls += 1
         try:
-            yield {
-                "queue_wait_ms": int(max(0.0, admitted_at - queued_at) * 1000)
-            }
+            yield {"queue_wait_ms": int(max(0.0, admitted_at - queued_at) * 1000)}
         finally:
             with self._build_lock:
                 self._active_pulls -= 1
@@ -806,26 +845,7 @@ class ImageManager:
         cleanup: Callable[[], None] | None = None,
     ) -> tuple[ImageBuildRecord, bool]:
         spec.validate()
-        admission_gate = (
-            _sandbox_create_lock(self.admission_store.path, "image-build-admission")
-            if self.admission_store is not None
-            else nullcontext()
-        )
-        with admission_gate, self._build_lock:
-            if self.admission_store is not None:
-                drain = self.admission_store.load_state().drain
-                if not drain.admission_open:
-                    active = self.build_store.active_for_image(spec.id, tag=spec.tag)
-                    if active is not None:
-                        if cleanup is not None:
-                            cleanup()
-                        return active, False
-                    if cleanup is not None:
-                        cleanup()
-                    raise SandboxAdmissionClosedError(
-                        f"image build admission is closed while drain token "
-                        f"{drain.token!r} is active"
-                    )
+        with self._build_lock:
             now = utc_now().isoformat()
             build_id = str(uuid4())
             direct_push = self.runtime.uses_direct_push(push=push)
@@ -888,7 +908,9 @@ class ImageManager:
         *,
         timeout_seconds: float | None = None,
     ) -> ImageBuildRecord | None:
-        deadline = None if timeout_seconds is None else utc_now().timestamp() + timeout_seconds
+        deadline = (
+            None if timeout_seconds is None else utc_now().timestamp() + timeout_seconds
+        )
         with self._build_lock:
             while True:
                 record = self.build_store.get(build_id_or_image_id)
@@ -925,7 +947,9 @@ class ImageManager:
         self.store.upsert(updated)
         return updated
 
-    def pull(self, image: str, image_id: str | None = None) -> tuple[ImageRecord, CommandResult]:
+    def pull(
+        self, image: str, image_id: str | None = None
+    ) -> tuple[ImageRecord, CommandResult]:
         result = self.runtime.pull(image)
         now = utc_now()
         record = ImageRecord(
@@ -981,19 +1005,11 @@ class ImageManager:
         try:
             phase = time.monotonic()
             try:
-                if direct_push:
-                    build_result = self.runtime.build(
-                        spec,
-                        push=True,
-                        on_output=append_output,
-                    )
-                else:
-                    # Preserve compatibility with runtime subclasses that
-                    # implemented build() before integrated push was available.
-                    build_result = self.runtime.build(
-                        spec,
-                        on_output=append_output,
-                    )
+                build_result = self.runtime.build(
+                    spec,
+                    push=direct_push,
+                    on_output=append_output,
+                )
             finally:
                 phase_name = (
                     "docker_build_and_push_ms" if direct_push else "docker_build_ms"
@@ -1030,7 +1046,9 @@ class ImageManager:
                 build_id,
                 status="succeeded",
                 exit_code=build_result.exit_code,
-                push_exit_code=push_result.exit_code if push_result is not None else None,
+                push_exit_code=push_result.exit_code
+                if push_result is not None
+                else None,
                 image=image_record.to_dict(),
                 finished_at=now.isoformat(),
                 timings=_build_timings(phases, started),
@@ -1041,7 +1059,9 @@ class ImageManager:
                 status="failed",
                 error=str(exc),
                 exit_code=build_result.exit_code if build_result is not None else None,
-                push_exit_code=push_result.exit_code if push_result is not None else None,
+                push_exit_code=push_result.exit_code
+                if push_result is not None
+                else None,
                 finished_at=utc_now().isoformat(),
                 timings=_build_timings(phases, started),
             )
@@ -1223,15 +1243,11 @@ def uploaded_build_context_reference(
     digest = raw.get("context_archive_digest")
     if digest is None:
         return None
-    if raw.get("context_archive_base64") is not None:
-        raise ValueError(
-            "use either context_archive_digest or context_archive_base64, not both."
-        )
     if not isinstance(digest, str):
         raise ValueError("context_archive_digest must be a string.")
-    if str(raw.get("context_archive_format") or "tar.gz") != "tar.gz":
+    if raw.get("context_archive_format") != "tar.gz":
         raise ValueError("unsupported context_archive_format; expected tar.gz.")
-    if raw.get("context_path") not in {None, "."}:
+    if raw.get("context_path") != ".":
         raise ValueError("context_path must be '.' for an uploaded build context.")
     archive_size = raw.get("context_archive_size")
     if isinstance(archive_size, bool) or not isinstance(archive_size, int):
@@ -1243,9 +1259,7 @@ def uploaded_build_context_reference(
     try:
         stored_size = context_store.size(digest)
     except (FileNotFoundError, ValueError) as exc:
-        raise ValueError(
-            f"build context {digest!r} has not been uploaded."
-        ) from exc
+        raise ValueError(f"build context {digest!r} has not been uploaded.") from exc
     if stored_size != archive_size:
         raise ValueError(
             f"build context size mismatch: expected {archive_size}, stored {stored_size}."
@@ -1278,32 +1292,7 @@ def materialize_uploaded_build_context(
             raise
         return MaterializedBuildContext(context_dir, temporary_directory)
 
-    archive = raw.get("context_archive_base64")
-    if archive is None:
-        return None
-    if not isinstance(archive, str) or not archive:
-        raise ValueError("context_archive_base64 must be a non-empty string.")
-    archive_format = str(raw.get("context_archive_format") or "tar.gz")
-    if archive_format != "tar.gz":
-        raise ValueError("unsupported context_archive_format; expected tar.gz.")
-    try:
-        payload = base64.b64decode(archive.encode("ascii"), validate=True)
-    except (UnicodeEncodeError, binascii.Error) as exc:
-        raise ValueError("context_archive_base64 is not valid base64.") from exc
-    temporary_directory: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
-        prefix="ucloud-image-context-"
-    )
-    context_dir = Path(temporary_directory.name)
-    try:
-        _extract_safe_tar_gz(payload, context_dir)
-    except Exception:
-        temporary_directory.cleanup()
-        raise
-    return MaterializedBuildContext(context_dir, temporary_directory)
-
-
-def _extract_safe_tar_gz(payload: bytes, destination: Path) -> None:
-    _extract_safe_tar_gz_file(io.BytesIO(payload), destination)
+    return None
 
 
 def _extract_safe_tar_gz_file(payload: Any, destination: Path) -> None:

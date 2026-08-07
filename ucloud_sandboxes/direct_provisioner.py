@@ -7,9 +7,8 @@ import shutil
 import time
 from typing import Any
 
-from .direct_migration import (
-    DirectMigrationArchiveStore,
-    DirectMigrationError,
+from .storage_native_migration import (
+    StorageNativeMigrationError,
     MIGRATION_CONNECTION_POLICY_DISCONNECT,
     MIGRATION_CONNECTION_POLICY_NONE,
     StorageNativeMigration,
@@ -31,7 +30,7 @@ from .hibernation import (
     HibernationState,
     hibernation_memory_backing_reservation_mb,
 )
-from .image_rootfs import DockerRootfsStore, OverlayRootfsManager
+from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .runtime_identity import (
     NodeRuntimeIdentity,
     NodeRuntimeIdentityStore,
@@ -69,12 +68,11 @@ class DirectSandboxProvisioner:
         registry: DirectSandboxRegistry,
         disk_ledger: HibernationDiskLedger,
         quota_backend: HibernationQuotaBackend,
-        image_store: DockerRootfsStore,
+        image_store: DockerOverlay2RootfsStore,
         overlays: OverlayRootfsManager,
         oci: DirectOciConfigBuilder,
         warden: DirectRunscWarden,
         network_manager: DirectNetworkManager | None = None,
-        migration_archives: DirectMigrationArchiveStore | None = None,
         storage_migrations: StorageNativeMigrationStore | None = None,
     ) -> None:
         self.identity_store = identity_store
@@ -86,9 +84,6 @@ class DirectSandboxProvisioner:
         self.oci = oci
         self.warden = warden
         self.network_manager = network_manager
-        self.migration_archives = (
-            migration_archives or DirectMigrationArchiveStore()
-        )
         self.storage_migrations = storage_migrations or StorageNativeMigrationStore(
             registry.path.parent / "storage-native-migrations"
         )
@@ -100,7 +95,7 @@ class DirectSandboxProvisioner:
     def start(self) -> tuple[DirectProvisioningResult, ...]:
         """Bind node identity, audit all owners, and reconcile every incarnation."""
         self.identity_store.bind(self.identity)
-        self.image_store.reconcile_export_containers()
+        self.image_store.reconcile_images()
         registrations = self.registry.list()
         self._audit_ownership(registrations)
         host_rules_ready = self.network_manager is not None
@@ -126,14 +121,18 @@ class DirectSandboxProvisioner:
         for item in registrations:
             if item.phase == "deleting":
                 continue
-            if item.phase in {
-                "import_planned",
-                "importing",
-                "rootfs_ready",
-            } and item.migration_id:
+            if (
+                item.phase
+                in {
+                    "import_planned",
+                    "importing",
+                    "rootfs_ready",
+                }
+                and item.migration_id
+            ):
                 # Transfer bytes are deliberately not retained in the node
                 # registry. The exact migration can be retried with the same
-                # archive digest; never turn an interrupted import into a
+                # snapshot digest; never turn an interrupted import into a
                 # newly-created sandbox.
                 continue
             elif item.phase in {"import_ready", "moving_out"}:
@@ -197,150 +196,21 @@ class DirectSandboxProvisioner:
             raise DirectRegistryError("direct sandbox registration is absent")
         return self._advance(registration)
 
-    def stage_import(
-        self,
-        archive_path: Path,
-        *,
-        expected_sha256: str,
-        migration_id: str,
-    ) -> DirectProvisioningResult:
-        """Import a parked sandbox but keep it unavailable until route CAS."""
-        self.identity_store.bind(self.identity)
-        portable = self.migration_archives.read_manifest(
-            archive_path,
-            expected_sha256=expected_sha256,
-        )
-        if portable.runtime_identity != self.identity:
-            raise DirectMigrationError(
-                "migration archive belongs to another node runtime identity"
-            )
-        self._validate_spec(portable.spec)
-        image = self.image_store.materialize(portable.spec.image)
-        registration = self.registry.plan_import(
-            spec=portable.spec,
-            sandbox_generation=portable.sandbox_generation,
-            operation_id=portable.create_operation_id,
-            runtime_identity_sha256=self.identity.digest,
-            migration_id=migration_id,
-            migration_sha256=expected_sha256,
-        )
-        if registration.phase == "import_planned":
-            try:
-                reservation = self._reserve(
-                    registration,
-                    allow_released_generation=True,
-                )
-            except HibernationCapacityError:
-                self.registry.abort_import_planned(
-                    portable.sandbox_id,
-                    expected_revision=registration.revision,
-                    migration_id=migration_id,
-                    migration_sha256=expected_sha256,
-                    retire=False,
-                )
-                raise
-            prepared = self.quota_backend.prepare(reservation)
-            quota_path = Path(str(prepared["path"]))
-            if quota_path != self._quota_path(registration):
-                raise DirectRegistryError(
-                    "quota helper returned a different sandbox incarnation"
-                )
-            registration = self.registry.commit_import_quota(
-                registration.sandbox_id,
-                expected_revision=registration.revision,
-                project_id=reservation.project_id,
-                total_mb=reservation.total_mb,
-                quota_path=quota_path,
-            )
-        config = self.oci.build(
-            portable.spec,
-            image,
-            network_namespace_path=self._migration_network_namespace(
-                registration,
-                source_guest_ip=portable.source_guest_ip,
-                connection_policy=portable.connection_policy,
-            ),
-        )
-        if registration.phase == "owned":
-            record = self.warden.inspect(registration.to_direct_sandbox())
-            if record is None:
-                raise DirectRegistryError("activated import has no lifecycle journal")
-            return DirectProvisioningResult(registration, record.state)
-        if registration.migration_id != migration_id or (
-            registration.migration_sha256 != expected_sha256
-        ):
-            raise DirectRegistryError(
-                "destination already owns another migration"
-            )
-        if registration.phase == "importing":
-            self._reset_interrupted_import(registration)
-            _, local_manifest = self.migration_archives.import_archive(
-                archive_path,
-                expected_sha256=expected_sha256,
-                expected_runtime_identity=self.identity,
-                expected_runtime=replace(
-                    self.warden.config.runtime_fingerprint,
-                    rootfs_sha256=image.rootfs_identity_sha256,
-                ),
-                artifact_store=self.warden.artifacts,
-                writable_incarnation=Path(registration.quota_path),
-                portable_manifest=portable,
-            )
-            lease = self.overlays.prepare(
-                sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation,
-                image_ref=registration.spec.image,
-                config_template=config,
-                spec_sha256=registration.spec_sha256,
-                imported_parked=True,
-            )
-            registration = self.registry.commit_import_rootfs(
-                registration.sandbox_id,
-                expected_revision=registration.revision,
-                image_id=lease.image.image_id,
-                sandbox=lease.sandbox,
-            )
-        if registration.phase == "rootfs_ready" and registration.migration_id:
-            sandbox = registration.to_direct_sandbox()
-            local_manifest = self.warden.artifacts.load_complete(
-                sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation,
-                hibernation_generation=portable.hibernation_generation,
-            )
-            record = self.warden.adopt_parked(sandbox, local_manifest)
-            registration = self.registry.commit_import_ready(
-                registration.sandbox_id,
-                expected_revision=registration.revision,
-                migration_id=migration_id,
-                migration_sha256=expected_sha256,
-            )
-            return DirectProvisioningResult(registration, record.state)
-        if registration.phase == "import_ready":
-            record = self.warden.inspect(registration.to_direct_sandbox())
-            if record is None or record.state != HibernationState.PARKED:
-                raise DirectRegistryError(
-                    "import-ready sandbox is not durably parked"
-                )
-            return DirectProvisioningResult(registration, record.state)
-        raise DirectRegistryError(
-            f"migration import cannot continue from {registration.phase}"
-        )
-
     def stage_storage_native_import(
         self,
         migration: StorageNativeMigration,
         *,
         migration_id: str,
     ) -> DirectStorageNativeImportResult:
-        """Adopt a durable remote snapshot without transferring an archive."""
+        """Adopt a durable remote snapshot by its published storage identity."""
 
         if not isinstance(self.quota_backend, StorageNativeQuotaBackend):
-            raise DirectMigrationError(
+            raise StorageNativeMigrationError(
                 "storage-native migration requires the storage-native quota backend"
             )
         portable = migration.manifest
         if portable.runtime_identity != self.identity:
-            raise DirectMigrationError(
+            raise StorageNativeMigrationError(
                 "storage-native migration belongs to another runtime identity"
             )
         self._validate_spec(portable.spec)
@@ -568,13 +438,10 @@ class DirectSandboxProvisioner:
                 item
                 for item in self.disk_ledger.inventory().reservations
                 if item.sandbox_id == registration.sandbox_id
-                and item.sandbox_generation
-                == registration.sandbox_generation
+                and item.sandbox_generation == registration.sandbox_generation
             ]
             if len(matching) > 1:
-                raise DirectRegistryError(
-                    "import plan owns multiple disk reservations"
-                )
+                raise DirectRegistryError("import plan owns multiple disk reservations")
             if matching:
                 self.quota_backend.drop(matching[0])
                 self.disk_ledger.release(
@@ -844,9 +711,7 @@ class DirectSandboxProvisioner:
         if registration.phase == "owned":
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
-                raise DirectWardenError(
-                    "owned direct sandbox has no lifecycle journal"
-                )
+                raise DirectWardenError("owned direct sandbox has no lifecycle journal")
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
@@ -862,7 +727,9 @@ class DirectSandboxProvisioner:
             return DirectProvisioningResult(registration, record.state)
         if registration.phase == "deleting":
             self.delete(registration.sandbox_id)
-            raise DirectRegistryError("direct sandbox was deleted during reconciliation")
+            raise DirectRegistryError(
+                "direct sandbox was deleted during reconciliation"
+            )
         raise DirectRegistryError(
             f"unsupported direct registration phase: {registration.phase}"
         )
@@ -925,9 +792,13 @@ class DirectSandboxProvisioner:
             )
         reservation = matching[0]
         if registration.quota_project_id not in {None, reservation.project_id}:
-            raise DirectRegistryError("direct registration quota project mismatches ledger")
+            raise DirectRegistryError(
+                "direct registration quota project mismatches ledger"
+            )
         if registration.quota_total_mb not in {None, reservation.total_mb}:
-            raise DirectRegistryError("direct registration quota limit mismatches ledger")
+            raise DirectRegistryError(
+                "direct registration quota limit mismatches ledger"
+            )
         return reservation
 
     def _quota_path(self, registration: DirectSandboxRegistration) -> Path:
@@ -966,21 +837,27 @@ class DirectSandboxProvisioner:
                 )
             reservation = reservations.get(identity)
             quota = quota_inventory.get(identity)
-            if registration.phase not in {"planned", "import_planned"} and (
-                reservation is None
-            ) and registration.phase != "deleting":
+            if (
+                registration.phase not in {"planned", "import_planned"}
+                and (reservation is None)
+                and registration.phase != "deleting"
+            ):
                 raise DirectRegistryError(
                     "registered direct sandbox is missing disk admission"
                 )
-            if registration.phase in {
-                "quota_ready",
-                "importing",
-                "rootfs_ready",
-                "import_ready",
-                "owned",
-                "moving_out",
-                "deleting",
-            } and quota is None:
+            if (
+                registration.phase
+                in {
+                    "quota_ready",
+                    "importing",
+                    "rootfs_ready",
+                    "import_ready",
+                    "owned",
+                    "moving_out",
+                    "deleting",
+                }
+                and quota is None
+            ):
                 if registration.phase != "deleting":
                     raise DirectRegistryError(
                         "registered direct sandbox is missing physical quota"
@@ -1016,8 +893,6 @@ class DirectSandboxProvisioner:
             )
 
     def _validate_spec(self, spec: SandboxSpec) -> None:
-        if spec.forkable:
-            raise ValueError("fork is deferred from the direct runtime")
         spec.validate()
         if spec.memory_mb is None or spec.disk_mb is None:
             raise ValueError(
@@ -1068,19 +943,19 @@ class DirectSandboxProvisioner:
                 source_guest_ip is not None
                 or connection_policy != MIGRATION_CONNECTION_POLICY_NONE
             ):
-                raise DirectMigrationError(
+                raise StorageNativeMigrationError(
                     "network=none migration carries network reconnect state"
                 )
             return None
         if self.network_manager is None:
-            raise DirectMigrationError(
+            raise StorageNativeMigrationError(
                 "networked migration has no destination network manager"
             )
         if (
             source_guest_ip is None
             or connection_policy != MIGRATION_CONNECTION_POLICY_DISCONNECT
         ):
-            raise DirectMigrationError(
+            raise StorageNativeMigrationError(
                 "networked migration does not require a safe reconnect"
             )
         lease = self.network_manager.ensure(
@@ -1089,7 +964,7 @@ class DirectSandboxProvisioner:
             avoid_guest_ips=(source_guest_ip,),
         )
         if lease.guest_ip == source_guest_ip:
-            raise DirectMigrationError(
+            raise StorageNativeMigrationError(
                 "migration destination retained the source guest IP"
             )
         return lease.namespace_path

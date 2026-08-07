@@ -69,20 +69,10 @@ class DirectOciConfigTests(unittest.TestCase):
                 {"period": 100_000, "quota": 150_000},
             )
 
-    def test_fails_closed_on_deferred_or_unimplemented_contracts(self) -> None:
+    def test_fails_closed_on_missing_resource_limits(self) -> None:
         with TemporaryDirectory() as raw:
             image = self.image(Path(raw))
             for spec, message in (
-                (
-                    SandboxSpec(
-                        id="fork",
-                        image=image.image_ref,
-                        memory_mb=1024,
-                        disk_mb=1024,
-                        forkable=True,
-                    ),
-                    "fork is deferred",
-                ),
                 (
                     SandboxSpec(
                         id="implicit-disk",

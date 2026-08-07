@@ -95,7 +95,10 @@ class DirectOciConfigBuilder:
     def __post_init__(self) -> None:
         if self.init_binary is not None and not self.init_binary.is_absolute():
             raise ValueError("direct runtime init binary must be absolute")
-        if self.managed_init_binary is not None and not self.managed_init_binary.is_absolute():
+        if (
+            self.managed_init_binary is not None
+            and not self.managed_init_binary.is_absolute()
+        ):
             raise ValueError("managed-process init binary must be absolute")
         if self.network_mode not in {"none", "sandbox"}:
             raise ValueError("direct OCI network mode must be none or sandbox")
@@ -107,8 +110,6 @@ class DirectOciConfigBuilder:
         *,
         network_namespace_path: Path | None = None,
     ) -> dict[str, Any]:
-        if spec.forkable:
-            raise DirectOciConfigError("fork is deferred from the direct runtime")
         spec.validate()
         if spec.memory_mb is None or spec.disk_mb is None:
             raise DirectOciConfigError(
@@ -197,7 +198,10 @@ class DirectOciConfigBuilder:
                 }
             )
         annotations.update(
-            {f"dev.ucloud-sandboxes.label.{key}": value for key, value in spec.labels.items()}
+            {
+                f"dev.ucloud-sandboxes.label.{key}": value
+                for key, value in spec.labels.items()
+            }
         )
         namespaces = [
             {"type": "pid"},
@@ -375,7 +379,9 @@ class DirectOciConfigBuilder:
             for component in Path(spec.filesystem.workspace_path).parts
             if component != "/"
         )
-        if not components or any(component in {"", ".", ".."} for component in components):
+        if not components or any(
+            component in {"", ".", ".."} for component in components
+        ):
             raise DirectOciConfigError(
                 "direct-runtime workspace must name a directory below rootfs"
             )
@@ -390,18 +396,14 @@ class DirectOciConfigBuilder:
                 try:
                     child_fd = os.open(
                         component,
-                        os.O_RDONLY
-                        | os.O_DIRECTORY
-                        | getattr(os, "O_NOFOLLOW", 0),
+                        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                         dir_fd=directory_fd,
                     )
                 except FileNotFoundError:
                     os.mkdir(component, mode=0o777, dir_fd=directory_fd)
                     child_fd = os.open(
                         component,
-                        os.O_RDONLY
-                        | os.O_DIRECTORY
-                        | getattr(os, "O_NOFOLLOW", 0),
+                        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                         dir_fd=directory_fd,
                     )
                 os.close(directory_fd)
@@ -443,10 +445,7 @@ class DirectOciConfigBuilder:
             )
             descriptor = os.open(
                 temporary,
-                os.O_WRONLY
-                | os.O_CREAT
-                | os.O_EXCL
-                | getattr(os, "O_NOFOLLOW", 0),
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
                 0o644,
                 dir_fd=etc_fd,
             )
@@ -506,7 +505,9 @@ class DirectOciConfigBuilder:
         for item in image.env:
             key, separator, value = item.partition("=")
             if not separator or not _ENV_KEY.fullmatch(key):
-                raise DirectOciConfigError("Docker image contains an invalid environment")
+                raise DirectOciConfigError(
+                    "Docker image contains an invalid environment"
+                )
             environment[key] = value
         environment.update(spec.env)
         return environment
@@ -642,18 +643,12 @@ class DirectOciConfigBuilder:
     @staticmethod
     def _linux_host_environment(spec: SandboxSpec) -> dict[str, str]:
         values = {
-            "UCLOUD_SANDBOX_ENABLE_CRON": (
-                "1" if spec.linux_host.enable_cron else "0"
-            ),
+            "UCLOUD_SANDBOX_ENABLE_CRON": ("1" if spec.linux_host.enable_cron else "0"),
             "UCLOUD_SANDBOX_ENABLE_SSHD": (
                 "1" if spec.linux_host.enable_sshd or spec.ssh.enabled else "0"
             ),
-            "UCLOUD_SANDBOX_KEEP_ALIVE": (
-                "1" if spec.linux_host.keep_alive else "0"
-            ),
-            "UCLOUD_SANDBOX_LINUX_HOST_PATHS": ":".join(
-                spec.linux_host.writable_paths
-            ),
+            "UCLOUD_SANDBOX_KEEP_ALIVE": ("1" if spec.linux_host.keep_alive else "0"),
+            "UCLOUD_SANDBOX_LINUX_HOST_PATHS": ":".join(spec.linux_host.writable_paths),
             "UCLOUD_SANDBOX_PROFILE": "linux_host",
             "UCLOUD_SANDBOX_SSH_PORT": str(spec.ssh.container_port),
             "UCLOUD_SANDBOX_SSH_USER": spec.ssh.user,

@@ -19,8 +19,15 @@ if SDK_SRC.exists():
     sys.path.insert(0, str(SDK_SRC))
 sys.path.insert(0, str(REPO_ROOT))
 
-from ucloud_sandboxes.tmax import TMaxBuildContext, materialize_tmax_context
-from ucloud_sandboxes_sdk import Image, SandboxApiError, SandboxClient
+from ucloud_sandboxes.tmax import (  # noqa: E402
+    TMaxBuildContext,
+    materialize_tmax_context,
+)
+from ucloud_sandboxes_sdk import (  # noqa: E402
+    Image,
+    SandboxApiError,
+    SandboxClient,
+)
 
 
 DATASET_ROWS_URL = "https://datasets-server.huggingface.co/rows"
@@ -212,7 +219,7 @@ def build_with_retry(
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     image = Image.from_dockerfile(
-        image_id=context.image_id,
+        name=context.image_id,
         context_path=context.context_path,
         labels={"ucloud-sandboxes.tmax.task-id": context.task_id},
     )
@@ -276,7 +283,7 @@ def run_sandbox_smoke(
         try:
             sandbox = client.create_sandbox(
                 id=sandbox_id,
-                image=Image.from_gateway_id(context.image_id),
+                image=Image.from_name(context.image_id),
                 command=["sleep", str(int(args.sandbox_timeout_seconds))],
                 cpus=args.cpus,
                 memory_mb=args.memory_mb,

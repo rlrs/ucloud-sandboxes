@@ -159,7 +159,7 @@ class BootstrapRetryTests(unittest.TestCase):
         try:
             with TemporaryDirectory() as raw_dir:
                 store = VmBootstrapStore(Path(raw_dir) / "bootstrap.json")
-                metrics = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+                metrics = MetricsStore(Path(raw_dir) / "metrics.sqlite")
                 coordinator = cli._VmBootstrapCoordinator(2, metrics)
                 records: dict[str, VmBootstrapRecord] = {}
                 fence_checks = 0
@@ -243,28 +243,14 @@ class BootstrapRetryTests(unittest.TestCase):
             )
         )
 
-    def test_legacy_record_uses_configured_backoff(self) -> None:
-        attempted_at = datetime(2026, 7, 10, tzinfo=timezone.utc)
-        record = VmBootstrapRecord.from_dict(
-            {
-                "jobId": "job-1",
-                "status": "failed",
-                "lastAttemptAt": attempted_at.isoformat(),
-            }
-        )
-
-        self.assertFalse(
-            record.retry_due(
-                now=attempted_at + timedelta(seconds=29),
-                retry_seconds=30,
+    def test_record_requires_current_schema(self) -> None:
+        with self.assertRaisesRegex(ValueError, "current schema"):
+            VmBootstrapRecord.from_dict(
+                {
+                    "job_id": "job-1",
+                    "status": "failed",
+                }
             )
-        )
-        self.assertTrue(
-            record.retry_due(
-                now=attempted_at + timedelta(seconds=30),
-                retry_seconds=30,
-            )
-        )
 
     def test_ssh_failures_use_bounded_exponential_retry(self) -> None:
         delays = [

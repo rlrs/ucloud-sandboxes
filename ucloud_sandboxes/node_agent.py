@@ -2,69 +2,54 @@ from __future__ import annotations
 
 from dataclasses import replace
 import base64
-import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 import hmac
 import json
-import math
-import os
 from pathlib import Path
 import shutil
 import time
 from typing import Any, Callable
-from urllib import error as urlerror
-from urllib import request as urlrequest
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from .agent import build_heartbeat
 from .build_context_store import BuildContextBlobStore, ContentLengthReader
 from .deployment import service_health
-from .direct_migration import (
-    DIRECT_MIGRATION_SCHEMA,
+from .storage_native_migration import (
     STORAGE_NATIVE_MIGRATION_SCHEMA,
     StorageNativeMigration,
 )
 from .http_server import HighBacklogThreadingHTTPServer
-from .hibernation import HibernationDiskLedger
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
     ImageManager,
     ImageStore,
-    image_id_from_tag,
     materialize_uploaded_build_context,
 )
+from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
 from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from .runtime_metrics import sample_node_runtime_metrics
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    FORK_LOCAL_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
-    merge_capabilities,
+    STORAGE_NATIVE_CAPABILITY,
+    STORAGE_NATIVE_MIGRATION_CAPABILITY,
 )
 from .managed_process import ManagedProcessError, ManagedProcessStart
 from .sandbox import (
-    HibernationQuotaBackend,
-    MAX_FORK_FANOUT,
     SandboxAdmissionClosedError,
     SandboxBusyError,
-    DockerGvisorRuntime,
     SandboxCapacityUnavailableError,
     SandboxConflictError,
     SandboxFileTooLargeError,
-    SandboxForkRuntimeResult,
-    SandboxForkUnsupportedError,
-    SandboxManager,
     SandboxOperation,
     SandboxRecord,
     SandboxSpec,
-    SandboxStore,
-    sandbox_fork_target,
     sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionManager, SandboxExecSpec
@@ -75,8 +60,7 @@ DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
 DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS = 24 * 60 * 60
-# Public node API headers for a versioned DELETE operation.  Callers must send
-# both together; omitting both selects the legacy generation-zero operation.
+# Public node API headers for a generation-fenced DELETE operation.
 SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
 SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
 
@@ -86,8 +70,8 @@ class RequestBodyTooLargeError(ValueError):
 
 
 class NodeAgentHandler(BaseHTTPRequestHandler):
-    manager: SandboxManager
-    exec_manager: ExecSessionManager
+    manager: Any
+    exec_manager: ExecSessionManager | None
     image_manager: ImageManager
     build_context_store: BuildContextBlobStore
     job_id: str
@@ -102,11 +86,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     disk_overcommit: float
     capabilities: tuple[str, ...]
     image_builds_enabled: bool
+    sandboxes_enabled: bool
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None]
     node_epoch: str
     physical_disk_path: Path
     image_materializer: Callable[[str], object] | None = None
-    node_control_bearer_token: str | None = None
+    rootfs_metrics_provider: Callable[[], dict[str, int]] | None = None
+    node_control_bearer_token: str
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
@@ -115,11 +101,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/healthz":
             self._write_json(service_health("node-agent"))
-            return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
-            "/migration/archive"
-        ):
-            self._download_migration_archive(parsed)
             return
         if not self._check_node_control_authorized():
             return
@@ -189,6 +170,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if not self.sandboxes_enabled and (
+            parsed.path.startswith("/v1/sandboxes")
+            or parsed.path.startswith("/v1/exec")
+        ):
+            self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
         if parsed.path == "/v1/sandboxes":
             records = sorted(
                 self.manager.list(),
@@ -197,8 +184,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             self._write_json(
                 {
                     "sandboxes": [
-                        self._sandbox_inventory_payload(record)
-                        for record in records
+                        self._sandbox_inventory_payload(record) for record in records
                     ]
                 }
             )
@@ -241,7 +227,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         context_digest = _build_context_digest_from_path(parsed.path)
-        if context_digest is not None:
+        if context_digest is not None and self.image_builds_enabled:
             try:
                 size = self.build_context_store.size(context_digest)
             except (FileNotFoundError, ValueError):
@@ -287,6 +273,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/drain":
             self._configure_drain()
             return
+        if not self.sandboxes_enabled and parsed.path not in {
+            "/v1/images/build",
+            "/v1/images/pull",
+        }:
+            self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
         if parsed.path == "/v1/sandboxes":
             self._create_sandbox()
             return
@@ -324,9 +316,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/wake"):
             self._wake_sandbox(parsed.path)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/forks"):
-            self._fork_sandbox(parsed.path)
-            return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/exec"):
             self._start_exec(parsed.path)
             return
@@ -349,11 +338,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/images/pull":
             self._pull_image()
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
-            "/snapshot"
-        ):
-            self._snapshot_sandbox(parsed.path)
-            return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
     def _configure_drain(self) -> None:
@@ -361,7 +345,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("drain payload must be a JSON object")
-            token = str(raw.get("token") or "").strip()
+            if set(raw) != {"draining", "token"}:
+                raise ValueError("drain payload has an invalid schema")
+            token = raw.get("token")
+            if not isinstance(token, str):
+                raise ValueError("drain token must be a string")
+            token = token.strip()
             draining = raw.get("draining")
             if not isinstance(draining, bool):
                 raise ValueError("draining must be a boolean")
@@ -403,8 +392,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         context_digest = _build_context_digest_from_path(parsed.path)
-        if context_digest is not None:
+        if context_digest is not None and self.image_builds_enabled:
             self._store_build_context(context_digest)
+            return
+        if not self.sandboxes_enabled:
+            self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/files"):
             self._upload_file(parsed)
@@ -455,13 +447,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if not isinstance(raw, dict):
                 raise ValueError("sandbox payload must be a JSON object")
             phase = time.monotonic()
-            spec = SandboxSpec.from_dict(raw)
-            operation_raw = raw.get("_ucloud_operation")
-            operation = (
-                SandboxOperation.from_dict(operation_raw)
-                if operation_raw is not None
-                else None
+            spec_raw = dict(raw)
+            operation = SandboxOperation.from_dict(
+                spec_raw.pop("_ucloud_operation", None)
             )
+            spec = SandboxSpec.from_dict(spec_raw)
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
             record, result, manager_timings = self.manager.create_with_timings(
@@ -502,7 +492,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             {
                 "sandbox": record.to_dict(),
                 "command": list(result.argv),
-                "exitCode": result.exit_code,
+                "exit_code": result.exit_code,
                 "timings": {
                     "total_ms": _elapsed_ms(started),
                     "phases": phases,
@@ -526,12 +516,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        consume_manager_timings = getattr(
-            self.manager, "consume_exec_start_timings", None
-        )
-        manager_timings = (
-            consume_manager_timings() if consume_manager_timings is not None else {}
-        )
+        manager_timings = self.manager.consume_exec_start_timings()
         self._write_json(
             {
                 "session": session.to_dict(),
@@ -544,16 +529,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         )
 
     def _start_managed_process(self, sandbox_id: str) -> None:
-        start = getattr(self.manager, "start_managed_process", None)
-        if start is None:
-            self._write_json(
-                {"error": "managed processes are unavailable"},
-                status=HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
         try:
             spec = ManagedProcessStart.from_dict(self._read_json_body())
-            record = start(sandbox_id, spec)
+            record = self.manager.start_managed_process(sandbox_id, spec)
         except ManagedProcessError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -563,15 +541,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json({"job": record.to_dict()}, status=HTTPStatus.CREATED)
 
     def _managed_process_status(self, sandbox_id: str, job_id: str) -> None:
-        status = getattr(self.manager, "managed_process_status", None)
-        if status is None:
-            self._write_json(
-                {"error": "managed processes are unavailable"},
-                status=HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
         try:
-            record = status(sandbox_id, job_id)
+            record = self.manager.managed_process_status(sandbox_id, job_id)
         except ManagedProcessError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -587,16 +558,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         stream: str,
         parsed: Any,
     ) -> None:
-        logs = getattr(self.manager, "managed_process_logs", None)
-        if logs is None:
-            self._write_json(
-                {"error": "managed processes are unavailable"},
-                status=HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
         query = parse_qs(parsed.query, keep_blank_values=True)
         try:
-            chunk = logs(
+            chunk = self.manager.managed_process_logs(
                 sandbox_id,
                 job_id,
                 stream=stream,
@@ -620,18 +584,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         )
 
     def _signal_managed_process(self, sandbox_id: str, job_id: str) -> None:
-        signal_process = getattr(self.manager, "signal_managed_process", None)
-        if signal_process is None:
-            self._write_json(
-                {"error": "managed processes are unavailable"},
-                status=HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("signal payload must be a JSON object")
-            record = signal_process(
+            record = self.manager.signal_managed_process(
                 sandbox_id,
                 job_id,
                 signal=int(raw.get("signal") or 15),
@@ -650,15 +607,20 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("park payload must be a JSON object")
-            operation_id = str(raw.get("operation_id") or "").strip() or None
-            background = bool(raw.get("background", False))
-            park = getattr(self.manager, "park", None)
-            if park is None:
-                raise RuntimeError("sandbox parking is unavailable on this runtime")
-            park_arguments: dict[str, Any] = {"operation_id": operation_id}
-            if background:
-                park_arguments["background"] = True
-            record = park(sandbox_id, **park_arguments)
+            if set(raw) not in ({"operation_id"}, {"background", "operation_id"}):
+                raise ValueError("park payload has an invalid schema")
+            operation_id = raw.get("operation_id")
+            if not isinstance(operation_id, str) or not operation_id.strip():
+                raise ValueError("operation_id must be a nonempty string")
+            operation_id = operation_id.strip()
+            background = raw.get("background", False)
+            if type(background) is not bool:
+                raise ValueError("background must be a boolean")
+            record = self.manager.park(
+                sandbox_id,
+                operation_id=operation_id,
+                background=background,
+            )
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return
@@ -677,32 +639,24 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         payload: dict[str, Any] = {"sandbox": record.to_dict()}
         try:
-            service = getattr(self.manager, "service", None)
-            warden = getattr(service, "warden", None)
-            if getattr(warden, "storage", None) is not None:
-                if (
-                    background
-                    and service.storage_native_publication_pending(sandbox_id)
-                ):
-                    payload["publication"] = "pending"
-                    self._write_json(payload, status=HTTPStatus.ACCEPTED)
-                    return
-                registration = service._require_registration(sandbox_id)
-                storage_record = warden._storage_record(
-                    registration.to_direct_sandbox()
-                )
-                if storage_record.get("state") != "published":
-                    self._write_json(payload)
-                    return
-                snapshot = service.describe_storage_native_snapshot(sandbox_id)
-                payload["storage_schema"] = "storage-native-v1"
-                payload["snapshot_sha256"] = snapshot.sha256
-                payload["storage_snapshot"] = snapshot.to_dict()
-                payload["snapshot_manifest_digest"] = (
-                    snapshot.publication.manifest_digest
-                )
-                payload["snapshot_repository"] = snapshot.publication.repository
-                payload["snapshot_tag"] = snapshot.publication.tag
+            service = self.manager.service
+            warden = service.warden
+            if background and service.storage_native_publication_pending(sandbox_id):
+                payload["publication"] = "pending"
+                self._write_json(payload, status=HTTPStatus.ACCEPTED)
+                return
+            registration = service._require_registration(sandbox_id)
+            storage_record = warden._storage_record(registration.to_direct_sandbox())
+            if storage_record.get("state") != "published":
+                self._write_json(payload)
+                return
+            snapshot = service.describe_storage_native_snapshot(sandbox_id)
+            payload["storage_schema"] = "storage-native-v1"
+            payload["snapshot_sha256"] = snapshot.sha256
+            payload["storage_snapshot"] = snapshot.to_dict()
+            payload["snapshot_manifest_digest"] = snapshot.publication.manifest_digest
+            payload["snapshot_repository"] = snapshot.publication.repository
+            payload["snapshot_tag"] = snapshot.publication.tag
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -712,15 +666,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         payload = record.to_dict()
         if str(payload.get("state") or "").lower() != "parked":
             return payload
-        service = getattr(self.manager, "service", None)
-        warden = getattr(service, "warden", None)
-        if service is None or getattr(warden, "storage", None) is None:
-            return payload
+        service = self.manager.service
+        warden = service.warden
         try:
             registration = service._require_registration(record.spec.id)
-            storage_record = warden._storage_record(
-                registration.to_direct_sandbox()
-            )
+            storage_record = warden._storage_record(registration.to_direct_sandbox())
             if storage_record.get("state") != "published":
                 return payload
             snapshot = service.describe_storage_native_snapshot(record.spec.id)
@@ -728,9 +678,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return payload
         payload.update(
             {
-                "snapshot_manifest_digest": (
-                    snapshot.publication.manifest_digest
-                ),
+                "snapshot_manifest_digest": (snapshot.publication.manifest_digest),
                 "snapshot_repository": snapshot.publication.repository,
                 "snapshot_sha256": snapshot.sha256,
                 "snapshot_tag": snapshot.publication.tag,
@@ -746,13 +694,19 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             raw = self._read_json_body()
             if not isinstance(raw, dict):
                 raise ValueError("wake payload must be a JSON object")
-            operation_id = str(raw.get("operation_id") or "").strip() or None
+            if set(raw) != {"generation", "operation_id"}:
+                raise ValueError("wake payload has an invalid schema")
+            operation_id = raw.get("operation_id")
+            if not isinstance(operation_id, str) or not operation_id.strip():
+                raise ValueError("operation_id must be a nonempty string")
+            operation_id = operation_id.strip()
             generation_raw = raw.get("generation")
-            generation = None if generation_raw is None else int(generation_raw)
-            wake = getattr(self.manager, "wake", None)
-            if wake is None:
-                raise RuntimeError("sandbox waking is unavailable on this runtime")
-            record = wake(
+            if isinstance(generation_raw, bool) or not isinstance(generation_raw, int):
+                raise ValueError("generation must be an integer")
+            generation = generation_raw
+            if generation <= 0:
+                raise ValueError("generation must be positive")
+            record = self.manager.wake(
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
@@ -784,104 +738,29 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             migration_id = str(raw.get("migration_id") or "").strip()
             requested_format = str(raw.get("format") or "").strip()
             service = self._direct_service()
-            if getattr(service.warden, "storage", None) is not None:
-                if requested_format == DIRECT_MIGRATION_SCHEMA:
-                    archive = service.prepare_storage_native_v2_export(
-                        sandbox_id,
-                        migration_id=migration_id,
-                    )
-                    archive_token = self._migration_archive_token(
-                        sandbox_id=sandbox_id,
-                        migration_id=migration_id,
-                        migration_sha256=archive.sha256,
-                    )
-                else:
-                    migration = service.prepare_storage_native_move(
-                        sandbox_id,
-                        migration_id=migration_id,
-                    )
-                    self._write_json(
-                        {
-                            "migration": {
-                                "migration_id": migration_id,
-                                "sandbox_id": sandbox_id,
-                                "snapshot_sha256": migration.sha256,
-                                "storage_schema": (
-                                    STORAGE_NATIVE_MIGRATION_SCHEMA
-                                ),
-                                "storage_snapshot": migration.to_dict(),
-                            }
-                        }
-                    )
-                    return
-            else:
-                archive = service.prepare_move(
-                    sandbox_id,
-                    migration_id=migration_id,
-                )
-                archive_token = self._migration_archive_token(
-                    sandbox_id=sandbox_id,
-                    migration_id=migration_id,
-                    migration_sha256=archive.sha256,
-                )
-        except (RuntimeError, ValueError) as exc:
-            self._write_exception(exc)
-            return
-        self._write_json(
-            {
-                "migration": {
-                    "archive_bytes": archive.path.stat().st_size,
-                    "archive_sha256": archive.sha256,
-                    "archive_token": archive_token,
-                    "manifest": archive.manifest.to_dict(),
-                    "migration_id": migration_id,
-                    "sandbox_id": sandbox_id,
-                }
-            }
-        )
-
-    def _download_migration_archive(self, parsed: Any) -> None:
-        sandbox_id = _sandbox_id_from_path(
-            parsed.path,
-            suffix="/migration/archive",
-        )
-        query = parse_qs(parsed.query, keep_blank_values=True)
-        migration_id = (query.get("migration_id") or [""])[0].strip()
-        supplied_token = self.headers.get("X-UCloud-Migration-Token") or ""
-        try:
-            archive = self._direct_service().prepared_move_archive(
+            if requested_format not in {"", STORAGE_NATIVE_MIGRATION_SCHEMA}:
+                raise ValueError("unsupported migration storage schema")
+            migration = service.prepare_storage_native_move(
                 sandbox_id,
                 migration_id=migration_id,
             )
-            expected_token = self._migration_archive_token(
-                sandbox_id=sandbox_id,
-                migration_id=migration_id,
-                migration_sha256=archive.sha256,
+            self._write_json(
+                {
+                    "migration": {
+                        "migration_id": migration_id,
+                        "sandbox_id": sandbox_id,
+                        "snapshot_sha256": migration.sha256,
+                        "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                        "storage_snapshot": migration.to_dict(),
+                    }
+                }
             )
-            if not supplied_token or not hmac.compare_digest(
-                supplied_token,
-                expected_token,
-            ):
-                self._write_json(
-                    {"error": "unauthorized"},
-                    status=HTTPStatus.UNAUTHORIZED,
-                )
-                return
-            size = archive.path.stat().st_size
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "application/x-tar")
-            self.send_header("Content-Length", str(size))
-            self.send_header("X-UCloud-Archive-SHA256", archive.sha256)
-            self.end_headers()
-            with archive.path.open("rb") as source:
-                shutil.copyfileobj(source, self.wfile, length=8 * 1024 * 1024)
-        except (BrokenPipeError, ConnectionResetError):
             return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
+            return
 
     def _import_migration(self) -> None:
-        archive_path: Path | None = None
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -889,133 +768,27 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             sandbox_id = str(raw.get("sandbox_id") or "").strip()
             migration_id = str(raw.get("migration_id") or "").strip()
             storage_schema = str(raw.get("storage_schema") or "").strip()
-            if storage_schema:
-                if storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
-                    raise ValueError("unsupported migration storage schema")
-                migration = StorageNativeMigration.from_dict(
-                    raw.get("storage_snapshot")
-                )
-                if migration.manifest.sandbox_id != sandbox_id:
-                    raise ValueError(
-                        "storage-native migration belongs to another sandbox"
-                    )
-                expected_sha256 = str(
-                    raw.get("snapshot_sha256") or ""
-                ).strip()
-                if migration.sha256 != expected_sha256:
-                    raise ValueError(
-                        "storage-native migration digest does not match"
-                    )
-                result, destination = self._direct_service().stage_storage_native_import(
-                    migration,
-                    migration_id=migration_id,
-                )
-                self._write_json(
-                    {
-                        "sandbox": result.to_dict(),
-                        "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
-                        "storage_snapshot": destination.to_dict(),
-                    },
-                    status=HTTPStatus.CREATED,
-                )
-                return
-            migration_sha256 = str(raw.get("archive_sha256") or "").strip()
-            archive_token = str(raw.get("archive_token") or "").strip()
-            source_url = str(raw.get("source_url") or "").strip()
-            if not sandbox_id or not migration_sha256 or not archive_token:
-                raise ValueError("migration identity and archive fields are required")
-            parsed_source = urlparse(source_url)
-            expected_suffix = (
-                f"/v1/sandboxes/{quote(sandbox_id, safe='')}/migration/archive"
-            )
-            source_query = parse_qs(parsed_source.query, keep_blank_values=True)
-            if (
-                parsed_source.scheme not in {"http", "https"}
-                or not parsed_source.netloc
-                or parsed_source.username is not None
-                or parsed_source.password is not None
-                or parsed_source.fragment
-                or parsed_source.path != expected_suffix
-                or (source_query.get("migration_id") or [""])[0] != migration_id
-            ):
-                raise ValueError("migration source URL is invalid")
-            service = self._direct_service()
-            registration = service.provisioner.registry.get(sandbox_id)
-            if (
-                registration is not None
-                and registration.phase in {"import_ready", "owned"}
-                and registration.migration_id == migration_id
-                and registration.migration_sha256 == migration_sha256
-            ):
-                self._write_json({"sandbox": service._record(registration).to_dict()})
-                return
-            archive_path = service.migration_archive_path(migration_id)
-            archive_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            temporary = archive_path.with_suffix(".partial")
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
-            digest = hashlib.sha256()
-            downloaded = 0
-            request = urlrequest.Request(
-                source_url,
-                headers={"X-UCloud-Migration-Token": archive_token},
-                method="GET",
-            )
-            with urlrequest.urlopen(request, timeout=3600) as response:
-                length_header = response.headers.get("Content-Length")
-                expected_length = (
-                    int(length_header) if length_header is not None else None
-                )
-                free_bytes = shutil.disk_usage(archive_path.parent).free
-                if expected_length is not None and expected_length > max(
-                    0, free_bytes - 64 * 1024 * 1024
-                ):
-                    raise RuntimeError(
-                        "destination has insufficient transient migration space"
-                    )
-                with temporary.open("xb") as destination:
-                    while True:
-                        chunk = response.read(8 * 1024 * 1024)
-                        if not chunk:
-                            break
-                        downloaded += len(chunk)
-                        if downloaded > max(0, free_bytes - 64 * 1024 * 1024):
-                            raise RuntimeError(
-                                "migration archive exceeded destination free space"
-                            )
-                        digest.update(chunk)
-                        destination.write(chunk)
-                    destination.flush()
-                    os.fsync(destination.fileno())
-            if expected_length is not None and downloaded != expected_length:
-                raise RuntimeError("migration archive download ended early")
-            if digest.hexdigest() != migration_sha256:
-                raise RuntimeError("migration archive digest does not match")
-            temporary.replace(archive_path)
-            result = service.stage_import(
-                archive_path,
+            if storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
+                raise ValueError("unsupported migration storage schema")
+            migration = StorageNativeMigration.from_dict(raw.get("storage_snapshot"))
+            if migration.manifest.sandbox_id != sandbox_id:
+                raise ValueError("storage-native migration belongs to another sandbox")
+            expected_sha256 = str(raw.get("snapshot_sha256") or "").strip()
+            if migration.sha256 != expected_sha256:
+                raise ValueError("storage-native migration digest does not match")
+            result, destination = self._direct_service().stage_storage_native_import(
+                migration,
                 migration_id=migration_id,
-                migration_sha256=migration_sha256,
             )
-            archive_path.unlink()
-            archive_path = None
-        except (urlerror.URLError, OSError, RuntimeError, ValueError) as exc:
-            self._write_exception(
-                RuntimeError(f"migration import failed: {exc}")
-                if isinstance(exc, urlerror.URLError)
-                else exc
-            )
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
             return
-        finally:
-            if archive_path is not None:
-                try:
-                    archive_path.with_suffix(".partial").unlink()
-                except FileNotFoundError:
-                    pass
         self._write_json(
-            {"sandbox": result.to_dict()},
+            {
+                "sandbox": result.to_dict(),
+                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "storage_snapshot": destination.to_dict(),
+            },
             status=HTTPStatus.CREATED,
         )
 
@@ -1038,7 +811,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if not isinstance(raw, dict):
                 raise ValueError("migration payload must be a JSON object")
             migration_id = str(raw.get("migration_id") or "").strip()
-            migration_sha256 = str(raw.get("archive_sha256") or "").strip()
+            migration_sha256 = str(raw.get("snapshot_sha256") or "").strip()
             service = self._direct_service()
             if action == "activate":
                 record = service.activate_import(
@@ -1075,269 +848,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json(payload)
 
     def _direct_service(self) -> Any:
-        service = getattr(self.manager, "service", None)
-        if service is None:
-            raise RuntimeError("sandbox migration is unavailable on this runtime")
-        return service
-
-    def _migration_archive_token(
-        self,
-        *,
-        sandbox_id: str,
-        migration_id: str,
-        migration_sha256: str,
-    ) -> str:
-        secret = (
-            self.node_control_bearer_token or "development-node-without-control-token"
-        ).encode("utf-8")
-        payload = "\0".join((sandbox_id, migration_id, migration_sha256)).encode(
-            "utf-8"
-        )
-        return hmac.new(secret, payload, hashlib.sha256).hexdigest()
-
-    def _fork_sandbox(self, path: str) -> None:
-        started = time.monotonic()
-        phases: dict[str, int] = {}
-        source_sandbox_id = _sandbox_id_from_path(path, suffix="/forks")
-        target: SandboxSpec | None = None
-        operation: SandboxOperation | None = None
-        targets: tuple[SandboxSpec, ...] = ()
-        operations: tuple[SandboxOperation, ...] = ()
-        batch = False
-        source_generation_for_intent: int | None = None
-        try:
-            phase = time.monotonic()
-            raw = self._read_json_body()
-            phases["read_request_ms"] = _elapsed_ms(phase)
-            if not isinstance(raw, dict):
-                raise ValueError("fork payload must be a JSON object")
-
-            phase = time.monotonic()
-            batch = _fork_request_is_batch(raw)
-            source_generation, source_spec_hash = _fork_source_envelope(raw)
-            source_generation_for_intent = source_generation
-            raw_targets: list[dict[str, Any]] = []
-            if batch:
-                raw_targets_value = raw.get("sandboxes")
-                raw_operations = raw.get("_ucloud_operations")
-                if not isinstance(raw_targets_value, list) or not raw_targets_value:
-                    raise ValueError("sandboxes must be a non-empty JSON array")
-                if len(raw_targets_value) > MAX_FORK_FANOUT:
-                    raise ValueError(
-                        f"fork fan-out cannot exceed {MAX_FORK_FANOUT} sandboxes"
-                    )
-                if not all(isinstance(item, dict) for item in raw_targets_value):
-                    raise ValueError("each fork sandbox must be a JSON object")
-                raw_targets = list(raw_targets_value)
-                if not isinstance(raw_operations, list) or len(raw_operations) != len(
-                    raw_targets
-                ):
-                    raise ValueError(
-                        "_ucloud_operations must contain one operation per sandbox"
-                    )
-                operations = tuple(
-                    SandboxOperation.from_dict(item) for item in raw_operations
-                )
-                targets = tuple(_fork_wire_target(item) for item in raw_targets)
-            else:
-                operation = SandboxOperation.from_dict(raw.get("_ucloud_operation"))
-                operations = (operation,)
-                target = _fork_wire_target(raw)
-                targets = (target,)
-
-            try:
-                source = self.manager.get(source_sandbox_id)
-            except (OSError, RuntimeError, ValueError) as exc:
-                self._write_json(
-                    {
-                        "error": f"sandbox store unavailable during fork: {exc}",
-                        "retryable": True,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                )
-                return
-            if source is None:
-                payload = _fork_request_error_payload(
-                    f"source sandbox not found: {source_sandbox_id}",
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                )
-                self._write_json(
-                    payload,
-                    status=HTTPStatus.NOT_FOUND,
-                )
-                return
-            if batch:
-                targets = tuple(
-                    sandbox_fork_target(source.spec, item) for item in raw_targets
-                )
-            else:
-                target = sandbox_fork_target(source.spec, raw)
-                targets = (target,)
-            phases["parse_fork_ms"] = _elapsed_ms(phase)
-
-            phase = time.monotonic()
-            if batch:
-                records, results, manager_timings = self.manager.fork_many_with_timings(
-                    source_sandbox_id,
-                    targets,
-                    operations=operations,
-                    source_generation=source_generation,
-                    source_spec_hash=source_spec_hash,
-                )
-            else:
-                record, result, manager_timings = self.manager.fork_with_timings(
-                    source_sandbox_id,
-                    target,
-                    operation=operation,
-                    source_generation=source_generation,
-                    source_spec_hash=source_spec_hash,
-                )
-                records, results = (record,), (result,)
-            phases["manager_fork_ms"] = _elapsed_ms(phase)
-        except SandboxBusyError as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                    retryable=True,
-                ),
-                status=HTTPStatus.CONFLICT,
-            )
-            return
-        except SandboxConflictError as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                ),
-                status=HTTPStatus.CONFLICT,
-            )
-            return
-        except SandboxCapacityUnavailableError as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                    retryable=True,
-                ),
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
-        except SandboxForkUnsupportedError as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                    capability="fork-local-v1",
-                ),
-                status=HTTPStatus.NOT_IMPLEMENTED,
-            )
-            return
-        except (RequestBodyTooLargeError, SandboxFileTooLargeError) as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                ),
-                status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
-            )
-            return
-        except RuntimeError as exc:
-            self._write_json(
-                _fork_request_error_payload(
-                    str(exc),
-                    self.manager,
-                    targets,
-                    operations,
-                    batch=batch,
-                    source_sandbox_id=source_sandbox_id,
-                    source_generation=source_generation_for_intent,
-                    retryable=True,
-                ),
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
-        except ValueError as exc:
-            payload = _fork_request_error_payload(
-                str(exc),
-                self.manager,
-                targets,
-                operations,
-                batch=batch,
-                source_sandbox_id=source_sandbox_id,
-                source_generation=source_generation_for_intent,
-            )
-            store_ambiguous = "intent_persisted" not in payload
-            if store_ambiguous:
-                payload["retryable"] = True
-            self._write_json(
-                payload,
-                status=(
-                    HTTPStatus.SERVICE_UNAVAILABLE
-                    if store_ambiguous
-                    else HTTPStatus.BAD_REQUEST
-                ),
-            )
-            return
-
-        response_payload: dict[str, Any] = {
-            "intent_persisted": True,
-            "timings": {
-                "total_ms": _elapsed_ms(started),
-                "phases": phases,
-                "manager": manager_timings,
-            },
-        }
-        if batch:
-            response_payload["sandboxes"] = [record.to_dict() for record in records]
-            response_payload["forks"] = [
-                {
-                    "sandbox_id": record.spec.id,
-                    **_fork_result_payload(result),
-                }
-                for record, result in zip(records, results, strict=True)
-            ]
-        else:
-            response_payload["sandbox"] = records[0].to_dict()
-            response_payload["fork"] = _fork_result_payload(results[0])
-        self._write_json(
-            response_payload,
-            status=(
-                HTTPStatus.OK
-                if manager_timings.get("idempotent")
-                else HTTPStatus.CREATED
-            ),
-        )
+        return self.manager.service
 
     def _exec_session(self, path: str) -> None:
         session_id = self._exec_session_id_from_path(path)
@@ -1423,7 +934,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 {"error": "sandbox ssh is not enabled"}, status=HTTPStatus.BAD_REQUEST
             )
             return
-        self._write_json({"sandboxId": sandbox_id, "ssh": ssh})
+        self._write_json({"sandbox_id": sandbox_id, "ssh": ssh})
 
     def _upload_file(self, parsed: Any) -> None:
         sandbox_id = _sandbox_id_from_path(parsed.path, suffix="/files")
@@ -1443,11 +954,11 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json(
             {
                 "ok": True,
-                "sandboxId": sandbox_id,
+                "sandbox_id": sandbox_id,
                 "path": container_path,
                 "size": len(content),
                 "command": list(result.argv),
-                "exitCode": result.exit_code,
+                "exit_code": result.exit_code,
             }
         )
 
@@ -1517,15 +1028,16 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 )
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
-            build, build_started = self.image_manager.start_build(
-                spec,
-                push=push,
-                cleanup=(
-                    materialized_context.cleanup
-                    if materialized_context is not None
-                    else None
-                ),
-            )
+            with self.manager.image_operation(self.image_manager):
+                build, build_started = self.image_manager.start_build(
+                    spec,
+                    push=push,
+                    cleanup=(
+                        materialized_context.cleanup
+                        if materialized_context is not None
+                        else None
+                    ),
+                )
             cleanup_transferred = materialized_context is not None
             phases["start_build_ms"] = _elapsed_ms(phase)
             if wait:
@@ -1570,12 +1082,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             if image_record is not None
             else build.image,
             "command": list(build.command),
-            "exitCode": build.exit_code,
+            "exit_code": build.exit_code,
             "timings": timings,
         }
         if build.push_command:
-            payload["pushCommand"] = list(build.push_command)
-            payload["pushExitCode"] = build.push_exit_code
+            payload["push_command"] = list(build.push_command)
+            payload["push_exit_code"] = build.push_exit_code
         self._write_json(payload, status=HTTPStatus.CREATED)
 
     def _pull_image(self) -> None:
@@ -1588,17 +1100,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 raise ValueError("image pull payload must be a JSON object")
             image = str(raw.get("image") or "")
             image_id = str(raw["id"]) if raw.get("id") else None
-            manager_image_operation = getattr(
-                self.manager,
-                "image_operation",
-                None,
-            )
-            operation = (
-                manager_image_operation(self.image_manager)
-                if manager_image_operation is not None
-                else self.image_manager.image_operation()
-            )
-            with operation:
+            with self.manager.image_operation(self.image_manager):
                 failed_phase = "docker_pull"
                 with self.image_manager.pull_slot() as pull_admission:
                     pull_queue_ms = int(pull_admission["queue_wait_ms"])
@@ -1657,7 +1159,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             {
                 "image": record.to_dict(),
                 "command": list(result.argv),
-                "exitCode": result.exit_code,
+                "exit_code": result.exit_code,
                 "timings": timings,
             },
             status=HTTPStatus.CREATED,
@@ -1680,57 +1182,20 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 0, int(pull_snapshot.get("max_concurrent_operations") or 0)
             ),
         )
-        owner = getattr(self.image_materializer, "__self__", None)
-        snapshot_provider = getattr(owner, "operation_snapshot", None)
-        if snapshot_provider is None:
+        if self.rootfs_metrics_provider is None:
             return metrics
-        snapshot = snapshot_provider()
+        snapshot = self.rootfs_metrics_provider()
         return replace(
             metrics,
-            rootfs_export_active_operations=max(
+            image_materialization_active_operations=max(
                 0, int(snapshot.get("active_operations") or 0)
             ),
-            rootfs_export_waiting_operations=max(
+            image_materialization_waiting_operations=max(
                 0, int(snapshot.get("waiting_operations") or 0)
             ),
-            rootfs_export_max_concurrent_operations=max(
+            image_materialization_max_concurrent_operations=max(
                 0, int(snapshot.get("max_concurrent_operations") or 0)
             ),
-        )
-
-    def _snapshot_sandbox(self, path: str) -> None:
-        if not self.image_builds_enabled:
-            self._write_json(
-                {"error": "snapshots are disabled on this node"},
-                status=HTTPStatus.FORBIDDEN,
-            )
-            return
-        prefix = "/v1/sandboxes/"
-        suffix = "/snapshot"
-        sandbox_id = unquote(path[len(prefix) : -len(suffix)])
-        try:
-            raw = self._read_json_body()
-            if not isinstance(raw, dict):
-                raise ValueError("snapshot payload must be a JSON object")
-            image = str(raw.get("image") or "")
-            image_id = str(raw.get("id") or image_id_from_tag(image))
-            result = self.manager.snapshot(sandbox_id, image)
-            record = self.image_manager.record_snapshot(
-                image_id=image_id,
-                image=image,
-                sandbox_id=sandbox_id,
-                dry_run=self.manager.runtime.dry_run,
-            )
-        except (RuntimeError, ValueError) as exc:
-            self._write_exception(exc)
-            return
-        self._write_json(
-            {
-                "image": record.to_dict(),
-                "command": list(result.argv),
-                "exitCode": result.exit_code,
-            },
-            status=HTTPStatus.CREATED,
         )
 
     def _exec_session_id_from_path(self, path: str, *, suffix: str = "") -> str:
@@ -1741,6 +1206,9 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         if not self._check_node_control_authorized():
+            return
+        if not self.sandboxes_enabled:
+            self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
         parsed = urlparse(self.path)
         prefix = "/v1/sandboxes/"
@@ -1769,15 +1237,13 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         payload: dict[str, Any] = {
             "deleted": record.to_dict() if record is not None else None,
             "command": list(result.argv),
-            "exitCode": result.exit_code,
+            "exit_code": result.exit_code,
         }
         self._write_json(payload)
 
     def _delete_operation_headers(self) -> tuple[int, str]:
         generation_header = self.headers.get(SANDBOX_GENERATION_HEADER)
         operation_id_header = self.headers.get(SANDBOX_OPERATION_ID_HEADER)
-        if generation_header is None and operation_id_header is None:
-            return 0, ""
         if generation_header is None or operation_id_header is None:
             raise ValueError(
                 f"{SANDBOX_GENERATION_HEADER} and {SANDBOX_OPERATION_ID_HEADER} "
@@ -1788,16 +1254,14 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             raise ValueError(f"{SANDBOX_GENERATION_HEADER} must be an integer") from exc
         operation_id = operation_id_header.strip()
-        if generation < 0:
-            raise ValueError(f"{SANDBOX_GENERATION_HEADER} cannot be negative")
+        if generation < 1:
+            raise ValueError(f"{SANDBOX_GENERATION_HEADER} must be positive")
         if not operation_id:
             raise ValueError(f"{SANDBOX_OPERATION_ID_HEADER} cannot be empty")
         return generation, operation_id
 
     def _check_node_control_authorized(self) -> bool:
         expected = self.node_control_bearer_token
-        if expected is None:
-            return True
         authorization = self.headers.get("Authorization") or ""
         prefix = "Bearer "
         supplied = (
@@ -1890,40 +1354,34 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def build_node_agent_server(
+def build_builder_node_agent_server(
     host: str,
     port: int,
     *,
-    sandbox_file: Path,
+    state_file: Path,
     image_file: Path,
     job_id: str,
     node_id: str,
     node_url: str | None = None,
     agent_version: str = "",
-    deployment_id: str = "",
+    deployment_id: str,
     init_version: str = "",
     total_resources: ResourceQuantity | None = None,
-    cpu_overcommit: float = 1.0,
-    memory_overcommit: float = 1.0,
-    disk_overcommit: float = 1.0,
-    runtime: DockerGvisorRuntime | None = None,
-    image_runtime: DockerImageRuntime | None = None,
-    ssh_port_range: tuple[int, int] | None = (22000, 22999),
-    image_builds_enabled: bool = False,
-    extra_capabilities: tuple[str, ...] = (),
+    image_runtime: DockerImageRuntime,
+    node_control_bearer_token: str,
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     max_active_image_builds: int = 4,
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
-    node_control_bearer_token: str | None = None,
     build_context_store_dir: Path | None = None,
-    hibernation_disk_ledger: HibernationDiskLedger | None = None,
-    hibernation_quota_backend: HibernationQuotaBackend | None = None,
 ) -> HighBacklogThreadingHTTPServer:
-    if node_control_bearer_token is not None and not node_control_bearer_token.strip():
+    token = node_control_bearer_token.strip()
+    if not token:
         raise ValueError("node control bearer token cannot be empty")
+    if not deployment_id.strip():
+        raise ValueError("deployment_id cannot be empty")
     if (
         max_json_body_bytes < 1
         or max_file_body_bytes < 1
@@ -1931,49 +1389,18 @@ def build_node_agent_server(
         or max_concurrent_image_pulls < 1
     ):
         raise ValueError("node-agent request and build limits must be positive")
-    configured_resources = total_resources or ResourceQuantity()
-    if not configured_resources.is_valid:
+    resources = total_resources or ResourceQuantity()
+    if not resources.is_valid:
         raise ValueError("total_resources cannot contain negative or non-finite values")
-    overcommit = {
-        "cpu_overcommit": cpu_overcommit,
-        "memory_overcommit": memory_overcommit,
-        "disk_overcommit": disk_overcommit,
-    }
-    for name, factor in overcommit.items():
-        if not math.isfinite(factor) or factor < 0:
-            raise ValueError(f"{name} must be finite and non-negative")
-    if disk_overcommit > 1.0:
-        raise ValueError(
-            "disk_overcommit cannot exceed 1.0 because sandbox disk "
-            "reservations must be physically backable"
-        )
-    manager = SandboxManager(
-        SandboxStore(sandbox_file),
-        runtime or DockerGvisorRuntime(dry_run=True),
-        ssh_port_range=ssh_port_range,
-        effective_capacity=configured_resources.scaled(
-            cpu=cpu_overcommit,
-            memory=memory_overcommit,
-            disk=disk_overcommit,
-        ),
-        hibernation_disk_ledger=hibernation_disk_ledger,
-        hibernation_quota_backend=hibernation_quota_backend,
-    )
-    manager.reconcile_checkpoint_storage()
-    manager.reconcile_hibernation_storage()
-    exec_manager = ExecSessionManager(
-        manager,
-        route_node_id=node_id,
-        route_job_id=job_id,
-    )
+
+    runtime = BuilderNodeRuntime(NodeStateStore(state_file))
     image_manager = ImageManager(
         ImageStore(image_file),
-        image_runtime or DockerImageRuntime(dry_run=True),
+        image_runtime,
         max_active_builds=max_active_image_builds,
         max_concurrent_pulls=max_concurrent_image_pulls,
-        admission_store=manager.store,
     )
-    build_context_store = BuildContextBlobStore(
+    context_store = BuildContextBlobStore(
         build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
         max_blob_bytes=max_file_body_bytes,
         max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
@@ -1981,52 +1408,35 @@ def build_node_agent_server(
         max_age_seconds=DEFAULT_MAX_BUILD_CONTEXT_AGE_SECONDS,
     )
 
-    class BoundHandler(NodeAgentHandler):
+    class BuilderHandler(NodeAgentHandler):
         pass
 
-    BoundHandler.manager = manager
-    BoundHandler.exec_manager = exec_manager
-    BoundHandler.image_manager = image_manager
-    BoundHandler.build_context_store = build_context_store
-    BoundHandler.job_id = job_id
-    BoundHandler.node_id = node_id
-    BoundHandler.node_url = node_url
-    BoundHandler.agent_version = agent_version
-    BoundHandler.deployment_id = deployment_id
-    BoundHandler.init_version = init_version
-    BoundHandler.total_resources = configured_resources
-    BoundHandler.cpu_overcommit = cpu_overcommit
-    BoundHandler.memory_overcommit = memory_overcommit
-    BoundHandler.disk_overcommit = disk_overcommit
-    capabilities = (
-        ["image-cache"] if image_builds_enabled else ["sandbox", "image-cache"]
-    )
-    if image_builds_enabled:
-        capabilities.extend(["image-build", "snapshot"])
-    merged_capabilities = merge_capabilities(tuple(capabilities), extra_capabilities)
-    unavailable_runtime_capabilities = set()
-    if image_builds_enabled or not manager.runtime.fork_enabled:
-        unavailable_runtime_capabilities.add(FORK_LOCAL_CAPABILITY)
-    if image_builds_enabled or not manager.runtime.hibernate_enabled:
-        unavailable_runtime_capabilities.add(HIBERNATE_LOCAL_CAPABILITY)
-    merged_capabilities = tuple(
-        capability
-        for capability in merged_capabilities
-        if capability not in unavailable_runtime_capabilities
-    )
-    BoundHandler.capabilities = merged_capabilities
-    BoundHandler.image_builds_enabled = image_builds_enabled
-    BoundHandler.node_epoch = uuid4().hex
-    BoundHandler.physical_disk_path = physical_disk_path or _default_physical_disk_path(
-        sandbox_file
-    )
-    BoundHandler.node_control_bearer_token = node_control_bearer_token
-    BoundHandler.max_json_body_bytes = max_json_body_bytes
-    BoundHandler.max_file_body_bytes = max_file_body_bytes
-    BoundHandler.runtime_metrics_provider = staticmethod(
+    BuilderHandler.manager = runtime
+    BuilderHandler.exec_manager = None
+    BuilderHandler.image_manager = image_manager
+    BuilderHandler.build_context_store = context_store
+    BuilderHandler.job_id = job_id
+    BuilderHandler.node_id = node_id
+    BuilderHandler.node_url = node_url
+    BuilderHandler.agent_version = agent_version
+    BuilderHandler.deployment_id = deployment_id
+    BuilderHandler.init_version = init_version
+    BuilderHandler.total_resources = resources
+    BuilderHandler.cpu_overcommit = 1.0
+    BuilderHandler.memory_overcommit = 1.0
+    BuilderHandler.disk_overcommit = 1.0
+    BuilderHandler.capabilities = ("image-cache", "image-build")
+    BuilderHandler.image_builds_enabled = True
+    BuilderHandler.sandboxes_enabled = False
+    BuilderHandler.node_epoch = uuid4().hex
+    BuilderHandler.physical_disk_path = physical_disk_path or image_file.parent
+    BuilderHandler.node_control_bearer_token = token
+    BuilderHandler.max_json_body_bytes = max_json_body_bytes
+    BuilderHandler.max_file_body_bytes = max_file_body_bytes
+    BuilderHandler.runtime_metrics_provider = staticmethod(
         runtime_metrics_provider or sample_node_runtime_metrics
     )
-    return HighBacklogThreadingHTTPServer((host, port), BoundHandler)
+    return HighBacklogThreadingHTTPServer((host, port), BuilderHandler)
 
 
 def build_direct_node_agent_server(
@@ -2039,23 +1449,24 @@ def build_direct_node_agent_server(
     node_id: str,
     node_url: str | None = None,
     agent_version: str = "",
-    deployment_id: str = "",
+    deployment_id: str,
     init_version: str = "",
     total_resources: ResourceQuantity | None = None,
     cpu_overcommit: float = 1.0,
     memory_overcommit: float = 1.0,
-    image_runtime: DockerImageRuntime | None = None,
-    node_control_bearer_token: str | None = None,
+    image_runtime: DockerImageRuntime,
+    node_control_bearer_token: str,
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_concurrent_image_pulls: int = 8,
 ) -> HighBacklogThreadingHTTPServer:
-    """Serve a whole node with direct runsc ownership and no legacy task owner."""
-    from .direct_node_adapter import DirectNodeManagerAdapter
-
-    if node_control_bearer_token is not None and not node_control_bearer_token.strip():
+    """Serve a sandbox node with direct runsc and storage-native ownership."""
+    node_control_bearer_token = node_control_bearer_token.strip()
+    if not node_control_bearer_token:
         raise ValueError("node control bearer token cannot be empty")
+    if not deployment_id.strip():
+        raise ValueError("deployment_id cannot be empty")
     if max_concurrent_image_pulls < 1:
         raise ValueError("max concurrent image pulls must be positive")
     configured_resources = total_resources or ResourceQuantity()
@@ -2065,6 +1476,8 @@ def build_direct_node_agent_server(
         raise ValueError(
             "direct node CPU and memory overcommit factors must be exactly 1.0"
         )
+    if service.warden.storage is None:
+        raise ValueError("direct node requires storage-native ownership")
     host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
@@ -2077,7 +1490,7 @@ def build_direct_node_agent_server(
             runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
-    manager = DirectNodeManagerAdapter(service)
+    manager = DirectNodeRuntime(service)
     exec_manager = ExecSessionManager(
         manager,
         route_node_id=node_id,
@@ -2085,7 +1498,7 @@ def build_direct_node_agent_server(
     )
     image_manager = ImageManager(
         ImageStore(image_file),
-        image_runtime or DockerImageRuntime(dry_run=True),
+        image_runtime,
         max_concurrent_pulls=max_concurrent_image_pulls,
     )
     build_context_store = BuildContextBlobStore(
@@ -2119,33 +1532,36 @@ def build_direct_node_agent_server(
         DISK_QUOTA_CAPABILITY,
         HIBERNATE_LOCAL_CAPABILITY,
         "direct-runsc-v1",
-        "sandbox-migrate-v2",
     ]
     if service.provisioner.oci.managed_init_binary is not None:
         direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
     if service.dynamic_active_admission_enabled:
         direct_capabilities.append(DYNAMIC_ACTIVE_ADMISSION_CAPABILITY)
-    if getattr(service.warden, "storage", None) is not None:
-        direct_capabilities.extend(
-            (
-                "storage-native-v1",
-                "sandbox-migrate-storage-native-v1",
-            )
+    direct_capabilities.extend(
+        (
+            STORAGE_NATIVE_CAPABILITY,
+            STORAGE_NATIVE_MIGRATION_CAPABILITY,
         )
+    )
     DirectBoundHandler.capabilities = tuple(direct_capabilities)
     DirectBoundHandler.image_builds_enabled = False
+    DirectBoundHandler.sandboxes_enabled = True
     DirectBoundHandler.node_epoch = uuid4().hex
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
     DirectBoundHandler.image_materializer = staticmethod(
         service.provisioner.image_store.materialize
     )
+    DirectBoundHandler.rootfs_metrics_provider = staticmethod(
+        service.provisioner.image_store.operation_snapshot
+    )
     DirectBoundHandler.node_control_bearer_token = node_control_bearer_token
     DirectBoundHandler.max_json_body_bytes = max_json_body_bytes
     DirectBoundHandler.max_file_body_bytes = max_file_body_bytes
+
     def direct_runtime_metrics() -> NodeRuntimeMetrics | None:
         metrics = host_runtime_metrics()
-        storage = getattr(service.warden, "storage", None)
-        if metrics is None or storage is None:
+        storage = service.warden.storage
+        if metrics is None:
             return metrics
         try:
             raw = storage.get_metrics()
@@ -2154,12 +1570,8 @@ def build_direct_node_agent_server(
         mib = 1024 * 1024
         return replace(
             metrics,
-            storage_hard_capacity_mb=(
-                int(raw.get("hard_capacity_bytes", 0)) // mib
-            ),
-            storage_hard_reserved_mb=(
-                int(raw.get("hard_reserved_bytes", 0)) // mib
-            ),
+            storage_hard_capacity_mb=(int(raw.get("hard_capacity_bytes", 0)) // mib),
+            storage_hard_reserved_mb=(int(raw.get("hard_reserved_bytes", 0)) // mib),
             storage_cache_mb=int(raw.get("cache_bytes", 0)) // mib,
             storage_active_operations=int(raw.get("active_operations", 0)),
             storage_waiting_operations=int(raw.get("waiting_operations", 0)),
@@ -2168,9 +1580,7 @@ def build_direct_node_agent_server(
             ),
             storage_published_volumes=int(raw.get("published_volumes", 0)),
             storage_error_volumes=int(raw.get("error_volumes", 0)),
-            storage_device_pool_enabled=bool(
-                raw.get("device_pool_enabled", False)
-            ),
+            storage_device_pool_enabled=bool(raw.get("device_pool_enabled", False)),
             storage_device_pool_low_watermark=int(
                 raw.get("device_pool_low_watermark", 0)
             ),
@@ -2182,26 +1592,18 @@ def build_direct_node_agent_server(
             ),
             storage_ublk_active_devices=int(raw.get("ublk_active_devices", 0)),
             storage_ublk_live_devices=int(raw.get("ublk_live_devices", 0)),
-            storage_device_pool_acquires=int(
-                raw.get("device_pool_acquires", 0)
-            ),
+            storage_device_pool_acquires=int(raw.get("device_pool_acquires", 0)),
             storage_device_pool_reused_acquires=int(
                 raw.get("device_pool_reused_acquires", 0)
             ),
             storage_device_pool_new_acquires=int(
                 raw.get("device_pool_new_acquires", 0)
             ),
-            storage_device_pool_releases=int(
-                raw.get("device_pool_releases", 0)
-            ),
-            storage_device_pool_discards=int(
-                raw.get("device_pool_discards", 0)
-            ),
+            storage_device_pool_releases=int(raw.get("device_pool_releases", 0)),
+            storage_device_pool_discards=int(raw.get("device_pool_discards", 0)),
         )
 
-    DirectBoundHandler.runtime_metrics_provider = staticmethod(
-        direct_runtime_metrics
-    )
+    DirectBoundHandler.runtime_metrics_provider = staticmethod(direct_runtime_metrics)
 
     class DirectServiceHTTPServer(HighBacklogThreadingHTTPServer):
         def server_close(self) -> None:
@@ -2256,175 +1658,6 @@ def _int_query(query: dict[str, list[str]], key: str, default: int) -> int:
 
 def _elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))
-
-
-def _fork_source_envelope(raw: dict[str, Any]) -> tuple[int, str]:
-    source_raw = raw.get("_ucloud_source")
-    if not isinstance(source_raw, dict):
-        raise ValueError("_ucloud_source must be a JSON object")
-    try:
-        generation = int(source_raw.get("generation"))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("source generation must be an integer") from exc
-    if generation < 0:
-        raise ValueError("source generation cannot be negative")
-    spec_hash = str(source_raw.get("spec_hash") or "").strip()
-    if not spec_hash:
-        raise ValueError("source spec_hash is required")
-    return generation, spec_hash
-
-
-def _fork_request_is_batch(raw: dict[str, Any]) -> bool:
-    """Validate the mutually-exclusive single and fan-out wire shapes."""
-
-    batch = "sandboxes" in raw
-    if "sandbox" in raw and "target" in raw:
-        raise ValueError("fork payload cannot contain both sandbox and target")
-    single = "sandbox" in raw or "target" in raw
-    if batch and single:
-        raise ValueError("fork payload cannot contain both sandbox and sandboxes")
-    if batch and "_ucloud_operation" in raw:
-        raise ValueError("batch fork payload cannot contain singular _ucloud_operation")
-    if not batch and "_ucloud_operations" in raw:
-        raise ValueError("single fork payload cannot contain plural _ucloud_operations")
-    return batch
-
-
-def _fork_wire_target(raw: object) -> SandboxSpec:
-    """Parse the gateway's full target spec without consulting the source."""
-
-    if not isinstance(raw, dict):
-        raise ValueError("fork sandbox must be a JSON object")
-    target_raw = raw.get("sandbox", raw.get("target", raw))
-    if not isinstance(target_raw, dict) or not target_raw.get("image"):
-        raise ValueError("node fork requests require a complete sandbox spec")
-    target = SandboxSpec.from_dict(target_raw)
-    target.validate()
-    return target
-
-
-def _fork_intent_persisted(
-    manager: SandboxManager,
-    target: SandboxSpec | None,
-    operation: SandboxOperation | None,
-    *,
-    source_sandbox_id: str,
-    source_generation: int | None,
-) -> bool | None:
-    """Return whether this exact fork has a durable destination intent.
-
-    ``None`` is deliberately reserved for an unreadable/ambiguous store.  The
-    gateway must retain its reservation in that case, just as it does for an
-    interrupted node request.
-    """
-
-    if target is None or operation is None or source_generation is None:
-        return False
-    try:
-        record = manager.get(target.id)
-    except (OSError, RuntimeError, ValueError):
-        return None
-    if record is None:
-        return False
-    return (
-        record.generation == operation.generation
-        and record.operation_id == operation.operation_id
-        and record.spec_hash == operation.spec_hash
-        and record.creation_kind == "restore"
-        and record.source_sandbox_id == source_sandbox_id
-        and record.source_generation == source_generation
-        and bool(record.checkpoint_id)
-        and len(record.fork_nonce) == 64
-        and all(character in "0123456789abcdef" for character in record.fork_nonce)
-        and record.state in {"restoring", "running"}
-    )
-
-
-def _fork_error_payload(
-    error: str,
-    manager: SandboxManager,
-    target: SandboxSpec | None,
-    operation: SandboxOperation | None,
-    *,
-    source_sandbox_id: str,
-    source_generation: int | None,
-    **fields: Any,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {"error": error, **fields}
-    persisted = _fork_intent_persisted(
-        manager,
-        target,
-        operation,
-        source_sandbox_id=source_sandbox_id,
-        source_generation=source_generation,
-    )
-    if persisted is not None:
-        payload["intent_persisted"] = persisted
-    return payload
-
-
-def _fork_request_error_payload(
-    error: str,
-    manager: SandboxManager,
-    targets: tuple[SandboxSpec, ...],
-    operations: tuple[SandboxOperation, ...],
-    *,
-    batch: bool,
-    source_sandbox_id: str,
-    source_generation: int | None,
-    **fields: Any,
-) -> dict[str, Any]:
-    if not batch:
-        target = targets[0] if targets else None
-        operation = operations[0] if operations else None
-        return _fork_error_payload(
-            error,
-            manager,
-            target,
-            operation,
-            source_sandbox_id=source_sandbox_id,
-            source_generation=source_generation,
-            **fields,
-        )
-
-    payload: dict[str, Any] = {"error": error, **fields}
-    if not targets or len(targets) != len(operations):
-        payload["intent_persisted"] = False
-        return payload
-    persisted = tuple(
-        _fork_intent_persisted(
-            manager,
-            target,
-            operation,
-            source_sandbox_id=source_sandbox_id,
-            source_generation=source_generation,
-        )
-        for target, operation in zip(targets, operations, strict=True)
-    )
-    payload["intents"] = [
-        {
-            "sandbox_id": target.id,
-            "intent_persisted": value,
-        }
-        for target, value in zip(targets, persisted, strict=True)
-    ]
-    if all(value is True for value in persisted):
-        payload["intent_persisted"] = True
-    elif all(value is False for value in persisted):
-        payload["intent_persisted"] = False
-    # A partial/unreadable set is ambiguous. Omitting the signal makes the
-    # gateway retain every reservation for safe exact replay.
-    return payload
-
-
-def _fork_result_payload(result: SandboxForkRuntimeResult) -> dict[str, Any]:
-    return {
-        "checkpoint_id": result.checkpoint_id,
-        "restored": result.restored,
-        # Runtime argv can contain restore-time environment values. Keep the
-        # stable response shape without reflecting secrets.
-        "commands": [],
-    }
 
 
 def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:

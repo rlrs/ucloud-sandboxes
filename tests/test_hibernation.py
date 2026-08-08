@@ -10,7 +10,7 @@ from ucloud_sandboxes.hibernation import (
     HibernationArtifactStore,
     HibernationAuthority,
     HibernationCapacityError,
-    HibernationCompatibilityError,
+    HibernationValidationError,
     HibernationConflictError,
     HibernationDiskLedger,
     HibernationError,
@@ -103,17 +103,17 @@ class HibernationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "digest does not match"):
                 HibernationManifest.from_dict(tampered)
 
-    def test_manifest_requires_runtime_and_sandbox_compatibility(self) -> None:
+    def test_manifest_validates_runtime_and_sandbox_identity(self) -> None:
         with TemporaryDirectory() as raw_dir:
             manifest = self._manifest(Path(raw_dir))
-            manifest.require_compatible(
+            manifest.validate_identity(
                 sandbox_id="sandbox-1",
                 sandbox_generation=7,
                 spec_sha256=DIGEST_B,
                 runtime_sha256=manifest.runtime.digest,
             )
-            with self.assertRaises(HibernationCompatibilityError):
-                manifest.require_compatible(
+            with self.assertRaises(HibernationValidationError):
+                manifest.validate_identity(
                     sandbox_id="sandbox-1",
                     sandbox_generation=7,
                     spec_sha256=DIGEST_B,
@@ -133,7 +133,7 @@ class HibernationTests(unittest.TestCase):
             replacement.write_bytes(memory.read_bytes())
             os.replace(replacement, memory)
             with self.assertRaisesRegex(
-                HibernationCompatibilityError, "identity changed"
+                HibernationValidationError, "identity changed"
             ):
                 manifest.validate_files(root)
 
@@ -150,7 +150,7 @@ class HibernationTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(
-                HibernationCompatibilityError,
+                HibernationValidationError,
                 "identity changed",
             ):
                 remounted.validate_files(root)
@@ -161,7 +161,7 @@ class HibernationTests(unittest.TestCase):
             changed_inode.write_bytes(memory.read_bytes())
             os.replace(changed_inode, memory)
             with self.assertRaisesRegex(
-                HibernationCompatibilityError,
+                HibernationValidationError,
                 "identity changed",
             ):
                 remounted.validate_files(root, require_stable_device=False)
@@ -206,7 +206,7 @@ class HibernationTests(unittest.TestCase):
             target = root / "target"
             os.replace(memory, target)
             memory.symlink_to(target.name)
-            with self.assertRaisesRegex(HibernationCompatibilityError, "safely open"):
+            with self.assertRaisesRegex(HibernationValidationError, "safely open"):
                 manifest.validate_files(root)
 
     def test_manifest_schema_is_strict(self) -> None:
@@ -290,7 +290,7 @@ class HibernationTests(unittest.TestCase):
             )
             self.assertEqual(store.inventory()[0].state, "pending")
             with self.assertRaisesRegex(
-                HibernationCompatibilityError, "COMPLETE is absent"
+                HibernationValidationError, "COMPLETE is absent"
             ):
                 store.load_complete(
                     sandbox_id="sandbox-1",
@@ -375,7 +375,7 @@ class HibernationTests(unittest.TestCase):
             raw_marker = json.loads(marker.read_text(encoding="utf-8"))
             raw_marker["metadata_sha256"] = DIGEST_C
             marker.write_text(json.dumps(raw_marker), encoding="utf-8")
-            with self.assertRaises(HibernationCompatibilityError):
+            with self.assertRaises(HibernationValidationError):
                 store.load_complete(
                     sandbox_id="sandbox-1",
                     sandbox_generation=7,
@@ -968,7 +968,7 @@ class HibernationTests(unittest.TestCase):
                 result.record.state,
                 HibernationState.RECOVERY_REQUIRED,
             )
-            self.assertIn("incompatible", result.detail)
+            self.assertIn("does not match", result.detail)
 
     def test_disk_reservation_matches_allocator_growth_and_never_uses_holes(
         self,

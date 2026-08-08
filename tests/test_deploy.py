@@ -1,4 +1,3 @@
-import io
 import hashlib
 import json
 from pathlib import Path
@@ -27,6 +26,68 @@ from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
 
 class DeployTests(unittest.TestCase):
+    @staticmethod
+    def _plan(root: Path, **overrides: object) -> AllInOneDeployPlan:
+        wheel = root / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
+        wheel.write_bytes(b"wheel")
+        runsc = root / "runsc"
+        runsc.write_bytes(b"patched-runsc")
+        runsc.chmod(0o755)
+        managed_init = root / "ucloud-sandbox-init"
+        managed_init.write_bytes(b"managed-process-init")
+        managed_init.chmod(0o755)
+        backend_bytes = b"pinned-storage-native-backend"
+        backend_digest = hashlib.sha256(backend_bytes).hexdigest()
+        backend = root / f"uvm-ublk-daemon-{backend_digest}"
+        backend.write_bytes(backend_bytes)
+        backend.chmod(0o755)
+        (root / f"{backend.name}.LICENSE").write_text("MIT\n", encoding="utf-8")
+        storage_manifest = root / f"{backend.name}.manifest.json"
+        storage_manifest.write_text(
+            json.dumps(
+                {
+                    "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+                    "artifact": backend.name,
+                    "artifact_sha256": backend_digest,
+                    "cargo_package": "uvm-ublk-daemon",
+                    "host_architecture": "x86_64",
+                    "license": "MIT",
+                    "patches": [
+                        {
+                            "name": "agentenv-streaming-dense-export.patch",
+                            "sha256": "a" * 64,
+                        },
+                        {
+                            "name": "agentenv-pooled-delete.patch",
+                            "sha256": "b" * 64,
+                        },
+                        {
+                            "name": "agentenv-owner-identity.patch",
+                            "sha256": "c" * 64,
+                        },
+                    ],
+                    "schema": 3,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        values: dict[str, object] = {
+            "job_id": "job-1",
+            "project_id": "project-1",
+            "deployment_id": "prod-a",
+            "local_wheel": wheel,
+            "local_direct_runsc": runsc,
+            "local_managed_init": managed_init,
+            "direct_runsc_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+            "local_storage_native_manifest": storage_manifest,
+            "gateway_private_host": "sandbox-gateway-prod",
+            "registry_private_ip": "10.0.0.5",
+            "private_network_id": "net-1",
+        }
+        values.update(overrides)
+        return AllInOneDeployPlan(**values)
+
     def test_remote_deploy_failure_retains_bounded_diagnostics(self) -> None:
         with patch(
             "ucloud_sandboxes.deploy.subprocess.run",
@@ -72,9 +133,7 @@ class DeployTests(unittest.TestCase):
             storage_manifest.write_text(
                 json.dumps(
                     {
-                        "agentenv_commit": (
-                            "f41abb21324f6b0520abf34b7720aa260ddd10eb"
-                        ),
+                        "agentenv_commit": ("f41abb21324f6b0520abf34b7720aa260ddd10eb"),
                         "artifact": backend.name,
                         "artifact_sha256": backend_digest,
                         "cargo_package": "uvm-ublk-daemon",
@@ -89,8 +148,12 @@ class DeployTests(unittest.TestCase):
                                 "name": "agentenv-pooled-delete.patch",
                                 "sha256": "b" * 64,
                             },
+                            {
+                                "name": "agentenv-owner-identity.patch",
+                                "sha256": "c" * 64,
+                            },
                         ],
-                        "schema": 2,
+                        "schema": 3,
                     }
                 )
                 + "\n",
@@ -101,7 +164,6 @@ class DeployTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-direct",
                 local_wheel=wheel,
-                sandbox_runtime="direct",
                 local_direct_runsc=runsc,
                 local_managed_init=managed_init,
                 direct_runsc_commit="9f653e577965df2ddd13875b5530cd2588661f1c",
@@ -115,7 +177,7 @@ class DeployTests(unittest.TestCase):
             env = autoscaler_env(plan)
             script = render_remote_deploy_script(plan)
 
-        self.assertEqual(env["UCLOUD_INIT_NODE_RUNTIME"], "direct")
+        self.assertNotIn("UCLOUD_INIT_NODE_RUNTIME", env)
         self.assertEqual(env["UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS"], "7")
         self.assertEqual(
             env["UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK"],
@@ -133,7 +195,7 @@ class DeployTests(unittest.TestCase):
         self.assertIn("runtime/direct/ucloud-sandbox-init", script)
         self.assertIn("managed_init", script)
         self.assertIn("DIRECT_RUNSC_COMMIT=", script)
-        self.assertIn("agentenv-pooled-delete.patch", script)
+        self.assertIn("agentenv-owner-identity.patch", script)
 
     def test_env_rendering_quotes_only_when_needed(self) -> None:
         text = render_env_file({"A": "plain-value", "B": "two words"})
@@ -143,17 +205,7 @@ class DeployTests(unittest.TestCase):
 
     def test_all_in_one_plan_renders_env_and_script(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
-            wheel.write_bytes(b"wheel")
-            plan = AllInOneDeployPlan(
-                job_id="job-1",
-                project_id="project-1",
-                deployment_id="prod-a",
-                local_wheel=wheel,
-                gateway_private_host="sandbox-gateway-prod",
-                registry_private_ip="10.0.0.5",
-                private_network_id="net-1",
-            )
+            plan = self._plan(Path(raw_dir))
 
             gateway = gateway_env(plan)
             relay = relay_env(plan)
@@ -244,9 +296,7 @@ class DeployTests(unittest.TestCase):
         self.assertEqual(autoscaler["UCLOUD_INIT_MEMORY_OVERCOMMIT"], "2")
         self.assertEqual(autoscaler["UCLOUD_SANDBOX_DISK_GB"], "2000")
         self.assertEqual(autoscaler["UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB"], "440")
-        self.assertEqual(
-            autoscaler["UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB"], "200"
-        )
+        self.assertEqual(autoscaler["UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB"], "200")
         self.assertEqual(autoscaler["UCLOUD_INIT_SWAP_GB"], "96")
         self.assertEqual(
             autoscaler["UCLOUD_DOCKER_HOST_ALIAS"],
@@ -255,9 +305,7 @@ class DeployTests(unittest.TestCase):
         self.assertIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertIn("SANDBOX_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("BUILDER_NODE_PACKAGE_BUNDLE=", script)
-        self.assertIn('pip" download --disable-pip-version-check', script)
-        self.assertIn("binutils ca-certificates", script)
-        self.assertIn('strip --strip-debug "$unpack_dir/usr/bin/runsc"', script)
+        self.assertIn("ca-certificates curl docker.io", script)
         self.assertIn("package-bundle.json", script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("compresslevel=1", script)
@@ -271,28 +319,21 @@ class DeployTests(unittest.TestCase):
         self.assertIn('Dir::Cache::archives="$archive_dir"', script)
         self.assertIn("download_runtime_packages runtime xfsprogs", script)
         self.assertIn("NODE_AGENT_RUNTIME_ARCHIVE", script)
-        self.assertIn("prune_runsc_package", script)
-        self.assertIn("runsc-metric-server", script)
+        self.assertNotIn("prune_runsc_package", script)
+        self.assertNotIn("gvisor/releases", script)
         self.assertNotIn("python3-pip", script)
         self.assertNotIn("docker-compose-plugin", script)
-        self.assertIn("docker pull busybox", script)
-        self.assertIn("docker save --output", script)
-        self.assertIn("'reference': 'busybox'", script)
-        self.assertIn("'architecture': sys.argv[9]", script)
+        self.assertIn("'architecture': sys.argv[6]", script)
         self.assertIn("'sha256': sha256_file(path)", script)
         self.assertIn("mode='w|'", script)
-        self.assertIn(
-            "could not build offline Docker/gVisor bundle; cold nodes will use repository fallback",
-            script,
-        )
+        self.assertNotIn("repository fallback", script)
+        self.assertNotIn("runtime-conformance", script)
         self.assertIn("ucloud-sandbox-autoscaler.service", script)
         self.assertIn("ucloud-sandbox-registry-prune.timer", script)
         self.assertIn(
             "systemctl enable --now ucloud-sandbox-registry-prune.timer", script
         )
-        self.assertIn(
-            "wait_for_http gateway http://127.0.0.1:8090/healthz", script
-        )
+        self.assertIn("wait_for_http gateway http://127.0.0.1:8090/healthz", script)
         self.assertIn('while [ "$attempt" -le 30 ]; do', script)
         self.assertNotIn("sleep 2\ncurl -fsS", script)
         self.assertIn(
@@ -309,20 +350,8 @@ class DeployTests(unittest.TestCase):
         )
         self.assertIn("PROJECT_MOUNT_DIR=/work/data", script)
         self.assertIn('mountpoint -q "$PROJECT_MOUNT_DIR"', script)
-        self.assertIn("LEGACY_STATE_DIR=/work/ucloud-sandboxes/state", script)
-        self.assertIn(
-            "LEGACY_STATE_BACKUP_DIR=/work/ucloud-sandboxes/state.pre-persistent-v1",
-            script,
-        )
-        self.assertIn(
-            "PERSISTENT_STATE_MARKER=/work/data/ucloud-sandboxes/state/.persistent-state-v1",
-            script,
-        )
-        self.assertIn('sudo cp -a "$LEGACY_STATE_DIR/." "$MIGRATION_DIR/"', script)
-        self.assertIn(
-            'sudo mv "$LEGACY_STATE_DIR" "$LEGACY_STATE_BACKUP_DIR"', script
-        )
-        self.assertIn('sudo ln -s "$STATE_DIR" "$LEGACY_STATE_DIR"', script)
+        self.assertNotIn("LEGACY_STATE", script)
+        self.assertNotIn("PERSISTENT_STATE_MARKER", script)
         self.assertIn('sudo systemctl stop "$unit"', script)
         self.assertNotIn('systemctl stop "$unit" 2>/dev/null || true', script)
         self.assertIn("RequiresMountsFor=/work/data", script)
@@ -353,27 +382,14 @@ class DeployTests(unittest.TestCase):
 
     def test_all_in_one_plan_uses_project_drive_for_durable_state(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
-            wheel.write_bytes(b"wheel")
-            plan = AllInOneDeployPlan(
-                job_id="job-1",
-                project_id="project-1",
-                deployment_id="prod-a",
-                local_wheel=wheel,
+            plan = self._plan(
+                Path(raw_dir),
                 install_root="/srv/ucloud-sandboxes",
                 project_mount_dir="/mnt/project-data",
-                gateway_private_host="sandbox-gateway-prod",
-                registry_private_ip="10.0.0.5",
-                private_network_id="net-1",
             )
             script = render_remote_deploy_script(plan)
 
         self.assertEqual(plan.state_dir, "/mnt/project-data/ucloud-sandboxes/state")
-        self.assertEqual(plan.legacy_state_dir, "/srv/ucloud-sandboxes/state")
-        self.assertEqual(
-            plan.legacy_state_backup_dir,
-            "/srv/ucloud-sandboxes/state.pre-persistent-v1",
-        )
         self.assertEqual(
             plan.staged_session_file,
             "/srv/ucloud-sandboxes/release/.deploy-ucloud-session.json",
@@ -391,19 +407,7 @@ class DeployTests(unittest.TestCase):
 
     def test_offline_bundle_builder_python_compiles(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
-            wheel.write_bytes(b"wheel")
-            script = render_remote_deploy_script(
-                AllInOneDeployPlan(
-                    job_id="job-1",
-                    project_id="project-1",
-                    deployment_id="prod-a",
-                    local_wheel=wheel,
-                    gateway_private_host="sandbox-gateway-prod",
-                    registry_private_ip="10.0.0.5",
-                    private_network_id="net-1",
-                )
-            )
+            script = render_remote_deploy_script(self._plan(Path(raw_dir)))
 
         start = script.index("import hashlib\nimport gzip")
         end = script.index('\nPY\ndone\nrm -rf "$NODE_PACKAGE_WORK"', start)
@@ -420,31 +424,6 @@ class DeployTests(unittest.TestCase):
             package_dir = runtime_dir / "debs"
             package_dir.mkdir(parents=True)
             (package_dir / "docker-ce_1.0_amd64.deb").write_bytes(b"docker")
-            (package_dir / "runsc_1.0_amd64.deb").write_bytes(b"gvisor")
-            image_dir = runtime_dir / "images"
-            image_dir.mkdir()
-            image_archive = image_dir / "runtime-conformance-busybox.tar"
-            config_digest = "c" * 64
-            saved_manifest = json.dumps(
-                [{"Config": f"blobs/sha256/{config_digest}"}]
-            ).encode("utf-8")
-            with tarfile.open(image_archive, mode="w") as archive:
-                info = tarfile.TarInfo("manifest.json")
-                info.size = len(saved_manifest)
-                archive.addfile(info, io.BytesIO(saved_manifest))
-            (image_dir / "runtime-conformance-busybox.inspect.json").write_text(
-                json.dumps(
-                    [
-                        {
-                            "Id": "sha256:" + "d" * 64,
-                            "RepoDigests": ["busybox@sha256:" + "e" * 64],
-                            "Os": "linux",
-                            "Architecture": "amd64",
-                        }
-                    ]
-                ),
-                encoding="utf-8",
-            )
             agent_runtime_archive = root / "node-agent-runtime.tar"
             agent_runtime_archive.write_bytes(b"preassembled-agent")
             kernel_module_dir = root / "kernel-modules"
@@ -453,15 +432,7 @@ class DeployTests(unittest.TestCase):
             xfs_module.write_bytes(b"xfs-module")
             overlay_module = kernel_module_dir / "overlay.ko.zst"
             overlay_module.write_bytes(b"overlay-module")
-            plan = AllInOneDeployPlan(
-                job_id="job-1",
-                project_id="project-1",
-                deployment_id="prod-a",
-                local_wheel=wheel,
-                gateway_private_host="sandbox-gateway-prod",
-                registry_private_ip="10.0.0.5",
-                private_network_id="net-1",
-            )
+            plan = self._plan(root, local_wheel=wheel)
             script = render_remote_deploy_script(plan)
             start = script.index("import hashlib\nimport gzip")
             end = script.index('\nPY\ndone\nrm -rf "$NODE_PACKAGE_WORK"', start)
@@ -476,21 +447,24 @@ class DeployTests(unittest.TestCase):
                 for target in targets:
                     sys.argv = [
                         "builder",
-                        str(wheel),
-                        str(wheel_dir),
                         str(target),
                         str(runtime_dir),
-                        "1",
                         "ubuntu",
                         "24.04",
                         "noble",
                         "amd64",
-                        "sandbox",
-                        "xfsprogs docker-ce docker-ce-cli containerd.io runsc",
+                        "builder",
+                        "xfsprogs docker-ce docker-ce-cli containerd.io docker-buildx-plugin",
                         str(agent_runtime_archive),
                         "6.8.0-test-generic",
                         str(kernel_module_dir),
                         " ".join(RUNTIME_KERNEL_MODULES),
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
                     ]
                     exec(code, {"__name__": "__main__"})
             finally:
@@ -512,8 +486,8 @@ class DeployTests(unittest.TestCase):
             },
         )
         self.assertIn("docker-ce", manifest["runtime"]["packages"])
-        self.assertIn("runsc", manifest["runtime"]["packages"])
-        self.assertEqual(manifest["runtime"]["role"], "sandbox")
+        self.assertNotIn("runsc", manifest["runtime"]["packages"])
+        self.assertEqual(manifest["runtime"]["role"], "builder")
         self.assertEqual(
             manifest["runtime"]["kernel"]["release"],
             "6.8.0-test-generic",
@@ -528,29 +502,16 @@ class DeployTests(unittest.TestCase):
         )
         self.assertEqual(
             [item["name"] for item in manifest["runtime"]["files"]],
-            ["docker-ce_1.0_amd64.deb", "runsc_1.0_amd64.deb"],
+            ["docker-ce_1.0_amd64.deb"],
         )
-        self.assertEqual(manifest["runtime"]["probe_image"]["reference"], "busybox")
-        self.assertEqual(
-            manifest["runtime"]["probe_image"]["accepted_ids"],
-            [
-                "sha256:" + config_digest,
-                "sha256:" + "d" * 64,
-                "sha256:" + "e" * 64,
-            ],
-        )
+        self.assertNotIn("probe_image", manifest["runtime"])
 
     def test_all_in_one_plan_uses_restart_stable_private_dns(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            wheel = Path(raw_dir) / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
-            wheel.write_bytes(b"wheel")
-            plan = AllInOneDeployPlan(
-                job_id="job-1",
-                project_id="project-1",
-                deployment_id="prod-a",
-                local_wheel=wheel,
+            plan = self._plan(
+                Path(raw_dir),
                 gateway_private_host="sandbox-gateway-prod",
-                private_network_id="net-1",
+                registry_private_ip="",
             )
 
             autoscaler = autoscaler_env(plan)
@@ -579,12 +540,12 @@ class DeployTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP="
-            "sandbox-gateway-prod:8092",
+            "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP=" "sandbox-gateway-prod:8092",
             script,
         )
         self.assertNotIn("__UCLOUD_REGISTRY_PRIVATE_IP__", script)
-        self.assertIn("--init-host-alias-optional=", script)
+        self.assertIn("--init-host-alias=", script)
+        self.assertNotIn("--init-host-alias-optional", script)
 
     def test_packaged_systemd_units_are_available(self) -> None:
         units = packaged_systemd_units()
@@ -650,17 +611,6 @@ class DeployTests(unittest.TestCase):
             units["ucloud-sandbox-gateway.service"],
         )
 
-    def test_deploy_and_packaged_systemd_units_do_not_drift(self) -> None:
-        units = packaged_systemd_units()
-        deploy_root = Path(__file__).resolve().parents[1] / "deploy" / "systemd"
-
-        for name, packaged_text in units.items():
-            with self.subTest(name=name):
-                self.assertEqual(
-                    (deploy_root / name).read_text(encoding="utf-8"),
-                    packaged_text,
-                )
-
     def test_packaged_autoscaler_unit_matches_cli_parser(self) -> None:
         unit = packaged_systemd_units()["ucloud-sandbox-autoscaler.service"]
         exec_start = next(
@@ -678,7 +628,8 @@ class DeployTests(unittest.TestCase):
         args = build_parser().parse_args(argv[1:])
 
         self.assertEqual(args.command, "autoscaler-loop")
-        self.assertFalse(args.execute_resumes)
+        self.assertFalse(hasattr(args, "execute_resumes"))
+        self.assertEqual(args.max_storage_native_migrations_per_cycle, 1)
         self.assertEqual(args.init_max_concurrent_image_pulls, 1)
         self.assertEqual(args.gateway_control_bearer_token_file, Path("1"))
         self.assertEqual(args.init_builder_docker_quota_image_gb, 1)

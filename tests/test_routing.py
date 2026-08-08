@@ -4,6 +4,7 @@ from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
 import json
+import sqlite3
 from threading import Event
 import unittest
 
@@ -26,12 +27,20 @@ from ucloud_sandboxes.routing import (
 )
 
 
+def sandbox_route(**values: object) -> SandboxRoute:
+    values.setdefault("spec", {"id": values.get("sandbox_id")})
+    values.setdefault("generation", 1)
+    values.setdefault("create_operation_id", "create-test-route")
+    values.setdefault("spec_hash", "a" * 64)
+    return SandboxRoute(**values)  # type: ignore[arg-type]
+
+
 class RoutingStoreTests(unittest.TestCase):
     def test_managed_primary_state_survives_route_handoff_and_is_generation_fenced(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="managed-one",
                     node_id="node-1",
                     job_id="vm-1",
@@ -84,7 +93,7 @@ class RoutingStoreTests(unittest.TestCase):
             path = Path(raw_dir) / "routes.sqlite"
             store = RoutingStore(path)
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -133,7 +142,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -183,7 +192,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -217,7 +226,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -247,7 +256,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             route = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -275,7 +284,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -314,7 +323,7 @@ class RoutingStoreTests(unittest.TestCase):
                     ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
                 )
                 store.upsert_sandbox(
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id=f"sandbox-{index}",
                         node_id="node-1",
                         job_id="job-1",
@@ -337,7 +346,7 @@ class RoutingStoreTests(unittest.TestCase):
             ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
         )
 
-    def test_sandbox_routes_persist_cached_spec_and_state(self) -> None:
+    def test_sandbox_route_updates_are_complete_snapshots(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             spec = {
@@ -347,7 +356,7 @@ class RoutingStoreTests(unittest.TestCase):
                 "resources": {"vcpu": 1.0, "memory_mb": 512, "disk_mb": 1024},
             }
             store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="cached-one",
                     node_id="node-1",
                     job_id="job-1",
@@ -361,15 +370,17 @@ class RoutingStoreTests(unittest.TestCase):
             route = store.get_sandbox_readonly("cached-one")
             routes = store.sandbox_routes_readonly()
             store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="cached-one",
                     node_id="node-1",
                     job_id="job-1",
                     node_url="http://node-1:8090",
                     resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
+                    spec=spec,
+                    state="running",
                 )
             )
-            preserved = store.get_sandbox_readonly("cached-one")
+            updated = store.get_sandbox_readonly("cached-one")
 
         self.assertIsNotNone(route)
         assert route is not None
@@ -377,34 +388,34 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(route.state, "creating")
         self.assertEqual([item.sandbox_id for item in routes], ["cached-one"])
         self.assertEqual(routes[0].spec["image"], "busybox")
-        self.assertIsNotNone(preserved)
-        assert preserved is not None
-        self.assertEqual(preserved.spec, spec)
-        self.assertEqual(preserved.state, "creating")
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.spec, spec)
+        self.assertEqual(updated.state, "running")
 
     def test_finalize_sandbox_create_never_overwrites_or_resurrects_delete(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
-            reserved = SandboxRoute(
-                sandbox_id="fork-child",
+            reserved = sandbox_route(
+                sandbox_id="pending-child",
                 node_id="node-1",
                 job_id="job-1",
                 node_url="http://node-1:8090",
                 resources=ResourceQuantity(memory_mb=64, disk_mb=64),
-                spec={"id": "fork-child", "image": "busybox"},
+                spec={"id": "pending-child", "image": "busybox"},
                 state="creating",
                 generation=1,
-                create_operation_id="fork-operation",
-                spec_hash="spec-hash",
+                create_operation_id="create-operation",
+                spec_hash="a" * 64,
             )
             store.upsert_sandbox(reserved)
-            deleting = store.prepare_sandbox_delete("fork-child")
+            deleting = store.prepare_sandbox_delete("pending-child")
             self.assertIsNotNone(deleting)
 
             rejected = store.finalize_sandbox_create(
                 replace(reserved, state="running")
             )
-            still_deleting = store.get_sandbox("fork-child")
+            still_deleting = store.get_sandbox("pending-child")
             assert deleting is not None
             assert still_deleting is not None
             self.assertIsNone(rejected)
@@ -414,20 +425,20 @@ class RoutingStoreTests(unittest.TestCase):
             )
 
             store.delete_sandbox_if_current(
-                "fork-child",
+                "pending-child",
                 generation=1,
                 delete_operation_id=deleting.delete_operation_id,
             )
             self.assertIsNone(
                 store.finalize_sandbox_create(replace(reserved, state="running"))
             )
-            self.assertIsNone(store.get_sandbox("fork-child"))
+            self.assertIsNone(store.get_sandbox("pending-child"))
 
     def test_parked_migration_moves_only_the_exact_current_route(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             source = store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="moving-one",
                     node_id="source-node",
                     job_id="source-job",
@@ -439,7 +450,7 @@ class RoutingStoreTests(unittest.TestCase):
                     ),
                     spec={"id": "moving-one", "image": "busybox"},
                 ),
-                spec_hash="spec-hash",
+                spec_hash="a" * 64,
                 create_operation_id="create-one",
             )
             source = store.finalize_sandbox_create(
@@ -487,7 +498,7 @@ class RoutingStoreTests(unittest.TestCase):
             path = Path(raw_dir) / "routes.sqlite"
             store = RoutingStore(path)
             source = store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="journaled-move",
                     node_id="source-node",
                     job_id="source-job",
@@ -495,7 +506,7 @@ class RoutingStoreTests(unittest.TestCase):
                     resources=ResourceQuantity(memory_mb=1024, disk_mb=4096),
                     spec={"id": "journaled-move", "image": "busybox"},
                 ),
-                spec_hash="spec-hash",
+                spec_hash="a" * 64,
                 create_operation_id="create-operation",
             )
             source = store.finalize_sandbox_create(
@@ -513,8 +524,15 @@ class RoutingStoreTests(unittest.TestCase):
                 migration.migration_id,
                 expected_phases={"planned"},
                 phase="prepared",
-                archive_sha256="a" * 64,
-                archive_token="token",
+                storage_schema="storage-native-v1",
+                snapshot_sha256="a" * 64,
+                storage_snapshot={
+                    "publication": {
+                        "manifest_digest": "sha256:" + "b" * 64,
+                        "repository": "snapshots",
+                        "tag": "migration-one",
+                    }
+                },
             )
             assert migration is not None
             migration = store.advance_sandbox_migration(
@@ -540,7 +558,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             source = store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="wake-move",
                     node_id="source-node",
                     job_id="source-job",
@@ -552,7 +570,7 @@ class RoutingStoreTests(unittest.TestCase):
                     ),
                     spec={"id": "wake-move", "image": "busybox"},
                 ),
-                spec_hash="spec-hash",
+                spec_hash="a" * 64,
                 create_operation_id="create-operation",
             )
             source = store.finalize_sandbox_create(
@@ -570,8 +588,15 @@ class RoutingStoreTests(unittest.TestCase):
                 migration.migration_id,
                 expected_phases={"planned"},
                 phase="prepared",
-                archive_sha256="a" * 64,
-                archive_token="token",
+                storage_schema="storage-native-v1",
+                snapshot_sha256="a" * 64,
+                storage_snapshot={
+                    "publication": {
+                        "manifest_digest": "sha256:" + "b" * 64,
+                        "repository": "snapshots",
+                        "tag": "wake-migration",
+                    }
+                },
             )
             assert migration is not None
             migration = store.advance_sandbox_migration(
@@ -609,7 +634,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.save(
                 RoutingState(
                     sandboxes={
-                        "stale-one": SandboxRoute(
+                        "stale-one": sandbox_route(
                             sandbox_id="stale-one",
                             node_id="node-1",
                             job_id="job-1",
@@ -621,7 +646,7 @@ class RoutingStoreTests(unittest.TestCase):
                             created_at=old,
                             updated_at=old,
                         ),
-                        "other-node": SandboxRoute(
+                        "other-node": sandbox_route(
                             sandbox_id="other-node",
                             node_id="node-2",
                             job_id="job-2",
@@ -661,7 +686,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.reconcile_sandboxes_for_node(
                 "http://node-1:8090",
                 [
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id="active-one",
                         node_id="node-1",
                         job_id="job-1",
@@ -676,7 +701,7 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertNotIn("stale-one", state.sandboxes)
         self.assertNotIn("stale-one", state.pending)
         self.assertNotIn("exec-stale", state.exec_sessions)
-        self.assertIn("active-one", state.sandboxes)
+        self.assertNotIn("active-one", state.sandboxes)
         self.assertIn("other-node", state.sandboxes)
 
     def test_reconcile_sandboxes_for_node_keeps_newer_routes(self) -> None:
@@ -687,7 +712,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.save(
                 RoutingState(
                     sandboxes={
-                        "new-after-list-started": SandboxRoute(
+                        "new-after-list-started": sandbox_route(
                             sandbox_id="new-after-list-started",
                             node_id="node-1",
                             job_id="job-1",
@@ -714,6 +739,44 @@ class RoutingStoreTests(unittest.TestCase):
 
         self.assertIn("new-after-list-started", state.sandboxes)
 
+    def test_reconcile_inventory_cannot_advance_route_generation(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+            existing = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-1",
+                    spec_hash="a" * 64,
+                )
+            )
+
+            store.reconcile_sandboxes_for_node(
+                existing.node_url,
+                [
+                    replace(
+                        existing,
+                        generation=2,
+                        create_operation_id="unplanned-create-2",
+                        spec_hash="b" * 64,
+                        state="parked",
+                    )
+                ],
+                observed_at=utc_now().isoformat(),
+                node_epoch="boot-1",
+                activity_epoch=100,
+            )
+            stored = store.get_sandbox("sandbox-1")
+
+        assert stored is not None
+        self.assertEqual(stored.generation, 1)
+        self.assertEqual(stored.create_operation_id, "create-1")
+        self.assertEqual(stored.state, "running")
+
     def test_delete_sandboxes_for_jobs_removes_routes_and_dependents(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
@@ -721,7 +784,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.save(
                 RoutingState(
                     sandboxes={
-                        "remove-me": SandboxRoute(
+                        "remove-me": sandbox_route(
                             sandbox_id="remove-me",
                             node_id="node-1",
                             job_id="job-1",
@@ -732,7 +795,7 @@ class RoutingStoreTests(unittest.TestCase):
                             created_at=now,
                             updated_at=now,
                         ),
-                        "keep-me": SandboxRoute(
+                        "keep-me": sandbox_route(
                             sandbox_id="keep-me",
                             node_id="node-2",
                             job_id="job-2",
@@ -796,7 +859,7 @@ class RoutingStoreTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             live = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="live-lost",
                     node_id="lost-node",
                     job_id="lost-job",
@@ -808,7 +871,7 @@ class RoutingStoreTests(unittest.TestCase):
                 )
             )
             portable = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="portable-parked",
                     node_id="lost-node",
                     job_id="lost-job",
@@ -825,7 +888,7 @@ class RoutingStoreTests(unittest.TestCase):
                 )
             )
             local_park = store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="local-parked",
                     node_id="lost-node",
                     job_id="lost-job",
@@ -864,7 +927,7 @@ class RoutingStoreTests(unittest.TestCase):
     def test_readonly_sandbox_queries_return_current_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
-            route = SandboxRoute(
+            route = sandbox_route(
                 sandbox_id="readonly-one",
                 node_id="node-1",
                 job_id="job-1",
@@ -889,7 +952,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.save(
                 RoutingState(
                     sandboxes={
-                        "old-missing": SandboxRoute(
+                        "old-missing": sandbox_route(
                             sandbox_id="old-missing",
                             node_id="old-node",
                             job_id="old-job",
@@ -897,7 +960,7 @@ class RoutingStoreTests(unittest.TestCase):
                             created_at=old,
                             updated_at=old,
                         ),
-                        "recent-missing": SandboxRoute(
+                        "recent-missing": sandbox_route(
                             sandbox_id="recent-missing",
                             node_id="recent-node",
                             job_id="recent-job",
@@ -905,7 +968,7 @@ class RoutingStoreTests(unittest.TestCase):
                             created_at=recent,
                             updated_at=recent,
                         ),
-                        "active-job": SandboxRoute(
+                        "active-job": sandbox_route(
                             sandbox_id="active-job",
                             node_id="active-node",
                             job_id="active-job",
@@ -913,7 +976,7 @@ class RoutingStoreTests(unittest.TestCase):
                             created_at=old,
                             updated_at=old,
                         ),
-                        "fresh-node": SandboxRoute(
+                        "fresh-node": sandbox_route(
                             sandbox_id="fresh-node",
                             node_id="fresh-node",
                             job_id="missing-job",
@@ -960,7 +1023,7 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertIn("active-job", state.sandboxes)
         self.assertIn("fresh-node", state.sandboxes)
 
-    def test_legacy_json_file_is_moved_aside(self) -> None:
+    def test_non_sqlite_state_fails_closed(self) -> None:
         with TemporaryDirectory() as raw_dir:
             route_file = Path(raw_dir) / "routes.json"
             route_file.write_text(
@@ -975,11 +1038,25 @@ class RoutingStoreTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            state = RoutingStore(route_file).load()
-            backups = list(Path(raw_dir).glob("routes.json.legacy-*"))
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "not a SQLite"):
+                RoutingStore(route_file)
+            self.assertTrue(route_file.exists())
+            self.assertEqual(
+                json.loads(route_file.read_text(encoding="utf-8"))["sandboxes"],
+                [],
+            )
 
-        self.assertEqual(state.pending, {})
-        self.assertEqual(len(backups), 1)
+    def test_unversioned_sqlite_state_fails_closed(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            route_file = Path(raw_dir) / "routes.sqlite"
+            with sqlite3.connect(route_file) as conn:
+                conn.execute("CREATE TABLE obsolete_state (value TEXT)")
+
+            with self.assertRaisesRegex(
+                sqlite3.DatabaseError,
+                "unsupported routing schema version 0",
+            ):
+                RoutingStore(route_file)
 
     def test_prepared_capacity_signal_contributes_until_consumed_or_deleted(
         self,
@@ -1029,7 +1106,7 @@ class RoutingStoreTests(unittest.TestCase):
                 ttl_seconds=600,
                 image=image,
             )
-            route = SandboxRoute(
+            route = sandbox_route(
                 sandbox_id="sandbox-1",
                 node_id="node-1",
                 job_id="job-1",
@@ -1037,78 +1114,24 @@ class RoutingStoreTests(unittest.TestCase):
                 resources=resources,
                 spec={"id": "sandbox-1", "image": image},
             )
-            first = store.allocate_sandbox_create(route, spec_hash="spec-1")
-            repeated = store.allocate_sandbox_create(route, spec_hash="spec-1")
+            first = store.allocate_sandbox_create(route, spec_hash="1" * 64)
+            repeated = store.allocate_sandbox_create(route, spec_hash="1" * 64)
             after_first = store.prepared_capacity()
             store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     **{
                         **route.__dict__,
                         "sandbox_id": "sandbox-2",
                         "spec": {"id": "sandbox-2", "image": image},
                     }
                 ),
-                spec_hash="spec-2",
+                spec_hash="2" * 64,
             )
             after_second = store.prepared_capacity()
 
         self.assertEqual(first, repeated)
         self.assertEqual(after_first[0].count, 1)
         self.assertEqual(after_second, [])
-
-    def test_batch_create_reservations_are_atomic_and_exactly_replayable(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
-            base = SandboxRoute(
-                sandbox_id="child-a",
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-                resources=ResourceQuantity(memory_mb=64),
-                spec={"id": "child-a", "image": "busybox"},
-            )
-            requests = (
-                (base, "hash-a", "fork-a"),
-                (
-                    SandboxRoute(
-                        **{
-                            **base.__dict__,
-                            "sandbox_id": "child-b",
-                            "spec": {"id": "child-b", "image": "busybox"},
-                        }
-                    ),
-                    "hash-b",
-                    "fork-b",
-                ),
-            )
-            first = store.allocate_sandbox_creates(requests)
-            replayed = store.allocate_sandbox_creates(requests)
-
-            with self.assertRaises(SandboxRouteConflictError):
-                store.allocate_sandbox_creates(
-                    (
-                        (
-                            SandboxRoute(
-                                **{
-                                    **base.__dict__,
-                                    "sandbox_id": "not-persisted",
-                                    "spec": {
-                                        "id": "not-persisted",
-                                        "image": "busybox",
-                                    },
-                                }
-                            ),
-                            "hash-new",
-                            "fork-new",
-                        ),
-                        (requests[1][0], "different-hash", "fork-b"),
-                    )
-                )
-            rolled_back = store.get_sandbox("not-persisted")
-
-        self.assertEqual([created for _route, created in first], [True, True])
-        self.assertEqual([created for _route, created in replayed], [False, False])
-        self.assertIsNone(rolled_back)
 
     def test_route_does_not_claim_capacity_for_a_different_image(self) -> None:
         resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
@@ -1122,7 +1145,7 @@ class RoutingStoreTests(unittest.TestCase):
                 image="registry.example.org/expected:latest",
             )
             store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -1133,7 +1156,7 @@ class RoutingStoreTests(unittest.TestCase):
                         "image": "registry.example.org/other:latest",
                     },
                 ),
-                spec_hash="spec-1",
+                spec_hash="1" * 64,
             )
 
             prepared = store.prepared_capacity()
@@ -1161,7 +1184,7 @@ class RoutingStoreTests(unittest.TestCase):
                 image=image,
             )
             store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="sandbox-1",
                     node_id="node-1",
                     job_id="job-1",
@@ -1169,7 +1192,7 @@ class RoutingStoreTests(unittest.TestCase):
                     resources=resources,
                     spec={"id": "sandbox-1", "image": image},
                 ),
-                spec_hash="spec-1",
+                spec_hash="1" * 64,
             )
 
             remaining = store.prepared_capacity()
@@ -1539,7 +1562,7 @@ class RoutingStoreTests(unittest.TestCase):
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             store.upsert_pending("pending-one", resources)
             route, pending = store.allocate_sandbox_create_with_pending(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="pending-one",
                     node_id="node-1",
                     job_id="job-1",
@@ -1547,7 +1570,7 @@ class RoutingStoreTests(unittest.TestCase):
                     resources=resources,
                     spec={"id": "pending-one", "image": "busybox"},
                 ),
-                spec_hash="hash-one",
+                spec_hash="1" * 64,
             )
             after = store.get_pending("pending-one")
 
@@ -1586,7 +1609,7 @@ class RoutingStoreTests(unittest.TestCase):
                 resources,
                 generation=4,
                 operation_id="create-4",
-                spec_hash="sha256:spec-4",
+                spec_hash="4" * 64,
                 failure_reason="image_pull_http_502",
             )
             store.upsert_pending(
@@ -1594,7 +1617,7 @@ class RoutingStoreTests(unittest.TestCase):
                 resources,
                 generation=4,
                 operation_id="create-4",
-                spec_hash="sha256:spec-4",
+                spec_hash="4" * 64,
                 failure_reason="image_pull_http_503",
             )
             replay = RoutingStore(path).get_pending("pending-one")
@@ -1602,7 +1625,7 @@ class RoutingStoreTests(unittest.TestCase):
             self.assertEqual(replay.attempts, 2)
             self.assertEqual(replay.generation, 4)
             self.assertEqual(replay.operation_id, "create-4")
-            self.assertEqual(replay.spec_hash, "sha256:spec-4")
+            self.assertEqual(replay.spec_hash, "4" * 64)
             self.assertEqual(replay.failure_reason, "image_pull_http_503")
 
             store.upsert_pending(
@@ -1610,7 +1633,7 @@ class RoutingStoreTests(unittest.TestCase):
                 resources,
                 generation=5,
                 operation_id="create-5",
-                spec_hash="sha256:spec-5",
+                spec_hash="5" * 64,
                 failure_reason="registry_lease_unavailable",
             )
             replacement = RoutingStore(path).get_pending("pending-one")
@@ -1710,7 +1733,7 @@ class RoutingStoreTests(unittest.TestCase):
     def test_generation_high_water_survives_delete_and_reopen(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "routes.sqlite"
-            base = SandboxRoute(
+            base = sandbox_route(
                 sandbox_id="versioned-one",
                 node_id="node-1",
                 job_id="job-1",
@@ -1719,7 +1742,7 @@ class RoutingStoreTests(unittest.TestCase):
                 spec={"id": "versioned-one", "image": "busybox"},
             )
             first_store = RoutingStore(path)
-            first = first_store.allocate_sandbox_create(base, spec_hash="hash-1")
+            first = first_store.allocate_sandbox_create(base, spec_hash="1" * 64)
             removed = first_store.delete_sandbox_if_current(
                 first.sandbox_id,
                 generation=first.generation,
@@ -1727,7 +1750,7 @@ class RoutingStoreTests(unittest.TestCase):
             )
             second = RoutingStore(path).allocate_sandbox_create(
                 base,
-                spec_hash="hash-2",
+                spec_hash="2" * 64,
             )
 
         self.assertIsNotNone(removed)
@@ -1738,7 +1761,7 @@ class RoutingStoreTests(unittest.TestCase):
     def test_stale_inventory_cannot_overwrite_or_delete_newer_generation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
-            current = SandboxRoute(
+            current = sandbox_route(
                 sandbox_id="versioned-one",
                 node_id="node-1",
                 job_id="job-1",
@@ -1748,7 +1771,7 @@ class RoutingStoreTests(unittest.TestCase):
                 state="running",
                 generation=2,
                 create_operation_id="create-2",
-                spec_hash="hash-2",
+                spec_hash="2" * 64,
                 node_epoch="epoch-1",
                 activity_epoch=5,
             )
@@ -1756,7 +1779,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.reconcile_sandboxes_for_node(
                 current.node_url,
                 [
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id=current.sandbox_id,
                         node_id=current.node_id,
                         job_id=current.job_id,
@@ -1764,7 +1787,7 @@ class RoutingStoreTests(unittest.TestCase):
                         state="running",
                         generation=1,
                         create_operation_id="create-1",
-                        spec_hash="hash-1",
+                        spec_hash="1" * 64,
                         node_epoch="epoch-1",
                         activity_epoch=4,
                     )
@@ -1790,13 +1813,13 @@ class RoutingStoreTests(unittest.TestCase):
             assert route is not None
             self.assertEqual(route.generation, 2)
             self.assertEqual(route.create_operation_id, "create-2")
-            self.assertEqual(route.spec_hash, "hash-2")
+            self.assertEqual(route.spec_hash, "2" * 64)
             self.assertEqual(route.resources, current.resources)
 
     def test_same_generation_update_requires_exact_nonempty_identity(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
-            current = SandboxRoute(
+            current = sandbox_route(
                 sandbox_id="versioned-one",
                 node_id="node-1",
                 job_id="job-1",
@@ -1804,20 +1827,30 @@ class RoutingStoreTests(unittest.TestCase):
                 state="running",
                 generation=4,
                 create_operation_id="create-4",
-                spec_hash="hash-4",
+                spec_hash="4" * 64,
                 node_epoch="epoch-1",
                 activity_epoch=8,
             )
             store.upsert_sandbox(current)
 
+            for create_operation_id, spec_hash in (("", "4" * 64), ("create-4", "")):
+                with self.assertRaises(ValueError):
+                    store.upsert_sandbox(
+                        sandbox_route(
+                            **{
+                                **current.__dict__,
+                                "state": "stopped",
+                                "create_operation_id": create_operation_id,
+                                "spec_hash": spec_hash,
+                            }
+                        )
+                    )
             for create_operation_id, spec_hash in (
-                ("", "hash-4"),
-                ("create-4", ""),
-                ("different", "hash-4"),
-                ("create-4", "different"),
+                ("different", "4" * 64),
+                ("create-4", "d" * 64),
             ):
                 result = store.upsert_sandbox(
-                    SandboxRoute(
+                    sandbox_route(
                         **{
                             **current.__dict__,
                             "state": "stopped",
@@ -1834,24 +1867,24 @@ class RoutingStoreTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored.state, "running")
         self.assertEqual(stored.create_operation_id, "create-4")
-        self.assertEqual(stored.spec_hash, "hash-4")
+        self.assertEqual(stored.spec_hash, "4" * 64)
 
     def test_exact_identity_adopts_new_node_epoch_then_allows_absence(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
             first = store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="survived-restart",
                     node_id="node-1",
                     job_id="job-1",
                     node_url="http://node-1:8090",
                     spec={"id": "survived-restart", "image": "busybox"},
                 ),
-                spec_hash="hash-1",
+                spec_hash="1" * 64,
                 create_operation_id="create-1",
             )
             store.upsert_sandbox(
-                SandboxRoute(
+                sandbox_route(
                     **{
                         **first.__dict__,
                         "state": "running",
@@ -1865,7 +1898,7 @@ class RoutingStoreTests(unittest.TestCase):
             store.reconcile_sandboxes_for_node(
                 first.node_url,
                 [
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id=first.sandbox_id,
                         node_id=first.node_id,
                         job_id=first.job_id,
@@ -1906,25 +1939,30 @@ class RoutingStoreTests(unittest.TestCase):
             reconciling_store = RoutingStore(path)
             writer_store = RoutingStore(path)
             first = writer_store.allocate_sandbox_create(
-                SandboxRoute(
+                sandbox_route(
                     sandbox_id="reused-id",
                     node_id="node-1",
                     job_id="job-1",
                     node_url="http://node-1:8090",
                     spec={"id": "reused-id", "image": "busybox"},
                 ),
-                spec_hash="hash-1",
+                spec_hash="1" * 64,
                 create_operation_id="create-1",
             )
             writer_store.upsert_sandbox(
-                SandboxRoute(**{**first.__dict__, "state": "running"})
+                sandbox_route(**{**first.__dict__, "state": "running"})
             )
             snapshot_reached = Event()
             allow_reconcile_to_continue = Event()
             original_load = reconciling_store._load_unlocked
+            loaded_exec_sessions: list[bool] = []
 
-            def pause_at_snapshot(conn):
-                snapshot = original_load(conn)
+            def pause_at_snapshot(conn, *, include_exec_sessions=True):
+                loaded_exec_sessions.append(include_exec_sessions)
+                snapshot = original_load(
+                    conn,
+                    include_exec_sessions=include_exec_sessions,
+                )
                 snapshot_reached.set()
                 self.assertTrue(allow_reconcile_to_continue.wait(timeout=5))
                 return snapshot
@@ -1938,14 +1976,14 @@ class RoutingStoreTests(unittest.TestCase):
                     create_operation_id="create-1",
                 )
                 return writer_store.allocate_sandbox_create(
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id="reused-id",
                         node_id="node-1",
                         job_id="job-1",
                         node_url="http://node-1:8090",
                         spec={"id": "reused-id", "image": "python"},
                     ),
-                    spec_hash="hash-2",
+                    spec_hash="2" * 64,
                     create_operation_id="create-2",
                 )
 
@@ -1971,7 +2009,8 @@ class RoutingStoreTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored.generation, 2)
         self.assertEqual(stored.create_operation_id, "create-2")
-        self.assertEqual(stored.spec_hash, "hash-2")
+        self.assertEqual(stored.spec_hash, "2" * 64)
+        self.assertEqual(loaded_exec_sessions, [False])
 
     def test_concurrent_different_spec_allocation_rejects_loser_atomically(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1981,7 +2020,7 @@ class RoutingStoreTests(unittest.TestCase):
 
             def allocate(store: RoutingStore, image: str, spec_hash: str):
                 return store.allocate_sandbox_create(
-                    SandboxRoute(
+                    sandbox_route(
                         sandbox_id="same-id",
                         node_id="node-1",
                         job_id="job-1",
@@ -1993,8 +2032,8 @@ class RoutingStoreTests(unittest.TestCase):
 
             with ThreadPoolExecutor(max_workers=2) as executor:
                 futures = [
-                    executor.submit(allocate, first_store, "busybox", "hash-a"),
-                    executor.submit(allocate, second_store, "python", "hash-b"),
+                    executor.submit(allocate, first_store, "busybox", "a" * 64),
+                    executor.submit(allocate, second_store, "python", "b" * 64),
                 ]
                 results: list[SandboxRoute] = []
                 conflicts = 0

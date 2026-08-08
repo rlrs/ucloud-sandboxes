@@ -81,13 +81,9 @@ the updated deployment. Registry blobs remain under
 the image-id index and registry-use records, lives under
 `/work/data/ucloud-sandboxes/state`.
 
-The first convergence with this layout stops state-writing services and
-atomically migrates the old `/work/ucloud-sandboxes/state` directory. It refuses
-to merge a non-empty persistent target without the migration marker, preserves
-the original directory as `state.pre-persistent-v1`, and replaces the legacy
-path with a symlink to persistent state for downgrade compatibility. It stages a
-refreshed UCloud session separately so session copying cannot make the target
-appear pre-populated.
+The deployment creates gateway state directly under
+`/work/data/ucloud-sandboxes/state`. It stages a refreshed UCloud session
+separately so session copying cannot make an uninitialized target appear ready.
 
 Generated systemd drop-ins use `RequiresMountsFor=/work/data` and a `mountpoint`
 preflight. Without those gates, a boot can race the project-drive mount and bind
@@ -119,10 +115,8 @@ ucloud-sandboxes autoscaler-loop \
 The init script writes Docker's `insecure-registries` daemon setting and
 restarts Docker before starting the node agent. UCloud's restart-stable private
 DNS name avoids per-node `/etc/hosts` state when the gateway's private IP
-changes. The gateway rewrites legacy managed references that still contain
-`ucloud-sandbox-registry:5000` to the configured worker URL before dispatching
-them. See the dated registry alias incident in
-[deployment-flow.md](deployment-flow.md) for why the static alias was retired.
+changes. Image ids resolve to the immutable registry digest recorded by the
+control plane; worker registry coordinates are never supplied by clients.
 
 The same init script configures Docker's bridge MTU from the VM default-route
 interface. This matters on UCloud private-network VMs where the host interface
@@ -139,7 +133,7 @@ from ucloud_sandboxes_sdk import Image
 
 client.build_image(
     Image.from_dockerfile(
-        image_id="mini-swe-python311",
+        name="mini-swe-python311",
         context_path="./build-context",
     )
 )
@@ -150,7 +144,7 @@ Then create sandboxes with the same image id:
 ```python
 client.create_sandbox(
     id="sample-1",
-    image=Image.from_gateway_id("mini-swe-python311"),
+    image=Image.from_name("mini-swe-python311"),
     cpus=1,
     memory_mb=2048,
     disk_mb=10240,
@@ -175,12 +169,12 @@ in `<state_dir>/registry-usage.json`. Scheduled pruning uses that file as the
 age source. Tags with no usage entry are kept, because deleting by image
 creation time can remove shared base images that are still actively used.
 
-The same backward-compatible file persists both durable image references and
-finite transient leases. Keys remain repository, tag, and owner for migration
-compatibility, while new records also retain the exact manifest digest. Durable
-references have no expiry; transient pull and warmup leases retain an expiry.
-Old usage files without a `generation`, `leases`, or lease digest field continue
-to load and are upgraded when the reference is next observed.
+The same file persists both durable image references and finite transient
+leases. Every lease requires the exact immutable manifest digest; repository,
+tag, and owner identify its lifecycle, while pruning protects only the digest.
+Durable references have no expiry; transient pull and warmup leases retain an
+expiry. The file schema is strict: canonical snake-case fields, `generation`,
+and digest-bearing leases are required.
 
 Every resolved managed digest also has a deterministic internal
 `ucloud-digest-sha256-<hex>` tag. The gateway creates it by copying the exact

@@ -23,11 +23,15 @@ import (
 )
 
 const (
-	protocolVersion = 1
-	defaultStateDir = "/.ucloud-managed"
-	buildVersion    = "managed-primary-v1"
-	maxRequestBytes = 1024 * 1024
-	maxLogReadBytes = 1024 * 1024
+	protocolVersion          = 1
+	defaultStateDir          = "/.ucloud-managed"
+	buildVersion             = "managed-primary-v1"
+	maxRequestBytes          = 1024 * 1024
+	maxLogReadBytes          = 1024 * 1024
+	persistenceRetryInterval = 250 * time.Millisecond
+	// Log data is JSON-base64 encoded. Keep responses independently bounded
+	// while leaving room for a maximum raw chunk plus protocol framing.
+	maxResponseBytes = 2 * 1024 * 1024
 )
 
 var (
@@ -39,7 +43,6 @@ type request struct {
 	Version        int               `json:"version"`
 	Action         string            `json:"action"`
 	JobID          string            `json:"job_id,omitempty"`
-	OperationID    string            `json:"operation_id,omitempty"`
 	Argv           []string          `json:"argv,omitempty"`
 	Env            map[string]string `json:"env,omitempty"`
 	Cwd            string            `json:"cwd,omitempty"`
@@ -154,13 +157,15 @@ func (writer *boundedWriter) close() {
 }
 
 type supervisor struct {
-	mu       sync.Mutex
-	stateDir string
-	socket   string
-	state    *jobRecord
-	command  *exec.Cmd
-	stdout   *boundedWriter
-	stderr   *boundedWriter
+	mu               sync.Mutex
+	stateDir         string
+	socket           string
+	state            *jobRecord
+	command          *exec.Cmd
+	stdout           *boundedWriter
+	stderr           *boundedWriter
+	persistenceError error
+	persistHook      func(*jobRecord) error
 }
 
 func main() {
@@ -217,6 +222,7 @@ func runSupervisor(arguments []string) error {
 	if err := s.loadTerminalState(); err != nil {
 		return err
 	}
+	go s.retryPersistence()
 
 	signals := make(chan os.Signal, 8)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGQUIT)
@@ -264,7 +270,7 @@ func (s *supervisor) loadTerminalState() error {
 		record.Sequence++
 	}
 	s.state = &record
-	return s.persistLocked()
+	return s.persistStateLocked()
 }
 
 func (s *supervisor) serve(connection net.Conn) {
@@ -305,8 +311,7 @@ func (s *supervisor) start(req request) response {
 	defer s.mu.Unlock()
 	if s.state != nil {
 		if s.state.JobID == spec.JobID && s.state.SpecSHA256 == digest {
-			snapshot := s.snapshotLocked()
-			return response{Version: protocolVersion, OK: true, Job: &snapshot}
+			return s.stateResponseLocked()
 		}
 		return response{Version: protocolVersion, Error: "sandbox generation already owns another primary process"}
 	}
@@ -353,8 +358,9 @@ func (s *supervisor) start(req request) response {
 	s.state = record
 	s.stdout = stdout
 	s.stderr = stderr
-	if err := s.persistLocked(); err != nil {
+	if err := s.persistStateLocked(); err != nil {
 		s.state = nil
+		s.persistenceError = nil
 		stdout.close()
 		stderr.close()
 		return response{Version: protocolVersion, Error: "persist admission: " + err.Error()}
@@ -367,9 +373,8 @@ func (s *supervisor) start(req request) response {
 		record.Sequence++
 		stdout.close()
 		stderr.close()
-		_ = s.persistLocked()
-		snapshot := s.snapshotLocked()
-		return response{Version: protocolVersion, OK: true, Job: &snapshot}
+		_ = s.persistStateLocked()
+		return s.stateResponseLocked()
 	}
 	launchReader.Close()
 	if err := json.NewEncoder(launchWriter).Encode(spec); err != nil {
@@ -381,19 +386,17 @@ func (s *supervisor) start(req request) response {
 		record.Sequence++
 		stdout.close()
 		stderr.close()
-		_ = s.persistLocked()
-		snapshot := s.snapshotLocked()
-		return response{Version: protocolVersion, OK: true, Job: &snapshot}
+		_ = s.persistStateLocked()
+		return s.stateResponseLocked()
 	}
 	launchWriter.Close()
 	s.command = cmd
 	record.State = "running"
 	record.PID = cmd.Process.Pid
 	record.Sequence++
-	_ = s.persistLocked()
+	_ = s.persistStateLocked()
 	go s.wait(cmd)
-	snapshot := s.snapshotLocked()
-	return response{Version: protocolVersion, OK: true, Job: &snapshot}
+	return s.stateResponseLocked()
 }
 
 func (s *supervisor) wait(cmd *exec.Cmd) {
@@ -431,7 +434,7 @@ func (s *supervisor) wait(cmd *exec.Cmd) {
 		s.state.ExitCode = &code
 	}
 	s.command = nil
-	_ = s.persistLocked()
+	_ = s.persistStateLocked()
 }
 
 func (s *supervisor) status(jobID string) response {
@@ -440,8 +443,7 @@ func (s *supervisor) status(jobID string) response {
 	if s.state == nil || (jobID != "" && jobID != s.state.JobID) {
 		return response{Version: protocolVersion, Error: "primary process not found"}
 	}
-	snapshot := s.snapshotLocked()
-	return response{Version: protocolVersion, OK: true, Job: &snapshot}
+	return s.stateResponseLocked()
 }
 
 func (s *supervisor) logs(req request) response {
@@ -459,6 +461,14 @@ func (s *supervisor) logs(req request) response {
 	if s.state == nil || (req.JobID != "" && req.JobID != s.state.JobID) {
 		s.mu.Unlock()
 		return response{Version: protocolVersion, Error: "primary process not found"}
+	}
+	if s.persistenceError != nil {
+		_ = s.persistStateLocked()
+		if s.persistenceError != nil {
+			reply := s.degradedStateResponseLocked()
+			s.mu.Unlock()
+			return reply
+		}
 	}
 	path := filepath.Join(s.stateDir, req.Stream+".log")
 	s.mu.Unlock()
@@ -498,14 +508,12 @@ func (s *supervisor) signal(req request) response {
 		return response{Version: protocolVersion, Error: "primary process not found"}
 	}
 	if s.state.State != "running" || s.command == nil || s.command.Process == nil {
-		snapshot := s.snapshotLocked()
-		return response{Version: protocolVersion, OK: true, Job: &snapshot}
+		return s.stateResponseLocked()
 	}
 	if err := syscall.Kill(-s.command.Process.Pid, syscall.Signal(req.Signal)); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return response{Version: protocolVersion, Error: "signal primary process: " + err.Error()}
 	}
-	snapshot := s.snapshotLocked()
-	return response{Version: protocolVersion, OK: true, Job: &snapshot}
+	return s.stateResponseLocked()
 }
 
 func (s *supervisor) forwardSignal(received syscall.Signal) {
@@ -528,9 +536,57 @@ func (s *supervisor) snapshotLocked() jobRecord {
 	return record
 }
 
+func (s *supervisor) stateResponseLocked() response {
+	if s.persistenceError != nil {
+		_ = s.persistStateLocked()
+	}
+	if s.persistenceError != nil {
+		return s.degradedStateResponseLocked()
+	}
+	snapshot := s.snapshotLocked()
+	return response{Version: protocolVersion, OK: true, Job: &snapshot}
+}
+
+func (s *supervisor) degradedStateResponseLocked() response {
+	snapshot := s.snapshotLocked()
+	return response{
+		Version: protocolVersion,
+		Error: "managed process state durability is degraded: " +
+			s.persistenceError.Error(),
+		Job: &snapshot,
+	}
+}
+
+func (s *supervisor) persistStateLocked() error {
+	err := s.persistLocked()
+	if err != nil {
+		s.persistenceError = err
+		return err
+	}
+	s.persistenceError = nil
+	return nil
+}
+
+func (s *supervisor) retryPersistence() {
+	ticker := time.NewTicker(persistenceRetryInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		if s.persistenceError != nil {
+			_ = s.persistStateLocked()
+		}
+		s.mu.Unlock()
+	}
+}
+
 func (s *supervisor) persistLocked() error {
 	if s.state == nil {
 		return nil
+	}
+	if s.persistHook != nil {
+		if err := s.persistHook(s.state); err != nil {
+			return err
+		}
 	}
 	payload, err := json.Marshal(s.state)
 	if err != nil {
@@ -595,11 +651,11 @@ func runControl(arguments []string) error {
 	if unix, ok := connection.(*net.UnixConn); ok {
 		_ = unix.CloseWrite()
 	}
-	reply, err := io.ReadAll(io.LimitReader(connection, maxRequestBytes+1))
+	reply, err := io.ReadAll(io.LimitReader(connection, maxResponseBytes+1))
 	if err != nil {
 		return err
 	}
-	if len(reply) > maxRequestBytes {
+	if len(reply) > maxResponseBytes {
 		return errors.New("control response exceeds limit")
 	}
 	var decoded response

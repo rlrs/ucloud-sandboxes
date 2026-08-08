@@ -26,33 +26,46 @@ class VmBootstrapRecord:
     def from_dict(cls, raw: object) -> "VmBootstrapRecord":
         if not isinstance(raw, dict):
             raise ValueError("bootstrap record must be a JSON object.")
+        expected_fields = {
+            "job_id",
+            "node_id",
+            "role",
+            "status",
+            "attempts",
+            "last_attempt_at",
+            "last_success_at",
+            "last_error",
+            "retry_delay_seconds",
+        }
+        if set(raw) != expected_fields:
+            raise ValueError("bootstrap record does not match the current schema.")
         return cls(
-            job_id=str(raw.get("jobId") or ""),
-            node_id=str(raw.get("nodeId") or ""),
+            job_id=str(raw.get("job_id") or ""),
+            node_id=str(raw.get("node_id") or ""),
             role=str(raw.get("role") or ""),
             status=str(raw.get("status") or ""),
             attempts=int(raw.get("attempts") or 0),
-            last_attempt_at=_parse_iso(raw.get("lastAttemptAt")),
-            last_success_at=_parse_iso(raw.get("lastSuccessAt")),
-            last_error=str(raw.get("lastError") or ""),
+            last_attempt_at=_parse_iso(raw.get("last_attempt_at")),
+            last_success_at=_parse_iso(raw.get("last_success_at")),
+            last_error=str(raw.get("last_error") or ""),
             retry_delay_seconds=(
-                max(0, int(raw["retryDelaySeconds"]))
-                if raw.get("retryDelaySeconds") is not None
+                max(0, int(raw["retry_delay_seconds"]))
+                if raw.get("retry_delay_seconds") is not None
                 else None
             ),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "jobId": self.job_id,
-            "nodeId": self.node_id,
+            "job_id": self.job_id,
+            "node_id": self.node_id,
             "role": self.role,
             "status": self.status,
             "attempts": self.attempts,
-            "lastAttemptAt": _format_iso(self.last_attempt_at),
-            "lastSuccessAt": _format_iso(self.last_success_at),
-            "lastError": self.last_error,
-            "retryDelaySeconds": self.retry_delay_seconds,
+            "last_attempt_at": _format_iso(self.last_attempt_at),
+            "last_success_at": _format_iso(self.last_success_at),
+            "last_error": self.last_error,
+            "retry_delay_seconds": self.retry_delay_seconds,
         }
 
     def retry_due(self, *, now: datetime, retry_seconds: int) -> bool:
@@ -88,12 +101,13 @@ class VmBootstrapStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "jobs": {
-                job_id: record.to_dict()
-                for job_id, record in sorted(records.items())
+                job_id: record.to_dict() for job_id, record in sorted(records.items())
             }
         }
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
+        )
         tmp_path.replace(self.path)
 
 
@@ -166,7 +180,9 @@ def build_vm_bootstrap_intents(
                 )
             )
             continue
-        if record is not None and not record.retry_due(now=now, retry_seconds=retry_seconds):
+        if record is not None and not record.retry_due(
+            now=now, retry_seconds=retry_seconds
+        ):
             plan = plan_for_payload(node.job.raw)
             intents.append(
                 VmBootstrapIntent(
@@ -238,7 +254,9 @@ def mark_bootstrap_success(
         node_id=intent.node_id,
         role=intent.role,
         status="succeeded",
-        attempts=existing.attempts if existing is not None else intent.previous_attempts,
+        attempts=existing.attempts
+        if existing is not None
+        else intent.previous_attempts,
         last_attempt_at=existing.last_attempt_at if existing is not None else now,
         last_success_at=now,
         last_error="",
@@ -264,14 +282,14 @@ def mark_bootstrap_failure(
         node_id=intent.node_id,
         role=intent.role,
         status="failed",
-        attempts=existing.attempts if existing is not None else intent.previous_attempts,
+        attempts=existing.attempts
+        if existing is not None
+        else intent.previous_attempts,
         last_attempt_at=existing.last_attempt_at if existing is not None else now,
         last_success_at=existing.last_success_at if existing is not None else None,
         last_error=error,
         retry_delay_seconds=(
-            max(0, retry_delay_seconds)
-            if retry_delay_seconds is not None
-            else None
+            max(0, retry_delay_seconds) if retry_delay_seconds is not None else None
         ),
     )
     return updated
@@ -282,17 +300,14 @@ def prune_bootstrap_records(
     active_job_ids: set[str],
 ) -> dict[str, VmBootstrapRecord]:
     return {
-        job_id: record
-        for job_id, record in records.items()
-        if job_id in active_job_ids
+        job_id: record for job_id, record in records.items() if job_id in active_job_ids
     }
 
 
 def _is_builder(node: SandboxNode) -> bool:
-    return (
-        node.job.labels.get("ucloud-sandboxes/builder") == "true"
-        or node.job.name.startswith("ucloud-sandbox-builder")
-    )
+    return node.job.labels.get(
+        "ucloud-sandboxes/builder"
+    ) == "true" or node.job.name.startswith("ucloud-sandbox-builder")
 
 
 def _parse_iso(value: object) -> datetime | None:

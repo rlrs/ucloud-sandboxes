@@ -9,6 +9,7 @@ from ucloud_sandboxes.models import (
     SandboxInventoryEntry,
     SandboxDemand,
     SandboxNode,
+    SandboxPlacementRequest,
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
@@ -79,6 +80,9 @@ class ReconcileTests(unittest.TestCase):
                     SandboxInventoryEntry(
                         sandbox_id="sandbox-1",
                         generation=1,
+                        operation_id="create-1",
+                        spec_hash="a" * 64,
+                        state="running",
                     ),
                 ),
             ),
@@ -278,7 +282,14 @@ class ReconcileTests(unittest.TestCase):
         )
         decision = evaluate_scale(
             [],
-            SandboxDemand(pending_resources=ResourceQuantity(vcpu=4, memory_mb=12_288)),
+            SandboxDemand(
+                pending_resources=ResourceQuantity(vcpu=4, memory_mb=12_288),
+                placement_requests=(
+                    SandboxPlacementRequest(
+                        resources=ResourceQuantity(vcpu=4, memory_mb=12_288)
+                    ),
+                ),
+            ),
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
 
@@ -313,7 +324,14 @@ class ReconcileTests(unittest.TestCase):
         )
         decision = evaluate_scale(
             [],
-            SandboxDemand(pending_resources=ResourceQuantity(vcpu=4, memory_mb=12_288)),
+            SandboxDemand(
+                pending_resources=ResourceQuantity(vcpu=4, memory_mb=12_288),
+                placement_requests=(
+                    SandboxPlacementRequest(
+                        resources=ResourceQuantity(vcpu=4, memory_mb=12_288)
+                    ),
+                ),
+            ),
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
         intents = build_vm_create_intents(

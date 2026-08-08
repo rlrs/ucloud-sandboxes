@@ -32,7 +32,6 @@ class ManagedProcessStart:
     argv: tuple[str, ...]
     env: dict[str, str] = field(default_factory=dict)
     cwd: str = "/workspace"
-    operation_id: str = ""
     max_stdout_bytes: int = DEFAULT_MAX_STDOUT_BYTES
     max_stderr_bytes: int = DEFAULT_MAX_STDERR_BYTES
 
@@ -40,26 +39,52 @@ class ManagedProcessStart:
     def from_dict(cls, raw: object) -> "ManagedProcessStart":
         if not isinstance(raw, dict):
             raise ValueError("managed process payload must be a JSON object")
+        unsupported = sorted(
+            set(raw)
+            - {
+                "argv",
+                "cwd",
+                "env",
+                "job_id",
+                "max_stderr_bytes",
+                "max_stdout_bytes",
+            }
+        )
+        if unsupported:
+            raise ValueError(
+                "unsupported managed process fields: " + ", ".join(unsupported)
+            )
         argv = raw.get("argv")
         env = raw.get("env") or {}
-        if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        if not isinstance(argv, list) or not all(
+            isinstance(item, str) for item in argv
+        ):
             raise ValueError("managed process argv must be a JSON string array")
-        if not isinstance(env, dict):
-            raise ValueError("managed process env must be a JSON object")
+        if not isinstance(env, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in env.items()
+        ):
+            raise ValueError("managed process env must contain strings")
+        cwd = raw.get("cwd", "/workspace")
+        if not isinstance(cwd, str):
+            raise ValueError("managed process cwd must be a string")
+        job_id = raw.get("job_id")
+        if not isinstance(job_id, str):
+            raise ValueError("managed process job_id must be a string")
+        stdout_limit = raw.get("max_stdout_bytes", DEFAULT_MAX_STDOUT_BYTES)
+        stderr_limit = raw.get("max_stderr_bytes", DEFAULT_MAX_STDERR_BYTES)
+        if any(
+            isinstance(value, bool) or not isinstance(value, int)
+            for value in (stdout_limit, stderr_limit)
+        ):
+            raise ValueError("managed process log limits must be integers")
         result = cls(
-            job_id=str(raw.get("job_id") or raw.get("jobId") or "").strip(),
-            operation_id=str(
-                raw.get("operation_id") or raw.get("operationId") or ""
-            ).strip(),
+            job_id=job_id.strip(),
             argv=tuple(argv),
-            env={str(key): str(value) for key, value in env.items()},
-            cwd=str(raw.get("cwd") or "/workspace"),
-            max_stdout_bytes=int(
-                raw.get("max_stdout_bytes", DEFAULT_MAX_STDOUT_BYTES)
-            ),
-            max_stderr_bytes=int(
-                raw.get("max_stderr_bytes", DEFAULT_MAX_STDERR_BYTES)
-            ),
+            env=dict(env),
+            cwd=cwd,
+            max_stdout_bytes=stdout_limit,
+            max_stderr_bytes=stderr_limit,
         )
         result.validate()
         return result
@@ -67,8 +92,6 @@ class ManagedProcessStart:
     def validate(self) -> None:
         if not _JOB_ID.fullmatch(self.job_id):
             raise ValueError("managed process job_id is invalid")
-        if self.operation_id and not _JOB_ID.fullmatch(self.operation_id):
-            raise ValueError("managed process operation_id is invalid")
         if not self.argv or len(self.argv) > 4096:
             raise ValueError("managed process argv must be non-empty and bounded")
         if any("\0" in item for item in self.argv):
@@ -87,7 +110,6 @@ class ManagedProcessStart:
             "version": MANAGED_PROCESS_PROTOCOL_VERSION,
             "action": "start",
             "job_id": self.job_id,
-            "operation_id": self.operation_id,
             "argv": list(self.argv),
             "env": dict(sorted(self.env.items())),
             "cwd": self.cwd,
@@ -232,7 +254,9 @@ class ManagedProcessLogChunk:
     def from_control_response(cls, raw: object) -> "ManagedProcessLogChunk":
         if not isinstance(raw, dict) or raw.get("ok") is not True:
             error = raw.get("error") if isinstance(raw, dict) else None
-            raise ManagedProcessError(str(error or "invalid managed process log response"))
+            raise ManagedProcessError(
+                str(error or "invalid managed process log response")
+            )
         stream = str(raw.get("stream") or "")
         if stream not in {"stdout", "stderr"}:
             raise ManagedProcessError("managed process log response has invalid stream")
@@ -242,11 +266,15 @@ class ManagedProcessLogChunk:
         try:
             data = base64.b64decode(encoded, validate=True)
         except (ValueError, binascii.Error) as exc:
-            raise ManagedProcessError("managed process log response is not base64") from exc
+            raise ManagedProcessError(
+                "managed process log response is not base64"
+            ) from exc
         offset = int(raw.get("offset") or 0)
         next_offset = int(raw.get("next_offset") or offset)
         if offset < 0 or next_offset != offset + len(data):
-            raise ManagedProcessError("managed process log response has invalid offsets")
+            raise ManagedProcessError(
+                "managed process log response has invalid offsets"
+            )
         return cls(
             stream=stream,
             offset=offset,

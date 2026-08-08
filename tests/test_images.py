@@ -24,11 +24,7 @@ from ucloud_sandboxes.images import (
 from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.sandbox import (
     CommandResult,
-    DockerGvisorRuntime,
     RecordingExecutor,
-    SandboxAdmissionClosedError,
-    SandboxManager,
-    SandboxStore,
 )
 
 
@@ -92,9 +88,9 @@ class ImageTests(unittest.TestCase):
     def test_image_record_manifest_digest_is_optional_and_persisted(self) -> None:
         digest = "sha256:" + "b" * 64
         now = utc_now()
-        legacy = ImageRecord.from_dict(
+        unpinned = ImageRecord.from_dict(
             {
-                "id": "legacy",
+                "id": "unpinned",
                 "tag": "registry.test/image:v1",
                 "source": "registry",
                 "state": "available",
@@ -112,12 +108,42 @@ class ImageTests(unittest.TestCase):
             manifest_digest=digest,
         )
 
-        self.assertEqual(legacy.manifest_digest, "")
+        self.assertEqual(unpinned.manifest_digest, "")
         self.assertEqual(ImageRecord.from_dict(pinned.to_dict()), pinned)
         self.assertEqual(
             pinned.digest_ref,
             f"registry.test/image@{digest}",
         )
+
+    def test_build_records_use_only_canonical_fields(self) -> None:
+        common = {
+            "build_id": "build-1",
+            "image_id": "image-1",
+            "tag": "local/image-1:latest",
+            "status": "succeeded",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:01+00:00",
+        }
+        canonical = ImageBuildRecord.from_dict(
+            {
+                **common,
+                "exit_code": 0,
+                "push_exit_code": 0,
+            }
+        )
+        noncanonical = ImageBuildRecord.from_dict(
+            {
+                **common,
+                "exitCode": 0,
+                "pushExitCode": 0,
+            }
+        )
+
+        self.assertIsNotNone(canonical)
+        self.assertIsNone(noncanonical)
+        assert canonical is not None
+        self.assertEqual((canonical.exit_code, canonical.push_exit_code), (0, 0))
+        self.assertEqual(ImageBuildRecord.from_dict(canonical.to_dict()), canonical)
 
     def test_image_state_fails_closed_on_malformed_or_duplicate_records(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -238,90 +264,6 @@ class ImageTests(unittest.TestCase):
                     self.fail("completed build condition was not released")
                 time.sleep(0.01)
 
-    def test_drain_blocks_new_build_but_allows_existing_build_replay(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            sandbox_store = SandboxStore(Path(raw_dir) / "sandboxes.json")
-            sandbox_manager = SandboxManager(
-                sandbox_store,
-                DockerGvisorRuntime(dry_run=True),
-            )
-            executor = BlockingBuildExecutor()
-            image_manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(executor=executor),
-                admission_store=sandbox_store,
-            )
-            spec = ImageBuildSpec(
-                id="existing",
-                tag="local/existing:latest",
-                context_path="/tmp/context",
-            )
-            build, started = image_manager.start_build(spec)
-            self.assertTrue(started)
-            self.assertTrue(executor.started.wait(1))
-            draining = sandbox_manager.configure_drain(
-                "drain-build",
-                True,
-                active_build_count=image_manager.active_build_count,
-            )
-
-            self.assertFalse(draining.ready)
-            replay, replay_started = image_manager.start_build(spec)
-            self.assertEqual(replay.build_id, build.build_id)
-            self.assertFalse(replay_started)
-            with self.assertRaises(SandboxAdmissionClosedError):
-                image_manager.start_build(
-                    ImageBuildSpec(
-                        id="blocked",
-                        tag="local/blocked:latest",
-                        context_path="/tmp/context",
-                    )
-                )
-            executor.release.set()
-            finished = image_manager.wait_for_build(build.build_id, timeout_seconds=2)
-            self.assertIsNotNone(finished)
-            ready = sandbox_manager.heartbeat_snapshot(
-                active_build_count=image_manager.active_build_count
-            )
-            self.assertTrue(ready.ready)
-
-    def test_multiprocess_build_cannot_enter_after_drain_ack(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            sandbox_path = Path(raw_dir) / "sandboxes.json"
-            build_path = Path(raw_dir) / "builds.json"
-            sandbox_manager = SandboxManager(
-                SandboxStore(sandbox_path),
-                DockerGvisorRuntime(dry_run=True),
-            )
-            drained = sandbox_manager.configure_drain(
-                "drain-build-process",
-                True,
-                active_build_count=lambda: 0,
-            )
-            self.assertTrue(drained.ready)
-            context = multiprocessing.get_context("spawn")
-            results = context.Queue()
-            processes = [
-                context.Process(
-                    target=_multiprocess_build_after_drain,
-                    args=(
-                        str(sandbox_path),
-                        str(build_path),
-                        index,
-                        results,
-                    ),
-                )
-                for index in range(4)
-            ]
-            for process in processes:
-                process.start()
-            outcomes = [results.get(timeout=10) for _process in processes]
-            for process in processes:
-                process.join(timeout=10)
-
-            self.assertEqual([process.exitcode for process in processes], [0] * 4)
-            self.assertEqual(outcomes, ["closed"] * 4)
-            self.assertEqual(ImageBuildStore(build_path).load(), {})
     def test_multiprocess_image_and_build_writers_do_not_lose_updates(self) -> None:
         with TemporaryDirectory() as raw_dir:
             image_path = Path(raw_dir) / "images.json"
@@ -488,7 +430,14 @@ class ImageTests(unittest.TestCase):
 
         self.assertEqual(
             argv[:6],
-            ("docker", "build", "-f", "/tmp/context/Containerfile", "-t", "local/base:latest"),
+            (
+                "docker",
+                "build",
+                "-f",
+                "/tmp/context/Containerfile",
+                "-t",
+                "local/base:latest",
+            ),
         )
         self.assertIn("--build-arg", argv)
         self.assertIn("A=1", argv)
@@ -507,7 +456,10 @@ class ImageTests(unittest.TestCase):
 
         argv = runtime.build_command(spec)
 
-        self.assertEqual(argv[:6], ("docker", "build", "-f", "/tmp/Dockerfile", "-t", "local/base:latest"))
+        self.assertEqual(
+            argv[:6],
+            ("docker", "build", "-f", "/tmp/Dockerfile", "-t", "local/base:latest"),
+        )
 
     def test_buildx_direct_push_command_uses_registry_cache(self) -> None:
         runtime = DockerImageRuntime(
@@ -702,7 +654,9 @@ class BlockingBuildExecutor:
         self.started = Event()
         self.release = Event()
 
-    def run(self, argv: tuple[str, ...], *, input: bytes | None = None) -> CommandResult:
+    def run(
+        self, argv: tuple[str, ...], *, input: bytes | None = None
+    ) -> CommandResult:
         del input
         self.started.set()
         self.release.wait(2)
@@ -713,7 +667,8 @@ class ChattyBuildRuntime(DockerImageRuntime):
     def __init__(self) -> None:
         super().__init__(dry_run=True)
 
-    def build(self, spec, *, on_output=None):  # type: ignore[no-untyped-def]
+    def build(self, spec, *, push=False, on_output=None):  # type: ignore[no-untyped-def]
+        del push
         if on_output is not None:
             for _index in range(4_000):
                 on_output("combined", "x")
@@ -799,33 +754,6 @@ def _multiprocess_build_reserver(path: str, worker: int, start, results) -> None
         results.put("capacity")
     else:
         results.put("started" if started else "duplicate")
-
-
-def _multiprocess_build_after_drain(
-    sandbox_path: str,
-    build_path: str,
-    index: int,
-    results,
-) -> None:
-    sandbox_store = SandboxStore(Path(sandbox_path))
-    manager = ImageManager(
-        ImageStore(Path(build_path).with_name(f"images-{index}.json")),
-        DockerImageRuntime(dry_run=True),
-        build_store=ImageBuildStore(Path(build_path)),
-        admission_store=sandbox_store,
-    )
-    try:
-        manager.start_build(
-            ImageBuildSpec(
-                id=f"blocked-{index}",
-                tag=f"local/blocked-{index}:latest",
-                context_path="/tmp/context",
-            )
-        )
-    except SandboxAdmissionClosedError:
-        results.put("closed")
-    else:
-        results.put("started")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import stat
 import tempfile
 import time
@@ -22,6 +23,10 @@ from .sandbox import (
 
 DIRECT_REGISTRY_VERSION = 2
 DIRECT_REGISTRATION_VERSION = 2
+DIRECT_REGISTRY_MAX_BYTES = 16 * 1024 * 1024
+DIRECT_REGISTRY_MAX_INLINE_TOMBSTONES = 4096
+DIRECT_REGISTRY_MAX_INLINE_MIGRATION_TOMBSTONES = 4096
+DIRECT_REGISTRY_MAX_MIGRATION_TOMBSTONES_PER_SANDBOX = 256
 DIRECT_REGISTRATION_PHASES = {
     "planned",
     "import_planned",
@@ -70,11 +75,9 @@ class DirectSandboxRegistration:
     def __post_init__(self) -> None:
         if self.version != DIRECT_REGISTRATION_VERSION:
             raise ValueError("unsupported direct registration version")
-        if self.spec.forkable:
-            raise ValueError("fork is deferred from the direct runtime")
         self.spec.validate()
-        if self.sandbox_generation < 0:
-            raise ValueError("sandbox generation cannot be negative")
+        if self.sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         if not self.operation_id or not OPERATION_ID_RE.fullmatch(self.operation_id):
             raise ValueError("direct registration operation id is invalid")
         if not _DIGEST.fullmatch(self.runtime_identity_sha256):
@@ -97,7 +100,7 @@ class DirectSandboxRegistration:
         if migration_phase and not self.migration_id:
             raise ValueError("migration registration has no migration id")
         if migration_phase and not self.migration_sha256:
-            raise ValueError("migration registration has no archive digest")
+            raise ValueError("migration registration has no snapshot digest")
         if not migration_phase and (self.migration_id or self.migration_sha256):
             raise ValueError("ordinary registration has migration ownership")
         if self.revision < 1 or self.created_ns < 1 or self.updated_ns < 1:
@@ -107,10 +110,7 @@ class DirectSandboxRegistration:
             self.quota_total_mb,
             self.quota_path,
         )
-        quota_present = all(
-            value not in {None, ""}
-            for value in quota_values
-        )
+        quota_present = all(value not in {None, ""} for value in quota_values)
         if any(value not in {None, ""} for value in quota_values) != quota_present:
             raise ValueError("direct registration quota identity is incomplete")
         if quota_present:
@@ -157,9 +157,7 @@ class DirectSandboxRegistration:
             "owned",
             "moving_out",
             "deleting",
-        } and (
-            not quota_present or not rootfs_present
-        ):
+        } and (not quota_present or not rootfs_present):
             raise ValueError("direct registration is missing owned resources")
 
     @property
@@ -243,11 +241,8 @@ class DirectSandboxRegistration:
             "updated_ns",
             "version",
         }
-        raw_version = int(raw.get("version", 0))
-        if raw_version == 1:
-            expected -= {"migration_id", "migration_sha256"}
         if (
-            raw_version not in {1, DIRECT_REGISTRATION_VERSION}
+            raw.get("version") != DIRECT_REGISTRATION_VERSION
             or set(raw) != expected
             or not isinstance(raw["spec"], dict)
         ):
@@ -311,11 +306,27 @@ class _DirectRegistryState:
 class DirectSandboxRegistry:
     """Crash-durable ownership bridge from admission through Warden create."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        max_bytes: int = DIRECT_REGISTRY_MAX_BYTES,
+        max_inline_tombstones: int = DIRECT_REGISTRY_MAX_INLINE_TOMBSTONES,
+        max_inline_migration_tombstones: int = (
+            DIRECT_REGISTRY_MAX_INLINE_MIGRATION_TOMBSTONES
+        ),
+    ) -> None:
         if not path.is_absolute():
             raise ValueError("direct registry path must be absolute")
         self.path = path
         self.lock_path = path.with_name(f".{path.name}.lock")
+        self.tombstone_archive_path = path.with_name(f"{path.name}.tombstones.sqlite3")
+        self._max_bytes = max(1, max_bytes)
+        self._max_inline_tombstones = max(1, max_inline_tombstones)
+        self._max_inline_migration_tombstones = max(
+            1,
+            max_inline_migration_tombstones,
+        )
 
     def plan(
         self,
@@ -325,6 +336,8 @@ class DirectSandboxRegistry:
         operation_id: str,
         runtime_identity_sha256: str,
     ) -> DirectSandboxRegistration:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         candidate = DirectSandboxRegistration(
             spec=spec,
             sandbox_generation=sandbox_generation,
@@ -343,14 +356,16 @@ class DirectSandboxRegistry:
                     existing.sandbox_generation == sandbox_generation
                     and existing.operation_id == operation_id
                     and existing.spec == spec
-                    and existing.runtime_identity_sha256
-                    == runtime_identity_sha256
+                    and existing.runtime_identity_sha256 == runtime_identity_sha256
                 ):
                     return existing
                 raise DirectRegistryConflictError(
                     "sandbox already has another direct registration"
                 )
-            if state.tombstones.get(spec.id, -1) >= sandbox_generation:
+            if (
+                state.tombstones.get(spec.id, -1) >= sandbox_generation
+                or self._archived_generation_unlocked(spec.id) >= sandbox_generation
+            ):
                 raise DirectRegistryConflictError(
                     "direct registration is fenced by a tombstone"
                 )
@@ -367,6 +382,8 @@ class DirectSandboxRegistry:
         migration_id: str,
         migration_sha256: str,
     ) -> DirectSandboxRegistration:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         candidate = DirectSandboxRegistration(
             spec=spec,
             sandbox_generation=sandbox_generation,
@@ -387,8 +404,7 @@ class DirectSandboxRegistry:
                     existing.sandbox_generation == sandbox_generation
                     and existing.operation_id == operation_id
                     and existing.spec == spec
-                    and existing.runtime_identity_sha256
-                    == runtime_identity_sha256
+                    and existing.runtime_identity_sha256 == runtime_identity_sha256
                     and existing.migration_id == migration_id
                     and existing.migration_sha256 == migration_sha256
                 ):
@@ -396,7 +412,9 @@ class DirectSandboxRegistry:
                 raise DirectRegistryConflictError(
                     "sandbox already has another direct registration"
                 )
-            if migration_id in state.migration_tombstones.get(spec.id, ()):
+            if migration_id in state.migration_tombstones.get(
+                spec.id, ()
+            ) or self._archived_migration_unlocked(spec.id, migration_id):
                 raise DirectRegistryConflictError(
                     "migration import is fenced by a tombstone"
                 )
@@ -490,13 +508,12 @@ class DirectSandboxRegistry:
                 previous = migration_tombstones.get(sandbox_id, ())
                 migration_tombstones[sandbox_id] = tuple(
                     dict.fromkeys((*previous, migration_id))
-                )[-256:]
+                )
             self._save_unlocked(
                 replace(
                     state,
                     records=tuple(
-                        item for item in state.records
-                        if item.sandbox_id != sandbox_id
+                        item for item in state.records if item.sandbox_id != sandbox_id
                     ),
                     migration_tombstones=migration_tombstones,
                 )
@@ -631,7 +648,7 @@ class DirectSandboxRegistry:
                 previous = migration_tombstones.get(sandbox_id, ())
                 migration_tombstones[sandbox_id] = tuple(
                     dict.fromkeys((*previous, record.migration_id))
-                )[-256:]
+                )
             updated = replace(
                 record,
                 phase="moving_out",
@@ -669,9 +686,7 @@ class DirectSandboxRegistry:
                 or record.migration_id != migration_id
                 or record.migration_sha256 != migration_sha256
             ):
-                raise DirectRegistryConflictError(
-                    "move abort lost its ownership fence"
-                )
+                raise DirectRegistryConflictError("move abort lost its ownership fence")
             return self._replace_record_unlocked(
                 state,
                 record,
@@ -765,6 +780,8 @@ class DirectSandboxRegistry:
         sandbox_generation: int,
         expected_revision: int,
     ) -> None:
+        if sandbox_generation <= 0:
+            raise ValueError("sandbox generation must be positive")
         with self._locked():
             state = self._load_unlocked()
             record = self._require(state, sandbox_id)
@@ -780,13 +797,14 @@ class DirectSandboxRegistry:
             tombstones[sandbox_id] = max(
                 sandbox_generation,
                 tombstones.get(sandbox_id, -1),
+                self._archived_generation_unlocked(sandbox_id),
             )
             migration_tombstones = dict(state.migration_tombstones)
             if record.migration_id:
                 previous = migration_tombstones.get(sandbox_id, ())
                 migration_tombstones[sandbox_id] = tuple(
                     dict.fromkeys((*previous, record.migration_id))
-                )[-256:]
+                )
             self._save_unlocked(
                 replace(
                     state,
@@ -823,10 +841,7 @@ class DirectSandboxRegistry:
         with self._locked():
             state = self._load_unlocked()
             record = self._require(state, sandbox_id)
-            if (
-                record.revision != expected_revision
-                or record.phase != expected_phase
-            ):
+            if record.revision != expected_revision or record.phase != expected_phase:
                 raise DirectRegistryConflictError(
                     "direct registration transition lost its ownership fence"
                 )
@@ -937,8 +952,10 @@ class DirectSandboxRegistry:
             if info.st_uid != os.geteuid() or info.st_mode & 0o077:
                 raise DirectRegistryError("direct registry must be private and owned")
             raw = self.path.read_bytes()
-            if len(raw) > 16 * 1024 * 1024:
-                raise DirectRegistryError("direct registry is too large")
+            if len(raw) > self._max_bytes:
+                raise DirectRegistryError(
+                    f"direct registry exceeds the {self._max_bytes} byte limit"
+                )
             payload = json.loads(raw.decode("utf-8"))
         except DirectRegistryError:
             raise
@@ -947,22 +964,17 @@ class DirectSandboxRegistry:
         payload_version = (
             int(payload.get("version", 0)) if isinstance(payload, dict) else 0
         )
-        expected_keys = {"records", "tombstones", "version"}
-        if payload_version == DIRECT_REGISTRY_VERSION:
-            expected_keys.add("migration_tombstones")
+        expected_keys = {"migration_tombstones", "records", "tombstones", "version"}
         if (
             not isinstance(payload, dict)
             or set(payload) != expected_keys
-            or payload_version not in {1, DIRECT_REGISTRY_VERSION}
+            or payload_version != DIRECT_REGISTRY_VERSION
             or not isinstance(payload["records"], list)
             or not isinstance(payload["tombstones"], dict)
-            or (
-                payload_version == DIRECT_REGISTRY_VERSION
-                and not isinstance(payload["migration_tombstones"], dict)
-            )
+            or not isinstance(payload["migration_tombstones"], dict)
         ):
             raise DirectRegistryError("direct registry schema is invalid")
-        raw_migration_tombstones = payload.get("migration_tombstones", {})
+        raw_migration_tombstones = payload["migration_tombstones"]
         if any(
             not isinstance(key, str)
             or not isinstance(values, list)
@@ -975,12 +987,10 @@ class DirectSandboxRegistry:
             )
         try:
             records = tuple(
-                DirectSandboxRegistration.from_dict(item)
-                for item in payload["records"]
+                DirectSandboxRegistration.from_dict(item) for item in payload["records"]
             )
             tombstones = {
-                str(key): int(value)
-                for key, value in payload["tombstones"].items()
+                str(key): int(value) for key, value in payload["tombstones"].items()
             }
             migration_tombstones = {
                 str(key): tuple(str(item) for item in values)
@@ -991,7 +1001,7 @@ class DirectSandboxRegistry:
         ids = [item.sandbox_id for item in records]
         if (
             len(ids) != len(set(ids))
-            or any(value < 0 for value in tombstones.values())
+            or any(value <= 0 for value in tombstones.values())
             or any(
                 not OPERATION_ID_RE.fullmatch(migration_id)
                 for values in migration_tombstones.values()
@@ -1005,7 +1015,209 @@ class DirectSandboxRegistry:
             migration_tombstones=migration_tombstones,
         )
 
+    @contextmanager
+    def _tombstone_archive_connection_unlocked(
+        self,
+        *,
+        create: bool,
+    ) -> Iterator[sqlite3.Connection | None]:
+        archive_created = False
+        if not os.path.lexists(self.tombstone_archive_path):
+            if not create:
+                yield None
+                return
+            try:
+                descriptor = os.open(
+                    self.tombstone_archive_path,
+                    os.O_RDWR
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                )
+            except FileExistsError:
+                pass
+            else:
+                os.close(descriptor)
+                archive_created = True
+
+        try:
+            info = self.tombstone_archive_path.lstat()
+            if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+                raise DirectRegistryError(
+                    "direct tombstone archive must be a regular file"
+                )
+            if info.st_uid != os.geteuid() or info.st_mode & 0o077:
+                raise DirectRegistryError(
+                    "direct tombstone archive must be private and owned"
+                )
+        except FileNotFoundError as exc:
+            raise DirectRegistryError("direct tombstone archive disappeared") from exc
+
+        connection: sqlite3.Connection | None = None
+        try:
+            connection = sqlite3.connect(
+                self.tombstone_archive_path
+                if create
+                else f"{self.tombstone_archive_path.as_uri()}?mode=ro",
+                timeout=5.0,
+                uri=not create,
+            )
+            connection.execute("PRAGMA trusted_schema = OFF")
+            if create:
+                connection.execute("PRAGMA synchronous = FULL")
+                connection.execute("PRAGMA journal_mode = DELETE")
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ordinary_tombstones (
+                        sandbox_id TEXT PRIMARY KEY,
+                        generation INTEGER NOT NULL CHECK (generation > 0)
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS migration_tombstones (
+                        sandbox_id TEXT NOT NULL,
+                        migration_id TEXT NOT NULL,
+                        PRIMARY KEY (sandbox_id, migration_id)
+                    )
+                    """
+                )
+                connection.commit()
+                if archive_created:
+                    directory = os.open(
+                        self.path.parent,
+                        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+                    )
+                    try:
+                        os.fsync(directory)
+                    finally:
+                        os.close(directory)
+            yield connection
+        except DirectRegistryError:
+            raise
+        except (OSError, sqlite3.DatabaseError) as exc:
+            raise DirectRegistryError("direct tombstone archive is unreadable") from exc
+        finally:
+            if connection is not None:
+                connection.close()
+
+    def _archived_generation_unlocked(self, sandbox_id: str) -> int:
+        with self._tombstone_archive_connection_unlocked(create=False) as connection:
+            if connection is None:
+                return -1
+            row = connection.execute(
+                """
+                SELECT generation
+                FROM ordinary_tombstones
+                WHERE sandbox_id = ?
+                """,
+                (sandbox_id,),
+            ).fetchone()
+        if row is None:
+            return -1
+        generation = int(row[0])
+        if generation <= 0:
+            raise DirectRegistryError("direct tombstone archive is invalid")
+        return generation
+
+    def _archived_migration_unlocked(
+        self,
+        sandbox_id: str,
+        migration_id: str,
+    ) -> bool:
+        with self._tombstone_archive_connection_unlocked(create=False) as connection:
+            if connection is None:
+                return False
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM migration_tombstones
+                WHERE sandbox_id = ? AND migration_id = ?
+                """,
+                (sandbox_id, migration_id),
+            ).fetchone()
+        return row is not None
+
+    def _archive_tombstones_unlocked(
+        self,
+        ordinary: tuple[tuple[str, int], ...],
+        migrations: tuple[tuple[str, str], ...],
+    ) -> None:
+        if not ordinary and not migrations:
+            return
+        with self._tombstone_archive_connection_unlocked(create=True) as connection:
+            assert connection is not None
+            with connection:
+                connection.executemany(
+                    """
+                    INSERT INTO ordinary_tombstones (sandbox_id, generation)
+                    VALUES (?, ?)
+                    ON CONFLICT (sandbox_id) DO UPDATE SET
+                        generation = MAX(generation, excluded.generation)
+                    """,
+                    ordinary,
+                )
+                connection.executemany(
+                    """
+                    INSERT OR IGNORE INTO migration_tombstones (
+                        sandbox_id,
+                        migration_id
+                    ) VALUES (?, ?)
+                    """,
+                    migrations,
+                )
+
+    def _compact_state_unlocked(
+        self,
+        state: _DirectRegistryState,
+    ) -> _DirectRegistryState:
+        ordinary_items = tuple(sorted(state.tombstones.items()))
+        ordinary_overflow = ordinary_items[: -self._max_inline_tombstones]
+        inline_ordinary = ordinary_items[-self._max_inline_tombstones :]
+
+        migration_overflow: list[tuple[str, str]] = []
+        inline_migrations: list[tuple[str, str]] = []
+        for sandbox_id, migration_ids in sorted(state.migration_tombstones.items()):
+            split = max(
+                0,
+                len(migration_ids)
+                - DIRECT_REGISTRY_MAX_MIGRATION_TOMBSTONES_PER_SANDBOX,
+            )
+            migration_overflow.extend(
+                (sandbox_id, migration_id) for migration_id in migration_ids[:split]
+            )
+            inline_migrations.extend(
+                (sandbox_id, migration_id) for migration_id in migration_ids[split:]
+            )
+        global_split = max(
+            0,
+            len(inline_migrations) - self._max_inline_migration_tombstones,
+        )
+        migration_overflow.extend(inline_migrations[:global_split])
+        inline_migrations = inline_migrations[global_split:]
+
+        compact_migrations: dict[str, list[str]] = {}
+        for sandbox_id, migration_id in inline_migrations:
+            compact_migrations.setdefault(sandbox_id, []).append(migration_id)
+
+        self._archive_tombstones_unlocked(
+            ordinary_overflow,
+            tuple(migration_overflow),
+        )
+        return replace(
+            state,
+            tombstones=dict(inline_ordinary),
+            migration_tombstones={
+                sandbox_id: tuple(migration_ids)
+                for sandbox_id, migration_ids in compact_migrations.items()
+            },
+        )
+
     def _save_unlocked(self, state: _DirectRegistryState) -> None:
+        state = self._compact_state_unlocked(state)
         payload = (
             json.dumps(
                 state.to_dict(),
@@ -1015,6 +1227,10 @@ class DirectSandboxRegistry:
             ).encode("ascii")
             + b"\n"
         )
+        if len(payload) > self._max_bytes:
+            raise DirectRegistryError(
+                f"direct registry update exceeds the {self._max_bytes} byte limit"
+            )
         descriptor, raw_path = tempfile.mkstemp(
             prefix=f".{self.path.name}.",
             suffix=".tmp",

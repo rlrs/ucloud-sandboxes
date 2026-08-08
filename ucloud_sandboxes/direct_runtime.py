@@ -12,10 +12,9 @@ from .direct_provisioner import DirectSandboxProvisioner
 from .direct_registry import DirectSandboxRegistry
 from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
-from .hibernation import HibernationDiskLedger, HibernationRuntimeFingerprint
+from .hibernation import HibernationRuntimeFingerprint
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .runtime_identity import NodeRuntimeIdentityStore
-from .sandbox import HibernationQuotaHelperClient
 from .storage_native_daemon import StorageNativeNodeClient
 from .storage_native_quota import (
     StorageNativeQuotaBackend,
@@ -27,26 +26,23 @@ def build_direct_runtime_service(
     *,
     state_root: Path,
     image_cache_root: Path | None = None,
-    quota_root: Path,
+    volume_mount_root: Path,
     runsc: Path,
     runsc_commit: str,
     init_binary: Path,
     managed_init_binary: Path | None = None,
-    disk_capacity_mb: int,
-    disk_headroom_mb: int,
-    quota_helper: Path = Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
     docker_binary: str = "docker",
     network: str = "none",
     network_allow_tcp: Sequence[str] = (),
     max_concurrent_restores: int = 8,
     idle_park_seconds: float = 0.0,
-    storage_native_socket: Path | None = None,
+    storage_native_socket: Path,
 ) -> DirectSandboxService:
     """Assemble the one production direct-runtime owner for an entire node."""
     for label, path in (
         ("state_root", state_root),
         ("image_cache_root", image_cache_root or state_root / "image-cache"),
-        ("quota_root", quota_root),
+        ("volume_mount_root", volume_mount_root),
         ("runsc", runsc),
         ("init_binary", init_binary),
         *(
@@ -54,18 +50,17 @@ def build_direct_runtime_service(
             if managed_init_binary is not None
             else ()
         ),
-        ("quota_helper", quota_helper),
     ):
         if not path.is_absolute():
             raise ValueError(f"{label} must be absolute")
     if network not in {"none", "sandbox"}:
         raise ValueError("direct runtime network must be none or sandbox")
-    if storage_native_socket is not None and not storage_native_socket.is_absolute():
+    if not storage_native_socket.is_absolute():
         raise ValueError("storage_native_socket must be absolute")
     state_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     resolved_image_cache_root = image_cache_root or state_root / "image-cache"
     resolved_image_cache_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    quota_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    volume_mount_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     runsc_digest = _sha256_file(runsc)
     boot_digest = _canonical_sha256(
         {
@@ -82,11 +77,7 @@ def build_direct_runtime_service(
             # contract as the former export. Keep the migration fingerprint
             # stable so only the per-image semantic identity gates restore.
             "rootfs_format": "docker-export-overlay-v2",
-            "quota_layout": (
-                "storage-native-v1"
-                if storage_native_socket is not None
-                else "unified-xfs-project-v1"
-            ),
+            "quota_layout": "storage-native-v1",
         }
     )
     fingerprint = HibernationRuntimeFingerprint(
@@ -106,7 +97,7 @@ def build_direct_runtime_service(
     )
     overlays = OverlayRootfsManager(
         image_store,
-        writable_root=quota_root,
+        writable_root=volume_mount_root,
         bundle_root=state_root / "bundles",
         require_precreated_writable=True,
     )
@@ -118,21 +109,16 @@ def build_direct_runtime_service(
         if network == "sandbox"
         else None
     )
-    storage_client = (
-        StorageNativeNodeClient(storage_native_socket)
-        if storage_native_socket is not None
-        else None
-    )
-    if storage_client is not None:
-        storage_client.wait_ready()
+    storage_client = StorageNativeNodeClient(storage_native_socket)
+    storage_client.wait_ready()
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
             runsc=runsc,
             runtime_root=state_root / "runsc",
-            memory_root=quota_root,
+            memory_root=volume_mount_root,
             bundle_root=state_root / "bundles",
             journal_root=state_root / "journals",
-            artifact_root=quota_root,
+            artifact_root=volume_mount_root,
             runtime_fingerprint=fingerprint,
             network=network,
             restore_background=True,
@@ -143,33 +129,17 @@ def build_direct_runtime_service(
             remove_memory_directory_on_delete=False,
         ),
         storage=storage_client,
-        rootfs_lifecycle=overlays if storage_client is not None else None,
+        rootfs_lifecycle=overlays,
     )
     provisioner = DirectSandboxProvisioner(
         identity_store=NodeRuntimeIdentityStore(state_root / "runtime-identity.json"),
         registry=DirectSandboxRegistry(state_root / "direct-registry.json"),
-        disk_ledger=(
-            StorageNativeReservationLedger(
-                state_root / "storage-native-identities.json"
-            )
-            if storage_client is not None
-            else HibernationDiskLedger(
-                state_root / "disk-ledger.json",
-                capacity_mb=disk_capacity_mb,
-                safety_headroom_mb=disk_headroom_mb,
-            )
+        disk_ledger=StorageNativeReservationLedger(
+            state_root / "storage-native-identities.json"
         ),
-        quota_backend=(
-            StorageNativeQuotaBackend(
-                storage_client,
-                mount_root=quota_root,
-            )
-            if storage_client is not None
-            else HibernationQuotaHelperClient(
-                helper=str(quota_helper),
-                sudo=True,
-                include_writable_disk=True,
-            )
+        quota_backend=StorageNativeQuotaBackend(
+            storage_client,
+            mount_root=volume_mount_root,
         ),
         image_store=image_store,
         overlays=overlays,

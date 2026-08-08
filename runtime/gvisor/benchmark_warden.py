@@ -21,7 +21,7 @@ from ucloud_sandboxes.direct_warden import (
     SubprocessCommandRunner,
 )
 from ucloud_sandboxes.hibernation import HibernationRuntimeFingerprint
-from ucloud_sandboxes.image_rootfs import DockerRootfsStore, OverlayRootfsManager
+from ucloud_sandboxes.image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
 
 
@@ -283,7 +283,9 @@ def main() -> int:
         tool_command = ("/bin/true",)
         initial_command = ("/bin/sleep", "86400")
     if args.bundle is None:
-        image_store = DockerRootfsStore((args.state_root / "image-cache").resolve())
+        image_store = DockerOverlay2RootfsStore(
+            (args.state_root / "image-cache").resolve()
+        )
         image = image_store.materialize(args.image)
         oci = DirectOciConfigBuilder()
         spec = SandboxSpec(

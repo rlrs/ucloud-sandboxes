@@ -8,6 +8,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PATCH_PATHS=(
   "${SCRIPT_DIR}/agentenv-streaming-dense-export.patch"
   "${SCRIPT_DIR}/agentenv-pooled-delete.patch"
+  "${SCRIPT_DIR}/agentenv-owner-identity.patch"
 )
 
 usage() {
@@ -56,6 +57,7 @@ readonly BUILT_BINARY="${SOURCE_DIR}/target/release/${BINARY}"
 readonly BINARY_SHA256="$(sha256sum "${BUILT_BINARY}" | awk '{print $1}')"
 readonly DENSE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[0]}" | awk '{print $1}')"
 readonly POOLED_DELETE_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[1]}" | awk '{print $1}')"
+readonly OWNER_IDENTITY_PATCH_SHA256="$(sha256sum "${PATCH_PATHS[2]}" | awk '{print $1}')"
 readonly ARTIFACT_NAME="${BINARY}-${BINARY_SHA256}"
 install -m 0755 "${BUILT_BINARY}" "${OUTPUT_DIR}/${ARTIFACT_NAME}"
 install -m 0644 "${SOURCE_DIR}/LICENSE" "${OUTPUT_DIR}/${ARTIFACT_NAME}.LICENSE"
@@ -81,8 +83,12 @@ payload = {
             "name": "$(basename "${PATCH_PATHS[1]}")",
             "sha256": "${POOLED_DELETE_PATCH_SHA256}",
         },
+        {
+            "name": "$(basename "${PATCH_PATHS[2]}")",
+            "sha256": "${OWNER_IDENTITY_PATCH_SHA256}",
+        },
     ],
-    "schema": 2,
+    "schema": 3,
 }
 Path("${OUTPUT_DIR}/${ARTIFACT_NAME}.manifest.json").write_text(
     json.dumps(payload, indent=2, sort_keys=True) + "\n",

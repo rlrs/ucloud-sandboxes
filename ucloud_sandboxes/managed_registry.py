@@ -83,11 +83,17 @@ class RegistryImageUsage:
     def from_dict(cls, raw: object) -> "RegistryImageUsage | None":
         if not isinstance(raw, dict):
             return None
-        image_ref = str(raw.get("image_ref") or raw.get("imageRef") or "")
-        repository = str(raw.get("repository") or "")
-        tag = str(raw.get("tag") or "")
-        last_used_at = str(raw.get("last_used_at") or raw.get("lastUsedAt") or "")
+        if set(raw) != {"image_ref", "repository", "tag", "last_used_at"}:
+            return None
+        if any(not isinstance(raw[key], str) for key in raw):
+            return None
+        image_ref = raw["image_ref"]
+        repository = raw["repository"]
+        tag = raw["tag"]
+        last_used_at = raw["last_used_at"]
         if not image_ref or not repository or not tag or not last_used_at:
+            return None
+        if parse_iso_datetime(last_used_at) is None:
             return None
         return cls(
             image_ref=image_ref,
@@ -113,33 +119,45 @@ class RegistryImageLease:
     acquired_at: str
     renewed_at: str
     expires_at: str
-    digest: str = ""
+    digest: str
+
+    def __post_init__(self) -> None:
+        if _validate_lease_digest(self.digest) != self.digest:
+            raise ValueError("registry lease digest must be canonical")
 
     @classmethod
     def from_dict(cls, raw: object) -> "RegistryImageLease | None":
         if not isinstance(raw, dict):
             return None
-        repository = str(raw.get("repository") or "").strip()
-        tag = str(raw.get("tag") or "").strip()
-        owner = str(raw.get("owner") or "").strip()
-        acquired_at = str(raw.get("acquired_at") or raw.get("acquiredAt") or "")
-        renewed_at = str(raw.get("renewed_at") or raw.get("renewedAt") or "")
-        expires_at = str(raw.get("expires_at") or raw.get("expiresAt") or "")
-        raw_digest = str(raw.get("digest") or raw.get("manifest_digest") or "")
+        if set(raw) != {
+            "repository",
+            "tag",
+            "owner",
+            "acquired_at",
+            "renewed_at",
+            "expires_at",
+            "digest",
+        }:
+            return None
+        if any(not isinstance(raw[key], str) for key in raw):
+            return None
+        repository = raw["repository"].strip()
+        tag = raw["tag"].strip()
+        owner = raw["owner"].strip()
+        acquired_at = raw["acquired_at"]
+        renewed_at = raw["renewed_at"]
+        expires_at = raw["expires_at"]
+        raw_digest = raw["digest"]
         digest = normalize_manifest_digest(raw_digest)
-        persistent = raw.get("persistent", False)
         if not repository or not tag or not owner:
             return None
         if (
             parse_iso_datetime(acquired_at) is None
             or parse_iso_datetime(renewed_at) is None
-            or (
-                not (persistent is True and not expires_at)
-                and parse_iso_datetime(expires_at) is None
-            )
+            or (expires_at and parse_iso_datetime(expires_at) is None)
         ):
             return None
-        if raw_digest and not digest:
+        if not digest:
             return None
         return cls(
             repository=repository,
@@ -169,7 +187,6 @@ class RegistryImageLease:
             "acquired_at": self.acquired_at,
             "renewed_at": self.renewed_at,
             "expires_at": self.expires_at,
-            "persistent": not self.expires_at,
             "digest": self.digest,
         }
 
@@ -180,14 +197,6 @@ class RegistryUsageSnapshot:
     records: dict[tuple[str, str], RegistryImageUsage]
     leases: dict[tuple[str, str, str], RegistryImageLease] = field(default_factory=dict)
 
-    def active_lease_tags(self, *, now: datetime | None = None) -> set[tuple[str, str]]:
-        reference = _as_utc(now or datetime.now(timezone.utc))
-        return {
-            (lease.repository, lease.tag)
-            for lease in self.leases.values()
-            if not lease.digest and lease.is_active(reference)
-        }
-
     def active_lease_digests(
         self,
         *,
@@ -197,7 +206,7 @@ class RegistryUsageSnapshot:
         return {
             (lease.repository, lease.digest)
             for lease in self.leases.values()
-            if lease.digest and lease.is_active(reference)
+            if lease.is_active(reference)
         }
 
 
@@ -744,7 +753,7 @@ class RegistryUsageStore:
         owner: str,
         *,
         ttl_seconds: float,
-        digest: str = "",
+        digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
@@ -758,6 +767,8 @@ class RegistryUsageStore:
             )
             key = (repository, tag, owner)
             previous = snapshot.leases.get(key)
+            if previous is not None and previous.digest != normalized_digest:
+                raise ValueError("registry lease digest is immutable")
             lease = RegistryImageLease(
                 repository=repository,
                 tag=tag,
@@ -769,10 +780,7 @@ class RegistryUsageStore:
                 ),
                 renewed_at=timestamp.isoformat(),
                 expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
-                digest=(
-                    normalized_digest
-                    or (previous.digest if previous is not None else "")
-                ),
+                digest=normalized_digest,
             )
             leases = dict(snapshot.leases)
             leases[key] = lease
@@ -789,7 +797,7 @@ class RegistryUsageStore:
         tag: str,
         owner: str,
         *,
-        digest: str = "",
+        digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
         """Persist a non-expiring reference to an actively used image tag.
@@ -810,6 +818,8 @@ class RegistryUsageStore:
             )
             key = (repository, tag, owner)
             previous = snapshot.leases.get(key)
+            if previous is not None and previous.digest != normalized_digest:
+                raise ValueError("registry reference digest is immutable")
             reference = RegistryImageLease(
                 repository=repository,
                 tag=tag,
@@ -821,10 +831,7 @@ class RegistryUsageStore:
                 ),
                 renewed_at=timestamp.isoformat(),
                 expires_at="",
-                digest=(
-                    normalized_digest
-                    or (previous.digest if previous is not None else "")
-                ),
+                digest=normalized_digest,
             )
             leases = dict(snapshot.leases)
             leases[key] = reference
@@ -842,7 +849,7 @@ class RegistryUsageStore:
         owner: str,
         *,
         ttl_seconds: float,
-        digest: str = "",
+        digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
@@ -858,6 +865,8 @@ class RegistryUsageStore:
             previous = snapshot.leases.get(key)
             if previous is None:
                 raise RegistryImageLeaseNotFound(key)
+            if previous.digest != normalized_digest:
+                raise ValueError("registry lease digest is immutable")
             lease = RegistryImageLease(
                 repository=repository,
                 tag=tag,
@@ -865,7 +874,7 @@ class RegistryUsageStore:
                 acquired_at=previous.acquired_at,
                 renewed_at=timestamp.isoformat(),
                 expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
-                digest=normalized_digest or previous.digest,
+                digest=normalized_digest,
             )
             leases = dict(snapshot.leases)
             leases[key] = lease
@@ -940,14 +949,20 @@ class RegistryUsageStore:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("registry usage store must contain a JSON object.")
+        if set(raw) != {"generation", "images", "leases"}:
+            raise ValueError("registry usage store has an invalid schema.")
         items = raw.get("images", [])
         if not isinstance(items, list):
             raise ValueError("registry usage store must contain an images list.")
         records: dict[tuple[str, str], RegistryImageUsage] = {}
-        for item in items:
+        for index, item in enumerate(items):
             record = RegistryImageUsage.from_dict(item)
             if record is None:
-                continue
+                raise ValueError(
+                    f"registry usage store contains an invalid image at index {index}."
+                )
+            if (record.repository, record.tag) in records:
+                raise ValueError("registry usage store contains a duplicate image.")
             records[(record.repository, record.tag)] = record
         raw_leases = raw.get("leases", [])
         leases: dict[tuple[str, str, str], RegistryImageLease] = {}
@@ -964,17 +979,11 @@ class RegistryUsageStore:
             if lease.key in leases:
                 raise ValueError("registry usage store contains a duplicate lease.")
             leases[lease.key] = lease
-        if "generation" not in raw:
-            generation = 0
-        else:
-            try:
-                generation = int(raw["generation"])
-            except (TypeError, ValueError) as exc:
-                raise ValueError(
-                    "registry usage store generation must be an integer."
-                ) from exc
-            if generation < 0:
-                raise ValueError("registry usage store generation cannot be negative.")
+        generation = raw["generation"]
+        if isinstance(generation, bool) or not isinstance(generation, int):
+            raise ValueError("registry usage store generation must be an integer.")
+        if generation < 0:
+            raise ValueError("registry usage store generation cannot be negative.")
         return RegistryUsageSnapshot(
             generation=generation,
             records=records,
@@ -1123,14 +1132,8 @@ def execute_registry_prune(
                 expected_generation=expected_usage_generation,
                 now=now,
             ) as snapshot:
-                leased_tags = snapshot.active_lease_tags(now=now)
                 leased_digests = snapshot.active_lease_digests(now=now)
                 if (repository, digest) in leased_digests:
-                    continue
-                if any(
-                    (record.repository, record.tag) in leased_tags
-                    for record in digest_aliases
-                ):
                     continue
                 if revalidate is not None and not all(
                     revalidate(record) for record in digest_aliases
@@ -1272,15 +1275,9 @@ def select_prune_candidates(
     by_repository: dict[str, list[RegistryTag]] = {}
     for record in records:
         by_repository.setdefault(record.repository, []).append(record)
-    leased_tags = {
-        (lease.repository, lease.tag)
-        for lease in _active_leases(active_leases, now=now)
-        if not lease.digest
-    }
     leased_digests = {
         (lease.repository, lease.digest)
         for lease in _active_leases(active_leases, now=now)
-        if lease.digest
     }
     for repository_records in by_repository.values():
         ordered = sorted(
@@ -1293,11 +1290,6 @@ def select_prune_candidates(
             if len(protected_digests) >= keep:
                 break
             protected_digests.add(record.digest)
-        protected_digests.update(
-            record.digest
-            for record in ordered
-            if (record.repository, record.tag) in leased_tags
-        )
         protected_digests.update(
             record.digest
             for record in ordered
@@ -1359,7 +1351,10 @@ def _validate_lease_identity(
     tag: str,
     owner: str,
 ) -> tuple[str, str, str]:
-    cleaned = tuple(str(value).strip() for value in (repository, tag, owner))
+    values = (repository, tag, owner)
+    if any(not isinstance(value, str) for value in values):
+        raise ValueError("registry lease identity fields must be strings")
+    cleaned = tuple(value.strip() for value in values)
     labels = ("repository", "tag", "owner")
     for label, value in zip(labels, cleaned):
         if not value:
@@ -1386,9 +1381,11 @@ def _validate_lease_ttl(value: float) -> float:
 
 
 def _validate_lease_digest(value: str) -> str:
-    raw = str(value or "").strip()
+    if not isinstance(value, str):
+        raise ValueError("registry lease digest must be a string")
+    raw = value.strip()
     if not raw:
-        return ""
+        raise ValueError("registry lease digest is required")
     digest = normalize_manifest_digest(raw)
     if not digest:
         raise ValueError("registry lease digest must be a valid sha256 digest")

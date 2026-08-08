@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -21,6 +26,8 @@ func TestMain(m *testing.M) {
 			err = runSupervisor(os.Args[2:])
 		case "launch":
 			err = runLaunch()
+		case "ctl":
+			err = runControl(os.Args[2:])
 		default:
 			os.Exit(2)
 		}
@@ -30,6 +37,73 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestControlAcceptsMaximumLogResponse(t *testing.T) {
+	stateDir, err := os.MkdirTemp("/tmp", "ucmp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
+	socket := filepath.Join(stateDir, "control.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	serverErrors := make(chan error, 1)
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErrors <- acceptErr
+			return
+		}
+		defer connection.Close()
+		if _, readErr := io.ReadAll(connection); readErr != nil {
+			serverErrors <- readErr
+			return
+		}
+		payload, marshalErr := json.Marshal(response{
+			Version: protocolVersion,
+			OK:      true,
+			Stream:  "stdout",
+			Next:    maxLogReadBytes,
+			EOF:     true,
+			Data:    bytes.Repeat([]byte{0xa5}, maxLogReadBytes),
+		})
+		if marshalErr != nil {
+			serverErrors <- marshalErr
+			return
+		}
+		if len(payload) <= maxRequestBytes || len(payload) > maxResponseBytes {
+			serverErrors <- fmt.Errorf("unexpected encoded response size: %d", len(payload))
+			return
+		}
+		_, writeErr := io.Copy(connection, bytes.NewReader(payload))
+		serverErrors <- writeErr
+	}()
+
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "ctl", "--socket", socket)
+	command.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
+	command.Stdin = bytes.NewBufferString(`{"version":1,"action":"logs"}`)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("maximum log response was rejected: %v", err)
+	}
+	if serverErr := <-serverErrors; serverErr != nil {
+		t.Fatal(serverErr)
+	}
+	var decoded response
+	if err := json.Unmarshal(output, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Data) != maxLogReadBytes {
+		t.Fatalf("expected %d log bytes, got %d", maxLogReadBytes, len(decoded.Data))
+	}
 }
 
 func TestSupervisorOwnsIdempotentBoundedPrimaryProcess(t *testing.T) {
@@ -119,6 +193,71 @@ func TestSupervisorOwnsIdempotentBoundedPrimaryProcess(t *testing.T) {
 	conflicted := callSupervisor(t, socket, conflict)
 	if conflicted.OK || conflicted.Error == "" {
 		t.Fatalf("second primary process was admitted: %#v", conflicted)
+	}
+}
+
+func TestStatusSurfacesAndRetriesDurabilityFailures(t *testing.T) {
+	for _, state := range []string{"running", "exited"} {
+		t.Run(state, func(t *testing.T) {
+			stateDir := t.TempDir()
+			s := &supervisor{
+				stateDir: stateDir,
+				state: &jobRecord{
+					Version:    protocolVersion,
+					JobID:      "job-1",
+					SpecSHA256: strings.Repeat("a", 64),
+					State:      state,
+					Sequence:   2,
+				},
+			}
+			injected := errors.New("injected persistence failure")
+			failing := true
+			s.persistHook = func(_ *jobRecord) error {
+				if failing {
+					return injected
+				}
+				return nil
+			}
+
+			s.mu.Lock()
+			if err := s.persistStateLocked(); !errors.Is(err, injected) {
+				t.Fatalf("expected injected persistence failure, got %v", err)
+			}
+			s.mu.Unlock()
+
+			degraded := s.status("job-1")
+			if degraded.OK || degraded.Job == nil || degraded.Job.State != state {
+				t.Fatalf("durability failure was not visible: %#v", degraded)
+			}
+			if !strings.Contains(degraded.Error, "durability is degraded") {
+				t.Fatalf("unexpected durability error: %q", degraded.Error)
+			}
+			degradedLogs := s.logs(request{
+				JobID:  "job-1",
+				Stream: "stdout",
+				Limit:  1,
+			})
+			if degradedLogs.OK || degradedLogs.Job == nil {
+				t.Fatalf("log request hid durability failure: %#v", degradedLogs)
+			}
+
+			failing = false
+			recovered := s.status("job-1")
+			if !recovered.OK || recovered.Error != "" || recovered.Job == nil {
+				t.Fatalf("durability retry did not recover: %#v", recovered)
+			}
+			payload, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var persisted jobRecord
+			if err := json.Unmarshal(payload, &persisted); err != nil {
+				t.Fatal(err)
+			}
+			if persisted.State != state || persisted.Sequence != 2 {
+				t.Fatalf("unexpected persisted state: %#v", persisted)
+			}
+		})
 	}
 }
 

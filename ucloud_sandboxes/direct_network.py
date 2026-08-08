@@ -151,6 +151,7 @@ class DirectNetworkManager:
         sandbox_generation: int,
         *,
         avoid_guest_ips: Sequence[str] = (),
+        host_rules_ready: bool = False,
     ) -> DirectNetworkLease:
         if sandbox_generation < 0:
             raise ValueError("sandbox generation cannot be negative")
@@ -185,7 +186,8 @@ class DirectNetworkManager:
                 raise DirectNetworkError(
                     "existing direct network lease reuses a forbidden guest IP"
                 )
-            self._ensure_host_rules()
+            if not host_rules_ready:
+                self._ensure_host_rules()
             self._ensure_kernel_lease(lease)
             return lease
 

@@ -1,0 +1,439 @@
+diff --git a/storage/ublk-daemon/src/client.rs b/storage/ublk-daemon/src/client.rs
+index d8a289b..6d53e06 100644
+--- a/storage/ublk-daemon/src/client.rs
++++ b/storage/ublk-daemon/src/client.rs
+@@ -54,6 +54,7 @@ pub struct OverlaybdRuntimeDevice {
+ 
+ #[derive(Debug, Clone, Copy)]
+ pub struct CreateOverlaybdRuntimeDeviceRequest<'a> {
++    pub owner_id: &'a str,
+     pub source_image_config: &'a Path,
+     pub global_config: &'a Path,
+     pub runtime_dir: &'a Path,
+@@ -390,6 +391,7 @@ impl UblkDaemonClient {
+         request: CreateOverlaybdRuntimeDeviceRequest<'_>,
+     ) -> Result<OverlaybdRuntimeDevice> {
+         let request = DaemonRequest::CreateOverlaybdRuntimeDevice {
++            owner_id: request.owner_id.to_string(),
+             source_image_config: request.source_image_config.to_path_buf(),
+             global_config: request.global_config.to_path_buf(),
+             runtime_dir: request.runtime_dir.to_path_buf(),
+diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
+index fb8d469..e4c5615 100644
+--- a/storage/ublk-daemon/src/protocol.rs
++++ b/storage/ublk-daemon/src/protocol.rs
+@@ -28,6 +28,7 @@ pub enum DaemonRequest {
+     /// Materialize an OverlayBD runtime directory and create/acquire the ublk
+     /// device for it. This is the rootfs/extra-drive block-device path.
+     CreateOverlaybdRuntimeDevice {
++        owner_id: String,
+         source_image_config: PathBuf,
+         global_config: PathBuf,
+         runtime_dir: PathBuf,
+@@ -77,6 +78,8 @@ pub enum DaemonRequest {
+     ReleaseOverlaybd {
+         dev_id: u32,
+     },
++    /// List exclusive runtime-device ownership used by the lifecycle journal.
++    ListExclusiveOwners,
+     /// Update the virtual size of a ublk device (requires UBLK_F_UPDATE_SIZE).
+     UpdateSize {
+         dev_id: u32,
+@@ -111,6 +114,14 @@ pub enum AccessMode {
+     Shared,
+ }
+ 
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++pub struct ExclusiveDeviceOwner {
++    pub owner_id: String,
++    pub dev_id: u32,
++    pub device_path: PathBuf,
++    pub image_config_path: PathBuf,
++}
++
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ #[serde(tag = "status", rename_all = "snake_case")]
+ pub enum DaemonResponse {
+@@ -129,6 +140,9 @@ pub enum DaemonResponse {
+         device_path: PathBuf,
+     },
+     Released,
++    ExclusiveOwners {
++        owners: Vec<ExclusiveDeviceOwner>,
++    },
+     SizeUpdated,
+     Features {
+         flags: u64,
+@@ -302,6 +316,7 @@ mod tests {
+     #[test]
+     fn request_create_overlaybd_runtime_device_round_trip() {
+         let req = DaemonRequest::CreateOverlaybdRuntimeDevice {
++            owner_id: "device:test".into(),
+             source_image_config: PathBuf::from("/src/image.json"),
+             global_config: PathBuf::from("/global.json"),
+             runtime_dir: PathBuf::from("/work/overlaybd"),
+@@ -316,6 +331,7 @@ mod tests {
+         match decoded {
+             DaemonRequest::CreateOverlaybdRuntimeDevice {
+                 source_image_config,
++                owner_id,
+                 global_config,
+                 runtime_dir,
+                 read_only,
+@@ -324,6 +340,7 @@ mod tests {
+                 known_source_virtual_size,
+                 allow_shrink,
+             } => {
++                assert_eq!(owner_id, "device:test");
+                 assert_eq!(source_image_config, PathBuf::from("/src/image.json"));
+                 assert_eq!(global_config, PathBuf::from("/global.json"));
+                 assert_eq!(runtime_dir, PathBuf::from("/work/overlaybd"));
+diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
+index f36e1a4..8401815 100644
+--- a/storage/ublk-daemon/src/server.rs
++++ b/storage/ublk-daemon/src/server.rs
+@@ -28,7 +28,8 @@ use uvm_ublk::{
+ };
+ 
+ use crate::protocol::{
+-    recv_message, send_message, AccessMode, DaemonRequest, DaemonResponse, ResizeToolSpec,
++    recv_message, send_message, AccessMode, DaemonRequest, DaemonResponse, ExclusiveDeviceOwner,
++    ResizeToolSpec,
+ };
+ use crate::runtime;
+ 
+@@ -126,6 +127,14 @@ type SharedKey = (PathBuf, PathBuf);
+ /// Canonical key used to coordinate image opens with restack mutation.
+ type ImageLockKey = PathBuf;
+ 
++#[derive(Clone)]
++struct RuntimeDeviceOwner {
++    dev_id: u32,
++    device_path: PathBuf,
++    image_config_path: PathBuf,
++    actual_virtual_size: u64,
++}
++
+ // ── Lazy ImageService cache ─────────────────────────────────────────────────
+ 
+ /// Cache of `ImageService` instances keyed by canonical global config path.
+@@ -315,6 +324,8 @@ pub struct UblkDaemonServer {
+     image_service_cache: Arc<ImageServiceCache>,
+     default_image_service: ImageService,
+     devices: Arc<DashMap<u32, ManagedDevice>>,
++    runtime_owners: Arc<DashMap<String, RuntimeDeviceOwner>>,
++    owner_by_dev_id: Arc<DashMap<u32, String>>,
+     pool_state: Option<Arc<PoolState>>,
+     resize_tool: Option<ResizeToolSpec>,
+     shutdown: Arc<Notify>,
+@@ -353,6 +364,8 @@ impl UblkDaemonServer {
+             image_service_cache: Arc::new(cache),
+             default_image_service,
+             devices: Arc::new(DashMap::new()),
++            runtime_owners: Arc::new(DashMap::new()),
++            owner_by_dev_id: Arc::new(DashMap::new()),
+             pool_state: None,
+             resize_tool: None,
+             shutdown: Arc::new(Notify::new()),
+@@ -434,6 +447,8 @@ impl UblkDaemonServer {
+                 accept = listener.accept() => {
+                     let (stream, _) = accept.context("accept daemon connection")?;
+                     let devices = Arc::clone(&self.devices);
++                    let runtime_owners = Arc::clone(&self.runtime_owners);
++                    let owner_by_dev_id = Arc::clone(&self.owner_by_dev_id);
+                     let ctrl_ring = self.ctrl_ring.clone();
+                     let image_service_cache = Arc::clone(&self.image_service_cache);
+                     let pool_state = self.pool_state.as_ref().map(Arc::clone);
+@@ -443,6 +458,8 @@ impl UblkDaemonServer {
+                         if let Err(err) = handle_connection(
+                             stream,
+                             devices,
++                            runtime_owners,
++                            owner_by_dev_id,
+                             ctrl_ring,
+                             image_service_cache,
+                             pool_state,
+@@ -518,6 +535,8 @@ impl UblkDaemonServer {
+                 stop_overlaybd_device(self.ctrl_ring.clone(), pooled.dev).await;
+             }
+         }
++        self.runtime_owners.clear();
++        self.owner_by_dev_id.clear();
+     }
+ }
+ 
+@@ -526,6 +545,8 @@ impl UblkDaemonServer {
+ async fn handle_connection(
+     mut stream: tokio::net::UnixStream,
+     devices: Arc<DashMap<u32, ManagedDevice>>,
++    runtime_owners: Arc<DashMap<String, RuntimeDeviceOwner>>,
++    owner_by_dev_id: Arc<DashMap<u32, String>>,
+     ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
+     image_service_cache: Arc<ImageServiceCache>,
+     pool_state: Option<Arc<PoolState>>,
+@@ -551,6 +572,7 @@ async fn handle_connection(
+             .await
+         }
+         DaemonRequest::CreateOverlaybdRuntimeDevice {
++            owner_id,
+             source_image_config,
+             global_config,
+             runtime_dir,
+@@ -560,31 +582,72 @@ async fn handle_connection(
+             known_source_virtual_size,
+             allow_shrink,
+         } => {
+-            let request = OverlaybdRuntimeDeviceRequest {
+-                source_image_config: &source_image_config,
+-                global_config: &global_config,
+-                runtime_dir: &runtime_dir,
+-                read_only,
+-                runtime_upper_mode,
+-                requested_virtual_size,
+-                known_source_virtual_size,
+-                resize_tool: resize_tool.as_ref(),
+-                allow_shrink,
+-            };
+-            handle_create_overlaybd_runtime_device(
+-                request,
+-                ctrl_ring,
+-                &devices,
+-                &image_service_cache,
+-                &pool_state,
+-            )
+-            .await
++            if owner_id.is_empty()
++                || owner_id.len() > 256
++                || owner_id.contains('\n')
++                || owner_id.contains('\r')
++            {
++                Err(anyhow::anyhow!("runtime device owner_id is invalid"))
++            } else if let Some(existing) = runtime_owners.get(&owner_id) {
++                Ok(DaemonResponse::OverlaybdRuntimeDeviceCreated {
++                    dev_id: existing.dev_id,
++                    device_path: existing.device_path.clone(),
++                    actual_virtual_size: existing.actual_virtual_size,
++                    runtime_image_config_path: existing.image_config_path.clone(),
++                })
++            } else {
++                let request = OverlaybdRuntimeDeviceRequest {
++                    source_image_config: &source_image_config,
++                    global_config: &global_config,
++                    runtime_dir: &runtime_dir,
++                    read_only,
++                    runtime_upper_mode,
++                    requested_virtual_size,
++                    known_source_virtual_size,
++                    resize_tool: resize_tool.as_ref(),
++                    allow_shrink,
++                };
++                handle_create_overlaybd_runtime_device(
++                    request,
++                    ctrl_ring,
++                    &devices,
++                    &image_service_cache,
++                    &pool_state,
++                )
++                .await
++                .map(|response| {
++                    if let DaemonResponse::OverlaybdRuntimeDeviceCreated {
++                        dev_id,
++                        device_path,
++                        actual_virtual_size,
++                        runtime_image_config_path,
++                        ..
++                    } = &response
++                    {
++                        runtime_owners.insert(
++                            owner_id.clone(),
++                            RuntimeDeviceOwner {
++                                dev_id: *dev_id,
++                                device_path: device_path.clone(),
++                                image_config_path: runtime_image_config_path.clone(),
++                                actual_virtual_size: *actual_virtual_size,
++                            },
++                        );
++                        owner_by_dev_id.insert(*dev_id, owner_id);
++                    }
++                    response
++                })
++            }
+         }
+         DaemonRequest::CreateCow { origin, cow } => {
+             handle_create_cow(&devices, ctrl_ring, &origin, &cow).await
+         }
+         DaemonRequest::Delete { dev_id } => {
+-            handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await
++            let response = handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await;
++            if response.is_ok() {
++                remove_runtime_owner(&runtime_owners, &owner_by_dev_id, dev_id);
++            }
++            response
+         }
+         DaemonRequest::RestackSnapshot {
+             dev_id,
+@@ -621,8 +684,23 @@ async fn handle_connection(
+             .await
+         }
+         DaemonRequest::ReleaseOverlaybd { dev_id } => {
+-            handle_release_overlaybd(&pool_state, ctrl_ring.clone(), dev_id).await
++            let response = handle_release_overlaybd(&pool_state, ctrl_ring.clone(), dev_id).await;
++            if response.is_ok() {
++                remove_runtime_owner(&runtime_owners, &owner_by_dev_id, dev_id);
++            }
++            response
+         }
++        DaemonRequest::ListExclusiveOwners => Ok(DaemonResponse::ExclusiveOwners {
++            owners: runtime_owners
++                .iter()
++                .map(|entry| ExclusiveDeviceOwner {
++                    owner_id: entry.key().clone(),
++                    dev_id: entry.dev_id,
++                    device_path: entry.device_path.clone(),
++                    image_config_path: entry.image_config_path.clone(),
++                })
++                .collect(),
++        }),
+         DaemonRequest::UpdateSize {
+             dev_id,
+             new_sectors,
+@@ -661,6 +739,16 @@ async fn handle_connection(
+ 
+ // ── Request handlers ────────────────────────────────────────────────────────
+ 
++fn remove_runtime_owner(
++    runtime_owners: &DashMap<String, RuntimeDeviceOwner>,
++    owner_by_dev_id: &DashMap<u32, String>,
++    dev_id: u32,
++) {
++    if let Some((_, owner_id)) = owner_by_dev_id.remove(&dev_id) {
++        runtime_owners.remove(&owner_id);
++    }
++}
++
+ struct OverlaybdRuntimeDeviceRequest<'a> {
+     source_image_config: &'a Path,
+     global_config: &'a Path,
+diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
+index e4c5615..8d821f4 100644
+--- a/storage/ublk-daemon/src/protocol.rs
++++ b/storage/ublk-daemon/src/protocol.rs
+@@ -33,11 +33,9 @@ pub enum DaemonRequest {
+         global_config: PathBuf,
+         runtime_dir: PathBuf,
+         read_only: bool,
+-        #[serde(default = "default_runtime_upper_mode")]
+         runtime_upper_mode: UpperMode,
+         requested_virtual_size: Option<u64>,
+         known_source_virtual_size: Option<u64>,
+-        #[serde(default)]
+         allow_shrink: bool,
+     },
+     /// Create a raw COW ublk device. This is separate from OverlayBD runtime
+@@ -88,20 +86,10 @@ pub enum DaemonRequest {
+     Shutdown,
+ }
+ 
+-fn default_runtime_upper_mode() -> UpperMode {
+-    UpperMode::LogStructured
+-}
+-
+-const fn default_resize_timeout_secs() -> u64 {
+-    120
+-}
+-
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct ResizeToolSpec {
+     pub binary: PathBuf,
+-    #[serde(default)]
+     pub lib_dir: Option<PathBuf>,
+-    #[serde(default = "default_resize_timeout_secs")]
+     pub timeout_secs: u64,
+ }
+ 
+@@ -354,33 +342,6 @@ mod tests {
+         }
+     }
+ 
+-    #[test]
+-    fn runtime_resize_fields_default_for_old_requests() {
+-        let json = r#"{
+-            "kind":"create_overlaybd_runtime_device",
+-            "source_image_config":"/src/image.json",
+-            "global_config":"/global.json",
+-            "runtime_dir":"/work/overlaybd",
+-            "read_only":false,
+-            "requested_virtual_size":null,
+-            "known_source_virtual_size":null
+-        }"#;
+-        let decoded: DaemonRequest = serde_json::from_str(json).unwrap();
+-        match decoded {
+-            DaemonRequest::CreateOverlaybdRuntimeDevice { allow_shrink, .. } => {
+-                assert!(!allow_shrink);
+-            }
+-            other => panic!("unexpected request: {other:?}"),
+-        }
+-    }
+-
+-    #[test]
+-    fn resize_tool_timeout_defaults_for_old_requests() {
+-        let spec: ResizeToolSpec =
+-            serde_json::from_str(r#"{"binary":"/opt/overlaybd-resize","lib_dir":null}"#).unwrap();
+-        assert_eq!(spec.timeout_secs, 120);
+-    }
+-
+     #[test]
+     fn request_acquire_overlaybd_round_trip() {
+         let req = DaemonRequest::AcquireOverlaybd {
+diff --git a/storage/ublk-daemon/tests/ublk_daemon_test.rs b/storage/ublk-daemon/tests/ublk_daemon_test.rs
+index c8701c0..66c4cd7 100644
+--- a/storage/ublk-daemon/tests/ublk_daemon_test.rs
++++ b/storage/ublk-daemon/tests/ublk_daemon_test.rs
+@@ -337,6 +337,7 @@ mod client_tests {
+     async fn create_overlaybd_runtime_device_success() {
+         let server = MockServer::start(Box::new(|req| match req {
+             DaemonRequest::CreateOverlaybdRuntimeDevice {
++                owner_id,
+                 source_image_config,
+                 global_config,
+                 runtime_dir,
+@@ -346,6 +347,7 @@ mod client_tests {
+                 known_source_virtual_size,
+                 allow_shrink,
+             } => {
++                assert_eq!(owner_id, "device:test");
+                 assert_eq!(source_image_config, PathBuf::from("/src/image.json"));
+                 assert_eq!(global_config, PathBuf::from("/global.json"));
+                 assert_eq!(runtime_dir, PathBuf::from("/work/overlaybd"));
+@@ -370,6 +372,7 @@ mod client_tests {
+         let client = server.client();
+         let device = client
+             .create_overlaybd_runtime_device(CreateOverlaybdRuntimeDeviceRequest {
++                owner_id: "device:test",
+                 source_image_config: Path::new("/src/image.json"),
+                 global_config: Path::new("/global.json"),
+                 runtime_dir: Path::new("/work/overlaybd"),
+@@ -405,6 +408,7 @@ mod client_tests {
+         let client = server.client();
+         let err = client
+             .create_overlaybd_runtime_device(CreateOverlaybdRuntimeDeviceRequest {
++                owner_id: "device:test-error",
+                 source_image_config: Path::new("/src/image.json"),
+                 global_config: Path::new("/global.json"),
+                 runtime_dir: Path::new("/work/overlaybd"),
+@@ -428,6 +432,7 @@ mod client_tests {
+         let err = server
+             .client()
+             .create_overlaybd_runtime_device(CreateOverlaybdRuntimeDeviceRequest {
++                owner_id: "device:test-invalid",
+                 source_image_config: Path::new("/src/image.json"),
+                 global_config: Path::new("/global.json"),
+                 runtime_dir: Path::new("/work/overlaybd"),
+@@ -449,6 +454,7 @@ mod client_tests {
+         let client = server.client();
+         let err = client
+             .create_overlaybd_runtime_device(CreateOverlaybdRuntimeDeviceRequest {
++                owner_id: "device:test-unexpected",
+                 source_image_config: Path::new("/src/image.json"),
+                 global_config: Path::new("/global.json"),
+                 runtime_dir: Path::new("/work/overlaybd"),

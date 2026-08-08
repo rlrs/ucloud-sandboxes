@@ -72,6 +72,63 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(events[0].data["count"], 1)
         self.assertEqual(events[1].data["index"], 2)
 
+    def test_sqlite_store_enforces_logical_and_physical_byte_budget(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            max_bytes = 128 * 1024
+            store = MetricsStore(
+                path,
+                max_bytes=max_bytes,
+                max_event_bytes=8 * 1024,
+                max_events=10_000,
+            )
+            for index in range(200):
+                store.append(
+                    "bounded",
+                    {"index": index, "padding": "x" * 2048},
+                )
+
+            events = store.load_events(max_events=10_000)
+            with sqlite3.connect(path) as connection:
+                retained_bytes, retained_events = connection.execute(
+                    """
+                    SELECT retained_payload_bytes, retained_events
+                    FROM metric_store_meta
+                    WHERE singleton = 1
+                    """
+                ).fetchone()
+                auto_vacuum = connection.execute("PRAGMA auto_vacuum").fetchone()[0]
+            physical_bytes = sum(
+                candidate.stat().st_size
+                for candidate in (path, path.with_name(path.name + "-wal"))
+                if candidate.exists()
+            )
+
+        self.assertTrue(events)
+        self.assertEqual(events[-1].data["index"], 199)
+        self.assertLess(retained_events, 200)
+        self.assertLessEqual(retained_bytes, max_bytes)
+        self.assertLessEqual(physical_bytes, max_bytes)
+        self.assertEqual(auto_vacuum, 2)
+
+    def test_sqlite_store_rejects_noncanonical_schema(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "metrics.sqlite"
+            with sqlite3.connect(path) as connection:
+                connection.execute(
+                    """
+                    CREATE TABLE metric_events (
+                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT NOT NULL,
+                        timestamp_epoch REAL NOT NULL,
+                        kind TEXT NOT NULL,
+                        data_json TEXT NOT NULL
+                    )
+                    """
+                )
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "schema is invalid"):
+                MetricsStore(path, max_bytes=128 * 1024)
+
     def test_builds_live_pressure_and_provisioning_signals(self) -> None:
         now = utc_now()
         heartbeat_data = {
@@ -143,7 +200,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.sandbox_create_limit, 32)
         self.assertLessEqual(signals.latest_create_pressure_age_seconds or 0, 2)
 
-    def test_rootfs_export_queue_is_live_pressure(self) -> None:
+    def test_image_materialization_queue_is_live_pressure(self) -> None:
         now = utc_now()
         events = [
             MetricEvent(
@@ -154,9 +211,9 @@ class MetricsTests(unittest.TestCase):
                     "actual_usage": {
                         "cpu_percent": 2,
                         "memory_percent": 3,
-                        "rootfs_export_active_operations": 4,
-                        "rootfs_export_waiting_operations": 8,
-                        "rootfs_export_max_concurrent_operations": 4,
+                        "image_materialization_active_operations": 4,
+                        "image_materialization_waiting_operations": 8,
+                        "image_materialization_max_concurrent_operations": 4,
                     },
                 },
             )
@@ -166,9 +223,9 @@ class MetricsTests(unittest.TestCase):
         signals = build_live_scale_signals(events, ScalePolicy())
 
         self.assertEqual(signals.pressure_samples, 3)
-        self.assertEqual(signals.rootfs_export_queue_utilization, 1.0)
+        self.assertEqual(signals.image_materialization_queue_utilization, 1.0)
 
-    def test_busy_rootfs_slots_without_waiters_are_not_pressure(self) -> None:
+    def test_busy_materialization_slots_without_waiters_are_not_pressure(self) -> None:
         now = utc_now()
         events = [
             MetricEvent(
@@ -179,9 +236,9 @@ class MetricsTests(unittest.TestCase):
                     "actual_usage": {
                         "cpu_percent": 2,
                         "memory_percent": 3,
-                        "rootfs_export_active_operations": 3,
-                        "rootfs_export_waiting_operations": 0,
-                        "rootfs_export_max_concurrent_operations": 4,
+                        "image_materialization_active_operations": 3,
+                        "image_materialization_waiting_operations": 0,
+                        "image_materialization_max_concurrent_operations": 4,
                     },
                 },
             )
@@ -191,7 +248,7 @@ class MetricsTests(unittest.TestCase):
         signals = build_live_scale_signals(events, ScalePolicy())
 
         self.assertEqual(signals.pressure_samples, 0)
-        self.assertIsNone(signals.rootfs_export_queue_utilization)
+        self.assertIsNone(signals.image_materialization_queue_utilization)
 
     def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
         snapshot = build_metrics_snapshot(
@@ -295,7 +352,7 @@ class MetricsTests(unittest.TestCase):
 
     def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             sampler = GatewayBusyTraceSampler(store, min_interval_seconds=60)
 
             emitted = [
@@ -318,44 +375,34 @@ class MetricsTests(unittest.TestCase):
 
     def test_metrics_state_file_is_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "metrics.jsonl"
+            path = Path(raw_dir) / "metrics.sqlite"
             store = MetricsStore(path)
 
             store.append("sensitive", {"token": "redacted-by-operator-policy"})
 
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
-    def test_metrics_store_rotates_and_bounds_output(self) -> None:
+    def test_metrics_store_bounds_retained_events(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "metrics.jsonl"
             store = MetricsStore(
-                path,
-                max_bytes=220,
-                max_files=2,
-                max_event_bytes=200,
+                Path(raw_dir) / "metrics.sqlite",
+                max_bytes=64 * 1024,
+                max_events=5,
             )
 
             for index in range(12):
                 store.append("bounded", {"index": index, "padding": "x" * 24})
 
             retained = store.load_events(max_events=100)
-            segments = [
-                candidate
-                for candidate in path.parent.glob("metrics.jsonl.*")
-                if candidate.name.removeprefix("metrics.jsonl.").isdigit()
-            ]
 
-            self.assertLessEqual(len(segments), 2)
-            self.assertTrue(retained)
+            self.assertEqual(len(retained), 5)
             self.assertEqual(retained[-1].data["index"], 11)
-            self.assertTrue(all(candidate.stat().st_size <= 220 for candidate in segments))
-            self.assertLessEqual(path.stat().st_size, 220)
 
     def test_metrics_store_replaces_oversized_event_with_marker(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(
-                Path(raw_dir) / "metrics.jsonl",
-                max_bytes=512,
+                Path(raw_dir) / "metrics.sqlite",
+                max_bytes=64 * 1024,
                 max_event_bytes=160,
             )
 
@@ -368,7 +415,7 @@ class MetricsTests(unittest.TestCase):
 
     def test_load_events_returns_recent_tail(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             for index in range(20):
                 store.append("event", {"index": index})
 
@@ -380,7 +427,7 @@ class MetricsTests(unittest.TestCase):
 
     def test_autoscaler_cycle_records_build_warm_fields(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             record_autoscaler_cycle(
                 store,
                 cycle=7,
@@ -409,7 +456,7 @@ class MetricsTests(unittest.TestCase):
 
     def test_autoscaler_cycle_bounds_wake_plan_and_exposes_policy(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             record_autoscaler_cycle(
                 store,
                 cycle=8,
@@ -553,7 +600,7 @@ class MetricsTests(unittest.TestCase):
         )
 
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             store.append(
                 "sandbox_scheduled",
                 {
@@ -699,7 +746,7 @@ class MetricsTests(unittest.TestCase):
         )
 
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             from ucloud_sandboxes.metrics import record_node_heartbeat
 
             record_node_heartbeat(store, heartbeat)
@@ -722,7 +769,7 @@ class MetricsTests(unittest.TestCase):
     def test_builds_vm_lifecycle_summary(self) -> None:
         now = utc_now()
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             store.append(
                 "vm_submitted",
                 {
@@ -805,7 +852,7 @@ class MetricsTests(unittest.TestCase):
     def test_builds_trace_summary_from_spans(self) -> None:
         now = utc_now()
         with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.jsonl")
+            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             record_trace_span(
                 store,
                 trace_id="trace-1",

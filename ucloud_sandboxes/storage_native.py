@@ -9,7 +9,6 @@ import time
 from typing import Any
 
 
-STORAGE_NATIVE_CAPABILITY = "storage-native-v1"
 STORAGE_NATIVE_SCHEMA = "ucloud-storage-native-v1"
 AGENTENV_UBLK_PROTOCOL_MAX_BYTES = 16 * 1024 * 1024
 
@@ -36,6 +35,26 @@ class StorageNativeDevice:
             raise ValueError("storage-native device path must be absolute")
         if self.virtual_size <= 0:
             raise ValueError("storage-native virtual size must be positive")
+        if not self.image_config_path.is_absolute():
+            raise ValueError("storage-native image config path must be absolute")
+
+
+@dataclass(frozen=True)
+class StorageNativeDeviceOwner:
+    owner_id: str
+    device_id: int
+    device_path: Path
+    image_config_path: Path
+
+    def __post_init__(self) -> None:
+        if not self.owner_id or len(self.owner_id) > 256:
+            raise ValueError("storage-native device owner id is invalid")
+        if "\n" in self.owner_id or "\r" in self.owner_id:
+            raise ValueError("storage-native device owner id is invalid")
+        if self.device_id < 0:
+            raise ValueError("storage-native device id must be non-negative")
+        if not self.device_path.is_absolute():
+            raise ValueError("storage-native device path must be absolute")
         if not self.image_config_path.is_absolute():
             raise ValueError("storage-native image config path must be absolute")
 
@@ -111,6 +130,7 @@ class AgentEnvUblkClient:
         global_config: Path,
         runtime_dir: Path,
         virtual_size: int,
+        owner_id: str,
         upper_mode: str = "logStructured",
     ) -> StorageNativeDevice:
         for label, path in {
@@ -122,6 +142,8 @@ class AgentEnvUblkClient:
                 raise ValueError(f"{label} must be absolute")
         if virtual_size <= 0:
             raise ValueError("storage-native virtual size must be positive")
+        if not owner_id or len(owner_id) > 256 or "\n" in owner_id or "\r" in owner_id:
+            raise ValueError("storage-native device owner id is invalid")
         if upper_mode not in {"sparse", "logStructured", "hybridLogStructured"}:
             raise ValueError("unsupported overlaybd upper mode")
         response = self._call(
@@ -135,6 +157,7 @@ class AgentEnvUblkClient:
                 "requested_virtual_size": virtual_size,
                 "known_source_virtual_size": virtual_size,
                 "allow_shrink": False,
+                "owner_id": owner_id,
             }
         )
         if response.get("status") != "overlaybd_runtime_device_created":
@@ -145,6 +168,36 @@ class AgentEnvUblkClient:
             virtual_size=int(response["actual_virtual_size"]),
             image_config_path=Path(str(response["runtime_image_config_path"])),
         )
+
+    def list_runtime_device_owners(self) -> tuple[StorageNativeDeviceOwner, ...]:
+        response = self._call({"kind": "list_exclusive_owners"})
+        if response.get("status") != "exclusive_owners":
+            raise StorageNativeError("ublk daemon returned invalid owner inventory")
+        raw_owners = response.get("owners")
+        if not isinstance(raw_owners, list):
+            raise StorageNativeError("ublk daemon returned invalid owner inventory")
+        try:
+            owners = tuple(
+                StorageNativeDeviceOwner(
+                    owner_id=str(raw["owner_id"]),
+                    device_id=int(raw["dev_id"]),
+                    device_path=Path(str(raw["device_path"])),
+                    image_config_path=Path(str(raw["image_config_path"])),
+                )
+                for raw in raw_owners
+                if isinstance(raw, dict)
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise StorageNativeError(
+                "ublk daemon returned invalid owner inventory"
+            ) from exc
+        if len(owners) != len(raw_owners):
+            raise StorageNativeError("ublk daemon returned invalid owner inventory")
+        if len({owner.owner_id for owner in owners}) != len(owners):
+            raise StorageNativeError("ublk daemon returned duplicate owner identity")
+        if len({owner.device_id for owner in owners}) != len(owners):
+            raise StorageNativeError("ublk daemon returned duplicate owned device")
+        return owners
 
     def restack_snapshot(
         self,
@@ -163,7 +216,9 @@ class AgentEnvUblkClient:
             }
         )
         if response.get("status") != "restack_snapshot_created":
-            raise StorageNativeError("ublk daemon returned an invalid snapshot response")
+            raise StorageNativeError(
+                "ublk daemon returned an invalid snapshot response"
+            )
         raw = response.get("descriptor")
         if raw is None:
             return None
@@ -230,9 +285,7 @@ class AgentEnvUblkClient:
 
         if device_id < 0:
             raise ValueError("storage-native device id must be non-negative")
-        response = self._call(
-            {"kind": "release_overlaybd", "dev_id": device_id}
-        )
+        response = self._call({"kind": "release_overlaybd", "dev_id": device_id})
         if response.get("status") != "released":
             raise StorageNativeError("ublk daemon did not release the device")
 

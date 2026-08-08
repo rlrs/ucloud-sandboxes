@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
@@ -14,11 +14,15 @@ from ucloud_sandboxes.hibernation import (
     HibernationDiskReservation,
     hibernation_memory_backing_reservation_mb,
 )
-from ucloud_sandboxes.storage_native import StorageNativeDevice
+from ucloud_sandboxes.storage_native import (
+    StorageNativeDevice,
+    StorageNativeDeviceOwner,
+)
 from ucloud_sandboxes.storage_native_daemon import (
     LinuxStorageHostOperations,
     StorageNativeConflictError,
     StorageNativeNodeConfig,
+    StorageNativePendingOperation,
     StorageNativeNodeClient,
     StorageNativeNodeServer,
     StorageNativeNodeService,
@@ -50,6 +54,8 @@ class FakeBlockBackend:
         self.restack_calls = 0
         self.delete_calls: list[int] = []
         self.release_calls: list[int] = []
+        self.fail_next_release = False
+        self.owners: dict[str, StorageNativeDeviceOwner] = {}
 
     def create_runtime_device(
         self,
@@ -59,7 +65,16 @@ class FakeBlockBackend:
         runtime_dir: Path,
         virtual_size: int,
         upper_mode: str,
+        owner_id: str,
     ) -> StorageNativeDevice:
+        existing = self.owners.get(owner_id)
+        if existing is not None:
+            return StorageNativeDevice(
+                device_id=existing.device_id,
+                device_path=existing.device_path,
+                virtual_size=virtual_size,
+                image_config_path=existing.image_config_path,
+            )
         self.create_calls += 1
         if self.pooled and self.idle:
             device_id = min(self.idle)
@@ -71,12 +86,22 @@ class FakeBlockBackend:
         runtime_dir.mkdir(mode=0o700)
         image = runtime_dir / "image.json"
         image.write_text("{}\n", encoding="ascii")
-        return StorageNativeDevice(
+        device = StorageNativeDevice(
             device_id=device_id,
             device_path=Path(f"/dev/ublkb{device_id}"),
             virtual_size=virtual_size,
             image_config_path=image,
         )
+        self.owners[owner_id] = StorageNativeDeviceOwner(
+            owner_id=owner_id,
+            device_id=device.device_id,
+            device_path=device.device_path,
+            image_config_path=device.image_config_path,
+        )
+        return device
+
+    def list_runtime_device_owners(self) -> tuple[StorageNativeDeviceOwner, ...]:
+        return tuple(self.owners.values())
 
     def restack_snapshot(self, device_id: int, output_layer_path: Path):
         if device_id not in self.live:
@@ -94,12 +119,25 @@ class FakeBlockBackend:
         self.delete_calls.append(device_id)
         self.idle.discard(device_id)
         self.live.discard(device_id)
+        self.owners = {
+            owner_id: owner
+            for owner_id, owner in self.owners.items()
+            if owner.device_id != device_id
+        }
 
     def release(self, device_id: int) -> None:
         self.release_calls.append(device_id)
+        if self.fail_next_release:
+            self.fail_next_release = False
+            raise RuntimeError("injected release failure")
         if device_id not in self.live:
             raise RuntimeError("device is missing")
         self.idle.add(device_id)
+        self.owners = {
+            owner_id: owner
+            for owner_id, owner in self.owners.items()
+            if owner.device_id != device_id
+        }
 
 
 class FakePublisher:
@@ -475,6 +513,43 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     expected_revision=1,
                 )
 
+    def test_released_volume_wakes_without_reserving_its_capacity_twice(self) -> None:
+        with TemporaryDirectory() as raw:
+            capacity = 1 << 30
+            service, _, _ = self._service(Path(raw), capacity=capacity)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=capacity,
+            )
+            sealed = service.freeze_and_seal(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="seal:1",
+                expected_revision=int(created["record"]["revision"]),
+            )
+            released = service.release_runtime(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="release:1",
+                expected_revision=int(sealed["record"]["revision"]),
+            )
+
+            mounted = service.mount_snapshot_cow(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="mount:1",
+                expected_revision=int(released["record"]["revision"]),
+            )
+
+            self.assertEqual(mounted["record"]["state"], "mounted")
+            self.assertEqual(mounted["record"]["virtual_size"], capacity)
+
     def test_deleted_import_tombstone_allows_same_incarnation_retry(self) -> None:
         with TemporaryDirectory() as raw:
             service, _, _ = self._service(Path(raw), publisher=True)
@@ -679,6 +754,12 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             backend.live.remove(1)
             backend.live.add(99)
+            backend.owners["device:rogue"] = StorageNativeDeviceOwner(
+                owner_id="device:rogue",
+                device_id=99,
+                device_path=Path("/dev/ublkb99"),
+                image_config_path=root / "rogue" / "image.json",
+            )
             result = service.reconcile()
             self.assertEqual(result["deleted_orphan_device_ids"], [99])
             self.assertEqual(result["terminal_records"][0]["record"]["state"], "error")
@@ -749,8 +830,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 runtime_dir=str(volume_root / "runtime"),
                 mount_path=str(root / "mounts" / "volume-1"),
                 source_image_config=str(volume_root / "source.json"),
-                device_id=7,
-                device_path="/dev/ublkb7",
+                device_owner_id="device:test-interrupted-create",
                 updated_ns=time.time_ns(),
             )
             request = {
@@ -767,9 +847,100 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 hard_capacity_bytes=service.config.hard_capacity_bytes,
             )
             backend.live.add(7)
+            backend.owners[record.device_owner_id] = StorageNativeDeviceOwner(
+                owner_id=record.device_owner_id,
+                device_id=7,
+                device_path=Path("/dev/ublkb7"),
+                image_config_path=volume_root / "runtime" / "image.json",
+            )
             result = service.reconcile()
             self.assertEqual(backend.delete_calls, [7])
             self.assertEqual(result["terminal_records"][0]["record"]["state"], "error")
+
+    def test_interrupted_cow_acquire_recovers_backend_owner_before_cleanup(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            service, backend, _ = self._service(root)
+            volume_root = root / "runtime" / "volume-1"
+            volume_root.mkdir(parents=True)
+            source = volume_root / "source.json"
+            source.write_text("{}\n", encoding="ascii")
+            sealed = volume_root / "sealed.commit"
+            sealed.write_bytes(b"sealed")
+            record = StorageVolumeRecord(
+                volume_id="volume-1",
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                revision=1,
+                state=StorageVolumeState.RELEASED,
+                operation_id="seed:1",
+                virtual_size=1 << 30,
+                runtime_dir=str(volume_root / "runtime-seed"),
+                mount_path=str(root / "mounts" / "volume-1"),
+                source_image_config=str(source),
+                device_owner_id="",
+                sealed_layer_paths=(str(sealed),),
+                updated_ns=time.time_ns(),
+            )
+            service.journal.reserve_create(
+                request={
+                    "kind": "CreateVolume",
+                    "operation_id": "seed:1",
+                    "sandbox_generation": 1,
+                    "sandbox_id": "sandbox-1",
+                    "virtual_size": 1 << 30,
+                    "volume_id": "volume-1",
+                },
+                record=record,
+                hard_capacity_bytes=service.config.hard_capacity_bytes,
+            )
+            pending = service.journal.begin_transition(
+                request={
+                    "expected_revision": 1,
+                    "kind": "MountSnapshotCow",
+                    "operation_id": "mount:1",
+                    "sandbox_generation": 1,
+                    "sandbox_id": "sandbox-1",
+                    "volume_id": "volume-1",
+                },
+                operation_id="mount:1",
+                kind="MountSnapshotCow",
+                volume_id="volume-1",
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                expected_revision=1,
+                allowed_states={StorageVolumeState.RELEASED},
+                next_state=StorageVolumeState.ACQUIRING,
+                reserve_capacity=True,
+                hard_capacity_bytes=service.config.hard_capacity_bytes,
+            )
+            assert isinstance(pending, StorageVolumeRecord)
+            runtime_dir = volume_root / "runtime-2"
+            pending = replace(
+                pending,
+                runtime_dir=str(runtime_dir),
+                device_owner_id="device:test-interrupted-cow",
+            )
+            service.journal.update_pending(pending)
+            backend.create_runtime_device(
+                source_image_config=source,
+                global_config=service.global_config_path,
+                runtime_dir=runtime_dir,
+                virtual_size=1 << 30,
+                upper_mode=service.config.upper_mode,
+                owner_id=pending.device_owner_id,
+            )
+
+            result = service.reconcile()
+
+            recovered = service.journal.load("volume-1")
+            assert recovered is not None
+            self.assertEqual(recovered.state, StorageVolumeState.ERROR)
+            self.assertEqual(result["terminal_records"][0]["record"]["state"], "error")
+            self.assertEqual(backend.delete_calls, [1])
+            self.assertEqual(backend.owners, {})
 
     def test_versioned_unix_socket_protocol(self) -> None:
         with TemporaryDirectory() as raw:
@@ -815,6 +986,55 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             server.shutdown()
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())
+
+    def test_pooled_delete_retries_backend_release_before_forgetting_device(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(Path(raw), pooled=True)
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            backend.fail_next_release = True
+
+            with self.assertRaisesRegex(
+                StorageNativePendingOperation,
+                "waiting for backend device release",
+            ):
+                service.delete_volume(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=1,
+                    volume_id="volume-1",
+                    operation_id="delete:1",
+                    expected_revision=int(created["record"]["revision"]),
+                )
+
+            waiting = service.journal.load("volume-1")
+            assert waiting is not None
+            self.assertEqual(waiting.state, StorageVolumeState.DELETING)
+            self.assertEqual(waiting.device_id, 1)
+            self.assertEqual(backend.live, {1})
+            self.assertEqual(backend.idle, set())
+            self.assertEqual(service.metrics()["device_pool_idle_devices"], 0)
+
+            reconciled = service.reconcile()
+            deleted = service.journal.load("volume-1")
+            assert deleted is not None
+            self.assertEqual(reconciled["terminal_records"], [])
+            self.assertEqual(deleted.state, StorageVolumeState.DELETED)
+            self.assertIsNone(deleted.device_id)
+            self.assertEqual(backend.idle, {1})
+            self.assertEqual(service.metrics()["device_pool_idle_devices"], 1)
+            replay = service.delete_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="delete:1",
+                expected_revision=int(created["record"]["revision"]),
+            )
+            self.assertEqual(replay["record"]["state"], "deleted")
 
     def test_unix_socket_backlog_accepts_operation_burst(self) -> None:
         with TemporaryDirectory() as raw:

@@ -17,7 +17,7 @@ from ucloud_sandboxes.direct_warden import (
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactFile,
     HibernationAuthority,
-    HibernationCompatibilityError,
+    HibernationValidationError,
     HibernationFileRole,
     HibernationManifest,
     HibernationRecoveryAction,
@@ -664,10 +664,10 @@ class DirectRunscWardenTests(unittest.TestCase):
         with patch.object(
             self.warden.artifacts,
             "load_complete",
-            side_effect=HibernationCompatibilityError("injected identity failure"),
+            side_effect=HibernationValidationError("injected identity failure"),
         ):
             with self.assertRaisesRegex(
-                HibernationCompatibilityError,
+                HibernationValidationError,
                 "identity failure",
             ):
                 self.warden.resume(self.sandbox, operation_id="wake:1")

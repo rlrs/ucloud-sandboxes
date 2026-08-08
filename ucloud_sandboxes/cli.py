@@ -35,17 +35,9 @@ from .autoscaler_state import (
     stable_provider_operation_id,
 )
 from .capabilities import (
-    DISK_QUOTA_CAPABILITY,
     DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    FORK_LOCAL_CAPABILITY,
-    GVISOR_HIBERNATE_PROBE,
-    GVISOR_LIVE_FORK_PROBE,
-    HIBERNATE_LOCAL_CAPABILITY,
-    STORAGE_OPT_QUOTA_PROBE,
-    TMPFS_QUOTA_PROBE,
-    conformance_capabilities_from_file,
-    conformance_results_from_file,
-    has_capability,
+    STORAGE_NATIVE_CAPABILITY,
+    STORAGE_NATIVE_MIGRATION_CAPABILITY,
     merge_capabilities,
 )
 from .bootstrap import (
@@ -58,7 +50,6 @@ from .bootstrap import (
     mark_bootstrap_success,
     prune_bootstrap_records,
 )
-from .async_node_agent import create_async_node_agent_app
 from .config import AutoscalerConfig
 from .control_plane import (
     DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
@@ -86,7 +77,6 @@ from .deploy import (
     stage_file_over_ssh,
 )
 from .images import DockerImageRuntime, ImageRecord, ImageStore
-from .hibernation import HibernationDiskLedger
 from .managed_registry import (
     RegistryClient,
     RegistryRequestError,
@@ -109,6 +99,7 @@ from .metrics import (
     record_vm_submitted,
 )
 from .model_relay import (
+    DEFAULT_MAX_COMPLETED_BYTES,
     DEFAULT_MAX_INFLIGHT_BYTES,
     DEFAULT_MAX_INFLIGHT_REQUESTS,
     DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
@@ -134,7 +125,6 @@ from .networking import (
     apply_public_link_attachment,
     stable_hostname,
 )
-from .node_agent import build_node_agent_server
 from .policy import (
     evaluate_scale,
     unreachable_node_reference,
@@ -171,12 +161,6 @@ from .routing import (
     is_portable_parked_route,
     sandbox_demand_from_routing_state,
 )
-from .runtime_probe import (
-    DEFAULT_CHECKPOINT_HELPER,
-    DEFAULT_CHECKPOINT_ROOT,
-    DockerRuntimeProbe,
-)
-from .sandbox import DockerGvisorRuntime, HibernationQuotaHelperClient
 from .ucloud import (
     SessionStore,
     UCloudClient,
@@ -188,7 +172,6 @@ from .vm_init import (
     DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
     DEFAULT_DOCKER_QUOTA_IMAGE_GB,
     DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-    DEFAULT_HIBERNATION_QUOTA_HELPER,
     DEFAULT_MANAGED_INIT,
     DEFAULT_STORAGE_NATIVE_CACHE_GB,
     DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
@@ -218,60 +201,6 @@ from .vm_submit import (
 
 DEFAULT_BUILDER_PRODUCT_ID = "cpu-amd-zen5-16-vcpu"
 DEFAULT_BUILDER_DISK_GB = 250
-
-
-def add_local_hibernation_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--enable-local-hibernation",
-        action="store_true",
-        help=(
-            "Enable the experimental local hibernation runtime. Requires execute "
-            "mode, an exact conformance fingerprint, and hard disk quota settings."
-        ),
-    )
-    parser.add_argument(
-        "--hibernate-runtime-name",
-        default="runsc-hibernate",
-        help="Docker runtime name for the pinned local-hibernation runsc build.",
-    )
-    parser.add_argument(
-        "--expected-hibernate-runtime-fingerprint",
-        help=(
-            "Required lowercase SHA-256 fingerprint from the exact hibernation "
-            "conformance result."
-        ),
-    )
-    parser.add_argument(
-        "--hibernation-disk-ledger",
-        type=Path,
-        help=(
-            "Crash-durable hard disk reservation ledger. Defaults beside the "
-            "sandbox state file."
-        ),
-    )
-    parser.add_argument(
-        "--hibernation-disk-capacity-mb",
-        type=int,
-        default=0,
-        help=(
-            "Explicit hard disk budget for parkable sandbox reservations. "
-            "Required when local hibernation is enabled."
-        ),
-    )
-    parser.add_argument(
-        "--hibernation-disk-headroom-mb",
-        type=int,
-        default=0,
-        help=(
-            "Disk budget retained outside hibernation reservations. Must be "
-            "positive when local hibernation is enabled."
-        ),
-    )
-    parser.add_argument(
-        "--hibernation-quota-helper",
-        default=DEFAULT_HIBERNATION_QUOTA_HELPER,
-        help="Privileged XFS project-quota helper for hibernation artifacts.",
-    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -339,11 +268,6 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="Advertise a node capability, e.g. sandbox or image-build.",
-    )
-    agent_heartbeat.add_argument(
-        "--runtime-conformance-file",
-        type=Path,
-        help="Runtime conformance JSON used to derive security capabilities.",
     )
     add_node_version_args(agent_heartbeat)
     add_resource_args(agent_heartbeat)
@@ -437,6 +361,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--gateway-bearer-token-file",
         type=Path,
+        required=True,
         help=(
             "Require a gateway token for control-plane routes. The gateway accepts "
             "X-UCloud-Sandbox-Token, plus Authorization: Bearer for private callers."
@@ -445,15 +370,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument(
         "--heartbeat-bearer-token-file",
         type=Path,
-        help=(
-            "Require this distinct bearer token for node heartbeat POSTs. "
-            "If omitted, heartbeat auth uses the gateway token for legacy "
-            "deployments."
-        ),
+        required=True,
+        help=("Distinct bearer token required for node heartbeat POSTs."),
     )
     serve.add_argument(
         "--node-control-bearer-token-file",
         type=Path,
+        required=True,
         help=(
             "Private credential used by the gateway for every node-agent call. "
             "It is distinct from gateway and heartbeat credentials."
@@ -473,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--registry-url",
         help=(
             "Docker Distribution registry URL to include in gateway metrics. "
-            "Defaults to UCLOUD_SANDBOX_REGISTRY_URL or UCLOUD_REGISTRY_URL."
+            "Defaults to UCLOUD_REGISTRY_URL."
         ),
     )
     serve.add_argument(
@@ -491,130 +414,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Defaults to <state_dir>/registry-usage.json."
         ),
     )
-    serve.add_argument(
-        "--docker-binary",
-        default="docker",
-        help="Docker-compatible CLI binary used for control-plane image builds.",
-    )
-    serve.add_argument(
-        "--enable-image-builds",
-        action="store_true",
-        help="Allow this control-plane process to build images locally.",
-    )
-    serve.add_argument(
-        "--execute-image-builds",
-        action="store_true",
-        help="Actually execute control-plane Docker image build/push commands.",
-    )
     serve.set_defaults(func=cmd_serve_control_plane)
-
-    node_agent = subparsers.add_parser(
-        "serve-node-agent",
-        help="Run the VM-side sandbox node agent API.",
-    )
-    add_config_args(node_agent)
-    node_agent.add_argument("--host", default="127.0.0.1", help="Bind host.")
-    node_agent.add_argument("--port", type=int, default=8090, help="Bind port.")
-    node_agent.add_argument("--job-id", help="UCloud VM job id.")
-    node_agent.add_argument("--node-id", help="Stable node id. Defaults to hostname.")
-    node_agent.add_argument(
-        "--node-url",
-        help="URL advertised in heartbeats for control-plane/node-agent calls.",
-    )
-    add_node_version_args(node_agent)
-    add_resource_args(node_agent)
-    node_agent.add_argument(
-        "--sandbox-file",
-        type=Path,
-        help="Sandbox state file. Defaults to <state_dir>/sandboxes.json.",
-    )
-    node_agent.add_argument(
-        "--image-file",
-        type=Path,
-        help="Image cache state file. Defaults to <state_dir>/images.json.",
-    )
-    node_agent.add_argument(
-        "--ssh-port-start",
-        type=int,
-        default=22000,
-        help="First local host port available for per-sandbox SSH.",
-    )
-    node_agent.add_argument(
-        "--ssh-port-end",
-        type=int,
-        default=22999,
-        help="Last local host port available for per-sandbox SSH.",
-    )
-    node_agent.add_argument(
-        "--docker-binary",
-        default="docker",
-        help="Docker-compatible CLI binary.",
-    )
-    node_agent.add_argument(
-        "--max-concurrent-image-pulls",
-        type=int,
-        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-        help="Maximum distinct cold Docker pulls running concurrently on this node.",
-    )
-    node_agent.add_argument(
-        "--runtime-name",
-        default="runsc",
-        help="Docker runtime name for gVisor/runsc.",
-    )
-    node_agent.add_argument(
-        "--enable-image-builds",
-        action="store_true",
-        help=(
-            "Manual/debug builder mode. The node advertises image-build but "
-            "not sandbox capacity; production builds should run on the control plane."
-        ),
-    )
-    node_agent.add_argument(
-        "--buildx-direct-push",
-        action="store_true",
-        help="Build and push in one Docker Buildx registry-export operation.",
-    )
-    node_agent.add_argument(
-        "--buildx-cache-ref",
-        help="Optional external Buildx registry cache reference.",
-    )
-    node_agent.add_argument(
-        "--runtime-conformance-file",
-        type=Path,
-        help="Runtime conformance JSON used to derive security capabilities.",
-    )
-    node_agent.add_argument(
-        "--checkpoint-helper",
-        default=DEFAULT_CHECKPOINT_HELPER,
-        help="Privileged helper used to prepare and stage checkpoint artifacts.",
-    )
-    node_agent.add_argument(
-        "--checkpoint-root",
-        type=Path,
-        help=(
-            "Docker-root-relative checkpoint artifact directory. Required when "
-            "the conformance file enables local live fork."
-        ),
-    )
-    add_local_hibernation_args(node_agent)
-    node_agent.add_argument(
-        "--execute-runtime",
-        action="store_true",
-        help="Actually execute Docker commands. Default is dry-run.",
-    )
-    node_agent.add_argument(
-        "--node-control-bearer-token-file",
-        type=Path,
-        help="Require this private bearer credential on non-health node routes.",
-    )
-    node_agent.set_defaults(func=cmd_serve_node_agent)
 
     direct_node_agent = subparsers.add_parser(
         "serve-direct-node-agent",
-        help=(
-            "Run the replacement direct-runsc node daemon. This command must "
-            "own a dedicated node and cannot share state with serve-node-agent."
-        ),
+        help="Run the direct-runsc sandbox node daemon.",
     )
     add_config_args(direct_node_agent)
     direct_node_agent.add_argument("--host", default="127.0.0.1")
@@ -634,14 +438,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     direct_node_agent.add_argument("--image-file", type=Path)
-    direct_node_agent.add_argument("--quota-root", type=Path, required=True)
+    direct_node_agent.add_argument("--volume-mount-root", type=Path, required=True)
     direct_node_agent.add_argument(
         "--storage-native-socket",
         type=Path,
-        help=(
-            "Root-only node-storage service socket. When set, the direct "
-            "runtime uses storage-native-v1 volumes instead of XFS project quotas."
-        ),
+        required=True,
+        help="Root-only storage-native node service socket.",
     )
     direct_node_agent.add_argument("--runsc", type=Path, required=True)
     direct_node_agent.add_argument("--runsc-commit", required=True)
@@ -655,27 +457,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(DEFAULT_MANAGED_INIT),
     )
-    direct_node_agent.add_argument(
-        "--quota-helper",
-        type=Path,
-        default=Path("/usr/local/libexec/ucloud-sandbox-hibernation-quota"),
-    )
     direct_node_agent.add_argument("--docker-binary", default="docker")
     direct_node_agent.add_argument(
         "--max-concurrent-image-pulls",
         type=int,
         default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
         help="Maximum distinct cold Docker pulls running concurrently on this node.",
-    )
-    direct_node_agent.add_argument(
-        "--disk-capacity-mb",
-        type=int,
-        required=True,
-    )
-    direct_node_agent.add_argument(
-        "--disk-headroom-mb",
-        type=int,
-        required=True,
     )
     direct_node_agent.add_argument(
         "--max-concurrent-restores",
@@ -714,78 +501,37 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument(
         "--node-control-bearer-token-file",
         type=Path,
+        required=True,
     )
     direct_node_agent.set_defaults(func=cmd_serve_direct_node_agent)
 
-    async_node_agent = subparsers.add_parser(
-        "serve-async-node-agent",
-        help="Run the high-performance async VM-side exec/SSH node-agent API.",
+    builder_agent = subparsers.add_parser(
+        "serve-builder-agent",
+        help="Run an image-only builder node.",
     )
-    add_config_args(async_node_agent)
-    async_node_agent.add_argument("--host", default="127.0.0.1", help="Bind host.")
-    async_node_agent.add_argument("--port", type=int, default=8091, help="Bind port.")
-    async_node_agent.add_argument(
-        "--sandbox-file",
-        type=Path,
-        help="Sandbox state file. Defaults to <state_dir>/sandboxes.json.",
-    )
-    async_node_agent.add_argument(
-        "--image-file",
-        type=Path,
-        help="Image cache state file. Defaults to <state_dir>/images.json.",
-    )
-    async_node_agent.add_argument(
-        "--ssh-port-start",
+    add_config_args(builder_agent)
+    builder_agent.add_argument("--host", default="127.0.0.1")
+    builder_agent.add_argument("--port", type=int, default=8090)
+    builder_agent.add_argument("--job-id")
+    builder_agent.add_argument("--node-id")
+    builder_agent.add_argument("--node-url")
+    add_node_version_args(builder_agent)
+    add_resource_args(builder_agent)
+    builder_agent.add_argument("--state-file", type=Path, required=True)
+    builder_agent.add_argument("--image-file", type=Path, required=True)
+    builder_agent.add_argument("--docker-binary", default="docker")
+    builder_agent.add_argument("--buildx-direct-push", action="store_true")
+    builder_agent.add_argument("--buildx-cache-ref")
+    builder_agent.add_argument("--max-active-image-builds", type=int, default=4)
+    builder_agent.add_argument(
+        "--max-concurrent-image-pulls",
         type=int,
-        default=22000,
-        help="First local host port available for per-sandbox SSH.",
+        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
     )
-    async_node_agent.add_argument(
-        "--ssh-port-end",
-        type=int,
-        default=22999,
-        help="Last local host port available for per-sandbox SSH.",
+    builder_agent.add_argument(
+        "--node-control-bearer-token-file", type=Path, required=True
     )
-    async_node_agent.add_argument(
-        "--docker-binary",
-        default="docker",
-        help="Docker-compatible CLI binary.",
-    )
-    async_node_agent.add_argument(
-        "--runtime-name",
-        default="runsc",
-        help="Docker runtime name for gVisor/runsc.",
-    )
-    async_node_agent.add_argument(
-        "--runtime-conformance-file",
-        type=Path,
-        help="Runtime conformance JSON used to validate optional live fork support.",
-    )
-    async_node_agent.add_argument(
-        "--checkpoint-helper",
-        default=DEFAULT_CHECKPOINT_HELPER,
-        help="Privileged helper used to prepare and stage checkpoint artifacts.",
-    )
-    async_node_agent.add_argument(
-        "--checkpoint-root",
-        type=Path,
-        help=(
-            "Docker-root-relative checkpoint artifact directory. Required when "
-            "the conformance file enables local live fork."
-        ),
-    )
-    add_local_hibernation_args(async_node_agent)
-    async_node_agent.add_argument(
-        "--execute-runtime",
-        action="store_true",
-        help="Actually execute Docker commands. Default is dry-run.",
-    )
-    async_node_agent.add_argument(
-        "--node-control-bearer-token-file",
-        type=Path,
-        help="Require this private bearer credential on non-health node routes.",
-    )
-    async_node_agent.set_defaults(func=cmd_serve_async_node_agent)
+    builder_agent.set_defaults(func=cmd_serve_builder_agent)
 
     model_relay = subparsers.add_parser(
         "serve-model-relay",
@@ -842,6 +588,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Global serialized active request-envelope byte limit.",
     )
     model_relay.add_argument(
+        "--max-completed-bytes",
+        type=int,
+        default=DEFAULT_MAX_COMPLETED_BYTES,
+        help="Global retained completed-response byte limit.",
+    )
+    model_relay.add_argument(
         "--request-timeout-seconds",
         type=float,
         default=3600.0,
@@ -866,73 +618,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="How long completed request ids are retained for idempotent responses.",
     )
     model_relay.set_defaults(func=cmd_serve_model_relay)
-
-    runtime_conformance = subparsers.add_parser(
-        "runtime-conformance",
-        help="Check local Docker/runsc sandbox runtime behavior on an initialized node.",
-    )
-    runtime_conformance.add_argument(
-        "--docker-binary",
-        default="docker",
-        help="Docker-compatible CLI binary.",
-    )
-    runtime_conformance.add_argument(
-        "--sudo",
-        action="store_true",
-        help="Prefix probe Docker commands with sudo.",
-    )
-    runtime_conformance.add_argument(
-        "--runtime-name",
-        default="runsc",
-        help="Docker runtime name for gVisor/runsc.",
-    )
-    runtime_conformance.add_argument(
-        "--image",
-        default="busybox",
-        help="Small image used for runtime probes.",
-    )
-    runtime_conformance.add_argument(
-        "--execute",
-        action="store_true",
-        help="Execute probes. Default renders the probe commands without running them.",
-    )
-    runtime_conformance.add_argument(
-        "--probe-live-fork",
-        action="store_true",
-        help=(
-            "Also test optional cross-container gVisor checkpoint restore. "
-            "Failure is reported but does not fail required runtime conformance."
-        ),
-    )
-    runtime_conformance.add_argument(
-        "--checkpoint-helper",
-        default=DEFAULT_CHECKPOINT_HELPER,
-        help="Privileged helper used to prepare and stage checkpoint artifacts.",
-    )
-    runtime_conformance.add_argument(
-        "--checkpoint-root",
-        type=Path,
-        default=Path(DEFAULT_CHECKPOINT_ROOT),
-        help=(
-            "Checkpoint artifact root configured for the helper; production VM "
-            "initialization should pass the Docker-root-relative path explicitly."
-        ),
-    )
-    runtime_conformance.add_argument(
-        "--output", choices=("text", "json"), default="text", help="Output format."
-    )
-    runtime_conformance.set_defaults(func=cmd_runtime_conformance)
-
-    render_init = subparsers.add_parser(
-        "render-vm-init-script",
-        help="Render the post-boot VM init script.",
-    )
-    add_config_args(render_init)
-    add_vm_init_args(render_init, include_job_id=True)
-    render_init.add_argument(
-        "--output", choices=("script", "json"), default="script", help="Output format."
-    )
-    render_init.set_defaults(func=cmd_render_vm_init_script)
 
     init_vm = subparsers.add_parser(
         "init-vm",
@@ -959,7 +644,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_vm.add_argument(
         "--output",
-        choices=("text", "json", "script"),
+        choices=("text", "json"),
         default="text",
         help="Output format.",
     )
@@ -1288,15 +973,6 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         type=Path,
         help="Built ucloud-sandboxes wheel to install on the gateway VM.",
-    )
-    deploy_all.add_argument(
-        "--sandbox-runtime",
-        choices=("legacy", "direct"),
-        required=True,
-        help=(
-            "Required exclusive sandbox task lifecycle owner installed on worker "
-            "nodes. The deploy command never changes runtimes implicitly."
-        ),
     )
     deploy_all.add_argument(
         "--direct-runsc",
@@ -1686,14 +1362,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Terminate planned stop jobs. This is separate because it is destructive.",
     )
     reconcile.add_argument(
-        "--execute-resumes",
-        action="store_true",
-        help=(
-            "Deprecated compatibility flag. Post-start UCloud suspension is "
-            "destructive and is handled as permanent node loss."
-        ),
-    )
-    reconcile.add_argument(
         "--allow-unlabeled-stops",
         action="store_true",
         help=(
@@ -1780,23 +1448,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--gateway-control-url",
         default="",
         help=(
-            "Gateway base URL used to evacuate parked direct-runtime sandboxes "
+            "Gateway base URL used to migrate parked storage-native sandboxes "
             "from draining nodes. Defaults to the base of --init-heartbeat-url."
         ),
     )
     loop.add_argument(
         "--gateway-control-bearer-token-file",
         type=Path,
-        help=(
-            "Gateway bearer token used for authenticated drain-evacuation "
-            "migration requests."
-        ),
+        help="Gateway bearer token used for storage-native migration requests.",
     )
     loop.add_argument(
-        "--max-migrations-per-cycle",
+        "--max-storage-native-migrations-per-cycle",
         type=int,
         default=2,
-        help="Maximum parked-sandbox evacuations started by one autoscaler cycle.",
+        help="Maximum storage-native migrations started by one autoscaler cycle.",
     )
     add_builder_autoscale_args(loop)
     add_vm_bootstrap_args(loop)
@@ -1821,14 +1486,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--execute-stops",
         action="store_true",
         help="Terminate planned stop jobs. This is separate because it is destructive.",
-    )
-    loop.add_argument(
-        "--execute-resumes",
-        action="store_true",
-        help=(
-            "Deprecated compatibility flag. Post-start UCloud suspension is "
-            "destructive and is handled as permanent node loss."
-        ),
     )
     loop.add_argument(
         "--allow-unlabeled-stops",
@@ -2235,16 +1892,6 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--init-host-alias-optional",
-        action="append",
-        default=[],
-        metavar="HOST=ADDRESS",
-        help=(
-            "Like --init-host-alias, but accepts an empty value from a systemd "
-            "environment file."
-        ),
-    )
-    parser.add_argument(
         "--init-cpu-overcommit",
         type=float,
         default=None,
@@ -2261,16 +1908,6 @@ def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         help="Disk overcommit multiplier advertised by autoscaled VM node agents.",
-    )
-    parser.add_argument(
-        "--init-runtime-dry-run",
-        action="store_true",
-        help="Initialize node-agent without --execute-runtime.",
-    )
-    parser.add_argument(
-        "--init-node-runtime",
-        default="legacy",
-        help="Sandbox task owner installed on autoscaled nodes: legacy or direct.",
     )
     parser.add_argument(
         "--init-direct-runsc-commit",
@@ -2437,12 +2074,12 @@ def add_vm_init_args(
     parser.add_argument(
         "--work-dir",
         default="/work/ucloud-sandboxes",
-        help="Persistent VM work directory for state, caches, and venv.",
+        help="VM work directory for node state and caches.",
     )
     parser.add_argument(
         "--package-spec",
-        default="ucloud-sandboxes",
-        help="pip package spec installed into the VM venv.",
+        required=True,
+        help="Role-specific verified node bundle staged before bootstrap.",
     )
     parser.add_argument(
         "--node-agent-host",
@@ -2484,10 +2121,7 @@ def add_vm_init_args(
         "--docker-quota-image-gb",
         type=int,
         default=DEFAULT_DOCKER_QUOTA_IMAGE_GB,
-        help=(
-            "Sparse XFS image size in GB for Docker overlay2 project quotas. "
-            "Use 0 to disable quota-backed Docker storage."
-        ),
+        help=("Sparse XFS image size in GB for bounded Docker image storage."),
     )
     parser.add_argument(
         "--swap-gb",
@@ -2523,17 +2157,6 @@ def add_vm_init_args(
             "Configure this VM as a builder-only node-agent. Production builds "
             "should run on the control plane."
         ),
-    )
-    parser.add_argument(
-        "--runtime-dry-run",
-        action="store_true",
-        help="Start node-agent without --execute-runtime.",
-    )
-    parser.add_argument(
-        "--node-runtime",
-        choices=("legacy", "direct"),
-        default="legacy",
-        help="Sandbox task owner installed on this node.",
     )
     parser.add_argument(
         "--direct-runsc-commit",
@@ -2709,12 +2332,7 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
             agent_version=args.agent_version,
             deployment_id=config.deployment_id,
             init_version=args.init_version,
-            capabilities=merge_capabilities(
-                tuple(args.capability),
-                conformance_capabilities_from_file(
-                    getattr(args, "runtime_conformance_file", None)
-                ),
-            ),
+            capabilities=merge_capabilities(tuple(args.capability)),
             total_resources=resource_quantity_from_args(args),
             used_resources=ResourceQuantity(),
             cpu_overcommit=args.cpu_overcommit,
@@ -2772,32 +2390,21 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     heartbeat_file = args.heartbeat_file or config.heartbeat_file()
     route_file = args.route_file or config.routing_file()
     metrics_file = metrics_path_from_args(args, config, sibling_file=route_file)
-    gateway_bearer_token = None
-    if args.gateway_bearer_token_file:
-        gateway_bearer_token = args.gateway_bearer_token_file.read_text(
-            encoding="utf-8"
-        ).strip()
-        if not gateway_bearer_token:
-            raise ValueError("gateway bearer token file is empty.")
-    heartbeat_bearer_token = None
-    if args.heartbeat_bearer_token_file:
-        heartbeat_bearer_token = args.heartbeat_bearer_token_file.read_text(
-            encoding="utf-8"
-        ).strip()
-        if not heartbeat_bearer_token:
-            raise ValueError("heartbeat bearer token file is empty.")
+    gateway_bearer_token = read_required_token_file(
+        args.gateway_bearer_token_file,
+        "gateway bearer token",
+    )
+    heartbeat_bearer_token = read_required_token_file(
+        args.heartbeat_bearer_token_file,
+        "heartbeat bearer token",
+    )
     node_control_bearer_token = read_required_token_file(
         getattr(args, "node_control_bearer_token_file", None),
         "node control bearer token",
     )
-    registry_url = (
-        args.registry_url
-        or os.environ.get("UCLOUD_SANDBOX_REGISTRY_URL")
-        or os.environ.get("UCLOUD_REGISTRY_URL")
-    )
-    registry_worker_url = (
-        getattr(args, "registry_worker_url", None)
-        or os.environ.get("UCLOUD_REGISTRY_WORKER_URL")
+    registry_url = args.registry_url or os.environ.get("UCLOUD_REGISTRY_URL")
+    registry_worker_url = getattr(args, "registry_worker_url", None) or os.environ.get(
+        "UCLOUD_REGISTRY_WORKER_URL"
     )
     server = build_server(
         args.host,
@@ -2815,21 +2422,13 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
             else config.policy.heartbeat_ttl_seconds
         ),
         image_file=args.image_file or config.image_file(),
-        image_runtime=(
-            DockerImageRuntime(
-                docker_binary=args.docker_binary,
-                dry_run=not args.execute_image_builds,
-            )
-            if args.enable_image_builds
-            else None
-        ),
-        local_image_builds_enabled=args.enable_image_builds,
         metrics_file=metrics_file,
         registry_url=registry_url,
         registry_worker_url=registry_worker_url,
         registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
         max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
         max_http_request_threads=args.max_http_request_threads,
+        max_sandbox_resources=config.policy.schedulable_node_resources,
     )
     host, port = server.server_address
     print(f"Serving heartbeat receiver on http://{host}:{port}")
@@ -2838,12 +2437,9 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     print(f"Metrics file: {metrics_file}")
     if args.gateway_upstream_node_url:
         print(f"Gateway upstream node: {args.gateway_upstream_node_url}")
-    if gateway_bearer_token:
-        print("Gateway auth: bearer token required")
-    if heartbeat_bearer_token:
-        print("Heartbeat auth: distinct bearer token required")
-    if node_control_bearer_token:
-        print("Node control auth: distinct bearer token required")
+    print("Gateway auth: bearer token required")
+    print("Heartbeat auth: distinct bearer token required")
+    print("Node control auth: distinct bearer token required")
     if registry_url:
         print(f"Registry metrics: {registry_url}")
     if registry_worker_url:
@@ -2870,224 +2466,44 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     return 0
 
 
-def _node_runtime_conformance(
-    args: argparse.Namespace,
-    path: Path | None,
-) -> tuple[tuple[str, ...], dict[str, bool]]:
-    """Load persisted results and bind live fork to the current daemon/runsc."""
+def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
+    from .node_agent import build_builder_node_agent_server
 
-    initial_results = conformance_results_from_file(path)
-    expected_fingerprint: str | None = None
-    if all(
-        initial_results.get(probe)
-        for probe in (
-            GVISOR_LIVE_FORK_PROBE,
-            STORAGE_OPT_QUOTA_PROBE,
-            TMPFS_QUOTA_PROBE,
-        )
-    ):
-        try:
-            expected_fingerprint = DockerRuntimeProbe(
-                docker_binary=args.docker_binary,
-                runtime_name=args.runtime_name,
-                use_sudo=False,
-                execute=True,
-            ).live_fork_runtime_fingerprint()
-        except (OSError, RuntimeError):
-            # A stale report must never enable restore against a runtime whose
-            # exact socket policy/version can no longer be established.
-            expected_fingerprint = ""
-    results = conformance_results_from_file(
-        path,
-        expected_fork_runtime_fingerprint=expected_fingerprint,
-        expected_hibernate_runtime_fingerprint=getattr(
-            args,
-            "expected_hibernate_runtime_fingerprint",
-            None,
-        ),
-    )
-    capabilities = conformance_capabilities_from_file(
-        path,
-        expected_fork_runtime_fingerprint=expected_fingerprint,
-        expected_hibernate_runtime_fingerprint=getattr(
-            args,
-            "expected_hibernate_runtime_fingerprint",
-            None,
-        ),
-    )
-    return capabilities, results
-
-
-def _node_hibernation_storage(
-    args: argparse.Namespace,
-    *,
-    sandbox_file: Path,
-    conformance_capabilities: tuple[str, ...],
-    runtime: DockerGvisorRuntime,
-) -> tuple[HibernationDiskLedger | None, HibernationQuotaHelperClient | None]:
-    if not bool(getattr(args, "enable_local_hibernation", False)):
-        return None, None
-    if not bool(getattr(args, "execute_runtime", False)):
-        raise ValueError(
-            "--enable-local-hibernation requires --execute-runtime; dry-run "
-            "nodes must never advertise a restorable runtime"
-        )
-    if bool(getattr(args, "enable_image_builds", False)):
-        raise ValueError(
-            "--enable-local-hibernation cannot share an image-builder node"
-        )
-    if not has_capability(
-        conformance_capabilities,
-        HIBERNATE_LOCAL_CAPABILITY,
-    ):
-        raise ValueError(
-            "--enable-local-hibernation requires a conformance report whose "
-            f"{GVISOR_HIBERNATE_PROBE}, storage quota, and tmpfs quota probes "
-            "pass with --expected-hibernate-runtime-fingerprint"
-        )
-    capacity_mb = int(getattr(args, "hibernation_disk_capacity_mb", 0))
-    headroom_mb = int(getattr(args, "hibernation_disk_headroom_mb", 0))
-    if capacity_mb < 1:
-        raise ValueError("--hibernation-disk-capacity-mb must be positive")
-    if headroom_mb < 1:
-        raise ValueError("--hibernation-disk-headroom-mb must be positive")
-    if headroom_mb >= capacity_mb:
-        raise ValueError("--hibernation-disk-headroom-mb must be smaller than capacity")
-    total_disk_mb = int(getattr(args, "total_disk_mb", 0))
-    if total_disk_mb < capacity_mb:
-        raise ValueError(
-            "--total-disk-mb must be at least --hibernation-disk-capacity-mb"
-        )
-    ledger_path = getattr(args, "hibernation_disk_ledger", None)
-    if ledger_path is None:
-        ledger_path = sandbox_file.with_name("hibernation-disk-ledger.json")
-    if not ledger_path.is_absolute():
-        ledger_path = ledger_path.absolute()
-    ledger = HibernationDiskLedger(
-        ledger_path,
-        capacity_mb=capacity_mb,
-        safety_headroom_mb=headroom_mb,
-    )
-    quota_backend = HibernationQuotaHelperClient(
-        executor=runtime.executor,
-        helper=str(getattr(args, "hibernation_quota_helper")),
-        sudo=True,
-    )
-    return ledger, quota_backend
-
-
-def cmd_serve_node_agent(args: argparse.Namespace) -> int:
     config = load_config(args)
-    sandbox_file = args.sandbox_file or config.sandbox_file()
-    image_file = args.image_file or config.image_file()
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
-    node_id = args.node_id or default_node_id(job_id)
-    runtime_conformance_file = getattr(args, "runtime_conformance_file", None)
-    conformance_capabilities, conformance_results = _node_runtime_conformance(
-        args,
-        runtime_conformance_file,
-    )
-    runtime = DockerGvisorRuntime(
-        docker_binary=args.docker_binary,
-        runtime_name=args.runtime_name,
-        allow_storage_opt_quota=has_capability(
-            conformance_capabilities,
-            DISK_QUOTA_CAPABILITY,
-        ),
-        allow_tmpfs_workspace=bool(conformance_results.get(TMPFS_QUOTA_PROBE)),
-        fork_enabled=has_capability(
-            conformance_capabilities,
-            FORK_LOCAL_CAPABILITY,
-        ),
-        hibernate_enabled=bool(getattr(args, "enable_local_hibernation", False)),
-        hibernate_runtime_name=getattr(
-            args,
-            "hibernate_runtime_name",
-            "runsc-hibernate",
-        ),
-        checkpoint_root=getattr(args, "checkpoint_root", None),
-        checkpoint_helper=getattr(
-            args,
-            "checkpoint_helper",
-            DEFAULT_CHECKPOINT_HELPER,
-        ),
-        dry_run=not args.execute_runtime,
-    )
-    hibernation_disk_ledger, hibernation_quota_backend = _node_hibernation_storage(
-        args,
-        sandbox_file=sandbox_file,
-        conformance_capabilities=conformance_capabilities,
-        runtime=runtime,
-    )
-    image_runtime = DockerImageRuntime(
-        docker_binary=args.docker_binary,
-        dry_run=not args.execute_runtime,
-        buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
-        buildx_cache_ref=getattr(args, "buildx_cache_ref", None),
-    )
-    server = build_node_agent_server(
+    server = build_builder_node_agent_server(
         args.host,
         args.port,
-        sandbox_file=sandbox_file,
-        image_file=image_file,
+        state_file=args.state_file.absolute(),
+        image_file=args.image_file.absolute(),
         job_id=job_id,
-        node_id=node_id,
+        node_id=args.node_id or default_node_id(job_id),
         node_url=args.node_url,
         agent_version=args.agent_version,
         deployment_id=config.deployment_id,
         init_version=args.init_version,
         total_resources=resource_quantity_from_args(args),
-        cpu_overcommit=args.cpu_overcommit,
-        memory_overcommit=args.memory_overcommit,
-        disk_overcommit=args.disk_overcommit,
-        extra_capabilities=conformance_capabilities,
-        runtime=runtime,
-        image_runtime=image_runtime,
-        ssh_port_range=(args.ssh_port_start, args.ssh_port_end),
-        image_builds_enabled=args.enable_image_builds,
-        max_concurrent_image_pulls=int(
-            getattr(
-                args,
-                "max_concurrent_image_pulls",
-                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-            )
+        image_runtime=DockerImageRuntime(
+            docker_binary=args.docker_binary,
+            dry_run=False,
+            buildx_direct_push=args.buildx_direct_push,
+            buildx_cache_ref=args.buildx_cache_ref,
         ),
+        max_active_image_builds=args.max_active_image_builds,
+        max_concurrent_image_pulls=args.max_concurrent_image_pulls,
         node_control_bearer_token=read_required_token_file(
-            getattr(args, "node_control_bearer_token_file", None),
+            args.node_control_bearer_token_file,
             "node control bearer token",
         ),
-        hibernation_disk_ledger=hibernation_disk_ledger,
-        hibernation_quota_backend=hibernation_quota_backend,
     )
     host, port = server.server_address
-    mode = "execute" if args.execute_runtime else "dry-run"
-    print(f"Serving node agent on http://{host}:{port}")
-    print(f"Runtime mode: {mode}")
-    print(f"Sandbox file: {sandbox_file}")
-    print(f"Image file: {image_file}")
-    print(f"Node URL: {args.node_url or ''}")
-    print(f"Deployment: {config.deployment_id}")
-    print(f"Agent version: {args.agent_version}")
-    print(f"Init version: {args.init_version}")
-    print(f"SSH port range: {args.ssh_port_start}-{args.ssh_port_end}")
-    print(f"Image builds: {'enabled' if args.enable_image_builds else 'disabled'}")
-    print(
-        "Local hibernation: "
-        f"{'enabled' if getattr(args, 'enable_local_hibernation', False) else 'disabled'}"
-    )
-    print(
-        "Resources: "
-        f"{args.total_vcpu} vCPU, {args.total_memory_mb} MB RAM, "
-        f"{args.total_disk_mb} MB disk "
-        f"(overcommit cpu={args.cpu_overcommit}, memory={args.memory_overcommit}, "
-        f"disk={args.disk_overcommit})"
-    )
+    print(f"Serving builder node agent on http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("Stopping node agent.")
+        print("Stopping builder node agent.")
     finally:
         server.server_close()
     return 0
@@ -3116,14 +2532,11 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
             if args.image_cache_root is not None
             else None
         ),
-        quota_root=args.quota_root.absolute(),
+        volume_mount_root=args.volume_mount_root.absolute(),
         runsc=args.runsc.absolute(),
         runsc_commit=args.runsc_commit,
         init_binary=args.init_binary.absolute(),
         managed_init_binary=args.managed_init_binary.absolute(),
-        disk_capacity_mb=args.disk_capacity_mb,
-        disk_headroom_mb=args.disk_headroom_mb,
-        quota_helper=args.quota_helper.absolute(),
         docker_binary=args.docker_binary,
         network=args.network,
         network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
@@ -3134,11 +2547,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
                 str(args.idle_park_seconds),
             )
         ),
-        storage_native_socket=(
-            args.storage_native_socket.absolute()
-            if args.storage_native_socket is not None
-            else None
-        ),
+        storage_native_socket=args.storage_native_socket.absolute(),
     )
     server = build_direct_node_agent_server(
         args.host,
@@ -3158,13 +2567,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
             docker_binary=args.docker_binary,
             dry_run=False,
         ),
-        max_concurrent_image_pulls=int(
-            getattr(
-                args,
-                "max_concurrent_image_pulls",
-                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-            )
-        ),
+        max_concurrent_image_pulls=args.max_concurrent_image_pulls,
         node_control_bearer_token=read_required_token_file(
             args.node_control_bearer_token_file,
             "node control bearer token",
@@ -3177,13 +2580,9 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         "Direct image cache root: "
         f"{args.image_cache_root or state_root / 'image-cache'}"
     )
-    print(f"Direct quota root: {args.quota_root}")
-    print(
-        "Storage-native volumes: "
-        f"{args.storage_native_socket if args.storage_native_socket else 'disabled'}"
-    )
+    print(f"Storage-native mount root: {args.volume_mount_root}")
+    print(f"Storage-native service: {args.storage_native_socket}")
     print(f"Runtime identity: {service.provisioner.identity.digest}")
-    print("Legacy Docker task lifecycle: disabled")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -3191,75 +2590,6 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     finally:
         server.server_close()
         service.stop()
-    return 0
-
-
-def cmd_serve_async_node_agent(args: argparse.Namespace) -> int:
-    from aiohttp import web
-
-    config = load_config(args)
-    sandbox_file = args.sandbox_file or config.sandbox_file()
-    image_file = args.image_file or config.image_file()
-    runtime_conformance_file = getattr(args, "runtime_conformance_file", None)
-    conformance_capabilities, conformance_results = _node_runtime_conformance(
-        args,
-        runtime_conformance_file,
-    )
-    runtime = DockerGvisorRuntime(
-        docker_binary=args.docker_binary,
-        runtime_name=args.runtime_name,
-        allow_storage_opt_quota=has_capability(
-            conformance_capabilities,
-            DISK_QUOTA_CAPABILITY,
-        ),
-        allow_tmpfs_workspace=bool(conformance_results.get(TMPFS_QUOTA_PROBE)),
-        fork_enabled=has_capability(
-            conformance_capabilities,
-            FORK_LOCAL_CAPABILITY,
-        ),
-        hibernate_enabled=bool(getattr(args, "enable_local_hibernation", False)),
-        hibernate_runtime_name=getattr(
-            args,
-            "hibernate_runtime_name",
-            "runsc-hibernate",
-        ),
-        checkpoint_root=getattr(args, "checkpoint_root", None),
-        checkpoint_helper=getattr(
-            args,
-            "checkpoint_helper",
-            DEFAULT_CHECKPOINT_HELPER,
-        ),
-        dry_run=not args.execute_runtime,
-    )
-    hibernation_disk_ledger, hibernation_quota_backend = _node_hibernation_storage(
-        args,
-        sandbox_file=sandbox_file,
-        conformance_capabilities=conformance_capabilities,
-        runtime=runtime,
-    )
-    app = create_async_node_agent_app(
-        sandbox_file=sandbox_file,
-        image_file=image_file,
-        runtime=runtime,
-        ssh_port_range=(args.ssh_port_start, args.ssh_port_end),
-        node_control_bearer_token=read_required_token_file(
-            getattr(args, "node_control_bearer_token_file", None),
-            "node control bearer token",
-        ),
-        hibernation_disk_ledger=hibernation_disk_ledger,
-        hibernation_quota_backend=hibernation_quota_backend,
-    )
-    mode = "execute" if args.execute_runtime else "dry-run"
-    print(f"Serving async node agent on http://{args.host}:{args.port}")
-    print(f"Runtime mode: {mode}")
-    print(f"Sandbox file: {sandbox_file}")
-    print(f"Image file: {image_file}")
-    print(f"SSH port range: {args.ssh_port_start}-{args.ssh_port_end}")
-    print(
-        "Local hibernation: "
-        f"{'enabled' if getattr(args, 'enable_local_hibernation', False) else 'disabled'}"
-    )
-    web.run_app(app, host=args.host, port=args.port, print=None)
     return 0
 
 
@@ -3312,6 +2642,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         "max_inflight_requests",
         "max_inflight_requests_per_rollout",
         "max_inflight_bytes",
+        "max_completed_bytes",
     ):
         if int(getattr(args, name)) < 1:
             raise ValueError(f"{name.replace('_', '-')} must be positive")
@@ -3328,6 +2659,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         max_inflight_requests=args.max_inflight_requests,
         max_inflight_requests_per_rollout=(args.max_inflight_requests_per_rollout),
         max_inflight_bytes=args.max_inflight_bytes,
+        max_completed_bytes=args.max_completed_bytes,
         state_path=args.state_path,
         accepted_notifier=accepted_notifier if gateway_url else None,
         result_notifier=result_notifier if gateway_url else None,
@@ -3396,16 +2728,6 @@ def _post_gateway_sandbox_lifecycle(
         return transport_epoch or None
 
 
-def cmd_render_vm_init_script(args: argparse.Namespace) -> int:
-    options = vm_init_options_from_args(args, args.job_id)
-    script = render_vm_init_script(options)
-    if args.output == "json":
-        print_json({"script": script, "options": vm_init_options_to_dict(options)})
-    else:
-        print(script, end="" if script.endswith("\n") else "\n")
-    return 0
-
-
 def cmd_init_vm(args: argparse.Namespace) -> int:
     config = load_config(args).with_project_id(args.project)
     if not config.project_id:
@@ -3415,11 +2737,6 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     payload = client.retrieve_job(config.project_id, args.job_id, include_updates=True)
     plan = plan_vm_init(payload)
     options = vm_init_options_from_args(args, args.job_id)
-    script = render_vm_init_script(options)
-
-    if args.output == "script":
-        print(script, end="" if script.endswith("\n") else "\n")
-        return 0
 
     result: dict[str, Any] = {
         "projectId": config.project_id,
@@ -3441,23 +2758,22 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
             timeout_seconds=max(1, args.timeout_seconds),
             private_key_file=args.ssh_private_key_file,
         )
-        if stage_result is not None:
-            result["packageStage"] = {
-                "localPath": str(stage_result.local_path),
-                "remotePath": stage_result.remote_path,
-                "command": list(stage_result.command),
-                "returncode": stage_result.returncode,
-                "reused": stage_result.reused,
-            }
-            if stage_result.returncode != 0:
-                raise ValueError(
-                    f"remote package staging failed with exit code {stage_result.returncode}"
-                )
-            effective_options = replace(
-                options,
-                package_spec=stage_result.remote_path,
-                package_sha256=stage_result.package_sha256,
+        result["packageStage"] = {
+            "localPath": str(stage_result.local_path),
+            "remotePath": stage_result.remote_path,
+            "command": list(stage_result.command),
+            "returncode": stage_result.returncode,
+            "reused": stage_result.reused,
+        }
+        if stage_result.returncode != 0:
+            raise ValueError(
+                f"remote package staging failed with exit code {stage_result.returncode}"
             )
+        effective_options = replace(
+            options,
+            package_spec=stage_result.remote_path,
+            package_sha256=stage_result.package_sha256,
+        )
         run_result = run_init_over_ssh(
             plan.ssh_command,
             render_vm_init_script(effective_options),
@@ -3542,48 +2858,6 @@ def cmd_ensure_ucloud_ssh_key(args: argparse.Namespace) -> int:
         if create_timeout:
             print("Create request timed out, but follow-up browse found the key.")
     return 0
-
-
-def cmd_runtime_conformance(args: argparse.Namespace) -> int:
-    report = DockerRuntimeProbe(
-        docker_binary=args.docker_binary,
-        runtime_name=args.runtime_name,
-        image=args.image,
-        use_sudo=args.sudo,
-        execute=args.execute,
-        probe_live_fork=getattr(args, "probe_live_fork", False),
-        checkpoint_helper=getattr(
-            args,
-            "checkpoint_helper",
-            DEFAULT_CHECKPOINT_HELPER,
-        ),
-        checkpoint_root=getattr(
-            args,
-            "checkpoint_root",
-            Path(DEFAULT_CHECKPOINT_ROOT),
-        ),
-    ).run()
-    payload = report.to_dict()
-    if args.output == "json":
-        print_json(payload)
-        return 0 if report.ok else 1
-
-    print(f"Runtime: {report.runtime_name}")
-    print(f"Image: {report.image}")
-    print(f"Mode: {'execute' if report.executed else 'dry-run'}")
-    print(f"Overall: {'ok' if report.ok else 'failed'}")
-    for result in report.results:
-        if result.skipped:
-            status = "skipped"
-        else:
-            status = "ok" if result.ok else "failed"
-        print(f"- {result.name}: {status}")
-        print(f"  command: {' '.join(result.command)}")
-        if result.detail:
-            print(f"  detail: {result.detail}")
-        if result.exit_code is not None:
-            print(f"  exit: {result.exit_code}")
-    return 0 if report.ok else 1
 
 
 def cmd_vm_network_attachment(args: argparse.Namespace) -> int:
@@ -3971,7 +3245,6 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         project_id=config.project_id,
         deployment_id=config.deployment_id,
         local_wheel=args.wheel.expanduser().resolve(),
-        sandbox_runtime=args.sandbox_runtime,
         local_direct_runsc=(
             args.direct_runsc.expanduser().resolve()
             if args.direct_runsc is not None
@@ -3989,12 +3262,8 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             else None
         ),
         storage_native_cache_gb=args.storage_native_cache_gb,
-        storage_native_pool_low_watermark=(
-            args.storage_native_pool_low_watermark
-        ),
-        storage_native_pool_high_watermark=(
-            args.storage_native_pool_high_watermark
-        ),
+        storage_native_pool_low_watermark=(args.storage_native_pool_low_watermark),
+        storage_native_pool_high_watermark=(args.storage_native_pool_high_watermark),
         storage_native_repository=args.storage_native_repository,
         direct_disk_headroom_mb=args.direct_disk_headroom_mb,
         direct_max_concurrent_restores=args.direct_max_concurrent_restores,
@@ -4310,9 +3579,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     if not config.project_id:
         raise ValueError("project id is required via --project or config.project_id.")
     execution_requested = bool(
-        args.execute
-        or args.execute_stops
-        or getattr(args, "execute_init", False)
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
     )
     if execution_requested:
         raise ValueError(
@@ -4365,9 +3632,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     cycle = 0
     observed_vm_keys: dict[str, tuple[object, ...]] = {}
     execution_requested = bool(
-        args.execute
-        or args.execute_stops
-        or getattr(args, "execute_init", False)
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
     )
     reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
     provider_state = (
@@ -4459,7 +3724,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             if controller_active or not execution_requested:
                 destructive_job_ids = {
                     str(job_id)
-                    for job_id in result.get("destructivePowerCycleJobIds", [])
+                    for job_id in result.get("destructive_power_cycle_job_ids", [])
                 }
                 removed_routes = routing_store.delete_sandboxes_for_jobs_with_error(
                     destructive_job_ids,
@@ -4667,23 +3932,21 @@ def _post_node_drain(
         return decoded
 
 
-def _gateway_base_url(
-    explicit_url: str,
-    heartbeat_url: str,
-) -> str:
+def _gateway_base_url(explicit_url: str, heartbeat_url: str) -> str:
     explicit_url = str(explicit_url or "").strip().rstrip("/")
     if explicit_url:
         parsed = urlparse(explicit_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("gateway control URL is invalid")
         return explicit_url
-    heartbeat_url = str(heartbeat_url or "").strip()
-    parsed = urlparse(heartbeat_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return ""
+    parsed = urlparse(str(heartbeat_url or "").strip())
     suffix = "/v1/nodes/heartbeat"
     path = parsed.path.rstrip("/")
-    if not path.endswith(suffix):
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not path.endswith(suffix)
+    ):
         return ""
     prefix = path[: -len(suffix)].rstrip("/")
     return f"{parsed.scheme}://{parsed.netloc}{prefix}"
@@ -4703,21 +3966,13 @@ def _post_gateway_sandbox_migration(
         f"{str(gateway_url).rstrip('/')}/v1/sandboxes/"
         f"{quote(sandbox_id, safe='')}/migration"
     )
-    request_headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if bearer_token is not None:
         bearer_token = bearer_token.strip()
         if not bearer_token:
             raise ValueError("gateway control bearer token cannot be empty")
-        request_headers["Authorization"] = f"Bearer {bearer_token}"
-    request = Request(
-        url,
-        data=b"{}",
-        headers=request_headers,
-        method="POST",
-    )
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    request = Request(url, data=b"{}", headers=headers, method="POST")
 
     class RejectGatewayRedirects(HTTPRedirectHandler):
         def redirect_request(self, *_args: object, **_kwargs: object) -> None:
@@ -4850,9 +4105,8 @@ def apply_prepared_provider_operations(
             allowed_stop_operation_ids or set()
         ):
             continue
-        # Recurring autoscaler stops must never execute from a legacy or
-        # partially-written journal record without a fresh drain proof or a
-        # conservative unreachable-empty lease proof.
+        # Autoscaler stops require a fresh drain proof or a conservative
+        # unreachable-empty lease proof.
         if prepared.kind == "stop" and not _stop_operation_has_safety_proof(
             provider_state, prepared
         ):
@@ -4861,11 +4115,6 @@ def apply_prepared_provider_operations(
         try:
             if submitting.kind == "create":
                 response = client.submit_jobs(project_id, submitting.request)
-            elif submitting.kind == "resume":
-                response = client.unsuspend_jobs(
-                    project_id,
-                    submitting.target_job_ids,
-                )
             else:
                 response = client.terminate_jobs(
                     project_id,
@@ -4937,10 +4186,6 @@ def _provider_response_is_definite_success(
 ) -> bool:
     if operation.kind == "create":
         return len(response_job_ids) == 1
-    if operation.kind == "resume":
-        # UCloud's BulkResponse[Empty] proves acceptance with an empty object,
-        # so a non-rejection 2xx response is the strongest synchronous proof.
-        return bool(operation.target_job_ids)
     return bool(operation.target_job_ids) and set(operation.target_job_ids).issubset(
         response_job_ids
     )
@@ -5038,9 +4283,7 @@ def run_reconcile_cycle(
     provider_fence: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     execution_requested = bool(
-        args.execute
-        or args.execute_stops
-        or getattr(args, "execute_init", False)
+        args.execute or args.execute_stops or getattr(args, "execute_init", False)
     )
     if (
         execution_requested
@@ -5074,7 +4317,6 @@ def run_reconcile_cycle(
     operation_deployment_id = config.deployment_id or config.project_id
     provider_operation_results: list[dict[str, Any]] = []
     create_recovery_results: list[dict[str, Any]] = []
-    resume_recovery_results: list[dict[str, Any]] = []
     stop_recovery_results: list[dict[str, Any]] = []
     create_visibility_guards: list[dict[str, Any]] = []
     blocked_create_roles: set[str] = set()
@@ -5096,21 +4338,6 @@ def run_reconcile_cycle(
             provider_operation_results.append(item)
         observed_job_ids = {job.id for job in jobs if job.id}
         provider_state.confirm_visible_creates(observed_job_ids)
-        for recovery in provider_state.reconcile_resume_operations(
-            {job.id: job.state for job in jobs if job.id},
-        ):
-            operation = provider_state.get_operation(recovery.operation_id)
-            item = {
-                "operationId": recovery.operation_id,
-                "kind": "resume",
-                "role": operation.role if operation is not None else "",
-                "state": recovery.status,
-                "jobIds": list(recovery.job_ids),
-                "source": "inventory-recovery",
-                "error": operation.last_error if operation is not None else "",
-            }
-            resume_recovery_results.append(item)
-            provider_operation_results.append(item)
         final_provider_job_ids = tuple(
             job.id for job in jobs if job.id and job.is_final
         )
@@ -5183,15 +4410,13 @@ def run_reconcile_cycle(
 
     # Job browse omits update history.  A powered-off VM may therefore appear
     # RUNNING again after UCloud has replaced its ephemeral guest.  Current
-    # SUSPENDED state, a previously journaled resume, and our own destructive
-    # stop journal are durable hints.  For a stale RUNNING node, retrieve its
+    # SUSPENDED state and our own destructive stop journal are durable hints.
+    # For a stale RUNNING node, retrieve its
     # full ordered updates once so the later RUNNING report cannot hide the
-    # post-start suspension.
-    resume_latched_job_ids: set[str] = set()
+    # post-start suspension. A fresh heartbeat is not sufficient evidence of
+    # continuity when its guest epoch differs from an owned route.
     loss_latched_job_ids: set[str] = set()
     if provider_state is not None:
-        for operation in provider_state.list_operations(kind="resume"):
-            resume_latched_job_ids.update(operation.target_job_ids)
         for operation in provider_state.list_operations(kind="stop"):
             if operation.request.get("destructivePowerCycle") is True:
                 loss_latched_job_ids.update(operation.target_job_ids)
@@ -5199,20 +4424,28 @@ def run_reconcile_cycle(
     if not getattr(args, "jobs_file", None):
         for job in tuple(jobs):
             heartbeat = heartbeats.get(job.id)
+            owned_routes = (route_reservations or {}).get(job.id, ())
             stale_heartbeat = bool(
                 heartbeat is not None
                 and not heartbeat.is_fresh(
                     utc_now(), effective_policy.heartbeat_ttl_seconds
                 )
             )
-            owns_routes = bool((route_reservations or {}).get(job.id))
+            route_epoch_mismatch = bool(
+                heartbeat is not None
+                and heartbeat.node_epoch
+                and any(
+                    route.node_epoch and route.node_epoch != heartbeat.node_epoch
+                    for route in owned_routes
+                )
+            )
+            owns_routes = bool(owned_routes)
             should_retrieve_history = bool(
                 job.state == "RUNNING"
                 and not job.has_post_start_suspension
-                and job.id not in resume_latched_job_ids
                 and job.id not in loss_latched_job_ids
-                and stale_heartbeat
                 and owns_routes
+                and (stale_heartbeat or route_epoch_mismatch)
             )
             if not should_retrieve_history:
                 continue
@@ -5233,9 +4466,7 @@ def run_reconcile_cycle(
         sorted(
             job.id
             for job in jobs
-            if job.id in loss_latched_job_ids
-            or job.has_post_start_suspension
-            or job.id in resume_latched_job_ids
+            if job.id in loss_latched_job_ids or job.has_post_start_suspension
         )
     )
     final_heartbeat_job_ids = tuple(
@@ -5302,8 +4533,7 @@ def run_reconcile_cycle(
     destructive_sandbox_job_ids = {
         node.job_id
         for node in sandbox_nodes
-        if not node.job.is_final
-        and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
     }
     lost_sandbox_routes = tuple(
         route
@@ -5474,16 +4704,16 @@ def run_reconcile_cycle(
     requested_sandbox_stop_job_ids = stop_job_ids_from_decision(decision)
     requested_builder_stop_job_ids = stop_job_ids_from_decision(builder_decision)
     (
-        sandbox_stop_job_ids_with_evacuation_capacity,
-        blocked_evacuation_stop_job_ids,
-    ) = partition_evacuatable_direct_stop_job_ids(
+        sandbox_stop_job_ids_with_migration_capacity,
+        blocked_storage_native_migration_stop_job_ids,
+    ) = partition_storage_native_migratable_stop_job_ids(
         sandbox_nodes,
         requested_sandbox_stop_job_ids,
         route_reservations or {},
     )
     sandbox_stop_job_ids, blocked_sandbox_stop_job_ids = partition_safe_stop_job_ids(
         sandbox_nodes,
-        sandbox_stop_job_ids_with_evacuation_capacity,
+        sandbox_stop_job_ids_with_migration_capacity,
         deployment_id=config.deployment_id,
         allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=NODE_LABEL,
@@ -5498,14 +4728,12 @@ def run_reconcile_cycle(
     requested_lost_sandbox_job_ids = tuple(
         node.job_id
         for node in sandbox_nodes
-        if not node.job.is_final
-        and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
     )
     requested_lost_builder_job_ids = tuple(
         node.job_id
         for node in builder_nodes
-        if not node.job.is_final
-        and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
     )
     lost_sandbox_stop_job_ids, blocked_lost_sandbox_job_ids = (
         partition_safe_stop_job_ids(
@@ -5544,14 +4772,12 @@ def run_reconcile_cycle(
     builder_stop_job_ids = tuple(
         dict.fromkeys([*builder_stop_job_ids, *lost_builder_stop_job_ids])
     )
-    stop_job_ids = tuple(
-        dict.fromkeys([*sandbox_stop_job_ids, *builder_stop_job_ids])
-    )
+    stop_job_ids = tuple(dict.fromkeys([*sandbox_stop_job_ids, *builder_stop_job_ids]))
     blocked_stop_job_ids = tuple(
         dict.fromkeys(
             [
                 *blocked_sandbox_stop_job_ids,
-                *blocked_evacuation_stop_job_ids,
+                *blocked_storage_native_migration_stop_job_ids,
                 *blocked_builder_stop_job_ids,
                 *blocked_lost_sandbox_job_ids,
                 *blocked_lost_builder_job_ids,
@@ -5574,14 +4800,12 @@ def run_reconcile_cycle(
             sandbox_stop_job_ids = tuple(
                 job_id
                 for job_id in sandbox_stop_job_ids
-                if job_id not in canceling_job_ids
-                or job_id in destructive_stop_job_ids
+                if job_id not in canceling_job_ids or job_id in destructive_stop_job_ids
             )
             builder_stop_job_ids = tuple(
                 job_id
                 for job_id in builder_stop_job_ids
-                if job_id not in canceling_job_ids
-                or job_id in destructive_stop_job_ids
+                if job_id not in canceling_job_ids or job_id in destructive_stop_job_ids
             )
             stop_job_ids = (*sandbox_stop_job_ids, *builder_stop_job_ids)
             blocked_stop_job_ids = (*blocked_stop_job_ids, *blocked_canceling)
@@ -5597,12 +4821,12 @@ def run_reconcile_cycle(
     unreachable_stop_job_id_set = set(unreachable_stop_job_ids)
     active_drain_intents: list[DrainIntent] = []
     drain_results: list[dict[str, Any]] = []
-    evacuation_results: list[dict[str, Any]] = []
+    storage_native_migration_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
     canceled_drain_job_ids: list[str] = []
     remaining_migration_budget = max(
         0,
-        int(getattr(args, "max_migrations_per_cycle", 2)),
+        int(getattr(args, "max_storage_native_migrations_per_cycle", 2)),
     )
     migration_gateway_url = ""
     migration_gateway_error = ""
@@ -5712,23 +4936,26 @@ def run_reconcile_cycle(
                 drain_acknowledged
                 and intent.role == "sandbox"
                 and heartbeat is not None
-                and "sandbox-migrate-v2" in heartbeat.capabilities
+                and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
+                and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
                 and remaining_migration_budget > 0
             ):
                 parked_routes = [
                     route
                     for route in (route_reservations or {}).get(intent.job_id, ())
                     if (route.state or "unknown").lower() == "parked"
+                    and route.storage_schema == STORAGE_NATIVE_CAPABILITY
+                    and bool(route.snapshot_manifest_digest)
                 ]
                 for route in parked_routes[:remaining_migration_budget]:
-                    evacuation_error = migration_gateway_error
+                    migration_error = migration_gateway_error
                     migration_payload: dict[str, Any] = {}
-                    if not evacuation_error and not migration_gateway_url:
-                        evacuation_error = (
-                            "gateway control URL is required for direct-runtime "
-                            "drain evacuation"
+                    if not migration_error and not migration_gateway_url:
+                        migration_error = (
+                            "gateway control URL is required for storage-native "
+                            "drain migration"
                         )
-                    if not evacuation_error:
+                    if not migration_error:
                         try:
                             migration_payload = _post_gateway_sandbox_migration(
                                 migration_gateway_url,
@@ -5738,15 +4965,15 @@ def run_reconcile_cycle(
                         except Exception as exc:
                             # Migration is journaled by the gateway. An ambiguous
                             # request is safe to retry in a later autoscaler cycle.
-                            evacuation_error = str(exc)
-                    evacuation_results.append(
+                            migration_error = str(exc)
+                    storage_native_migration_results.append(
                         {
-                            "jobId": intent.job_id,
-                            "sandboxId": route.sandbox_id,
-                            "gatewayUrl": migration_gateway_url,
-                            "requestSucceeded": not evacuation_error,
+                            "job_id": intent.job_id,
+                            "sandbox_id": route.sandbox_id,
+                            "gateway_url": migration_gateway_url,
+                            "request_succeeded": not migration_error,
                             "migration": migration_payload.get("migration", {}),
-                            "error": evacuation_error,
+                            "error": migration_error,
                         }
                     )
                     remaining_migration_budget -= 1
@@ -6011,13 +5238,13 @@ def run_reconcile_cycle(
         "pendingImageBuilds": builder_pending,
         "activeImageBuilds": active_image_builds,
         "preparedBuilderCount": builder_prepared,
-        "unexpectedlySuspendedJobIds": sorted(
+        "unexpectedly_suspended_job_ids": sorted(
             node.job_id
             for node in (*sandbox_nodes, *builder_nodes)
             if node.job.is_unexpectedly_suspended
         ),
-        "destructivePowerCycleJobIds": list(destructive_power_cycle_job_ids),
-        "lostSandboxIds": [route.sandbox_id for route in lost_sandbox_routes],
+        "destructive_power_cycle_job_ids": list(destructive_power_cycle_job_ids),
+        "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
@@ -6030,18 +5257,20 @@ def run_reconcile_cycle(
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
-        "blockedEvacuationStopJobIds": list(blocked_evacuation_stop_job_ids),
+        "blocked_storage_native_migration_stop_job_ids": list(
+            blocked_storage_native_migration_stop_job_ids
+        ),
         "drainingJobIds": sorted(active_drain_job_ids),
         "cancelingDrainJobIds": sorted(canceling_drain_job_ids),
         "canceledDrainJobIds": sorted(canceled_drain_job_ids),
         "drainReadyStopJobIds": list(drain_ready_stop_job_ids),
         "unreachableReadyStopJobIds": list(unreachable_stop_job_ids),
-        "destructiveStopJobIds": list(destructive_stop_job_ids),
+        "destructive_stop_job_ids": list(destructive_stop_job_ids),
         "drainIntents": [
             _drain_intent_to_dict(intent) for intent in pending_drain_intents
         ],
         "drainResults": drain_results,
-        "evacuationResults": evacuation_results,
+        "storage_native_migration_results": storage_native_migration_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "fencedPowerCycleHeartbeats": sorted(
             set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
@@ -6052,7 +5281,6 @@ def run_reconcile_cycle(
         ],
         "bootstrapResults": list(completed_bootstrap_results),
         "executeCreates": bool(args.execute and execution_authorized),
-        "executeResumes": False,
         "executeStops": bool(args.execute_stops and execution_authorized),
         "executeInit": bool(
             getattr(args, "execute_init", False) and execution_authorized
@@ -6061,12 +5289,9 @@ def run_reconcile_cycle(
         "controllerLockHeld": provider_mutations_allowed,
         "blockedCreateRoles": sorted(blocked_create_roles),
         "createRecoveryResults": create_recovery_results,
-        "resumeRecoveryResults": resume_recovery_results,
         "stopRecoveryResults": stop_recovery_results,
         "createVisibilityGuards": create_visibility_guards,
         "providerOperationResults": provider_operation_results,
-        "resumeResponse": {"operations": []},
-        "resumedJobIds": [],
         "sandboxCapacityOperationSucceeded": False,
         "builderCapacityOperationSucceeded": False,
         "definitelyTerminatedJobIds": [],
@@ -6159,9 +5384,6 @@ def run_reconcile_cycle(
         if definitely_terminated:
             removed_stop_heartbeats = heartbeat_store.remove(definitely_terminated)
             result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
-    result["retiredResumeOperations"] = [
-        item for item in provider_operation_results if item.get("kind") == "resume"
-    ]
     result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
         provider_operation_results,
         decision.resource_deficit,
@@ -6640,50 +5862,45 @@ def _execute_vm_bootstrap_attempt(
             known_hosts_file=known_hosts_file,
         )
         stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
-        if stage_result is not None:
-            stage_duration_ms = stage_elapsed_ms
-            stage_payload = {
-                "localPath": str(stage_result.local_path),
-                "remotePath": stage_result.remote_path,
-                "command": list(stage_result.command),
-                "returncode": stage_result.returncode,
-                "durationMs": stage_duration_ms,
-                "reused": stage_result.reused,
-            }
-            if stage_result.returncode != 0:
-                error = (
-                    "package staging exited with status " f"{stage_result.returncode}"
-                )
-                retry_delay_seconds = _bootstrap_retry_delay_seconds(
-                    stage_result.returncode,
-                    attempt_count=attempt_count,
-                    configured_retry_seconds=int(
-                        getattr(args, "init_retry_seconds", 30)
-                    ),
-                )
-                return _VmBootstrapAttemptResult(
-                    result={
-                        "jobId": intent.job_id,
-                        "nodeId": intent.node_id,
-                        "role": intent.role,
-                        "returncode": stage_result.returncode,
-                        "status": "failed",
-                        "error": error,
-                        "packageStage": stage_payload,
-                        "durationMs": _elapsed_ms(attempt_started_perf),
-                        "retryDelaySeconds": retry_delay_seconds,
-                    },
-                    status="failed",
-                    returncode=stage_result.returncode,
-                    error=error,
-                    stage_duration_ms=stage_duration_ms,
-                    retry_delay_seconds=retry_delay_seconds,
-                )
-            effective_options = replace(
-                intent.options,
-                package_spec=stage_result.remote_path,
-                package_sha256=stage_result.package_sha256,
+        stage_duration_ms = stage_elapsed_ms
+        stage_payload = {
+            "localPath": str(stage_result.local_path),
+            "remotePath": stage_result.remote_path,
+            "command": list(stage_result.command),
+            "returncode": stage_result.returncode,
+            "durationMs": stage_duration_ms,
+            "reused": stage_result.reused,
+        }
+        if stage_result.returncode != 0:
+            error = "package staging exited with status " f"{stage_result.returncode}"
+            retry_delay_seconds = _bootstrap_retry_delay_seconds(
+                stage_result.returncode,
+                attempt_count=attempt_count,
+                configured_retry_seconds=int(getattr(args, "init_retry_seconds", 30)),
             )
+            return _VmBootstrapAttemptResult(
+                result={
+                    "jobId": intent.job_id,
+                    "nodeId": intent.node_id,
+                    "role": intent.role,
+                    "returncode": stage_result.returncode,
+                    "status": "failed",
+                    "error": error,
+                    "packageStage": stage_payload,
+                    "durationMs": _elapsed_ms(attempt_started_perf),
+                    "retryDelaySeconds": retry_delay_seconds,
+                },
+                status="failed",
+                returncode=stage_result.returncode,
+                error=error,
+                stage_duration_ms=stage_duration_ms,
+                retry_delay_seconds=retry_delay_seconds,
+            )
+        effective_options = replace(
+            intent.options,
+            package_spec=stage_result.remote_path,
+            package_sha256=stage_result.package_sha256,
+        )
 
         assert_provider_fence()
         run_started_perf = time.perf_counter()
@@ -6917,17 +6134,11 @@ def policy_with_cli_overrides(
             scale_down_idle_seconds=max(0, int(scale_down_seconds)),
         )
     capacity_factors = {
-        "cpu_overcommit": getattr(args, "init_cpu_overcommit", None),
-        "memory_overcommit": getattr(args, "init_memory_overcommit", None),
-        "disk_overcommit": getattr(args, "init_disk_overcommit", None),
+        "cpu_overcommit": 1.0,
+        "memory_overcommit": 1.0,
+        "disk_overcommit": 1.0,
     }
-    if str(getattr(args, "init_node_runtime", "legacy")) == "direct":
-        capacity_factors = {
-            "cpu_overcommit": 1.0,
-            "memory_overcommit": 1.0,
-            "disk_overcommit": 1.0,
-        }
-        effective = replace(effective, dynamic_active_admission_enabled=True)
+    effective = replace(effective, dynamic_active_admission_enabled=True)
     factor_updates: dict[str, float] = {}
     for field_name, raw_value in capacity_factors.items():
         if raw_value is None:
@@ -7061,37 +6272,36 @@ def sandbox_route_reservations(
     }
 
 
-def partition_evacuatable_direct_stop_job_ids(
+def partition_storage_native_migratable_stop_job_ids(
     nodes: list[SandboxNode],
     requested_job_ids: tuple[str, ...],
     routes_by_job: dict[str, tuple[SandboxRoute, ...]],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Do not replace a last disk-owning node merely to stop the old one.
+    """Block stops whose storage-native routes have no surviving destination.
 
-    A direct node with parked routes can scale down only when all of those
-    disk-only shapes fit on ready nodes that will remain after the same stop
-    batch. Otherwise migration would create replacement demand and preserve
-    the node count while needlessly copying every parked sandbox.
+    Parked routes migrate only between nodes advertising the storage-native
+    migration contract. At least one surviving destination must fit each
+    route's lifetime disk reservation.
     """
     if not requested_job_ids:
         return (), ()
     nodes_by_job_id = {node.job_id: node for node in nodes}
     remaining = list(dict.fromkeys(requested_job_ids))
     blocked: list[str] = []
-    while remaining and not _direct_stop_set_has_evacuation_capacity(
+    while remaining and not _storage_native_stop_set_has_migration_capacity(
         nodes,
         nodes_by_job_id,
         tuple(remaining),
         routes_by_job,
     ):
         # Preserve the policy's highest-priority stop and progressively keep
-        # later candidates as possible evacuation destinations.
+        # later candidates as possible migration destinations.
         blocked.append(remaining.pop())
     blocked.reverse()
     return tuple(remaining), tuple(blocked)
 
 
-def _direct_stop_set_has_evacuation_capacity(
+def _storage_native_stop_set_has_migration_capacity(
     nodes: list[SandboxNode],
     nodes_by_job_id: dict[str, SandboxNode],
     stop_job_ids: tuple[str, ...],
@@ -7099,7 +6309,6 @@ def _direct_stop_set_has_evacuation_capacity(
 ) -> bool:
     stop_set = set(stop_job_ids)
     parked_shapes: list[int] = []
-    storage_native_only = True
     for job_id in stop_job_ids:
         routes = routes_by_job.get(job_id, ())
         if not routes:
@@ -7111,18 +6320,19 @@ def _direct_stop_set_has_evacuation_capacity(
             and node.heartbeat_fresh
             and heartbeat is not None
             and heartbeat.inventory_complete
-            and "sandbox-migrate-v2" in heartbeat.capabilities
-            and all((route.state or "unknown").lower() == "parked" for route in routes)
+            and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
+            and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
+            and all(
+                (route.state or "unknown").lower() == "parked"
+                and route.storage_schema == STORAGE_NATIVE_CAPABILITY
+                and bool(route.snapshot_manifest_digest)
+                for route in routes
+            )
         ):
             return False
         for route in routes:
             if route.resources.disk_mb <= 0:
                 return False
-            storage_native_only = storage_native_only and bool(
-                "storage-native-v1" in heartbeat.capabilities
-                and route.storage_schema == "storage-native-v1"
-                and route.snapshot_manifest_digest
-            )
             parked_shapes.append(route.resources.disk_mb)
     if not parked_shapes:
         return True
@@ -7135,36 +6345,12 @@ def _direct_stop_set_has_evacuation_capacity(
         and (heartbeat := node.heartbeat) is not None
         and heartbeat.admission_open
         and not heartbeat.draining
-        and "sandbox-migrate-v2" in heartbeat.capabilities
-        and heartbeat.free_resources.disk_mb > 0
+        and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
+        and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
     ]
-    if storage_native_only:
-        storage_native_free_disk = [
-            heartbeat.free_resources.disk_mb
-            for node in nodes
-            if node.job_id not in stop_set
-            and node.is_ready
-            and (heartbeat := node.heartbeat) is not None
-            and heartbeat.admission_open
-            and not heartbeat.draining
-            and "storage-native-v1" in heartbeat.capabilities
-            and "sandbox-migrate-storage-native-v1" in heartbeat.capabilities
-        ]
-        return bool(
-            storage_native_free_disk
-            and max(parked_shapes) <= max(storage_native_free_disk)
-        )
-    for disk_mb in sorted(parked_shapes, reverse=True):
-        candidates = [
-            (free_disk, index)
-            for index, free_disk in enumerate(destination_free_disk)
-            if disk_mb <= free_disk
-        ]
-        if not candidates:
-            return False
-        _free_disk, destination_index = max(candidates)
-        destination_free_disk[destination_index] -= disk_mb
-    return True
+    return bool(
+        destination_free_disk and max(parked_shapes) <= max(destination_free_disk)
+    )
 
 
 def apply_route_reservations_to_heartbeats(
@@ -7182,9 +6368,7 @@ def apply_route_reservations_to_heartbeats(
             if not _heartbeat_inventory_contains_route(inventory, route)
         ]
         missing_resources = ResourceQuantity()
-        dynamic_active = (
-            DYNAMIC_ACTIVE_ADMISSION_CAPABILITY in heartbeat.capabilities
-        )
+        dynamic_active = DYNAMIC_ACTIVE_ADMISSION_CAPABILITY in heartbeat.capabilities
         for route in missing_routes:
             missing_resources = missing_resources + (
                 ResourceQuantity(disk_mb=route.resources.disk_mb)
@@ -7214,15 +6398,22 @@ def apply_route_reservations_to_nodes(
             node.heartbeat_fresh
             and heartbeat is not None
             and heartbeat.inventory_complete
-            and "sandbox-migrate-v2" in heartbeat.capabilities
+            and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
+            and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
+            and all(
+                (route.state or "unknown").lower() == "parked"
+                and route.storage_schema == STORAGE_NATIVE_CAPABILITY
+                and bool(route.snapshot_manifest_digest)
+                for route in routes_by_job.get(node.job_id, ())
+            )
         )
         reconciled.append(
             replace(
                 node,
-                # Direct-runtime parked ownership is disk inventory, not active
+                # Parked ownership is disk inventory, not active
                 # compute. A fresh complete inventory can therefore enter the
-                # evacuation drain workflow. Missing/stale/legacy observations
-                # retain the old conservative route-count fence.
+                # storage-native migration workflow. Missing or stale observations
+                # retain the conservative route-count fence.
                 active_sandboxes=(
                     node.active_sandboxes
                     if owns_movable_inventory
@@ -7260,10 +6451,7 @@ def build_activity_sandbox_warm_resources(
     policy: ScalePolicy,
 ) -> ResourceQuantity:
     del prepared_builder_count
-    if (
-        max(0, active_image_builds) <= 0
-        and max(0, pending_image_builds) <= 0
-    ):
+    if max(0, active_image_builds) <= 0 and max(0, pending_image_builds) <= 0:
         return ResourceQuantity()
     # A build proves that a sandbox node will probably be needed soon, but it
     # says nothing about the eventual sandbox shape. Reserve a small runnable
@@ -7411,19 +6599,10 @@ def vm_init_options_for_autoscaled_node(
         ),
     )
     swap_gb = 0 if role == "builder" else max(0, int(getattr(args, "init_swap_gb", 0)))
-    node_runtime = (
-        "legacy"
-        if role == "builder"
-        else str(getattr(args, "init_node_runtime", "legacy"))
-    )
     total_resources = resources_from_vm_job(
         node.job, config.policy.default_node_resources
     )
-    if (
-        docker_quota_image_gb > 0
-        and total_resources.disk_mb > 0
-        and node_runtime != "direct"
-    ):
+    if docker_quota_image_gb > 0 and total_resources.disk_mb > 0 and role == "builder":
         total_resources = replace(
             total_resources,
             disk_mb=min(total_resources.disk_mb, docker_quota_image_gb * 1024),
@@ -7440,10 +6619,9 @@ def vm_init_options_for_autoscaled_node(
         getattr(args, "init_disk_overcommit", None),
         config.policy.disk_overcommit,
     )
-    if role == "builder" or node_runtime == "direct":
-        cpu_overcommit = 1.0
-        memory_overcommit = 1.0
-        disk_overcommit = 1.0
+    cpu_overcommit = 1.0
+    memory_overcommit = 1.0
+    disk_overcommit = 1.0
     return VmInitOptions(
         job_id=node.job.id,
         heartbeat_url=str(getattr(args, "init_heartbeat_url", "") or ""),
@@ -7495,12 +6673,7 @@ def vm_init_options_for_autoscaled_node(
             getattr(args, "init_docker_insecure_registry", []) or []
         ),
         host_aliases=tuple(
-            alias
-            for alias in (
-                *(getattr(args, "init_host_alias", []) or []),
-                *(getattr(args, "init_host_alias_optional", []) or []),
-            )
-            if alias
+            alias for alias in (getattr(args, "init_host_alias", []) or []) if alias
         ),
         enable_image_builds=role == "builder",
         buildx_direct_push=(
@@ -7511,8 +6684,6 @@ def vm_init_options_for_autoscaled_node(
             if role == "builder"
             else ""
         ),
-        runtime_dry_run=bool(getattr(args, "init_runtime_dry_run", False)),
-        node_runtime=node_runtime,
         direct_runsc_commit=(
             ""
             if role == "builder"
@@ -7537,9 +6708,7 @@ def vm_init_options_for_autoscaled_node(
         storage_native_registry_url=(
             ""
             if role == "builder"
-            else str(
-                getattr(args, "init_storage_native_registry_url", "") or ""
-            )
+            else str(getattr(args, "init_storage_native_registry_url", "") or "")
         ),
         storage_native_repository=str(
             getattr(
@@ -7790,17 +6959,19 @@ def print_reconcile(
     print("Stop intents:")
     requested_stop_job_ids = tuple(result.get("requestedStopJobIds", []))
     blocked_stop_job_ids = tuple(result.get("blockedStopJobIds", []))
-    blocked_evacuation_job_ids = set(result.get("blockedEvacuationStopJobIds", []))
+    blocked_migration_job_ids = set(
+        result.get("blocked_storage_native_migration_stop_job_ids", [])
+    )
     if not requested_stop_job_ids:
         print("- none")
     for job_id in stop_job_ids:
         print(f"- {job_id}")
     for job_id in blocked_stop_job_ids:
-        if job_id in blocked_evacuation_job_ids:
-            print(f"- {job_id} (blocked: no net-gain evacuation destination)")
+        if job_id in blocked_migration_job_ids:
+            print(f"- {job_id} (blocked: no storage-native migration destination)")
         else:
             print(f"- {job_id} (blocked: missing matching deployment label)")
-    lost_job_ids = tuple(result.get("destructivePowerCycleJobIds", []))
+    lost_job_ids = tuple(result.get("destructive_power_cycle_job_ids", []))
     print("Destructive node-loss intents:")
     if not lost_job_ids:
         print("- none")
@@ -7838,15 +7009,15 @@ def print_reconcile(
     elif requested_stop_job_ids:
         if blocked_stop_job_ids:
             if result.get("executeStops"):
-                if set(blocked_stop_job_ids) == blocked_evacuation_job_ids:
+                if set(blocked_stop_job_ids) == blocked_migration_job_ids:
                     print(
-                        "No stop requests executed. Parked disk state has no "
-                        "net-gain evacuation destination."
+                        "No stop requests executed. Parked storage-native state "
+                        "has no migration destination."
                     )
                 else:
                     print(
                         "No stop requests executed. Some jobs lack a matching "
-                        "deployment label or evacuation destination."
+                        "deployment label or storage-native migration destination."
                     )
             else:
                 print(
@@ -7898,9 +7069,7 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         "unreachableNodes": decision.unreachable_nodes,
         "totalNodes": decision.total_nodes,
         "pendingResources": decision.pending_resources.to_dict(),
-        "suppressedPendingResources": (
-            decision.suppressed_pending_resources.to_dict()
-        ),
+        "suppressedPendingResources": (decision.suppressed_pending_resources.to_dict()),
         "pendingCount": decision.pending_count,
         "suppressedPendingCount": decision.suppressed_pending_count,
         "preparedResources": decision.prepared_resources.to_dict(),
@@ -7919,9 +7088,7 @@ def scale_decision_to_dict(decision: Any) -> dict[str, Any]:
         ),
         "pressureScaleUp": decision.pressure_scale_up,
         "createPressureScaleUp": decision.create_pressure_scale_up,
-        "effectiveScaleDownIdleSeconds": (
-            decision.effective_scale_down_idle_seconds
-        ),
+        "effectiveScaleDownIdleSeconds": (decision.effective_scale_down_idle_seconds),
         "reasons": list(decision.reasons),
     }
 
@@ -7940,9 +7107,7 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "target_cpu_utilization": policy.target_cpu_utilization,
         "target_memory_utilization": policy.target_memory_utilization,
         "max_memory_psi_full_avg10": policy.max_memory_psi_full_avg10,
-        "target_storage_queue_utilization": (
-            policy.target_storage_queue_utilization
-        ),
+        "target_storage_queue_utilization": (policy.target_storage_queue_utilization),
         "create_pressure_enabled": policy.create_pressure_enabled,
         "create_pressure_window_seconds": policy.create_pressure_window_seconds,
         "create_pressure_min_samples": policy.create_pressure_min_samples,
@@ -7956,14 +7121,10 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "pressure_scale_down_cooldown_seconds": (
             policy.pressure_scale_down_cooldown_seconds
         ),
-        "program_aware_autoscaling_enabled": (
-            policy.program_aware_autoscaling_enabled
-        ),
+        "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
-        "dynamic_active_admission_enabled": (
-            policy.dynamic_active_admission_enabled
-        ),
+        "dynamic_active_admission_enabled": (policy.dynamic_active_admission_enabled),
         "default_node_resources": policy.default_node_resources.to_dict(),
     }
 
@@ -8344,8 +7505,6 @@ def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOp
         enable_image_builds=args.enable_image_builds,
         buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
         buildx_cache_ref=str(getattr(args, "buildx_cache_ref", "") or ""),
-        runtime_dry_run=args.runtime_dry_run,
-        node_runtime=str(getattr(args, "node_runtime", "legacy")),
         direct_runsc_commit=str(getattr(args, "direct_runsc_commit", "") or ""),
         direct_network=str(getattr(args, "direct_network", "none") or "none"),
         direct_network_allow_tcp=tuple(
@@ -8438,20 +7597,15 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "dockerInsecureRegistries": list(options.docker_insecure_registries),
         "hostAliases": list(options.host_aliases),
         "enableImageBuilds": options.enable_image_builds,
-        "runtimeDryRun": options.runtime_dry_run,
-        "nodeRuntime": options.node_runtime,
+        "role": "builder" if options.enable_image_builds else "sandbox",
         "directRunscCommit": options.direct_runsc_commit,
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
         "storageNativeCacheGb": options.storage_native_cache_gb,
-        "storageNativePoolLowWatermark": (
-            options.storage_native_pool_low_watermark
-        ),
-        "storageNativePoolHighWatermark": (
-            options.storage_native_pool_high_watermark
-        ),
+        "storageNativePoolLowWatermark": (options.storage_native_pool_low_watermark),
+        "storageNativePoolHighWatermark": (options.storage_native_pool_high_watermark),
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
         "maxConcurrentImagePulls": options.max_concurrent_image_pulls,

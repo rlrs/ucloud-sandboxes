@@ -1,9 +1,8 @@
 # Distributed sandbox state protocol
 
-This document defines the compatibility target for durable sandbox operations.
-It is intentionally stricter than the legacy `sandbox_id`-only API. New fields
-are additive during rollout, but a component must not claim the safety
-properties below until it persists and enforces them.
+This document defines the required contract for durable sandbox operations.
+Every component persists and enforces these properties; there is no reduced
+or generation-zero protocol.
 
 ## Identity and fencing
 
@@ -11,7 +10,7 @@ A sandbox incarnation is identified by:
 
 - `deployment_id`: prevents cross-deployment admission.
 - `sandbox_id`: stable user-facing name.
-- `generation`: monotonically increasing integer allocated by the control
+- `generation`: positive, monotonically increasing integer allocated by the control
   plane. A generation is never reused, including after deletion.
 - `operation_id`: stable random identifier for one create, delete, or cancel
   intent. Every retry of that intent reuses the identifier.
@@ -21,9 +20,6 @@ A sandbox incarnation is identified by:
 The node retains a tombstone containing the greatest accepted generation after
 deletion. A delayed request at or below that generation cannot recreate or
 delete a later incarnation.
-
-Legacy requests have generation zero. They may create a new legacy record, but
-must never mutate a record or tombstone whose generation is greater than zero.
 
 ## Durable operation order
 
@@ -95,13 +91,3 @@ explicitly.
 The process lock cannot cancel an already in-flight provider request.
 Consequently, the operation journal and provider labels remain required even
 with one local mutating controller.
-
-## Rollout order
-
-1. Deploy readers for the additive heartbeat, route, and store fields.
-2. Deploy node persistence, runtime-label recovery, and idempotent mutation
-   enforcement.
-3. Enable control-plane generation/operation envelopes and reconciliation.
-4. Enable the drain handshake and provider-operation recovery.
-5. Remove generation-zero mutation compatibility only after all nodes advertise
-   the generation protocol capability.

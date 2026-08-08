@@ -21,7 +21,11 @@ import threading
 import time
 from typing import Any, Protocol
 
-from .storage_native import AgentEnvUblkClient, StorageNativeDevice
+from .storage_native import (
+    AgentEnvUblkClient,
+    StorageNativeDevice,
+    StorageNativeDeviceOwner,
+)
 from .storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
@@ -54,6 +58,10 @@ class StorageNativeConflictError(StorageNativeNodeError):
 
 
 class StorageNativePendingOperation(StorageNativeConflictError):
+    pass
+
+
+class _StorageNativeBackendReleasePending(StorageNativeNodeError):
     pass
 
 
@@ -130,6 +138,7 @@ class StorageVolumeRecord:
     runtime_dir: str
     mount_path: str
     source_image_config: str
+    device_owner_id: str
     device_id: int | None = None
     device_path: str = ""
     runtime_image_config: str = ""
@@ -155,7 +164,9 @@ class StorageVolumeRecord:
             if not _SAFE_ID.fullmatch(value):
                 raise ValueError(f"{label} is invalid")
         if self.sandbox_generation < 0 or self.revision < 0:
-            raise ValueError("storage-native generations and revisions must be non-negative")
+            raise ValueError(
+                "storage-native generations and revisions must be non-negative"
+            )
         if self.virtual_size <= 0:
             raise ValueError("storage-native virtual size must be positive")
         for label, raw in (
@@ -167,6 +178,10 @@ class StorageVolumeRecord:
                 raise ValueError(f"{label} must be absolute")
         if self.device_id is not None and self.device_id < 0:
             raise ValueError("device_id must be non-negative")
+        if self.device_owner_id and not _SAFE_ID.fullmatch(self.device_owner_id):
+            raise ValueError("device_owner_id is invalid")
+        if self.device_id is not None and not self.device_owner_id:
+            raise ValueError("journaled devices require an owner identity")
         for raw in (
             self.device_path,
             self.runtime_image_config,
@@ -209,13 +224,9 @@ class StorageVolumeRecord:
     def from_json(cls, raw: dict[str, Any]) -> "StorageVolumeRecord":
         payload = dict(raw)
         payload["state"] = StorageVolumeState(str(payload["state"]))
-        payload["sealed_layer_paths"] = tuple(
-            payload.get("sealed_layer_paths", ())
-        )
+        payload["sealed_layer_paths"] = tuple(payload.get("sealed_layer_paths", ()))
         payload["published_layers"] = tuple(payload.get("published_layers", ()))
-        payload["cached_layer_paths"] = tuple(
-            payload.get("cached_layer_paths", ())
-        )
+        payload["cached_layer_paths"] = tuple(payload.get("cached_layer_paths", ()))
         return cls(**payload)
 
 
@@ -233,7 +244,12 @@ class StorageBlockBackend(Protocol):
         runtime_dir: Path,
         virtual_size: int,
         upper_mode: str,
+        owner_id: str,
     ) -> StorageNativeDevice: ...
+
+    def list_runtime_device_owners(
+        self,
+    ) -> tuple[StorageNativeDeviceOwner, ...]: ...
 
     def restack_snapshot(
         self,
@@ -468,14 +484,11 @@ class StorageNativeJournal:
                 (record.volume_id,),
             ).fetchone()
             if existing_row is not None:
-                existing = StorageVolumeRecord.from_json(
-                    json.loads(existing_row[0])
-                )
+                existing = StorageVolumeRecord.from_json(json.loads(existing_row[0]))
                 if (
                     existing.state != StorageVolumeState.DELETED
                     or existing.sandbox_id != record.sandbox_id
-                    or existing.sandbox_generation
-                    != record.sandbox_generation
+                    or existing.sandbox_generation != record.sandbox_generation
                 ):
                     raise StorageNativeConflictError("volume_id already exists")
                 record = replace(
@@ -533,9 +546,10 @@ class StorageNativeJournal:
                 reserved = connection.execute(
                     (
                         "SELECT COALESCE(SUM(virtual_size), 0) FROM volumes "
-                        f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)})"
+                        f"WHERE state IN ({','.join('?' for _ in _ACTIVE_CAPACITY_STATES)}) "
+                        "AND volume_id != ?"
                     ),
-                    tuple(sorted(_ACTIVE_CAPACITY_STATES)),
+                    (*sorted(_ACTIVE_CAPACITY_STATES), record.volume_id),
                 ).fetchone()[0]
                 if int(reserved) + record.virtual_size > hard_capacity_bytes:
                     raise StorageNativeConflictError(
@@ -638,12 +652,12 @@ class StorageNativeJournal:
         self,
         record: StorageVolumeRecord,
         *,
-        fallback_state: StorageVolumeState,
+        failure_state: StorageVolumeState,
         error: str,
     ) -> StorageVolumeRecord:
         recovered = replace(
             record,
-            state=fallback_state,
+            state=failure_state,
             error=error[:4096],
             updated_ns=time.time_ns(),
         )
@@ -891,15 +905,9 @@ class StorageNativeNodeService:
                     continue
         live_device_ids = self.host.ublk_device_ids()
         active_device_ids = {
-            record.device_id
-            for record in records
-            if record.device_id is not None
+            owner.device_id for owner in self._backend_ownership().values()
         }
-        idle_device_ids = (
-            live_device_ids - active_device_ids
-            if self.config.device_pool_enabled
-            else set()
-        )
+        idle_device_ids = live_device_ids - active_device_ids
         with self._pool_metrics_lock:
             pool_metrics = {
                 "device_pool_acquires": self._pool_acquires,
@@ -911,12 +919,8 @@ class StorageNativeNodeService:
         return {
             "cache_bytes": cache_bytes,
             "device_pool_enabled": self.config.device_pool_enabled,
-            "device_pool_low_watermark": (
-                self.config.device_pool_low_watermark
-            ),
-            "device_pool_high_watermark": (
-                self.config.device_pool_high_watermark
-            ),
+            "device_pool_low_watermark": (self.config.device_pool_low_watermark),
+            "device_pool_high_watermark": (self.config.device_pool_high_watermark),
             "device_pool_idle_devices": len(idle_device_ids),
             "ublk_active_devices": len(active_device_ids & live_device_ids),
             "ublk_live_devices": len(live_device_ids),
@@ -977,6 +981,11 @@ class StorageNativeNodeService:
             runtime_dir=str(volume_root / "runtime"),
             mount_path=str(self.config.mount_root / volume_id),
             source_image_config=str(volume_root / "source.json"),
+            device_owner_id=_device_owner_id(
+                volume_id=volume_id,
+                revision=1,
+                operation_id=operation_id,
+            ),
             accounting_id=accounting_id,
             updated_ns=time.time_ns(),
         )
@@ -1002,6 +1011,7 @@ class StorageNativeNodeService:
                 source_image_config=source,
                 runtime_dir=runtime_dir,
                 virtual_size=virtual_size,
+                owner_id=record.device_owner_id,
             )
             if device.virtual_size != virtual_size:
                 raise StorageNativeTerminalError(
@@ -1067,16 +1077,13 @@ class StorageNativeNodeService:
             runtime_dir=str(volume_root / "runtime"),
             mount_path=str(self.config.mount_root / volume_id),
             source_image_config=str(volume_root / "source.json"),
-            sealed_layer_bytes=sum(
-                layer.size for layer in publication.layers
-            ),
+            device_owner_id="",
+            sealed_layer_bytes=sum(layer.size for layer in publication.layers),
             published_manifest_digest=publication.manifest_digest,
             published_tag=publication.tag,
             published_repository=publication.repository,
             published_repo_blob_url=publication.repo_blob_url,
-            published_layers=tuple(
-                layer.to_dict() for layer in publication.layers
-            ),
+            published_layers=tuple(layer.to_dict() for layer in publication.layers),
             accounting_id=accounting_id,
             updated_ns=time.time_ns(),
         )
@@ -1091,9 +1098,7 @@ class StorageNativeNodeService:
                 Path(record.source_image_config),
                 {
                     "repoBlobUrl": publication.repo_blob_url,
-                    "lowers": [
-                        layer.to_dict() for layer in publication.layers
-                    ],
+                    "lowers": [layer.to_dict() for layer in publication.layers],
                     "resultFile": "",
                     "upper": {},
                 },
@@ -1153,8 +1158,10 @@ class StorageNativeNodeService:
             self.journal.fail(pending, "mounted volume has no block device")
             raise StorageNativeTerminalError("mounted volume has no block device")
         mount_path = Path(pending.mount_path)
-        layer_path = Path(pending.runtime_dir) / "layers" / (
-            f"revision-{pending.revision}.commit"
+        layer_path = (
+            Path(pending.runtime_dir)
+            / "layers"
+            / (f"revision-{pending.revision}.commit")
         )
         layer_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         frozen = False
@@ -1236,9 +1243,7 @@ class StorageNativeNodeService:
             return pending.result
         if not pending.sealed_layer_paths and not pending.published_layers:
             self.journal.fail(pending, "released volume has no sealed layers")
-            raise StorageNativeTerminalError(
-                "released volume has no sealed layers"
-            )
+            raise StorageNativeTerminalError("released volume has no sealed layers")
         volume_root = self._volume_root(volume_id)
         runtime_dir = volume_root / f"runtime-{pending.revision}"
         source = volume_root / f"source-{pending.revision}.json"
@@ -1246,6 +1251,11 @@ class StorageNativeNodeService:
             pending,
             runtime_dir=str(runtime_dir),
             source_image_config=str(source),
+            device_owner_id=_device_owner_id(
+                volume_id=volume_id,
+                revision=pending.revision,
+                operation_id=operation_id,
+            ),
             updated_ns=time.time_ns(),
         )
         self.journal.update_pending(pending)
@@ -1253,10 +1263,7 @@ class StorageNativeNodeService:
             source_config = {
                 "lowers": [
                     *(dict(layer) for layer in pending.published_layers),
-                    *(
-                        {"file": path}
-                        for path in pending.sealed_layer_paths
-                    ),
+                    *({"file": path} for path in pending.sealed_layer_paths),
                 ],
                 "resultFile": "",
                 "upper": {},
@@ -1268,6 +1275,7 @@ class StorageNativeNodeService:
                 source_image_config=source,
                 runtime_dir=runtime_dir,
                 virtual_size=pending.virtual_size,
+                owner_id=pending.device_owner_id,
             )
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
@@ -1348,6 +1356,7 @@ class StorageNativeNodeService:
                     if pending.published_layers
                     else StorageVolumeState.RELEASED
                 ),
+                device_owner_id="",
                 device_id=None,
                 device_path="",
                 runtime_image_config="",
@@ -1399,6 +1408,7 @@ class StorageNativeNodeService:
             record = replace(
                 pending,
                 state=StorageVolumeState.RELEASED,
+                device_owner_id="",
                 device_id=None,
                 device_path="",
                 runtime_image_config="",
@@ -1448,7 +1458,7 @@ class StorageNativeNodeService:
         if not pending.sealed_layer_paths:
             self.journal.fail_transition(
                 pending,
-                fallback_state=StorageVolumeState.RELEASED,
+                failure_state=StorageVolumeState.RELEASED,
                 error="released volume has no unpublished sealed layer",
             )
             raise StorageNativeConflictError(
@@ -1478,16 +1488,12 @@ class StorageNativeNodeService:
                     *pending.cached_layer_paths,
                     *(str(path) for path in local_paths),
                 ),
-                sealed_layer_bytes=sum(
-                    layer.size for layer in publication.layers
-                ),
+                sealed_layer_bytes=sum(layer.size for layer in publication.layers),
                 published_manifest_digest=publication.manifest_digest,
                 published_tag=publication.tag,
                 published_repository=publication.repository,
                 published_repo_blob_url=publication.repo_blob_url,
-                published_layers=tuple(
-                    layer.to_dict() for layer in publication.layers
-                ),
+                published_layers=tuple(layer.to_dict() for layer in publication.layers),
                 updated_ns=time.time_ns(),
             )
             result = {
@@ -1500,7 +1506,7 @@ class StorageNativeNodeService:
         except BaseException as exc:
             self.journal.fail_transition(
                 pending,
-                fallback_state=StorageVolumeState.RELEASED,
+                failure_state=StorageVolumeState.RELEASED,
                 error=f"{type(exc).__name__}: {exc}",
             )
             raise
@@ -1542,75 +1548,75 @@ class StorageNativeNodeService:
         if isinstance(pending, OperationReplay):
             return pending.result
         try:
-            self._best_effort_release(pending)
-            volume_root = self._volume_root(volume_id)
-            if volume_root.exists():
-                if volume_root.is_symlink() or not volume_root.is_dir():
-                    raise StorageNativeTerminalError(
-                        "volume root is not a real directory"
-                    )
-                shutil.rmtree(volume_root)
-            mount_path = Path(pending.mount_path)
-            if mount_path.exists():
-                mount_path.rmdir()
-            record = replace(
+            return self._complete_delete(pending)
+        except _StorageNativeBackendReleasePending as exc:
+            waiting = replace(
                 pending,
-                state=StorageVolumeState.DELETED,
-                device_id=None,
-                device_path="",
-                runtime_image_config="",
-                sealed_layer_path="",
-                sealed_layer_bytes=0,
-                sealed_layer_paths=(),
-                cached_layer_paths=(),
-                published_manifest_digest="",
-                published_tag="",
-                published_repository="",
-                published_repo_blob_url="",
-                published_layers=(),
+                error=f"{type(exc).__name__}: {exc}"[:4096],
                 updated_ns=time.time_ns(),
             )
-            result = self._record_result(record)
-            self.journal.finish(record, result)
-            return result
+            self.journal.update_pending(waiting)
+            raise StorageNativePendingOperation(
+                "delete is waiting for backend device release"
+            ) from exc
         except BaseException as exc:
-            self.journal.fail(pending, f"{type(exc).__name__}: {exc}")
+            current = self.journal.load(volume_id) or pending
+            self.journal.fail(current, f"{type(exc).__name__}: {exc}")
             raise
 
     def reconcile(self) -> dict[str, Any]:
-        records = self.journal.list()
+        records = list(self.journal.list())
         live_devices = self.host.ublk_device_ids()
-        owned_devices = {
-            record.device_id
-            for record in records
-            if record.device_id is not None
+        backend_owners = self._backend_ownership()
+        expected_owner_ids = {
+            record.device_owner_id for record in records if record.device_owner_id
         }
-        # With pooling enabled, unjournaled live devices are daemon-owned idle
-        # placeholders.  The backend, not this service, owns their high-water
-        # cleanup.  In non-pooled compatibility mode they remain true orphans.
-        orphan_devices = (
-            []
-            if self.config.device_pool_enabled
-            else sorted(live_devices - owned_devices)
+        orphan_devices = sorted(
+            owner.device_id
+            for owner_id, owner in backend_owners.items()
+            if owner_id not in expected_owner_ids
         )
         deleted_orphans: list[int] = []
         for device_id in orphan_devices:
-            self.backend.delete(device_id)
+            self._discard_backend_device(device_id)
             deleted_orphans.append(device_id)
 
         errors: list[dict[str, Any]] = []
-        for record in records:
-            if record.state in {
-                StorageVolumeState.MOUNTED,
-                StorageVolumeState.ACQUIRING,
-                StorageVolumeState.SEALING,
-                StorageVolumeState.SEALED,
-            } and (
-                record.device_id is None or record.device_id not in live_devices
+        for index, original in enumerate(records):
+            record = original
+            owner = (
+                backend_owners.get(record.device_owner_id)
+                if record.device_owner_id
+                else None
+            )
+            if record.device_id is None and owner is not None:
+                record = replace(
+                    record,
+                    device_id=owner.device_id,
+                    device_path=str(owner.device_path),
+                    runtime_image_config=str(owner.image_config_path),
+                    updated_ns=time.time_ns(),
+                )
+                self.journal.update_pending(record)
+                records[index] = record
+            owner_matches = (
+                owner is not None
+                and record.device_id == owner.device_id
+                and record.device_id in live_devices
+            )
+            if (
+                record.state
+                in {
+                    StorageVolumeState.MOUNTED,
+                    StorageVolumeState.ACQUIRING,
+                    StorageVolumeState.SEALING,
+                    StorageVolumeState.SEALED,
+                }
+                and not owner_matches
             ):
                 updated = self.journal.mark_reconcile_error(
                     record,
-                    "journaled live block device is missing",
+                    "journaled block device ownership is missing or mismatched",
                 )
                 errors.append(self._record_result(updated))
                 continue
@@ -1652,6 +1658,7 @@ class StorageNativeNodeService:
                 updated = replace(
                     record,
                     state=StorageVolumeState.RELEASED,
+                    device_owner_id="",
                     device_id=None,
                     device_path="",
                     runtime_image_config="",
@@ -1662,7 +1669,7 @@ class StorageNativeNodeService:
             elif record.state == StorageVolumeState.PUBLISHING:
                 updated = self.journal.fail_transition(
                     record,
-                    fallback_state=StorageVolumeState.RELEASED,
+                    failure_state=StorageVolumeState.RELEASED,
                     error=(
                         "snapshot publication was interrupted; retry with a "
                         "new operation id"
@@ -1674,12 +1681,23 @@ class StorageNativeNodeService:
                     tuple(Path(path) for path in record.cached_layer_paths)
                 )
             elif record.state == StorageVolumeState.DELETING:
-                self._best_effort_release(record)
-                updated = self.journal.mark_reconcile_error(
-                    record,
-                    "delete was interrupted and requires an idempotent retry",
-                )
-                errors.append(self._record_result(updated))
+                try:
+                    self._complete_delete(record)
+                except _StorageNativeBackendReleasePending as exc:
+                    waiting = replace(
+                        record,
+                        error=f"{type(exc).__name__}: {exc}"[:4096],
+                        updated_ns=time.time_ns(),
+                    )
+                    self.journal.update_pending(waiting)
+                    errors.append(self._record_result(waiting))
+                except BaseException as exc:
+                    current = self.journal.load(record.volume_id) or record
+                    updated = self.journal.mark_reconcile_error(
+                        current,
+                        f"delete reconciliation failed: {type(exc).__name__}: {exc}",
+                    )
+                    errors.append(self._record_result(updated))
 
         return {
             "deleted_orphan_device_ids": deleted_orphans,
@@ -1687,10 +1705,69 @@ class StorageNativeNodeService:
             "volume_count": len(records),
         }
 
-    def _best_effort_release(self, record: StorageVolumeRecord) -> None:
+    def _complete_delete(self, record: StorageVolumeRecord) -> dict[str, Any]:
+        self._best_effort_release(record, require_backend=True)
+        released = replace(
+            record,
+            device_owner_id="",
+            device_id=None,
+            device_path="",
+            runtime_image_config="",
+            error="",
+            updated_ns=time.time_ns(),
+        )
+        if released != record:
+            # Persist the backend ownership transfer before local cleanup. A
+            # crash after an acknowledged release must not retry the release
+            # against a device that is already idle in the warm pool.
+            self.journal.update_pending(released)
+        volume_root = self._volume_root(record.volume_id)
+        if volume_root.exists():
+            if volume_root.is_symlink() or not volume_root.is_dir():
+                raise StorageNativeTerminalError("volume root is not a real directory")
+            shutil.rmtree(volume_root)
+        mount_path = Path(record.mount_path)
+        if mount_path.exists():
+            mount_path.rmdir()
+        deleted = replace(
+            released,
+            state=StorageVolumeState.DELETED,
+            sealed_layer_path="",
+            sealed_layer_bytes=0,
+            sealed_layer_paths=(),
+            cached_layer_paths=(),
+            published_manifest_digest="",
+            published_tag="",
+            published_repository="",
+            published_repo_blob_url="",
+            published_layers=(),
+            updated_ns=time.time_ns(),
+        )
+        result = self._record_result(deleted)
+        self.journal.finish(deleted, result)
+        return result
+
+    def _best_effort_release(
+        self,
+        record: StorageVolumeRecord,
+        *,
+        require_backend: bool = False,
+    ) -> None:
         mount_path = Path(record.mount_path)
         mounted = True
         safe_to_pool = True
+        device_id = record.device_id
+        if device_id is None and record.device_owner_id:
+            try:
+                owner = self._backend_ownership().get(record.device_owner_id)
+            except Exception as exc:
+                if require_backend:
+                    raise _StorageNativeBackendReleasePending(
+                        "cannot inspect backend device ownership"
+                    ) from exc
+                owner = None
+            if owner is not None:
+                device_id = owner.device_id
         try:
             mounted = self.host.is_mounted(mount_path)
             if mounted:
@@ -1707,16 +1784,32 @@ class StorageNativeNodeService:
                     self.host.detach(mount_path)
                 except Exception:
                     pass
-        if record.device_id is not None:
+        if device_id is not None:
+            if require_backend:
+                try:
+                    owner = self._backend_ownership().get(record.device_owner_id)
+                    if owner is None:
+                        return
+                    if owner.device_id != device_id:
+                        raise StorageNativeNodeError(
+                            "backend owner identity points to another device"
+                        )
+                except Exception as exc:
+                    raise _StorageNativeBackendReleasePending(
+                        f"cannot inspect backend device {device_id}: {exc}"
+                    ) from exc
             try:
                 if not safe_to_pool:
                     # A lazy-detached or otherwise questionable mount must
                     # never be rebound to another sandbox through the pool.
-                    self._discard_backend_device(record.device_id)
+                    self._discard_backend_device(device_id)
                 else:
-                    self._release_backend_device(record.device_id)
-            except Exception:
-                pass
+                    self._release_backend_device(device_id)
+            except Exception as exc:
+                if require_backend:
+                    raise _StorageNativeBackendReleasePending(
+                        f"cannot release backend device {device_id}: {exc}"
+                    ) from exc
 
     def _acquire_runtime_device(
         self,
@@ -1724,14 +1817,11 @@ class StorageNativeNodeService:
         source_image_config: Path,
         runtime_dir: Path,
         virtual_size: int,
+        owner_id: str,
     ) -> StorageNativeDevice:
         idle_before = (
             self.host.ublk_device_ids()
-            - {
-                record.device_id
-                for record in self.journal.list()
-                if record.device_id is not None
-            }
+            - {owner.device_id for owner in self._backend_ownership().values()}
             if self.config.device_pool_enabled
             else set()
         )
@@ -1741,6 +1831,7 @@ class StorageNativeNodeService:
             runtime_dir=runtime_dir,
             virtual_size=virtual_size,
             upper_mode=self.config.upper_mode,
+            owner_id=owner_id,
         )
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
@@ -1755,6 +1846,19 @@ class StorageNativeNodeService:
                 else:
                     self._pool_new_acquires += 1
         return device
+
+    def _backend_ownership(self) -> dict[str, StorageNativeDeviceOwner]:
+        owners = self.backend.list_runtime_device_owners()
+        by_owner = {owner.owner_id: owner for owner in owners}
+        if len(by_owner) != len(owners):
+            raise StorageNativeNodeError(
+                "block backend returned duplicate device owner identities"
+            )
+        if len({owner.device_id for owner in owners}) != len(owners):
+            raise StorageNativeNodeError(
+                "block backend returned duplicate owned device ids"
+            )
+        return by_owner
 
     def _release_backend_device(self, device_id: int) -> None:
         if not self.config.device_pool_enabled:
@@ -2029,9 +2133,9 @@ class StorageNativeNodeClient:
         return self._call({"operation": "ListVolumes"})
 
     def _call(self, request: dict[str, Any]) -> dict[str, Any]:
-        payload = _canonical_json(
-            {"schema": _PROTOCOL_SCHEMA, **request}
-        ).encode("ascii")
+        payload = _canonical_json({"schema": _PROTOCOL_SCHEMA, **request}).encode(
+            "ascii"
+        )
         if len(payload) > _PROTOCOL_MAX_BYTES:
             raise ValueError("storage-native service request is too large")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
@@ -2073,9 +2177,7 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             size = struct.unpack(">I", _recv_exact(self.request, 4))[0]
             if size > _PROTOCOL_MAX_BYTES:
                 raise ValueError("storage-native request is too large")
-            request = json.loads(
-                _recv_exact(self.request, size).decode("utf-8")
-            )
+            request = json.loads(_recv_exact(self.request, size).decode("utf-8"))
             if not isinstance(request, dict):
                 raise ValueError("storage-native request must be an object")
             if request.get("operation") in {"GetFeatures", "GetMetrics"}:
@@ -2253,20 +2355,13 @@ class _StorageNativeUnixServer(
                 return self.service.publish_snapshot(**arguments)
             return self.service.release_runtime(**arguments)
         if operation == "GetVolume":
-            record = self.service.journal.load(
-                _string_field(request, "volume_id")
-            )
+            record = self.service.journal.load(_string_field(request, "volume_id"))
             if record is None:
-                raise StorageNativeConflictError(
-                    "storage-native volume does not exist"
-                )
+                raise StorageNativeConflictError("storage-native volume does not exist")
             return self.service._record_result(record)
         if operation == "ListVolumes":
             return {
-                "records": [
-                    record.to_json()
-                    for record in self.service.journal.list()
-                ]
+                "records": [record.to_json() for record in self.service.journal.list()]
             }
         if operation == "Reconcile":
             return self.service.reconcile()
@@ -2358,6 +2453,22 @@ def _canonical_json(payload: Any) -> str:
 
 def _request_sha256(request: dict[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(request).encode("ascii")).hexdigest()
+
+
+def _device_owner_id(
+    *,
+    volume_id: str,
+    revision: int,
+    operation_id: str,
+) -> str:
+    identity = _canonical_json(
+        {
+            "operation_id": operation_id,
+            "revision": revision,
+            "volume_id": volume_id,
+        }
+    )
+    return f"device:{hashlib.sha256(identity.encode('ascii')).hexdigest()}"
 
 
 def _is_sha256_digest(value: str) -> bool:

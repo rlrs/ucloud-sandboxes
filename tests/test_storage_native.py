@@ -60,6 +60,38 @@ class FakeUblkDaemon:
 
 
 class StorageNativeTests(unittest.TestCase):
+    def test_owner_inventory_protocol(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            socket_path = root / "ublk.sock"
+            with FakeUblkDaemon(
+                socket_path,
+                [
+                    {
+                        "status": "exclusive_owners",
+                        "owners": [
+                            {
+                                "owner_id": "device:test-runtime",
+                                "dev_id": 7,
+                                "device_path": "/dev/ublkb7",
+                                "image_config_path": str(root / "runtime/image.json"),
+                            }
+                        ],
+                    }
+                ],
+            ) as daemon:
+                owners = AgentEnvUblkClient(
+                    socket_path
+                ).list_runtime_device_owners()
+
+            self.assertEqual(len(owners), 1)
+            self.assertEqual(owners[0].owner_id, "device:test-runtime")
+            self.assertEqual(owners[0].device_id, 7)
+            self.assertEqual(
+                daemon.requests,
+                [{"kind": "list_exclusive_owners"}],
+            )
+
     def test_runtime_device_and_snapshot_protocol(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -95,6 +127,7 @@ class StorageNativeTests(unittest.TestCase):
                     global_config=(root / "global.json").resolve(),
                     runtime_dir=(root / "runtime").resolve(),
                     virtual_size=1 << 30,
+                    owner_id="device:test-runtime",
                 )
                 layer = client.restack_snapshot(
                     device.device_id,
@@ -121,6 +154,7 @@ class StorageNativeTests(unittest.TestCase):
                     "global_config": str((root / "global.json").resolve()),
                     "kind": "create_overlaybd_runtime_device",
                     "known_source_virtual_size": 1 << 30,
+                    "owner_id": "device:test-runtime",
                     "read_only": False,
                     "requested_virtual_size": 1 << 30,
                     "runtime_dir": str((root / "runtime").resolve()),
@@ -171,6 +205,7 @@ class StorageNativeTests(unittest.TestCase):
                 global_config=Path("/tmp/global.json"),
                 runtime_dir=Path("/tmp/runtime"),
                 virtual_size=0,
+                owner_id="device:test-invalid-size",
             )
 
 

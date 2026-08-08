@@ -43,7 +43,15 @@ class AgentTests(unittest.TestCase):
             labels={"pool": "default"},
             node_epoch="boot-1",
             activity_epoch=4,
-            inventory=(SandboxInventoryEntry(sandbox_id="sandbox-1", generation=2),),
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id="sandbox-1",
+                    generation=2,
+                    operation_id="operation-2",
+                    spec_hash="a" * 64,
+                    state="running",
+                ),
+            ),
             inventory_complete=True,
             reserved_resources=ResourceQuantity(vcpu=0.5, memory_mb=512, disk_mb=256),
             physical_disk_total_mb=200_000,
@@ -107,9 +115,9 @@ class AgentTests(unittest.TestCase):
 
         self.assertEqual(heartbeat.free_resources.disk_mb, 8_384)
 
-    def test_legacy_free_disk_ignores_storage_native_only_metrics(self) -> None:
+    def test_non_storage_native_free_disk_ignores_daemon_metrics(self) -> None:
         heartbeat = build_heartbeat(
-            job_id="legacy-node",
+            job_id="builder-node",
             capabilities=("disk-quota",),
             total_resources=ResourceQuantity(disk_mb=1_449_984),
             used_resources=ResourceQuantity(disk_mb=17_472),

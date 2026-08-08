@@ -12,8 +12,9 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+from threading import Lock
 import time
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypeVar
 from uuid import uuid4
 
 from aiohttp import web
@@ -26,6 +27,7 @@ ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
 REGISTRATION_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,127}$")
+SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
 DEFAULT_WORKER_LEASE_SECONDS = 600.0
@@ -35,6 +37,7 @@ DEFAULT_MAX_INFLIGHT_REQUESTS = 4096
 DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT = 1024
 DEFAULT_MAX_INFLIGHT_BYTES = 128 * 1024**2
 DEFAULT_MAX_COMPLETED_REQUESTS = 8192
+DEFAULT_MAX_COMPLETED_BYTES = 256 * 1024**2
 DEFAULT_MAX_WORKERS = 4096
 MAX_TRANSIENT_WORKER_DELIVERIES = 3
 MAX_RELAY_BODY_BYTES = 32 * 1024**2
@@ -57,6 +60,20 @@ ACCEPTED_NOTIFIER_KEY = web.AppKey(
     "model_relay_accepted_notifier",
     Callable[["RelayRequest"], Awaitable[str | None]] | None,
 )
+_BlockingResult = TypeVar("_BlockingResult")
+
+
+async def _blocking_call(
+    function: Callable[..., _BlockingResult],
+    *args: object,
+    **kwargs: object,
+) -> _BlockingResult:
+    work = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(work)
+    except asyncio.CancelledError:
+        await asyncio.gather(work, return_exceptions=True)
+        raise
 
 
 @dataclass
@@ -93,6 +110,7 @@ class RelayRequest:
     sandbox_generation: int | None = None
     completed_at: float | None = None
     completed_response: RelayWorkerResponse | None = None
+    completed_bytes: int = 0
     wake_notified_at: float | None = None
     accepted_notified_at: float | None = None
     parked_transport_epoch: str | None = None
@@ -102,7 +120,6 @@ class RelayRequest:
         return {
             "request_id": self.request_id,
             "rollout_id": self.rollout_id,
-            "tunnel_id": self.rollout_id,
             "registration_token": self.registration_token,
             "endpoint": self.endpoint,
             "method": self.method,
@@ -149,7 +166,12 @@ class RelaySqliteStore:
             raise ValueError("relay state path must be absolute")
         self.path = path
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(path, isolation_level=None)
+        self._lock = Lock()
+        self._connection = sqlite3.connect(
+            path,
+            isolation_level=None,
+            check_same_thread=False,
+        )
         os.chmod(path, 0o600)
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.execute("PRAGMA synchronous=FULL")
@@ -176,10 +198,20 @@ class RelaySqliteStore:
                 state TEXT NOT NULL,
                 expires_at REAL,
                 completed_at REAL,
+                completed_bytes INTEGER NOT NULL DEFAULT 0,
                 payload TEXT NOT NULL
             )
             """
         )
+        request_columns = {
+            str(row[1])
+            for row in self._connection.execute("PRAGMA table_info(relay_requests)")
+        }
+        if "completed_bytes" not in request_columns:
+            self._connection.execute(
+                "ALTER TABLE relay_requests "
+                "ADD COLUMN completed_bytes INTEGER NOT NULL DEFAULT 0"
+            )
         version = self._connection.execute(
             "SELECT value FROM relay_meta WHERE key = 'version'"
         ).fetchone()
@@ -192,69 +224,126 @@ class RelaySqliteStore:
             raise ValueError("relay state database has an unsupported version")
 
     def close(self) -> None:
-        self._connection.close()
+        with self._lock:
+            self._connection.close()
 
     def load_rollouts(self) -> list[JsonObject]:
-        return [
-            _json_mapping(row[0])
-            for row in self._connection.execute(
+        with self._lock:
+            rows = self._connection.execute(
                 "SELECT payload FROM relay_rollouts ORDER BY rollout_id"
-            )
-        ]
+            ).fetchall()
+        return [_json_mapping(row[0]) for row in rows]
 
     def load_requests(self) -> list[JsonObject]:
-        return [
-            _json_mapping(row[0])
-            for row in self._connection.execute(
+        with self._lock:
+            rows = self._connection.execute(
                 "SELECT payload FROM relay_requests ORDER BY request_id"
+            ).fetchall()
+        return [_json_mapping(row[0]) for row in rows]
+
+    def prune_completed(
+        self,
+        *,
+        cutoff: float,
+        max_count: int,
+        max_bytes: int,
+    ) -> None:
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM relay_requests "
+                "WHERE state = 'completed' AND COALESCE(completed_at, 0) < ?",
+                (cutoff,),
             )
-        ]
+            retained_count = 0
+            retained_bytes = 0
+            evicted: list[str] = []
+            for request_id, completed_bytes, payload_bytes in self._connection.execute(
+                """
+                SELECT request_id, completed_bytes, length(CAST(payload AS BLOB))
+                FROM relay_requests
+                WHERE state = 'completed'
+                ORDER BY completed_at DESC, request_id DESC
+                """
+            ):
+                size = max(0, int(completed_bytes or payload_bytes or 0))
+                if retained_count >= max_count or retained_bytes + size > max_bytes:
+                    evicted.append(str(request_id))
+                    continue
+                retained_count += 1
+                retained_bytes += size
+            if evicted:
+                self._connection.executemany(
+                    "DELETE FROM relay_requests WHERE request_id = ?",
+                    ((request_id,) for request_id in evicted),
+                )
 
     def save_rollout(self, record: JsonObject) -> None:
-        self._connection.execute(
-            """
-            INSERT INTO relay_rollouts(rollout_id, payload) VALUES (?, ?)
-            ON CONFLICT(rollout_id) DO UPDATE SET payload = excluded.payload
-            """,
-            (
-                str(record["rollout_id"]),
-                json.dumps(record, ensure_ascii=False, separators=(",", ":")),
-            ),
-        )
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO relay_rollouts(rollout_id, payload) VALUES (?, ?)
+                ON CONFLICT(rollout_id) DO UPDATE SET payload = excluded.payload
+                """,
+                (
+                    str(record["rollout_id"]),
+                    json.dumps(record, ensure_ascii=False, separators=(",", ":")),
+                ),
+            )
 
     def delete_rollout(self, rollout_id: str) -> None:
-        self._connection.execute(
-            "DELETE FROM relay_rollouts WHERE rollout_id = ?",
-            (rollout_id,),
-        )
+        with self._lock:
+            self._connection.execute(
+                "DELETE FROM relay_rollouts WHERE rollout_id = ?",
+                (rollout_id,),
+            )
 
     def save_request(self, request: RelayRequest) -> None:
-        payload = _persisted_request_payload(request)
-        self._connection.execute(
-            """
-            INSERT INTO relay_requests(
-                request_id, state, expires_at, completed_at, payload
-            ) VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(request_id) DO UPDATE SET
-                state = excluded.state,
-                expires_at = excluded.expires_at,
-                completed_at = excluded.completed_at,
-                payload = excluded.payload
-            """,
-            (
-                request.request_id,
-                request.state,
-                request.expires_at,
-                request.completed_at,
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-            ),
-        )
+        self.save_requests((request,))
+
+    def save_requests(self, requests: tuple[RelayRequest, ...]) -> None:
+        rows = []
+        for request in requests:
+            payload = _persisted_request_payload(request)
+            rows.append(
+                (
+                    request.request_id,
+                    request.state,
+                    request.expires_at,
+                    request.completed_at,
+                    request.completed_bytes,
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                )
+            )
+        if not rows:
+            return
+        with self._lock:
+            self._connection.executemany(
+                """
+                INSERT INTO relay_requests(
+                    request_id, state, expires_at, completed_at,
+                    completed_bytes, payload
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO UPDATE SET
+                    state = excluded.state,
+                    expires_at = excluded.expires_at,
+                    completed_at = excluded.completed_at,
+                    completed_bytes = excluded.completed_bytes,
+                    payload = excluded.payload
+                """,
+                rows,
+            )
 
     def delete_request(self, request_id: str) -> None:
-        self._connection.execute(
-            "DELETE FROM relay_requests WHERE request_id = ?",
-            (request_id,),
-        )
+        self.delete_requests((request_id,))
+
+    def delete_requests(self, request_ids: tuple[str, ...]) -> None:
+        if not request_ids:
+            return
+        with self._lock:
+            self._connection.executemany(
+                "DELETE FROM relay_requests WHERE request_id = ?",
+                ((request_id,) for request_id in request_ids),
+            )
 
 
 class ModelRelayState:
@@ -269,6 +358,7 @@ class ModelRelayState:
         max_inflight_requests_per_rollout: int = DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
         max_inflight_bytes: int = DEFAULT_MAX_INFLIGHT_BYTES,
         max_completed_requests: int = DEFAULT_MAX_COMPLETED_REQUESTS,
+        max_completed_bytes: int = DEFAULT_MAX_COMPLETED_BYTES,
         max_workers: int = DEFAULT_MAX_WORKERS,
     ) -> None:
         self._condition = asyncio.Condition()
@@ -282,6 +372,7 @@ class ModelRelayState:
         self._store = RelaySqliteStore(state_path) if state_path is not None else None
         self._loaded = state_path is None
         self._inflight_bytes = 0
+        self._completed_bytes = 0
         self._rollout_inflight_counts: dict[str, int] = {}
         self._max_inflight_requests = max(1, max_inflight_requests)
         self._max_inflight_requests_per_rollout = max(
@@ -290,6 +381,7 @@ class ModelRelayState:
         )
         self._max_inflight_bytes = max(1, max_inflight_bytes)
         self._max_completed_requests = max(1, max_completed_requests)
+        self._max_completed_bytes = max(1024, max_completed_bytes)
         self._max_workers = max(1, max_workers)
         self._completed_request_retention_seconds = max(
             0.001,
@@ -331,15 +423,16 @@ class ModelRelayState:
         metadata: JsonObject | None = None,
     ) -> JsonObject:
         validate_rollout_id(rollout_id)
+        _validate_registration_metadata(metadata)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
+            await self._prune_completed_locked(now)
             self._prune_workers_locked(now)
             registration_token = uuid4().hex
             previous = self._rollouts.get(rollout_id)
             if previous is not None:
-                self._cancel_rollout_incarnation_locked(
+                await self._cancel_rollout_incarnation_locked(
                     rollout_id,
                     str(previous["registration_token"]),
                     message="rollout registration was replaced",
@@ -347,14 +440,13 @@ class ModelRelayState:
                 )
             record = {
                 "rollout_id": rollout_id,
-                "tunnel_id": rollout_id,
                 "registration_token": registration_token,
                 "metadata": dict(metadata or {}),
                 "registered_at": time.time(),
             }
             self._rollouts[rollout_id] = record
             if self._store is not None:
-                self._store.save_rollout(record)
+                await _blocking_call(self._store.save_rollout, record)
             self._pending.setdefault(rollout_id, deque())
             self._condition.notify_all()
             return dict(record)
@@ -368,7 +460,7 @@ class ModelRelayState:
         validate_rollout_id(rollout_id)
         validate_registration_token(registration_token)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
             if current is None:
                 return False
@@ -379,8 +471,8 @@ class ModelRelayState:
             existed = True
             self._rollouts.pop(rollout_id, None)
             if self._store is not None:
-                self._store.delete_rollout(rollout_id)
-            self._cancel_rollout_incarnation_locked(
+                await _blocking_call(self._store.delete_rollout, rollout_id)
+            await self._cancel_rollout_incarnation_locked(
                 rollout_id,
                 registration_token,
                 message="rollout unregistered",
@@ -394,25 +486,25 @@ class ModelRelayState:
         rollout_id: str,
         registration_token: str,
     ) -> None:
-        """Authorize a caller against one exact tunnel incarnation."""
+        """Authorize a caller against one exact rollout incarnation."""
 
         validate_rollout_id(rollout_id)
         if not REGISTRATION_TOKEN_RE.fullmatch(registration_token):
-            raise web.HTTPUnauthorized(text="invalid tunnel access token")
+            raise web.HTTPUnauthorized(text="invalid rollout registration token")
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
             if current is None or not hmac.compare_digest(
                 str(current["registration_token"]),
                 registration_token,
             ):
-                raise web.HTTPUnauthorized(text="invalid tunnel access token")
+                raise web.HTTPUnauthorized(text="invalid rollout registration token")
 
     async def list_rollouts(self) -> list[JsonObject]:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
+            await self._prune_completed_locked(now)
             self._prune_workers_locked(now)
             return [dict(record) for record in self._rollouts.values()]
 
@@ -428,7 +520,7 @@ class ModelRelayState:
         validate_registration_token(registration_token)
         validate_worker_id(worker_id)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             self._prune_workers_locked(time.time())
             self._require_current_registration_locked(
                 rollout_id,
@@ -481,10 +573,10 @@ class ModelRelayState:
             validate_idempotency_key(idempotency_key)
         loop = asyncio.get_running_loop()
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
-            self._expire_requests_locked(now)
+            await self._prune_completed_locked(now)
+            await self._expire_requests_locked(now)
             if rollout_id not in self._rollouts:
                 raise web.HTTPNotFound(text=f"rollout is not registered: {rollout_id}")
             identity_headers = {
@@ -590,7 +682,7 @@ class ModelRelayState:
                     request.request_id
                 )
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
             self._counters["enqueued"] += 1
             self._condition.notify_all()
             return request
@@ -618,7 +710,7 @@ class ModelRelayState:
         counter: str,
     ) -> None:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             request = self._requests.get(request_id) or self._completed.get(request_id)
             if request is None:
                 return
@@ -634,7 +726,7 @@ class ModelRelayState:
                 ] = request.request_id
             self._counters[counter] += 1
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
 
     async def poll(
         self,
@@ -654,8 +746,8 @@ class ModelRelayState:
         lease_seconds = max(0.001, lease_seconds)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
         async with self._condition:
-            self._ensure_loaded_locked()
-            self._prune_completed_locked(time.time())
+            await self._ensure_loaded_locked()
+            await self._prune_completed_locked(time.time())
             self._prune_workers_locked(time.time())
             self._require_current_registration_locked(
                 rollout_id,
@@ -674,8 +766,8 @@ class ModelRelayState:
                     registration_token,
                 )
                 now = time.time()
-                self._expire_requests_locked(now)
-                self._requeue_expired_leases_locked(now)
+                await self._expire_requests_locked(now)
+                await self._requeue_expired_leases_locked(now)
                 queue = self._pending.setdefault(rollout_id, deque())
                 if queue:
                     requests = [
@@ -696,8 +788,10 @@ class ModelRelayState:
                         )
                         requests = [request]
                     if self._store is not None:
-                        for request in requests:
-                            self._store.save_request(request)
+                        await _blocking_call(
+                            self._store.save_requests,
+                            tuple(requests),
+                        )
                     return requests
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -725,10 +819,10 @@ class ModelRelayState:
             validate_worker_id(worker_id)
         lease_seconds = max(0.001, lease_seconds)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
-            self._expire_requests_locked(now)
+            await self._prune_completed_locked(now)
+            await self._expire_requests_locked(now)
             request = self._requests.get(request_id)
             if request is None:
                 if request_id in self._completed:
@@ -745,11 +839,8 @@ class ModelRelayState:
             if request.state != "leased" or request.lease_id != lease_id:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
-            if (
-                request.lease_expires_at is not None
-                and request.lease_expires_at <= now
-            ):
-                self._requeue_expired_leases_locked(now)
+            if request.lease_expires_at is not None and request.lease_expires_at <= now:
+                await self._requeue_expired_leases_locked(now)
                 raise web.HTTPConflict(text="request lease has expired")
             if worker_id:
                 request.leased_by = worker_id
@@ -760,7 +851,7 @@ class ModelRelayState:
                 )
             request.lease_expires_at = now + lease_seconds
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
             self._counters["lease_renewed"] += 1
             self._condition.notify_all()
             return request
@@ -777,10 +868,10 @@ class ModelRelayState:
     ) -> RelayRespondResult:
         validate_registration_token(registration_token)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
-            self._expire_requests_locked(now)
+            await self._prune_completed_locked(now)
+            await self._expire_requests_locked(now)
             if request_id in self._completed:
                 self._require_completed_registration_locked(
                     request_id,
@@ -805,12 +896,12 @@ class ModelRelayState:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
             if request.lease_expires_at is not None and request.lease_expires_at <= now:
-                self._requeue_expired_leases_locked(now)
+                await self._requeue_expired_leases_locked(now)
                 raise web.HTTPConflict(text="request lease has expired")
             self._pop_request_locked(request_id)
             self._remove_pending_locked(request_id, request.rollout_id)
             request.state = "completed"
-            self._remember_completed_locked(
+            response = await self._remember_completed_locked(
                 request,
                 completed_at=now,
                 response=response,
@@ -826,7 +917,7 @@ class ModelRelayState:
             if not defer_delivery:
                 _set_response(request.future, response)
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
             self._condition.notify_all()
             return RelayRespondResult(request_id=request_id, request=request)
 
@@ -841,10 +932,10 @@ class ModelRelayState:
 
         validate_registration_token(registration_token)
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
-            self._expire_requests_locked(now)
+            await self._prune_completed_locked(now)
+            await self._expire_requests_locked(now)
             request = self._requests.get(request_id)
             if request is None:
                 return None
@@ -855,7 +946,7 @@ class ModelRelayState:
             if request.state != "leased" or request.lease_id != lease_id:
                 raise web.HTTPConflict(text="request lease is no longer active")
             if request.lease_expires_at is not None and request.lease_expires_at <= now:
-                self._requeue_expired_leases_locked(now)
+                await self._requeue_expired_leases_locked(now)
                 raise web.HTTPConflict(text="request lease has expired")
             if request.delivery_count >= MAX_TRANSIENT_WORKER_DELIVERIES:
                 self._counters["worker_retry_exhausted"] += 1
@@ -868,7 +959,7 @@ class ModelRelayState:
             self._pending.setdefault(request.rollout_id, deque()).append(request)
             self._counters["worker_retries"] += 1
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
             self._condition.notify_all()
             return request
 
@@ -881,7 +972,7 @@ class ModelRelayState:
         """
 
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             request = self._completed.get(request_id)
             if request is None or request.completed_response is None:
                 raise web.HTTPNotFound(text=f"request not found: {request_id}")
@@ -896,13 +987,13 @@ class ModelRelayState:
         reason: str = "canceled",
     ) -> RelayWorkerResponse | None:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             request = self._pop_request_locked(request_id)
             if request is None:
                 return None
             self._remove_pending_locked(request_id, request.rollout_id)
             request.state = "completed"
-            self._remember_completed_locked(
+            response = await self._remember_completed_locked(
                 request,
                 completed_at=time.time(),
                 response=response,
@@ -913,7 +1004,7 @@ class ModelRelayState:
                 self._counters["canceled"] += 1
             _set_response(request.future, response)
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
             self._condition.notify_all()
             return response
 
@@ -932,12 +1023,12 @@ class ModelRelayState:
 
     async def stats(self) -> JsonObject:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             now = time.time()
-            self._prune_completed_locked(now)
+            await self._prune_completed_locked(now)
             self._prune_workers_locked(now)
-            self._expire_requests_locked(now)
-            self._requeue_expired_leases_locked(now)
+            await self._expire_requests_locked(now)
+            await self._requeue_expired_leases_locked(now)
             pending = {
                 rollout_id: len(queue)
                 for rollout_id, queue in sorted(self._pending.items())
@@ -971,6 +1062,7 @@ class ModelRelayState:
                 "inflight": len(self._requests),
                 "inflight_bytes": self._inflight_bytes,
                 "completed_retained": len(self._completed),
+                "completed_bytes": self._completed_bytes,
                 "workers": [dict(record) for record in self._workers.values()],
                 "counters": counters,
                 "timers": timers,
@@ -980,13 +1072,14 @@ class ModelRelayState:
                     "max_inflight_requests_per_rollout": self._max_inflight_requests_per_rollout,
                     "max_inflight_bytes": self._max_inflight_bytes,
                     "max_completed_requests": self._max_completed_requests,
+                    "max_completed_bytes": self._max_completed_bytes,
                     "max_workers": self._max_workers,
                 },
             }
 
     async def mark_wake_notified(self, request_id: str) -> None:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             request = self._completed.get(request_id)
             if request is None:
                 raise web.HTTPNotFound(text=f"request not found: {request_id}")
@@ -994,7 +1087,7 @@ class ModelRelayState:
                 request.wake_notified_at = time.time()
                 self._counters["wake_notifications"] += 1
                 if self._store is not None:
-                    self._store.save_request(request)
+                    await _blocking_call(self._store.save_request, request)
 
     async def mark_accepted_notified(
         self,
@@ -1003,7 +1096,7 @@ class ModelRelayState:
         transport_epoch: str | None = None,
     ) -> None:
         async with self._condition:
-            self._ensure_loaded_locked()
+            await self._ensure_loaded_locked()
             request = self._requests.get(request_id) or self._completed.get(request_id)
             if request is None:
                 raise web.HTTPNotFound(text=f"request not found: {request_id}")
@@ -1012,24 +1105,37 @@ class ModelRelayState:
                 request.parked_transport_epoch = transport_epoch
                 self._counters["accepted_notifications"] += 1
                 if self._store is not None:
-                    self._store.save_request(request)
+                    await _blocking_call(self._store.save_request, request)
 
     def close(self) -> None:
         if self._store is not None:
             self._store.close()
             self._store = None
 
-    def _ensure_loaded_locked(self) -> None:
+    async def aclose(self) -> None:
+        store = self._store
+        self._store = None
+        if store is not None:
+            await _blocking_call(store.close)
+
+    async def _ensure_loaded_locked(self) -> None:
         if self._loaded:
             return
         assert self._store is not None
         loop = asyncio.get_running_loop()
-        for record in self._store.load_rollouts():
+        now = time.time()
+        await _blocking_call(
+            self._store.prune_completed,
+            cutoff=now - self._completed_request_retention_seconds,
+            max_count=self._max_completed_requests,
+            max_bytes=self._max_completed_bytes,
+        )
+        for record in await _blocking_call(self._store.load_rollouts):
             rollout_id = str(record.get("rollout_id") or "")
             validate_rollout_id(rollout_id)
             self._rollouts[rollout_id] = record
             self._pending.setdefault(rollout_id, deque())
-        for payload in self._store.load_requests():
+        for payload in await _blocking_call(self._store.load_requests):
             request = _request_from_persisted_payload(payload, loop=loop)
             # Every non-terminal caller connection was destroyed by this relay
             # restart. A lifecycle-bound completed response also remains
@@ -1056,9 +1162,13 @@ class ModelRelayState:
                     raise ValueError(
                         "completed relay request is missing its persisted response"
                     )
-                _set_response(request.future, request.completed_response)
-                self._completed[request.request_id] = request
-                self._store.save_request(request)
+                response = await self._remember_completed_locked(
+                    request,
+                    completed_at=request.completed_at or now,
+                    response=request.completed_response,
+                )
+                _set_response(request.future, response)
+                await _blocking_call(self._store.save_request, request)
                 continue
             current_registration = self._rollouts.get(request.rollout_id)
             if (
@@ -1078,13 +1188,13 @@ class ModelRelayState:
                         "relay_rollout_closed",
                     ),
                 )
-                self._remember_completed_locked(
+                response = await self._remember_completed_locked(
                     request,
                     completed_at=time.time(),
                     response=response,
                 )
                 _set_response(request.future, response)
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
                 continue
             self._requests[request.request_id] = request
             self._inflight_bytes += request.payload_bytes
@@ -1093,13 +1203,13 @@ class ModelRelayState:
             )
             if request.state == "pending":
                 self._pending.setdefault(request.rollout_id, deque()).append(request)
-            self._store.save_request(request)
+            await _blocking_call(self._store.save_request, request)
             self._counters["restored_requests"] += 1
         self._loaded = True
         now = time.time()
-        self._prune_completed_locked(now)
-        self._expire_requests_locked(now)
-        self._requeue_expired_leases_locked(now)
+        await self._prune_completed_locked(now)
+        await self._expire_requests_locked(now)
+        await self._requeue_expired_leases_locked(now)
 
     def _pop_request_locked(self, request_id: str) -> RelayRequest | None:
         request = self._requests.pop(request_id, None)
@@ -1159,7 +1269,7 @@ class ModelRelayState:
         if current is None:
             raise web.HTTPConflict(text="rollout registration is no longer current")
 
-    def _cancel_rollout_incarnation_locked(
+    async def _cancel_rollout_incarnation_locked(
         self,
         rollout_id: str,
         registration_token: str,
@@ -1177,15 +1287,15 @@ class ModelRelayState:
                 continue
             self._pop_request_locked(request_id)
             request.state = "completed"
-            self._remember_completed_locked(
+            effective_response = await self._remember_completed_locked(
                 request,
                 completed_at=now,
                 response=response,
             )
             self._counters["unregister_canceled"] += 1
-            _set_response(request.future, response)
+            _set_response(request.future, effective_response)
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
         queue = self._pending.get(rollout_id)
         if queue is not None:
             kept = deque(
@@ -1248,7 +1358,7 @@ class ModelRelayState:
         self._timers["queue_wait_seconds_total"] += now - request.created_at
         return request
 
-    def _requeue_expired_leases_locked(self, now: float) -> None:
+    async def _requeue_expired_leases_locked(self, now: float) -> None:
         expired = [
             request
             for request in self._requests.values()
@@ -1267,11 +1377,11 @@ class ModelRelayState:
             self._pending.setdefault(request.rollout_id, deque()).appendleft(request)
             self._counters["lease_expired"] += 1
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
         if expired:
             self._condition.notify_all()
 
-    def _expire_requests_locked(self, now: float) -> None:
+    async def _expire_requests_locked(self, now: float) -> None:
         expired = [
             request
             for request in self._requests.values()
@@ -1287,15 +1397,15 @@ class ModelRelayState:
             self._pop_request_locked(request.request_id)
             self._remove_pending_locked(request.request_id, request.rollout_id)
             request.state = "completed"
-            self._remember_completed_locked(
+            effective_response = await self._remember_completed_locked(
                 request,
                 completed_at=now,
                 response=response,
             )
             self._counters["timed_out"] += 1
-            _set_response(request.future, response)
+            _set_response(request.future, effective_response)
             if self._store is not None:
-                self._store.save_request(request)
+                await _blocking_call(self._store.save_request, request)
         self._condition.notify_all()
 
     def _next_lease_expiry_locked(self) -> float | None:
@@ -1306,11 +1416,15 @@ class ModelRelayState:
         ]
         return min(expiries) if expiries else None
 
-    def _prune_completed_locked(self, now: float) -> None:
+    async def _prune_completed_locked(self, now: float) -> None:
         cutoff = now - self._completed_request_retention_seconds
         for request_id, request in list(self._completed.items()):
             if (request.completed_at or 0.0) < cutoff:
                 self._completed.pop(request_id, None)
+                self._completed_bytes = max(
+                    0,
+                    self._completed_bytes - request.completed_bytes,
+                )
                 if request.idempotency_key is not None and request.reattachable:
                     self._idempotency.pop(
                         (
@@ -1321,17 +1435,30 @@ class ModelRelayState:
                         None,
                     )
                 if self._store is not None:
-                    self._store.delete_request(request_id)
+                    await _blocking_call(self._store.delete_request, request_id)
 
-    def _remember_completed_locked(
+    async def _remember_completed_locked(
         self,
         request: RelayRequest,
         *,
         completed_at: float,
         response: RelayWorkerResponse,
-    ) -> None:
-        self._prune_completed_locked(completed_at)
-        while len(self._completed) >= self._max_completed_requests:
+    ) -> RelayWorkerResponse:
+        await self._prune_completed_locked(completed_at)
+        completed_bytes = _relay_response_retained_bytes(response)
+        if completed_bytes > self._max_completed_bytes:
+            response = RelayWorkerResponse(
+                502,
+                _openai_error(
+                    "worker response exceeds relay completed-response capacity",
+                    "relay_response_capacity_exceeded",
+                ),
+            )
+            completed_bytes = _relay_response_retained_bytes(response)
+        while self._completed and (
+            len(self._completed) >= self._max_completed_requests
+            or self._completed_bytes + completed_bytes > self._max_completed_bytes
+        ):
             oldest = min(
                 self._completed,
                 key=lambda item: (
@@ -1340,6 +1467,10 @@ class ModelRelayState:
                 ),
             )
             evicted = self._completed.pop(oldest)
+            self._completed_bytes = max(
+                0,
+                self._completed_bytes - evicted.completed_bytes,
+            )
             if evicted.idempotency_key is not None and evicted.reattachable:
                 self._idempotency.pop(
                     (
@@ -1350,11 +1481,18 @@ class ModelRelayState:
                     None,
                 )
             if self._store is not None:
-                self._store.delete_request(oldest)
+                await _blocking_call(self._store.delete_request, oldest)
         request.completed_at = completed_at
         request.completed_response = response
+        request.completed_bytes = completed_bytes
         request.state = "completed"
+        request.body = None
+        request.body_bytes = b""
+        request.headers = {}
+        request.payload_bytes = 0
         self._completed[request.request_id] = request
+        self._completed_bytes += completed_bytes
+        return response
 
     def _prune_workers_locked(self, now: float) -> None:
         cutoff = now - self._worker_retention_seconds
@@ -1391,6 +1529,7 @@ def create_model_relay_app(
     max_inflight_requests_per_rollout: int = DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
     max_inflight_bytes: int = DEFAULT_MAX_INFLIGHT_BYTES,
     max_completed_requests: int = DEFAULT_MAX_COMPLETED_REQUESTS,
+    max_completed_bytes: int = DEFAULT_MAX_COMPLETED_BYTES,
     max_workers: int = DEFAULT_MAX_WORKERS,
     state_path: Path | None = None,
     accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
@@ -1408,6 +1547,7 @@ def create_model_relay_app(
         max_inflight_requests_per_rollout=max_inflight_requests_per_rollout,
         max_inflight_bytes=max_inflight_bytes,
         max_completed_requests=max_completed_requests,
+        max_completed_bytes=max_completed_bytes,
         max_workers=max_workers,
     )
     app[SANDBOX_TOKEN_KEY] = sandbox_bearer_token
@@ -1419,25 +1559,23 @@ def create_model_relay_app(
     app[RESULT_NOTIFIER_KEY] = result_notifier
 
     async def close_state(_app: web.Application) -> None:
-        _app[STATE_KEY].close()
+        await _app[STATE_KEY].aclose()
 
     app.on_cleanup.append(close_state)
 
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/v1/relay/stats", relay_stats)
     app.router.add_get("/v1/relay/rollouts", list_rollouts)
-    app.router.add_get("/v1/tunnels", list_rollouts)
-    app.router.add_post("/register_rollout", register_rollout)
-    app.router.add_post("/v1/tunnels/register", register_rollout)
-    app.router.add_post("/unregister_rollout", unregister_rollout)
-    app.router.add_post("/v1/tunnels/unregister", unregister_rollout)
+    app.router.add_post("/v1/relay/rollouts", register_rollout)
+    app.router.add_delete(
+        "/v1/relay/rollouts/{rollout_id}",
+        unregister_rollout,
+    )
     app.router.add_post("/worker/heartbeat", worker_heartbeat)
     app.router.add_get("/worker/poll", worker_poll)
     app.router.add_post("/worker/renew", worker_renew)
     app.router.add_post("/worker/respond", worker_respond)
     app.router.add_post("/worker/error", worker_error)
-    app.router.add_post("/v1/chat/completions", openai_chat_completions)
-    app.router.add_post("/v1/responses", openai_responses)
     app.router.add_post(
         "/rollouts/{rollout_id}/v1/chat/completions",
         openai_chat_completions,
@@ -1445,18 +1583,18 @@ def create_model_relay_app(
     app.router.add_post("/rollouts/{rollout_id}/v1/responses", openai_responses)
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/_relay/{tunnel_token}",
+        "/tunnels/{rollout_id}/_relay/{registration_token}",
         tunnel_http_proxy,
     )
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/_relay/{tunnel_token}/{tunnel_path:.*}",
+        "/tunnels/{rollout_id}/_relay/{registration_token}/{tunnel_path:.*}",
         tunnel_http_proxy,
     )
-    app.router.add_route("*", "/tunnels/{tunnel_id}", tunnel_http_proxy)
+    app.router.add_route("*", "/tunnels/{rollout_id}", tunnel_http_proxy)
     app.router.add_route(
         "*",
-        "/tunnels/{tunnel_id}/{tunnel_path:.*}",
+        "/tunnels/{rollout_id}/{tunnel_path:.*}",
         tunnel_http_proxy,
     )
     return app
@@ -1479,9 +1617,7 @@ async def list_rollouts(request: web.Request) -> web.Response:
 async def register_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(payload.get("rollout_id") or "")
     metadata = payload.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
         raise web.HTTPBadRequest(text="metadata must be a JSON object")
@@ -1492,9 +1628,7 @@ async def register_rollout(request: web.Request) -> web.Response:
 async def unregister_rollout(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(request.match_info.get("rollout_id") or "")
     registration_token = _registration_token_from_payload(payload)
     existed = await _state(request).unregister_rollout(
         rollout_id,
@@ -1504,7 +1638,6 @@ async def unregister_rollout(request: web.Request) -> web.Response:
         {
             "ok": True,
             "rollout_id": rollout_id,
-            "tunnel_id": rollout_id,
             "existed": existed,
         }
     )
@@ -1512,9 +1645,7 @@ async def unregister_rollout(request: web.Request) -> web.Response:
 
 async def worker_poll(request: web.Request) -> web.Response:
     _require_worker_token(request)
-    rollout_id = str(
-        request.query.get("rollout_id") or request.query.get("tunnel_id") or ""
-    )
+    rollout_id = str(request.query.get("rollout_id") or "")
     registration_token = _registration_token_from_request(request)
     worker_id = _worker_id_from_request(request)
     timeout_seconds = _float_query(
@@ -1548,9 +1679,7 @@ async def worker_poll(request: web.Request) -> web.Response:
 async def worker_heartbeat(request: web.Request) -> web.Response:
     _require_worker_token(request)
     payload = await _json_object(request)
-    rollout_id = str(
-        payload.get("rollout_id") or payload.get("tunnel_id") or payload.get("id") or ""
-    )
+    rollout_id = str(payload.get("rollout_id") or "")
     registration_token = _registration_token_from_payload(payload)
     worker_id = str(payload.get("worker_id") or "")
     metadata = payload.get("metadata")
@@ -1712,15 +1841,15 @@ async def openai_responses(request: web.Request) -> web.Response:
 async def tunnel_http_proxy(request: web.Request) -> web.Response:
     if request.method not in TUNNEL_HTTP_METHODS:
         raise web.HTTPMethodNotAllowed(request.method, sorted(TUNNEL_HTTP_METHODS))
-    tunnel_id = str(request.match_info.get("tunnel_id") or "")
-    validate_rollout_id(tunnel_id)
-    tunnel_token = request.match_info.get("tunnel_token")
-    if tunnel_token is None:
+    rollout_id = str(request.match_info.get("rollout_id") or "")
+    validate_rollout_id(rollout_id)
+    registration_token = request.match_info.get("registration_token")
+    if registration_token is None:
         _require_sandbox_token(request)
     else:
         await _state(request).require_current_registration(
-            tunnel_id,
-            str(tunnel_token),
+            rollout_id,
+            str(registration_token),
         )
     endpoint = _tunnel_endpoint(request)
     body_bytes = await request.read()
@@ -1731,7 +1860,7 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
         )
     explicit_request_id = request.headers.get(RELAY_REQUEST_ID_HEADER)
     relay_request = await _state(request).enqueue(
-        rollout_id=tunnel_id,
+        rollout_id=rollout_id,
         endpoint=endpoint,
         method=request.method,
         body=_decode_tunnel_json(request.content_type, body_bytes),
@@ -1741,7 +1870,7 @@ async def tunnel_http_proxy(request: web.Request) -> web.Response:
             explicit_request_id
             or _implicit_idempotency_key(
                 request,
-                rollout_id=tunnel_id,
+                rollout_id=rollout_id,
                 endpoint=endpoint,
                 body_bytes=body_bytes,
             )
@@ -1926,17 +2055,7 @@ async def _json_object(request: web.Request) -> JsonObject:
 
 
 def _rollout_id_from_request(request: web.Request) -> str:
-    path_rollout_id = request.match_info.get("rollout_id")
-    if path_rollout_id:
-        rollout_id = path_rollout_id
-    else:
-        rollout_id = (
-            request.headers.get("X-UCloud-Rollout-Id")
-            or request.headers.get("X-Relay-Rollout-Id")
-            or request.headers.get("X-Rollout-Id")
-            or request.query.get("rollout_id")
-            or ""
-        )
+    rollout_id = str(request.match_info.get("rollout_id") or "")
     validate_rollout_id(rollout_id)
     return rollout_id
 
@@ -2081,21 +2200,18 @@ def _forward_headers(request: web.Request) -> dict[str, str]:
     expected = request.app[SANDBOX_TOKEN_KEY]
     relay_header = request.headers.get(RELAY_TOKEN_HEADER) or ""
     relay_header_authenticated = (
-        request.match_info.get("tunnel_token") is not None
+        request.match_info.get("registration_token") is not None
         or expected is None
         or relay_header in {expected, f"Bearer {expected}"}
     )
     if not relay_header_authenticated:
-        # Backward-compatible OpenAI clients use Authorization for relay auth;
-        # never leak that credential to the worker-local upstream.
+        # OpenAI clients carry relay authentication in Authorization; never
+        # leak that credential to the worker-local upstream.
         blocked.add("authorization")
     return {
         key: value
         for key, value in request.headers.items()
-        if (
-            key.lower() not in blocked
-            and not key.lower().startswith("x-forwarded-")
-        )
+        if (key.lower() not in blocked and not key.lower().startswith("x-forwarded-"))
     }
 
 
@@ -2161,7 +2277,7 @@ def _tunnel_endpoint(request: web.Request) -> str:
     # Work from raw_path rather than match_info so percent-encoding, repeated
     # query parameters, and literal '+' characters reach the upstream exactly.
     raw_path, separator, raw_query = request.raw_path.partition("?")
-    if request.match_info.get("tunnel_token") is None:
+    if request.match_info.get("registration_token") is None:
         path_parts = raw_path.split("/", 3)
         tunnel_path = path_parts[3] if len(path_parts) == 4 else ""
     else:
@@ -2249,9 +2365,26 @@ def _registration_sandbox_id(record: JsonObject) -> str | None:
     metadata = record.get("metadata")
     if not isinstance(metadata, dict):
         return None
-    raw = metadata.get("sandbox_id") or metadata.get("sandboxId")
-    value = str(raw or "").strip()
-    return value or None
+    raw = metadata.get("sandbox_id")
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or SANDBOX_ID_RE.fullmatch(raw) is None:
+        raise web.HTTPBadRequest(text="sandbox_id registration metadata is invalid")
+    return raw
+
+
+def _validate_registration_metadata(metadata: JsonObject | None) -> None:
+    if metadata is None:
+        return
+    if "sandboxId" in metadata or "sandboxGeneration" in metadata:
+        raise web.HTTPBadRequest(text="registration metadata must use snake_case")
+    record: JsonObject = {"metadata": metadata}
+    sandbox_id = _registration_sandbox_id(record)
+    generation = _registration_sandbox_generation(record)
+    if (sandbox_id is None) != (generation is None):
+        raise web.HTTPBadRequest(
+            text="sandbox_id and sandbox_generation must be supplied together"
+        )
 
 
 def _registration_sandbox_generation(record: JsonObject) -> int | None:
@@ -2260,20 +2393,16 @@ def _registration_sandbox_generation(record: JsonObject) -> int | None:
         return None
     raw = metadata.get("sandbox_generation")
     if raw is None:
-        raw = metadata.get("sandboxGeneration")
-    if raw is None:
         return None
-    try:
-        generation = int(raw)
-    except (TypeError, ValueError) as exc:
+    if isinstance(raw, bool) or not isinstance(raw, int):
         raise web.HTTPBadRequest(
             text="sandbox_generation registration metadata must be an integer"
-        ) from exc
-    if generation < 1:
+        )
+    if raw < 1:
         raise web.HTTPBadRequest(
             text="sandbox_generation registration metadata must be positive"
         )
-    return generation
+    return raw
 
 
 def _json_mapping(raw: str) -> JsonObject:
@@ -2308,18 +2437,21 @@ def _decoded_body(value: object) -> object:
 
 def _persisted_request_payload(request: RelayRequest) -> JsonObject:
     response = request.completed_response
+    completed = request.state == "completed"
     return {
         "request_id": request.request_id,
         "rollout_id": request.rollout_id,
         "registration_token": request.registration_token,
         "endpoint": request.endpoint,
         "method": request.method,
-        "body": request.body,
-        "body_bytes": base64.b64encode(request.body_bytes).decode("ascii"),
-        "headers": request.headers,
+        "body": None if completed else request.body,
+        "body_bytes": (
+            "" if completed else base64.b64encode(request.body_bytes).decode("ascii")
+        ),
+        "headers": {} if completed else request.headers,
         "created_at": request.created_at,
         "expires_at": request.expires_at,
-        "payload_bytes": request.payload_bytes,
+        "payload_bytes": 0 if completed else request.payload_bytes,
         "delivered_at": request.delivered_at,
         "first_delivered_at": request.first_delivered_at,
         "lease_id": request.lease_id,
@@ -2332,6 +2464,7 @@ def _persisted_request_payload(request: RelayRequest) -> JsonObject:
         "sandbox_id": request.sandbox_id,
         "sandbox_generation": request.sandbox_generation,
         "completed_at": request.completed_at,
+        "completed_bytes": request.completed_bytes,
         "completed_response": (
             None
             if response is None
@@ -2399,17 +2532,37 @@ def _request_from_persisted_payload(
         ),
         completed_at=_optional_float(payload.get("completed_at")),
         completed_response=response,
+        completed_bytes=int(payload.get("completed_bytes") or 0),
         wake_notified_at=_optional_float(payload.get("wake_notified_at")),
         accepted_notified_at=_optional_float(payload.get("accepted_notified_at")),
-        parked_transport_epoch=_optional_string(
-            payload.get("parked_transport_epoch")
-        ),
+        parked_transport_epoch=_optional_string(payload.get("parked_transport_epoch")),
         reattachable=bool(payload.get("reattachable")),
     )
 
 
 def _optional_float(value: object) -> float | None:
     return None if value is None else float(value)
+
+
+def _relay_response_retained_bytes(response: RelayWorkerResponse) -> int:
+    if isinstance(response.body, bytes):
+        body_bytes = len(response.body)
+    else:
+        body_bytes = len(
+            json.dumps(
+                response.body,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+    header_bytes = len(
+        json.dumps(
+            response.headers,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    return body_bytes + header_bytes + 8
 
 
 def _optional_string(value: object) -> str | None:

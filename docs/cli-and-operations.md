@@ -1,365 +1,162 @@
-# CLI And Operations
+# CLI and operations
 
-Print a starter config:
+The CLI separates inspection from mutation. Planning commands are read-only;
+provider create, stop, bootstrap, and deployment actions require their own
+explicit execution flags.
+
+## Configuration and inspection
+
+Print a starter configuration:
 
 ```bash
 uv run ucloud-sandboxes sample-config
 ```
 
-Inspect the known small VM job:
+Inspect a UCloud job:
 
 ```bash
-uv run ucloud-sandboxes inspect-job 12345311 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141
+uv run ucloud-sandboxes inspect-job <job-id> --project <project-id>
 ```
 
-Plan one reconciliation cycle from live UCloud jobs:
+Plan resource demand against live jobs and node heartbeats:
 
 ```bash
 uv run ucloud-sandboxes plan \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --include-job 12345311 \
-  --pending-vcpu 1 \
-  --pending-memory-mb 2048 \
-  --pending-disk-mb 10240 \
-  --oldest-pending-seconds 300
+  --project <project-id> \
+  --pending-vcpu 2 \
+  --pending-memory-mb 4096 \
+  --pending-disk-mb 10240
 ```
 
-Use `--jobs-file` and `--heartbeats` to run the planner without touching
-UCloud.
+Use `--jobs-file` and `--heartbeats` for an entirely local plan. Sandbox demand
+is always expressed as CPU, memory, and disk shapes.
 
-Autoscaling demand is resource-based. Sandbox requests and manual planning use
-vCPU, memory, and disk requirements; count-only sandbox demand is not accepted.
-
-The default policy scales to zero. When VM startup is slow, tune in-flight VM
-caps, provisioning resource discounts, and idle grace before paying for a warm
-pool. See [scaling-policy.md](scaling-policy.md).
-
-Sandbox runtime security is tracked in
-[security-stance.md](security-stance.md). On an initialized VM node,
-run the local conformance probe before trusting the runtime:
-
-```bash
-uv run ucloud-sandboxes runtime-conformance --sudo --execute --output json
-```
-
-Render one full reconciliation cycle, including VM create payloads and stop
-intents. This is dry-run by default:
+Render one complete reconcile result without changing UCloud:
 
 ```bash
 uv run ucloud-sandboxes reconcile \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --private-network-id 12345327 \
+  --project <project-id> \
+  --private-network-id <network-id> \
   --pending-vcpu 2 \
   --pending-memory-mb 4096 \
   --pending-disk-mb 10240 \
   --output json
 ```
 
-`reconcile` is deliberately read-only. To run one mutating production cycle,
-use `autoscaler-loop --once`; it reads pending demand from the routing state and
-uses the same local process lock and provider journal as the recurring service.
-Create, stop, and VM initialization execution remain separate flags:
+## VM submission
+
+Render a VM job payload:
 
 ```bash
-uv run ucloud-sandboxes autoscaler-loop --once \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --private-network-id 12345327 \
-  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
-  --execute
-
-uv run ucloud-sandboxes autoscaler-loop --once \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --private-network-id 12345327 \
-  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
-  --execute-stops
-
+uv run ucloud-sandboxes submit-vm \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --role sandbox \
+  --private-network-id <network-id> \
+  --hostname-seed sandbox-1 \
+  --output json
 ```
 
-UCloud reports a new VM as `SUSPENDED` before its first transition to
-`RUNNING`; that is normal provisioning. Any later `SUSPENDED` transition is a
-destructive power cycle: the job id may return to `RUNNING`, but its ephemeral
-guest disk and every live sandbox are gone. The autoscaler therefore never
-calls `/api/jobs/unsuspend`. It latches the post-start suspension from ordered
-job updates, immediately removes the old heartbeat from gateway placement,
-journals a direct provider stop, and creates replacement capacity for the lost
-resource shapes.
-
-Non-portable running, creating, parking, waking, and legacy parked routes are
-removed with program error `node_lost`. A fully published storage-native parked
-route is retained because its content-addressed Registry snapshot can be
-adopted by another node without the source VM. `--execute-resumes` remains only
-as a deprecated no-op so older manual commands fail safely instead of restoring
-the obsolete behavior.
-
-Render the UCloud job-submission fragment for attaching a VM job to a private
-network. The resulting `hostname` is the DNS name other jobs in that private
-network should use for the node:
+Roles are `gateway`, `sandbox`, and `builder`. Add `--execute` only after
+reviewing the payload. Helper commands render private-network and public-link
+resource fragments:
 
 ```bash
 uv run ucloud-sandboxes vm-network-attachment \
-  --private-network-id "$UCLOUD_PRIVATE_NETWORK_ID" \
-  --hostname-seed 12345317
-```
+  --private-network-id <network-id> \
+  --hostname-seed sandbox-1
 
-With a config file, `private_network_id` and `node_hostname_prefix` provide the
-node defaults. `gateway_public_link_id` and `gateway_public_link_port` describe
-the single public link that should be bound to the gateway/control-plane VM, not
-to autoscaled sandbox nodes:
-
-```json
-{
-  "private_network_id": "12345327",
-  "gateway_public_link_id": "12345368",
-  "gateway_public_link_port": 8090,
-  "node_hostname_prefix": "sandbox-node"
-}
-```
-
-Render the UCloud job-submission fragment for binding a public link to a VM
-port:
-
-```bash
 uv run ucloud-sandboxes vm-public-link-attachment \
-  --public-link-id 12345368 \
+  --public-link-id <link-id> \
   --port 8090
 ```
 
-Render the VM job submission payload. This is dry-run by default:
+## Deployment
 
-```bash
-uv run ucloud-sandboxes submit-vm \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --private-network-id 12345327 \
-  --hostname-seed dev-1 \
-  --output json
-```
-
-Submit the VM job only when ready:
-
-```bash
-uv run ucloud-sandboxes submit-vm \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --private-network-id 12345327 \
-  --hostname-seed dev-1 \
-  --execute
-```
-
-For the all-in-one gateway/control-plane VM, bind the public gateway link to
-the gateway service port while still joining the private network for node
-traffic and mounting the project storage drive used by the local registry:
-
-```bash
-uv run ucloud-sandboxes submit-vm \
-  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
-  --deployment-id direct-20260730 \
-  --role gateway \
-  --private-network-id 12345327 \
-  --public-link-id 12345368 \
-  --public-link-port 8090 \
-  --mount /998037 \
-  --hostname-seed gateway-1 \
-  --output json
-```
-
-`--role gateway` defaults to `cpu-amd-zen5-2-vcpu` (2 vCPU/6 GiB). Sandbox
-nodes retain the `cpu-amd-zen5-32-vcpu` default. An explicit `--product-id`
-still overrides either role-aware default.
-
-After the VM is running and the gateway service is listening, activate UCloud's
-VM web forwarding for the public-link target port:
-
-```bash
-uv run ucloud-sandboxes open-vm-web 12361919 \
-  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
-  --port 8090
-```
-
-The normal deployment path is now to let the CLI converge the running VM:
+The normal release path is:
 
 ```bash
 uv build
-uv run ucloud-sandboxes deploy-all-in-one 12361919 \
-  --project 5530ccd4-2828-4031-9275-d51aa231cc01 \
-  --deployment-id direct-20260730 \
-  --private-network-id 12345327 \
+uv run ucloud-sandboxes deploy-all-in-one <gateway-job-id> \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --private-network-id <network-id> \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
-  --sandbox-runtime direct \
-  --direct-runsc /path/to/pinned/ucloud-direct-runsc \
-  --direct-runsc-commit 9f653e577965df2ddd13875b5530cd2588661f1c \
-  --sandbox-product-id cpu-amd-zen5-32-vcpu \
-  --sandbox-disk-gb 2000 \
-  --docker-quota-image-gb 440 \
-  --storage-native-cache-gb 32 \
-  --direct-disk-headroom-mb 16384 \
-  --swap-gb 96 \
-  --cpu-overcommit 1 \
-  --memory-overcommit 1 \
-  --disk-overcommit 1 \
-  --max-builder-nodes 0 \
-  --execute
+  --direct-runsc /path/to/ucloud-direct-runsc \
+  --direct-runsc-commit <40-character-commit> \
+  --managed-init /path/to/managed-init \
+  --storage-native-manifest /path/to/storage-native-manifest.json \
+  --output script
 ```
 
-`deploy-all-in-one` writes the deployment-specific env files, installs the
-packaged systemd units, stages the wheel and UCloud session, migrates gateway
-state to `/work/data/ucloud-sandboxes/state`, generates missing tokens and the
-gateway init SSH key, registers that key with UCloud, restarts
-gateway/relay/registry/autoscaler, and opens the gateway and relay VM web ports.
-Use `--output script` for the exact remote script or omit `--execute` for a dry
-run.
+The rendered script stages the control-plane wheel, assembles verified sandbox
+and builder bundles, writes service configuration, and installs systemd units.
+Run the same command with `--execute` to apply it. See
+[deployment-flow.md](deployment-flow.md) for the complete release contract.
 
-The production compute is charged to project `DFM`; the existing network,
-ingresses, and drive remain owned by `DFM Pretraining` and are attached
-cross-project by resource ID.
+## Autoscaler execution
 
-Builder capacity is autoscaled separately. Manual builder VM tests should keep
-the VM on the private network and use the builder role so the sandbox
-autoscaler does not treat it as disposable sandbox pool capacity:
+`reconcile` never mutates provider state. Use a one-shot autoscaler cycle for an
+operator-controlled mutation:
 
 ```bash
-uv run ucloud-sandboxes submit-vm \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --role builder \
-  --private-network-id 12345327 \
-  --hostname-seed builder-1 \
-  --product-id cpu-amd-zen5-16-vcpu \
-  --disk-gb 250 \
-  --output json
+uv run ucloud-sandboxes autoscaler-loop --once \
+  --project <project-id> \
+  --deployment-id <deployment-id> \
+  --private-network-id <network-id> \
+  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
+  --execute \
+  --execute-stops \
+  --execute-init
 ```
 
-Use a larger CPU product here when UCloud capacity exposes one in the project.
-This VM is for Docker builds, registry push/pull work, or running the gateway;
-sandbox nodes should remain separate.
+The recurring systemd service uses the same process lock and provider journal.
+Create, stop, and node initialization permissions are intentionally distinct.
 
-`submit-vm` does not request UCloud SSH by default. The current live
-`vm-ubuntu:24.04` app rejects `--ssh` with
-`This application does not support SSH but it is required`. Running VMs can
-still announce an SSH proxy update such as
-`ssh ucloud@ssh.cloud.sdu.dk -p <port>`.
+New nodes are initialized with a role-specific bundle. The autoscaler stages
+the local bundle, computes its SHA-256 digest, supplies mandatory deployment and
+credential material, and renders VM init only after staging succeeds. `init-vm`
+is the operator entry point for replaying that same authenticated bootstrap for
+one running job; it requires a local bundle path and does not accept a package
+URL or installer specification.
 
-The live `DFM Pretraining` private network created for this project is:
+## Credentials
 
-```text
-id: 12345327
-name: ucloud-sandboxes
-subdomain: dfm-sandboxes
-provider: ucloud
-```
+Generated deployments use separate mandatory credentials:
 
-The live unbound gateway public link in the same project is:
+- the gateway token protects the public sandbox API;
+- the heartbeat token authorizes only heartbeat publication;
+- the node-control token protects every node route except `/healthz`.
 
-```text
-id: 12345368
-domain: app-sandboxes.cloud.sdu.dk
-product: ucloud/u1-publiclink/u1-publiclink
-state: READY
-```
+The control plane removes caller authorization headers before forwarding and
+adds the node-control token itself. Rotate the three credentials independently.
+Heartbeat rotation is coordinated because nodes and the control plane must
+switch to the same new value before heartbeat publication resumes.
 
-Render the post-boot VM init script locally:
+The gateway SSH bootstrap key is also deployment state. Register its public key
+with UCloud and keep the private key on the control-plane VM:
 
 ```bash
-uv run ucloud-sandboxes render-vm-init-script \
-  --job-id 12345317 \
-  --node-id sandbox-node-12345317 \
-  --heartbeat-url http://control-plane:8080/v1/nodes/heartbeat \
-  --total-vcpu 2 \
-  --total-memory-mb 6144 \
-  --total-disk-mb 51200
-```
-
-`init-vm` supports SSH-based post-boot init for VM jobs that are running and
-have announced an SSH command. This works even though `vm-ubuntu:24.04` is
-submitted with `sshEnabled=false`:
-
-```bash
-uv run ucloud-sandboxes init-vm 12345317 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --node-id sandbox-node-12345317 \
-  --heartbeat-url http://control-plane:8080/v1/nodes/heartbeat
-
-uv run ucloud-sandboxes init-vm 12345317 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --node-id sandbox-node-12345317 \
-  --heartbeat-url http://control-plane:8080/v1/nodes/heartbeat \
-  --init-authorized-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
-  --ssh-private-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init \
-  --execute
-```
-
-The following is the historical legacy-runtime initialization example. New
-storage-native nodes use `deploy-all-in-one --sandbox-runtime direct` above:
-
-```bash
-uv run ucloud-sandboxes init-vm 12345318 \
-  --project 4827bd3a-4e74-4393-9b82-49f71636c141 \
-  --node-id sandbox-node-12345318 \
-  --heartbeat-url https://app-sandboxes.cloud.sdu.dk/v1/nodes/heartbeat \
-  --heartbeat-bearer-token-file /work/data/ucloud-sandboxes/state/heartbeat-token \
-  --heartbeat-bearer-token-source-file /work/data/ucloud-sandboxes/state/heartbeat-token \
-  --package-spec /work/ucloud-sandboxes/release/ucloud_sandboxes-<version>-py3-none-any.whl \
-  --total-vcpu 2 \
-  --total-memory-mb 6144 \
-  --total-disk-mb 450560 \
-  --cpu-overcommit 3 \
-  --memory-overcommit 2 \
-  --docker-quota-image-gb 440 \
-  --swap-gb 96 \
-  --init-authorized-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
-  --ssh-private-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init \
-  --execute
-```
-
-The overcommit multipliers increase scheduler-visible capacity, not physical
-RAM. Sandbox containers receive their requested Docker `--memory` limit and an
-explicit `--memory-swap` ceiling equal to twice that limit (combined RAM and
-swap). Standard sandbox initialization provisions a fixed 96 GiB swap file;
-builder initialization forces swap off and retains its separate 200 GiB Docker
-quota image.
-
-The heartbeat credential has its own file and is the only bearer credential
-copied to nodes. It is generated independently from `gateway-token`: the
-heartbeat token authorizes only `POST /v1/nodes/heartbeat`, while the gateway
-token authorizes public/control routes and cannot post a heartbeat. The
-heartbeat endpoint accepts only `Authorization: Bearer`; the public-link
-`X-UCloud-Sandbox-Token` header is not valid on that channel.
-
-Rotate the two files independently. Gateway-token rotation requires updating
-public clients and restarting the gateway. Heartbeat-token rotation requires a
-coordinated maintenance window: pause node initialization, install the new
-heartbeat token on existing nodes, atomically replace the gateway copy, restart
-the gateway and heartbeat timers, then resume initialization. Until overlapping
-heartbeat credentials are supported, an uncoordinated rotation causes expected
-temporary `401` responses rather than falling back to the gateway token.
-
-The init script installs Docker and gVisor/runsc, creates a sparse XFS
-project-quota image for Docker under `/var/lib/ucloud-sandboxes/docker-xfs.img`,
-mounts it at `/var/lib/ucloud-sandboxes/docker-xfs`, installs this package into
-a VM-local venv owned by `--service-user` (`ucloud` by default), and enables
-systemd services for the node agent and heartbeat timer that run as that user
-with Docker group access. Docker storage is intentionally VM-local because
-sandbox and builder layer caches are high-churn and do not need to persist
-after scale-down; the registry is the persistent image store. Use
-`--docker-quota-image-gb 0` to disable quota-backed Docker storage, or set a
-larger value for large sandbox nodes. For private network use, the generated
-node agent binds to `0.0.0.0` and advertises `http://<node-id>:8090` in
-heartbeats by default.
-
-When the gateway initializes nodes, generate a dedicated gateway keypair on the
-gateway and pass only its public key with `--init-authorized-key-file`. The
-private key is used by `init-vm --ssh-private-key-file` for the SSH transport
-and should not be copied into node init scripts or release artifacts.
-
-Register the gateway public key with UCloud once so new VM jobs accept it during
-their first SSH login:
-
-```bash
-ucloud-sandboxes ensure-ucloud-ssh-key \
+uv run ucloud-sandboxes ensure-ucloud-ssh-key \
   --session-file /work/data/ucloud-sandboxes/state/ucloud-session.json \
   --public-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
   --title "ucloud-sandboxes gateway init"
 ```
 
-Live note: this path has been tested on UCloud job `12345813` using a wheel
-copied to `/work/ucloud-sandboxes/release/`. Docker, `runsc`, quota-backed
-`--storage-opt size=...`, the node agent, heartbeat delivery, real sandbox
-creation, exec, and cleanup all worked.
+## Operational invariants
+
+- Sandbox CPU, memory, and disk capacity factors are exactly `1.0`.
+- Builder capacity and idle policy are independent from sandbox admission.
+- A post-start worker suspension is node loss; the autoscaler replaces capacity
+  and never trusts the earlier guest disk.
+- A node is ready only after verified bootstrap, service health, and a fresh
+  authenticated heartbeat.
+- Drain closes admission first. Stop execution requires a matching drain token,
+  complete empty inventory, and zero owned resources.
+- Docker image/cache storage is node-local. The managed registry and published
+  storage-native objects are durable.
+
+Bootstrap diagnostics emit `UCLOUD_INIT_PHASE` lines with phase and cumulative
+timings. On failure, inspect the init output plus the node, Docker, containerd,
+and storage-native journals. Correct the bundle or configuration and replay the
+same bootstrap generation; do not repair the node with a different artifact.

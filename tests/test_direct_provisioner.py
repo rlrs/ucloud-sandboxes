@@ -10,27 +10,24 @@ import hashlib
 import json
 import shutil
 import unittest
+from unittest.mock import patch
 
+from ucloud_sandboxes.direct_network import DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
-from ucloud_sandboxes.direct_node_adapter import (
-    DirectNodeManagerAdapter,
-    DirectNodeStateStore,
+from ucloud_sandboxes.node_runtime import (
+    DirectNodeRuntime,
+    NodeStateStore,
 )
-from ucloud_sandboxes.direct_migration import DirectMigrationArchiveStore
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.direct_service import DirectExecResult, DirectSandboxService
 from ucloud_sandboxes.direct_registry import (
     DirectRegistryError,
-    DirectSandboxRegistration,
     DirectSandboxRegistry,
 )
 from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.hibernation import (
-    HibernationArtifactFile,
     HibernationArtifactStore,
     HibernationDiskLedger,
-    HibernationFileRole,
-    HibernationManifest,
     HibernationRuntimeFingerprint,
     HibernationState,
 )
@@ -39,16 +36,32 @@ from ucloud_sandboxes.image_rootfs import (
     MaterializedRootfs,
     OverlayRootfsLease,
 )
+from ucloud_sandboxes.images import DockerImageRuntime
 from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
-from ucloud_sandboxes.node_agent import build_direct_node_agent_server
+from ucloud_sandboxes.node_agent import (
+    build_direct_node_agent_server as _build_direct_node_agent_server,
+)
 from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
     SandboxCapacityUnavailableError,
+    SandboxOperation,
     SandboxSecuritySpec,
     SandboxSpec,
+    sandbox_spec_fingerprint,
 )
+
+
+def build_direct_node_agent_server(*args, **kwargs):
+    explicit_auth = "node_control_bearer_token" in kwargs
+    kwargs.setdefault("node_control_bearer_token", "test-node-secret")
+    kwargs.setdefault("deployment_id", "test-deployment")
+    kwargs.setdefault("image_runtime", DockerImageRuntime(dry_run=True))
+    server = _build_direct_node_agent_server(*args, **kwargs)
+    if not explicit_auth:
+        server.RequestHandlerClass._check_node_control_authorized = lambda _self: True
+    return server
 
 
 class FakeImageStore:
@@ -71,9 +84,8 @@ class FakeImageStore:
         self.materialized_refs.append(image_ref)
         return self.image
 
-    def reconcile_export_containers(self) -> tuple[str, ...]:
+    def reconcile_images(self) -> None:
         self.reconciled = True
-        return ()
 
     def operation_snapshot(self) -> dict[str, int]:
         return {
@@ -212,6 +224,7 @@ class FakeWarden:
         self.records = {}
         self.discarded = []
         self.alive = True
+        self.storage = SimpleNamespace(get_metrics=lambda: {})
 
     @staticmethod
     def key(sandbox):
@@ -249,6 +262,10 @@ class FakeWarden:
             self.alive
             and self.records[self.key(sandbox)].state == HibernationState.RUNNING
         )
+
+    @staticmethod
+    def _storage_record(_sandbox):
+        return {"state": "mounted"}
 
     def park(self, sandbox, *, operation_id):
         del operation_id
@@ -333,6 +350,23 @@ class DirectProvisionerTests(unittest.TestCase):
             security=SandboxSecuritySpec(init=False),
         )
 
+    @staticmethod
+    def create(
+        service: DirectSandboxService,
+        spec: SandboxSpec,
+        *,
+        generation: int = 7,
+    ):
+        return service.create(
+            spec,
+            operation=SandboxOperation(
+                operation_id=f"create:{spec.id}:{generation}",
+                generation=generation,
+                kind="create",
+                spec_hash=sandbox_spec_fingerprint(spec),
+            ),
+        )
+
     def test_create_and_delete_order_all_owners(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -355,96 +389,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertIsNone(registry.get("sandbox"))
             self.assertEqual(ledger.inventory().reservations, ())
             self.assertEqual(quota.inventory(), ())
-
-    def test_import_stays_unavailable_until_explicit_activation(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, registry, _, _, images, warden = self.make(root)
-            source_root = root / "source"
-            source = source_root / "sandbox.sandbox-7"
-            generation = source / "hibernate-2"
-            upper = source / "upper"
-            generation.mkdir(parents=True)
-            upper.mkdir()
-            (upper / "payload").write_bytes(b"writable-state")
-            roles = {
-                "application_memory.img": HibernationFileRole.MAIN_MEMORY,
-                "checkpoint.img": HibernationFileRole.KERNEL_STATE,
-                "pages_meta.img": HibernationFileRole.ALLOCATOR_METADATA,
-            }
-            for name in roles:
-                (generation / name).write_bytes(name.encode("ascii"))
-            runtime = replace(
-                warden.config.runtime_fingerprint,
-                rootfs_sha256=images.image.rootfs_identity_sha256,
-            )
-            container_id = hashlib.sha256(b"sandbox:7").hexdigest()
-            source_registration = DirectSandboxRegistration(
-                spec=self.spec(),
-                sandbox_generation=7,
-                operation_id="create:7",
-                runtime_identity_sha256=provisioner.identity.digest,
-                phase="owned",
-                revision=4,
-                created_ns=1,
-                updated_ns=1,
-                quota_project_id=200_007,
-                quota_total_mb=4096,
-                quota_path=str(source),
-                image_id=images.image.image_id,
-                rootfs_sha256=images.image.rootfs_identity_sha256,
-                container_id=container_id,
-                bundle=str(source_root / "bundle"),
-                memory_directory=source.name,
-            )
-            source_manifest = HibernationManifest(
-                sandbox_id="sandbox",
-                sandbox_generation=7,
-                hibernation_generation=2,
-                operation_id="park:source",
-                spec_sha256=source_registration.spec_sha256,
-                container_id=container_id,
-                created_ns=1,
-                runtime=runtime,
-                files=tuple(
-                    HibernationArtifactFile.from_path(
-                        generation / name,
-                        role=role,
-                    )
-                    for name, role in roles.items()
-                ),
-            )
-            HibernationArtifactStore(source_root).publish_complete(source_manifest)
-            archive_path = root / "migration.tar"
-            archive = DirectMigrationArchiveStore().export(
-                registration=source_registration,
-                local_manifest=source_manifest,
-                runtime_identity=provisioner.identity,
-                writable_incarnation=source,
-                archive_path=archive_path,
-            )
-
-            staged = provisioner.stage_import(
-                archive_path,
-                expected_sha256=archive.sha256,
-                migration_id="move:7",
-            )
-
-            self.assertEqual(staged.registration.phase, "import_ready")
-            self.assertEqual(staged.lifecycle_state, HibernationState.PARKED)
-            self.assertEqual(registry.get("sandbox").phase, "import_ready")
-            activated = provisioner.activate_import(
-                "sandbox",
-                migration_id="move:7",
-                migration_sha256=archive.sha256,
-            )
-            self.assertEqual(activated.registration.phase, "owned")
-            replay = provisioner.stage_import(
-                archive_path,
-                expected_sha256=archive.sha256,
-                migration_id="move:7",
-            )
-            self.assertEqual(replay.registration.phase, "owned")
 
     def test_restart_advances_quota_ready_registration(self) -> None:
         with TemporaryDirectory() as raw:
@@ -476,6 +420,69 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertTrue(images.reconciled)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].registration.phase, "owned")
+
+    def test_restart_uses_one_registry_snapshot_and_one_host_network_pass(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _, warden = self.make(root)
+            network = DirectNetworkManager(
+                root / "network-slots.json",
+                namespace_root=root / "netns",
+            )
+            provisioner.network_manager = network
+            provisioner.oci = DirectOciConfigBuilder(network_mode="sandbox")
+            warden.config.network = "sandbox"
+            original_prepare = provisioner.overlays.prepare
+
+            def prepare_with_etc(**kwargs):
+                lease = original_prepare(**kwargs)
+                (lease.merged / "etc").mkdir()
+                return lease
+
+            provisioner.overlays.prepare = prepare_with_etc
+            with (
+                patch.object(network, "_ensure_host_rules") as ensure_host_rules,
+                patch.object(network, "_ensure_kernel_lease") as ensure_kernel_lease,
+            ):
+                for index in range(3):
+                    provisioner.create(
+                        spec=replace(
+                            self.spec(),
+                            id=f"sandbox-{index}",
+                            network="bridge",
+                        ),
+                        sandbox_generation=7,
+                        operation_id=f"create:{index}",
+                    )
+                ensure_host_rules.reset_mock()
+                ensure_kernel_lease.reset_mock()
+                original_list = registry.list
+                original_get = registry.get
+                list_calls = 0
+                get_calls = 0
+
+                def counted_list():
+                    nonlocal list_calls
+                    list_calls += 1
+                    return original_list()
+
+                def counted_get(sandbox_id: str):
+                    nonlocal get_calls
+                    get_calls += 1
+                    return original_get(sandbox_id)
+
+                registry.list = counted_list  # type: ignore[method-assign]
+                registry.get = counted_get  # type: ignore[method-assign]
+
+                results = provisioner.start()
+
+            self.assertEqual(len(results), 3)
+            self.assertEqual(list_calls, 1)
+            self.assertEqual(get_calls, 0)
+            ensure_host_rules.assert_called_once_with()
+            self.assertEqual(ensure_kernel_lease.call_count, 3)
 
     def test_restart_never_turns_interrupted_import_into_new_sandbox(self) -> None:
         with TemporaryDirectory() as raw:
@@ -594,7 +601,7 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             service.start()
             try:
-                created = service.create(self.spec())
+                created = self.create(service, self.spec())
                 original_drop = quota.drop
                 failures_remaining = 1
 
@@ -607,11 +614,16 @@ class DirectProvisionerTests(unittest.TestCase):
 
                 quota.drop = transient_drop
                 with self.assertRaisesRegex(OSError, "transient quota delete"):
-                    service.delete(created.spec.id)
+                    service.delete(
+                        created.spec.id,
+                        generation=created.generation,
+                    )
                 self.assertEqual(registry.get(created.spec.id).phase, "deleting")
 
                 deadline = monotonic() + 2
-                while registry.get(created.spec.id) is not None and monotonic() < deadline:
+                while (
+                    registry.get(created.spec.id) is not None and monotonic() < deadline
+                ):
                     sleep(0.01)
 
                 self.assertIsNone(registry.get(created.spec.id))
@@ -683,8 +695,8 @@ class DirectProvisionerTests(unittest.TestCase):
             provisioner, _, _, _, _, _ = self.make(root)
             runner = FakeProcessRunner()
             service = DirectSandboxService(provisioner, process_runner=runner)
-            created = service.create(self.spec())
-            service.park(created.spec.id)
+            created = self.create(service, self.spec())
+            service.park(created.spec.id, operation_id="park:exec")
 
             result = service.exec(created.spec.id, ("/bin/echo", "ok"))
             service.write_file(created.spec.id, "/workspace/payload", b"\0binary")
@@ -722,7 +734,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
+            created = self.create(service, self.spec())
 
             parked = service.park(
                 created.spec.id,
@@ -732,9 +744,7 @@ class DirectProvisionerTests(unittest.TestCase):
 
             self.assertEqual(parked.state, HibernationState.PARKED.value)
             self.assertTrue(publication_started.wait(timeout=1))
-            self.assertTrue(
-                service.storage_native_publication_pending(created.spec.id)
-            )
+            self.assertTrue(service.storage_native_publication_pending(created.spec.id))
             allow_publication.set()
             for thread in tuple(service._publication_threads.values()):
                 thread.join(timeout=5)
@@ -760,7 +770,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
+            created = self.create(service, self.spec())
 
             parked = service.park(
                 created.spec.id,
@@ -778,7 +788,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
+            created = self.create(service, self.spec())
             warden.alive = False
 
             observed = service.get(created.spec.id)
@@ -794,10 +804,10 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            first = service.create(replace(self.spec(), id="sandbox-a"))
-            second = service.create(replace(self.spec(), id="sandbox-b"))
-            service.park(first.spec.id)
-            service.park(second.spec.id)
+            first = self.create(service, replace(self.spec(), id="sandbox-a"))
+            second = self.create(service, replace(self.spec(), id="sandbox-b"))
+            service.park(first.spec.id, operation_id="park:first")
+            service.park(second.spec.id, operation_id="park:second")
             service.configure_active_capacity(ResourceQuantity(vcpu=1, memory_mb=1024))
 
             service.exec(first.spec.id, ("/bin/true",))
@@ -833,7 +843,7 @@ class DirectProvisionerTests(unittest.TestCase):
             )
 
             for index in range(3):
-                service.create(replace(self.spec(), id=f"sandbox-{index}"))
+                self.create(service, replace(self.spec(), id=f"sandbox-{index}"))
 
             self.assertEqual(
                 {record.state for record in service.list()},
@@ -864,7 +874,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 SandboxCapacityUnavailableError,
                 "CPU pressure",
             ):
-                service.create(self.spec())
+                self.create(service, self.spec())
 
     def test_dynamic_active_admission_fails_closed_without_metrics(self) -> None:
         with TemporaryDirectory() as raw:
@@ -884,7 +894,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 SandboxCapacityUnavailableError,
                 "no fresh runtime metrics",
             ):
-                service.create(self.spec())
+                self.create(service, self.spec())
 
     def test_dynamic_active_admission_stops_on_cpu_load(self) -> None:
         with TemporaryDirectory() as raw:
@@ -911,8 +921,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 SandboxCapacityUnavailableError,
                 "CPU load",
             ):
-                service.create(self.spec())
-
+                self.create(service, self.spec())
 
     def test_node_adapter_releases_exec_start_fence_and_accounts_parked_memory(
         self,
@@ -924,9 +933,9 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
-            manager = DirectNodeManagerAdapter(service)
-            service.park(created.spec.id)
+            created = self.create(service, self.spec())
+            manager = DirectNodeRuntime(service)
+            service.park(created.spec.id, operation_id="park:exec-start")
 
             manager.lifecycle.acquire_shared(created.spec.id)
             command = manager.runtime.exec_command(
@@ -941,7 +950,7 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(command[:2], ("runsc", "exec"))
             self.assertEqual(snapshot.activity.active_sandboxes, 1)
             self.assertEqual(snapshot.activity.used_resources.memory_mb, 0)
-            service.park(created.spec.id)
+            service.park(created.spec.id, operation_id="park:heartbeat")
             parked = manager.heartbeat_snapshot(active_build_count=lambda: 0)
             self.assertEqual(parked.activity.active_sandboxes, 0)
             self.assertEqual(parked.activity.used_resources.memory_mb, 0)
@@ -956,8 +965,8 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
-            manager = DirectNodeManagerAdapter(service)
+            created = self.create(service, self.spec())
+            manager = DirectNodeRuntime(service)
 
             manager.lifecycle.acquire_shared(created.spec.id)
             manager.runtime.exec_command(
@@ -967,7 +976,7 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             manager.runtime.exec_started(created.spec.id)
             with self.assertRaisesRegex(SandboxBusyError, "active exec"):
-                manager.park(created.spec.id)
+                manager.park(created.spec.id, operation_id="park-busy")
 
             deleted, _ = manager.delete(
                 created.spec.id,
@@ -1010,7 +1019,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 total_mb=4096,
                 quota_path=(root / "quota" / "quota-ready.sandbox-2").resolve(),
             )
-            manager = DirectNodeManagerAdapter(service)
+            manager = DirectNodeRuntime(service)
 
             snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
 
@@ -1031,7 +1040,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            manager = DirectNodeManagerAdapter(service)
+            manager = DirectNodeRuntime(service)
             materialize_started = Event()
             materialize_release = Event()
             original_materialize = images.materialize
@@ -1044,7 +1053,9 @@ class DirectProvisionerTests(unittest.TestCase):
 
             images.materialize = blocked_materialize
             created: list[object] = []
-            create_thread = Thread(target=lambda: created.append(service.create(self.spec())))
+            create_thread = Thread(
+                target=lambda: created.append(self.create(service, self.spec()))
+            )
             create_thread.start()
             self.assertTrue(materialize_started.wait(timeout=2))
 
@@ -1061,7 +1072,7 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertFalse(draining.ready)
             self.assertEqual(draining.activity.active_operations, 1)
             with self.assertRaises(SandboxAdmissionClosedError):
-                service.create(replace(self.spec(), id="rejected"))
+                self.create(service, replace(self.spec(), id="rejected"))
 
             materialize_release.set()
             create_thread.join(timeout=5)
@@ -1080,7 +1091,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            manager = DirectNodeManagerAdapter(service)
+            manager = DirectNodeRuntime(service)
             snapshot_started = Event()
             snapshot_release = Event()
             configure_done = Event()
@@ -1153,7 +1164,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            manager = DirectNodeManagerAdapter(service)
+            manager = DirectNodeRuntime(service)
             images = ImageOperations()
 
             with manager.image_operation(images):
@@ -1165,9 +1176,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 self.assertFalse(draining.ready)
                 self.assertEqual(draining.active_image_builds, 1)
 
-            ready = manager.heartbeat_snapshot(
-                active_build_count=lambda: images.active
-            )
+            ready = manager.heartbeat_snapshot(active_build_count=lambda: images.active)
             self.assertTrue(ready.ready)
             with self.assertRaises(SandboxAdmissionClosedError):
                 with manager.image_operation(images):
@@ -1181,8 +1190,8 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
-            manager = DirectNodeManagerAdapter(service)
+            created = self.create(service, self.spec())
+            manager = DirectNodeRuntime(service)
 
             def fenced_inspect(_sandbox):
                 raise AssertionError("heartbeat joined the streaming exec fence")
@@ -1203,17 +1212,17 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            state_store = DirectNodeStateStore(root / "direct-node-state.json")
-            manager = DirectNodeManagerAdapter(service, state_store=state_store)
+            state_store = NodeStateStore(root / "direct-node-state.json")
+            manager = DirectNodeRuntime(service, state_store=state_store)
 
             drained = manager.configure_drain(
                 "drain-test",
                 True,
                 active_build_count=lambda: 0,
             )
-            restarted = DirectNodeManagerAdapter(
+            restarted = DirectNodeRuntime(
                 service,
-                state_store=DirectNodeStateStore(root / "direct-node-state.json"),
+                state_store=NodeStateStore(root / "direct-node-state.json"),
             )
             restarted_snapshot = restarted.heartbeat_snapshot(
                 active_build_count=lambda: 0
@@ -1342,7 +1351,7 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertIn("image", heartbeat["cached_images"])
             self.assertEqual(
                 heartbeat["runtime_metrics"][
-                    "rootfs_export_max_concurrent_operations"
+                    "image_materialization_max_concurrent_operations"
                 ],
                 4,
             )
@@ -1355,7 +1364,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            created = service.create(self.spec())
+            created = self.create(service, self.spec())
             server = build_direct_node_agent_server(
                 "127.0.0.1",
                 0,
@@ -1406,174 +1415,6 @@ class DirectProvisionerTests(unittest.TestCase):
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=1)
-
-    def test_direct_node_migrates_parked_sandbox_between_daemons(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            source_root = root / "source"
-            destination_root = root / "destination"
-            source_root.mkdir()
-            destination_root.mkdir()
-            source, _, _, _, source_images, source_warden = self.make(source_root)
-            destination, destination_registry, _, _, _, _ = self.make(destination_root)
-            source_service = DirectSandboxService(
-                source,
-                process_runner=FakeProcessRunner(),
-            )
-            destination_service = DirectSandboxService(
-                destination,
-                process_runner=FakeProcessRunner(),
-            )
-            created = source_service.create(self.spec())
-            source_service.park(created.spec.id, operation_id="park:migration")
-            registration = source.registry.get(created.spec.id)
-            self.assertIsNotNone(registration)
-            assert registration is not None
-            incarnation = Path(registration.quota_path)
-            generation = incarnation / "hibernate-1"
-            generation.mkdir()
-            (incarnation / "upper" / "payload").write_bytes(b"migrated")
-            roles = {
-                "application_memory.img": HibernationFileRole.MAIN_MEMORY,
-                "checkpoint.img": HibernationFileRole.KERNEL_STATE,
-                "pages_meta.img": HibernationFileRole.ALLOCATOR_METADATA,
-            }
-            for name in roles:
-                (generation / name).write_bytes(name.encode("ascii"))
-            runtime = replace(
-                source_warden.config.runtime_fingerprint,
-                rootfs_sha256=source_images.image.rootfs_identity_sha256,
-            )
-            manifest = HibernationManifest(
-                sandbox_id=registration.sandbox_id,
-                sandbox_generation=registration.sandbox_generation,
-                hibernation_generation=1,
-                operation_id="park:migration",
-                spec_sha256=registration.spec_sha256,
-                container_id=registration.container_id,
-                created_ns=1,
-                runtime=runtime,
-                files=tuple(
-                    HibernationArtifactFile.from_path(
-                        generation / name,
-                        role=role,
-                    )
-                    for name, role in roles.items()
-                ),
-            )
-            source_warden.artifacts.publish_complete(manifest)
-            source_warden.records[
-                (registration.sandbox_id, registration.sandbox_generation)
-            ] = SimpleNamespace(
-                state=HibernationState.PARKED,
-                hibernation_generation=1,
-            )
-
-            source_server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=source_service,
-                image_file=source_root / "images.json",
-                job_id="source-job",
-                node_id="source-node",
-                node_control_bearer_token="shared-secret",
-            )
-            destination_server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=destination_service,
-                image_file=destination_root / "images.json",
-                job_id="destination-job",
-                node_id="destination-node",
-                node_control_bearer_token="shared-secret",
-            )
-            source_thread = Thread(
-                target=source_server.serve_forever,
-                daemon=True,
-            )
-            destination_thread = Thread(
-                target=destination_server.serve_forever,
-                daemon=True,
-            )
-            source_thread.start()
-            destination_thread.start()
-
-            def post(base: str, path: str, payload: dict) -> dict:
-                outbound = request.Request(
-                    base + path,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Authorization": "Bearer shared-secret",
-                        "Content-Type": "application/json",
-                    },
-                    method="POST",
-                )
-                with request.urlopen(outbound) as response:
-                    return json.load(response)
-
-            try:
-                source_host, source_port = source_server.server_address
-                destination_host, destination_port = destination_server.server_address
-                source_base = f"http://{source_host}:{source_port}"
-                destination_base = f"http://{destination_host}:{destination_port}"
-                migration_id = "migration-http"
-                prepared = post(
-                    source_base,
-                    f"/v1/sandboxes/{created.spec.id}/migration/prepare",
-                    {"migration_id": migration_id},
-                )["migration"]
-                source_url = (
-                    f"{source_base}/v1/sandboxes/{created.spec.id}"
-                    f"/migration/archive?migration_id={migration_id}"
-                )
-                imported = post(
-                    destination_base,
-                    "/v1/migrations/import",
-                    {
-                        "archive_sha256": prepared["archive_sha256"],
-                        "archive_token": prepared["archive_token"],
-                        "migration_id": migration_id,
-                        "sandbox_id": created.spec.id,
-                        "source_url": source_url,
-                    },
-                )
-                self.assertEqual(imported["sandbox"]["state"], "import_ready")
-                activated = post(
-                    destination_base,
-                    f"/v1/sandboxes/{created.spec.id}/migration/activate",
-                    {
-                        "archive_sha256": prepared["archive_sha256"],
-                        "migration_id": migration_id,
-                    },
-                )
-                post(
-                    source_base,
-                    f"/v1/sandboxes/{created.spec.id}/migration/finalize",
-                    {
-                        "archive_sha256": prepared["archive_sha256"],
-                        "migration_id": migration_id,
-                    },
-                )
-            finally:
-                source_server.shutdown()
-                destination_server.shutdown()
-                source_server.server_close()
-                destination_server.server_close()
-                source_thread.join(timeout=1)
-                destination_thread.join(timeout=1)
-
-            self.assertEqual(activated["sandbox"]["state"], "parked")
-            self.assertIsNone(source.registry.get(created.spec.id))
-            destination_registration = destination_registry.get(created.spec.id)
-            self.assertIsNotNone(destination_registration)
-            assert destination_registration is not None
-            self.assertEqual(destination_registration.phase, "owned")
-            self.assertEqual(
-                (
-                    Path(destination_registration.quota_path) / "upper" / "payload"
-                ).read_bytes(),
-                b"migrated",
-            )
 
 
 if __name__ == "__main__":

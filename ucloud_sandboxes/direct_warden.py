@@ -318,19 +318,15 @@ class DirectRunscWarden:
         self.storage = storage
         self.rootfs_lifecycle = rootfs_lifecycle
         if (storage is None) != (rootfs_lifecycle is None):
-            raise ValueError(
-                "storage-native Warden requires a rootfs mount lifecycle"
-            )
+            raise ValueError("storage-native Warden requires a rootfs mount lifecycle")
         self.journals = HibernationJournalStore(config.journal_root)
         self.artifacts = HibernationArtifactStore(
             config.artifact_root,
             preserve_incarnation_roots=(
-                storage is not None
-                and config.artifact_root == config.memory_root
+                storage is not None and config.artifact_root == config.memory_root
             ),
             require_stable_device=not (
-                storage is not None
-                and config.artifact_root == config.memory_root
+                storage is not None and config.artifact_root == config.memory_root
             ),
         )
         self._ensure_roots()
@@ -457,9 +453,7 @@ class DirectRunscWarden:
                     )
                 payload = path.read_bytes()
                 if len(payload) > 1024 * 1024:
-                    raise DirectWardenError(
-                        "parked manifest control copy is too large"
-                    )
+                    raise DirectWardenError("parked manifest control copy is too large")
                 manifest = HibernationManifest.from_dict(
                     json.loads(payload.decode("ascii"))
                 )
@@ -476,7 +470,7 @@ class DirectRunscWarden:
                 raise DirectWardenError(
                     "parked manifest control copy is unavailable"
                 ) from exc
-            manifest.require_compatible(
+            manifest.validate_identity(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
                 spec_sha256=sandbox.spec_sha256,
@@ -484,13 +478,10 @@ class DirectRunscWarden:
             )
             self._require_managed_process_ledger(sandbox, manifest)
             if (
-                manifest.hibernation_generation
-                != parked.hibernation_generation
+                manifest.hibernation_generation != parked.hibernation_generation
                 or manifest.metadata_sha256 != parked.manifest_sha256
             ):
-                raise DirectWardenError(
-                    "parked manifest control copy changed identity"
-                )
+                raise DirectWardenError("parked manifest control copy changed identity")
             return manifest
 
     def publish_storage_snapshot(
@@ -562,7 +553,7 @@ class DirectRunscWarden:
     ) -> HibernationRecord:
         """Adopt a destination-local migration artifact without starting runsc."""
         with self._locked(sandbox):
-            manifest.require_compatible(
+            manifest.validate_identity(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
                 spec_sha256=sandbox.spec_sha256,
@@ -698,7 +689,7 @@ class DirectRunscWarden:
                     sandbox_generation=sandbox.sandbox_generation,
                     hibernation_generation=parked.hibernation_generation,
                 )
-                manifest.require_compatible(
+                manifest.validate_identity(
                     sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation,
                     spec_sha256=sandbox.spec_sha256,
@@ -1062,10 +1053,7 @@ class DirectRunscWarden:
                 finally:
                     candidate.close()
 
-            if (
-                self.storage is not None
-                and record.state == HibernationState.PARKED
-            ):
+            if self.storage is not None and record.state == HibernationState.PARKED:
                 self._release_parked_storage(
                     sandbox,
                     operation_seed=f"reconcile:{record.revision}",
@@ -1139,9 +1127,7 @@ class DirectRunscWarden:
             # a backend restart can leave an old ublk mount returning EIO, and
             # deletion must remain possible precisely in that recovery case.
             if self.storage is None:
-                unified_storage = (
-                    self.config.memory_root == self.config.artifact_root
-                )
+                unified_storage = self.config.memory_root == self.config.artifact_root
                 for item in self.artifacts.inventory_incarnation(
                     sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation,
@@ -1770,10 +1756,10 @@ class DirectRunscWarden:
                 if isinstance(annotations, dict)
                 else None
             )
-        except FileNotFoundError:
-            # Legacy non-managed sandboxes and old test fixtures predate this
-            # annotation. A managed sandbox always has a generated OCI config.
-            return ""
+        except FileNotFoundError as exc:
+            raise DirectWardenError(
+                "sandbox OCI config is absent while verifying managed processes"
+            ) from exc
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise DirectWardenError(
                 "could not verify managed-process OCI identity"
@@ -1807,9 +1793,7 @@ class DirectRunscWarden:
         except FileNotFoundError:
             return hashlib.sha256(b"managed-primary-v1:no-job").hexdigest()
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise DirectWardenError(
-                "managed-process ledger is unavailable"
-            ) from exc
+            raise DirectWardenError("managed-process ledger is unavailable") from exc
         return hashlib.sha256(payload).hexdigest()
 
     def _runtime_fingerprint(
@@ -1936,9 +1920,7 @@ class DirectRunscWarden:
         also fitting the daemon's bounded safe-ID grammar.
         """
 
-        identity = (
-            f"{sandbox.sandbox_id}\0{sandbox.sandbox_generation}\0{operation_id}"
-        )
+        identity = f"{sandbox.sandbox_id}\0{sandbox.sandbox_generation}\0{operation_id}"
         return "warden-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
     def _mount_storage(
@@ -1987,9 +1969,7 @@ class DirectRunscWarden:
                     "storage-native acquire returned an invalid record"
                 )
             return raw_mounted
-        raise DirectWardenError(
-            f"storage-native volume is {state}, not resumable"
-        )
+        raise DirectWardenError(f"storage-native volume is {state}, not resumable")
 
     def _seal_storage(
         self,
@@ -2014,9 +1994,7 @@ class DirectRunscWarden:
         )
         raw = sealed.get("record")
         if not isinstance(raw, dict):
-            raise DirectWardenError(
-                "storage-native seal returned an invalid record"
-            )
+            raise DirectWardenError("storage-native seal returned an invalid record")
         return raw
 
     def _release_storage(
@@ -2042,9 +2020,7 @@ class DirectRunscWarden:
         )
         raw = released.get("record")
         if not isinstance(raw, dict):
-            raise DirectWardenError(
-                "storage-native release returned an invalid record"
-            )
+            raise DirectWardenError("storage-native release returned an invalid record")
         return raw
 
     def _release_parked_storage(
@@ -2126,7 +2102,7 @@ class DirectRunscWarden:
         sandbox: DirectSandbox,
         manifest: HibernationManifest,
     ) -> None:
-        manifest.require_compatible(
+        manifest.validate_identity(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
             spec_sha256=sandbox.spec_sha256,

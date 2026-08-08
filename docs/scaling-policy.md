@@ -1,10 +1,5 @@
 # Scaling policy
 
-Date: 2026-07-31
-
-Implementation priority and rollout gates are tracked in
-[Production roadmap](roadmap.md).
-
 UCloud VM startup can be slow or capacity-constrained, so the autoscaler should
 not behave like a normal fast container scheduler. The policy should balance
 two risks:
@@ -69,8 +64,8 @@ data:
 ```
 
 This keeps no idle VM by default, submits at most one new VM per reconciliation
-cycle, and uses the qualified homogeneous storage-native node shape as the
-planning fallback: 32 vCPU, 96 GiB RAM, and 1,449,984 MiB of hard sandbox
+cycle, and uses the configured homogeneous storage-native node shape for
+planning: 32 vCPU, 96 GiB RAM, and 1,449,984 MiB of hard sandbox
 capacity on a 2-TB worker after bounded image storage, swap, cache, and
 headroom. A heartbeat replaces this estimate with measured capacity as soon as
 the node is ready.
@@ -96,7 +91,7 @@ Create pressure is an amplifier for resident host pressure, not an independent
 reason to buy capacity. Two sampled `gateway_busy` rejections in the default
 30-second window prove that all gateway create slots are occupied, but another
 VM is requested only when the ordinary sustained CPU, memory, PSI, storage, or
-rootfs-waiting signal independently proves that it can help. The default burst
+image-materialization queue independently proves that it can help. The default burst
 is capped at one node beyond hard resource demand. Operators can raise
 `create_pressure_max_headroom_nodes` after observing a workload where measured
 node-side queues justify a wider burst. Already-provisioning nodes count toward
@@ -106,11 +101,11 @@ Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer
 cost estimates to decide whether another image transfer is cheaper than the
 queue. This prevents a cached image from pinning an entire diverse cold-start
-burst to one rootfs export pipeline.
+burst to one image-materialization queue.
 
 Node heartbeats expose active sandbox creates plus active, waiting, and maximum
-rootfs-export operations. Rootfs pressure is `waiting / concurrency`: occupied
-slots are productive capacity and cannot trigger scale-up without a queue.
+image-materialization operations. Queue pressure is `waiting / concurrency`:
+occupied slots are productive capacity and cannot trigger scale-up without a queue.
 Gateway saturation can widen a confirmed burst but cannot manufacture pressure
 from healthy cold creates.
 
@@ -130,6 +125,19 @@ The policy does not predict the next tool call for each parked sandbox.
 Instead, the relay supplies an exact `ready_to_wake` signal and a deliberately
 coarse aggregate `model_wait` leading signal. The latter is bounded and
 disabled for action by default, as described below.
+
+## Program-aware wake demand
+
+The gateway persists each relay-bound request in one of four generation-fenced
+phases: `model_wait`, `ready_to_wake`, `waking`, or `acting`. `ready_to_wake`
+is exact hard demand because the response is already committed and the sandbox
+must run. `model_wait` is only a weighted, bounded headroom signal for requests
+still executing on a model worker.
+
+The scheduler always records its wake plan and metrics. With
+`program_aware_autoscaling_enabled=false`, that plan is shadow-only. Enabling
+the setting allows its hard and weighted demand to create or retain nodes; it
+does not change route ownership, disk accounting, or generation fences.
 
 The deployed systemd service exposes every live-feedback setting through
 `/etc/ucloud-sandboxes/autoscaler.env`. The corresponding variables are
@@ -151,33 +159,6 @@ The deployed systemd service exposes every live-feedback setting through
 autoscaler service restart. Set the corresponding enabled variable to `false`
 for a shadow rollout: metrics and the dashboard continue to update, while that
 feedback neither creates nor retains nodes.
-
-## Program-aware leading demand
-
-The gateway durably projects relay requests as `model_wait`,
-`ready_to_wake`, `waking`, or `acting`, fenced by sandbox generation. A relay
-return also records an O(nodes) shadow destination choice before the existing
-immediate wake. The periodic autoscaler independently computes a full
-aging-first global wake plan for blocked ready work.
-
-`ready_to_wake` CPU and memory are hard immediate demand unless the ordinary
-pending wake record already represents the same sandbox. Disk is not added:
-the sandbox's durable route already owns its hard disk reservation, and a
-cross-node destination must independently pass exact disk fit.
-
-`model_wait_capacity_weight` discounts aggregate parked CPU and memory to
-retain leading headroom. The contribution is capped at
-`model_wait_max_headroom_nodes * default_node_resources`; it never contributes
-disk. Concurrent relay calls for one sandbox are collapsed to the most urgent
-phase, so one sandbox cannot reserve its active shape multiple times.
-
-`program_aware_autoscaling_enabled=false` is the production default. In that
-mode the exact counts, counterfactual resource contribution, arrival decisions,
-and periodic global plan are emitted, but the resulting resource quantity is
-zero in the scale decision. Enabling it changes only create/retain demand; it
-does not yet activate a durable queued-wake dispatcher or delay relay delivery.
-Those changes remain behind the acceptance gates in
-[Program-aware sandbox scheduling](program-aware-scheduling-plan.md).
 
 ## Knobs
 
@@ -220,10 +201,9 @@ If a create was already placed on a node but the gateway has not yet observed
 completion, retries with the same sandbox id return a retryable in-progress
 response instead of adding another scale-up signal or choosing a different node.
 
-Disk is only credited from node heartbeats that advertise `disk-quota`, which is
-derived from a passing runtime conformance probe. Nodes without that capability
-can still contribute CPU and memory, but their free disk is treated as zero for
-hard disk demand.
+Disk is credited only from the storage-native physical-capacity report in a
+fresh complete heartbeat. A node without storage-native authority receives no
+sandbox placement.
 
 `max_provisioning_nodes` caps queued or booting VM jobs. Keep this low while
 UCloud reports scarce machines, otherwise the autoscaler can submit redundant
@@ -270,7 +250,7 @@ process exits; there is no renewable wall-clock leader lease or renewal thread.
 The SQLite file retains the provider-operation ambiguity journal and durable
 drain desired state. `autoscaler-loop` is the only mutating entry point, and
 `autoscaler-loop --once` runs one operational cycle. `reconcile` is always
-read-only and rejects its legacy mutation flags.
+read-only.
 
 No executing autoscaler sends a provider terminate request directly from a
 scale-down decision. While holding the local controller lock it first writes a durable
@@ -357,7 +337,7 @@ present or while the one-shot build signal is waiting to be consumed. The goal i
 to avoid scaling sandbox nodes to zero while a builder is preparing an image that
 will likely be launched shortly afterward.
 
-## Direct-runtime placement, wake, and evacuation
+## Direct-runtime placement and wake
 
 The direct runtime has no fixed CPU or memory overcommit multiplier. Each node
 advertises physical CPU and RAM, but resident sandbox CPU and memory limits are
@@ -373,19 +353,17 @@ This produces two independent capacity questions:
 
 The first answer determines durable placement. The second is re-evaluated on
 create and wake using actual CPU, available RAM plus swap, load, and memory PSI.
-A parked sandbox stays local when its individual shape fits and live pressure
-allows admission. Otherwise the gateway can choose or provision another node
-and migrate the opaque parked state before forwarding the request. The node
-independently applies the same pressure brake and reserves concurrent creates
-and wakes against physical CPU/RAM, so stale heartbeats and simultaneous
-requests cannot produce an unbounded activation burst.
+A parked sandbox wakes on its owning node when its individual shape fits and
+live pressure allows admission. Otherwise the gateway may migrate its verified
+storage-native snapshot to a fitting node before wake. The node independently
+applies the same pressure brake and reserves concurrent creates and wakes
+against physical CPU/RAM, so stale heartbeats and simultaneous requests cannot
+produce an unbounded activation burst.
 
-Failed create, wake, and migration placement attempts persist individual
-request shapes as pending demand. The autoscaler consumes disk additively and
-bin-packs exact disk shapes. CPU and memory contribute the largest individual
-shape and are reusable within a dynamic-admission node; sustained live pressure
-adds a headroom node. Older nodes without the dynamic-admission capability keep
-the conservative additive CPU/RAM behavior during a rolling upgrade.
+Failed create and wake attempts persist individual request shapes as pending
+demand. The autoscaler consumes disk additively and bin-packs exact disk shapes.
+CPU and memory contribute the largest individual shape and are reusable within
+a dynamic-admission node; sustained live pressure adds a headroom node.
 
 Closing admission and selecting placement can race. A node that has durably
 closed its admission gate returns the structured, retryable
@@ -395,27 +373,21 @@ route, restores the exact request shape as pending demand, and allows the SDK
 retry to select another node. Timeouts and generic 5xx responses remain
 identity-fenced because the original create may have reached provisioning.
 
-Scale-down is evacuation rather than an empty-container check:
+Scale-down requires a proven empty node or a completed storage-native migration:
 
 1. persist a drain incarnation and close node admission;
-2. migrate parked inventory, bounded by `--max-migrations-per-cycle`;
-3. wait for running sandboxes to become idle and park, then migrate them;
-4. require a fresh complete empty inventory and zero resource ownership;
-5. journal and execute the provider stop.
+2. wait for running ownership to be deleted and migrate each parked
+   `storage-native-v1` route to a surviving node that advertises both
+   `storage-native-v1` and `sandbox-migrate-storage-native-v1`;
+3. require a fresh complete empty inventory and zero resource ownership after
+   migration;
+4. journal and execute the provider stop.
 
-Before drain begins, the autoscaler bin-packs every parked disk shape on the
-candidate across ready nodes that will remain after the same stop batch. It
-blocks the stop if the shapes do not fit. In particular, the last disk-owning
-node remains: starting a replacement and copying the same parked state sideways
-would not reduce capacity and would otherwise cause perpetual scale-down churn.
-Explicit relocation and stranded-wake requests can still record disk-only
-pending demand so a destination node is started. The autoscaler derives the
-gateway base from `--init-heartbeat-url`, or accepts `--gateway-control-url`
-explicitly.
-Movement is deliberately limited to evacuation, disk-pressure repair, and
-stranded wakes. It is not part of the normal idle loop: the measured cost ranges
-from milliseconds for empty state to seconds for hundreds of MiB of resident
-state.
+The autoscaler derives the gateway base from `--init-heartbeat-url`, or accepts
+`--gateway-control-url` explicitly. It starts at most
+`--max-storage-native-migrations-per-cycle` drain migrations. A node is not a
+stop candidate when any parked route lacks the canonical storage schema,
+manifest digest, or a fitting migration destination.
 
 ## Initial operating stance
 
@@ -429,17 +401,6 @@ Until we have measurements, prefer:
 - CPU and memory overcommit factors of `1.0` for direct-runtime nodes, with
   live-pressure dynamic admission instead of fixed limit aggregation.
 - No disk overcommit by default.
-
-The legacy runtime can retain its historical fixed overcommit policy while it
-is being removed. Memory overcommit changes placement capacity; it does not
-increase a sandbox's individual Docker `--memory` limit. The standard 96 GiB
-legacy worker uses a fixed
-96 GiB swap file and each container receives an explicit combined RAM+swap
-ceiling of twice its requested memory. Node heartbeats expose swap use and
-memory PSI. The gateway stops placing new work on an overcommitted node when
-combined free RAM and swap cannot cover the request (with a 2 GiB minimum
-headroom), or when the 10-second full-memory PSI average reaches 10%. Existing
-containers continue running; this is an admission brake, not an eviction rule.
 
 The controller records VM lifecycle events into the indexed SQLite metrics
 database:

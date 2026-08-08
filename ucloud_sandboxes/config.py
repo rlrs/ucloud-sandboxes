@@ -20,7 +20,13 @@ def default_ucloud_session_path() -> Path:
     if override:
         return Path(override).expanduser()
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "ucloud-cli" / "session.json"
+        return (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "ucloud-cli"
+            / "session.json"
+        )
     if sys.platform.startswith("win"):
         return Path.home() / "AppData" / "Roaming" / "ucloud-cli" / "session.json"
     return Path.home() / ".config" / "ucloud-cli" / "session.json"
@@ -68,11 +74,13 @@ class AutoscalerConfig:
     def from_dict(cls, raw: dict[str, Any]) -> "AutoscalerConfig":
         if not isinstance(raw, dict):
             raise ValueError("Config must be a JSON object.")
+        defaults = cls.default()
+        _reject_unknown_keys("config", raw, set(asdict(defaults)))
         policy_raw = raw.get("policy") or {}
         if not isinstance(policy_raw, dict):
             raise ValueError("Config policy must be a JSON object.")
-        defaults = cls.default()
         policy_defaults = ScalePolicy()
+        _reject_unknown_keys("policy", policy_raw, set(asdict(policy_defaults)))
         warm_resources_raw = policy_raw.get(
             "warm_resources",
             policy_defaults.warm_resources.to_dict(),
@@ -348,7 +356,9 @@ class AutoscalerConfig:
                     policy_defaults.dynamic_active_admission_enabled,
                 ),
             ),
-            default_node_resources=ResourceQuantity.from_dict(default_node_resources_raw),
+            default_node_resources=ResourceQuantity.from_dict(
+                default_node_resources_raw
+            ),
             cpu_overcommit=_config_float(
                 "policy.cpu_overcommit",
                 policy_raw.get("cpu_overcommit", policy_defaults.cpu_overcommit),
@@ -379,22 +389,20 @@ class AutoscalerConfig:
                 "policy.default_node_resources values must all be positive."
             )
         if (
-            policy.cpu_overcommit <= 0
-            or policy.memory_overcommit <= 0
-            or policy.disk_overcommit <= 0
+            policy.cpu_overcommit != 1.0
+            or policy.memory_overcommit != 1.0
+            or policy.disk_overcommit != 1.0
         ):
-            raise ValueError("policy overcommit values must all be positive.")
-        if policy.disk_overcommit > 1.0:
-            raise ValueError(
-                "policy.disk_overcommit cannot exceed 1.0 because disk "
-                "reservations must be physically backable."
-            )
+            raise ValueError("policy overcommit values must all be exactly 1.0.")
         gateway_public_link_port = _config_int(
             "gateway_public_link_port",
             raw.get("gateway_public_link_port", defaults.gateway_public_link_port),
             minimum=1,
             maximum=65535,
         )
+        metrics_file = str(raw.get("metrics_file") or defaults.metrics_file)
+        if metrics_file and Path(metrics_file).suffix != ".sqlite":
+            raise ValueError("metrics_file must use the .sqlite suffix.")
         return cls(
             project_id=str(raw.get("project_id", defaults.project_id)),
             deployment_id=str(raw.get("deployment_id", defaults.deployment_id)),
@@ -403,7 +411,9 @@ class AutoscalerConfig:
                 str(raw["template_job_id"]) if raw.get("template_job_id") else None
             ),
             private_network_id=(
-                str(raw["private_network_id"]) if raw.get("private_network_id") else None
+                str(raw["private_network_id"])
+                if raw.get("private_network_id")
+                else None
             ),
             gateway_public_link_id=(
                 str(raw["gateway_public_link_id"])
@@ -418,7 +428,7 @@ class AutoscalerConfig:
                 raw.get("ucloud_session_file") or defaults.ucloud_session_file
             ),
             state_dir=str(raw.get("state_dir") or defaults.state_dir),
-            metrics_file=str(raw.get("metrics_file") or defaults.metrics_file),
+            metrics_file=metrics_file,
             policy=policy,
         )
 
@@ -540,18 +550,24 @@ def _config_bool(label: str, value: object) -> bool:
 def _validate_resource_quantity(label: str, value: object) -> None:
     if not isinstance(value, dict):
         raise ValueError(f"{label} must be a JSON object.")
-    aliases = {
-        "vcpu": ("vcpu", "cpu"),
-        "memory_mb": ("memory_mb", "memoryMb"),
-        "disk_mb": ("disk_mb", "diskMb"),
-    }
-    for field, keys in aliases.items():
-        raw_value: object = 0
-        for key in keys:
-            if key in value:
-                raw_value = value[key]
-                break
+    allowed = {"vcpu", "memory_mb", "disk_mb"}
+    if set(value) != allowed:
+        raise ValueError(
+            f"{label} must contain exactly: {', '.join(sorted(allowed))}."
+        )
+    for field in sorted(allowed):
+        raw_value = value[field]
         if field == "vcpu":
             _config_float(f"{label}.{field}", raw_value, minimum=0.0)
         else:
             _config_int(f"{label}.{field}", raw_value, minimum=0)
+
+
+def _reject_unknown_keys(
+    label: str,
+    value: dict[str, Any],
+    allowed: set[str],
+) -> None:
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(f"{label} contains unknown fields: {', '.join(unknown)}.")

@@ -40,9 +40,7 @@ def evaluate_scale(
         policy,
         now=now,
     )[:stop_budget]
-    unreachable_job_ids = {
-        node.job_id for node in unreachable_stop_candidates
-    }
+    unreachable_job_ids = {node.job_id for node in unreachable_stop_candidates}
     incompatible_stop_candidates = _incompatible_stop_candidates(
         [node for node in nodes if node.job_id not in unreachable_job_ids],
         now=now,
@@ -110,22 +108,56 @@ def evaluate_scale(
         live_signals,
     )
 
-    demand_resources = (
-        _dynamic_demand_resources(demand)
-        if policy.dynamic_active_admission_enabled
-        else demand.desired_resources
+    maximum_request = policy.schedulable_node_resources
+    demand_placement_requests = tuple(
+        request
+        for request in demand.placement_requests
+        if request.resources.fits_within(maximum_request)
     )
-    if (
-        policy.program_aware_autoscaling_enabled
-        and program_signals is not None
-    ):
-        demand_resources = _add_resources(
-            demand_resources,
-            (
+    unschedulable_placements = len(demand.placement_requests) - len(
+        demand_placement_requests
+    )
+    demand_resources = (
+        _placement_request_resources(
+            demand_placement_requests,
+            dynamic=policy.dynamic_active_admission_enabled,
+            include_disk=True,
+        )
+        if demand.placement_requests
+        else demand.pending_resources
+    )
+    demand_resources = _add_resources(
+        demand_resources,
+        demand.prepared_resources,
+    )
+    program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
+    if policy.program_aware_autoscaling_enabled and program_signals is not None:
+        program_placement_requests = tuple(
+            request
+            for request in program_signals.ready_placement_requests
+            if request.resources.fits_within(maximum_request)
+        )
+        unschedulable_placements += len(program_signals.ready_placement_requests) - len(
+            program_placement_requests
+        )
+        if program_signals.ready_placement_requests:
+            program_resources = _add_resources(
+                _placement_request_resources(
+                    program_placement_requests,
+                    dynamic=policy.dynamic_active_admission_enabled,
+                    include_disk=False,
+                ),
+                program_signals.weighted_model_wait_resources,
+            )
+        else:
+            program_resources = (
                 _dynamic_program_resources(program_signals)
                 if policy.dynamic_active_admission_enabled
                 else program_signals.effective_resources
-            ),
+            )
+        demand_resources = _add_resources(
+            demand_resources,
+            program_resources,
         )
     desired_resources = _add_resources(demand_resources, policy.warm_resources)
     projected_free_resources = _projected_free_resources(
@@ -138,23 +170,25 @@ def evaluate_scale(
         desired_resources,
         projected_free_resources,
     )
-    placement_requests = demand.placement_requests
-    if (
-        policy.program_aware_autoscaling_enabled
-        and program_signals is not None
-    ):
-        placement_requests = (
-            *placement_requests,
-            *program_signals.ready_placement_requests,
-        )
+    placement_requests = (
+        *demand_placement_requests,
+        *program_placement_requests,
+    )
     placement_nodes = _nodes_for_unplaced_requests(
         capacity_nodes,
         placement_requests,
         policy,
         now=now,
+        oldest_pending_seconds=oldest_pending_seconds,
     )
     reasons: list[str] = []
     actions: list[ScaleAction] = []
+
+    if unschedulable_placements > 0:
+        reasons.append(
+            f"{unschedulable_placements} placement request(s) exceed the "
+            "configured schedulable node shape and were excluded from create demand"
+        )
 
     if demand.suppressed_pending_count > 0:
         reasons.append(
@@ -302,8 +336,7 @@ def evaluate_scale(
                 baseline_nodes,
                 min(
                     pipeline_nodes,
-                    baseline_nodes
-                    + max(0, policy.create_pressure_max_headroom_nodes),
+                    baseline_nodes + max(0, policy.create_pressure_max_headroom_nodes),
                 ),
             ),
         )
@@ -455,10 +488,7 @@ def _latest_capacity_pressure_age(
     if signals is None:
         return None
     ages: list[int] = []
-    if (
-        policy.live_pressure_enabled
-        and signals.latest_pressure_age_seconds is not None
-    ):
+    if policy.live_pressure_enabled and signals.latest_pressure_age_seconds is not None:
         ages.append(signals.latest_pressure_age_seconds)
     # Create pressure is only an amplifier for live node pressure. Its raw age
     # must not retain otherwise idle capacity after a harmless gateway burst;
@@ -491,17 +521,17 @@ def _live_pressure_reason(
         values.append(f"memory-psi={signals.memory_psi_full_avg10:g}")
     if (
         signals.storage_queue_utilization is not None
-        and signals.storage_queue_utilization
-        >= policy.target_storage_queue_utilization
+        and signals.storage_queue_utilization >= policy.target_storage_queue_utilization
     ):
         values.append(f"storage-queue={signals.storage_queue_utilization:.0%}")
     if (
-        signals.rootfs_export_queue_utilization is not None
-        and signals.rootfs_export_queue_utilization
+        signals.image_materialization_queue_utilization is not None
+        and signals.image_materialization_queue_utilization
         >= policy.target_storage_queue_utilization
     ):
         values.append(
-            f"rootfs-export={signals.rootfs_export_queue_utilization:.0%}"
+            "image-materialization="
+            f"{signals.image_materialization_queue_utilization:.0%}"
         )
     suffix = f" ({', '.join(values)})" if values else ""
     return (
@@ -576,27 +606,15 @@ def _projected_free_resources(
                     node.heartbeat.free_resources,
                 )
             elif node.is_provisioning:
-                free = node.heartbeat.free_resources
-                if _has_resource_demand(node.heartbeat.effective_resources):
-                    total = total + _scale_resources(
-                        _security_adjusted_resources(node, free),
-                        _provisioning_weight(
-                            node,
-                            policy,
-                            now,
-                            oldest_pending_seconds,
-                        ),
-                    )
-                else:
-                    total = total + _weighted_estimated_node_resources(
-                        node,
-                        policy,
-                        now,
-                        oldest_pending_seconds,
-                    )
+                total = total + _projected_provisioning_resources(
+                    node,
+                    policy,
+                    now,
+                    oldest_pending_seconds,
+                )
             continue
         if node.is_provisioning:
-            total = total + _weighted_estimated_node_resources(
+            total = total + _projected_provisioning_resources(
                 node,
                 policy,
                 now,
@@ -611,12 +629,12 @@ def _nodes_for_unplaced_requests(
     policy: ScalePolicy,
     *,
     now: datetime,
+    oldest_pending_seconds: int,
 ) -> int:
     """Bin-pack accepted request shapes so aggregate free space cannot lie."""
 
     if not requests:
         return 0
-    del now
     bins: list[tuple[str, ResourceQuantity, bool]] = []
     for node in nodes:
         if node.job.is_final:
@@ -625,9 +643,7 @@ def _nodes_for_unplaced_requests(
             bins.append(
                 (
                     node.job_id,
-                    _security_adjusted_resources(
-                        node, node.heartbeat.free_resources
-                    ),
+                    _security_adjusted_resources(node, node.heartbeat.free_resources),
                     has_capability(
                         node.heartbeat.capabilities,
                         DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
@@ -635,16 +651,18 @@ def _nodes_for_unplaced_requests(
                 )
             )
         elif node.is_provisioning:
-            # A queued node is a real future placement bin. Aggregate capacity
-            # remains weighted separately, but starting another identical VM
-            # cannot repair fragmentation any sooner.
+            available = _projected_provisioning_resources(
+                node,
+                policy,
+                now,
+                oldest_pending_seconds,
+            )
+            if not _has_resource_demand(available):
+                continue
             bins.append(
                 (
                     node.job_id,
-                    _security_adjusted_resources(
-                        node,
-                        _estimated_node_resources(node, policy),
-                    ),
+                    available,
                     policy.dynamic_active_admission_enabled,
                 )
             )
@@ -659,9 +677,7 @@ def _nodes_for_unplaced_requests(
             request.memory_mb / default_bin.memory_mb
             if default_bin.memory_mb > 0
             else 0.0,
-            request.disk_mb / default_bin.disk_mb
-            if default_bin.disk_mb > 0
-            else 0.0,
+            request.disk_mb / default_bin.disk_mb if default_bin.disk_mb > 0 else 0.0,
         )
         return max(ratios), request.memory_mb + request.disk_mb, request.vcpu
 
@@ -680,9 +696,7 @@ def _nodes_for_unplaced_requests(
                     disk_mb=available.disk_mb + placement.owned_disk_mb,
                 )
             if requested.fits_within(available_for_request):
-                fitting.append(
-                    (index, job_id, available_for_request, dynamic_active)
-                )
+                fitting.append((index, job_id, available_for_request, dynamic_active))
         if fitting:
             index, job_id, available, dynamic_active = min(
                 fitting,
@@ -717,29 +731,36 @@ def _nodes_for_unplaced_requests(
     return missing
 
 
-def _dynamic_demand_resources(demand: SandboxDemand) -> ResourceQuantity:
-    """Reduce dynamic CPU/RAM demand without weakening hard disk ownership.
+def _placement_request_resources(
+    requests: tuple[SandboxPlacementRequest, ...],
+    *,
+    dynamic: bool,
+    include_disk: bool,
+) -> ResourceQuantity:
+    """Aggregate exact schedulable shapes without weakening hard disk ownership."""
 
-    Pending and prepared requests retain additive disk demand. CPU and memory
-    limits describe the largest single sandbox that must fit; they are not
-    steady-state reservations for every resident sandbox. Placement requests
-    preserve the exact individual shapes for bin fitting.
-    """
-
-    if not demand.placement_requests:
-        # Older state backends cannot reconstruct individual shapes. Retain
-        # conservative aggregation rather than guessing a maximum.
-        return demand.desired_resources
+    if not dynamic:
+        total = ResourceQuantity()
+        for request in requests:
+            resources = request.resources
+            total = total + ResourceQuantity(
+                vcpu=resources.vcpu,
+                memory_mb=resources.memory_mb,
+                disk_mb=resources.disk_mb if include_disk else 0,
+            )
+        return total
     return ResourceQuantity(
         vcpu=max(
-            (item.resources.vcpu for item in demand.placement_requests),
+            (item.resources.vcpu for item in requests),
             default=0.0,
         ),
         memory_mb=max(
-            (item.resources.memory_mb for item in demand.placement_requests),
+            (item.resources.memory_mb for item in requests),
             default=0,
         ),
-        disk_mb=demand.desired_resources.disk_mb,
+        disk_mb=(
+            sum(item.resources.disk_mb for item in requests) if include_disk else 0
+        ),
     )
 
 
@@ -748,39 +769,41 @@ def _dynamic_program_resources(
 ) -> ResourceQuantity:
     """Keep predictive headroom without adding every ready CPU/RAM limit."""
 
-    if signals.ready_placement_requests:
-        ready = ResourceQuantity(
-            vcpu=max(
-                (
-                    item.resources.vcpu
-                    for item in signals.ready_placement_requests
-                ),
-                default=0.0,
-            ),
-            memory_mb=max(
-                (
-                    item.resources.memory_mb
-                    for item in signals.ready_placement_requests
-                ),
-                default=0,
-            ),
-        )
-    else:
-        # Preserve conservative behavior for program-state backends that do
-        # not expose exact ready-to-wake shapes.
-        ready = signals.ready_to_wake_resources
+    ready = ResourceQuantity(
+        vcpu=max(
+            (item.resources.vcpu for item in signals.ready_placement_requests),
+            default=0.0,
+        ),
+        memory_mb=max(
+            (item.resources.memory_mb for item in signals.ready_placement_requests),
+            default=0,
+        ),
+    )
     return _add_resources(ready, signals.weighted_model_wait_resources)
 
 
-def _weighted_estimated_node_resources(
+def _projected_provisioning_resources(
     node: SandboxNode,
     policy: ScalePolicy,
     now: datetime,
     oldest_pending_seconds: int,
 ) -> ResourceQuantity:
+    weight = _provisioning_weight(
+        node,
+        policy,
+        now,
+        oldest_pending_seconds,
+    )
+    if node.heartbeat is not None and _has_resource_demand(
+        node.heartbeat.effective_resources
+    ):
+        return _scale_resources(
+            _security_adjusted_resources(node, node.heartbeat.free_resources),
+            weight,
+        )
     return _scale_resources(
         _security_adjusted_resources(node, _estimated_node_resources(node, policy)),
-        _provisioning_weight(node, policy, now, oldest_pending_seconds),
+        weight,
     )
 
 
@@ -841,11 +864,7 @@ def _counts_as_pool_node(
     oldest_pending_seconds: int,
 ) -> bool:
     del policy, now, oldest_pending_seconds
-    if (
-        node.job.is_final
-        or node.job.is_unexpectedly_suspended
-        or node.permanently_lost
-    ):
+    if node.job.is_final or node.job.is_unexpectedly_suspended or node.permanently_lost:
         return False
     # Capacity weighting and hard provider limits are separate concerns. A stale
     # provisioning job may contribute no projected resources, but it is still a
@@ -1011,7 +1030,7 @@ def unreachable_node_stop_ready(
 ) -> bool:
     """Return whether an unreachable node has conservative provider-stop proof.
 
-    A fresh node must always use the drain-token handshake.  This fallback is
+    A fresh node must always use the drain-token handshake. This path is
     only for a running VM that has exceeded its heartbeat lease, owns no known
     sandbox routes, and whose last complete inventory was empty.  A VM that
     never emitted a heartbeat cannot have admitted gateway-managed work.
@@ -1058,11 +1077,7 @@ def _unreachable_stop_candidates(
     now: datetime,
 ) -> list[SandboxNode]:
     return sorted(
-        [
-            node
-            for node in nodes
-            if unreachable_node_stop_ready(node, policy, now=now)
-        ],
+        [node for node in nodes if unreachable_node_stop_ready(node, policy, now=now)],
         key=lambda node: (
             unreachable_node_reference(node) or now,
             node.job_id,

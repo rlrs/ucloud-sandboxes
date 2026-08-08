@@ -2,13 +2,14 @@ import unittest
 from datetime import timedelta
 
 from ucloud_sandboxes.models import (
+    InstancePhase,
     NodeHeartbeat,
     NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxInventoryEntry,
     utc_now,
-    vm_job_from_payload,
 )
+from ucloud_sandboxes.providers.ucloud.models import instance_from_payload
 
 
 class VmJobParsingTests(unittest.TestCase):
@@ -52,10 +53,9 @@ class VmJobParsingTests(unittest.TestCase):
             },
         }
 
-        job = vm_job_from_payload(payload)
+        job = instance_from_payload(payload)
 
         self.assertEqual(job.id, "12345311")
-        self.assertEqual(job.project_id, "project-1")
         self.assertTrue(job.is_vm)
         self.assertEqual(job.state, "IN_QUEUE")
         self.assertEqual(job.product_id, "cpu-amd-zen5-2-vcpu")
@@ -69,7 +69,7 @@ class VmJobParsingTests(unittest.TestCase):
 
     def test_only_post_start_suspension_is_destructive(self) -> None:
         def job_with_updates(updates, *, state="RUNNING"):
-            return vm_job_from_payload(
+            return instance_from_payload(
                 {
                     "id": "vm-1",
                     "createdAt": 1_700_000_000_000,
@@ -86,9 +86,7 @@ class VmJobParsingTests(unittest.TestCase):
                 }
             )
 
-        initial_boot = job_with_updates(
-            [{"state": "SUSPENDED"}, {"state": "RUNNING"}]
-        )
+        initial_boot = job_with_updates([{"state": "SUSPENDED"}, {"state": "RUNNING"}])
         power_cycled = job_with_updates(
             [
                 {"state": "SUSPENDED"},
@@ -99,9 +97,9 @@ class VmJobParsingTests(unittest.TestCase):
         )
         currently_suspended = job_with_updates([], state="SUSPENDED")
 
-        self.assertFalse(initial_boot.has_post_start_suspension)
-        self.assertTrue(power_cycled.has_post_start_suspension)
-        self.assertTrue(currently_suspended.has_post_start_suspension)
+        self.assertEqual(initial_boot.phase, InstancePhase.RUNNING)
+        self.assertEqual(power_cycled.phase, InstancePhase.LOST)
+        self.assertEqual(currently_suspended.phase, InstancePhase.LOST)
 
 
 class HeartbeatContractTests(unittest.TestCase):
@@ -178,7 +176,9 @@ class HeartbeatContractTests(unittest.TestCase):
             )
         )
 
-    def test_estimates_cpu_from_vm_product_id_when_resolved_product_is_absent(self) -> None:
+    def test_estimates_cpu_from_vm_product_id_when_resolved_product_is_absent(
+        self,
+    ) -> None:
         payload = {
             "id": "123",
             "specification": {
@@ -191,7 +191,7 @@ class HeartbeatContractTests(unittest.TestCase):
             "status": {"state": "IN_QUEUE"},
         }
 
-        job = vm_job_from_payload(payload)
+        job = instance_from_payload(payload)
 
         self.assertEqual(job.cpu, 2)
 

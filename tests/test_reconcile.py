@@ -4,6 +4,7 @@ import unittest
 
 from ucloud_sandboxes.config import AutoscalerConfig
 from ucloud_sandboxes.models import (
+    InstancePhase,
     NodeHeartbeat,
     ResourceQuantity,
     SandboxInventoryEntry,
@@ -13,21 +14,38 @@ from ucloud_sandboxes.models import (
     ScaleAction,
     ScaleDecision,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     utc_now,
 )
 from ucloud_sandboxes.policy import evaluate_scale
 from ucloud_sandboxes.reconcile import (
-    VmNodeSubmissionDefaults,
-    build_builder_vm_create_intents,
-    build_vm_create_intents,
-    bulk_payload_from_create_intents,
+    NodeCreateDefaults,
+    build_builder_create_intents,
+    build_sandbox_create_intents,
     evaluate_builder_scale,
     node_drain_ready,
     partition_safe_stop_job_ids,
     stop_job_ids_from_decision,
 )
-from ucloud_sandboxes.vm_submit import VmProductRef
+from ucloud_sandboxes.providers.ucloud import UCloudCreateProfile, UCloudProvider
+from ucloud_sandboxes.providers.ucloud.config import UCloudSettings
+from ucloud_sandboxes.providers.ucloud.payloads import VmProductRef
+
+
+def ucloud_config(**values) -> AutoscalerConfig:
+    defaults = UCloudSettings.default()
+    settings = replace(
+        defaults,
+        project_id=values.pop("project_id", defaults.project_id),
+        session_file=values.pop("ucloud_session_file", defaults.session_file),
+        private_network_id=values.pop(
+            "private_network_id", defaults.private_network_id
+        ),
+        gateway_public_link_id=values.pop(
+            "gateway_public_link_id", defaults.gateway_public_link_id
+        ),
+    )
+    return AutoscalerConfig(provider=settings.to_provider(), **values)
 
 
 class ReconcileTests(unittest.TestCase):
@@ -47,15 +65,15 @@ class ReconcileTests(unittest.TestCase):
             admission_open=False,
         )
         node = SandboxNode(
-            job=VmJob(
+            job=ProviderInstance(
                 id="job-1",
-                project_id="project-1",
                 name="node-1",
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu",
                 product_category="cpu",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
             ),
             heartbeat=heartbeat,
             active_sandboxes=0,
@@ -105,15 +123,15 @@ class ReconcileTests(unittest.TestCase):
     def test_builder_scale_stops_idle_incompatible_builder_immediately(self) -> None:
         now = utc_now()
         builder = SandboxNode(
-            job=VmJob(
+            job=ProviderInstance(
                 id="builder-old",
-                project_id="project-1",
                 name="ucloud-sandbox-builder-old",
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu-amd-zen5-16-vcpu",
                 product_category="cpu-amd-zen5",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
                 started_at=now - timedelta(seconds=60),
                 labels={
                     "ucloud-sandboxes/builder": "true",
@@ -150,15 +168,15 @@ class ReconcileTests(unittest.TestCase):
     def test_builder_scale_stops_idle_builder_when_no_build_demand(self) -> None:
         now = utc_now()
         builder = SandboxNode(
-            job=VmJob(
+            job=ProviderInstance(
                 id="builder-1",
-                project_id="project-1",
                 name="ucloud-sandbox-builder-1",
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu-amd-zen5-16-vcpu",
                 product_category="cpu-amd-zen5",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
                 started_at=now - timedelta(seconds=600),
                 labels={
                     "ucloud-sandboxes/builder": "true",
@@ -194,15 +212,15 @@ class ReconcileTests(unittest.TestCase):
     def test_builder_scale_waits_for_builder_idle_grace(self) -> None:
         now = utc_now()
         builder = SandboxNode(
-            job=VmJob(
+            job=ProviderInstance(
                 id="builder-1",
-                project_id="project-1",
                 name="ucloud-sandbox-builder-1",
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu-amd-zen5-16-vcpu",
                 product_category="cpu-amd-zen5",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
                 started_at=now - timedelta(seconds=120),
                 labels={
                     "ucloud-sandboxes/builder": "true",
@@ -236,7 +254,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(decision.reasons, ("builder pool matches demand and policy",))
 
     def test_builds_builder_vm_create_intents_without_node_label(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             deployment_id="prod-a",
             private_network_id="net-1",
@@ -250,29 +268,33 @@ class ReconcileTests(unittest.TestCase):
             max_builder_nodes=1,
         )
 
-        intents = build_builder_vm_create_intents(
+        intents = build_builder_create_intents(
             config,
             decision,
-            VmNodeSubmissionDefaults(
-                private_network_id=config.private_network_id,
+            NodeCreateDefaults(),
+            seed_prefix="cycle-1",
+        )
+
+        provider = UCloudProvider(
+            "project-1",
+            sandbox_profile=UCloudCreateProfile(private_network_id="net-1"),
+            builder_profile=UCloudCreateProfile(
+                private_network_id="net-1",
                 product=VmProductRef(
                     id="cpu-amd-zen5-16-vcpu",
                     category="cpu-amd-zen5",
                     provider="ucloud",
                 ),
-                disk_gb=250,
             ),
-            seed_prefix="cycle-1",
         )
-
-        item = intents[0].options.job_item()
+        item = provider.render_create_request(intents)["items"][0]
         self.assertEqual(intents[0].node_id, "sandbox-builder-cycle-1-builder-1")
         self.assertEqual(item["labels"]["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", item["labels"])
         self.assertEqual(item["product"]["id"], "cpu-amd-zen5-16-vcpu")
 
     def test_builds_vm_create_intents_from_scale_decision(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             deployment_id="prod-a",
             private_network_id="net-1",
@@ -293,10 +315,10 @@ class ReconcileTests(unittest.TestCase):
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
 
-        intents = build_vm_create_intents(
+        intents = build_sandbox_create_intents(
             config,
             decision,
-            VmNodeSubmissionDefaults(private_network_id=config.private_network_id),
+            NodeCreateDefaults(),
             seed_prefix="cycle-1",
         )
 
@@ -304,10 +326,16 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(intents[0].seed, "cycle-1-1")
         self.assertEqual(intents[0].node_id, "sandbox-node-cycle-1-1")
         self.assertEqual(intents[0].node_url, "http://sandbox-node-cycle-1-1:8090")
-        self.assertEqual(intents[0].options.name, "ucloud-sandbox-node-cycle-1-1")
-        item = intents[0].options.job_item()
-        self.assertEqual(item["resources"], [{"type": "private_network", "id": "net-1"}])
-        self.assertIsNone(intents[0].options.public_link_id)
+        self.assertEqual(intents[0].name, "ucloud-sandbox-node-cycle-1-1")
+        provider = UCloudProvider(
+            "project-1",
+            sandbox_profile=UCloudCreateProfile(private_network_id="net-1"),
+            builder_profile=UCloudCreateProfile(private_network_id="net-1"),
+        )
+        item = provider.render_create_request(intents)["items"][0]
+        self.assertEqual(
+            item["resources"], [{"type": "private_network", "id": "net-1"}]
+        )
         self.assertFalse(item["sshEnabled"])
         self.assertEqual(item["labels"]["ucloud-sandboxes/reconcile"], "true")
         self.assertEqual(item["labels"]["ucloud-sandboxes/reconcile-cycle"], "cycle-1")
@@ -316,7 +344,7 @@ class ReconcileTests(unittest.TestCase):
         self.assertIn("ucloud-sandboxes/init-version", item["labels"])
 
     def test_builds_bulk_payload_for_create_intents(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="net-1",
             ucloud_session_file="/tmp/session.json",
@@ -334,14 +362,19 @@ class ReconcileTests(unittest.TestCase):
             ),
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
-        intents = build_vm_create_intents(
+        intents = build_sandbox_create_intents(
             config,
             decision,
-            VmNodeSubmissionDefaults(private_network_id=config.private_network_id),
+            NodeCreateDefaults(),
             seed_prefix="cycle-1",
         )
 
-        payload = bulk_payload_from_create_intents(intents)
+        provider = UCloudProvider(
+            "project-1",
+            sandbox_profile=UCloudCreateProfile(private_network_id="net-1"),
+            builder_profile=UCloudCreateProfile(private_network_id="net-1"),
+        )
+        payload = provider.render_create_request(intents)
 
         self.assertEqual(payload["type"], "bulk")
         self.assertEqual(len(payload["items"]), 1)
@@ -349,9 +382,7 @@ class ReconcileTests(unittest.TestCase):
 
     def test_extracts_stop_job_ids_from_decision(self) -> None:
         decision = ScaleDecision(
-            actions=(
-                ScaleAction(kind="stop", count=2, job_ids=("job-1", "job-2")),
-            ),
+            actions=(ScaleAction(kind="stop", count=2, job_ids=("job-1", "job-2")),),
             ready_nodes=2,
             provisioning_nodes=0,
             total_nodes=2,
@@ -369,29 +400,29 @@ class ReconcileTests(unittest.TestCase):
             def __init__(self, job):
                 self.job = job
 
-        owned = VmJob(
+        owned = ProviderInstance(
             id="job-1",
-            project_id="project-1",
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
             labels={
                 "ucloud-sandboxes/node": "true",
                 "ucloud-sandboxes/deployment": "prod-a",
             },
         )
-        foreign = VmJob(
+        foreign = ProviderInstance(
             id="job-2",
-            project_id="project-1",
             name="ucloud-sandbox-node-2",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
             labels={
                 "ucloud-sandboxes/node": "true",
                 "ucloud-sandboxes/deployment": "prod-b",

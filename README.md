@@ -1,12 +1,14 @@
 # ucloud-sandboxes
 
-Autoscaler for secure CPU sandboxes on top of SDU UCloud.
+Autoscaler and runtime for secure CPU sandboxes on Linux compute nodes, with an
+SDU UCloud provider included.
 
-The service manages UCloud VM jobs as pool nodes. Sandbox nodes run one direct
+The service manages provider instances as pool nodes. Sandbox nodes run one direct
 gVisor Warden backed by storage-native volumes. Builder nodes build and push
 custom images to a private registry. The public gateway owns placement,
 routing, operation fencing and demand; the autoscaler reconciles that demand
-into UCloud VM jobs.
+through a small compute-provider boundary. UCloud lifecycle, networking,
+payloads, credentials, and API calls live in the built-in adapter.
 
 The project currently has a live development deployment with a public gateway,
 private registry, model relay, autoscaler loop, sandbox nodes, and builder
@@ -25,6 +27,8 @@ under `docs/`, not in this overview.
   prepare, exec, file, dashboard, and node-agent endpoints.
 - [Architecture](docs/architecture.md): control plane, builder, registry,
   routing, resource placement, disk quota, and networking design notes.
+- [Compute provider portability](docs/provider-portability.md): provider
+  contract, configuration, extension entry point, and host requirements.
 
 ## Focused Docs
 
@@ -40,8 +44,8 @@ under `docs/`, not in this overview.
   signals, builder policy, overcommit, and observed scale-up metrics.
 - [Security stance](docs/security-stance.md): gVisor/container security model,
   storage authority, authentication boundaries, and verified bootstrap.
-- [VM init](docs/vm-init.md): UCloud VM bootstrap findings and post-boot init
-  strategy.
+- [VM init](docs/vm-init.md): provider-instance bootstrap and verified post-boot
+  node initialization.
 
 ## Quick Local Checks
 

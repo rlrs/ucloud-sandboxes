@@ -12,6 +12,11 @@ Print a starter configuration:
 uv run ucloud-sandboxes sample-config
 ```
 
+Cloud settings are contained under the tagged `provider` object. The built-in
+value is `{"kind": "ucloud", ...}`; installed adapters are selected by another
+kind without changing reconciliation or policy. See
+[provider-portability.md](provider-portability.md).
+
 Inspect a UCloud job:
 
 ```bash

@@ -1,5 +1,6 @@
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from datetime import timedelta
 from functools import wraps
 import hashlib
@@ -30,6 +31,7 @@ from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import RegistryTag, RegistryUsageStore
 from ucloud_sandboxes.metrics import MetricsStore
 from ucloud_sandboxes.models import (
+    InstancePhase,
     NodeHeartbeat,
     ResourceQuantity,
     SandboxDemand,
@@ -37,13 +39,38 @@ from ucloud_sandboxes.models import (
     SandboxNode,
     ScaleDecision,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     utc_now,
 )
+from ucloud_sandboxes.providers.base import ProviderMutationResult
 from ucloud_sandboxes.registry import HeartbeatStore
 from ucloud_sandboxes.routing import RoutingState, RoutingStore, SandboxRoute
-from ucloud_sandboxes.ucloud import UCloudError, UCloudHttpError
+from ucloud_sandboxes.providers.ucloud.api import UCloudError
+from ucloud_sandboxes.providers.ucloud.config import UCloudSettings
+from ucloud_sandboxes.providers.ucloud import UCloudCreateProfile, UCloudProvider
 from ucloud_sandboxes.vm_init import VmInitPackageStageResult
+
+
+def ucloud_config(**values) -> AutoscalerConfig:
+    settings = UCloudSettings.default()
+    provider_values = {
+        "project_id": values.pop("project_id", settings.project_id),
+        "session_file": values.pop("ucloud_session_file", settings.session_file),
+        "template_job_id": values.pop("template_job_id", settings.template_job_id),
+        "private_network_id": values.pop(
+            "private_network_id", settings.private_network_id
+        ),
+        "gateway_public_link_id": values.pop(
+            "gateway_public_link_id", settings.gateway_public_link_id
+        ),
+        "gateway_public_link_port": values.pop(
+            "gateway_public_link_port", settings.gateway_public_link_port
+        ),
+    }
+    return AutoscalerConfig(
+        provider=replace(settings, **provider_values).to_provider(),
+        **values,
+    )
 
 
 def allow_fixture_mutations(test):
@@ -116,13 +143,14 @@ class CliTests(unittest.TestCase):
         )
         with redirect_stdout(output):
             cli.print_reconcile(
-                AutoscalerConfig(project_id="project-1"),
+                ucloud_config(project_id="project-1"),
                 [],
                 decision,
                 Path("/tmp/heartbeats.json"),
                 [],
                 (),
                 {
+                    "provider": {"kind": "ucloud", "scopeId": "project-1"},
                     "requestedStopJobIds": ["job-1"],
                     "blockedStopJobIds": [],
                     "executeStops": True,
@@ -177,7 +205,7 @@ class CliTests(unittest.TestCase):
     def test_autoscaler_provider_state_is_deployment_scoped_not_route_scoped(
         self,
     ) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             deployment_id="prod-a",
             state_dir="/var/lib/ucloud-sandboxes",
@@ -270,12 +298,20 @@ class CliTests(unittest.TestCase):
     def test_provider_http_rejection_and_ambiguity_are_journaled_differently(
         self,
     ) -> None:
-        class RejectingClient:
+        class RejectingProvider:
             def __init__(self, status: int) -> None:
                 self.status = status
 
-            def terminate_jobs(self, *_args, **_kwargs) -> dict:
-                raise UCloudHttpError("POST", "/api/jobs/terminate", self.status, {})
+            def terminate(self, instance_ids) -> ProviderMutationResult:
+                if self.status == 400:
+                    return ProviderMutationResult(
+                        status="rejected",
+                        error="definite rejection",
+                    )
+                return ProviderMutationResult(
+                    status="uncertain",
+                    error="ambiguous provider outcome",
+                )
 
         with TemporaryDirectory() as raw_dir:
             state = AutoscalerStateStore(Path(raw_dir) / "autoscaler-state.sqlite")
@@ -299,8 +335,7 @@ class CliTests(unittest.TestCase):
             )
             definite_result = cli.apply_prepared_provider_operations(
                 state,
-                RejectingClient(400),
-                "project-1",
+                RejectingProvider(400),
                 source="test",
                 allowed_kinds={"stop"},
                 allowed_stop_operation_ids={definite.operation_id},
@@ -325,8 +360,7 @@ class CliTests(unittest.TestCase):
             )
             ambiguous_result = cli.apply_prepared_provider_operations(
                 state,
-                RejectingClient(503),
-                "project-1",
+                RejectingProvider(503),
                 source="test",
                 allowed_kinds={"stop"},
                 allowed_stop_operation_ids={ambiguous.operation_id},
@@ -404,7 +438,7 @@ class CliTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -545,7 +579,7 @@ class CliTests(unittest.TestCase):
                 spec_hash="a" * 64,
                 node_epoch="old-boot",
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -621,7 +655,7 @@ class CliTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -928,45 +962,63 @@ class CliTests(unittest.TestCase):
             self.assertEqual(list(store.load()), ["external"])
 
     def test_private_network_config_filters_auto_discovered_pool_nodes(self) -> None:
-        config = AutoscalerConfig.default(project_id="project-1")
-        config = AutoscalerConfig(
-            project_id=config.project_id,
+        config = AutoscalerConfig.default(scope_id="project-1")
+        provider = UCloudSettings.from_provider(config.provider)
+        config = ucloud_config(
+            project_id=provider.project_id,
             job_name_prefix=config.job_name_prefix,
             private_network_id="net-1",
             node_hostname_prefix=config.node_hostname_prefix,
-            ucloud_session_file=config.ucloud_session_file,
+            ucloud_session_file=provider.session_file,
             state_dir=config.state_dir,
             policy=config.policy,
         )
-        matching = VmJob(
+        matching = ProviderInstance(
             id="job-1",
-            project_id="project-1",
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id=None,
             product_category="cpu-amd-zen5",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
             private_network_ids=("net-1",),
         )
-        wrong_network = VmJob(
+        wrong_network = ProviderInstance(
             id="job-2",
-            project_id="project-1",
             name="ucloud-sandbox-node-2",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
             private_network_ids=("net-2",),
         )
+        compute_provider = UCloudProvider(
+            "project-1",
+            sandbox_profile=UCloudCreateProfile(private_network_id="net-1"),
+            builder_profile=UCloudCreateProfile(private_network_id="net-1"),
+        )
 
-        self.assertTrue(should_include_job(matching, config, set(), False))
-        self.assertFalse(should_include_job(wrong_network, config, set(), False))
-        self.assertTrue(should_include_job(wrong_network, config, {"job-2"}, False))
+        self.assertTrue(
+            should_include_job(matching, config, compute_provider, set(), False)
+        )
+        self.assertFalse(
+            should_include_job(wrong_network, config, compute_provider, set(), False)
+        )
+        self.assertTrue(
+            should_include_job(
+                wrong_network,
+                config,
+                compute_provider,
+                {"job-2"},
+                False,
+            )
+        )
 
     def test_metrics_path_defaults_to_route_file_directory(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             state_dir="/tmp/default-state",
             ucloud_session_file="/tmp/session.json",
@@ -982,7 +1034,7 @@ class CliTests(unittest.TestCase):
         )
 
     def test_vm_submission_options_use_private_network_config(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             ucloud_session_file="/tmp/session.json",
@@ -1019,7 +1071,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse(options.ssh_enabled)
 
     def test_vm_submission_options_can_request_ssh_explicitly(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             ucloud_session_file="/tmp/session.json",
@@ -1052,7 +1104,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(options.ssh_enabled)
 
     def test_vm_submission_options_use_gateway_public_link_config(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             gateway_public_link_id="12345368",
@@ -1105,7 +1157,7 @@ class CliTests(unittest.TestCase):
         )
 
     def test_vm_submission_options_include_project_file_mounts(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             gateway_public_link_id="12345368",
@@ -1155,7 +1207,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(resources[-1]["readOnly"])
 
     def test_node_role_does_not_consume_gateway_public_link_config(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             gateway_public_link_id="12345368",
@@ -1199,7 +1251,7 @@ class CliTests(unittest.TestCase):
         )
 
     def test_builder_role_uses_builder_identity_without_node_label(self) -> None:
-        config = AutoscalerConfig(
+        config = ucloud_config(
             project_id="project-1",
             private_network_id="12345327",
             gateway_public_link_id="12345368",
@@ -2490,9 +2542,9 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
-        sandbox_labels = payload["sandboxCreateIntents"][0]["payloadItem"]["labels"]
+        sandbox_labels = payload["sandboxCreateIntents"][0]["labels"]
         self.assertEqual(sandbox_labels["ucloud-sandboxes/node"], "true")
-        labels = payload["builderCreateIntents"][0]["payloadItem"]["labels"]
+        labels = payload["builderCreateIntents"][0]["labels"]
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", labels)
 
@@ -2832,15 +2884,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(reconciled.free_resources.memory_mb, 98304)
 
     def test_route_reservations_remain_visible_without_a_heartbeat(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="job-1",
-            project_id="project-1",
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu",
             product_category="cpu",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
         )
         node = SandboxNode(
             job=job,
@@ -2864,15 +2916,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(reconciled[0].active_sandboxes, 1)
 
     def test_parked_inventory_keeps_its_node_owned(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="job-1",
-            project_id="project-1",
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu",
             product_category="cpu",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
         )
         heartbeat = NodeHeartbeat(
             node_id="node-1",
@@ -3029,7 +3081,7 @@ class CliTests(unittest.TestCase):
                     ),
                 }
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -3103,15 +3155,15 @@ class CliTests(unittest.TestCase):
             ),
         )
         owner = SandboxNode(
-            job=VmJob(
+            job=ProviderInstance(
                 id="owned",
-                project_id="project-1",
                 name="ucloud-sandbox-node-owned",
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu",
                 product_category="cpu",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
             ),
             heartbeat=heartbeat,
             active_sandboxes=0,
@@ -3215,7 +3267,7 @@ class CliTests(unittest.TestCase):
             ["builds-soon"],
         )
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
-        labels = payload["builderCreateIntents"][0]["payloadItem"]["labels"]
+        labels = payload["builderCreateIntents"][0]["labels"]
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertEqual(remaining_builder_count, 0)
 
@@ -3784,7 +3836,7 @@ class CliTests(unittest.TestCase):
                         for job_id in ("owned", "foreign")
                     }
                 )
-                config = AutoscalerConfig(
+                config = ucloud_config(
                     project_id="project-1",
                     deployment_id="prod-a",
                     ucloud_session_file=str(root / "session.json"),
@@ -3905,7 +3957,7 @@ class CliTests(unittest.TestCase):
                 )
 
             save_heartbeat()
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -4097,7 +4149,7 @@ class CliTests(unittest.TestCase):
                     )
                 }
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -4209,7 +4261,7 @@ class CliTests(unittest.TestCase):
                     )
                 }
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -4357,7 +4409,7 @@ class CliTests(unittest.TestCase):
                     )
                 }
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
@@ -4546,7 +4598,7 @@ class CliTests(unittest.TestCase):
                     )
                 }
             )
-            config = AutoscalerConfig(
+            config = ucloud_config(
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),

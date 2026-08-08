@@ -7,11 +7,12 @@ import unittest
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.deployment import AGENT_VERSION_LABEL, package_version
 from ucloud_sandboxes.models import (
+    InstancePhase,
     NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxInventoryEntry,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     utc_now,
 )
 from ucloud_sandboxes.registry import (
@@ -47,7 +48,9 @@ class RegistryTests(unittest.TestCase):
             with self.subTest(payload=payload):
                 self.assertIsNone(heartbeat_from_dict(payload))
 
-    def test_complete_inventory_fails_closed_on_missing_or_invalid_entries(self) -> None:
+    def test_complete_inventory_fails_closed_on_missing_or_invalid_entries(
+        self,
+    ) -> None:
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         raw["inventory_complete"] = True
 
@@ -75,7 +78,9 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(heartbeat_from_dict(invalid_inventory))
         self.assertIsNone(heartbeat_from_dict(mixed_inventory))
 
-    def test_destructive_heartbeat_flags_and_inventory_resources_are_strict(self) -> None:
+    def test_destructive_heartbeat_flags_and_inventory_resources_are_strict(
+        self,
+    ) -> None:
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         malformed = (
             {**raw, "inventory_complete": "true"},
@@ -102,15 +107,15 @@ class RegistryTests(unittest.TestCase):
                 self.assertIsNone(heartbeat_from_dict(payload))
 
     def test_marks_provisioning_node_without_heartbeat(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="123",
-            project_id="project-1",
             name="ucloud-sandbox-node-123",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state="IN_QUEUE",
+            phase=InstancePhase.PROVISIONING,
             cpu=2,
             labels={AGENT_VERSION_LABEL: package_version()},
         )
@@ -124,15 +129,15 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(nodes[0].is_provisioning)
 
     def test_marks_suspended_vm_as_provisioning(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="123",
-            project_id="project-1",
             name="ucloud-sandbox-node-123",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-16-vcpu",
             product_category="cpu-amd-zen5",
             state="SUSPENDED",
+            phase=InstancePhase.PROVISIONING,
             cpu=16,
             disk_gb=250,
             labels={AGENT_VERSION_LABEL: package_version()},
@@ -147,15 +152,15 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(nodes[0].is_provisioning)
 
     def test_unversioned_provisioning_node_is_incompatible(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="123",
-            project_id="project-1",
             name="ucloud-sandbox-node-123",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state="IN_QUEUE",
+            phase=InstancePhase.PROVISIONING,
             cpu=2,
         )
 
@@ -231,7 +236,9 @@ class RegistryTests(unittest.TestCase):
                         operation_id="operation-1",
                         spec_hash="a" * 64,
                         state="running",
-                        resources=ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=2048),
+                        resources=ResourceQuantity(
+                            vcpu=2, memory_mb=1024, disk_mb=2048
+                        ),
                     ),
                 ),
                 inventory_complete=True,

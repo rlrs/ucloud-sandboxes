@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .models import SandboxNode, utc_now
-from .vm_init import VmInitOptions, VmInitPlan
+from .providers.base import InstanceBootstrapAccess
+from .vm_init import VmInitOptions
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ class VmBootstrapIntent:
     job_id: str
     node_id: str
     role: str
-    plan: VmInitPlan
+    access: InstanceBootstrapAccess
     options: VmInitOptions
     runnable: bool
     reason: str
@@ -130,7 +131,7 @@ def build_vm_bootstrap_intents(
     retry_seconds: int,
     max_per_cycle: int,
     options_for_node: Any,
-    plan_for_payload: Any,
+    access_for_instance: Any,
     now: datetime | None = None,
 ) -> list[VmBootstrapIntent]:
     if now is None:
@@ -140,7 +141,7 @@ def build_vm_bootstrap_intents(
     for node in nodes:
         if remaining <= 0:
             break
-        if node.is_ready or node.job.state != "RUNNING":
+        if node.is_ready or not node.job.is_running:
             continue
         role = "builder" if _is_builder(node) else "sandbox"
         options = options_for_node(node, role)
@@ -151,13 +152,13 @@ def build_vm_bootstrap_intents(
             node.heartbeat.active_workloads if node.heartbeat is not None else 0,
         )
         if stale_workloads > 0:
-            plan = plan_for_payload(node.job.raw)
+            access = access_for_instance(node.job)
             intents.append(
                 VmBootstrapIntent(
                     job_id=node.job_id,
                     node_id=options.normalized_node_id(),
                     role=role,
-                    plan=plan,
+                    access=access,
                     options=options,
                     runnable=False,
                     reason="stale node still owns gateway-managed work",
@@ -166,13 +167,13 @@ def build_vm_bootstrap_intents(
             )
             continue
         if record is not None and record.status == "succeeded":
-            plan = plan_for_payload(node.job.raw)
+            access = access_for_instance(node.job)
             intents.append(
                 VmBootstrapIntent(
                     job_id=node.job_id,
                     node_id=options.normalized_node_id(),
                     role=role,
-                    plan=plan,
+                    access=access,
                     options=options,
                     runnable=False,
                     reason="VM init previously succeeded; waiting for heartbeat",
@@ -183,13 +184,13 @@ def build_vm_bootstrap_intents(
         if record is not None and not record.retry_due(
             now=now, retry_seconds=retry_seconds
         ):
-            plan = plan_for_payload(node.job.raw)
+            access = access_for_instance(node.job)
             intents.append(
                 VmBootstrapIntent(
                     job_id=node.job_id,
                     node_id=options.normalized_node_id(),
                     role=role,
-                    plan=plan,
+                    access=access,
                     options=options,
                     runnable=False,
                     reason="waiting for VM init retry backoff",
@@ -197,15 +198,15 @@ def build_vm_bootstrap_intents(
                 )
             )
             continue
-        plan = plan_for_payload(node.job.raw)
+        access = access_for_instance(node.job)
         intent = VmBootstrapIntent(
             job_id=node.job_id,
             node_id=options.normalized_node_id(),
             role=role,
-            plan=plan,
+            access=access,
             options=options,
-            runnable=plan.runnable,
-            reason=plan.reason,
+            runnable=access.runnable,
+            reason=access.reason,
             previous_attempts=attempts,
         )
         intents.append(intent)

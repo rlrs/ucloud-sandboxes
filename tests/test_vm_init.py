@@ -6,12 +6,14 @@ import unittest
 
 import ucloud_sandboxes.vm_init as vm_init
 from ucloud_sandboxes.models import ResourceQuantity
+from ucloud_sandboxes.providers.ucloud.bootstrap import (
+    bootstrap_access_from_payload,
+    extract_ssh_command,
+)
 from ucloud_sandboxes.vm_init import (
     RUNTIME_KERNEL_MODULES,
     VmInitOptions,
-    extract_ssh_command,
     parse_vm_init_phases,
-    plan_vm_init,
     render_vm_init_script,
     stage_vm_init_package_over_ssh,
 )
@@ -127,13 +129,13 @@ class VmInitTests(unittest.TestCase):
             "status": {"state": "RUNNING"},
             "updates": [{"status": "SSH Access: ssh ucloud@example -p 22"}],
         }
-        plan = plan_vm_init(payload)
+        plan = bootstrap_access_from_payload(payload)
         self.assertTrue(plan.runnable)
-        self.assertEqual(plan.ssh_command, "ssh ucloud@example -p 22")
-        self.assertEqual(extract_ssh_command(payload), plan.ssh_command)
+        self.assertEqual(plan.command, "ssh ucloud@example -p 22")
+        self.assertEqual(extract_ssh_command(payload), plan.command)
 
         payload["status"]["state"] = "IN_QUEUE"
-        self.assertFalse(plan_vm_init(payload).runnable)
+        self.assertFalse(bootstrap_access_from_payload(payload).runnable)
 
     def test_parses_machine_readable_phase_timings(self) -> None:
         phases, total = parse_vm_init_phases(

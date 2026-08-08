@@ -1,6 +1,6 @@
 import unittest
 
-from ucloud_sandboxes.vm_submit import (
+from ucloud_sandboxes.providers.ucloud.payloads import (
     VmApplicationRef,
     VmFileMount,
     VmProductRef,
@@ -47,8 +47,12 @@ class VmSubmitTests(unittest.TestCase):
         )
         self.assertFalse(item["sshEnabled"])
         self.assertEqual(item["parameters"]["diskSize"]["value"], 50)
-        self.assertEqual(item["timeAllocation"], {"hours": 2, "minutes": 30, "seconds": 0})
-        self.assertEqual(item["resources"], [{"type": "private_network", "id": "12345327"}])
+        self.assertEqual(
+            item["timeAllocation"], {"hours": 2, "minutes": 30, "seconds": 0}
+        )
+        self.assertEqual(
+            item["resources"], [{"type": "private_network", "id": "12345327"}]
+        )
         self.assertEqual(item["labels"], {"pool": "default"})
 
     def test_can_request_ucloud_ssh_when_app_supports_it(self) -> None:
@@ -98,9 +102,13 @@ class VmSubmitTests(unittest.TestCase):
             ),
         ).job_item()
 
-        self.assertEqual(item["resources"][0], {"type": "private_network", "id": "net-1"})
+        self.assertEqual(
+            item["resources"][0], {"type": "private_network", "id": "net-1"}
+        )
         self.assertEqual(item["resources"][1]["type"], "file")
-        self.assertEqual(item["resources"][1]["path"], "/1234567/ucloud-sandbox-registry")
+        self.assertEqual(
+            item["resources"][1]["path"], "/1234567/ucloud-sandbox-registry"
+        )
         self.assertFalse(item["resources"][1]["readOnly"])
         self.assertEqual(item["resources"][2]["path"], "/1234567/read-only-data")
         self.assertTrue(item["resources"][2]["readOnly"])

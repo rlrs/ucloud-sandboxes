@@ -864,11 +864,12 @@ def _counts_as_pool_node(
     oldest_pending_seconds: int,
 ) -> bool:
     del policy, now, oldest_pending_seconds
-    if node.job.is_final or node.job.is_unexpectedly_suspended or node.permanently_lost:
+    if node.job.is_final or node.job.is_lost or node.permanently_lost:
         return False
     # Capacity weighting and hard provider limits are separate concerns. A stale
     # provisioning job may contribute no projected resources, but it is still a
-    # live VM and must count against max_nodes until UCloud reports it final.
+    # live instance and must count against max_nodes until the provider reports
+    # it final.
     return True
 
 
@@ -885,7 +886,7 @@ def _counts_as_active_provisioning(
     # first heartbeat receives only a bounded bootstrap grace period.
     if not node.is_provisioning:
         return False
-    if node.job.state != "RUNNING":
+    if not node.job.is_running:
         return True
     stale_after = max(0, policy.stale_provisioning_after_seconds)
     age = _provisioning_age_seconds(node, now)
@@ -899,7 +900,7 @@ def _counts_as_unreachable(
     oldest_pending_seconds: int,
 ) -> bool:
     return bool(
-        node.job.state == "RUNNING"
+        node.job.is_running
         and not node.heartbeat_fresh
         and not _counts_as_active_provisioning(
             node,
@@ -913,7 +914,7 @@ def _counts_as_unreachable(
 def _provisioning_age_seconds(node: SandboxNode, now: datetime) -> float | None:
     reference = (
         (node.job.started_at or node.job.created_at)
-        if node.job.state == "RUNNING"
+        if node.job.is_running
         else node.job.created_at
     )
     if reference is None:
@@ -1008,10 +1009,10 @@ def _incompatible_stop_candidates(
     for node in nodes:
         if node.job.is_final or node.agent_version_compatible:
             continue
-        if node.job.state == "IN_QUEUE" or node.job.is_initially_suspended:
+        if node.job.is_provisioning:
             candidates.append(node)
             continue
-        if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:
+        if node.job.is_running and node.heartbeat_fresh and node.is_idle:
             candidates.append(node)
     return sorted(
         candidates,
@@ -1042,7 +1043,7 @@ def unreachable_node_stop_ready(
     if (
         timeout_seconds <= 0
         or node.job.is_final
-        or node.job.state != "RUNNING"
+        or not node.job.is_running
         or node.heartbeat_fresh
         or node.active_sandboxes != 0
     ):

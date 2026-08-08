@@ -113,16 +113,18 @@ from .models import (
     SandboxNode,
     SandboxPlacementRequest,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     utc_now,
-    vm_job_from_payload,
 )
+from .providers.base import ComputeProvider, InstanceCreateIntent, ProviderError
+from .providers.loader import load_external_provider
+from .providers.ucloud import (
+    UCloudSettings,
+    bootstrap_access_from_payload,
+    instance_from_payload,
+)
+from .providers.ucloud.composition import provider_from_configuration
 from .networking import (
-    DEFAULT_PUBLIC_LINK_PORT,
-    PrivateNetworkAttachment,
-    PublicLinkAttachment,
-    apply_private_network_attachment,
-    apply_public_link_attachment,
     stable_hostname,
 )
 from .policy import (
@@ -137,11 +139,9 @@ from .program_scheduler import (
     plan_shadow_wake_queue,
 )
 from .reconcile import (
-    VmCreateIntent,
-    VmNodeSubmissionDefaults,
-    build_builder_vm_create_intents,
-    build_vm_create_intents,
-    bulk_payload_from_create_intents,
+    NodeCreateDefaults,
+    build_builder_create_intents,
+    build_sandbox_create_intents,
     evaluate_builder_scale,
     node_drain_ready,
     partition_safe_stop_job_ids,
@@ -161,11 +161,10 @@ from .routing import (
     is_portable_parked_route,
     sandbox_demand_from_routing_state,
 )
-from .ucloud import (
+from .providers.ucloud.api import (
     SessionStore,
     UCloudClient,
     UCloudError,
-    UCloudHttpError,
 )
 from .vm_init import (
     DEFAULT_DIRECT_DISK_HEADROOM_MB,
@@ -178,12 +177,14 @@ from .vm_init import (
     DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
     DEFAULT_STORAGE_NATIVE_REPOSITORY,
     VmInitOptions,
-    plan_vm_init,
     render_vm_init_script,
     run_init_over_ssh,
     stage_vm_init_package_over_ssh,
 )
-from .vm_submit import (
+from .providers.ucloud.payloads import (
+    DEFAULT_BUILDER_DISK_GB,
+    DEFAULT_BUILDER_PRODUCT_ID,
+    DEFAULT_PUBLIC_LINK_PORT,
     DEFAULT_GATEWAY_VM_PRODUCT_ID,
     DEFAULT_VM_APPLICATION_NAME,
     DEFAULT_VM_APPLICATION_VERSION,
@@ -196,11 +197,15 @@ from .vm_submit import (
     VmProductRef,
     VmSubmissionOptions,
     VmTimeAllocation,
+    PrivateNetworkAttachment,
+    PublicLinkAttachment,
+    apply_private_network_attachment,
+    apply_public_link_attachment,
 )
 
 
-DEFAULT_BUILDER_PRODUCT_ID = "cpu-amd-zen5-16-vcpu"
-DEFAULT_BUILDER_DISK_GB = 250
+def ucloud_settings(config: AutoscalerConfig) -> UCloudSettings:
+    return UCloudSettings.from_provider(config.provider)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -208,7 +213,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, ValueError, UCloudError, AutoscalerStateError) as exc:
+    except (
+        OSError,
+        ValueError,
+        ProviderError,
+        UCloudError,
+        AutoscalerStateError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -216,7 +227,9 @@ def main(argv: list[str] | None = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ucloud-sandboxes",
-        description="Autoscale gVisor sandbox nodes backed by UCloud VM jobs.",
+        description=(
+            "Autoscale direct gVisor sandbox nodes through a compute provider."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -704,14 +717,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_config_args(public_link_attachment)
     public_link_attachment.add_argument(
         "--public-link-id",
-        help="UCloud public link resource id. Defaults to config.gateway_public_link_id.",
+        help="UCloud public link resource id. Defaults to provider.gateway_public_link_id.",
     )
     public_link_attachment.add_argument(
         "--port",
         type=int,
         help=(
             "VM-local port exposed through the public link. Defaults to "
-            f"config.gateway_public_link_port or {DEFAULT_PUBLIC_LINK_PORT}."
+            f"provider.gateway_public_link_port or {DEFAULT_PUBLIC_LINK_PORT}."
         ),
     )
     public_link_attachment.add_argument(
@@ -805,7 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     submit_vm.add_argument(
         "--private-network-id",
-        help="UCloud private network id. Defaults to config.private_network_id.",
+        help="UCloud private network id. Defaults to provider.private_network_id.",
     )
     submit_vm.add_argument(
         "--no-private-network",
@@ -821,7 +834,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help=(
             "VM-local port exposed through --public-link-id. Defaults to "
-            f"config.gateway_public_link_port or {DEFAULT_PUBLIC_LINK_PORT}."
+            f"provider.gateway_public_link_port or {DEFAULT_PUBLIC_LINK_PORT}."
         ),
     )
     submit_vm.add_argument(
@@ -1161,7 +1174,10 @@ def build_parser() -> argparse.ArgumentParser:
         "plan", help="Plan one autoscaler reconciliation cycle."
     )
     add_config_args(plan)
-    plan.add_argument("--project", help="UCloud project id.")
+    plan.add_argument(
+        "--project",
+        help="Provider scope override (the UCloud project id for the built-in adapter).",
+    )
     plan.add_argument(
         "--pending-vcpu",
         type=float,
@@ -1217,7 +1233,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Plan one autoscaler cycle and optionally execute VM mutations.",
     )
     add_config_args(reconcile)
-    reconcile.add_argument("--project", help="UCloud project id.")
+    reconcile.add_argument(
+        "--project",
+        help="Provider scope override (the UCloud project id for the built-in adapter).",
+    )
     reconcile.add_argument(
         "--pending-vcpu",
         type=float,
@@ -1271,7 +1290,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reconcile.add_argument(
         "--private-network-id",
-        help="UCloud private network id. Defaults to config.private_network_id.",
+        help="UCloud private network id. Defaults to provider.private_network_id.",
     )
     reconcile.add_argument(
         "--no-private-network",
@@ -1379,7 +1398,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the autoscaler reconcile loop continuously on a gateway/control VM.",
     )
     add_config_args(loop)
-    loop.add_argument("--project", help="UCloud project id.")
+    loop.add_argument(
+        "--project",
+        help="Provider scope override (the UCloud project id for the built-in adapter).",
+    )
     loop.add_argument(
         "--interval-seconds",
         type=float,
@@ -1431,7 +1453,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     loop.add_argument(
         "--private-network-id",
-        help="UCloud private network id. Defaults to config.private_network_id.",
+        help="UCloud private network id. Defaults to provider.private_network_id.",
     )
     loop.add_argument(
         "--no-private-network",
@@ -2250,35 +2272,15 @@ def load_config(args: argparse.Namespace) -> AutoscalerConfig:
         else AutoscalerConfig.default()
     )
     if getattr(args, "session_file", None):
-        config = AutoscalerConfig(
-            project_id=config.project_id,
-            deployment_id=config.deployment_id,
-            job_name_prefix=config.job_name_prefix,
-            template_job_id=config.template_job_id,
-            private_network_id=config.private_network_id,
-            gateway_public_link_id=config.gateway_public_link_id,
-            gateway_public_link_port=config.gateway_public_link_port,
-            node_hostname_prefix=config.node_hostname_prefix,
-            ucloud_session_file=str(args.session_file),
-            state_dir=config.state_dir,
-            metrics_file=config.metrics_file,
-            policy=config.policy,
+        config = replace(
+            config,
+            provider=config.provider.with_setting(
+                "session_file",
+                str(args.session_file),
+            ),
         )
     if getattr(args, "deployment_id", None):
-        config = AutoscalerConfig(
-            project_id=config.project_id,
-            deployment_id=str(args.deployment_id),
-            job_name_prefix=config.job_name_prefix,
-            template_job_id=config.template_job_id,
-            private_network_id=config.private_network_id,
-            gateway_public_link_id=config.gateway_public_link_id,
-            gateway_public_link_port=config.gateway_public_link_port,
-            node_hostname_prefix=config.node_hostname_prefix,
-            ucloud_session_file=config.ucloud_session_file,
-            state_dir=config.state_dir,
-            metrics_file=config.metrics_file,
-            policy=config.policy,
-        )
+        config = replace(config, deployment_id=str(args.deployment_id))
     if getattr(args, "state_dir", None):
         config = config.with_state_dir(str(args.state_dir))
     return config
@@ -2290,12 +2292,14 @@ def cmd_sample_config(_args: argparse.Namespace) -> int:
 
 
 def cmd_inspect_job(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
-    client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-    payload = client.retrieve_job(config.project_id, args.job_id)
-    job = vm_job_from_payload(payload)
+    config = load_config(args).with_provider_scope(args.project)
+    if not ucloud_settings(config).project_id:
+        raise ValueError(
+            "project id is required via --project or provider.scope_id."
+        )
+    client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
+    payload = client.retrieve_job(ucloud_settings(config).project_id, args.job_id)
+    job = instance_from_payload(payload)
     if args.output == "json":
         print_json(vm_job_to_dict(job))
     else:
@@ -2305,7 +2309,7 @@ def cmd_inspect_job(args: argparse.Namespace) -> int:
 
 def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
     config = load_config(args)
-    labels = parse_labels(args.label)
+    labels = parse_labels(getattr(args, "label", []))
     if args.from_node_agent_url:
         node_control_token = read_required_token_file(
             getattr(args, "node_control_bearer_token_file", None),
@@ -2729,19 +2733,23 @@ def _post_gateway_sandbox_lifecycle(
 
 
 def cmd_init_vm(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    if not ucloud_settings(config).project_id:
+        raise ValueError(
+            "project id is required via --project or provider.scope_id."
+        )
 
-    client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-    payload = client.retrieve_job(config.project_id, args.job_id, include_updates=True)
-    plan = plan_vm_init(payload)
+    client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
+    payload = client.retrieve_job(
+        ucloud_settings(config).project_id, args.job_id, include_updates=True
+    )
+    plan = bootstrap_access_from_payload(payload)
     options = vm_init_options_from_args(args, args.job_id)
 
     result: dict[str, Any] = {
-        "projectId": config.project_id,
-        "job": vm_job_to_dict(plan.job),
-        "sshCommand": plan.ssh_command,
+        "projectId": ucloud_settings(config).project_id,
+        "job": vm_job_to_dict(plan.instance),
+        "sshCommand": plan.command,
         "runnable": plan.runnable,
         "reason": plan.reason,
         "options": vm_init_options_to_dict(options),
@@ -2749,11 +2757,11 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     }
 
     if args.execute:
-        if not plan.runnable or not plan.ssh_command:
+        if not plan.runnable or not plan.command:
             raise ValueError(plan.reason)
         effective_options = options
         stage_result = stage_vm_init_package_over_ssh(
-            plan.ssh_command,
+            plan.command,
             options,
             timeout_seconds=max(1, args.timeout_seconds),
             private_key_file=args.ssh_private_key_file,
@@ -2775,7 +2783,7 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
             package_sha256=stage_result.package_sha256,
         )
         run_result = run_init_over_ssh(
-            plan.ssh_command,
+            plan.command,
             render_vm_init_script(effective_options),
             timeout_seconds=max(1, args.timeout_seconds),
             private_key_file=args.ssh_private_key_file,
@@ -2794,11 +2802,11 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {config.project_id}")
-        print(f"Job: {plan.job.id}")
-        print(f"State: {plan.job.state}")
-        print(f"SSH enabled: {plan.job.ssh_enabled}")
-        print(f"SSH command: {plan.ssh_command or ''}")
+        print(f"Project: {ucloud_settings(config).project_id}")
+        print(f"Job: {plan.instance.id}")
+        print(f"State: {plan.instance.state}")
+        print(f"SSH enabled: {plan.instance.ssh_enabled}")
+        print(f"SSH command: {plan.command or ''}")
         print(f"Deployment: {options.deployment_id}")
         print(f"Agent version: {options.agent_version}")
         print(f"Init version: {options.init_version}")
@@ -2817,7 +2825,7 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
 def cmd_ensure_ucloud_ssh_key(args: argparse.Namespace) -> int:
     config = load_config(args)
     public_key = read_public_ssh_key_file(args.public_key_file)
-    client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
+    client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
 
     existing = find_ucloud_ssh_key(client.browse_ssh_keys(), public_key)
     response: dict[str, Any] | None = None
@@ -2862,7 +2870,9 @@ def cmd_ensure_ucloud_ssh_key(args: argparse.Namespace) -> int:
 
 def cmd_vm_network_attachment(args: argparse.Namespace) -> int:
     config = load_config(args)
-    private_network_id = args.private_network_id or config.private_network_id
+    private_network_id = (
+        args.private_network_id or ucloud_settings(config).private_network_id
+    )
     if not private_network_id:
         raise ValueError(
             "private network id is required via --private-network-id or config."
@@ -2894,16 +2904,19 @@ def cmd_vm_network_attachment(args: argparse.Namespace) -> int:
 
 def cmd_vm_public_link_attachment(args: argparse.Namespace) -> int:
     config = load_config(args)
-    public_link_id = args.public_link_id or config.gateway_public_link_id
+    public_link_id = (
+        args.public_link_id or ucloud_settings(config).gateway_public_link_id
+    )
     if not public_link_id:
         raise ValueError(
             "public link id is required via --public-link-id or "
-            "config.gateway_public_link_id."
+            "provider.gateway_public_link_id."
         )
     port = (
         args.port
         if args.port is not None
-        else config.gateway_public_link_port or DEFAULT_PUBLIC_LINK_PORT
+        else ucloud_settings(config).gateway_public_link_port
+        or DEFAULT_PUBLIC_LINK_PORT
     )
     attachment = PublicLinkAttachment(
         link_id=public_link_id,
@@ -3081,14 +3094,16 @@ def _dedupe_image_records(records: list[ImageRecord]) -> list[ImageRecord]:
 
 
 def cmd_submit_vm(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    if not ucloud_settings(config).project_id:
+        raise ValueError(
+            "project id is required via --project or provider.scope_id."
+        )
 
     options, seed = vm_submission_options_from_args(args, config)
     payload = options.bulk_payload()
     result: dict[str, Any] = {
-        "projectId": config.project_id,
+        "projectId": ucloud_settings(config).project_id,
         "execute": args.execute,
         "role": args.role,
         "seed": seed,
@@ -3108,8 +3123,8 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
     }
 
     if args.execute:
-        client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-        response = client.submit_jobs(config.project_id, payload)
+        client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
+        response = client.submit_jobs(ucloud_settings(config).project_id, payload)
         result["response"] = response
         job_ids = submitted_job_ids(response)
         result["jobIds"] = job_ids
@@ -3117,7 +3132,7 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {config.project_id}")
+        print(f"Project: {ucloud_settings(config).project_id}")
         print(f"Role: {args.role}")
         print(f"Name: {options.name}")
         print(f"Hostname: {options.hostname}")
@@ -3148,7 +3163,7 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
                     print(
                         "Next: "
                         f"ucloud-sandboxes init-vm {job_ids[0]} "
-                        f"--project {config.project_id} "
+                        f"--project {ucloud_settings(config).project_id} "
                         f"--node-id {options.hostname} "
                         "--heartbeat-url <control-plane-url>/v1/nodes/heartbeat"
                     )
@@ -3164,17 +3179,19 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
 
 
 def cmd_open_vm_web(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    if not ucloud_settings(config).project_id:
+        raise ValueError(
+            "project id is required via --project or provider.scope_id."
+        )
     if args.port < 1 or args.port > 65535:
         raise ValueError("port must be in [1, 65535].")
     if args.rank < 0:
         raise ValueError("rank cannot be negative.")
 
-    client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
+    client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
     response = client.open_interactive_session(
-        config.project_id,
+        ucloud_settings(config).project_id,
         args.job_id,
         session_type="WEB",
         rank=args.rank,
@@ -3194,12 +3211,16 @@ def cmd_open_vm_web(args: argparse.Namespace) -> int:
 
 
 def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    if not ucloud_settings(config).project_id:
+        raise ValueError(
+            "project id is required via --project or provider.scope_id."
+        )
     if not config.deployment_id:
         raise ValueError("deployment id is required via --deployment-id or config.")
-    private_network_id = args.private_network_id or config.private_network_id
+    private_network_id = (
+        args.private_network_id or ucloud_settings(config).private_network_id
+    )
     if not private_network_id:
         raise ValueError(
             "private network id is required via --private-network-id or config."
@@ -3210,7 +3231,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
     def get_client() -> UCloudClient:
         nonlocal client
         if client is None:
-            client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
+            client = UCloudClient(
+                SessionStore(Path(ucloud_settings(config).session_file))
+            )
         return client
 
     payload: dict[str, Any] | None = None
@@ -3219,7 +3242,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         nonlocal payload
         if payload is None:
             payload = get_client().retrieve_job(
-                config.project_id,
+                ucloud_settings(config).project_id,
                 args.job_id,
                 include_updates=True,
             )
@@ -3227,14 +3250,14 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
 
     ssh_command = args.ssh_command
     if not ssh_command and args.execute:
-        init_plan = plan_vm_init(get_payload())
-        if not init_plan.runnable or not init_plan.ssh_command:
+        init_plan = bootstrap_access_from_payload(get_payload())
+        if not init_plan.runnable or not init_plan.command:
             raise ValueError(init_plan.reason)
-        ssh_command = init_plan.ssh_command
+        ssh_command = init_plan.command
 
-    inferred_job: VmJob | None = None
+    inferred_job: ProviderInstance | None = None
     if not args.gateway_private_host:
-        inferred_job = vm_job_from_payload(get_payload())
+        inferred_job = instance_from_payload(get_payload())
     gateway_private_host = args.gateway_private_host or (
         inferred_job.hostname if inferred_job is not None else ""
     )
@@ -3242,7 +3265,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
 
     plan = AllInOneDeployPlan(
         job_id=args.job_id,
-        project_id=config.project_id,
+        project_id=ucloud_settings(config).project_id,
         deployment_id=config.deployment_id,
         local_wheel=args.wheel.expanduser().resolve(),
         local_direct_runsc=(
@@ -3403,7 +3426,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     }
                 )
         if not args.no_copy_session:
-            local_session = Path(config.ucloud_session_file).expanduser()
+            local_session = Path(ucloud_settings(config).session_file).expanduser()
             staged_session = stage_file_over_ssh(
                 ssh_command,
                 local_session,
@@ -3468,7 +3491,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         if not args.no_open_public_links:
             for port in (plan.gateway_port, plan.relay_port):
                 response = get_client().open_interactive_session(
-                    config.project_id,
+                    ucloud_settings(config).project_id,
                     args.job_id,
                     session_type="WEB",
                     rank=0,
@@ -3479,7 +3502,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {config.project_id}")
+        print(f"Project: {ucloud_settings(config).project_id}")
         print(f"Job: {args.job_id}")
         print(f"Deployment: {config.deployment_id}")
         print(f"Version: {plan.package_version}")
@@ -3533,11 +3556,11 @@ def cmd_heartbeats(args: argparse.Namespace) -> int:
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
-
-    jobs = load_jobs_for_plan(config, args)
+    config = load_config(args).with_provider_scope(args.project)
+    provider = compute_provider_from_args(args, config)
+    if not provider.scope_id:
+        raise ValueError("provider scope id is required via --project or config.")
+    jobs = load_instances_for_plan(config, provider, args)
     heartbeat_file = args.heartbeats or config.heartbeat_file()
     heartbeats = load_heartbeats(heartbeat_file)
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, config.policy)
@@ -3550,7 +3573,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(
             {
-                "projectId": config.project_id,
+                "provider": {
+                    "kind": provider.kind,
+                    "scopeId": provider.scope_id,
+                },
                 "jobNamePrefix": config.job_name_prefix,
                 "heartbeatFile": str(heartbeat_file),
                 "nodes": [node_to_dict(node) for node in nodes],
@@ -3558,7 +3584,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
             }
         )
     else:
-        print_plan(config, nodes, decision, heartbeat_file)
+        print_plan(
+            config,
+            nodes,
+            decision,
+            heartbeat_file,
+            provider_kind=provider.kind,
+            provider_scope_id=provider.scope_id,
+        )
     return 0
 
 
@@ -3575,9 +3608,10 @@ def reject_mutating_jobs_fixture(
 
 
 def cmd_reconcile(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    provider = compute_provider_from_args(args, config)
+    if not provider.scope_id:
+        raise ValueError("provider scope id is required via --project or config.")
     execution_requested = bool(
         args.execute or args.execute_stops or getattr(args, "execute_init", False)
     )
@@ -3589,6 +3623,7 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
     result = run_reconcile_cycle(
         config,
         args,
+        provider=provider,
         demand=sandbox_demand_from_args(args),
         provider_mutations_allowed=False,
     )
@@ -3622,9 +3657,10 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
 
 def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
-    config = load_config(args).with_project_id(args.project)
-    if not config.project_id:
-        raise ValueError("project id is required via --project or config.project_id.")
+    config = load_config(args).with_provider_scope(args.project)
+    provider = compute_provider_from_args(args, config)
+    if not provider.scope_id:
+        raise ValueError("provider scope id is required via --project or config.")
     route_file = args.route_file or config.routing_file()
     metrics_file = metrics_path_from_args(args, config, sibling_file=route_file)
     metrics_store = MetricsStore(metrics_file)
@@ -3698,6 +3734,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             result = run_reconcile_cycle(
                 config,
                 args,
+                provider=provider,
                 demand=demand,
                 pending_image_builds=pending_image_builds,
                 prepared_builder_count=prepared_builder_count,
@@ -4078,8 +4115,7 @@ def _stop_operation_has_safety_proof(
 
 def apply_prepared_provider_operations(
     provider_state: AutoscalerStateStore,
-    client: UCloudClient,
-    project_id: str,
+    provider: ComputeProvider,
     *,
     source: str,
     allowed_kinds: set[str],
@@ -4114,93 +4150,37 @@ def apply_prepared_provider_operations(
         submitting = provider_state.begin_provider_call(prepared.operation_id)
         try:
             if submitting.kind == "create":
-                response = client.submit_jobs(project_id, submitting.request)
+                outcome = provider.create(submitting.request)
             else:
-                response = client.terminate_jobs(
-                    project_id,
-                    submitting.target_job_ids,
-                )
-        except UCloudHttpError as exc:
-            if _provider_http_error_is_definite_rejection(exc):
-                operation = provider_state.mark_operation_failed(
-                    submitting.operation_id,
-                    error=str(exc),
-                    response=_provider_error_payload(exc),
-                )
-            else:
-                operation = provider_state.mark_operation_uncertain(
-                    submitting.operation_id,
-                    error=str(exc),
-                )
+                outcome = provider.terminate(submitting.target_job_ids)
         except Exception as exc:
-            # A transport failure, process interruption, or unknown client error
-            # cannot prove whether UCloud applied the request.
+            # Unknown adapter failures cannot prove whether the provider applied
+            # the request. Adapters should normally return an uncertain result.
             operation = provider_state.mark_operation_uncertain(
                 submitting.operation_id,
                 error=str(exc),
             )
         else:
-            response_job_ids = tuple(submitted_job_ids(response))
-            if _provider_response_is_definite_rejection(response):
+            if outcome.status == "rejected":
                 operation = provider_state.mark_operation_failed(
                     submitting.operation_id,
-                    error="UCloud explicitly rejected the provider operation",
-                    response=response,
+                    error=outcome.error or "provider explicitly rejected the operation",
+                    response=outcome.response,
                 )
-            elif _provider_response_is_definite_success(
-                submitting,
-                response_job_ids,
-            ):
+            elif outcome.status == "accepted":
                 operation = provider_state.mark_operation_accepted(
                     submitting.operation_id,
-                    response=response,
-                    target_job_ids=(
-                        response_job_ids
-                        if submitting.kind == "create"
-                        else submitting.target_job_ids
-                    ),
+                    response=outcome.response,
+                    target_job_ids=outcome.instance_ids,
                 )
             else:
                 operation = provider_state.mark_operation_uncertain(
                     submitting.operation_id,
-                    error="UCloud response did not prove whether the operation applied",
+                    error=outcome.error
+                    or "provider response did not prove whether the operation applied",
                 )
         results.append(_provider_operation_result(operation, source=source))
     return results
-
-
-def _provider_http_error_is_definite_rejection(exc: UCloudHttpError) -> bool:
-    return 400 <= exc.status < 500 and exc.status not in {408, 425, 429}
-
-
-def _provider_error_payload(exc: UCloudHttpError) -> dict[str, Any]:
-    return {
-        "status": exc.status,
-        "payload": exc.payload,
-    }
-
-
-def _provider_response_is_definite_success(
-    operation: ProviderOperation,
-    response_job_ids: tuple[str, ...],
-) -> bool:
-    if operation.kind == "create":
-        return len(response_job_ids) == 1
-    return bool(operation.target_job_ids) and set(operation.target_job_ids).issubset(
-        response_job_ids
-    )
-
-
-def _provider_response_is_definite_rejection(response: dict[str, Any]) -> bool:
-    responses = response.get("responses")
-    if not isinstance(responses, list) or not responses:
-        return False
-    return all(
-        isinstance(item, dict)
-        and not item.get("id")
-        and any(item.get(key) not in (None, "") for key in ("error", "why", "message"))
-        for item in responses
-    )
 
 
 def _provider_operation_result(
@@ -4269,6 +4249,7 @@ def run_reconcile_cycle(
     config: AutoscalerConfig,
     args: argparse.Namespace,
     *,
+    provider: ComputeProvider | None = None,
     demand: SandboxDemand,
     pending_image_builds: int | None = None,
     prepared_builder_count: int | None = None,
@@ -4305,16 +4286,9 @@ def run_reconcile_cycle(
         if provider_fence is not None:
             provider_fence()
 
-    client: UCloudClient | None = None
-
-    def get_client() -> UCloudClient:
-        nonlocal client
-        if client is None:
-            client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-        return client
-
-    jobs = load_jobs_for_plan(config, args)
-    operation_deployment_id = config.deployment_id or config.project_id
+    provider = provider or compute_provider_from_args(args, config)
+    jobs = load_instances_for_plan(config, provider, args)
+    operation_deployment_id = config.deployment_id or provider.scope_id
     provider_operation_results: list[dict[str, Any]] = []
     create_recovery_results: list[dict[str, Any]] = []
     stop_recovery_results: list[dict[str, Any]] = []
@@ -4364,8 +4338,7 @@ def run_reconcile_cycle(
         # node drain intent below.
         replay_results = apply_prepared_provider_operations(
             provider_state,
-            get_client(),
-            config.project_id,
+            provider,
             source="prepared-replay",
             allowed_kinds=allowed_kinds,
             allowed_stop_operation_ids=set(),
@@ -4408,9 +4381,9 @@ def run_reconcile_cycle(
     heartbeats = load_heartbeats(heartbeat_file)
     effective_policy = policy_with_cli_overrides(config.policy, args)
 
-    # Job browse omits update history.  A powered-off VM may therefore appear
-    # RUNNING again after UCloud has replaced its ephemeral guest.  Current
-    # SUSPENDED state and our own destructive stop journal are durable hints.
+    # Provider inventory may omit update history. A powered-off instance may
+    # therefore appear running again after its ephemeral guest is replaced.
+    # Normalized lost state and our own destructive stop journal are durable hints.
     # For a stale RUNNING node, retrieve its
     # full ordered updates once so the later RUNNING report cannot hide the
     # post-start suspension. A fresh heartbeat is not sufficient evidence of
@@ -4442,7 +4415,7 @@ def run_reconcile_cycle(
             owns_routes = bool(owned_routes)
             should_retrieve_history = bool(
                 job.state == "RUNNING"
-                and not job.has_post_start_suspension
+                and not job.is_lost
                 and job.id not in loss_latched_job_ids
                 and owns_routes
                 and (stale_heartbeat or route_epoch_mismatch)
@@ -4450,24 +4423,17 @@ def run_reconcile_cycle(
             if not should_retrieve_history:
                 continue
             try:
-                retrieved = vm_job_from_payload(
-                    get_client().retrieve_job(
-                        config.project_id,
-                        job.id,
-                        include_updates=True,
-                    )
+                retrieved = provider.retrieve_instance(
+                    job.id,
+                    include_updates=True,
                 )
-            except UCloudError:
+            except ProviderError:
                 continue
             jobs_by_id[job.id] = retrieved
         jobs = [jobs_by_id[job.id] for job in jobs]
 
     destructive_power_cycle_job_ids = tuple(
-        sorted(
-            job.id
-            for job in jobs
-            if job.id in loss_latched_job_ids or job.has_post_start_suspension
-        )
+        sorted(job.id for job in jobs if job.id in loss_latched_job_ids or job.is_lost)
     )
     final_heartbeat_job_ids = tuple(
         sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
@@ -4680,20 +4646,20 @@ def run_reconcile_cycle(
                 policy=effective_policy,
                 max_builder_nodes=getattr(args, "max_builder_nodes", 1),
             )
-    sandbox_create_intents: list[VmCreateIntent] = []
+    sandbox_create_intents: list[InstanceCreateIntent] = []
     if decision.creates > 0:
-        sandbox_create_intents = build_vm_create_intents(
+        sandbox_create_intents = build_sandbox_create_intents(
             config,
             decision,
-            vm_node_submission_defaults_from_args(args, config),
+            node_create_defaults_from_args(args, config),
             seed_prefix=args.seed_prefix,
         )
-    builder_create_intents: list[VmCreateIntent] = []
+    builder_create_intents: list[InstanceCreateIntent] = []
     if builder_decision.creates > 0:
-        builder_create_intents = build_builder_vm_create_intents(
+        builder_create_intents = build_builder_create_intents(
             config,
             builder_decision,
-            vm_builder_submission_defaults_from_args(args, config),
+            builder_create_defaults_from_args(args, config),
             seed_prefix=args.seed_prefix,
         )
     if "sandbox" in blocked_create_roles:
@@ -5051,22 +5017,19 @@ def run_reconcile_cycle(
             )
         )
 
-    def plan_bootstrap_from_payload(payload: dict[str, Any]) -> Any:
-        plan = plan_vm_init(payload)
+    def access_for_instance(instance: ProviderInstance):
+        access = provider.bootstrap_access(instance)
         if (
             getattr(args, "execute_init", False)
             and not getattr(args, "jobs_file", None)
-            and not plan.runnable
-            and "No SSH access command" in plan.reason
+            and not access.runnable
+            and "No SSH access command" in access.reason
         ):
-            job_id = str(payload.get("id") or "")
-            if job_id:
-                plan = plan_vm_init(
-                    get_client().retrieve_job(
-                        config.project_id, job_id, include_updates=True
-                    )
+            if instance.id:
+                access = provider.bootstrap_access(
+                    provider.retrieve_instance(instance.id, include_updates=True)
                 )
-        return plan
+        return access
 
     bootstrap_nodes = [*sandbox_nodes, *builder_nodes]
     max_bootstraps = max(0, int(getattr(args, "max_init_per_cycle", 1)))
@@ -5090,7 +5053,7 @@ def run_reconcile_cycle(
             args,
             config,
         ),
-        plan_for_payload=plan_bootstrap_from_payload,
+        access_for_instance=access_for_instance,
     )
     bootstrap_intents = [
         apply_bootstrap_cli_requirements(intent)
@@ -5101,8 +5064,8 @@ def run_reconcile_cycle(
     journaled_stop_operations: list[ProviderOperation] = []
     if execution_authorized and provider_state is not None:
         if args.execute:
-            labeled_sandbox_intents: list[VmCreateIntent] = []
-            labeled_builder_intents: list[VmCreateIntent] = []
+            labeled_sandbox_intents: list[InstanceCreateIntent] = []
+            labeled_builder_intents: list[InstanceCreateIntent] = []
             for role, intents, destination in (
                 ("sandbox", sandbox_create_intents, labeled_sandbox_intents),
                 ("builder", builder_create_intents, labeled_builder_intents),
@@ -5128,7 +5091,7 @@ def run_reconcile_cycle(
                         kind="create",
                         deployment_id=operation_deployment_id,
                         role=role,
-                        request=bulk_payload_from_create_intents([labeled]),
+                        request=provider.render_create_request([labeled]),
                     )
                     journaled_create_operations.append(operation)
                     destination.append(labeled)
@@ -5224,7 +5187,10 @@ def run_reconcile_cycle(
                     )
                 )
     result: dict[str, Any] = {
-        "projectId": config.project_id,
+        "provider": {
+            "kind": provider.kind,
+            "scopeId": provider.scope_id,
+        },
         "jobNamePrefix": config.job_name_prefix,
         "heartbeatFile": str(heartbeat_file),
         "bootstrapStateFile": str(bootstrap_state_file),
@@ -5239,9 +5205,7 @@ def run_reconcile_cycle(
         "activeImageBuilds": active_image_builds,
         "preparedBuilderCount": builder_prepared,
         "unexpectedly_suspended_job_ids": sorted(
-            node.job_id
-            for node in (*sandbox_nodes, *builder_nodes)
-            if node.job.is_unexpectedly_suspended
+            node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
         "destructive_power_cycle_job_ids": list(destructive_power_cycle_job_ids),
         "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
@@ -5250,7 +5214,7 @@ def run_reconcile_cycle(
         "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
         "builderCreateIntents": [intent.to_dict() for intent in builder_create_intents],
         "createPayload": (
-            bulk_payload_from_create_intents(create_intents)
+            provider.render_create_request(create_intents)
             if create_intents
             else {"type": "bulk", "items": []}
         ),
@@ -5326,8 +5290,7 @@ def run_reconcile_cycle(
             planned_allowed_kinds.add("stop")
         planned_results = apply_prepared_provider_operations(
             provider_state,
-            get_client(),
-            config.project_id,
+            provider,
             source="planned",
             allowed_kinds=planned_allowed_kinds,
             allowed_stop_operation_ids={
@@ -5406,7 +5369,7 @@ def run_reconcile_cycle(
     ):
         bootstrap_results = list(completed_bootstrap_results)
         for intent in bootstrap_intents:
-            if not intent.runnable or not intent.plan.ssh_command:
+            if not intent.runnable or not intent.access.command:
                 bootstrap_results.append(
                     {
                         "jobId": intent.job_id,
@@ -5439,7 +5402,7 @@ def run_reconcile_cycle(
             tuple[int, VmBootstrapIntent, int, datetime, float]
         ] = []
         for index, intent in enumerate(bootstrap_intents):
-            if not intent.runnable or not intent.plan.ssh_command:
+            if not intent.runnable or not intent.access.command:
                 ordered_bootstrap_results[index] = {
                     "jobId": intent.job_id,
                     "nodeId": intent.node_id,
@@ -5855,7 +5818,7 @@ def _execute_vm_bootstrap_attempt(
         known_hosts_file = _bootstrap_known_hosts_file(intent, args)
         stage_started_perf = time.perf_counter()
         stage_result = stage_vm_init_package_over_ssh(
-            intent.plan.ssh_command,
+            intent.access.command,
             intent.options,
             timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
@@ -5905,7 +5868,7 @@ def _execute_vm_bootstrap_attempt(
         assert_provider_fence()
         run_started_perf = time.perf_counter()
         run_result = run_init_over_ssh(
-            intent.plan.ssh_command,
+            intent.access.command,
             render_vm_init_script(effective_options),
             timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
             private_key_file=getattr(args, "init_ssh_private_key_file", None),
@@ -6095,29 +6058,36 @@ def _bootstrap_result_duration_ms(result: _VmBootstrapAttemptResult) -> int:
     return max(0, int(value))
 
 
-def load_jobs_for_plan(
-    config: AutoscalerConfig, args: argparse.Namespace
-) -> list[VmJob]:
+def load_instances_for_plan(
+    config: AutoscalerConfig,
+    provider: ComputeProvider,
+    args: argparse.Namespace,
+) -> list[ProviderInstance]:
     if args.jobs_file:
         payload = json.loads(args.jobs_file.read_text(encoding="utf-8"))
         raw_items = payload.get("items") if isinstance(payload, dict) else payload
+        if not isinstance(raw_items, list):
+            raise ValueError(
+                "Jobs payload must be a list or an object with an items list."
+            )
+        instances = [
+            provider.decode_instance(item)
+            for item in raw_items
+            if isinstance(item, dict)
+        ]
     else:
-        client = UCloudClient(SessionStore(Path(config.ucloud_session_file)))
-        raw_items = client.browse_all_jobs(
-            config.project_id,
-            include_application=False,
-        )
-
-    if not isinstance(raw_items, list):
-        raise ValueError("Jobs payload must be a list or an object with an items list.")
+        instances = provider.list_instances()
 
     include_ids = {str(job_id) for job_id in args.include_job}
-    jobs: list[VmJob] = []
-    for item in raw_items:
-        if not isinstance(item, dict):
-            continue
-        job = vm_job_from_payload(item)
-        if should_include_job(job, config, include_ids, args.all_vm_jobs):
+    jobs: list[ProviderInstance] = []
+    for job in instances:
+        if should_include_job(
+            job,
+            config,
+            provider,
+            include_ids,
+            args.all_vm_jobs,
+        ):
             jobs.append(job)
     return jobs
 
@@ -6519,8 +6489,9 @@ def demand_with_lost_sandbox_replacement(
 
 
 def should_include_job(
-    job: VmJob,
+    job: ProviderInstance,
     config: AutoscalerConfig,
+    provider: ComputeProvider,
     include_ids: set[str],
     all_vm_jobs: bool,
 ) -> bool:
@@ -6531,7 +6502,7 @@ def should_include_job(
         and job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
     ):
         return False
-    if not job_matches_private_network(job, config):
+    if not provider.instance_is_eligible(job):
         return False
     if all_vm_jobs and job.is_vm:
         return True
@@ -6829,13 +6800,15 @@ def vm_bootstrap_intent_to_dict(intent: VmBootstrapIntent) -> dict[str, Any]:
         "role": intent.role,
         "runnable": intent.runnable,
         "reason": intent.reason,
-        "sshCommand": intent.plan.ssh_command,
+        "sshCommand": intent.access.command,
         "previousAttempts": intent.previous_attempts,
         "options": vm_init_options_to_dict(intent.options),
     }
 
 
-def resources_from_vm_job(job: VmJob, default: ResourceQuantity) -> ResourceQuantity:
+def resources_from_vm_job(
+    job: ProviderInstance, default: ResourceQuantity
+) -> ResourceQuantity:
     return ResourceQuantity(
         vcpu=float(job.cpu) if job.cpu is not None else default.vcpu,
         memory_mb=(job.memory_gb * 1024)
@@ -6845,13 +6818,7 @@ def resources_from_vm_job(job: VmJob, default: ResourceQuantity) -> ResourceQuan
     )
 
 
-def job_matches_private_network(job: VmJob, config: AutoscalerConfig) -> bool:
-    if not config.private_network_id:
-        return True
-    return config.private_network_id in job.private_network_ids
-
-
-def print_vm_job(job: VmJob) -> None:
+def print_vm_job(job: ProviderInstance) -> None:
     print(f"Job: {job.id}")
     print(f"State: {job.state}")
     print(f"Application: {job.application_name}:{job.application_version}")
@@ -6872,11 +6839,13 @@ def print_plan(
     decision: Any,
     heartbeat_file: Path,
     *,
+    provider_kind: str,
+    provider_scope_id: str,
     footer: str | None = "Dry-run only. Mutation commands are not implemented yet.",
 ) -> None:
     unreachable = getattr(decision, "unreachable_nodes", 0)
     unreachable_suffix = f", {unreachable} unreachable" if unreachable else ""
-    print(f"Project: {config.project_id}")
+    print(f"Provider: {provider_kind} ({provider_scope_id})")
     print(f"Heartbeat file: {heartbeat_file}")
     print(
         "Nodes: "
@@ -6929,11 +6898,20 @@ def print_reconcile(
     nodes: list[Any],
     decision: Any,
     heartbeat_file: Path,
-    create_intents: list[VmCreateIntent],
+    create_intents: list[InstanceCreateIntent],
     stop_job_ids: tuple[str, ...],
     result: dict[str, Any],
 ) -> None:
-    print_plan(config, nodes, decision, heartbeat_file, footer=None)
+    provider = result["provider"]
+    print_plan(
+        config,
+        nodes,
+        decision,
+        heartbeat_file,
+        provider_kind=str(provider["kind"]),
+        provider_scope_id=str(provider["scopeId"]),
+        footer=None,
+    )
     builder_decision = result.get("rawBuilderDecision")
     if builder_decision is not None:
         print("Builder decision:")
@@ -7037,7 +7015,7 @@ def print_reconcile(
                 )
 
 
-def vm_job_to_dict(job: VmJob) -> dict[str, Any]:
+def vm_job_to_dict(job: ProviderInstance) -> dict[str, Any]:
     raw = asdict(job)
     raw.pop("raw", None)
     for key in ("created_at", "started_at", "expires_at"):
@@ -7157,25 +7135,10 @@ def sandbox_demand_from_args(args: argparse.Namespace) -> SandboxDemand:
     )
 
 
-def vm_node_submission_defaults_from_args(
+def node_create_defaults_from_args(
     args: argparse.Namespace,
     config: AutoscalerConfig,
-) -> VmNodeSubmissionDefaults:
-    if args.no_private_network:
-        private_network_id = None
-    else:
-        private_network_id = args.private_network_id or config.private_network_id
-        if not private_network_id:
-            raise ValueError(
-                "private network id is required via --private-network-id or config; "
-                "use --no-private-network to submit without one."
-            )
-
-    ssh_requested = bool(getattr(args, "ssh", False))
-    ssh_disabled = bool(getattr(args, "no_ssh", False))
-    if ssh_requested and ssh_disabled:
-        raise ValueError("--ssh and --no-ssh cannot be used together.")
-
+) -> NodeCreateDefaults:
     labels = parse_labels(args.label)
     labels.setdefault(NODE_LABEL, "true")
     if config.deployment_id:
@@ -7183,49 +7146,14 @@ def vm_node_submission_defaults_from_args(
     labels.setdefault(AGENT_VERSION_LABEL, package_version())
     labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
 
-    return VmNodeSubmissionDefaults(
-        private_network_id=private_network_id,
-        product=VmProductRef(
-            id=args.product_id,
-            category=args.product_category,
-            provider=args.product_provider,
-        ),
-        application=VmApplicationRef(
-            name=args.app_name,
-            version=args.app_version,
-        ),
-        disk_gb=args.disk_gb,
-        time_allocation=VmTimeAllocation(
-            hours=args.time_hours,
-            minutes=args.time_minutes,
-            seconds=args.time_seconds,
-        ),
-        ssh_enabled=ssh_requested,
-        allow_duplicate_job=args.allow_duplicate_job,
-        labels=labels,
-    )
+    return NodeCreateDefaults(labels=labels)
 
 
-def vm_builder_submission_defaults_from_args(
+def builder_create_defaults_from_args(
     args: argparse.Namespace,
     config: AutoscalerConfig,
-) -> VmNodeSubmissionDefaults:
-    if args.no_private_network:
-        private_network_id = None
-    else:
-        private_network_id = args.private_network_id or config.private_network_id
-        if not private_network_id:
-            raise ValueError(
-                "private network id is required via --private-network-id or config; "
-                "use --no-private-network to submit without one."
-            )
-
-    ssh_requested = bool(getattr(args, "ssh", False))
-    ssh_disabled = bool(getattr(args, "no_ssh", False))
-    if ssh_requested and ssh_disabled:
-        raise ValueError("--ssh and --no-ssh cannot be used together.")
-
-    labels = parse_labels(args.label)
+) -> NodeCreateDefaults:
+    labels = parse_labels(getattr(args, "label", []))
     labels.pop(NODE_LABEL, None)
     labels.setdefault(BUILDER_LABEL, "true")
     if config.deployment_id:
@@ -7233,26 +7161,25 @@ def vm_builder_submission_defaults_from_args(
     labels.setdefault(AGENT_VERSION_LABEL, package_version())
     labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
 
-    return VmNodeSubmissionDefaults(
-        private_network_id=private_network_id,
-        product=VmProductRef(
-            id=args.builder_product_id,
-            category=args.product_category,
-            provider=args.product_provider,
-        ),
-        application=VmApplicationRef(
-            name=args.app_name,
-            version=args.app_version,
-        ),
-        disk_gb=args.builder_disk_gb,
-        time_allocation=VmTimeAllocation(
-            hours=args.time_hours,
-            minutes=args.time_minutes,
-            seconds=args.time_seconds,
-        ),
-        ssh_enabled=ssh_requested,
-        allow_duplicate_job=args.allow_duplicate_job,
-        labels=labels,
+    return NodeCreateDefaults(labels=labels)
+
+
+def compute_provider_from_args(
+    args: argparse.Namespace,
+    config: AutoscalerConfig,
+) -> ComputeProvider:
+    """Compose the selected adapter at the CLI boundary.
+
+    The in-tree UCloud adapter keeps the existing CLI surface. Other providers
+    are discovered by their tagged configuration kind through an entry point.
+    """
+
+    if config.provider.kind != "ucloud":
+        return load_external_provider(config.provider, args)
+    return provider_from_configuration(
+        config.provider,
+        args,
+        client_factory=UCloudClient,
     )
 
 
@@ -7265,7 +7192,9 @@ def vm_submission_options_from_args(
     if args.no_private_network:
         private_network_id = None
     else:
-        private_network_id = args.private_network_id or config.private_network_id
+        private_network_id = (
+            args.private_network_id or ucloud_settings(config).private_network_id
+        )
         if not private_network_id:
             raise ValueError(
                 "private network id is required via --private-network-id or config; "
@@ -7277,12 +7206,15 @@ def vm_submission_options_from_args(
     else:
         explicit_public_link_id = getattr(args, "public_link_id", None)
         public_link_id = explicit_public_link_id or (
-            config.gateway_public_link_id if role == "gateway" else None
+            ucloud_settings(config).gateway_public_link_id
+            if role == "gateway"
+            else None
         )
     public_link_port = (
         getattr(args, "public_link_port", None)
         if getattr(args, "public_link_port", None) is not None
-        else config.gateway_public_link_port or DEFAULT_PUBLIC_LINK_PORT
+        else ucloud_settings(config).gateway_public_link_port
+        or DEFAULT_PUBLIC_LINK_PORT
     )
 
     seed = args.hostname_seed or uuid4().hex[:8]

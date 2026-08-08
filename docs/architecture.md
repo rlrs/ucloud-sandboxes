@@ -12,19 +12,23 @@ image infrastructure and never own a sandbox task.
 Each node deployment has one immutable runtime identity. Admission, routing,
 heartbeats, and storage authority all refer to that same Warden-owned runtime.
 
-- UCloud VM jobs are pool nodes.
-- The control plane and VM nodes should be attached to the same UCloud private
-  network. VM jobs get a stable private-network hostname, and node heartbeats
+- Provider instances are pool nodes. Native instance state is normalized at a
+  small compute-provider boundary before it reaches policy or reconciliation.
+- The control plane and worker nodes should have private network reachability.
+  Nodes get a stable private-network hostname, and node heartbeats
   advertise the node-agent URL based on that hostname.
 - A node agent on each VM reports resources, active sandbox count, capabilities,
   and drain state.
-- The autoscaler reconciles pending sandbox resource demand against UCloud VM
-  job state and node heartbeats.
+- The autoscaler reconciles pending sandbox resource demand against normalized
+  provider instance state and node heartbeats.
 - The gateway keeps client routing stable and forwards traffic through the
   node that owns the route's exact sandbox generation.
-- Mutating UCloud operations are gated behind explicit `--execute` flags.
+- Mutating provider operations are gated behind explicit `--execute` flags and
+  normalized as accepted, rejected, or uncertain.
 
 See [vm-init.md](vm-init.md) for the verified post-boot VM init contract.
+See [provider-portability.md](provider-portability.md) for the adapter contract
+and the remaining host-infrastructure requirements on another cloud.
 
 ## Image Build And Registry Flow
 

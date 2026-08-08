@@ -1,16 +1,121 @@
+"""Render provider-neutral node intent as an SDU UCloud job payload."""
+
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from .networking import (
-    DEFAULT_PUBLIC_LINK_PORT,
-    PrivateNetworkAttachment,
-    PublicLinkAttachment,
-    apply_private_network_attachment,
-    apply_public_link_attachment,
-    validate_hostname,
-)
+from ...networking import validate_hostname
+
+
+DEFAULT_PUBLIC_LINK_PORT = 8090
+
+
+@dataclass(frozen=True)
+class PrivateNetworkAttachment:
+    network_id: str
+    hostname: str
+
+    def __post_init__(self) -> None:
+        _validate_resource_id("private network", self.network_id)
+        validate_hostname(self.hostname)
+
+    def to_resource(self) -> dict[str, str]:
+        return {"type": "private_network", "id": self.network_id}
+
+
+@dataclass(frozen=True)
+class PublicLinkAttachment:
+    link_id: str
+    port: int = DEFAULT_PUBLIC_LINK_PORT
+
+    def __post_init__(self) -> None:
+        _validate_resource_id("public link", self.link_id)
+        _validate_port(self.port)
+
+    def to_resource(self) -> dict[str, Any]:
+        return {"type": "ingress", "id": self.link_id, "port": int(self.port)}
+
+
+def apply_private_network_attachment(
+    job_item: dict[str, Any],
+    attachment: PrivateNetworkAttachment,
+) -> dict[str, Any]:
+    updated, resources = _copy_resources(job_item)
+    resource = attachment.to_resource()
+    if not any(_same_resource(existing, resource) for existing in resources):
+        resources.append(resource)
+    updated["resources"] = resources
+    updated["hostname"] = attachment.hostname
+    return updated
+
+
+def apply_public_link_attachment(
+    job_item: dict[str, Any],
+    attachment: PublicLinkAttachment,
+) -> dict[str, Any]:
+    updated, resources = _copy_resources(job_item)
+    resource = attachment.to_resource()
+    for index, existing in enumerate(resources):
+        if _same_resource(existing, resource):
+            resources[index] = resource
+            break
+    else:
+        resources.append(resource)
+    updated["resources"] = resources
+    return updated
+
+
+def private_network_ids_from_resources(raw_resources: object) -> tuple[str, ...]:
+    return _resource_ids(raw_resources, "private_network")
+
+
+def public_link_ids_from_resources(raw_resources: object) -> tuple[str, ...]:
+    return _resource_ids(raw_resources, "ingress")
+
+
+def _copy_resources(job_item: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
+    updated = deepcopy(job_item)
+    raw_resources = updated.get("resources")
+    if raw_resources is None:
+        return updated, []
+    if not isinstance(raw_resources, list):
+        raise ValueError("job resources must be a list when present.")
+    return updated, deepcopy(raw_resources)
+
+
+def _resource_ids(raw_resources: object, resource_type: str) -> tuple[str, ...]:
+    if not isinstance(raw_resources, list):
+        return ()
+    values: list[str] = []
+    for resource in raw_resources:
+        if not isinstance(resource, dict) or resource.get("type") != resource_type:
+            continue
+        value = resource.get("id")
+        if isinstance(value, str) and value and value not in values:
+            values.append(value)
+    return tuple(values)
+
+
+def _validate_resource_id(label: str, value: str) -> None:
+    if not value:
+        raise ValueError(f"{label} id is required.")
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"{label} id cannot contain newlines.")
+
+
+def _validate_port(value: int) -> None:
+    if int(value) < 1 or int(value) > 65535:
+        raise ValueError("port must be in [1, 65535].")
+
+
+def _same_resource(left: object, right: dict[str, Any]) -> bool:
+    return (
+        isinstance(left, dict)
+        and left.get("type") == right["type"]
+        and left.get("id") == right["id"]
+    )
 
 
 DEFAULT_VM_APPLICATION_NAME = "vm-ubuntu"
@@ -18,10 +123,12 @@ DEFAULT_VM_APPLICATION_VERSION = "24.04"
 # Sandbox nodes are deliberately large; the always-on gateway is control-plane
 # infrastructure and should not inherit the worker-node product.
 DEFAULT_VM_PRODUCT_ID = "cpu-amd-zen5-32-vcpu"
+DEFAULT_BUILDER_PRODUCT_ID = "cpu-amd-zen5-16-vcpu"
 DEFAULT_GATEWAY_VM_PRODUCT_ID = "cpu-amd-zen5-2-vcpu"
 DEFAULT_VM_PRODUCT_CATEGORY = "cpu-amd-zen5"
 DEFAULT_VM_PRODUCT_PROVIDER = "ucloud"
 DEFAULT_VM_DISK_GB = 250
+DEFAULT_BUILDER_DISK_GB = 250
 
 
 @dataclass(frozen=True)

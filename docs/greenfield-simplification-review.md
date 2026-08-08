@@ -155,7 +155,7 @@ backend frameworks and no alternate implementation sits behind them.
 
 ## Validation
 
-- The main suite passes 724 tests; the pinned Verifiers relay integration is
+- The main suite passes 726 tests; the pinned Verifiers relay integration is
   skipped when its external checkout is unavailable.
 - The nested SDK suite passes 74 tests.
 - Whole-tree and SDK Ruff checks, Python byte compilation, shell syntax checks,

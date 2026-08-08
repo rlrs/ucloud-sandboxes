@@ -19,7 +19,7 @@ from .models import (
     SandboxInventoryEntry,
     SandboxNode,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     parse_iso_datetime,
     utc_now,
 )
@@ -556,7 +556,7 @@ def _strict_string_tuple(value: object) -> tuple[str, ...] | None:
 
 
 def merge_jobs_and_heartbeats(
-    jobs: list[VmJob],
+    jobs: list[ProviderInstance],
     heartbeats: dict[str, NodeHeartbeat],
     policy: ScalePolicy,
 ) -> list[SandboxNode]:
@@ -583,7 +583,9 @@ def merge_jobs_and_heartbeats(
     return nodes
 
 
-def _agent_version_compatible(job: VmJob, heartbeat: NodeHeartbeat | None) -> bool:
+def _agent_version_compatible(
+    job: ProviderInstance, heartbeat: NodeHeartbeat | None
+) -> bool:
     version = (
         heartbeat.agent_version
         if heartbeat is not None and heartbeat.agent_version

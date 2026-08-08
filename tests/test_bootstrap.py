@@ -15,21 +15,22 @@ from ucloud_sandboxes.bootstrap import (
 )
 from ucloud_sandboxes.cli import _bootstrap_retry_delay_seconds
 from ucloud_sandboxes.metrics import MetricsStore
-from ucloud_sandboxes.models import SandboxNode, VmJob
-from ucloud_sandboxes.vm_init import VmInitOptions, VmInitPlan
+from ucloud_sandboxes.models import InstancePhase, SandboxNode, ProviderInstance
+from ucloud_sandboxes.providers.base import InstanceBootstrapAccess
+from ucloud_sandboxes.vm_init import VmInitOptions
 
 
 class BootstrapRetryTests(unittest.TestCase):
     def test_successful_init_is_not_replayed_for_a_stale_heartbeat(self) -> None:
-        job = VmJob(
+        job = ProviderInstance(
             id="job-1",
-            project_id="project-1",
             name="ucloud-sandbox-node-1",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu",
             product_category="cpu",
             state="RUNNING",
+            phase=InstancePhase.RUNNING,
             raw={"id": "job-1"},
         )
         node = SandboxNode(
@@ -38,9 +39,9 @@ class BootstrapRetryTests(unittest.TestCase):
             active_sandboxes=0,
             heartbeat_fresh=False,
         )
-        plan = VmInitPlan(
-            job=job,
-            ssh_command="ssh job-1",
+        access = InstanceBootstrapAccess(
+            instance=job,
+            command="ssh job-1",
             runnable=True,
             reason="ready",
         )
@@ -60,7 +61,7 @@ class BootstrapRetryTests(unittest.TestCase):
                 job_id="job-1",
                 heartbeat_url="http://gateway/v1/nodes/heartbeat",
             ),
-            plan_for_payload=lambda _payload: plan,
+            access_for_instance=lambda _instance: access,
         )
 
         self.assertEqual(len(intents), 1)
@@ -75,23 +76,23 @@ class BootstrapRetryTests(unittest.TestCase):
         fast_attempts = 0
 
         def intent(job_id: str) -> VmBootstrapIntent:
-            job = VmJob(
+            job = ProviderInstance(
                 id=job_id,
-                project_id="project-1",
                 name=job_id,
                 application_name="vm-ubuntu",
                 application_version="24.04",
                 product_id="cpu",
                 product_category="cpu",
                 state="RUNNING",
+                phase=InstancePhase.RUNNING,
             )
             return VmBootstrapIntent(
                 job_id=job_id,
                 node_id=f"node-{job_id}",
                 role="sandbox",
-                plan=VmInitPlan(
-                    job=job,
-                    ssh_command=f"ssh {job_id}",
+                access=InstanceBootstrapAccess(
+                    instance=job,
+                    command=f"ssh {job_id}",
                     runnable=True,
                     reason="ready",
                 ),

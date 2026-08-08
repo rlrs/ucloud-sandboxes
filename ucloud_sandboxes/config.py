@@ -1,35 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import math
-import os
 from pathlib import Path
 import sys
 from typing import Any
 
-from .networking import DEFAULT_PUBLIC_LINK_PORT
 from .models import ResourceQuantity, ScalePolicy
+from .providers import (
+    ProviderConfiguration,
+    default_provider_configuration,
+    validate_provider_configuration,
+)
 
 
 APP_NAME = "ucloud-sandboxes"
-
-
-def default_ucloud_session_path() -> Path:
-    override = os.environ.get("UCLOUD_SESSION_FILE")
-    if override:
-        return Path(override).expanduser()
-    if sys.platform == "darwin":
-        return (
-            Path.home()
-            / "Library"
-            / "Application Support"
-            / "ucloud-cli"
-            / "session.json"
-        )
-    if sys.platform.startswith("win"):
-        return Path.home() / "AppData" / "Roaming" / "ucloud-cli" / "session.json"
-    return Path.home() / ".config" / "ucloud-cli" / "session.json"
 
 
 def default_state_dir() -> Path:
@@ -42,24 +28,18 @@ def default_state_dir() -> Path:
 
 @dataclass(frozen=True)
 class AutoscalerConfig:
-    project_id: str
+    provider: ProviderConfiguration
     deployment_id: str = ""
     job_name_prefix: str = "ucloud-sandbox-node-"
-    template_job_id: str | None = None
-    private_network_id: str | None = None
-    gateway_public_link_id: str | None = None
-    gateway_public_link_port: int = DEFAULT_PUBLIC_LINK_PORT
     node_hostname_prefix: str = "sandbox-node"
-    ucloud_session_file: str = ""
     state_dir: str = ""
     metrics_file: str = ""
     policy: ScalePolicy = ScalePolicy()
 
     @classmethod
-    def default(cls, project_id: str = "") -> "AutoscalerConfig":
+    def default(cls, scope_id: str = "") -> "AutoscalerConfig":
         return cls(
-            project_id=project_id,
-            ucloud_session_file=str(default_ucloud_session_path()),
+            provider=default_provider_configuration(scope_id),
             state_dir=str(default_state_dir()),
         )
 
@@ -76,6 +56,10 @@ class AutoscalerConfig:
             raise ValueError("Config must be a JSON object.")
         defaults = cls.default()
         _reject_unknown_keys("config", raw, set(asdict(defaults)))
+        provider = ProviderConfiguration.from_dict(
+            raw.get("provider", defaults.provider.to_dict())
+        )
+        validate_provider_configuration(provider)
         policy_raw = raw.get("policy") or {}
         if not isinstance(policy_raw, dict):
             raise ValueError("Config policy must be a JSON object.")
@@ -394,79 +378,31 @@ class AutoscalerConfig:
             or policy.disk_overcommit != 1.0
         ):
             raise ValueError("policy overcommit values must all be exactly 1.0.")
-        gateway_public_link_port = _config_int(
-            "gateway_public_link_port",
-            raw.get("gateway_public_link_port", defaults.gateway_public_link_port),
-            minimum=1,
-            maximum=65535,
-        )
         metrics_file = str(raw.get("metrics_file") or defaults.metrics_file)
         if metrics_file and Path(metrics_file).suffix != ".sqlite":
             raise ValueError("metrics_file must use the .sqlite suffix.")
         return cls(
-            project_id=str(raw.get("project_id", defaults.project_id)),
+            provider=provider,
             deployment_id=str(raw.get("deployment_id", defaults.deployment_id)),
             job_name_prefix=str(raw.get("job_name_prefix", defaults.job_name_prefix)),
-            template_job_id=(
-                str(raw["template_job_id"]) if raw.get("template_job_id") else None
-            ),
-            private_network_id=(
-                str(raw["private_network_id"])
-                if raw.get("private_network_id")
-                else None
-            ),
-            gateway_public_link_id=(
-                str(raw["gateway_public_link_id"])
-                if raw.get("gateway_public_link_id")
-                else None
-            ),
-            gateway_public_link_port=gateway_public_link_port,
             node_hostname_prefix=str(
                 raw.get("node_hostname_prefix") or defaults.node_hostname_prefix
-            ),
-            ucloud_session_file=str(
-                raw.get("ucloud_session_file") or defaults.ucloud_session_file
             ),
             state_dir=str(raw.get("state_dir") or defaults.state_dir),
             metrics_file=metrics_file,
             policy=policy,
         )
 
-    def with_project_id(self, project_id: str | None) -> "AutoscalerConfig":
-        if not project_id:
-            return self
-        return AutoscalerConfig(
-            project_id=project_id,
-            deployment_id=self.deployment_id,
-            job_name_prefix=self.job_name_prefix,
-            template_job_id=self.template_job_id,
-            private_network_id=self.private_network_id,
-            gateway_public_link_id=self.gateway_public_link_id,
-            gateway_public_link_port=self.gateway_public_link_port,
-            node_hostname_prefix=self.node_hostname_prefix,
-            ucloud_session_file=self.ucloud_session_file,
-            state_dir=self.state_dir,
-            metrics_file=self.metrics_file,
-            policy=self.policy,
+    def with_provider_scope(self, scope_id: str | None) -> "AutoscalerConfig":
+        return replace(
+            self,
+            provider=self.provider.with_scope(scope_id),
         )
 
     def with_state_dir(self, state_dir: str | None) -> "AutoscalerConfig":
         if not state_dir:
             return self
-        return AutoscalerConfig(
-            project_id=self.project_id,
-            deployment_id=self.deployment_id,
-            job_name_prefix=self.job_name_prefix,
-            template_job_id=self.template_job_id,
-            private_network_id=self.private_network_id,
-            gateway_public_link_id=self.gateway_public_link_id,
-            gateway_public_link_port=self.gateway_public_link_port,
-            node_hostname_prefix=self.node_hostname_prefix,
-            ucloud_session_file=self.ucloud_session_file,
-            state_dir=state_dir,
-            metrics_file=self.metrics_file,
-            policy=self.policy,
-        )
+        return replace(self, state_dir=state_dir)
 
     def heartbeat_file(self) -> Path:
         return Path(self.state_dir).expanduser() / "heartbeats.json"
@@ -493,6 +429,7 @@ class AutoscalerConfig:
 
     def to_dict(self) -> dict[str, Any]:
         raw = asdict(self)
+        raw["provider"] = self.provider.to_dict()
         raw["policy"] = asdict(self.policy)
         return raw
 
@@ -552,9 +489,7 @@ def _validate_resource_quantity(label: str, value: object) -> None:
         raise ValueError(f"{label} must be a JSON object.")
     allowed = {"vcpu", "memory_mb", "disk_mb"}
     if set(value) != allowed:
-        raise ValueError(
-            f"{label} must contain exactly: {', '.join(sorted(allowed))}."
-        )
+        raise ValueError(f"{label} must contain exactly: {', '.join(sorted(allowed))}.")
     for field in sorted(allowed):
         raw_value = value[field]
         if field == "vcpu":

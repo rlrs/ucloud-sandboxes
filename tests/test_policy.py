@@ -3,6 +3,7 @@ from datetime import timedelta
 import unittest
 
 from ucloud_sandboxes.models import (
+    InstancePhase,
     LiveScaleSignals,
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -12,7 +13,7 @@ from ucloud_sandboxes.models import (
     SandboxNode,
     SandboxPlacementRequest,
     ScalePolicy,
-    VmJob,
+    ProviderInstance,
     utc_now,
 )
 from ucloud_sandboxes.policy import evaluate_scale
@@ -68,15 +69,23 @@ def node(
             runtime_metrics=runtime_metrics,
         )
     return SandboxNode(
-        job=VmJob(
+        job=ProviderInstance(
             id=job_id,
-            project_id="project-1",
             name=f"ucloud-sandbox-node-{job_id}",
             application_name="vm-ubuntu",
             application_version="24.04",
             product_id="cpu-amd-zen5-2-vcpu",
             product_category="cpu-amd-zen5",
             state=state,
+            phase=(
+                InstancePhase.RUNNING
+                if state == "RUNNING"
+                else InstancePhase.LOST
+                if state == "SUSPENDED" and started_at is not None
+                else InstancePhase.TERMINAL
+                if state in {"SUCCESS", "FAILURE", "EXPIRED"}
+                else InstancePhase.PROVISIONING
+            ),
             created_at=utc_now() if created_at is _UNSET else created_at,
             started_at=started_at,
             cpu=job_cpu,

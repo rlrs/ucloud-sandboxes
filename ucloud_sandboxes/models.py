@@ -2,33 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
+from enum import Enum
 import math
 import re
 from typing import Any
 
-from .networking import private_network_ids_from_resources
-
-
-FINAL_JOB_STATES = {"SUCCESS", "FAILURE", "EXPIRED"}
-PROVISIONING_JOB_STATES = {"IN_QUEUE", "RUNNING"}
-CPU_PRODUCT_RE = re.compile(r"(?:^|[-_])(\d+)[-_]vcpu(?:$|[-_])", re.IGNORECASE)
-
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def parse_millis(value: object) -> datetime | None:
-    if (
-        not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or value <= 0
-    ):
-        return None
-    try:
-        return datetime.fromtimestamp(value / 1000.0, tz=timezone.utc)
-    except (OverflowError, OSError, ValueError):
-        return None
 
 
 def parse_iso_datetime(value: object) -> datetime | None:
@@ -46,26 +27,6 @@ def parse_iso_datetime(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def nested_get(payload: object, path: tuple[str, ...]) -> object | None:
-    current = payload
-    for key in path:
-        if not isinstance(current, dict):
-            return None
-        current = current.get(key)
-    return current
-
-
-def string_value(value: object) -> str | None:
-    if isinstance(value, str) and value:
-        return value
-    if isinstance(value, dict):
-        for key in ("value", "id", "name"):
-            candidate = value.get(key)
-            if isinstance(candidate, str) and candidate:
-                return candidate
-    return None
-
-
 def _optional_float(value: object) -> float | None:
     if value is None or value == "":
         return None
@@ -74,14 +35,6 @@ def _optional_float(value: object) -> float | None:
     except (TypeError, ValueError, OverflowError):
         return None
     return parsed if math.isfinite(parsed) else None
-
-
-def cpu_count_from_product_id(product_id: str) -> int | None:
-    match = CPU_PRODUCT_RE.search(product_id)
-    if not match:
-        return None
-    cpu = int(match.group(1))
-    return cpu if cpu > 0 else None
 
 
 @dataclass(frozen=True)
@@ -180,9 +133,10 @@ class SandboxInventoryEntry:
             raise ValueError("sandbox inventory id is required")
         if self.generation < 1:
             raise ValueError("sandbox inventory generation must be positive")
-        if re.fullmatch(
-            r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", self.operation_id
-        ) is None:
+        if (
+            re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", self.operation_id)
+            is None
+        ):
             raise ValueError("sandbox inventory operation_id is invalid")
         if re.fullmatch(r"[0-9a-f]{64}", self.spec_hash) is None:
             raise ValueError("sandbox inventory spec_hash is invalid")
@@ -221,8 +175,7 @@ class SandboxInventoryEntry:
         state = raw.get("state")
         if (
             not isinstance(operation_id, str)
-            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", operation_id)
-            is None
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", operation_id) is None
             or not isinstance(spec_hash, str)
             or re.fullmatch(r"[0-9a-f]{64}", spec_hash) is None
             or not isinstance(state, str)
@@ -410,16 +363,29 @@ class NodeRuntimeMetrics:
         }
 
 
+class InstancePhase(str, Enum):
+    PROVISIONING = "provisioning"
+    RUNNING = "running"
+    LOST = "lost"
+    TERMINAL = "terminal"
+
+
 @dataclass(frozen=True)
-class VmJob:
+class ProviderInstance:
+    """Provider-neutral compute instance observed by the autoscaler.
+
+    ``state`` and ``raw`` are retained only for operator diagnostics and
+    provider recovery. Scheduling and lifecycle decisions use ``phase``.
+    """
+
     id: str
-    project_id: str | None
     name: str
     application_name: str
     application_version: str
     product_id: str
     product_category: str
     state: str
+    phase: InstancePhase
     hostname: str | None = None
     created_at: datetime | None = None
     started_at: datetime | None = None
@@ -440,48 +406,23 @@ class VmJob:
 
     @property
     def is_final(self) -> bool:
-        return self.state in FINAL_JOB_STATES
+        return self.phase is InstancePhase.TERMINAL
+
+    @property
+    def is_running(self) -> bool:
+        return self.phase is InstancePhase.RUNNING
+
+    @property
+    def is_provisioning(self) -> bool:
+        return self.phase is InstancePhase.PROVISIONING
+
+    @property
+    def is_lost(self) -> bool:
+        return self.phase is InstancePhase.LOST
 
     @property
     def is_provisioning_or_running(self) -> bool:
-        return self.state in PROVISIONING_JOB_STATES or self.is_initially_suspended
-
-    @property
-    def is_initially_suspended(self) -> bool:
-        """UCloud commonly reports a new VM suspended before its first start."""
-
-        return self.state == "SUSPENDED" and self.started_at is None
-
-    @property
-    def is_unexpectedly_suspended(self) -> bool:
-        """Return whether a VM that previously ran has been powered off by UCloud."""
-
-        return self.state == "SUSPENDED" and self.started_at is not None
-
-    @property
-    def has_post_start_suspension(self) -> bool:
-        """Return whether UCloud powered this VM off after it had run.
-
-        UCloud's VM application initially reports ``SUSPENDED`` while a new
-        guest is being provisioned.  That first transition is harmless.  A
-        later suspension is a destructive power cycle: the resumed job id does
-        not retain the guest's local disk.  Inspect the ordered update history
-        so a later, misleading ``RUNNING`` state cannot resurrect the old node
-        incarnation.
-        """
-
-        seen_running = False
-        raw_updates = self.raw.get("updates")
-        if isinstance(raw_updates, list):
-            for update in raw_updates:
-                if not isinstance(update, dict):
-                    continue
-                state = str(update.get("state") or "").strip().upper()
-                if state == "RUNNING":
-                    seen_running = True
-                elif state == "SUSPENDED" and seen_running:
-                    return True
-        return self.is_unexpectedly_suspended
+        return self.phase in {InstancePhase.PROVISIONING, InstancePhase.RUNNING}
 
 
 @dataclass(frozen=True)
@@ -589,7 +530,7 @@ class NodeHeartbeat:
 
 @dataclass(frozen=True)
 class SandboxNode:
-    job: VmJob
+    job: ProviderInstance
     heartbeat: NodeHeartbeat | None
     active_sandboxes: int
     heartbeat_fresh: bool
@@ -607,9 +548,7 @@ class SandboxNode:
     @property
     def is_ready(self) -> bool:
         return bool(
-            not self.permanently_lost
-            and self.job.state == "RUNNING"
-            and self.heartbeat_fresh
+            not self.permanently_lost and self.job.is_running and self.heartbeat_fresh
         )
 
     @property
@@ -628,10 +567,9 @@ class SandboxNode:
         return bool(
             not self.permanently_lost
             and (
-                self.job.state == "IN_QUEUE"
-                or self.job.is_initially_suspended
+                self.job.is_provisioning
                 or (
-                    self.job.state == "RUNNING"
+                    self.job.is_running
                     and self.heartbeat is None
                     and not self.heartbeat_fresh
                 )
@@ -642,7 +580,7 @@ class SandboxNode:
     def is_unreachable(self) -> bool:
         return bool(
             not self.permanently_lost
-            and self.job.state == "RUNNING"
+            and self.job.is_running
             and self.heartbeat is not None
             and not self.heartbeat_fresh
         )
@@ -865,82 +803,3 @@ class ScaleDecision:
             if action.kind == "stop":
                 stopped.extend(action.job_ids)
         return tuple(stopped)
-
-
-def vm_job_from_payload(payload: dict[str, Any]) -> VmJob:
-    specification = payload.get("specification")
-    if not isinstance(specification, dict):
-        specification = {}
-    status = payload.get("status")
-    if not isinstance(status, dict):
-        status = {}
-    owner = payload.get("owner")
-    if not isinstance(owner, dict):
-        owner = {}
-
-    app = specification.get("application")
-    if not isinstance(app, dict):
-        app = {}
-    product = specification.get("product")
-    if not isinstance(product, dict):
-        product = {}
-
-    resolved_product = nested_get(
-        status, ("jobParametersJson", "request", "resolvedProduct")
-    )
-    if not isinstance(resolved_product, dict):
-        resolved_product = {}
-
-    machine_type = nested_get(status, ("jobParametersJson", "machineType"))
-    if not isinstance(machine_type, dict):
-        machine_type = {}
-
-    disk = nested_get(specification, ("parameters", "diskSize", "value"))
-    raw_labels = specification.get("labels")
-    labels = raw_labels if isinstance(raw_labels, dict) else {}
-    cpu_value = resolved_product.get("cpu", machine_type.get("cpu"))
-    memory_value = resolved_product.get(
-        "memoryInGigs", machine_type.get("memoryInGigs")
-    )
-    product_id = str(product.get("id") or "")
-    cpu = int(cpu_value) if isinstance(cpu_value, (int, float)) else None
-    if cpu is None:
-        cpu = cpu_count_from_product_id(product_id)
-
-    updates = payload.get("updates")
-    latest_update = updates[-1] if isinstance(updates, list) and updates else {}
-    latest_note = (
-        latest_update.get("status") if isinstance(latest_update, dict) else None
-    )
-
-    ssh_enabled = nested_get(status, ("jobParametersJson", "request", "sshEnabled"))
-    queue_status = nested_get(
-        status,
-        ("jobParametersJson", "request", "resolvedSupport", "support", "queueStatus"),
-    )
-
-    return VmJob(
-        id=str(payload.get("id") or ""),
-        project_id=string_value(owner.get("project")),
-        name=str(specification.get("name") or ""),
-        application_name=str(app.get("name") or ""),
-        application_version=str(app.get("version") or ""),
-        product_id=product_id,
-        product_category=str(product.get("category") or ""),
-        state=str(status.get("state") or ""),
-        hostname=string_value(specification.get("hostname")),
-        created_at=parse_millis(payload.get("createdAt")),
-        started_at=parse_millis(status.get("startedAt")),
-        expires_at=parse_millis(status.get("expiresAt")),
-        cpu=cpu,
-        memory_gb=int(memory_value) if isinstance(memory_value, (int, float)) else None,
-        disk_gb=int(disk) if isinstance(disk, (int, float)) else None,
-        ssh_enabled=ssh_enabled if isinstance(ssh_enabled, bool) else None,
-        private_network_ids=private_network_ids_from_resources(
-            specification.get("resources")
-        ),
-        queue_status=queue_status if isinstance(queue_status, str) else None,
-        latest_note=latest_note if isinstance(latest_note, str) else None,
-        labels={str(k): str(v) for k, v in labels.items()},
-        raw=payload,
-    )

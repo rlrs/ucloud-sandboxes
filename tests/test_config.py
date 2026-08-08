@@ -1,14 +1,48 @@
 import unittest
 
 from ucloud_sandboxes.config import AutoscalerConfig
+from ucloud_sandboxes.providers.ucloud.config import UCloudSettings
 
 
 class ConfigTests(unittest.TestCase):
+    def test_external_provider_owns_settings_and_uses_common_scope(self) -> None:
+        config = AutoscalerConfig.from_dict(
+            {
+                "provider": {
+                    "kind": "examplecloud",
+                    "scope_id": "tenant-a",
+                    "region": "north-1",
+                    "machine_profile": "sandbox-large",
+                }
+            }
+        )
+
+        self.assertEqual(config.provider.kind, "examplecloud")
+        self.assertEqual(config.provider.scope_id, "tenant-a")
+        self.assertEqual(
+            config.provider.settings,
+            {"region": "north-1", "machine_profile": "sandbox-large"},
+        )
+        overridden = config.with_provider_scope("tenant-b")
+        self.assertEqual(overridden.provider.scope_id, "tenant-b")
+        self.assertNotIn("project_id", overridden.provider.settings)
+
+    def test_ucloud_rejects_old_flat_scope_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown fields: project_id"):
+            AutoscalerConfig.from_dict(
+                {
+                    "provider": {
+                        "kind": "ucloud",
+                        "project_id": "project-1",
+                    }
+                }
+            )
+
     def test_non_exact_overcommit_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "exactly 1.0"):
             AutoscalerConfig.from_dict(
                 {
-                    "project_id": "project-1",
+                    "provider": {"kind": "ucloud", "scope_id": "project-1"},
                     "policy": {"disk_overcommit": 1.01},
                 }
             )
@@ -16,7 +50,12 @@ class ConfigTests(unittest.TestCase):
     def test_parses_slow_start_policy_fields(self) -> None:
         config = AutoscalerConfig.from_dict(
             {
-                "project_id": "project-1",
+                "provider": {
+                    "kind": "ucloud",
+                    "scope_id": "project-1",
+                    "gateway_public_link_id": "12345368",
+                    "gateway_public_link_port": 8090,
+                },
                 "policy": {
                     "warm_resources": {
                         "vcpu": 4,
@@ -44,8 +83,6 @@ class ConfigTests(unittest.TestCase):
                     "memory_overcommit": 1.0,
                     "disk_overcommit": 1.0,
                 },
-                "gateway_public_link_id": "12345368",
-                "gateway_public_link_port": 8090,
                 "metrics_file": "/tmp/ucloud-sandboxes-metrics.sqlite",
             }
         )
@@ -73,32 +110,25 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.policy.disk_overcommit, 1.0)
         self.assertEqual(config.policy.schedulable_node_resources.vcpu, 32)
         self.assertEqual(config.policy.schedulable_node_resources.memory_mb, 98304)
-        self.assertEqual(config.gateway_public_link_id, "12345368")
-        self.assertEqual(config.gateway_public_link_port, 8090)
+        provider = UCloudSettings.from_provider(config.provider)
+        self.assertEqual(provider.gateway_public_link_id, "12345368")
+        self.assertEqual(provider.gateway_public_link_port, 8090)
         self.assertEqual(config.metrics_file, "/tmp/ucloud-sandboxes-metrics.sqlite")
 
     def test_rejects_invalid_policy_numbers_and_impossible_ranges(self) -> None:
         invalid_configs = {
             "negative minimum": {"policy": {"min_nodes": -1}},
-            "minimum exceeds maximum": {
-                "policy": {"min_nodes": 3, "max_nodes": 2}
-            },
-            "nan capacity weight": {
-                "policy": {"provisioning_capacity_weight": "nan"}
-            },
+            "minimum exceeds maximum": {"policy": {"min_nodes": 3, "max_nodes": 2}},
+            "nan capacity weight": {"policy": {"provisioning_capacity_weight": "nan"}},
             "infinite capacity weight": {
                 "policy": {"stale_provisioning_capacity_weight": "inf"}
             },
-            "weight above one": {
-                "policy": {"provisioning_capacity_weight": 1.1}
-            },
+            "weight above one": {"policy": {"provisioning_capacity_weight": 1.1}},
             "zero heartbeat ttl": {"policy": {"heartbeat_ttl_seconds": 0}},
             "invalid live pressure toggle": {
                 "policy": {"live_pressure_enabled": "yes"}
             },
-            "invalid cpu target": {
-                "policy": {"target_cpu_utilization": 1.1}
-            },
+            "invalid cpu target": {"policy": {"target_cpu_utilization": 1.1}},
             "invalid program toggle": {
                 "policy": {"program_aware_autoscaling_enabled": "yes"}
             },
@@ -108,12 +138,8 @@ class ConfigTests(unittest.TestCase):
             "invalid model wait weight": {
                 "policy": {"model_wait_capacity_weight": 1.1}
             },
-            "negative warm resources": {
-                "policy": {"warm_resources": {"vcpu": -1}}
-            },
-            "nonintegral memory": {
-                "policy": {"warm_resources": {"memory_mb": 1.5}}
-            },
+            "negative warm resources": {"policy": {"warm_resources": {"vcpu": -1}}},
+            "nonintegral memory": {"policy": {"warm_resources": {"memory_mb": 1.5}}},
             "zero default resources": {
                 "policy": {
                     "default_node_resources": {
@@ -125,7 +151,12 @@ class ConfigTests(unittest.TestCase):
             },
             "zero cpu overcommit": {"policy": {"cpu_overcommit": 0}},
             "nan memory overcommit": {"policy": {"memory_overcommit": "nan"}},
-            "invalid public link port": {"gateway_public_link_port": 70000},
+            "invalid public link port": {
+                "provider": {
+                    "kind": "ucloud",
+                    "gateway_public_link_port": 70000,
+                }
+            },
         }
 
         for label, raw in invalid_configs.items():
@@ -139,7 +170,9 @@ class ConfigTests(unittest.TestCase):
     def test_rejects_unknown_config_and_policy_fields(self) -> None:
         with self.assertRaisesRegex(ValueError, "config contains unknown fields: typo"):
             AutoscalerConfig.from_dict({"typo": True})
-        with self.assertRaisesRegex(ValueError, "policy contains unknown fields: max_node"):
+        with self.assertRaisesRegex(
+            ValueError, "policy contains unknown fields: max_node"
+        ):
             AutoscalerConfig.from_dict({"policy": {"max_node": 20}})
         with self.assertRaisesRegex(ValueError, "metrics_file.*sqlite"):
             AutoscalerConfig.from_dict({"metrics_file": "/tmp/metrics.jsonl"})
@@ -155,9 +188,7 @@ class ConfigTests(unittest.TestCase):
                 ValueError,
                 "must contain exactly",
             ):
-                AutoscalerConfig.from_dict(
-                    {"policy": {"warm_resources": resources}}
-                )
+                AutoscalerConfig.from_dict({"policy": {"warm_resources": resources}})
 
 
 if __name__ == "__main__":

@@ -1,12 +1,14 @@
 import unittest
 
-from ucloud_sandboxes.networking import (
+from ucloud_sandboxes.providers.ucloud.payloads import (
     PrivateNetworkAttachment,
     PublicLinkAttachment,
     apply_private_network_attachment,
     apply_public_link_attachment,
     private_network_ids_from_resources,
     public_link_ids_from_resources,
+)
+from ucloud_sandboxes.networking import (
     stable_hostname,
 )
 
@@ -46,7 +48,9 @@ class NetworkingTests(unittest.TestCase):
             PrivateNetworkAttachment(network_id="net-1", hostname="sandbox-node-1"),
         )
 
-        self.assertEqual(updated["resources"], [{"type": "private_network", "id": "net-1"}])
+        self.assertEqual(
+            updated["resources"], [{"type": "private_network", "id": "net-1"}]
+        )
 
     def test_public_link_attachment_sets_ingress_resource_with_port(self) -> None:
         item = {"resources": [{"type": "private_network", "id": "net-1"}]}
@@ -63,7 +67,9 @@ class NetworkingTests(unittest.TestCase):
                 {"type": "ingress", "id": "link-1", "port": 8090},
             ],
         )
-        self.assertEqual(item["resources"], [{"type": "private_network", "id": "net-1"}])
+        self.assertEqual(
+            item["resources"], [{"type": "private_network", "id": "net-1"}]
+        )
 
     def test_public_link_attachment_updates_existing_resource_port(self) -> None:
         item = {"resources": [{"type": "ingress", "id": "link-1"}]}
@@ -73,7 +79,9 @@ class NetworkingTests(unittest.TestCase):
             PublicLinkAttachment(link_id="link-1", port=8080),
         )
 
-        self.assertEqual(updated["resources"], [{"type": "ingress", "id": "link-1", "port": 8080}])
+        self.assertEqual(
+            updated["resources"], [{"type": "ingress", "id": "link-1", "port": 8080}]
+        )
 
     def test_extracts_private_network_ids(self) -> None:
         self.assertEqual(

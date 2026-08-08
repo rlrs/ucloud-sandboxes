@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -29,61 +29,24 @@ from .models import (
     utc_now,
 )
 from .policy import unreachable_node_stop_ready
-from .vm_submit import (
-    DEFAULT_VM_DISK_GB,
-    VmApplicationRef,
-    VmProductRef,
-    VmSubmissionOptions,
-    VmTimeAllocation,
-    bulk_submission_payload,
-)
+from .providers.base import InstanceCreateIntent
 
 
 @dataclass(frozen=True)
-class VmNodeSubmissionDefaults:
-    private_network_id: str | None
-    product: VmProductRef = VmProductRef()
-    application: VmApplicationRef = VmApplicationRef()
-    disk_gb: int = DEFAULT_VM_DISK_GB
-    time_allocation: VmTimeAllocation = VmTimeAllocation()
-    ssh_enabled: bool = False
-    allow_duplicate_job: bool = False
+class NodeCreateDefaults:
     labels: dict[str, str] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class VmCreateIntent:
-    seed: str
-    node_id: str
-    node_url: str
-    options: VmSubmissionOptions
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "seed": self.seed,
-            "nodeId": self.node_id,
-            "nodeUrl": self.node_url,
-            "name": self.options.name,
-            "hostname": self.options.hostname,
-            "privateNetworkId": self.options.private_network_id,
-            "publicLinkId": self.options.public_link_id,
-            "publicLinkPort": (
-                self.options.public_link_port if self.options.public_link_id else None
-            ),
-            "payloadItem": self.options.job_item(),
-        }
-
-
 def with_provider_operation_label(
-    intent: VmCreateIntent,
+    intent: InstanceCreateIntent,
     operation_id: str,
     *,
     deployment_id: str | None = None,
-) -> VmCreateIntent:
+) -> InstanceCreateIntent:
     operation_id = str(operation_id).strip()
     if not operation_id:
         raise ValueError("operation_id is required")
-    labels = dict(intent.options.labels or {})
+    labels = dict(intent.labels)
     existing = labels.get(PROVIDER_OPERATION_LABEL)
     if existing and existing != operation_id:
         raise ValueError("intent already has a different provider operation label")
@@ -96,25 +59,22 @@ def with_provider_operation_label(
         if existing_deployment and existing_deployment != deployment_id:
             raise ValueError("intent already has a different deployment label")
         labels[DEPLOYMENT_LABEL] = deployment_id
-    return replace(
-        intent,
-        options=replace(intent.options, labels=labels),
-    )
+    return intent.with_labels(labels)
 
 
-def build_vm_create_intents(
+def build_sandbox_create_intents(
     config: AutoscalerConfig,
     decision: ScaleDecision,
-    defaults: VmNodeSubmissionDefaults,
+    defaults: NodeCreateDefaults,
     *,
     seed_prefix: str | None = None,
-) -> list[VmCreateIntent]:
+) -> list[InstanceCreateIntent]:
     count = create_count_from_decision(decision)
     if count <= 0:
         return []
 
     cycle_seed = stable_hostname(seed_prefix or uuid4().hex[:10], prefix="")
-    intents: list[VmCreateIntent] = []
+    intents: list[InstanceCreateIntent] = []
     for index in range(1, count + 1):
         seed = f"{cycle_seed}-{index}"
         hostname = stable_hostname(seed, prefix=config.node_hostname_prefix)
@@ -128,42 +88,32 @@ def build_vm_create_intents(
             labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
         labels.setdefault(AGENT_VERSION_LABEL, package_version())
         labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
-        options = VmSubmissionOptions(
-            name=name,
-            hostname=hostname,
-            private_network_id=defaults.private_network_id,
-            product=defaults.product,
-            application=defaults.application,
-            disk_gb=defaults.disk_gb,
-            time_allocation=defaults.time_allocation,
-            ssh_enabled=defaults.ssh_enabled,
-            allow_duplicate_job=defaults.allow_duplicate_job,
-            labels=labels,
-        )
         intents.append(
-            VmCreateIntent(
+            InstanceCreateIntent(
                 seed=seed,
+                role="sandbox",
+                name=name,
                 node_id=hostname,
                 node_url=f"http://{hostname}:8090",
-                options=options,
+                labels=labels,
             )
         )
     return intents
 
 
-def build_builder_vm_create_intents(
+def build_builder_create_intents(
     config: AutoscalerConfig,
     decision: ScaleDecision,
-    defaults: VmNodeSubmissionDefaults,
+    defaults: NodeCreateDefaults,
     *,
     seed_prefix: str | None = None,
-) -> list[VmCreateIntent]:
+) -> list[InstanceCreateIntent]:
     count = create_count_from_decision(decision)
     if count <= 0:
         return []
 
     cycle_seed = stable_hostname(seed_prefix or uuid4().hex[:10], prefix="")
-    intents: list[VmCreateIntent] = []
+    intents: list[InstanceCreateIntent] = []
     for index in range(1, count + 1):
         seed = f"{cycle_seed}-builder-{index}"
         hostname = stable_hostname(seed, prefix="sandbox-builder")
@@ -178,24 +128,14 @@ def build_builder_vm_create_intents(
             labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
         labels.setdefault(AGENT_VERSION_LABEL, package_version())
         labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
-        options = VmSubmissionOptions(
-            name=name,
-            hostname=hostname,
-            private_network_id=defaults.private_network_id,
-            product=defaults.product,
-            application=defaults.application,
-            disk_gb=defaults.disk_gb,
-            time_allocation=defaults.time_allocation,
-            ssh_enabled=defaults.ssh_enabled,
-            allow_duplicate_job=defaults.allow_duplicate_job,
-            labels=labels,
-        )
         intents.append(
-            VmCreateIntent(
+            InstanceCreateIntent(
                 seed=seed,
+                role="builder",
+                name=name,
                 node_id=hostname,
                 node_url=f"http://{hostname}:8090",
-                options=options,
+                labels=labels,
             )
         )
     return intents
@@ -218,9 +158,7 @@ def evaluate_builder_scale(
         for node in builder_nodes
         if unreachable_node_stop_ready(node, policy, now=now)
     ][:stop_budget]
-    unreachable_job_ids = {
-        node.job_id for node in unreachable_stop_candidates
-    }
+    unreachable_job_ids = {node.job_id for node in unreachable_stop_candidates}
     incompatible_stop_candidates = _incompatible_stop_candidates(
         [node for node in builder_nodes if node.job_id not in unreachable_job_ids],
         now=now,
@@ -228,9 +166,7 @@ def evaluate_builder_scale(
     pool_nodes = [
         node
         for node in builder_nodes
-        if not node.job.is_final
-        and not node.job.is_unexpectedly_suspended
-        and not node.permanently_lost
+        if not node.job.is_final and not node.job.is_lost and not node.permanently_lost
     ]
     ready_nodes = [node for node in pool_nodes if node.is_schedulable]
     provisioning_nodes = [node for node in pool_nodes if node.is_provisioning]
@@ -444,10 +380,10 @@ def _incompatible_stop_candidates(
     for node in nodes:
         if node.job.is_final or node.agent_version_compatible:
             continue
-        if node.job.state == "IN_QUEUE" or node.job.is_initially_suspended:
+        if node.job.is_provisioning:
             candidates.append(node)
             continue
-        if node.job.state == "RUNNING" and node.heartbeat_fresh and node.is_idle:
+        if node.job.is_running and node.heartbeat_fresh and node.is_idle:
             candidates.append(node)
     return sorted(
         candidates,
@@ -456,9 +392,3 @@ def _incompatible_stop_candidates(
             node.job_id,
         ),
     )
-
-
-def bulk_payload_from_create_intents(
-    intents: list[VmCreateIntent],
-) -> dict[str, Any]:
-    return bulk_submission_payload([intent.options for intent in intents])

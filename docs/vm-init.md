@@ -1,8 +1,10 @@
 # VM initialization
 
-VM initialization turns a running UCloud VM into either a sandbox node or an
-image-builder node. It is an authenticated bootstrap step owned by the
-autoscaler, not a general host installer.
+VM initialization turns a running provider instance into either a sandbox node
+or an image-builder node. It is an authenticated bootstrap step owned by the
+autoscaler, not a general host installer. The built-in UCloud adapter discovers
+the SSH command from job updates; another provider supplies the same bootstrap
+access through `ComputeProvider`.
 
 ## Inputs
 

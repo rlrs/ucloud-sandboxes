@@ -205,9 +205,9 @@ Disk is credited only from the storage-native physical-capacity report in a
 fresh complete heartbeat. A node without storage-native authority receives no
 sandbox placement.
 
-`max_provisioning_nodes` caps queued or booting VM jobs. Keep this low while
-UCloud reports scarce machines, otherwise the autoscaler can submit redundant
-jobs that all wait in the same provider queue.
+`max_provisioning_nodes` caps queued or booting provider instances. Keep this
+low while the provider reports scarce machines, otherwise the autoscaler can
+submit redundant instances that all wait in the same provider queue.
 
 `provisioning_capacity_weight` controls how much queued or booting VM capacity
 counts toward pending demand. `1.0` is optimistic. Values around `0.5` to
@@ -218,15 +218,15 @@ counts toward pending demand. `1.0` is optimistic. Values around `0.5` to
 has itself been provisioning too long. Backlog age does not make a newly
 submitted VM stale. With the default stale weight of `0.0`, a stale queued,
 suspended, or booting VM contributes no projected capacity, but it still counts
-against the hard provider and `max_provisioning_nodes` limits until UCloud
+against the hard provider and `max_provisioning_nodes` limits until the adapter
 reports it final. This prevents duplicate submissions from bypassing the cap
 while a billed or provider-visible job still exists.
 
 This weighting applies only to the initial pre-start `SUSPENDED` state. A
 post-start suspension is destructive node loss, contributes neither capacity
 nor a provider-limit slot to replacement planning, and is terminated directly.
-The ordered job update history and provider journal keep that classification
-latched if UCloud later reports the destroyed job as `RUNNING` again.
+Provider lifecycle evidence and the operation journal keep that classification
+latched if inventory later reports the destroyed instance as running again.
 
 `unreachable_stop_after_seconds` is a separate, conservative eviction lease for
 a running VM whose heartbeat has disappeared. After the lease expires, the VM

@@ -3,7 +3,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from threading import Thread
 
-from ucloud_sandboxes.agent import build_heartbeat, detect_job_id, fetch_node_agent_heartbeat
+from ucloud_sandboxes.agent import (
+    build_heartbeat as _build_heartbeat,
+    detect_job_id,
+    fetch_node_agent_heartbeat,
+)
 from ucloud_sandboxes.models import (
     NodeRuntimeMetrics,
     ResourceQuantity,
@@ -11,6 +15,11 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 from ucloud_sandboxes.registry import heartbeat_to_dict
+
+
+def build_heartbeat(**kwargs):
+    kwargs.setdefault("deployment_id", "test-deployment")
+    return _build_heartbeat(**kwargs)
 
 
 class AgentTests(unittest.TestCase):
@@ -133,6 +142,10 @@ class AgentTests(unittest.TestCase):
     def test_rejects_missing_job_id(self) -> None:
         with self.assertRaises(ValueError):
             build_heartbeat(job_id="")
+
+    def test_rejects_missing_deployment_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "deployment_id"):
+            build_heartbeat(job_id="123", deployment_id="")
 
     def test_rejects_invalid_resources_and_overcommit(self) -> None:
         with self.assertRaises(ValueError):

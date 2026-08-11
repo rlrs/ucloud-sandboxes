@@ -109,27 +109,43 @@ def evaluate_scale(
     )
 
     maximum_request = policy.schedulable_node_resources
+    all_demand_placement_requests = (
+        *demand.placement_requests,
+        *demand.prepared_placement_requests,
+    )
     demand_placement_requests = tuple(
         request
-        for request in demand.placement_requests
+        for request in all_demand_placement_requests
         if request.resources.fits_within(maximum_request)
     )
-    unschedulable_placements = len(demand.placement_requests) - len(
-        demand_placement_requests
+    unschedulable_placements = sum(
+        request.count
+        for request in all_demand_placement_requests
+        if not request.resources.fits_within(maximum_request)
     )
-    demand_resources = (
+    pending_resources = (
         _placement_request_resources(
-            demand_placement_requests,
+            tuple(
+                request
+                for request in demand.placement_requests
+                if request.resources.fits_within(maximum_request)
+            ),
             dynamic=policy.dynamic_active_admission_enabled,
             include_disk=True,
         )
         if demand.placement_requests
         else demand.pending_resources
     )
-    demand_resources = _add_resources(
-        demand_resources,
-        demand.prepared_resources,
+    prepared_resources = _placement_request_resources(
+        tuple(
+            request
+            for request in demand.prepared_placement_requests
+            if request.resources.fits_within(maximum_request)
+        ),
+        dynamic=policy.dynamic_active_admission_enabled,
+        include_disk=True,
     )
+    demand_resources = _add_resources(pending_resources, prepared_resources)
     program_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
     if policy.program_aware_autoscaling_enabled and program_signals is not None:
         program_placement_requests = tuple(
@@ -137,8 +153,10 @@ def evaluate_scale(
             for request in program_signals.ready_placement_requests
             if request.resources.fits_within(maximum_request)
         )
-        unschedulable_placements += len(program_signals.ready_placement_requests) - len(
-            program_placement_requests
+        unschedulable_placements += sum(
+            request.count
+            for request in program_signals.ready_placement_requests
+            if not request.resources.fits_within(maximum_request)
         )
         if program_signals.ready_placement_requests:
             program_resources = _add_resources(
@@ -401,6 +419,9 @@ def evaluate_scale(
                 now,
                 required_resources=desired_resources,
                 max_count=min(excess_nodes, stop_budget),
+                placement_nodes=capacity_nodes,
+                placement_requests=placement_requests,
+                oldest_pending_seconds=oldest_pending_seconds,
             )
             if stop_candidates:
                 job_ids = tuple(node.job_id for node in stop_candidates)
@@ -685,49 +706,52 @@ def _nodes_for_unplaced_requests(
     for placement in sorted(requests, key=pressure, reverse=True):
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
-        fitting: list[tuple[int, str, ResourceQuantity, bool]] = []
-        for index, (job_id, available, dynamic_active) in enumerate(bins):
-            if job_id in excluded:
+        for _ in range(placement.count):
+            fitting: list[tuple[int, str, ResourceQuantity, bool]] = []
+            for index, (job_id, available, dynamic_active) in enumerate(bins):
+                if job_id in excluded:
+                    continue
+                available_for_request = available
+                if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
+                    available_for_request = replace(
+                        available,
+                        disk_mb=available.disk_mb + placement.owned_disk_mb,
+                    )
+                if requested.fits_within(available_for_request):
+                    fitting.append(
+                        (index, job_id, available_for_request, dynamic_active)
+                    )
+            if fitting:
+                index, job_id, available, dynamic_active = min(
+                    fitting,
+                    key=lambda item: (
+                        item[2].disk_mb - requested.disk_mb,
+                        item[2].memory_mb - requested.memory_mb,
+                        item[2].vcpu - requested.vcpu,
+                    ),
+                )
+                bins[index] = (
+                    job_id,
+                    _subtract_dynamic_resources(available, requested)
+                    if dynamic_active
+                    else _subtract_resources(available, requested),
+                    dynamic_active,
+                )
                 continue
-            available_for_request = available
-            if job_id == placement.owned_job_id and placement.owned_disk_mb > 0:
-                available_for_request = replace(
-                    available,
-                    disk_mb=available.disk_mb + placement.owned_disk_mb,
-                )
-            if requested.fits_within(available_for_request):
-                fitting.append((index, job_id, available_for_request, dynamic_active))
-        if fitting:
-            index, job_id, available, dynamic_active = min(
-                fitting,
-                key=lambda item: (
-                    item[2].disk_mb - requested.disk_mb,
-                    item[2].memory_mb - requested.memory_mb,
-                    item[2].vcpu - requested.vcpu,
-                ),
-            )
-            bins[index] = (
-                job_id,
-                _subtract_dynamic_resources(available, requested)
-                if dynamic_active
-                else _subtract_resources(available, requested),
-                dynamic_active,
-            )
-            continue
-        missing += 1
-        bins.append(
-            (
-                "",
+            missing += 1
+            bins.append(
                 (
-                    _subtract_dynamic_resources(default_bin, requested)
-                    if policy.dynamic_active_admission_enabled
-                    else _subtract_resources(default_bin, requested)
+                    "",
+                    (
+                        _subtract_dynamic_resources(default_bin, requested)
+                        if policy.dynamic_active_admission_enabled
+                        else _subtract_resources(default_bin, requested)
+                    )
+                    if requested.fits_within(default_bin)
+                    else ResourceQuantity(),
+                    policy.dynamic_active_admission_enabled,
                 )
-                if requested.fits_within(default_bin)
-                else ResourceQuantity(),
-                policy.dynamic_active_admission_enabled,
             )
-        )
     return missing
 
 
@@ -744,9 +768,11 @@ def _placement_request_resources(
         for request in requests:
             resources = request.resources
             total = total + ResourceQuantity(
-                vcpu=resources.vcpu,
-                memory_mb=resources.memory_mb,
-                disk_mb=resources.disk_mb if include_disk else 0,
+                vcpu=resources.vcpu * request.count,
+                memory_mb=resources.memory_mb * request.count,
+                disk_mb=(
+                    resources.disk_mb * request.count if include_disk else 0
+                ),
             )
         return total
     return ResourceQuantity(
@@ -759,7 +785,9 @@ def _placement_request_resources(
             default=0,
         ),
         disk_mb=(
-            sum(item.resources.disk_mb for item in requests) if include_disk else 0
+            sum(item.resources.disk_mb * item.count for item in requests)
+            if include_disk
+            else 0
         ),
     )
 
@@ -794,9 +822,7 @@ def _projected_provisioning_resources(
         now,
         oldest_pending_seconds,
     )
-    if node.heartbeat is not None and _has_resource_demand(
-        node.heartbeat.effective_resources
-    ):
+    if node.heartbeat is not None and node.heartbeat.resources_known:
         return _scale_resources(
             _security_adjusted_resources(node, node.heartbeat.free_resources),
             weight,
@@ -977,11 +1003,23 @@ def _stop_candidates(
     *,
     required_resources: ResourceQuantity,
     max_count: int,
+    placement_nodes: list[SandboxNode],
+    placement_requests: tuple[SandboxPlacementRequest, ...],
+    oldest_pending_seconds: int,
 ) -> list[SandboxNode]:
     if max_count <= 0:
         return []
     candidates: list[SandboxNode] = []
-    remaining_free_resources = _ready_free_resources(ready_nodes, policy)
+    # Scale-down may only rely on capacity explicitly reported by surviving
+    # nodes. Estimates are useful for scale-up projections, but are not safe
+    # evidence for a destructive removal decision.
+    remaining_free_resources = ResourceQuantity()
+    for node in ready_nodes:
+        if node.heartbeat is not None and node.heartbeat.resources_known:
+            remaining_free_resources = remaining_free_resources + (
+                _security_adjusted_resources(node, node.heartbeat.free_resources)
+            )
+    remaining_placement_nodes = list(placement_nodes)
     for node in ready_nodes:
         if len(candidates) >= max_count:
             break
@@ -989,14 +1027,39 @@ def _stop_candidates(
             continue
         if not _past_idle_grace(node, policy, now):
             continue
-        node_free_resources = _node_free_resources(node, policy)
+        node_free_resources = (
+            _security_adjusted_resources(node, node.heartbeat.free_resources)
+            if node.heartbeat is not None and node.heartbeat.resources_known
+            else ResourceQuantity()
+        )
         after_resources = _subtract_resources(
             remaining_free_resources, node_free_resources
         )
         if not required_resources.fits_within(after_resources):
             continue
+        after_nodes = [
+            current
+            for current in remaining_placement_nodes
+            if current.job_id != node.job_id
+        ]
+        exact_after_nodes = [
+            current
+            for current in after_nodes
+            if current.is_schedulable
+            and current.heartbeat is not None
+            and current.heartbeat.resources_known
+        ]
+        if _nodes_for_unplaced_requests(
+            exact_after_nodes,
+            placement_requests,
+            policy,
+            now=now,
+            oldest_pending_seconds=oldest_pending_seconds,
+        ):
+            continue
         candidates.append(node)
         remaining_free_resources = after_resources
+        remaining_placement_nodes = after_nodes
     return candidates
 
 
@@ -1127,9 +1190,8 @@ def _node_free_resources(
         return _security_adjusted_resources(
             node, _estimated_node_resources(node, policy)
         )
-    free = node.heartbeat.free_resources
-    if _has_resource_demand(free):
-        return _security_adjusted_resources(node, free)
+    if node.heartbeat.resources_known:
+        return _security_adjusted_resources(node, node.heartbeat.free_resources)
     return _security_adjusted_resources(node, _estimated_node_resources(node, policy))
 
 

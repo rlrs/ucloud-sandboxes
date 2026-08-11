@@ -80,28 +80,29 @@ async def benchmark(args: argparse.Namespace) -> dict[str, object]:
     image_store = DockerOverlay2RootfsStore(
         (args.state_root / "image-cache").resolve()
     )
-    image = image_store.materialize(args.image)
-    if args.config_template is None:
-        template = DirectOciConfigBuilder().build(
-            SandboxSpec(
-                id="benchmark-template",
-                image=args.image,
-                command=("/bin/sleep", "86400"),
-                memory_mb=512,
-                disk_mb=512,
-                network="none" if args.network == "none" else "bridge",
-                parkable=True,
-                security=SandboxSecuritySpec(
-                    user="0:0",
-                    cap_drop=(),
-                    init=False,
-                    no_new_privileges=False,
+    with image_store.operation_lease(args.image) as image:
+        if args.config_template is None:
+            template = DirectOciConfigBuilder().build(
+                SandboxSpec(
+                    id="benchmark-template",
+                    image=args.image,
+                    command=("/bin/sleep", "86400"),
+                    memory_mb=512,
+                    disk_mb=512,
+                    network="none" if args.network == "none" else "bridge",
+                    parkable=True,
+                    security=SandboxSecuritySpec(
+                        user="0:0",
+                        cap_drop=(),
+                        init=False,
+                        no_new_privileges=False,
+                    ),
                 ),
-            ),
-            image,
-        )
-    else:
-        template = json.loads(args.config_template.read_text(encoding="utf-8"))
+                image,
+            )
+        else:
+            template = json.loads(args.config_template.read_text(encoding="utf-8"))
+        rootfs_sha256 = image.rootfs_identity_sha256
     if args.conformance_workload is None:
         template["process"]["args"] = ["/bin/sleep", "86400"]
         tool_command = ("/bin/true",)
@@ -141,7 +142,7 @@ async def benchmark(args: argparse.Namespace) -> dict[str, object]:
             ).encode("ascii")
         ).hexdigest(),
         boot_config_sha256=boot_config_sha256,
-        rootfs_sha256=image.rootfs_identity_sha256,
+        rootfs_sha256=rootfs_sha256,
     )
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
@@ -157,15 +158,16 @@ async def benchmark(args: argparse.Namespace) -> dict[str, object]:
             restore_cpu_startup_burst=args.cpu_startup_burst,
         )
     )
-    leases = [
-        overlays.prepare(
-            sandbox_id=f"burst-{index:04d}",
-            sandbox_generation=1,
-            image_ref=args.image,
-            config_template=template,
-        )
-        for index in range(args.sandboxes)
-    ]
+    with image_store.operation_lease(args.image) as image:
+        leases = [
+            overlays.prepare(
+                sandbox_id=f"burst-{index:04d}",
+                sandbox_generation=1,
+                image=image,
+                config_template=template,
+            )
+            for index in range(args.sandboxes)
+        ]
     sandboxes = [lease.sandbox for lease in leases]
     if args.conformance_workload is not None:
         for lease in leases:

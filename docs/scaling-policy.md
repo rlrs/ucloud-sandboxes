@@ -170,6 +170,8 @@ always-on cost.
 Prepared-capacity signals are the burst-oriented alternative. `POST
 /v1/capacity/prepare` records a scale-up reservation equal to `count *
 per-sandbox resources`; the autoscaler treats it like pending sandbox demand.
+The count is bounded to 100 and remains one counted placement group internally,
+so request memory and routing-state size do not grow with the batch size.
 Use this when a runner knows a batch is about to start and wants VM scale-up to
 begin before the first `POST /v1/sandboxes`. Each newly reserved sandbox with
 the same resource shape and, when specified, image atomically claims one unit

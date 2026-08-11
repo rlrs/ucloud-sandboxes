@@ -12,6 +12,8 @@ from threading import Lock, RLock
 from typing import Any, Iterable, Iterator
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from .models import ProviderInstance
+
 
 PROVIDER_OPERATION_LABEL = "ucloud-sandboxes/provider-operation"
 DEPLOYMENT_LABEL = "ucloud-sandboxes/deployment"
@@ -370,12 +372,6 @@ class AutoscalerStateStore:
         request_value = _json_object("request", request)
         job_ids = _job_ids(target_job_ids)
         operation_id = stable_provider_operation_id(deployment, operation_kind, key)
-        if operation_kind == "create":
-            _validate_create_request_labels(
-                request_value,
-                operation_id=operation_id,
-                deployment_id=deployment,
-            )
         now_us = _datetime_to_us(_normalized_now(now))
         with self._transaction() as conn:
             row = self._operation_row(conn, operation_id, required=False)
@@ -521,23 +517,19 @@ class AutoscalerStateStore:
 
     def recover_uncertain_creates(
         self,
-        complete_jobs: Iterable[dict[str, Any]],
+        instances: Iterable[ProviderInstance],
         *,
         now: datetime | None = None,
     ) -> list[ProviderRecovery]:
         label_index: dict[tuple[str, str], list[str]] = {}
-        for job in complete_jobs:
-            if not isinstance(job, dict):
-                continue
-            specification = job.get("specification")
-            labels = (
-                specification.get("labels") if isinstance(specification, dict) else None
-            )
-            if not isinstance(labels, dict):
-                continue
-            operation_id = str(labels.get(PROVIDER_OPERATION_LABEL) or "").strip()
-            deployment_id = str(labels.get(DEPLOYMENT_LABEL) or "").strip()
-            job_id = str(job.get("id") or "").strip()
+        for instance in instances:
+            operation_id = str(
+                instance.labels.get(PROVIDER_OPERATION_LABEL) or ""
+            ).strip()
+            deployment_id = str(
+                instance.labels.get(DEPLOYMENT_LABEL) or ""
+            ).strip()
+            job_id = str(instance.id or "").strip()
             if operation_id and deployment_id and job_id:
                 label_index.setdefault((operation_id, deployment_id), []).append(job_id)
 
@@ -966,24 +958,6 @@ def _job_ids(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(
         dict.fromkeys(value for item in values if (value := str(item).strip()))
     )
-
-
-def _validate_create_request_labels(
-    request: dict[str, Any],
-    *,
-    operation_id: str,
-    deployment_id: str,
-) -> None:
-    items = request.get("items")
-    if not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict):
-        raise ValueError("journaled create request must contain exactly one item")
-    labels = items[0].get("labels")
-    if not isinstance(labels, dict):
-        raise ValueError("journaled create request must contain labels")
-    if str(labels.get(PROVIDER_OPERATION_LABEL) or "") != operation_id:
-        raise ValueError("journaled create request has the wrong operation label")
-    if str(labels.get(DEPLOYMENT_LABEL) or "") != deployment_id:
-        raise ValueError("journaled create request has the wrong deployment label")
 
 
 def _json_object(label: str, value: object) -> dict[str, Any]:

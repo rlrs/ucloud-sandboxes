@@ -85,9 +85,15 @@ from .program_scheduler import (
     node_pressure_score,
     plan_shadow_wake_queue,
 )
-from .registry import HeartbeatStore, heartbeat_from_dict, heartbeat_to_dict
+from .registry import (
+    HeartbeatIdentityError,
+    HeartbeatStore,
+    heartbeat_from_dict,
+    heartbeat_to_dict,
+)
 from .routing import (
     ExecRoute,
+    MAX_PREPARED_CAPACITY_COUNT,
     PendingImageWarmup,
     PendingSandboxDemand,
     ProgramRequestState,
@@ -233,6 +239,32 @@ class NodePlacementState:
     inflight_image_identities: frozenset[str]
     projected_image_identities: frozenset[str]
     active_creates: int
+
+
+@dataclass(frozen=True)
+class PlacementRouteIndex:
+    """Route lookup tables built once for a gateway placement decision."""
+
+    by_node_id: dict[str, tuple[SandboxRoute, ...]]
+    by_job_id: dict[str, tuple[SandboxRoute, ...]]
+    by_node_url: dict[str, tuple[SandboxRoute, ...]]
+
+    def routes_for(self, heartbeat: NodeHeartbeat) -> list[SandboxRoute]:
+        matches: list[SandboxRoute] = []
+        seen: set[int] = set()
+        keys = (
+            self.by_node_id.get(heartbeat.node_id, ()),
+            self.by_job_id.get(heartbeat.job_id, ()),
+            self.by_node_url.get((heartbeat.node_url or "").rstrip("/"), ()),
+        )
+        for routes in keys:
+            for route in routes:
+                identity = id(route)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                matches.append(route)
+        return matches
 
 
 class RegistryLayerMetadataCache:
@@ -580,20 +612,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             return
 
-        identity_error = self._heartbeat_identity_error(heartbeat)
-        if identity_error is not None:
-            self._write_json(
-                {"error": identity_error},
-                status=HTTPStatus.FORBIDDEN,
-            )
-            return
-
-        if self.deployment_id and heartbeat.deployment_id != self.deployment_id:
+        if heartbeat.deployment_id != self.deployment_id:
             self._write_json(
                 {
                     "error": "heartbeat deployment_id does not match this gateway",
                     "expected_deployment_id": self.deployment_id,
                 },
+                status=HTTPStatus.FORBIDDEN,
+            )
+            return
+
+        identity_error = self._heartbeat_identity_error(heartbeat)
+        if identity_error is not None:
+            self._write_json(
+                {"error": identity_error},
                 status=HTTPStatus.FORBIDDEN,
             )
             return
@@ -605,13 +637,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         # gateway-controlled receipt time used for freshness.
         heartbeat = replace(
             heartbeat,
+            node_url=_canonical_node_url(heartbeat.node_url),
             updated_at=received_at,
             reported_at=reported_at,
             received_at=received_at,
             idle_since=None,
         )
 
-        receipt = self.store.upsert_received(heartbeat)
+        try:
+            receipt = self.store.upsert_received(heartbeat)
+        except HeartbeatIdentityError as exc:
+            self._write_json(
+                {"error": str(exc)},
+                status=HTTPStatus.FORBIDDEN,
+            )
+            return
         stored_heartbeat = receipt.stored
         if receipt.accepted:
             record_node_heartbeat(
@@ -660,29 +700,20 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not heartbeat.node_id or not heartbeat.job_id or not heartbeat.node_epoch:
             return "heartbeat node_id, job_id, and node_epoch are required"
 
-        for current in self.store.load().values():
-            same_job = current.job_id == heartbeat.job_id
-            same_node = current.node_id == heartbeat.node_id
-            if not same_job and not same_node:
-                continue
-            if not same_job or not same_node:
-                return "heartbeat node_id and job_id are already bound"
-            if _canonical_node_url(current.node_url) != node_url:
-                return "heartbeat node_url does not match the bound node"
-            if current.deployment_id != heartbeat.deployment_id:
-                return "heartbeat deployment_id does not match the bound node"
-
         if self.routing_store is None:
             return None
-        for route in self.routing_store.sandbox_routes_readonly():
+        for route in self.routing_store.sandbox_routes_matching_node_identity(
+            node_id=heartbeat.node_id,
+            job_id=heartbeat.job_id,
+            node_url=node_url,
+        ):
             same_job = bool(route.job_id) and route.job_id == heartbeat.job_id
             same_node = bool(route.node_id) and route.node_id == heartbeat.node_id
-            if not same_job and not same_node:
+            same_node_url = _canonical_node_url(route.node_url) == node_url
+            if not same_job and not same_node and not same_node_url:
                 continue
-            if not same_job or not same_node:
+            if not same_job or not same_node or not same_node_url:
                 return "heartbeat identity conflicts with an assigned route"
-            if _canonical_node_url(route.node_url) != node_url:
-                return "heartbeat node_url conflicts with an assigned route"
         return None
 
     def do_PUT(self) -> None:
@@ -1790,6 +1821,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if not prepare_id or "/" in prepare_id:
                 raise ValueError("prepare id must be non-empty and cannot contain '/'.")
             count = _strict_positive_integer(raw.get("count", 1), "count")
+            if count > MAX_PREPARED_CAPACITY_COUNT:
+                raise ValueError(
+                    f"count cannot exceed {MAX_PREPARED_CAPACITY_COUNT}."
+                )
             ttl_seconds = _strict_positive_integer(
                 raw.get("ttl_seconds", 900),
                 "ttl_seconds",
@@ -4204,6 +4239,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         required_capabilities: tuple[str, ...] = (),
     ) -> NodeHeartbeat | None:
         routes = self._placement_routes()
+        route_index = _placement_route_index(routes)
         candidate_states: list[tuple[NodeHeartbeat, NodePlacementState]] = []
         for heartbeat in self._ready_sandbox_heartbeats():
             if not agent_version_is_schedulable(heartbeat.agent_version):
@@ -4213,7 +4249,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 for capability in required_capabilities
             ):
                 continue
-            placement_state = _node_placement_state(heartbeat, routes)
+            placement_state = _node_placement_state(
+                heartbeat,
+                route_index.routes_for(heartbeat),
+            )
             if not _node_can_fit_available(
                 heartbeat,
                 requested,
@@ -5886,9 +5925,8 @@ def _node_can_fit_available(
 
 def _node_placement_state(
     heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
+    node_routes: list[SandboxRoute],
 ) -> NodePlacementState:
-    node_routes = [route for route in routes if _route_targets_node(route, heartbeat)]
     inflight_images = frozenset(
         identity
         for route in node_routes
@@ -6011,10 +6049,20 @@ def _node_reserved_route_resources(
     routes: list[SandboxRoute],
 ) -> ResourceQuantity:
     resources = ResourceQuantity()
-    node_url = heartbeat.node_url or ""
     seen_routes: set[tuple[str, int, str]] = set()
+    inventory_by_identity: dict[tuple[str, int, str, str], Any] = {}
+    for item in heartbeat.inventory:
+        inventory_by_identity.setdefault(
+            (
+                item.sandbox_id,
+                item.generation,
+                item.spec_hash,
+                item.operation_id,
+            ),
+            item,
+        )
     for route in routes:
-        if route.node_id != heartbeat.node_id and route.node_url != node_url:
+        if not _route_targets_node(route, heartbeat):
             continue
         identity = (
             route.sandbox_id,
@@ -6024,16 +6072,13 @@ def _node_reserved_route_resources(
         if identity in seen_routes:
             continue
         seen_routes.add(identity)
-        matching_inventory = next(
+        matching_inventory = inventory_by_identity.get(
             (
-                item
-                for item in heartbeat.inventory
-                if item.sandbox_id == route.sandbox_id
-                and item.generation == route.generation
-                and item.spec_hash == route.spec_hash
-                and item.operation_id == route.create_operation_id
-            ),
-            None,
+                route.sandbox_id,
+                route.generation,
+                route.spec_hash,
+                route.create_operation_id,
+            )
         )
         if matching_inventory is not None:
             if (route.state or "unknown").lower() == "waking" and (
@@ -6061,6 +6106,24 @@ def _node_reserved_route_resources(
             continue
         resources = resources + route.resources
     return resources
+
+
+def _placement_route_index(routes: list[SandboxRoute]) -> PlacementRouteIndex:
+    by_node_id: dict[str, list[SandboxRoute]] = {}
+    by_job_id: dict[str, list[SandboxRoute]] = {}
+    by_node_url: dict[str, list[SandboxRoute]] = {}
+    for route in routes:
+        if route.node_id:
+            by_node_id.setdefault(route.node_id, []).append(route)
+        if route.job_id:
+            by_job_id.setdefault(route.job_id, []).append(route)
+        if route.node_url:
+            by_node_url.setdefault(route.node_url.rstrip("/"), []).append(route)
+    return PlacementRouteIndex(
+        by_node_id={key: tuple(value) for key, value in by_node_id.items()},
+        by_job_id={key: tuple(value) for key, value in by_job_id.items()},
+        by_node_url={key: tuple(value) for key, value in by_node_url.items()},
+    )
 
 
 def _route_targets_node(route: SandboxRoute, heartbeat: NodeHeartbeat) -> bool:

@@ -23,10 +23,12 @@ from .storage_native_migration import (
 from .http_server import HighBacklogThreadingHTTPServer
 from .images import (
     DockerImageRuntime,
+    ImageBuildConflictError,
     ImageBuildSpec,
     ImageManager,
     ImageStore,
     materialize_uploaded_build_context,
+    uploaded_build_context_reference,
 )
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
@@ -1000,8 +1002,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         started = time.monotonic()
         phases: dict[str, int] = {}
-        materialized_context = None
-        cleanup_transferred = False
         try:
             phase = time.monotonic()
             raw = self._read_json_body()
@@ -1010,35 +1010,36 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 raise ValueError("image build payload must be a JSON object")
             push = bool(raw.get("push", False))
             wait = bool(raw.get("wait", True))
+            logical_spec = ImageBuildSpec.from_dict(raw)
             phase = time.monotonic()
-            materialized_context = materialize_uploaded_build_context(
-                raw, self.build_context_store
+            context_reference = uploaded_build_context_reference(
+                raw,
+                self.build_context_store,
             )
-            phases["materialize_context_ms"] = _elapsed_ms(phase)
-            phase = time.monotonic()
-            spec = ImageBuildSpec.from_dict(raw)
-            if materialized_context is not None:
-                spec = ImageBuildSpec(
-                    id=spec.id,
-                    tag=spec.tag,
-                    context_path=str(materialized_context.path),
-                    dockerfile=spec.dockerfile,
-                    build_args=spec.build_args,
-                    labels=spec.labels,
-                )
+            context_identity = None
+            materialize_context = None
+            if context_reference is not None:
+                digest, _stored_size = context_reference
+                context_identity = f"archive:{digest}"
+
+                def materialize_context():
+                    materialized = materialize_uploaded_build_context(
+                        raw,
+                        self.build_context_store,
+                    )
+                    if materialized is None:  # pragma: no cover - guarded above
+                        raise RuntimeError("uploaded build context disappeared")
+                    return materialized
+
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
             with self.manager.image_operation(self.image_manager):
                 build, build_started = self.image_manager.start_build(
-                    spec,
+                    logical_spec,
                     push=push,
-                    cleanup=(
-                        materialized_context.cleanup
-                        if materialized_context is not None
-                        else None
-                    ),
+                    context_identity=context_identity,
+                    materialize_context=materialize_context,
                 )
-            cleanup_transferred = materialized_context is not None
             phases["start_build_ms"] = _elapsed_ms(phase)
             if wait:
                 phase = time.monotonic()
@@ -1047,9 +1048,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        finally:
-            if materialized_context is not None and not cleanup_transferred:
-                materialized_context.cleanup()
         timings = {
             "total_ms": _elapsed_ms(started),
             "phases": phases,
@@ -1318,6 +1316,8 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
             status = HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        elif isinstance(exc, ImageBuildConflictError):
+            status = HTTPStatus.CONFLICT
         elif isinstance(exc, RuntimeError):
             status = HTTPStatus.SERVICE_UNAVAILABLE
         else:
@@ -1549,7 +1549,7 @@ def build_direct_node_agent_server(
     DirectBoundHandler.node_epoch = uuid4().hex
     DirectBoundHandler.physical_disk_path = service.provisioner.overlays.writable_root
     DirectBoundHandler.image_materializer = staticmethod(
-        service.provisioner.image_store.materialize
+        service.provisioner.image_store.warm
     )
     DirectBoundHandler.rootfs_metrics_provider = staticmethod(
         service.provisioner.image_store.operation_snapshot

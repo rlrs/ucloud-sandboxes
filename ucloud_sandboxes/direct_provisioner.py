@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import logging
 import shutil
+from threading import Lock
 import time
 from typing import Any
 
@@ -90,13 +91,17 @@ class DirectSandboxProvisioner:
         self.identity = NodeRuntimeIdentity.from_fingerprint(
             warden.config.runtime_fingerprint
         )
+        self._image_gc_state_guard = Lock()
+        self._image_sweep_guard = Lock()
+        self._image_gc_failure_generation = 1
+        self._image_gc_reconciled_generation = 0
         self._validate_layout()
 
     def start(self) -> tuple[DirectProvisioningResult, ...]:
         """Bind node identity, audit all owners, and reconcile every incarnation."""
         self.identity_store.bind(self.identity)
-        self.image_store.reconcile_images()
-        registrations = self.registry.list()
+        registrations = self.registry.snapshot().records
+        self.reconcile_image_cache(registrations)
         self._audit_ownership(registrations)
         host_rules_ready = self.network_manager is not None
         if self.network_manager is not None:
@@ -170,24 +175,24 @@ class DirectSandboxProvisioner:
         self._validate_spec(spec)
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
-        image = self.image_store.materialize(spec.image)
-        registration = self.registry.plan(
-            spec=spec,
-            sandbox_generation=sandbox_generation,
-            operation_id=operation_id,
-            runtime_identity_sha256=self.identity.digest,
-        )
-        if registration.phase == "planned":
-            try:
-                reservation = self._reserve(registration)
-            except HibernationCapacityError:
-                self.registry.abort_planned(
-                    spec.id,
-                    expected_revision=registration.revision,
-                )
-                raise
-            registration = self._prepare_quota(registration, reservation)
-        return self._advance(registration, image=image)
+        with self.image_store.operation_lease(spec.image) as image:
+            registration = self.registry.plan(
+                spec=spec,
+                sandbox_generation=sandbox_generation,
+                operation_id=operation_id,
+                runtime_identity_sha256=self.identity.digest,
+            )
+            if registration.phase == "planned":
+                try:
+                    reservation = self._reserve(registration)
+                except HibernationCapacityError:
+                    self.registry.abort_planned(
+                        spec.id,
+                        expected_revision=registration.revision,
+                    )
+                    raise
+                registration = self._prepare_quota(registration, reservation)
+            return self._advance(registration, image=image)
 
     def reconcile(self, sandbox_id: str) -> DirectProvisioningResult:
         self.identity_store.bind(self.identity)
@@ -212,9 +217,23 @@ class DirectSandboxProvisioner:
         if portable.runtime_identity != self.identity:
             raise StorageNativeMigrationError(
                 "storage-native migration belongs to another runtime identity"
-            )
+        )
         self._validate_spec(portable.spec)
-        image = self.image_store.materialize(portable.spec.image)
+        with self.image_store.operation_lease(portable.spec.image) as image:
+            return self._stage_storage_native_import_materialized(
+                migration,
+                migration_id=migration_id,
+                image=image,
+            )
+
+    def _stage_storage_native_import_materialized(
+        self,
+        migration: StorageNativeMigration,
+        *,
+        migration_id: str,
+        image,
+    ) -> DirectStorageNativeImportResult:
+        portable = migration.manifest
         migration_sha256 = migration.sha256
         registration = self.registry.plan_import(
             spec=portable.spec,
@@ -293,7 +312,7 @@ class DirectSandboxProvisioner:
             lease = self.overlays.prepare(
                 sandbox_id=registration.sandbox_id,
                 sandbox_generation=registration.sandbox_generation,
-                image_ref=registration.spec.image,
+                image=image,
                 config_template=config,
                 spec_sha256=registration.spec_sha256,
                 imported_parked=True,
@@ -526,6 +545,79 @@ class DirectSandboxProvisioner:
             sandbox_generation=registration.sandbox_generation,
             expected_revision=registration.revision,
         )
+        self._collect_deleted_image(registration.image_id)
+
+    @property
+    def image_cache_reconciliation_pending(self) -> bool:
+        with self._image_gc_state_guard:
+            return (
+                self._image_gc_reconciled_generation
+                < self._image_gc_failure_generation
+            )
+
+    def reconcile_image_cache_if_pending(self) -> bool:
+        with self._image_gc_state_guard:
+            if (
+                self._image_gc_reconciled_generation
+                >= self._image_gc_failure_generation
+            ):
+                return False
+        self.reconcile_image_cache()
+        return True
+
+    def _collect_deleted_image(self, image_id: str) -> None:
+        try:
+            self.image_store.collect_image(
+                image_id,
+                is_referenced=self.registry.references_image,
+            )
+        except Exception as exc:
+            # Registry deletion is already durable. Cache reclamation is not
+            # part of logical sandbox ownership, so report success and retain a
+            # generation-fenced maintenance retry instead of making an
+            # idempotent delete appear to fail.
+            self._record_image_gc_failure()
+            _LOG.warning(
+                "deferred rootfs cache collection for deleted image %s: %s",
+                image_id,
+                exc,
+            )
+
+    def _record_image_gc_failure(self) -> int:
+        with self._image_gc_state_guard:
+            self._image_gc_failure_generation += 1
+            return self._image_gc_failure_generation
+
+    def reconcile_image_cache(
+        self,
+        registrations: tuple[DirectSandboxRegistration, ...] | None = None,
+    ) -> None:
+        """Collect only cache entries with no durable registry owner.
+
+        ``registrations`` is the coherent startup root snapshot. The callback is
+        deliberately evaluated again while GC owns each digest lock, closing
+        the race with a provisioner that materialized before committing its
+        registry record.
+        """
+
+        with self._image_sweep_guard:
+            with self._image_gc_state_guard:
+                failure_generation = self._image_gc_failure_generation
+            if registrations is None:
+                registrations = self.registry.snapshot().records
+            try:
+                self.image_store.reconcile_images(
+                    (item.image_id for item in registrations if item.image_id),
+                    is_referenced=self.registry.references_image,
+                )
+            except Exception:
+                self._record_image_gc_failure()
+                raise
+            with self._image_gc_state_guard:
+                self._image_gc_reconciled_generation = max(
+                    self._image_gc_reconciled_generation,
+                    failure_generation,
+                )
 
     def _deletion_reservation_for(
         self,
@@ -621,12 +713,20 @@ class DirectSandboxProvisioner:
         if registration.phase == "planned":
             reservation = self._reserve(registration)
             registration = self._prepare_quota(registration, reservation)
+        if registration.phase == "quota_ready" and image is None:
+            with self.image_store.operation_lease(registration.spec.image) as image:
+                return self._advance(
+                    registration,
+                    image=image,
+                    config=config,
+                    host_rules_ready=host_rules_ready,
+                )
         network_namespace_path = self._network_namespace(
             registration,
             host_rules_ready=host_rules_ready,
         )
         if registration.phase == "quota_ready":
-            image = image or self.image_store.materialize(registration.spec.image)
+            assert image is not None
             config = config or self.oci.build(
                 registration.spec,
                 image,
@@ -641,7 +741,7 @@ class DirectSandboxProvisioner:
             lease = self.overlays.prepare(
                 sandbox_id=registration.sandbox_id,
                 sandbox_generation=registration.sandbox_generation,
-                image_ref=registration.spec.image,
+                image=image,
                 config_template=config,
                 spec_sha256=registration.spec_sha256,
             )

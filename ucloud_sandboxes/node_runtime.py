@@ -480,6 +480,14 @@ class DirectNodeRuntime:
 
     def cleanup_expired(self, *, blocking: bool = True) -> list[SandboxRecord]:
         records = self.service.list() if blocking else self.service.list_snapshot()
+        return self._cleanup_expired_records(records, blocking=blocking)
+
+    def _cleanup_expired_records(
+        self,
+        records: tuple[SandboxRecord, ...] | list[SandboxRecord],
+        *,
+        blocking: bool,
+    ) -> list[SandboxRecord]:
         expired = [record for record in records if record.is_expired()]
         for record in expired:
             if blocking:
@@ -545,14 +553,20 @@ class DirectNodeRuntime:
             operation.__exit__(None, None, None)
 
     def heartbeat_snapshot(self, *, active_build_count) -> NodeDrainSnapshot:
-        self.cleanup_expired(blocking=False)
         # Drain admission and the empty proof share this lock. A heartbeat
         # that began just before drain therefore cannot publish an empty proof
         # from observations taken before admission closed.
         with self._drain_guard:
-            return self._heartbeat_snapshot_locked(
+            snapshot = self._heartbeat_snapshot_locked(
                 active_build_count=active_build_count,
             )
+        # Expiry is deliberately reconciled after publishing this conservative
+        # snapshot. Deleting before the empty proof would require a second
+        # registry parse; counting an expired sandbox for one extra heartbeat is
+        # safe, while publishing an inventory assembled before drain admission
+        # closed is not.
+        self._cleanup_expired_records(snapshot.activity.records, blocking=False)
+        return snapshot
 
     def _heartbeat_snapshot_locked(self, *, active_build_count) -> NodeDrainSnapshot:
         # Read transient operations before durable inventory. During drain,
@@ -561,32 +575,36 @@ class DirectNodeRuntime:
         active_reservations, transient_epoch = (
             self.service.active_reservations_snapshot()
         )
-        records = self.service.list_snapshot()
+        inventory = self.service.inventory_snapshot()
+        records = inventory.records
         registered_keys = {(record.spec.id, record.generation) for record in records}
+        if self.service.warden.storage is None:
+            raise RuntimeError("direct node storage-native ownership is unavailable")
+        direct_sandboxes = tuple(
+            item.registration.to_direct_sandbox()
+            for item in inventory.items
+            if item.registration.has_direct_sandbox
+        )
+        storage_records = self.service.warden.storage_records_snapshot(
+            direct_sandboxes
+        )
         used = ResourceQuantity()
         reserved = ResourceQuantity()
-        for record in records:
-            registration = self.service.provisioner.registry.get(record.spec.id)
+        for item in inventory.items:
+            record = item.record
+            registration = item.registration
             quota_disk = (
                 registration.quota_total_mb
-                if registration is not None and registration.quota_total_mb is not None
+                if registration.quota_total_mb is not None
                 else record.spec.disk_mb or 0
             )
-            if self.service.warden.storage is None:
-                raise RuntimeError(
-                    "direct node storage-native ownership is unavailable"
-                )
-            if registration is None:
-                raise RuntimeError("direct activity has no storage-native registration")
             disk_charged = True
             # Planned and quota-ready registrations are valid, durable create
             # reservations but do not own a runsc sandbox yet. They remain
             # visible in heartbeat capacity accounting while a cold image is
             # materialized.
             if registration.has_direct_sandbox:
-                storage = self.service.warden._storage_record(
-                    registration.to_direct_sandbox()
-                )
+                storage = storage_records[registration.memory_directory]
                 disk_charged = storage.get("state") != "published"
             resources = ResourceQuantity(disk_mb=quota_disk if disk_charged else 0)
             if record.state == "running":
@@ -613,13 +631,7 @@ class DirectNodeRuntime:
                 vcpu=resources.vcpu,
                 memory_mb=resources.memory_mb,
             )
-        revision = (
-            max(
-                (item.revision for item in self.service.provisioner.registry.list()),
-                default=0,
-            )
-            + transient_epoch
-        )
+        revision = inventory.activity_revision + transient_epoch
         activity = SandboxActivitySnapshot(
             records=records,
             active_sandboxes=sum(record.state == "running" for record in records),

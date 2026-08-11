@@ -67,10 +67,11 @@ class FixedImageStore:
         self.images = images
         self.image = image
 
-    def materialize(self, image_ref: str) -> MaterializedRootfs:
+    @contextlib.contextmanager
+    def operation_lease(self, image_ref: str):
         if image_ref != self.image.image_ref:
             raise RuntimeError("unexpected benchmark image reference")
-        return self.image
+        yield self.image
 
 
 def _wait_client(client: StorageNativeNodeClient, timeout: float = 10) -> None:
@@ -461,7 +462,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         lease = overlay.prepare(
             sandbox_id=sandbox_id,
             sandbox_generation=sandbox_generation,
-            image_ref=image.image_ref,
+            image=image,
             config_template=_oci_config(namespace),
             spec_sha256=spec_sha256,
         )
@@ -635,7 +636,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             destination_lease = destination_overlay.prepare(
                 sandbox_id=sandbox_id,
                 sandbox_generation=sandbox_generation,
-                image_ref=image.image_ref,
+                image=image,
                 config_template=_oci_config(namespace),
                 spec_sha256=spec_sha256,
                 imported_parked=True,

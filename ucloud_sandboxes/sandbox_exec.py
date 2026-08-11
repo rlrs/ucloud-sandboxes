@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import json
 import subprocess
-from threading import Condition, RLock, Thread
+from threading import Condition, Lock, RLock, Thread
 import time
 from typing import Any
 from uuid import uuid4
@@ -146,6 +146,12 @@ class SandboxExecSpec:
             raise ValueError("sandbox id is required.")
         if not self.command:
             raise ValueError("exec command cannot be empty.")
+        if any("\0" in item for item in self.command):
+            raise ValueError("exec command cannot contain NUL bytes.")
+        if any("\0" in key or "\0" in value for key, value in self.env.items()):
+            raise ValueError("exec environment cannot contain NUL bytes.")
+        if self.working_dir is not None and "\0" in self.working_dir:
+            raise ValueError("exec working_dir cannot contain NUL bytes.")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -193,6 +199,11 @@ class ExecSession:
         default=None, repr=False, compare=False
     )
     activity_lease: bool = field(default=False, repr=False, compare=False)
+    stdin_lock: Lock = field(
+        default_factory=Lock,
+        repr=False,
+        compare=False,
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -339,17 +350,32 @@ class ExecSessionManager:
     def write_stdin(self, session_id: str, data: str) -> ExecSession:
         with self._lock:
             session = self._require_session_locked(session_id)
-            if not session.stdin_open:
-                raise ValueError("stdin is closed for this exec session.")
-            if session.process is None:
-                self._append_event_locked(session, "stdin", data)
-                return session
-            stdin = session.process.stdin
-            if stdin is None:
-                raise ValueError("stdin pipe is unavailable.")
-            stdin.write(data)
-            stdin.flush()
-            session.updated_at = utc_now()
+        # The pipe can apply kernel backpressure.  Serialize writes for this
+        # session without holding the manager-wide registry/event lock.
+        with session.stdin_lock:
+            with self._lock:
+                if self._sessions.get(session_id) is not session:
+                    raise ValueError(f"exec session not found: {session_id}")
+                if not session.stdin_open:
+                    raise ValueError("stdin is closed for this exec session.")
+                if session.process is None:
+                    self._append_event_locked(session, "stdin", data)
+                    return session
+                stdin = session.process.stdin
+                if stdin is None:
+                    raise ValueError("stdin pipe is unavailable.")
+            try:
+                stdin.write(data)
+                stdin.flush()
+            except (BrokenPipeError, OSError, ValueError) as exc:
+                with self._lock:
+                    if self._sessions.get(session_id) is session:
+                        session.stdin_open = False
+                        session.updated_at = utc_now()
+                raise ValueError("stdin pipe is closed for this exec session.") from exc
+            with self._lock:
+                if self._sessions.get(session_id) is session:
+                    session.updated_at = utc_now()
             return session
 
     async def awrite_stdin(self, session_id: str, data: str) -> ExecSession:
@@ -358,17 +384,26 @@ class ExecSessionManager:
     def close_stdin(self, session_id: str) -> ExecSession:
         with self._lock:
             session = self._require_session_locked(session_id)
-            if not session.stdin_open:
-                return session
-            session.stdin_open = False
-            session.updated_at = utc_now()
-            if session.process is None:
-                self._append_event_locked(session, "stdin_closed", "")
-                self._complete_locked(session, 0)
-                return session
-            stdin = session.process.stdin
+        with session.stdin_lock:
+            with self._lock:
+                if self._sessions.get(session_id) is not session:
+                    raise ValueError(f"exec session not found: {session_id}")
+                if not session.stdin_open:
+                    return session
+                session.stdin_open = False
+                session.updated_at = utc_now()
+                if session.process is None:
+                    self._append_event_locked(session, "stdin_closed", "")
+                    self._complete_locked(session, 0)
+                    return session
+                stdin = session.process.stdin
             if stdin is not None:
-                stdin.close()
+                try:
+                    stdin.close()
+                except (BrokenPipeError, OSError, ValueError) as exc:
+                    raise ValueError(
+                        "stdin pipe is closed for this exec session."
+                    ) from exc
             return session
 
     async def aclose_stdin(self, session_id: str) -> ExecSession:
@@ -384,43 +419,45 @@ class ExecSessionManager:
                 text=True,
                 bufsize=1,
             )
-        except OSError as exc:
-            self.sandbox_manager.runtime.exec_start_failed(session.spec.sandbox_id)
-            with self._lock:
-                self._append_event_locked(session, "error", str(exc))
-                self._complete_locked(session, 1)
+        except Exception as exc:
+            self._fail_process_start(session, exc)
             return
         with self._lock:
             session.process = process
         try:
             self.sandbox_manager.runtime.exec_started(session.spec.sandbox_id)
         except Exception as exc:
-            try:
-                process.kill()
-            except ProcessLookupError:
-                pass
-            process.wait()
-            with self._lock:
-                self._append_event_locked(session, "error", str(exc))
-                self._complete_locked(session, 1)
+            self._abort_started_process(session, process, (), exc)
             return
-        stdout_thread = Thread(
-            target=self._pump_stream,
-            args=(session.id, "stdout", process.stdout),
-            daemon=True,
-        )
-        stderr_thread = Thread(
-            target=self._pump_stream,
-            args=(session.id, "stderr", process.stderr),
-            daemon=True,
-        )
-        stdout_thread.start()
-        stderr_thread.start()
-        Thread(
-            target=self._wait_process,
-            args=(session.id, process, (stdout_thread, stderr_thread)),
-            daemon=True,
-        ).start()
+        pump_threads: list[Thread] = []
+        try:
+            stdout_thread = Thread(
+                target=self._pump_stream,
+                args=(session.id, "stdout", process.stdout),
+                daemon=True,
+            )
+            stderr_thread = Thread(
+                target=self._pump_stream,
+                args=(session.id, "stderr", process.stderr),
+                daemon=True,
+            )
+            stdout_thread.start()
+            pump_threads.append(stdout_thread)
+            stderr_thread.start()
+            pump_threads.append(stderr_thread)
+            wait_thread = Thread(
+                target=self._wait_process,
+                args=(session.id, process, (stdout_thread, stderr_thread)),
+                daemon=True,
+            )
+            wait_thread.start()
+        except Exception as exc:
+            self._abort_started_process(
+                session,
+                process,
+                tuple(pump_threads),
+                exc,
+            )
 
     def _pump_stream(
         self,
@@ -454,10 +491,64 @@ class ExecSessionManager:
             thread.join(timeout=2.0)
         with self._lock:
             session = self._sessions.get(session_id)
-            if session is None:
-                return
-            session.stdin_open = False
-            self._complete_locked(session, exit_code)
+        if session is None:
+            self._close_pipe(process.stdin)
+            return
+        with session.stdin_lock:
+            self._close_pipe(process.stdin)
+            with self._lock:
+                if self._sessions.get(session_id) is not session:
+                    return
+                session.stdin_open = False
+                self._complete_locked(session, exit_code)
+
+    @staticmethod
+    def _close_pipe(pipe: Any) -> None:
+        if pipe is None:
+            return
+        try:
+            pipe.close()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+    def _fail_process_start(
+        self,
+        session: ExecSession,
+        error: Exception,
+    ) -> None:
+        messages = [str(error)]
+        try:
+            self.sandbox_manager.runtime.exec_start_failed(session.spec.sandbox_id)
+        except Exception as cleanup_error:
+            messages.append(f"exec start fence cleanup failed: {cleanup_error}")
+        with self._lock:
+            self._append_event_locked(session, "error", "; ".join(messages))
+            self._complete_locked(session, 1)
+
+    def _abort_started_process(
+        self,
+        session: ExecSession,
+        process: subprocess.Popen[str],
+        pump_threads: tuple[Thread, ...],
+        error: Exception,
+    ) -> None:
+        messages = [str(error)]
+        try:
+            process.kill()
+        except OSError as cleanup_error:
+            messages.append(f"exec process kill failed: {cleanup_error}")
+        try:
+            process.wait()
+        except OSError as cleanup_error:
+            messages.append(f"exec process wait failed: {cleanup_error}")
+        for thread in pump_threads:
+            thread.join(timeout=2.0)
+            if thread.is_alive():
+                messages.append("exec output pump did not stop after process failure")
+        for pipe in (process.stdin, process.stdout, process.stderr):
+            self._close_pipe(pipe)
+        failure = RuntimeError("; ".join(messages))
+        self._fail_process_start(session, failure)
 
     def _require_session_locked(self, session_id: str) -> ExecSession:
         session = self._sessions.get(session_id)
@@ -505,9 +596,18 @@ class ExecSessionManager:
     def _complete_locked(self, session: ExecSession, exit_code: int) -> None:
         if session.status in {"exited", "failed"}:
             return
+        session.stdin_open = False
+        session.process = None
         session.exit_code = exit_code
         session.status = "exited" if exit_code == 0 else "failed"
         self._append_event_locked(session, "exit", "", exit_code=exit_code)
         if session.activity_lease:
             session.activity_lease = False
-            self.sandbox_manager.lifecycle.release_shared(session.spec.sandbox_id)
+            try:
+                self.sandbox_manager.lifecycle.release_shared(session.spec.sandbox_id)
+            except Exception as exc:
+                self._append_event_locked(
+                    session,
+                    "error",
+                    f"exec activity lease cleanup failed: {exc}",
+                )

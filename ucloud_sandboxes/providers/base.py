@@ -121,6 +121,7 @@ class InstanceBootstrapAccess:
     command: str | None
     runnable: bool
     reason: str
+    refresh_recommended: bool = False
 
 
 class ComputeProvider(Protocol):

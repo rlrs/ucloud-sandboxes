@@ -10,8 +10,8 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
-from threading import Lock
-from typing import Any, Iterator
+from threading import BoundedSemaphore, Lock
+from typing import Any, Callable, Iterable, Iterator
 
 from .direct_warden import (
     CommandRunner,
@@ -166,16 +166,22 @@ class DockerOverlay2RootfsStore:
         mount_binary: str = "mount",
         mountpoint_binary: str = "mountpoint",
         umount_binary: str = "umount",
+        max_concurrent_operations: int = MAX_CONCURRENT_OPERATIONS,
     ) -> None:
         if not root.is_absolute():
             raise ValueError("rootfs store root must be absolute")
         if docker_root is not None and not docker_root.is_absolute():
             raise ValueError("Docker data root must be absolute")
+        if max_concurrent_operations < 1:
+            raise ValueError("rootfs materialization concurrency must be positive")
         self.root = root
         self.runner = runner or SubprocessCommandRunner()
         self.docker_binary = docker_binary
         self._operation_guard = Lock()
         self._active_operations = 0
+        self._waiting_operations = 0
+        self.max_concurrent_operations = int(max_concurrent_operations)
+        self._operation_slots = BoundedSemaphore(self.max_concurrent_operations)
         self._configured_docker_root = docker_root
         self._resolved_docker_root: Path | None = None
         self._docker_root_guard = Lock()
@@ -204,14 +210,7 @@ class DockerOverlay2RootfsStore:
 
     @contextmanager
     def _locked(self, digest: str) -> Iterator[None]:
-        descriptor = os.open(
-            self.locks / f"{digest}.lock",
-            os.O_RDWR
-            | os.O_CREAT
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-        )
+        descriptor = self._open_digest_lock(digest)
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX)
             yield
@@ -219,97 +218,342 @@ class DockerOverlay2RootfsStore:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
             os.close(descriptor)
 
+    def _open_digest_lock(self, digest: str) -> int:
+        if not _DIGEST.fullmatch(digest):
+            raise ValueError("rootfs cache digest is invalid")
+        return os.open(
+            self.locks / f"{digest}.lock",
+            os.O_RDWR
+            | os.O_CREAT
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+
+    @contextmanager
+    def _operation_slot(self) -> Iterator[None]:
+        with self._operation_guard:
+            self._waiting_operations += 1
+        acquired = False
+        active = False
+        try:
+            self._operation_slots.acquire()
+            acquired = True
+            with self._operation_guard:
+                self._waiting_operations -= 1
+                self._active_operations += 1
+                active = True
+            yield
+        finally:
+            with self._operation_guard:
+                if active:
+                    self._active_operations -= 1
+                else:
+                    self._waiting_operations -= 1
+            if acquired:
+                self._operation_slots.release()
+
+    def _acquire_digest_lock(self, descriptor: int, operation: int) -> None:
+        """Wait for a digest lease without consuming a materialization slot."""
+
+        with self._operation_guard:
+            self._waiting_operations += 1
+        try:
+            fcntl.flock(descriptor, operation)
+        finally:
+            with self._operation_guard:
+                self._waiting_operations -= 1
+
     def operation_snapshot(self) -> dict[str, int]:
         with self._operation_guard:
             return {
                 "active_operations": self._active_operations,
-                "waiting_operations": 0,
-                "max_concurrent_operations": self.MAX_CONCURRENT_OPERATIONS,
+                "waiting_operations": self._waiting_operations,
+                "max_concurrent_operations": self.max_concurrent_operations,
             }
 
-    def materialize(self, image_ref: str) -> MaterializedRootfs:
+    def warm(self, image_ref: str) -> None:
+        """Populate the cache without exposing an unleased rootfs handle."""
+
+        with self.operation_lease(image_ref) as image:
+            del image
+
+    @contextmanager
+    def operation_lease(self, image_ref: str) -> Iterator[MaterializedRootfs]:
+        """Materialize an image and protect its digest until durable commit.
+
+        The shared flock is process-crash safe. GC takes the same lock
+        exclusively and rechecks the registry after any in-flight provisioner
+        has either committed its durable image root or released this lease.
+        """
+
         image_ref = str(image_ref).strip()
         if not image_ref or "\0" in image_ref:
             raise ValueError("image_ref is invalid")
-        image_id, image_config, layers = self._inspect_overlay2(image_ref)
+        descriptor: int | None = None
+        with self._operation_slot():
+            image_id, image_config, layers = self._inspect_overlay2(image_ref)
         digest = image_id[7:]
-        with self._locked(digest):
-            target = self.images / digest
-            if target.exists():
-                existing = self._load_overlay2_complete(
-                    digest,
-                    image_ref=image_ref,
-                    image_config=image_config,
-                )
-                if existing is None:
-                    self._discard_overlay2_target(target)
-                else:
-                    self._ensure_overlay2_mount(existing.rootfs, layers)
-                    return existing
-            self._pin_image(image_id)
-            target.mkdir(mode=0o700)
-            rootfs = target / "rootfs"
-            rootfs.mkdir(mode=0o755)
-            identity = self._rootfs_identity(image_id)
-            mounted = False
-            try:
-                self._mount_overlay2(rootfs, layers)
-                mounted = True
-                marker = {
-                    "image_id": image_id,
-                    "rootfs_identity_sha256": identity,
-                    "schema": _OVERLAY2_ROOTFS_SCHEMA,
-                    "store": "docker-overlay2",
-                }
-                _atomic_write(
-                    target / self.COMPLETE,
-                    _canonical_json(marker) + b"\n",
-                )
-                _fsync_directory(target)
-                _fsync_directory(self.images)
-            except Exception as exc:
-                if mounted:
-                    result = self.runner.run(
-                        (self.umount_binary, str(rootfs)),
-                        timeout=60,
+        descriptor = self._open_digest_lock(digest)
+        image: MaterializedRootfs | None = None
+        lock_held = False
+        try:
+            while True:
+                # Digest contention must not consume a global materialization
+                # slot: many requests for one cold image otherwise starve
+                # unrelated images by filling the semaphore in flock(2).
+                self._acquire_digest_lock(descriptor, fcntl.LOCK_SH)
+                lock_held = True
+                with self._operation_slot():
+                    image = self._load_overlay2_complete(
+                        digest,
+                        image_ref=image_ref,
+                        image_config=image_config,
                     )
-                    if result.returncode != 0:
-                        raise DirectWardenError(
-                            "overlay2 image publication failed and its mount "
-                            f"could not be released: {result.stderr or result.stdout}"
-                        ) from exc
-                shutil.rmtree(target, ignore_errors=True)
-                raise
-            return MaterializedRootfs(
+                    mounted = image is not None and self._overlay2_mount_present(
+                        image.rootfs
+                    )
+                if image is not None and mounted:
+                    break
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                lock_held = False
+                self._acquire_digest_lock(descriptor, fcntl.LOCK_EX)
+                lock_held = True
+                with self._operation_slot():
+                    image = self._materialize_locked(
+                        image_ref=image_ref,
+                        image_id=image_id,
+                        image_config=image_config,
+                        layers=layers,
+                    )
+                # Release EX instead of converting it: flock conversion can
+                # briefly drop the lock, and keeping EX through provisioning
+                # would serialize every caller of this digest. The next loop
+                # acquires SH and revalidates; if GC won this gap, the missing
+                # cache entry is rematerialized before anything is yielded.
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                lock_held = False
+        except BaseException:
+            if lock_held:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+            descriptor = None
+            raise
+        assert descriptor is not None and image is not None
+        try:
+            yield image
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+
+    def _materialize_locked(
+        self,
+        *,
+        image_ref: str,
+        image_id: str,
+        image_config: DockerImageConfig,
+        layers: tuple[Path, ...],
+    ) -> MaterializedRootfs:
+        digest = image_id[7:]
+        target = self.images / digest
+        if target.exists():
+            existing = self._load_overlay2_complete(
+                digest,
                 image_ref=image_ref,
-                image_id=image_id,
-                rootfs_identity_sha256=identity,
-                rootfs=rootfs,
                 image_config=image_config,
             )
+            if existing is None:
+                self._discard_overlay2_target(target)
+            else:
+                self._ensure_overlay2_mount(existing.rootfs, layers)
+                return existing
+        self._pin_image(image_id)
+        rootfs = target / "rootfs"
+        identity = self._rootfs_identity(image_id)
+        mounted = False
+        try:
+            target.mkdir(mode=0o700)
+            rootfs.mkdir(mode=0o755)
+            self._mount_overlay2(rootfs, layers)
+            mounted = True
+            marker = {
+                "image_id": image_id,
+                "rootfs_identity_sha256": identity,
+                "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                "store": "docker-overlay2",
+            }
+            _atomic_write(
+                target / self.COMPLETE,
+                _canonical_json(marker) + b"\n",
+            )
+            _fsync_directory(target)
+            _fsync_directory(self.images)
+        except Exception as exc:
+            if mounted:
+                result = self.runner.run(
+                    (self.umount_binary, str(rootfs)),
+                    timeout=60,
+                )
+                if result.returncode != 0:
+                    raise DirectWardenError(
+                        "overlay2 image publication failed and its mount "
+                        f"could not be released: {result.stderr or result.stdout}"
+                    ) from exc
+            shutil.rmtree(target, ignore_errors=True)
+            try:
+                self._unpin_image(image_id)
+            except Exception as cleanup_exc:
+                raise DirectWardenError(
+                    "overlay2 image publication failed and its private pin "
+                    "could not be released"
+                ) from cleanup_exc
+            raise
+        return MaterializedRootfs(
+            image_ref=image_ref,
+            image_id=image_id,
+            rootfs_identity_sha256=identity,
+            rootfs=rootfs,
+            image_config=image_config,
+        )
 
-    def reconcile_images(self) -> None:
-        """Validate cached images and restore their durable Docker leases."""
+    def reconcile_images(
+        self,
+        referenced_image_ids: Iterable[str],
+        *,
+        is_referenced: Callable[[str], bool],
+    ) -> dict[str, int]:
+        """Reconcile durable roots and collect every unreferenced cache entry."""
+
         self._validate_docker_driver()
         self._docker_overlay2_root()
-        for target in self.images.iterdir():
+        roots = frozenset(str(image_id) for image_id in referenced_image_ids)
+        if any(
+            not image_id.startswith("sha256:")
+            or not _DIGEST.fullmatch(image_id[7:])
+            for image_id in roots
+        ):
+            raise ValueError("referenced rootfs image id is invalid")
+        pins = self._list_pinned_images()
+        retained = 0
+        collected = 0
+        for target in sorted(self.images.iterdir(), key=lambda item: item.name):
             if target.name.startswith("."):
                 continue
             if not _DIGEST.fullmatch(target.name):
                 raise DirectWardenError(
                     "overlay2 image cache contains an invalid entry"
                 )
+            image_id = f"sha256:{target.name}"
+            with self._locked(target.name):
+                if not target.exists():
+                    continue
+                _require_private_directory(target)
+                try:
+                    marker = json.loads(
+                        (target / self.COMPLETE).read_text(encoding="ascii")
+                    )
+                except FileNotFoundError:
+                    if image_id in roots or is_referenced(image_id):
+                        raise DirectWardenError(
+                            "referenced overlay2 rootfs publication is incomplete"
+                        )
+                    self._discard_overlay2_target(target)
+                    if target.name in pins:
+                        self._unpin_image(image_id)
+                        pins.pop(target.name)
+                    collected += 1
+                    continue
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise DirectWardenError("overlay2 rootfs marker is invalid") from exc
+                if marker != {
+                    "image_id": image_id,
+                    "rootfs_identity_sha256": self._rootfs_identity(image_id),
+                    "schema": _OVERLAY2_ROOTFS_SCHEMA,
+                    "store": "docker-overlay2",
+                }:
+                    raise DirectWardenError("overlay2 rootfs marker identity is invalid")
+                rooted = image_id in roots or is_referenced(image_id)
+                if rooted:
+                    if target.name not in pins:
+                        self._pin_image(image_id)
+                    retained += 1
+                    continue
+                # Keep the private tag until the cache mount and directory are
+                # safely gone. A crash can then leak a harmless tag, never leave
+                # a cache mount backed by an image Docker may prune.
+                self._discard_overlay2_target(target)
+                if target.name in pins:
+                    self._unpin_image(image_id)
+                    pins.pop(target.name)
+                collected += 1
+
+        orphan_pins_removed = 0
+        for digest, image_id in pins.items():
+            target = self.images / digest
+            if target.exists():
+                continue
+            with self._locked(digest):
+                if target.exists():
+                    continue
+                if image_id in roots or is_referenced(image_id):
+                    raise DirectWardenError(
+                        "referenced Docker image pin has no rootfs cache entry"
+                    )
+                self._unpin_image(image_id)
+                orphan_pins_removed += 1
+
+        missing = sorted(
+            image_id for image_id in roots if not (self.images / image_id[7:]).exists()
+        )
+        if missing:
+            raise DirectWardenError("direct registry references a missing rootfs cache")
+        return {
+            "collected": collected,
+            "orphan_pins_removed": orphan_pins_removed,
+            "retained": retained,
+        }
+
+    def collect_image(
+        self,
+        image_id: str,
+        *,
+        is_referenced: Callable[[str], bool],
+    ) -> bool:
+        """Collect one deleted registration's digest in constant work."""
+
+        if not image_id.startswith("sha256:") or not _DIGEST.fullmatch(image_id[7:]):
+            raise ValueError("rootfs image id is invalid")
+        digest = image_id[7:]
+        target = self.images / digest
+        with self._locked(digest):
+            pins = self._list_pinned_images(digest)
+            rooted = is_referenced(image_id)
+            if not target.exists():
+                if rooted:
+                    raise DirectWardenError(
+                        "referenced Docker image pin has no rootfs cache entry"
+                    )
+                if digest in pins:
+                    self._unpin_image(image_id)
+                    return True
+                return False
             _require_private_directory(target)
             try:
                 marker = json.loads(
                     (target / self.COMPLETE).read_text(encoding="ascii")
                 )
             except FileNotFoundError:
+                if rooted:
+                    raise DirectWardenError(
+                        "referenced overlay2 rootfs publication is incomplete"
+                    )
                 self._discard_overlay2_target(target)
-                continue
+                if digest in pins:
+                    self._unpin_image(image_id)
+                return True
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise DirectWardenError("overlay2 rootfs marker is invalid") from exc
-            image_id = f"sha256:{target.name}"
             if marker != {
                 "image_id": image_id,
                 "rootfs_identity_sha256": self._rootfs_identity(image_id),
@@ -317,7 +561,14 @@ class DockerOverlay2RootfsStore:
                 "store": "docker-overlay2",
             }:
                 raise DirectWardenError("overlay2 rootfs marker identity is invalid")
-            self._pin_image(image_id)
+            if rooted:
+                if digest not in pins:
+                    self._pin_image(image_id)
+                return False
+            self._discard_overlay2_target(target)
+            if digest in pins:
+                self._unpin_image(image_id)
+            return True
 
     def _pin_image(self, image_id: str) -> None:
         self._checked(
@@ -327,6 +578,45 @@ class DockerOverlay2RootfsStore:
             image_id,
             f"{self.PIN_REPOSITORY}:{image_id[7:]}",
         )
+
+    def _unpin_image(self, image_id: str) -> None:
+        self._checked(
+            self.docker_binary,
+            "image",
+            "rm",
+            f"{self.PIN_REPOSITORY}:{image_id[7:]}",
+        )
+
+    def _list_pinned_images(self, only_digest: str | None = None) -> dict[str, str]:
+        if only_digest is not None and not _DIGEST.fullmatch(only_digest):
+            raise ValueError("rootfs cache digest is invalid")
+        reference = self.PIN_REPOSITORY + ":" + (only_digest or "*")
+        output = self._checked(
+            self.docker_binary,
+            "image",
+            "ls",
+            "--no-trunc",
+            "--filter",
+            f"reference={reference}",
+            "--format={{.Repository}} {{.Tag}} {{.ID}}",
+        )
+        pins: dict[str, str] = {}
+        for line in output.splitlines():
+            fields = line.split()
+            if len(fields) != 3:
+                raise DirectWardenError("Docker image pin inventory is invalid")
+            repository, tag_digest, image_id = fields
+            if (
+                repository != self.PIN_REPOSITORY
+                or not _DIGEST.fullmatch(tag_digest)
+                or image_id != f"sha256:{tag_digest}"
+                or tag_digest in pins
+            ):
+                raise DirectWardenError("Docker image pin inventory is invalid")
+            pins[tag_digest] = image_id
+        if only_digest is not None and any(item != only_digest for item in pins):
+            raise DirectWardenError("Docker image pin inventory is invalid")
+        return pins
 
     def _inspect_overlay2(
         self,
@@ -465,13 +755,13 @@ class DockerOverlay2RootfsStore:
             return None
         _require_private_directory(target)
         rootfs = target / "rootfs"
-        _require_real_directory(rootfs)
         try:
             marker = json.loads((target / self.COMPLETE).read_text(encoding="ascii"))
         except FileNotFoundError:
             return None
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DirectWardenError("overlay2 rootfs metadata is invalid") from exc
+        _require_real_directory(rootfs)
         image_id = f"sha256:{digest}"
         identity = self._rootfs_identity(image_id)
         if (
@@ -521,75 +811,74 @@ class DockerOverlay2RootfsStore:
         rootfs: Path,
         layers: tuple[Path, ...],
     ) -> None:
+        if self._overlay2_mount_present(rootfs):
+            return
+        self._mount_overlay2(rootfs, layers)
+
+    def _overlay2_mount_present(self, rootfs: Path) -> bool:
         mounted = self.runner.run(
             (self.mountpoint_binary, "--quiet", str(rootfs)),
             timeout=60,
         )
         if mounted.returncode == 0:
-            return
+            return True
         if mounted.returncode not in {1, 32}:
             raise DirectWardenError(
                 f"could not inspect overlay2 image mount: "
                 f"{mounted.stderr or mounted.stdout}"
             )
-        self._mount_overlay2(rootfs, layers)
+        return False
 
     def _mount_overlay2(self, rootfs: Path, layers: tuple[Path, ...]) -> None:
-        with self._operation_guard:
-            self._active_operations += 1
-        try:
-            if len(layers) == 1:
-                result = self.runner.run(
+        if len(layers) == 1:
+            result = self.runner.run(
+                (
+                    self.mount_binary,
+                    "--bind",
+                    str(layers[0]),
+                    str(rootfs),
+                ),
+                timeout=60,
+            )
+            if result.returncode == 0:
+                readonly = self.runner.run(
                     (
                         self.mount_binary,
-                        "--bind",
-                        str(layers[0]),
+                        "-o",
+                        "remount,bind,ro",
                         str(rootfs),
                     ),
                     timeout=60,
                 )
-                if result.returncode == 0:
-                    readonly = self.runner.run(
-                        (
-                            self.mount_binary,
-                            "-o",
-                            "remount,bind,ro",
-                            str(rootfs),
-                        ),
+                if readonly.returncode != 0:
+                    cleanup = self.runner.run(
+                        (self.umount_binary, str(rootfs)),
                         timeout=60,
                     )
-                    if readonly.returncode != 0:
-                        cleanup = self.runner.run(
-                            (self.umount_binary, str(rootfs)),
-                            timeout=60,
+                    if cleanup.returncode != 0:
+                        raise DirectWardenError(
+                            "single-layer image remount failed and its "
+                            "bind mount could not be released: "
+                            f"{cleanup.stderr or cleanup.stdout}"
                         )
-                        if cleanup.returncode != 0:
-                            raise DirectWardenError(
-                                "single-layer image remount failed and its "
-                                "bind mount could not be released: "
-                                f"{cleanup.stderr or cleanup.stdout}"
-                            )
-                        result = readonly
-            else:
-                result = self.runner.run(
-                    (
-                        self.mount_binary,
-                        "-t",
-                        "overlay",
-                        "overlay",
-                        "-o",
-                        "ro,lowerdir=" + ":".join(str(item) for item in layers),
-                        str(rootfs),
-                    ),
-                    timeout=60,
-                )
-            if result.returncode != 0:
-                raise DirectWardenError(
-                    f"overlay2 image mount failed: {result.stderr or result.stdout}"
-                )
-        finally:
-            with self._operation_guard:
-                self._active_operations -= 1
+                    result = readonly
+        else:
+            result = self.runner.run(
+                (
+                    self.mount_binary,
+                    "-t",
+                    "overlay",
+                    "overlay",
+                    "-o",
+                    "ro,lowerdir=" + ":".join(str(item) for item in layers),
+                    str(rootfs),
+                ),
+                timeout=60,
+            )
+        if result.returncode != 0:
+            raise DirectWardenError(
+                f"overlay2 image mount failed: {result.stderr or result.stdout}"
+            )
 
     @staticmethod
     def _rootfs_identity(image_id: str) -> str:
@@ -641,14 +930,13 @@ class OverlayRootfsManager:
         *,
         sandbox_id: str,
         sandbox_generation: int,
-        image_ref: str,
+        image: MaterializedRootfs,
         config_template: dict[str, Any],
         spec_sha256: str | None = None,
         imported_parked: bool = False,
     ) -> OverlayRootfsLease:
         if not _SAFE_ID.fullmatch(sandbox_id) or sandbox_generation < 1:
             raise ValueError("sandbox incarnation is invalid")
-        image = self.image_store.materialize(image_ref)
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
         writable = self.writable_root / incarnation
         bundle = self.bundle_root / incarnation
@@ -864,38 +1152,40 @@ class OverlayRootfsManager:
             or metadata.get("rootfs_identity_sha256") != sandbox.rootfs_sha256
         ):
             raise DirectWardenError("overlay bundle metadata changed")
-        image = self.image_store.materialize(str(metadata["image_id"]))
-        if (
-            image.rootfs_identity_sha256 != sandbox.rootfs_sha256
-            or image.image_id != metadata["image_id"]
-        ):
-            raise DirectWardenError("overlay image identity changed during remount")
-        try:
-            lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
-            lower.relative_to(self.image_store.images.resolve(strict=True))
-        except (OSError, ValueError) as exc:
-            raise DirectWardenError(
-                "overlay lower escaped the immutable image store"
-            ) from exc
-        _require_real_directory(lower)
-        if lower != image.rootfs.resolve(strict=True):
-            raise DirectWardenError("overlay lower changed during remount")
-        result = self.runner.run(
-            (
-                self.mount_binary,
-                "-t",
-                "overlay",
-                "overlay",
-                "-o",
-                f"lowerdir={lower},upperdir={upper},workdir={work}",
-                str(merged),
-            ),
-            timeout=60,
-        )
-        if result.returncode != 0:
-            raise DirectWardenError(
-                f"overlay remount failed: {result.stderr or result.stdout}"
+        with self.image_store.operation_lease(str(metadata["image_id"])) as image:
+            if (
+                image.rootfs_identity_sha256 != sandbox.rootfs_sha256
+                or image.image_id != metadata["image_id"]
+            ):
+                raise DirectWardenError(
+                    "overlay image identity changed during remount"
+                )
+            try:
+                lower = Path(str(metadata["lowerdir"])).resolve(strict=True)
+                lower.relative_to(self.image_store.images.resolve(strict=True))
+            except (OSError, ValueError) as exc:
+                raise DirectWardenError(
+                    "overlay lower escaped the immutable image store"
+                ) from exc
+            _require_real_directory(lower)
+            if lower != image.rootfs.resolve(strict=True):
+                raise DirectWardenError("overlay lower changed during remount")
+            result = self.runner.run(
+                (
+                    self.mount_binary,
+                    "-t",
+                    "overlay",
+                    "overlay",
+                    "-o",
+                    f"lowerdir={lower},upperdir={upper},workdir={work}",
+                    str(merged),
+                ),
+                timeout=60,
             )
+            if result.returncode != 0:
+                raise DirectWardenError(
+                    f"overlay remount failed: {result.stderr or result.stdout}"
+                )
 
     def discard_unregistered(
         self,

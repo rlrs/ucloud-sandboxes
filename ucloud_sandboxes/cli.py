@@ -45,6 +45,7 @@ from .bootstrap import (
     VmBootstrapRecord,
     VmBootstrapStore,
     build_vm_bootstrap_intents,
+    mark_bootstrap_access_refresh,
     mark_bootstrap_attempt,
     mark_bootstrap_failure,
     mark_bootstrap_success,
@@ -116,7 +117,12 @@ from .models import (
     ProviderInstance,
     utc_now,
 )
-from .providers.base import ComputeProvider, InstanceCreateIntent, ProviderError
+from .providers.base import (
+    ComputeProvider,
+    InstanceBootstrapAccess,
+    InstanceCreateIntent,
+    ProviderError,
+)
 from .providers.loader import load_external_provider
 from .providers.ucloud import (
     UCloudSettings,
@@ -2319,8 +2325,6 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
             args.from_node_agent_url,
             bearer_token=node_control_token,
         )
-        if config.deployment_id and not heartbeat.deployment_id:
-            heartbeat = replace(heartbeat, deployment_id=config.deployment_id)
         if labels:
             heartbeat = replace(heartbeat, labels={**heartbeat.labels, **labels})
     else:
@@ -4295,7 +4299,7 @@ def run_reconcile_cycle(
     create_visibility_guards: list[dict[str, Any]] = []
     blocked_create_roles: set[str] = set()
     if execution_authorized and provider_state is not None:
-        recoveries = provider_state.recover_uncertain_creates([job.raw for job in jobs])
+        recoveries = provider_state.recover_uncertain_creates(jobs)
         for recovery in recoveries:
             operation = provider_state.get_operation(recovery.operation_id)
             role = operation.role if operation is not None else ""
@@ -5017,19 +5021,19 @@ def run_reconcile_cycle(
             )
         )
 
-    def access_for_instance(instance: ProviderInstance):
-        access = provider.bootstrap_access(instance)
-        if (
-            getattr(args, "execute_init", False)
-            and not getattr(args, "jobs_file", None)
-            and not access.runnable
-            and "No SSH access command" in access.reason
-        ):
-            if instance.id:
-                access = provider.bootstrap_access(
-                    provider.retrieve_instance(instance.id, include_updates=True)
-                )
-        return access
+    def refresh_access_for_instance(
+        instance: ProviderInstance,
+    ) -> InstanceBootstrapAccess:
+        try:
+            refreshed = provider.retrieve_instance(instance.id, include_updates=True)
+        except ProviderError as exc:
+            current = provider.bootstrap_access(instance)
+            return replace(
+                current,
+                runnable=False,
+                reason=f"Provider access refresh failed: {exc}",
+            )
+        return provider.bootstrap_access(refreshed)
 
     bootstrap_nodes = [*sandbox_nodes, *builder_nodes]
     max_bootstraps = max(0, int(getattr(args, "max_init_per_cycle", 1)))
@@ -5053,12 +5057,28 @@ def run_reconcile_cycle(
             args,
             config,
         ),
-        access_for_instance=access_for_instance,
+        access_for_instance=provider.bootstrap_access,
+        refresh_access_for_instance=(
+            refresh_access_for_instance
+            if getattr(args, "execute_init", False)
+            and not getattr(args, "jobs_file", None)
+            else None
+        ),
+        max_access_refreshes=max_bootstraps,
+        excluded_job_ids=set(stop_job_ids) | pending_drain_job_ids,
     )
+    refreshed_access = False
+    for intent in bootstrap_intents:
+        if intent.access_refreshed_at is not None:
+            refreshed_access = True
+            bootstrap_records = mark_bootstrap_access_refresh(
+                bootstrap_records,
+                intent,
+            )
+    if refreshed_access:
+        bootstrap_store.save(bootstrap_records)
     bootstrap_intents = [
-        apply_bootstrap_cli_requirements(intent)
-        for intent in bootstrap_intents
-        if intent.job_id not in set(stop_job_ids) | pending_drain_job_ids
+        apply_bootstrap_cli_requirements(intent) for intent in bootstrap_intents
     ]
     journaled_create_operations: list[ProviderOperation] = []
     journaled_stop_operations: list[ProviderOperation] = []
@@ -6450,7 +6470,10 @@ def demand_with_build_warm_resources(
         return demand
     return replace(
         demand,
-        prepared_resources=demand.prepared_resources + supplement,
+        prepared_placement_requests=(
+            *demand.prepared_placement_requests,
+            SandboxPlacementRequest(resources=supplement),
+        ),
     )
 
 
@@ -7139,7 +7162,7 @@ def node_create_defaults_from_args(
     args: argparse.Namespace,
     config: AutoscalerConfig,
 ) -> NodeCreateDefaults:
-    labels = parse_labels(args.label)
+    labels = parse_labels(getattr(args, "label", []))
     labels.setdefault(NODE_LABEL, "true")
     if config.deployment_id:
         labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)

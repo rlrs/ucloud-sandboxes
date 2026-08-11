@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from collections import deque
 from contextlib import asynccontextmanager
+import heapq
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -354,6 +356,702 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
         assert ticked_at is not None
         self.assertLess(ticked_at - started_at, 0.2)
+
+    async def test_enqueue_save_failure_does_not_publish_a_ghost_request(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            await state.register_rollout("enqueue-failure")
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            original_save = store.save_request
+
+            def fail_save(_request) -> None:
+                raise sqlite3.OperationalError("injected enqueue failure")
+
+            store.save_request = fail_save  # type: ignore[method-assign]
+            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
+                await state.enqueue(
+                    rollout_id="enqueue-failure",
+                    endpoint="/v1/responses",
+                    body={"payload": True},
+                    headers={},
+                    idempotency_key="same-request",
+                )
+
+            self.assertEqual(state._requests, {})  # noqa: SLF001
+            self.assertEqual(len(state._pending["enqueue-failure"]), 0)  # noqa: SLF001
+            self.assertEqual(state._idempotency, {})  # noqa: SLF001
+            self.assertEqual(state._inflight_bytes, 0)  # noqa: SLF001
+            with store._lock:  # noqa: SLF001
+                row_count = store._connection.execute(  # noqa: SLF001
+                    "SELECT count(*) FROM relay_requests"
+                ).fetchone()[0]
+            self.assertEqual(row_count, 0)
+
+            store.save_request = original_save  # type: ignore[method-assign]
+            request = await state.enqueue(
+                rollout_id="enqueue-failure",
+                endpoint="/v1/responses",
+                body={"payload": True},
+                headers={},
+                idempotency_key="same-request",
+            )
+            self.assertIs(state._requests[request.request_id], request)  # noqa: SLF001
+            await state.aclose()
+
+    async def test_registration_save_failure_does_not_publish_registration(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            await state.stats()
+            store = state._store  # noqa: SLF001
+            assert store is not None
+
+            def fail_save(_record) -> None:
+                raise sqlite3.OperationalError("injected registration failure")
+
+            store.save_rollout = fail_save  # type: ignore[method-assign]
+            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
+                await state.register_rollout("registration-failure")
+            self.assertNotIn("registration-failure", state._rollouts)  # noqa: SLF001
+            self.assertNotIn("registration-failure", state._pending)  # noqa: SLF001
+            await state.aclose()
+
+    async def test_enqueue_cancellation_after_commit_publishes_memory_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            await state.register_rollout("enqueue-cancel")
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            original_save = store.save_request
+            committed = Event()
+            release = Event()
+
+            def commit_then_block(request) -> None:
+                original_save(request)
+                committed.set()
+                release.wait(1)
+
+            store.save_request = commit_then_block  # type: ignore[method-assign]
+            enqueue_task = asyncio.create_task(
+                state.enqueue(
+                    rollout_id="enqueue-cancel",
+                    endpoint="/v1/responses",
+                    body={"payload": True},
+                    headers={},
+                    idempotency_key="cancel-request",
+                )
+            )
+            self.assertTrue(await asyncio.to_thread(committed.wait, 1))
+            enqueue_task.cancel()
+            release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await enqueue_task
+
+            self.assertEqual(len(state._requests), 1)  # noqa: SLF001
+            request = next(iter(state._requests.values()))  # noqa: SLF001
+            self.assertEqual(
+                state._idempotency[
+                    (
+                        request.rollout_id,
+                        request.registration_token,
+                        "cancel-request",
+                    )
+                ],
+                request.request_id,
+            )
+            self.assertEqual(len(state._pending["enqueue-cancel"]), 1)  # noqa: SLF001
+            with store._lock:  # noqa: SLF001
+                row_state = store._connection.execute(  # noqa: SLF001
+                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                    (request.request_id,),
+                ).fetchone()[0]
+            self.assertEqual(row_state, "pending")
+            await state.aclose()
+
+    async def test_terminal_commit_failure_never_publishes_in_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = str(
+                (await state.register_rollout("commit-failure"))["registration_token"]
+            )
+            request, delivery = await enqueue_and_poll(
+                state,
+                "commit-failure",
+                token,
+            )
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            original_commit = store.commit_request_batch
+
+            def fail_commit(snapshots, evicted) -> None:
+                del evicted
+                snapshot = snapshots[0]
+                self.assertEqual(snapshot.state, "completed")
+                self.assertEqual(request.state, "leased")
+                self.assertFalse(request.future.done())
+                raise sqlite3.OperationalError("injected commit failure")
+
+            store.commit_request_batch = fail_commit  # type: ignore[method-assign]
+            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
+                await state.respond(
+                    request_id=delivery.request_id,
+                    registration_token=token,
+                    lease_id=delivery.lease_id,
+                    response=RelayWorkerResponse(200, {"ok": True}),
+                )
+
+            self.assertIs(state._requests[request.request_id], request)  # noqa: SLF001
+            self.assertNotIn(request.request_id, state._completed)  # noqa: SLF001
+            self.assertEqual(request.state, "leased")
+            self.assertFalse(request.future.done())
+            with store._lock:  # noqa: SLF001
+                row_state = store._connection.execute(  # noqa: SLF001
+                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                    (request.request_id,),
+                ).fetchone()[0]
+            self.assertEqual(row_state, "leased")
+
+            store.commit_request_batch = original_commit  # type: ignore[method-assign]
+            await state.respond(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"ok": True}),
+            )
+            self.assertTrue(request.future.done())
+            await state.aclose()
+
+    async def test_cancellation_after_terminal_commit_restores_memory_invariants(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = str(
+                (await state.register_rollout("commit-cancel"))["registration_token"]
+            )
+            request, delivery = await enqueue_and_poll(state, "commit-cancel", token)
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            original_commit = store.commit_request_batch
+            committed = Event()
+            release = Event()
+
+            def commit_then_block(snapshot, evicted) -> None:
+                original_commit(snapshot, evicted)
+                committed.set()
+                release.wait(1)
+
+            store.commit_request_batch = commit_then_block  # type: ignore[method-assign]
+            response_task = asyncio.create_task(
+                state.respond(
+                    request_id=delivery.request_id,
+                    registration_token=token,
+                    lease_id=delivery.lease_id,
+                    response=RelayWorkerResponse(200, {"ok": True}),
+                )
+            )
+            self.assertTrue(await asyncio.to_thread(committed.wait, 1))
+            response_task.cancel()
+            release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await response_task
+
+            self.assertNotIn(request.request_id, state._requests)  # noqa: SLF001
+            self.assertIs(state._completed[request.request_id], request)  # noqa: SLF001
+            self.assertTrue(request.future.done())
+            self.assertEqual(state._counters["completed"], 1)  # noqa: SLF001
+            with store._lock:  # noqa: SLF001
+                row_state = store._connection.execute(  # noqa: SLF001
+                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                    (request.request_id,),
+                ).fetchone()[0]
+            self.assertEqual(row_state, "completed")
+            await state.aclose()
+
+    async def test_deferred_response_pin_survives_restart_until_durable_release(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path, max_completed_requests=1)
+            token = str(
+                (await state.register_rollout("durable-pin"))["registration_token"]
+            )
+            request, delivery = await enqueue_and_poll(state, "durable-pin", token)
+            await state.respond(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id,
+                response=RelayWorkerResponse(200, {"ok": True}),
+                defer_delivery=True,
+            )
+            self.assertTrue(request.delivery_pending)
+            self.assertFalse(request.future.done())
+            await state.aclose()
+
+            restored = ModelRelayState(
+                state_path=state_path,
+                max_completed_requests=1,
+            )
+            await restored.stats()
+            recovered = restored._completed[request.request_id]  # noqa: SLF001
+            self.assertTrue(recovered.delivery_pending)
+            self.assertFalse(recovered.future.done())
+            await restored.release_completed_response(request.request_id)
+            self.assertFalse(recovered.delivery_pending)
+            self.assertTrue(recovered.future.done())
+            await restored.aclose()
+
+            with sqlite3.connect(state_path) as connection:
+                delivery_pending = connection.execute(
+                    "SELECT delivery_pending FROM relay_requests WHERE request_id = ?",
+                    (request.request_id,),
+                ).fetchone()[0]
+            self.assertEqual(delivery_pending, 0)
+
+    async def test_completed_capacity_never_evicts_deferred_pins(self) -> None:
+        state = ModelRelayState(max_completed_requests=1)
+        token = str((await state.register_rollout("pin-capacity"))["registration_token"])
+        first, first_delivery = await enqueue_and_poll(state, "pin-capacity", token)
+        await state.respond(
+            request_id=first_delivery.request_id,
+            registration_token=token,
+            lease_id=first_delivery.lease_id,
+            response=RelayWorkerResponse(200, {"first": True}),
+            defer_delivery=True,
+        )
+        second, second_delivery = await enqueue_and_poll(state, "pin-capacity", token)
+        with self.assertRaises(web.HTTPServiceUnavailable):
+            await state.respond(
+                request_id=second_delivery.request_id,
+                registration_token=token,
+                lease_id=second_delivery.lease_id,
+                response=RelayWorkerResponse(200, {"second": True}),
+            )
+        self.assertIs(state._completed[first.request_id], first)  # noqa: SLF001
+        self.assertIs(state._requests[second.request_id], second)  # noqa: SLF001
+        self.assertFalse(first.future.done())
+
+        await state.release_completed_response(first.request_id)
+        await state.respond(
+            request_id=second_delivery.request_id,
+            registration_token=token,
+            lease_id=second_delivery.lease_id,
+            response=RelayWorkerResponse(200, {"second": True}),
+        )
+        self.assertNotIn(first.request_id, state._completed)  # noqa: SLF001
+        self.assertTrue(second.future.done())
+
+    async def test_poll_wakeups_are_scoped_to_the_target_rollout(self) -> None:
+        state = ModelRelayState()
+        token_a = str((await state.register_rollout("wake-a"))["registration_token"])
+        token_b = str((await state.register_rollout("wake-b"))["registration_token"])
+        waits = 0
+        original_wait = state._wait_for_rollout_wakeup  # noqa: SLF001
+
+        async def counted_wait(wakeup, timeout_seconds) -> None:
+            nonlocal waits
+            waits += 1
+            await original_wait(wakeup, timeout_seconds)
+
+        state._wait_for_rollout_wakeup = counted_wait  # type: ignore[method-assign]  # noqa: SLF001
+        poll_b = asyncio.create_task(
+            state.poll(
+                rollout_id="wake-b",
+                registration_token=token_b,
+                timeout_seconds=1,
+            )
+        )
+        while waits == 0:
+            await asyncio.sleep(0)
+        await state.enqueue(
+            rollout_id="wake-a",
+            endpoint="/v1/responses",
+            body={},
+            headers={},
+        )
+        await asyncio.sleep(0.02)
+        self.assertFalse(poll_b.done())
+        self.assertEqual(waits, 1)
+
+        request_b = await state.enqueue(
+            rollout_id="wake-b",
+            endpoint="/v1/responses",
+            body={},
+            headers={},
+        )
+        deliveries = await asyncio.wait_for(poll_b, 1)
+        self.assertEqual(deliveries[0].request_id, request_b.request_id)
+        await state.cancel_request(
+            request_id=deliveries[0].request_id,
+            response=RelayWorkerResponse(499, {}),
+        )
+        await state.cancel_request(
+            request_id=next(iter(state._requests)),  # noqa: SLF001
+            response=RelayWorkerResponse(499, {}),
+        )
+        del token_a
+
+    async def test_shortened_lease_renewal_wakes_waiting_rollout_poller(self) -> None:
+        state = ModelRelayState()
+        token = str((await state.register_rollout("short-renew"))["registration_token"])
+        request, leased = await enqueue_and_poll(
+            state,
+            "short-renew",
+            token,
+            lease_seconds=5,
+        )
+        waiting_poll = asyncio.create_task(
+            state.poll(
+                rollout_id="short-renew",
+                registration_token=token,
+                timeout_seconds=0.8,
+                lease_seconds=1,
+            )
+        )
+        deadline = time.monotonic() + 1
+        while (
+            "short-renew" not in state._rollout_wakeups  # noqa: SLF001
+            and time.monotonic() < deadline
+        ):
+            await asyncio.sleep(0)
+
+        await state.renew_lease(
+            request_id=leased.request_id,
+            registration_token=token,
+            lease_id=leased.lease_id or "",
+            lease_seconds=0.02,
+        )
+        retried = (await asyncio.wait_for(waiting_poll, 0.3))[0]
+        self.assertEqual(retried.request_id, request.request_id)
+        self.assertEqual(retried.delivery_count, 2)
+        await state.cancel_request(
+            request_id=request.request_id,
+            response=RelayWorkerResponse(499, {}),
+        )
+
+    async def test_expiry_heaps_stay_bounded_after_completion_and_renewal(self) -> None:
+        state = ModelRelayState(max_completed_requests=512)
+        token = str((await state.register_rollout("heap-bounds"))["registration_token"])
+        for _index in range(300):
+            request = await state.enqueue(
+                rollout_id="heap-bounds",
+                endpoint="/v1/responses",
+                body={},
+                headers={},
+            )
+            await state.cancel_request(
+                request_id=request.request_id,
+                response=RelayWorkerResponse(499, {}),
+            )
+        self.assertLessEqual(len(state._request_expiry_heap), 256)  # noqa: SLF001
+
+        _request, delivery = await enqueue_and_poll(state, "heap-bounds", token)
+        for _index in range(200):
+            delivery = await state.renew_lease(
+                request_id=delivery.request_id,
+                registration_token=token,
+                lease_id=delivery.lease_id or "",
+                lease_seconds=30,
+            )
+        self.assertLessEqual(
+            len(state._lease_expiry_heaps["heap-bounds"]),  # noqa: SLF001
+            66,
+        )
+
+    async def test_sqlite_poll_batch_uses_one_explicit_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
+            token = str((await state.register_rollout("batch-tx"))["registration_token"])
+            for _index in range(3):
+                await state.enqueue(
+                    rollout_id="batch-tx",
+                    endpoint="/v1/responses",
+                    body={},
+                    headers={},
+                )
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            statements: list[str] = []
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
+            await state.poll(
+                rollout_id="batch-tx",
+                registration_token=token,
+                timeout_seconds=0,
+                limit=3,
+            )
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(None)  # noqa: SLF001
+            self.assertEqual(
+                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                1,
+            )
+            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
+            await state.aclose()
+
+    async def test_many_timeouts_use_one_terminal_transaction_and_queue_scan(
+        self,
+    ) -> None:
+        class CountingDeque(deque):
+            iterations = 0
+
+            def __iter__(self):  # type: ignore[no-untyped-def]
+                self.iterations += 1
+                return super().__iter__()
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(
+                state_path=Path(directory) / "relay.sqlite3",
+                max_completed_requests=256,
+            )
+            await state.register_rollout("bulk-timeout")
+            requests = [
+                await state.enqueue(
+                    rollout_id="bulk-timeout",
+                    endpoint="/v1/responses",
+                    body={"index": index},
+                    headers={},
+                )
+                for index in range(128)
+            ]
+            expired_at = time.time() - 1
+            state._request_expiry_heap.clear()  # noqa: SLF001
+            for request in requests:
+                request.expires_at = expired_at
+                state._request_expiry_heap.append(  # noqa: SLF001
+                    (expired_at, request.request_id)
+                )
+            heapq.heapify(state._request_expiry_heap)  # noqa: SLF001
+            queue = CountingDeque(state._pending["bulk-timeout"])  # noqa: SLF001
+            state._pending["bulk-timeout"] = queue  # noqa: SLF001
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            store.save_requests(tuple(requests))
+            statements: list[str] = []
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
+
+            stats = await state.stats()
+
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(None)  # noqa: SLF001
+            self.assertEqual(stats["inflight"], 0)
+            self.assertEqual(stats["counters"]["timed_out"], 128)
+            self.assertEqual(queue.iterations, 1)
+            self.assertEqual(
+                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                1,
+            )
+            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
+            self.assertTrue(all(request.future.done() for request in requests))
+            await state.aclose()
+
+    async def test_many_unregister_cancellations_use_one_terminal_transaction(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = ModelRelayState(
+                state_path=Path(directory) / "relay.sqlite3",
+                max_completed_requests=256,
+            )
+            token = str(
+                (await state.register_rollout("bulk-unregister"))["registration_token"]
+            )
+            requests = [
+                await state.enqueue(
+                    rollout_id="bulk-unregister",
+                    endpoint="/v1/responses",
+                    body={"index": index},
+                    headers={},
+                )
+                for index in range(128)
+            ]
+            store = state._store  # noqa: SLF001
+            assert store is not None
+            statements: list[str] = []
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
+
+            self.assertTrue(
+                await state.unregister_rollout(
+                    "bulk-unregister",
+                    registration_token=token,
+                )
+            )
+
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(None)  # noqa: SLF001
+            self.assertEqual(state._requests, {})  # noqa: SLF001
+            self.assertEqual(state._counters["unregister_canceled"], 128)  # noqa: SLF001
+            self.assertEqual(
+                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                1,
+            )
+            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
+            self.assertTrue(all(request.future.done() for request in requests))
+            await state.aclose()
+
+    async def test_startup_parse_failure_is_atomic_and_retry_does_not_duplicate(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            await state.register_rollout("atomic-restore")
+            for index in range(2):
+                await state.enqueue(
+                    rollout_id="atomic-restore",
+                    endpoint="/v1/responses",
+                    body={"index": index},
+                    headers={},
+                )
+            await state.aclose()
+
+            restored = ModelRelayState(state_path=state_path)
+            store = restored._store  # noqa: SLF001
+            assert store is not None
+            original_load = store.load_requests
+            rows = original_load()
+            malformed = dict(rows[1])
+            malformed["delivery_pending"] = "invalid"
+            store.load_requests = lambda: [rows[0], malformed]  # type: ignore[method-assign]
+
+            with self.assertRaisesRegex(ValueError, "delivery_pending"):
+                await restored.stats()
+            self.assertFalse(restored._loaded)  # noqa: SLF001
+            self.assertEqual(restored._rollouts, {})  # noqa: SLF001
+            self.assertEqual(restored._requests, {})  # noqa: SLF001
+            self.assertEqual(restored._pending, {})  # noqa: SLF001
+            self.assertEqual(restored._inflight_bytes, 0)  # noqa: SLF001
+
+            store.load_requests = original_load  # type: ignore[method-assign]
+            stats = await restored.stats()
+            self.assertEqual(stats["inflight"], 2)
+            self.assertEqual(stats["pending"]["atomic-restore"], 2)
+            self.assertEqual(stats["counters"]["restored_requests"], 2)
+            self.assertEqual(
+                len({request.request_id for request in restored._requests.values()}),  # noqa: SLF001
+                2,
+            )
+            await restored.aclose()
+
+    async def test_startup_recovery_commit_failure_keeps_live_state_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            await state.register_rollout("recovery-commit")
+            await state.enqueue(
+                rollout_id="recovery-commit",
+                endpoint="/v1/responses",
+                body={},
+                headers={},
+                idempotency_key="reattach-after-restart",
+                defer_idempotency_until_disconnect=True,
+            )
+            await state.aclose()
+
+            restored = ModelRelayState(state_path=state_path)
+            store = restored._store  # noqa: SLF001
+            assert store is not None
+            original_commit = store.commit_request_batch
+
+            def fail_commit(_requests, _deleted) -> None:
+                raise sqlite3.OperationalError("injected recovery commit failure")
+
+            store.commit_request_batch = fail_commit  # type: ignore[method-assign]
+            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
+                await restored.stats()
+            self.assertFalse(restored._loaded)  # noqa: SLF001
+            self.assertEqual(restored._requests, {})  # noqa: SLF001
+            self.assertEqual(restored._idempotency, {})  # noqa: SLF001
+
+            store.commit_request_batch = original_commit  # type: ignore[method-assign]
+            stats = await restored.stats()
+            self.assertEqual(stats["inflight"], 1)
+            self.assertEqual(len(restored._idempotency), 1)  # noqa: SLF001
+            await restored.aclose()
+
+    async def test_startup_stranded_rows_use_one_recovery_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            await state.register_rollout("stranded")
+            for index in range(64):
+                await state.enqueue(
+                    rollout_id="stranded",
+                    endpoint="/v1/responses",
+                    body={"index": index},
+                    headers={},
+                )
+            await state.aclose()
+            with sqlite3.connect(state_path) as connection:
+                connection.execute(
+                    "DELETE FROM relay_rollouts WHERE rollout_id = ?",
+                    ("stranded",),
+                )
+
+            restored = ModelRelayState(
+                state_path=state_path,
+                max_completed_requests=128,
+            )
+            store = restored._store  # noqa: SLF001
+            assert store is not None
+            statements: list[str] = []
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
+
+            stats = await restored.stats()
+
+            with store._lock:  # noqa: SLF001
+                store._connection.set_trace_callback(None)  # noqa: SLF001
+            self.assertEqual(stats["inflight"], 0)
+            self.assertEqual(stats["completed_retained"], 64)
+            self.assertEqual(
+                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                1,
+            )
+            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
+            await restored.aclose()
+
+    async def test_restore_does_not_rewrite_unchanged_request_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            state = ModelRelayState(state_path=state_path)
+            await state.register_rollout("restore-read-only")
+            completed = await state.enqueue(
+                rollout_id="restore-read-only",
+                endpoint="/v1/responses",
+                body={},
+                headers={},
+            )
+            await state.cancel_request(
+                request_id=completed.request_id,
+                response=RelayWorkerResponse(499, {}),
+            )
+            await state.enqueue(
+                rollout_id="restore-read-only",
+                endpoint="/v1/responses",
+                body={},
+                headers={},
+            )
+            await state.aclose()
+
+            restored = ModelRelayState(state_path=state_path)
+            store = restored._store  # noqa: SLF001
+            assert store is not None
+
+            def unexpected_write(*_args, **_kwargs) -> None:
+                raise AssertionError("restore rewrote an unchanged request row")
+
+            store.save_request = unexpected_write  # type: ignore[method-assign]
+            store.commit_request_batch = unexpected_write  # type: ignore[method-assign]
+            stats = await restored.stats()
+            self.assertEqual(stats["inflight"], 1)
+            self.assertEqual(stats["completed_retained"], 1)
+            await restored.aclose()
 
     async def test_transient_worker_disconnect_requeues_without_failing_caller(
         self,

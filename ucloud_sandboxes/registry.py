@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import RLock, get_ident
 import time
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 from .deployment import AGENT_VERSION_LABEL, agent_version_is_schedulable
 from .models import (
@@ -106,6 +107,10 @@ class HeartbeatReceiptResult:
     accepted: bool
 
 
+class HeartbeatIdentityError(ValueError):
+    """A heartbeat would make the persisted node/job binding ambiguous."""
+
+
 class HeartbeatStore:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -116,6 +121,7 @@ class HeartbeatStore:
     def upsert(self, heartbeat: NodeHeartbeat) -> dict[str, NodeHeartbeat]:
         with _heartbeat_file_lock(self.path):
             heartbeats = _load_heartbeats_unlocked(self.path)
+            _assert_heartbeat_binding(heartbeats, heartbeat)
             heartbeat = normalize_idle_since(
                 heartbeat,
                 previous=heartbeats.get(heartbeat.job_id),
@@ -132,6 +138,7 @@ class HeartbeatStore:
         with _heartbeat_file_lock(self.path):
             heartbeats = _load_heartbeats_unlocked(self.path)
             previous = heartbeats.get(heartbeat.job_id)
+            _assert_heartbeat_binding(heartbeats, heartbeat)
             if (
                 previous is not None
                 and previous.received_at is not None
@@ -145,17 +152,6 @@ class HeartbeatStore:
             retired_node_epochs: set[str] = set()
             if previous is not None:
                 retired_node_epochs.update(previous.retired_node_epochs)
-                identity_changed = (
-                    heartbeat.node_id != previous.node_id
-                    or heartbeat.node_url != previous.node_url
-                    or heartbeat.deployment_id != previous.deployment_id
-                )
-                if identity_changed:
-                    return HeartbeatReceiptResult(
-                        stored=previous,
-                        previous=previous,
-                        accepted=False,
-                    )
                 if heartbeat.node_epoch != previous.node_epoch:
                     if (
                         not heartbeat.node_epoch
@@ -207,7 +203,64 @@ class HeartbeatStore:
 
     def save(self, heartbeats: dict[str, NodeHeartbeat]) -> None:
         with _heartbeat_file_lock(self.path):
-            _save_heartbeats_unlocked(self.path, heartbeats)
+            validated: dict[str, NodeHeartbeat] = {}
+            for heartbeat in heartbeats.values():
+                _assert_heartbeat_binding(validated, heartbeat)
+                validated[heartbeat.job_id] = heartbeat
+            _save_heartbeats_unlocked(self.path, validated)
+
+
+def _assert_heartbeat_binding(
+    heartbeats: dict[str, NodeHeartbeat],
+    heartbeat: NodeHeartbeat,
+) -> None:
+    if not heartbeat.node_id or not heartbeat.job_id:
+        raise HeartbeatIdentityError("heartbeat node_id and job_id are required")
+    if not heartbeat.deployment_id.strip():
+        raise HeartbeatIdentityError("heartbeat deployment_id is required")
+    node_url = _canonical_heartbeat_node_url(heartbeat.node_url)
+    for current in heartbeats.values():
+        same_job = current.job_id == heartbeat.job_id
+        same_node = current.node_id == heartbeat.node_id
+        current_node_url = _canonical_heartbeat_node_url(current.node_url)
+        same_node_url = current_node_url == node_url
+        if not same_job and not same_node and not (node_url and same_node_url):
+            continue
+        if (
+            not same_job
+            or not same_node
+            or not same_node_url
+            or current.deployment_id != heartbeat.deployment_id
+        ):
+            raise HeartbeatIdentityError(
+                "heartbeat node_id, job_id, node_url, or deployment_id is already bound"
+            )
+
+
+def _canonical_heartbeat_node_url(value: str | None) -> str:
+    if not value:
+        return ""
+    parsed = urlparse(value.strip())
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise HeartbeatIdentityError(
+            "heartbeat node_url must be an absolute HTTP(S) origin"
+        )
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise HeartbeatIdentityError(
+            "heartbeat node_url must be an absolute HTTP(S) origin"
+        ) from exc
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
 
 
 @contextmanager
@@ -346,6 +399,11 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
     ):
         return None
     draining = _strict_bool(raw.get("draining"), default=False)
+    resources_known = (
+        raw.get("resources_known")
+        if isinstance(raw.get("resources_known"), bool)
+        else None
+    )
     cached_images_known = _strict_bool(
         raw.get("cached_images_known"),
         default=False,
@@ -360,6 +418,7 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
     )
     if None in {
         draining,
+        resources_known,
         cached_images_known,
         inventory_complete,
         admission_open,
@@ -388,6 +447,9 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         "drain_token",
     )
     if any(name in raw and not isinstance(raw[name], str) for name in string_fields):
+        return None
+    deployment_id = str(raw.get("deployment_id") or "").strip()
+    if not deployment_id:
         return None
     node_url_raw = raw.get("node_url")
     if node_url_raw is not None and not isinstance(node_url_raw, str):
@@ -439,10 +501,11 @@ def heartbeat_from_dict(raw: dict[str, Any]) -> NodeHeartbeat | None:
         draining=bool(draining),
         node_url=string_or_none(raw.get("node_url")),
         agent_version=str(raw.get("agent_version") or ""),
-        deployment_id=str(raw.get("deployment_id") or ""),
+        deployment_id=deployment_id,
         init_version=str(raw.get("init_version") or ""),
         capabilities=string_list_fields["capabilities"] or (),
         total_resources=ResourceQuantity.from_dict(raw.get("total_resources")),
+        resources_known=bool(resources_known),
         used_resources=ResourceQuantity.from_dict(raw.get("used_resources")),
         cpu_overcommit=cpu_overcommit,
         memory_overcommit=memory_overcommit,

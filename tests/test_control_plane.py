@@ -19,7 +19,7 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes.agent import (
-    build_heartbeat,
+    build_heartbeat as _agent_build_heartbeat,
     post_heartbeat,
     post_heartbeat_with_headers,
 )
@@ -49,7 +49,7 @@ from ucloud_sandboxes.models import (
 from ucloud_sandboxes.node_agent import (
     build_builder_node_agent_server as _build_builder_node_agent_server,
 )
-from ucloud_sandboxes.registry import HeartbeatStore
+from ucloud_sandboxes.registry import HeartbeatIdentityError, HeartbeatStore
 from ucloud_sandboxes.routing import (
     RoutingStore,
     SandboxRoute,
@@ -63,10 +63,14 @@ from ucloud_sandboxes.sandbox import (
 from ucloud_sandboxes.sandbox_exec import new_exec_session_id
 
 
+def build_heartbeat(**kwargs):
+    kwargs.setdefault("deployment_id", "test-deployment")
+    return _agent_build_heartbeat(**kwargs)
+
+
 def build_server(*args, **kwargs):
     """Build an auth-bypassed server for tests unrelated to channel security."""
 
-    explicit_deployment = "deployment_id" in kwargs
     explicit_public_auth = (
         "gateway_bearer_token" in kwargs or "heartbeat_bearer_token" in kwargs
     )
@@ -81,8 +85,6 @@ def build_server(*args, **kwargs):
     server.RequestHandlerClass._heartbeat_identity_error = (
         lambda _self, _heartbeat: None
     )
-    if not explicit_deployment:
-        server.RequestHandlerClass.deployment_id = ""
     return server
 
 
@@ -745,10 +747,43 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored.updated_at, stored.received_at)
         self.assertTrue(stored.is_fresh(after, 5))
 
+    def test_atomic_heartbeat_binding_conflict_returns_forbidden(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                Path(raw_dir) / "heartbeats.json",
+            )
+            thread = Thread(target=gateway.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = gateway.server_address
+                with patch.object(
+                    HeartbeatStore,
+                    "upsert_received",
+                    side_effect=HeartbeatIdentityError(
+                        "heartbeat node_id and job_id are already bound"
+                    ),
+                ):
+                    result = post_heartbeat(
+                        f"http://{host}:{port}/v1/nodes/heartbeat",
+                        build_heartbeat(job_id="job-1", node_id="node-1"),
+                    )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+
+        self.assertEqual(result.status, 403)
+        self.assertEqual(
+            result.payload,
+            {"error": "heartbeat node_id and job_id are already bound"},
+        )
+
     def test_disk_request_requires_disk_quota_capability(self) -> None:
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=utc_now(),
             active_sandboxes=0,
             node_url="http://node-1:8090",
@@ -775,6 +810,7 @@ class ControlPlaneTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=utc_now(),
             active_sandboxes=0,
             total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=450560),
@@ -817,6 +853,7 @@ class ControlPlaneTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=utc_now(),
             active_sandboxes=64,
             total_resources=ResourceQuantity(
@@ -872,6 +909,7 @@ class ControlPlaneTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=utc_now(),
             active_sandboxes=0,
             node_url="http://node-1:8090",
@@ -930,6 +968,7 @@ class ControlPlaneTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=utc_now(),
             active_sandboxes=0,
             node_url="http://node-1:8090",
@@ -967,6 +1006,78 @@ class ControlPlaneTests(unittest.TestCase):
             ResourceQuantity(vcpu=2, memory_mb=4096),
         )
 
+    def test_route_inventory_accounting_builds_one_identity_index(self) -> None:
+        class CountingInventory:
+            def __init__(self, items: tuple[SandboxInventoryEntry, ...]) -> None:
+                self.items = items
+                self.iterations = 0
+
+            def __iter__(self):
+                self.iterations += 1
+                return iter(self.items)
+
+        routes = [
+            _sandbox_route(
+                sandbox_id=f"sandbox-{index}",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=ResourceQuantity(vcpu=1),
+            )
+            for index in range(50)
+        ]
+        inventory = CountingInventory(
+            tuple(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    generation=route.generation,
+                    operation_id=route.create_operation_id,
+                    spec_hash=route.spec_hash,
+                    state="running",
+                )
+                for route in routes
+            )
+        )
+        heartbeat = replace(
+            build_heartbeat(
+                job_id="job-1",
+                node_id="node-1",
+                node_url="http://node-1:8090",
+            ),
+            inventory=inventory,
+        )
+
+        reserved = control_plane._node_reserved_route_resources(heartbeat, routes)
+
+        self.assertEqual(reserved, ResourceQuantity())
+        self.assertEqual(inventory.iterations, 1)
+
+    def test_placement_route_index_returns_only_matching_routes_once(self) -> None:
+        target = _sandbox_route(
+            sandbox_id="target",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+        )
+        unrelated = [
+            _sandbox_route(
+                sandbox_id=f"other-{index}",
+                node_id=f"node-{index + 2}",
+                job_id=f"job-{index + 2}",
+                node_url=f"http://node-{index + 2}:8090",
+            )
+            for index in range(100)
+        ]
+        heartbeat = build_heartbeat(
+            job_id="job-1",
+            node_id="node-1",
+            node_url="http://node-1:8090/",
+        )
+
+        index = control_plane._placement_route_index([*unrelated, target])
+
+        self.assertEqual(index.routes_for(heartbeat), [target])
+
     def test_failed_parked_wake_records_full_relocation_demand(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -987,6 +1098,7 @@ class ControlPlaneTests(unittest.TestCase):
                 NodeHeartbeat(
                     node_id="node-1",
                     job_id="job-1",
+                    deployment_id="test-deployment",
                     updated_at=utc_now(),
                     active_sandboxes=1,
                     node_url=route.node_url,
@@ -1062,6 +1174,7 @@ class ControlPlaneTests(unittest.TestCase):
                 NodeHeartbeat(
                     node_id="source-node",
                     job_id="source-job",
+                    deployment_id="test-deployment",
                     updated_at=utc_now(),
                     active_sandboxes=1,
                     node_url="http://source:8090",
@@ -1086,6 +1199,7 @@ class ControlPlaneTests(unittest.TestCase):
                 NodeHeartbeat(
                     node_id="destination-node",
                     job_id="destination-job",
+                    deployment_id="test-deployment",
                     updated_at=utc_now(),
                     active_sandboxes=0,
                     node_url="http://destination:8090",
@@ -1201,6 +1315,7 @@ class ControlPlaneTests(unittest.TestCase):
             base = NodeHeartbeat(
                 node_id="node-1",
                 job_id="job-1",
+                deployment_id="test-deployment",
                 updated_at=utc_now(),
                 active_sandboxes=0,
                 node_url="http://node-1:8090",
@@ -1263,6 +1378,7 @@ class ControlPlaneTests(unittest.TestCase):
             base = NodeHeartbeat(
                 node_id="cached-node",
                 job_id="cached-job",
+                deployment_id="test-deployment",
                 updated_at=utc_now(),
                 active_sandboxes=0,
                 node_url="http://cached-node:8090",
@@ -1350,6 +1466,7 @@ class ControlPlaneTests(unittest.TestCase):
             base = NodeHeartbeat(
                 node_id="layer-node",
                 job_id="job-layer",
+                deployment_id="test-deployment",
                 updated_at=utc_now(),
                 active_sandboxes=0,
                 node_url="http://layer-node:8090",
@@ -2317,6 +2434,56 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response.status, 403)
         self.assertEqual(stored, {})
 
+    def test_heartbeat_rejects_node_url_owned_by_another_route(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            RoutingStore(route_file).upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-2",
+                    job_id="job-2",
+                    node_url="http://shared-node:8090",
+                    generation=1,
+                    create_operation_id="create-1",
+                    spec_hash="a" * 64,
+                )
+            )
+            gateway = _build_server(
+                "127.0.0.1",
+                0,
+                root / "heartbeats.json",
+                routing_file=route_file,
+                gateway_bearer_token="gateway-secret",
+                heartbeat_bearer_token="heartbeat-secret",
+                node_control_bearer_token="node-secret",
+                deployment_id="prod",
+            )
+            thread = Thread(target=gateway.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = gateway.server_address
+                response = post_heartbeat_with_headers(
+                    f"http://{host}:{port}/v1/nodes/heartbeat",
+                    build_heartbeat(
+                        job_id="job-1",
+                        node_id="node-1",
+                        node_url="http://shared-node:8090/",
+                        node_epoch="boot-1",
+                        activity_epoch=100,
+                        deployment_id="prod",
+                    ),
+                    {"Authorization": "Bearer heartbeat-secret"},
+                )
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                thread.join(timeout=1)
+            stored = HeartbeatStore(root / "heartbeats.json").load()
+
+        self.assertEqual(response.status, 403)
+        self.assertEqual(stored, {})
+
     def test_dashboard_assets_are_public_but_metrics_remain_protected(self) -> None:
         with TemporaryDirectory() as raw_dir:
             gateway = build_server(
@@ -2495,6 +2662,7 @@ class ControlPlaneTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="test-deployment",
             updated_at=now,
             active_sandboxes=0,
             node_url="http://node-1:8090",
@@ -3592,7 +3760,7 @@ class ControlPlaneTests(unittest.TestCase):
                     "v1",
                     control_plane._registry_route_reference_owner(
                         stored_route,
-                        deployment_id="",
+                        deployment_id="test-deployment",
                     ),
                     digest="sha256:" + "a" * 64,
                 )
@@ -3710,7 +3878,7 @@ class ControlPlaneTests(unittest.TestCase):
                     "v1",
                     control_plane._registry_route_reference_owner(
                         stored_route,
-                        deployment_id="",
+                        deployment_id="test-deployment",
                     ),
                     digest="sha256:" + "a" * 64,
                 )
@@ -4204,6 +4372,12 @@ class ControlPlaneTests(unittest.TestCase):
     def test_gateway_routes_image_build_to_builder_only_node(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
+            context_path = raw_path / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
             builder = build_builder_node_agent_server(
                 "127.0.0.1",
                 0,
@@ -4249,7 +4423,7 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "custom",
-                            "context_path": "/tmp/context",
+                            "context_path": str(context_path),
                         },
                     )
                     builder_heartbeat = self._json_request(
@@ -4290,6 +4464,12 @@ class ControlPlaneTests(unittest.TestCase):
         digest = "sha256:" + "8" * 64
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
+            context_path = raw_path / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
             gateway_image_file = raw_path / "gateway-images.json"
             builder = build_builder_node_agent_server(
                 "127.0.0.1",
@@ -4342,7 +4522,7 @@ class ControlPlaneTests(unittest.TestCase):
                             payload={
                                 "id": "custom",
                                 "tag": "registry.invalid:5000/custom:latest",
-                                "context_path": "/tmp/context",
+                                "context_path": str(context_path),
                                 "push": True,
                                 "wait": False,
                             },
@@ -4606,6 +4786,16 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 listed = self._json_request(f"{base}/v1/capacity/prepare")
                 demand = self._json_request(f"{base}/v1/demand")
+                rejected = self._json_request(
+                    f"{base}/v1/capacity/prepare",
+                    method="POST",
+                    payload={
+                        "id": "unbounded",
+                        "count": 101,
+                        "cpus": 1,
+                    },
+                    allow_error=True,
+                )
                 deleted = self._json_request(
                     f"{base}/v1/capacity/prepare/eval-soon",
                     method="DELETE",
@@ -4624,6 +4814,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(listed["prepared"][0]["prepare_id"], "eval-soon")
         self.assertEqual(demand["prepared_resources"]["disk_mb"], 81_920)
         self.assertEqual(demand["prepared"][0]["prepare_id"], "eval-soon")
+        self.assertEqual(rejected["status"], 400)
+        self.assertEqual(rejected["body"]["error"], "count cannot exceed 100.")
+        self.assertEqual([item["prepare_id"] for item in listed["prepared"]], ["eval-soon"])
         self.assertTrue(deleted["ok"])
         self.assertEqual(deleted["deleted"]["prepare_id"], "eval-soon")
         self.assertEqual(demand_after_delete["prepared_resources"]["vcpu"], 0.0)

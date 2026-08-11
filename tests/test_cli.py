@@ -37,6 +37,7 @@ from ucloud_sandboxes.models import (
     SandboxDemand,
     SandboxInventoryEntry,
     SandboxNode,
+    SandboxPlacementRequest,
     ScaleDecision,
     ScalePolicy,
     ProviderInstance,
@@ -562,6 +563,7 @@ class CliTests(unittest.TestCase):
                 build_heartbeat(
                     job_id="replaced-job",
                     node_id="new-node",
+                    deployment_id="test-deployment",
                     node_epoch="new-boot",
                     active_sandboxes=0,
                     now=utc_now(),
@@ -1510,6 +1512,7 @@ class CliTests(unittest.TestCase):
                     "old-node": NodeHeartbeat(
                         node_id="node-old",
                         job_id="old-node",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         active_sandboxes=1,
                         node_url="http://node-old:8090",
@@ -2068,18 +2071,19 @@ class CliTests(unittest.TestCase):
                     "owned": NodeHeartbeat(
                         node_id="node-owned",
                         job_id="owned",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         active_sandboxes=0,
                         idle_since=utc_now() - timedelta(minutes=10),
                         node_url="http://node-owned:8090",
                         agent_version=package_version(),
-                        deployment_id="prod-a",
                         capabilities=("disk-quota",),
                         total_resources=ResourceQuantity(
                             vcpu=2,
                             memory_mb=6144,
                             disk_mb=51200,
                         ),
+                        resources_known=True,
                     ),
                 }
             )
@@ -2131,6 +2135,7 @@ class CliTests(unittest.TestCase):
                                 memory_mb=6144,
                                 disk_mb=51200,
                             ),
+                            resources_known=True,
                             draining=True,
                             admission_open=False,
                             drain_token=intent.token,
@@ -2668,10 +2673,14 @@ class CliTests(unittest.TestCase):
         warm = ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800)
         demand = SandboxDemand(
             pending_resources=ResourceQuantity(vcpu=16, memory_mb=8192, disk_mb=16384),
-            prepared_resources=ResourceQuantity(
-                vcpu=33,
-                memory_mb=16896,
-                disk_mb=33792,
+            prepared_placement_requests=(
+                SandboxPlacementRequest(
+                    resources=ResourceQuantity(
+                        vcpu=33,
+                        memory_mb=16896,
+                        disk_mb=33792,
+                    )
+                ),
             ),
         )
 
@@ -2820,6 +2829,7 @@ class CliTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="prod-a",
             updated_at=utc_now(),
             active_sandboxes=0,
             total_resources=ResourceQuantity(
@@ -2827,6 +2837,7 @@ class CliTests(unittest.TestCase):
                 memory_mb=32768,
                 disk_mb=204800,
             ),
+            resources_known=True,
             used_resources=ResourceQuantity(),
             cpu_overcommit=2.0,
             memory_overcommit=1.2,
@@ -2860,6 +2871,7 @@ class CliTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="prod-a",
             updated_at=utc_now(),
             active_sandboxes=0,
             total_resources=ResourceQuantity(
@@ -2867,6 +2879,7 @@ class CliTests(unittest.TestCase):
                 memory_mb=98304,
                 disk_mb=1_449_984,
             ),
+            resources_known=True,
             capabilities=("disk-quota", "dynamic-active-admission-v1"),
         )
 
@@ -2929,6 +2942,7 @@ class CliTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-1",
             job_id="job-1",
+            deployment_id="prod-a",
             updated_at=utc_now(),
             active_sandboxes=0,
             capabilities=("disk-quota",),
@@ -3038,6 +3052,7 @@ class CliTests(unittest.TestCase):
                     "owned": NodeHeartbeat(
                         node_id="node-owned",
                         job_id="owned",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         active_sandboxes=0,
                         idle_since=utc_now() - timedelta(minutes=10),
@@ -3049,6 +3064,7 @@ class CliTests(unittest.TestCase):
                             memory_mb=6144,
                             disk_mb=51200,
                         ),
+                        resources_known=True,
                         used_resources=ResourceQuantity(disk_mb=8192),
                         inventory_complete=True,
                         inventory=(
@@ -3065,6 +3081,7 @@ class CliTests(unittest.TestCase):
                     "destination": NodeHeartbeat(
                         node_id="node-destination",
                         job_id="destination",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         # Keep this ready node out of the scale-down candidate set.
                         active_sandboxes=1,
@@ -3076,6 +3093,7 @@ class CliTests(unittest.TestCase):
                             memory_mb=6144,
                             disk_mb=51200,
                         ),
+                        resources_known=True,
                         used_resources=ResourceQuantity(),
                         inventory_complete=True,
                     ),
@@ -3137,10 +3155,12 @@ class CliTests(unittest.TestCase):
         heartbeat = NodeHeartbeat(
             node_id="node-owned",
             job_id="owned",
+            deployment_id="prod-a",
             updated_at=utc_now(),
             active_sandboxes=0,
             capabilities=("disk-quota",),
             total_resources=ResourceQuantity(disk_mb=51200),
+            resources_known=True,
             used_resources=route.resources,
             inventory_complete=True,
             inventory=(
@@ -3824,6 +3844,7 @@ class CliTests(unittest.TestCase):
                         job_id: NodeHeartbeat(
                             node_id=f"node-{job_id}",
                             job_id=job_id,
+                            deployment_id="prod-a",
                             updated_at=utc_now(),
                             active_sandboxes=0,
                             total_resources=ResourceQuantity(
@@ -3831,6 +3852,7 @@ class CliTests(unittest.TestCase):
                                 memory_mb=6144,
                                 disk_mb=51200,
                             ),
+                            resources_known=True,
                             capabilities=("disk-quota",),
                         )
                         for job_id in ("owned", "foreign")
@@ -3939,6 +3961,7 @@ class CliTests(unittest.TestCase):
                         "owned": NodeHeartbeat(
                             node_id="node-owned",
                             job_id="owned",
+                            deployment_id="prod-a",
                             updated_at=updated_at or utc_now(),
                             active_sandboxes=0,
                             idle_since=utc_now() - timedelta(minutes=10),
@@ -4140,6 +4163,7 @@ class CliTests(unittest.TestCase):
                     "owned": NodeHeartbeat(
                         node_id="node-owned",
                         job_id="owned",
+                        deployment_id="prod-a",
                         updated_at=utc_now() - timedelta(hours=1),
                         active_sandboxes=0,
                         node_url="http://node-owned:8090",
@@ -4247,6 +4271,7 @@ class CliTests(unittest.TestCase):
                     "owned": NodeHeartbeat(
                         node_id="node-owned",
                         job_id="owned",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         active_sandboxes=0,
                         idle_since=utc_now() - timedelta(minutes=10),
@@ -4258,6 +4283,7 @@ class CliTests(unittest.TestCase):
                             memory_mb=6144,
                             disk_mb=51200,
                         ),
+                        resources_known=True,
                     )
                 }
             )
@@ -4400,6 +4426,7 @@ class CliTests(unittest.TestCase):
                     "owned": NodeHeartbeat(
                         node_id="node-owned",
                         job_id="owned",
+                        deployment_id="prod-a",
                         updated_at=utc_now(),
                         active_sandboxes=0,
                         idle_since=utc_now() - timedelta(minutes=10),
@@ -4447,6 +4474,7 @@ class CliTests(unittest.TestCase):
                             "owned": NodeHeartbeat(
                                 node_id="node-owned",
                                 job_id="owned",
+                                deployment_id="prod-a",
                                 updated_at=utc_now(),
                                 active_sandboxes=0,
                                 idle_since=utc_now() - timedelta(minutes=10),
@@ -4474,6 +4502,7 @@ class CliTests(unittest.TestCase):
                             "owned": NodeHeartbeat(
                                 node_id="node-owned",
                                 job_id="owned",
+                                deployment_id="prod-a",
                                 updated_at=utc_now(),
                                 active_sandboxes=0,
                                 node_url="http://node-owned:8090",
@@ -4501,6 +4530,7 @@ class CliTests(unittest.TestCase):
                             "owned": NodeHeartbeat(
                                 node_id="node-owned",
                                 job_id="owned",
+                                deployment_id="prod-a",
                                 updated_at=utc_now(),
                                 active_sandboxes=0,
                                 node_url="http://node-owned:8090",

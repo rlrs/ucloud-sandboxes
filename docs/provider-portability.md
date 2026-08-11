@@ -33,6 +33,8 @@ boundary. An adapter must:
 - decide whether an instance belongs to the configured pool scope;
 - translate semantic sandbox/builder `InstanceCreateIntent` values into a
   native create request;
+- preserve every create-intent label and return it through normalized
+  `ProviderInstance.labels`, which is the operation-recovery identity;
 - normalize create and terminate outcomes as accepted, rejected, or uncertain;
 - provide a bootstrap access command when a running instance can be
   initialized.

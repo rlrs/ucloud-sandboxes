@@ -374,8 +374,8 @@ class InstancePhase(str, Enum):
 class ProviderInstance:
     """Provider-neutral compute instance observed by the autoscaler.
 
-    ``state`` and ``raw`` are retained only for operator diagnostics and
-    provider recovery. Scheduling and lifecycle decisions use ``phase``.
+    ``state`` and ``raw`` are retained at the provider-adapter boundary and for
+    diagnostics. Core scheduling, lifecycle, and recovery use normalized fields.
     """
 
     id: str
@@ -441,6 +441,7 @@ class NodeHeartbeat:
     init_version: str = ""
     capabilities: tuple[str, ...] = ()
     total_resources: ResourceQuantity = ResourceQuantity()
+    resources_known: bool = False
     used_resources: ResourceQuantity = ResourceQuantity()
     cpu_overcommit: float = 1.0
     memory_overcommit: float = 1.0
@@ -594,9 +595,16 @@ class SandboxNode:
 @dataclass(frozen=True)
 class SandboxPlacementRequest:
     resources: ResourceQuantity
+    count: int = 1
     excluded_job_ids: tuple[str, ...] = ()
     owned_job_id: str = ""
     owned_disk_mb: int = 0
+
+    def __post_init__(self) -> None:
+        if isinstance(self.count, bool) or not isinstance(self.count, int):
+            raise ValueError("placement request count must be an integer")
+        if self.count <= 0:
+            raise ValueError("placement request count must be positive")
 
 
 @dataclass(frozen=True)
@@ -605,9 +613,20 @@ class SandboxDemand:
     suppressed_pending_resources: ResourceQuantity = ResourceQuantity()
     pending_count: int = 0
     suppressed_pending_count: int = 0
-    prepared_resources: ResourceQuantity = ResourceQuantity()
     oldest_pending_seconds: int = 0
     placement_requests: tuple[SandboxPlacementRequest, ...] = ()
+    prepared_placement_requests: tuple[SandboxPlacementRequest, ...] = ()
+
+    @property
+    def prepared_resources(self) -> ResourceQuantity:
+        total = ResourceQuantity()
+        for request in self.prepared_placement_requests:
+            total = total + request.resources.scaled(
+                cpu=request.count,
+                memory=request.count,
+                disk=request.count,
+            )
+        return total
 
     @property
     def desired_resources(self) -> ResourceQuantity:

@@ -84,7 +84,8 @@ def main() -> int:
     image_store = DockerOverlay2RootfsStore(
         (args.state_root / "image-cache").resolve()
     )
-    image = image_store.materialize(args.image)
+    with image_store.operation_lease(args.image) as image:
+        rootfs_sha256 = image.rootfs_identity_sha256
     overlays = OverlayRootfsManager(
         image_store,
         writable_root=(args.state_root / "writable").resolve(),
@@ -113,7 +114,7 @@ def main() -> int:
                 "restore_background": True,
             }
         ),
-        rootfs_sha256=image.rootfs_identity_sha256,
+        rootfs_sha256=rootfs_sha256,
     )
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
@@ -134,24 +135,25 @@ def main() -> int:
     sentry_rss: list[int] = []
     payload: dict[str, object] | None = None
     try:
-        for index in range(args.sandboxes):
-            lease = overlays.prepare(
-                sandbox_id=f"density-{index:04d}",
-                sandbox_generation=1,
-                image_ref=args.image,
-                config_template=template,
-            )
-            target = lease.merged / "conformance-workload"
-            shutil.copyfile(args.conformance_workload, target)
-            target.chmod(0o755)
-            leases.append(lease)
-            started = time.monotonic()
-            record = warden.create(
-                lease.sandbox,
-                operation_id=f"create:{index}",
-            )
-            create_ms.append((time.monotonic() - started) * 1000)
-            sentry_rss.append(process_rss_bytes(record.sentry_pid or 0))
+        with image_store.operation_lease(args.image) as image:
+            for index in range(args.sandboxes):
+                lease = overlays.prepare(
+                    sandbox_id=f"density-{index:04d}",
+                    sandbox_generation=1,
+                    image=image,
+                    config_template=template,
+                )
+                target = lease.merged / "conformance-workload"
+                shutil.copyfile(args.conformance_workload, target)
+                target.chmod(0o755)
+                leases.append(lease)
+                started = time.monotonic()
+                record = warden.create(
+                    lease.sandbox,
+                    operation_id=f"create:{index}",
+                )
+                create_ms.append((time.monotonic() - started) * 1000)
+                sentry_rss.append(process_rss_bytes(record.sentry_pid or 0))
 
         for lease in leases:
             started = time.monotonic()

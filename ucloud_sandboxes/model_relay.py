@@ -4,7 +4,9 @@ import asyncio
 import base64
 import binascii
 from collections import deque
-from dataclasses import dataclass, field
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
+import heapq
 import hashlib
 import hmac
 import json
@@ -39,6 +41,8 @@ DEFAULT_MAX_INFLIGHT_BYTES = 128 * 1024**2
 DEFAULT_MAX_COMPLETED_REQUESTS = 8192
 DEFAULT_MAX_COMPLETED_BYTES = 256 * 1024**2
 DEFAULT_MAX_WORKERS = 4096
+EXPIRY_HEAP_COMPACTION_SLACK = 256
+LEASE_HEAP_COMPACTION_SLACK = 64
 MAX_TRANSIENT_WORKER_DELIVERIES = 3
 MAX_RELAY_BODY_BYTES = 32 * 1024**2
 MAX_WORKER_RESPONSE_BYTES = 32 * 1024**2
@@ -115,6 +119,7 @@ class RelayRequest:
     accepted_notified_at: float | None = None
     parked_transport_epoch: str | None = None
     reattachable: bool = False
+    delivery_pending: bool = False
 
     def envelope(self) -> JsonObject:
         return {
@@ -159,7 +164,7 @@ class RelaySqliteStore:
     SQLite/WAL is not presented as a multi-host broker.
     """
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self, path: Path) -> None:
         if not path.is_absolute():
@@ -198,20 +203,12 @@ class RelaySqliteStore:
                 state TEXT NOT NULL,
                 expires_at REAL,
                 completed_at REAL,
-                completed_bytes INTEGER NOT NULL DEFAULT 0,
+                completed_bytes INTEGER NOT NULL,
+                delivery_pending INTEGER NOT NULL,
                 payload TEXT NOT NULL
             )
             """
         )
-        request_columns = {
-            str(row[1])
-            for row in self._connection.execute("PRAGMA table_info(relay_requests)")
-        }
-        if "completed_bytes" not in request_columns:
-            self._connection.execute(
-                "ALTER TABLE relay_requests "
-                "ADD COLUMN completed_bytes INTEGER NOT NULL DEFAULT 0"
-            )
         version = self._connection.execute(
             "SELECT value FROM relay_meta WHERE key = 'version'"
         ).fetchone()
@@ -227,6 +224,24 @@ class RelaySqliteStore:
         with self._lock:
             self._connection.close()
 
+    @contextmanager
+    def _transaction_locked(self):
+        """Run one logical journal update as one durable SQLite commit.
+
+        Callers must already hold ``self._lock``.  Keeping transaction and
+        mutex acquisition in one order prevents another thread from slipping
+        an autocommitted row between members of a batch.
+        """
+
+        self._connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+            self._connection.execute("COMMIT")
+        except BaseException:
+            if self._connection.in_transaction:
+                self._connection.execute("ROLLBACK")
+            raise
+
     def load_rollouts(self) -> list[JsonObject]:
         with self._lock:
             rows = self._connection.execute(
@@ -240,42 +255,6 @@ class RelaySqliteStore:
                 "SELECT payload FROM relay_requests ORDER BY request_id"
             ).fetchall()
         return [_json_mapping(row[0]) for row in rows]
-
-    def prune_completed(
-        self,
-        *,
-        cutoff: float,
-        max_count: int,
-        max_bytes: int,
-    ) -> None:
-        with self._lock:
-            self._connection.execute(
-                "DELETE FROM relay_requests "
-                "WHERE state = 'completed' AND COALESCE(completed_at, 0) < ?",
-                (cutoff,),
-            )
-            retained_count = 0
-            retained_bytes = 0
-            evicted: list[str] = []
-            for request_id, completed_bytes, payload_bytes in self._connection.execute(
-                """
-                SELECT request_id, completed_bytes, length(CAST(payload AS BLOB))
-                FROM relay_requests
-                WHERE state = 'completed'
-                ORDER BY completed_at DESC, request_id DESC
-                """
-            ):
-                size = max(0, int(completed_bytes or payload_bytes or 0))
-                if retained_count >= max_count or retained_bytes + size > max_bytes:
-                    evicted.append(str(request_id))
-                    continue
-                retained_count += 1
-                retained_bytes += size
-            if evicted:
-                self._connection.executemany(
-                    "DELETE FROM relay_requests WHERE request_id = ?",
-                    ((request_id,) for request_id in evicted),
-                )
 
     def save_rollout(self, record: JsonObject) -> None:
         with self._lock:
@@ -301,37 +280,27 @@ class RelaySqliteStore:
         self.save_requests((request,))
 
     def save_requests(self, requests: tuple[RelayRequest, ...]) -> None:
-        rows = []
-        for request in requests:
-            payload = _persisted_request_payload(request)
-            rows.append(
-                (
-                    request.request_id,
-                    request.state,
-                    request.expires_at,
-                    request.completed_at,
-                    request.completed_bytes,
-                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                )
-            )
-        if not rows:
+        self.commit_request_batch(requests, ())
+
+    def commit_request_batch(
+        self,
+        requests: tuple[RelayRequest, ...],
+        deleted_request_ids: tuple[str, ...],
+    ) -> None:
+        """Commit one logical group of request upserts and deletions."""
+
+        rows = [self._request_row(request) for request in requests]
+        if not rows and not deleted_request_ids:
             return
         with self._lock:
-            self._connection.executemany(
-                """
-                INSERT INTO relay_requests(
-                    request_id, state, expires_at, completed_at,
-                    completed_bytes, payload
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(request_id) DO UPDATE SET
-                    state = excluded.state,
-                    expires_at = excluded.expires_at,
-                    completed_at = excluded.completed_at,
-                    completed_bytes = excluded.completed_bytes,
-                    payload = excluded.payload
-                """,
-                rows,
-            )
+            with self._transaction_locked():
+                if rows:
+                    self._upsert_request_rows_locked(rows)
+                if deleted_request_ids:
+                    self._connection.executemany(
+                        "DELETE FROM relay_requests WHERE request_id = ?",
+                        ((request_id,) for request_id in deleted_request_ids),
+                    )
 
     def delete_request(self, request_id: str) -> None:
         self.delete_requests((request_id,))
@@ -340,10 +309,45 @@ class RelaySqliteStore:
         if not request_ids:
             return
         with self._lock:
-            self._connection.executemany(
-                "DELETE FROM relay_requests WHERE request_id = ?",
-                ((request_id,) for request_id in request_ids),
-            )
+            with self._transaction_locked():
+                self._connection.executemany(
+                    "DELETE FROM relay_requests WHERE request_id = ?",
+                    ((request_id,) for request_id in request_ids),
+                )
+
+    @staticmethod
+    def _request_row(request: RelayRequest) -> tuple[object, ...]:
+        payload = _persisted_request_payload(request)
+        return (
+            request.request_id,
+            request.state,
+            request.expires_at,
+            request.completed_at,
+            request.completed_bytes,
+            int(request.delivery_pending),
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        )
+
+    def _upsert_request_rows_locked(
+        self,
+        rows: tuple[tuple[object, ...], ...] | list[tuple[object, ...]],
+    ) -> None:
+        self._connection.executemany(
+            """
+            INSERT INTO relay_requests(
+                request_id, state, expires_at, completed_at,
+                completed_bytes, delivery_pending, payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(request_id) DO UPDATE SET
+                state = excluded.state,
+                expires_at = excluded.expires_at,
+                completed_at = excluded.completed_at,
+                completed_bytes = excluded.completed_bytes,
+                delivery_pending = excluded.delivery_pending,
+                payload = excluded.payload
+            """,
+            rows,
+        )
 
 
 class ModelRelayState:
@@ -361,7 +365,13 @@ class ModelRelayState:
         max_completed_bytes: int = DEFAULT_MAX_COMPLETED_BYTES,
         max_workers: int = DEFAULT_MAX_WORKERS,
     ) -> None:
-        self._condition = asyncio.Condition()
+        self._lock = asyncio.Lock()
+        self._rollout_wakeups: dict[str, asyncio.Event] = {}
+        self._request_expiry_heap: list[tuple[float, str]] = []
+        self._lease_expiry_heaps: dict[
+            str,
+            list[tuple[float, str, str]],
+        ] = {}
         self._request_timeout_seconds = max(0.001, request_timeout_seconds)
         self._rollouts: dict[str, JsonObject] = {}
         self._pending: dict[str, deque[RelayRequest]] = {}
@@ -374,6 +384,7 @@ class ModelRelayState:
         self._inflight_bytes = 0
         self._completed_bytes = 0
         self._rollout_inflight_counts: dict[str, int] = {}
+        self._rollout_leased_counts: dict[str, int] = {}
         self._max_inflight_requests = max(1, max_inflight_requests)
         self._max_inflight_requests_per_rollout = max(
             1,
@@ -424,31 +435,25 @@ class ModelRelayState:
     ) -> JsonObject:
         validate_rollout_id(rollout_id)
         _validate_registration_metadata(metadata)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
             self._prune_workers_locked(now)
             registration_token = uuid4().hex
             previous = self._rollouts.get(rollout_id)
-            if previous is not None:
-                await self._cancel_rollout_incarnation_locked(
-                    rollout_id,
-                    str(previous["registration_token"]),
-                    message="rollout registration was replaced",
-                    error_code="relay_rollout_replaced",
-                )
             record = {
                 "rollout_id": rollout_id,
                 "registration_token": registration_token,
                 "metadata": dict(metadata or {}),
                 "registered_at": time.time(),
             }
-            self._rollouts[rollout_id] = record
-            if self._store is not None:
-                await _blocking_call(self._store.save_rollout, record)
-            self._pending.setdefault(rollout_id, deque())
-            self._condition.notify_all()
+            await self._finish_transition_before_cancellation_locked(
+                self._register_rollout_transition_locked(
+                    record,
+                    previous=previous,
+                )
+            )
             return dict(record)
 
     async def unregister_rollout(
@@ -459,7 +464,7 @@ class ModelRelayState:
     ) -> bool:
         validate_rollout_id(rollout_id)
         validate_registration_token(registration_token)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
             if current is None:
@@ -468,18 +473,13 @@ class ModelRelayState:
                 rollout_id,
                 registration_token,
             )
-            existed = True
-            self._rollouts.pop(rollout_id, None)
-            if self._store is not None:
-                await _blocking_call(self._store.delete_rollout, rollout_id)
-            await self._cancel_rollout_incarnation_locked(
-                rollout_id,
-                registration_token,
-                message="rollout unregistered",
-                error_code="relay_rollout_closed",
+            await self._finish_transition_before_cancellation_locked(
+                self._unregister_rollout_transition_locked(
+                    rollout_id,
+                    registration_token,
+                )
             )
-            self._condition.notify_all()
-            return existed
+            return True
 
     async def require_current_registration(
         self,
@@ -491,7 +491,7 @@ class ModelRelayState:
         validate_rollout_id(rollout_id)
         if not REGISTRATION_TOKEN_RE.fullmatch(registration_token):
             raise web.HTTPUnauthorized(text="invalid rollout registration token")
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             current = self._rollouts.get(rollout_id)
             if current is None or not hmac.compare_digest(
@@ -501,7 +501,7 @@ class ModelRelayState:
                 raise web.HTTPUnauthorized(text="invalid rollout registration token")
 
     async def list_rollouts(self) -> list[JsonObject]:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -519,7 +519,7 @@ class ModelRelayState:
         validate_rollout_id(rollout_id)
         validate_registration_token(registration_token)
         validate_worker_id(worker_id)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             self._prune_workers_locked(time.time())
             self._require_current_registration_locked(
@@ -572,7 +572,7 @@ class ModelRelayState:
         if idempotency_key is not None:
             validate_idempotency_key(idempotency_key)
         loop = asyncio.get_running_loop()
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -673,18 +673,9 @@ class ModelRelayState:
                     and not defer_idempotency_until_disconnect
                 ),
             )
-            self._pending.setdefault(rollout_id, deque()).append(request)
-            self._requests[request.request_id] = request
-            self._inflight_bytes += payload_bytes
-            self._rollout_inflight_counts[rollout_id] = rollout_inflight + 1
-            if idempotency_key is not None and request.reattachable:
-                self._idempotency[(rollout_id, registration_token, idempotency_key)] = (
-                    request.request_id
-                )
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-            self._counters["enqueued"] += 1
-            self._condition.notify_all()
+            await self._finish_transition_before_cancellation_locked(
+                self._enqueue_transition_locked(request)
+            )
             return request
 
     async def mark_caller_detached(self, request_id: str) -> None:
@@ -709,7 +700,7 @@ class ModelRelayState:
         *,
         counter: str,
     ) -> None:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             request = self._requests.get(request_id) or self._completed.get(request_id)
             if request is None:
@@ -745,29 +736,35 @@ class ModelRelayState:
         limit = max(1, min(256, limit))
         lease_seconds = max(0.001, lease_seconds)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
-        async with self._condition:
-            await self._ensure_loaded_locked()
-            await self._prune_completed_locked(time.time())
-            self._prune_workers_locked(time.time())
-            self._require_current_registration_locked(
-                rollout_id,
-                registration_token,
-            )
-            if worker_id:
-                await self._record_worker_heartbeat_locked(
-                    rollout_id=rollout_id,
-                    worker_id=worker_id,
-                    metadata=None,
-                )
-            self._counters["polls"] += 1
-            while True:
+        initialized = False
+        while True:
+            async with self._lock:
+                if not initialized:
+                    await self._ensure_loaded_locked()
+                    await self._prune_completed_locked(time.time())
+                    self._prune_workers_locked(time.time())
+                    self._require_current_registration_locked(
+                        rollout_id,
+                        registration_token,
+                    )
+                    if worker_id:
+                        await self._record_worker_heartbeat_locked(
+                            rollout_id=rollout_id,
+                            worker_id=worker_id,
+                            metadata=None,
+                        )
+                    self._counters["polls"] += 1
+                    initialized = True
                 self._require_current_registration_locked(
                     rollout_id,
                     registration_token,
                 )
                 now = time.time()
                 await self._expire_requests_locked(now)
-                await self._requeue_expired_leases_locked(now)
+                await self._requeue_expired_leases_locked(
+                    now,
+                    rollout_id=rollout_id,
+                )
                 queue = self._pending.setdefault(rollout_id, deque())
                 if queue:
                     requests = [
@@ -797,13 +794,11 @@ class ModelRelayState:
                 if remaining <= 0:
                     self._counters["empty_polls"] += 1
                     return []
-                next_expiry = self._next_lease_expiry_locked()
+                next_expiry = self._next_lease_expiry_locked(rollout_id)
                 if next_expiry is not None:
                     remaining = min(remaining, max(0.001, next_expiry - time.time()))
-                try:
-                    await asyncio.wait_for(self._condition.wait(), remaining)
-                except asyncio.TimeoutError:
-                    continue
+                wakeup = self._rollout_wakeup_locked(rollout_id)
+            await self._wait_for_rollout_wakeup(wakeup, remaining)
 
     async def renew_lease(
         self,
@@ -818,7 +813,7 @@ class ModelRelayState:
         if worker_id is not None:
             validate_worker_id(worker_id)
         lease_seconds = max(0.001, lease_seconds)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -840,20 +835,24 @@ class ModelRelayState:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
             if request.lease_expires_at is not None and request.lease_expires_at <= now:
-                await self._requeue_expired_leases_locked(now)
+                await self._requeue_request_locked(request)
                 raise web.HTTPConflict(text="request lease has expired")
+            leased_by = request.leased_by
             if worker_id:
-                request.leased_by = worker_id
+                leased_by = worker_id
                 await self._record_worker_heartbeat_locked(
                     rollout_id=request.rollout_id,
                     worker_id=worker_id,
                     metadata=None,
                 )
-            request.lease_expires_at = now + lease_seconds
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-            self._counters["lease_renewed"] += 1
-            self._condition.notify_all()
+            lease_expires_at = now + lease_seconds
+            await self._finish_transition_before_cancellation_locked(
+                self._renew_lease_transition_locked(
+                    request,
+                    leased_by=leased_by,
+                    lease_expires_at=lease_expires_at,
+                )
+            )
             return request
 
     async def respond(
@@ -867,7 +866,7 @@ class ModelRelayState:
         defer_delivery: bool = False,
     ) -> RelayRespondResult:
         validate_registration_token(registration_token)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -896,29 +895,30 @@ class ModelRelayState:
                 raise web.HTTPConflict(text="request lease is no longer active")
             now = time.time()
             if request.lease_expires_at is not None and request.lease_expires_at <= now:
-                await self._requeue_expired_leases_locked(now)
+                await self._requeue_request_locked(request)
                 raise web.HTTPConflict(text="request lease has expired")
-            self._pop_request_locked(request_id)
-            self._remove_pending_locked(request_id, request.rollout_id)
-            request.state = "completed"
-            response = await self._remember_completed_locked(
+            def record_completion(
+                completed_request: RelayRequest,
+                effective_response: RelayWorkerResponse,
+            ) -> None:
+                self._counters["completed"] += 1
+                if error or effective_response.status >= 400:
+                    self._counters["worker_errors"] += 1
+                self._timers["request_lifetime_seconds_total"] += (
+                    now - completed_request.created_at
+                )
+                if completed_request.delivered_at is not None:
+                    self._timers["worker_processing_seconds_total"] += (
+                        now - completed_request.delivered_at
+                    )
+
+            request, response = await self._complete_request_cancellation_safe_locked(
                 request,
                 completed_at=now,
                 response=response,
+                defer_delivery=defer_delivery,
+                after_transition=record_completion,
             )
-            self._counters["completed"] += 1
-            if error or response.status >= 400:
-                self._counters["worker_errors"] += 1
-            self._timers["request_lifetime_seconds_total"] += now - request.created_at
-            if request.delivered_at is not None:
-                self._timers["worker_processing_seconds_total"] += (
-                    now - request.delivered_at
-                )
-            if not defer_delivery:
-                _set_response(request.future, response)
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-            self._condition.notify_all()
             return RelayRespondResult(request_id=request_id, request=request)
 
     async def retry_worker_failure(
@@ -931,7 +931,7 @@ class ModelRelayState:
         """Release a transient failed lease back to the durable queue."""
 
         validate_registration_token(registration_token)
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -946,11 +946,12 @@ class ModelRelayState:
             if request.state != "leased" or request.lease_id != lease_id:
                 raise web.HTTPConflict(text="request lease is no longer active")
             if request.lease_expires_at is not None and request.lease_expires_at <= now:
-                await self._requeue_expired_leases_locked(now)
+                await self._requeue_request_locked(request)
                 raise web.HTTPConflict(text="request lease has expired")
             if request.delivery_count >= MAX_TRANSIENT_WORKER_DELIVERIES:
                 self._counters["worker_retry_exhausted"] += 1
                 return None
+            self._decrement_rollout_leased_locked(request.rollout_id)
             request.state = "pending"
             request.lease_id = None
             request.lease_expires_at = None
@@ -960,7 +961,8 @@ class ModelRelayState:
             self._counters["worker_retries"] += 1
             if self._store is not None:
                 await _blocking_call(self._store.save_request, request)
-            self._condition.notify_all()
+            self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
+            self._wake_rollout_locked(request.rollout_id)
             return request
 
     async def release_completed_response(self, request_id: str) -> None:
@@ -971,13 +973,12 @@ class ModelRelayState:
         intentionally idempotent for retried worker commits.
         """
 
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             request = self._completed.get(request_id)
             if request is None or request.completed_response is None:
                 raise web.HTTPNotFound(text=f"request not found: {request_id}")
-            _set_response(request.future, request.completed_response)
-            self._condition.notify_all()
+            await self._release_completed_cancellation_safe_locked(request)
 
     async def cancel_request(
         self,
@@ -986,26 +987,21 @@ class ModelRelayState:
         response: RelayWorkerResponse,
         reason: str = "canceled",
     ) -> RelayWorkerResponse | None:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
-            request = self._pop_request_locked(request_id)
+            request = self._requests.get(request_id)
             if request is None:
                 return None
-            self._remove_pending_locked(request_id, request.rollout_id)
-            request.state = "completed"
-            response = await self._remember_completed_locked(
+            counter = "timed_out" if reason == "timeout" else "canceled"
+            request, response = await self._complete_request_cancellation_safe_locked(
                 request,
                 completed_at=time.time(),
                 response=response,
+                defer_delivery=False,
+                after_transition=lambda _request, _response: self._increment_counter_locked(
+                    counter
+                ),
             )
-            if reason == "timeout":
-                self._counters["timed_out"] += 1
-            else:
-                self._counters["canceled"] += 1
-            _set_response(request.future, response)
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-            self._condition.notify_all()
             return response
 
     async def wait_for_response(
@@ -1022,7 +1018,7 @@ class ModelRelayState:
         )
 
     async def stats(self) -> JsonObject:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             now = time.time()
             await self._prune_completed_locked(now)
@@ -1033,12 +1029,7 @@ class ModelRelayState:
                 rollout_id: len(queue)
                 for rollout_id, queue in sorted(self._pending.items())
             }
-            leased_by_rollout: dict[str, int] = {}
-            for request in self._requests.values():
-                if request.state == "leased":
-                    leased_by_rollout[request.rollout_id] = (
-                        leased_by_rollout.get(request.rollout_id, 0) + 1
-                    )
+            leased_by_rollout = dict(self._rollout_leased_counts)
             counters = dict(self._counters)
             timers = dict(self._timers)
             averages = {
@@ -1078,7 +1069,7 @@ class ModelRelayState:
             }
 
     async def mark_wake_notified(self, request_id: str) -> None:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             request = self._completed.get(request_id)
             if request is None:
@@ -1095,7 +1086,7 @@ class ModelRelayState:
         *,
         transport_epoch: str | None = None,
     ) -> None:
-        async with self._condition:
+        async with self._lock:
             await self._ensure_loaded_locked()
             request = self._requests.get(request_id) or self._completed.get(request_id)
             if request is None:
@@ -1118,59 +1109,170 @@ class ModelRelayState:
         if store is not None:
             await _blocking_call(store.close)
 
+    async def _finish_transition_before_cancellation_locked(
+        self,
+        awaitable: Awaitable[_BlockingResult],
+    ) -> _BlockingResult:
+        """Keep the state mutex until durable and in-memory state agree."""
+
+        transition = asyncio.create_task(awaitable)
+        cancellation: asyncio.CancelledError | None = None
+        while not transition.done():
+            try:
+                await asyncio.shield(transition)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+        result = transition.result()
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    async def _register_rollout_transition_locked(
+        self,
+        record: JsonObject,
+        *,
+        previous: JsonObject | None,
+    ) -> None:
+        rollout_id = str(record["rollout_id"])
+        if previous is not None:
+            await self._cancel_rollout_incarnation_locked(
+                rollout_id,
+                str(previous["registration_token"]),
+                message="rollout registration was replaced",
+                error_code="relay_rollout_replaced",
+            )
+        if self._store is not None:
+            await _blocking_call(self._store.save_rollout, record)
+        self._rollouts[rollout_id] = record
+        self._pending.setdefault(rollout_id, deque())
+        self._wake_rollout_locked(rollout_id)
+
+    async def _unregister_rollout_transition_locked(
+        self,
+        rollout_id: str,
+        registration_token: str,
+    ) -> None:
+        await self._cancel_rollout_incarnation_locked(
+            rollout_id,
+            registration_token,
+            message="rollout unregistered",
+            error_code="relay_rollout_closed",
+        )
+        if self._store is not None:
+            await _blocking_call(self._store.delete_rollout, rollout_id)
+        self._rollouts.pop(rollout_id, None)
+        self._wake_rollout_locked(rollout_id)
+
+    async def _enqueue_transition_locked(self, request: RelayRequest) -> None:
+        if self._store is not None:
+            await _blocking_call(self._store.save_request, request)
+        self._pending.setdefault(request.rollout_id, deque()).append(request)
+        self._requests[request.request_id] = request
+        if request.expires_at is not None:
+            heapq.heappush(
+                self._request_expiry_heap,
+                (request.expires_at, request.request_id),
+            )
+        self._inflight_bytes += request.payload_bytes
+        self._rollout_inflight_counts[request.rollout_id] = (
+            self._rollout_inflight_counts.get(request.rollout_id, 0) + 1
+        )
+        if request.idempotency_key is not None and request.reattachable:
+            self._idempotency[
+                (
+                    request.rollout_id,
+                    request.registration_token,
+                    request.idempotency_key,
+                )
+            ] = request.request_id
+        self._counters["enqueued"] += 1
+        self._wake_rollout_locked(request.rollout_id)
+
+    async def _renew_lease_transition_locked(
+        self,
+        request: RelayRequest,
+        *,
+        leased_by: str | None,
+        lease_expires_at: float,
+    ) -> None:
+        durable = replace(
+            request,
+            leased_by=leased_by,
+            lease_expires_at=lease_expires_at,
+        )
+        if self._store is not None:
+            await _blocking_call(self._store.save_request, durable)
+        request.leased_by = leased_by
+        request.lease_expires_at = lease_expires_at
+        assert request.lease_id is not None
+        heapq.heappush(
+            self._lease_expiry_heaps.setdefault(request.rollout_id, []),
+            (lease_expires_at, request.request_id, request.lease_id),
+        )
+        self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
+        self._counters["lease_renewed"] += 1
+        self._wake_rollout_locked(request.rollout_id)
+
     async def _ensure_loaded_locked(self) -> None:
         if self._loaded:
             return
         assert self._store is not None
         loop = asyncio.get_running_loop()
         now = time.time()
-        await _blocking_call(
-            self._store.prune_completed,
-            cutoff=now - self._completed_request_retention_seconds,
-            max_count=self._max_completed_requests,
-            max_bytes=self._max_completed_bytes,
-        )
-        for record in await _blocking_call(self._store.load_rollouts):
+        rollout_rows = await _blocking_call(self._store.load_rollouts)
+        request_rows = await _blocking_call(self._store.load_requests)
+
+        recovered_rollouts: dict[str, JsonObject] = {}
+        recovered_pending: dict[str, deque[RelayRequest]] = {}
+        for record in rollout_rows:
             rollout_id = str(record.get("rollout_id") or "")
             validate_rollout_id(rollout_id)
-            self._rollouts[rollout_id] = record
-            self._pending.setdefault(rollout_id, deque())
-        for payload in await _blocking_call(self._store.load_requests):
+            recovered_rollouts[rollout_id] = record
+            recovered_pending[rollout_id] = deque()
+
+        active: list[RelayRequest] = []
+        completed: list[RelayRequest] = []
+        changed: dict[str, RelayRequest] = {}
+        restored_requests = 0
+        recovered_timeouts = 0
+        recovered_expired_leases = 0
+        for payload in request_rows:
             request = _request_from_persisted_payload(payload, loop=loop)
+            recovery_changed = False
             # Every non-terminal caller connection was destroyed by this relay
             # restart. A lifecycle-bound completed response also remains
             # replayable because its sandbox was parked before delivery.
             if request.state != "completed" and request.idempotency_key is not None:
-                request.reattachable = True
+                if not request.reattachable:
+                    request.reattachable = True
+                    recovery_changed = True
             elif (
                 request.state == "completed"
                 and request.sandbox_id is not None
                 and request.accepted_notified_at is not None
                 and request.idempotency_key is not None
             ):
-                request.reattachable = True
-            if request.idempotency_key is not None and request.reattachable:
-                self._idempotency[
-                    (
-                        request.rollout_id,
-                        request.registration_token,
-                        request.idempotency_key,
-                    )
-                ] = request.request_id
+                if not request.reattachable:
+                    request.reattachable = True
+                    recovery_changed = True
             if request.state == "completed":
                 if request.completed_response is None:
                     raise ValueError(
                         "completed relay request is missing its persisted response"
                     )
-                response = await self._remember_completed_locked(
-                    request,
-                    completed_at=request.completed_at or now,
-                    response=request.completed_response,
-                )
-                _set_response(request.future, response)
-                await _blocking_call(self._store.save_request, request)
+                if request.completed_bytes <= 0:
+                    raise ValueError(
+                        "completed relay request has an invalid retained byte count"
+                    )
+                completed.append(request)
+                if recovery_changed:
+                    changed[request.request_id] = request
                 continue
-            current_registration = self._rollouts.get(request.rollout_id)
+            if request.state not in {"pending", "leased"}:
+                raise ValueError(
+                    f"persisted relay request has invalid state {request.state!r}"
+                )
+            current_registration = recovered_rollouts.get(request.rollout_id)
             if (
                 current_registration is None
                 or str(current_registration.get("registration_token") or "")
@@ -1188,39 +1290,215 @@ class ModelRelayState:
                         "relay_rollout_closed",
                     ),
                 )
-                response = await self._remember_completed_locked(
+                self._recover_terminal_request(
                     request,
                     completed_at=time.time(),
                     response=response,
                 )
-                _set_response(request.future, response)
-                await _blocking_call(self._store.save_request, request)
+                completed.append(request)
+                changed[request.request_id] = request
                 continue
-            self._requests[request.request_id] = request
-            self._inflight_bytes += request.payload_bytes
-            self._rollout_inflight_counts[request.rollout_id] = (
-                self._rollout_inflight_counts.get(request.rollout_id, 0) + 1
+            restored_requests += 1
+            if request.expires_at is not None and request.expires_at <= now:
+                self._recover_terminal_request(
+                    request,
+                    completed_at=now,
+                    response=RelayWorkerResponse(
+                        504,
+                        _openai_error(
+                            "model relay request timed out",
+                            "relay_timeout",
+                        ),
+                    ),
+                )
+                completed.append(request)
+                changed[request.request_id] = request
+                recovered_timeouts += 1
+                continue
+            if (
+                request.state == "leased"
+                and request.lease_expires_at is not None
+                and request.lease_id is not None
+                and request.lease_expires_at <= now
+            ):
+                request.state = "pending"
+                request.lease_id = None
+                request.lease_expires_at = None
+                request.leased_by = None
+                recovery_changed = True
+                recovered_expired_leases += 1
+            elif request.state == "leased" and (
+                request.lease_expires_at is None or request.lease_id is None
+            ):
+                raise ValueError("persisted leased relay request is missing its lease")
+            active.append(request)
+            if recovery_changed:
+                changed[request.request_id] = request
+
+        cutoff = now - self._completed_request_retention_seconds
+        deleted: set[str] = set()
+        retained_completed: dict[str, RelayRequest] = {}
+        retained_completed_bytes = 0
+        pinned = [request for request in completed if request.delivery_pending]
+        for request in pinned:
+            retained_completed[request.request_id] = request
+            retained_completed_bytes += request.completed_bytes
+        unpinned = sorted(
+            (request for request in completed if not request.delivery_pending),
+            key=lambda item: (item.completed_at or 0.0, item.request_id),
+            reverse=True,
+        )
+        for request in unpinned:
+            if (request.completed_at or 0.0) < cutoff:
+                deleted.add(request.request_id)
+                continue
+            if (
+                len(retained_completed) >= self._max_completed_requests
+                or retained_completed_bytes + request.completed_bytes
+                > self._max_completed_bytes
+            ):
+                deleted.add(request.request_id)
+                continue
+            retained_completed[request.request_id] = request
+            retained_completed_bytes += request.completed_bytes
+
+        changed_rows = tuple(
+            request
+            for request_id, request in changed.items()
+            if request_id not in deleted
+        )
+        if changed_rows or deleted:
+            await _blocking_call(
+                self._store.commit_request_batch,
+                changed_rows,
+                tuple(sorted(deleted)),
             )
+
+        recovered_requests: dict[str, RelayRequest] = {}
+        recovered_idempotency: dict[tuple[str, str, str], str] = {}
+        recovered_request_expiry_heap: list[tuple[float, str]] = []
+        recovered_lease_expiry_heaps: dict[
+            str,
+            list[tuple[float, str, str]],
+        ] = {}
+        recovered_rollout_inflight_counts: dict[str, int] = {}
+        recovered_rollout_leased_counts: dict[str, int] = {}
+        recovered_inflight_bytes = 0
+
+        for request in active:
+            recovered_requests[request.request_id] = request
+            recovered_inflight_bytes += request.payload_bytes
+            recovered_rollout_inflight_counts[request.rollout_id] = (
+                recovered_rollout_inflight_counts.get(request.rollout_id, 0) + 1
+            )
+            if request.expires_at is not None:
+                recovered_request_expiry_heap.append(
+                    (request.expires_at, request.request_id)
+                )
             if request.state == "pending":
-                self._pending.setdefault(request.rollout_id, deque()).append(request)
-            await _blocking_call(self._store.save_request, request)
-            self._counters["restored_requests"] += 1
+                recovered_pending.setdefault(request.rollout_id, deque()).append(
+                    request
+                )
+            else:
+                assert request.lease_expires_at is not None
+                assert request.lease_id is not None
+                recovered_rollout_leased_counts[request.rollout_id] = (
+                    recovered_rollout_leased_counts.get(request.rollout_id, 0) + 1
+                )
+                recovered_lease_expiry_heaps.setdefault(request.rollout_id, []).append(
+                    (
+                        request.lease_expires_at,
+                        request.request_id,
+                        request.lease_id,
+                    )
+                )
+            self._add_recovered_idempotency(
+                recovered_idempotency,
+                request,
+            )
+        heapq.heapify(recovered_request_expiry_heap)
+        for heap in recovered_lease_expiry_heaps.values():
+            heapq.heapify(heap)
+        for request in retained_completed.values():
+            self._add_recovered_idempotency(
+                recovered_idempotency,
+                request,
+            )
+            if not request.delivery_pending:
+                assert request.completed_response is not None
+                _set_response(request.future, request.completed_response)
+
+        self._rollouts = recovered_rollouts
+        self._pending = recovered_pending
+        self._requests = recovered_requests
+        self._completed = retained_completed
+        self._idempotency = recovered_idempotency
+        self._request_expiry_heap = recovered_request_expiry_heap
+        self._lease_expiry_heaps = recovered_lease_expiry_heaps
+        self._inflight_bytes = recovered_inflight_bytes
+        self._completed_bytes = retained_completed_bytes
+        self._rollout_inflight_counts = recovered_rollout_inflight_counts
+        self._rollout_leased_counts = recovered_rollout_leased_counts
+        self._counters["restored_requests"] += restored_requests
+        self._counters["timed_out"] += recovered_timeouts
+        self._counters["lease_expired"] += recovered_expired_leases
         self._loaded = True
-        now = time.time()
-        await self._prune_completed_locked(now)
-        await self._expire_requests_locked(now)
-        await self._requeue_expired_leases_locked(now)
+
+    def _recover_terminal_request(
+        self,
+        request: RelayRequest,
+        *,
+        completed_at: float,
+        response: RelayWorkerResponse,
+    ) -> None:
+        completed_bytes = _relay_response_retained_bytes(response)
+        if completed_bytes > self._max_completed_bytes:
+            response = RelayWorkerResponse(
+                502,
+                _openai_error(
+                    "worker response exceeds relay completed-response capacity",
+                    "relay_response_capacity_exceeded",
+                ),
+            )
+            completed_bytes = _relay_response_retained_bytes(response)
+        request.completed_at = completed_at
+        request.completed_response = response
+        request.completed_bytes = completed_bytes
+        request.state = "completed"
+        request.body = None
+        request.body_bytes = b""
+        request.headers = {}
+        request.payload_bytes = 0
+        request.delivery_pending = False
+
+    @staticmethod
+    def _add_recovered_idempotency(
+        recovered: dict[tuple[str, str, str], str],
+        request: RelayRequest,
+    ) -> None:
+        if request.idempotency_key is not None and request.reattachable:
+            recovered[
+                (
+                    request.rollout_id,
+                    request.registration_token,
+                    request.idempotency_key,
+                )
+            ] = request.request_id
 
     def _pop_request_locked(self, request_id: str) -> RelayRequest | None:
         request = self._requests.pop(request_id, None)
         if request is None:
             return None
+        if request.state == "leased":
+            self._decrement_rollout_leased_locked(request.rollout_id)
         self._inflight_bytes = max(0, self._inflight_bytes - request.payload_bytes)
         count = self._rollout_inflight_counts.get(request.rollout_id, 0)
         if count <= 1:
             self._rollout_inflight_counts.pop(request.rollout_id, None)
         else:
             self._rollout_inflight_counts[request.rollout_id] = count - 1
+        self._maybe_compact_request_expiry_heap_locked()
+        self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
         return request
 
     def _require_current_registration_locked(
@@ -1279,37 +1557,27 @@ class ModelRelayState:
     ) -> None:
         response = RelayWorkerResponse(410, _openai_error(message, error_code))
         now = time.time()
-        for request_id, request in list(self._requests.items()):
-            if (
-                request.rollout_id != rollout_id
-                or request.registration_token != registration_token
-            ):
-                continue
-            self._pop_request_locked(request_id)
-            request.state = "completed"
-            effective_response = await self._remember_completed_locked(
-                request,
+        canceled = tuple(
+            request
+            for request in self._requests.values()
+            if request.rollout_id == rollout_id
+            and request.registration_token == registration_token
+        )
+        if canceled:
+            await self._complete_requests_cancellation_safe_locked(
+                canceled,
                 completed_at=now,
                 response=response,
+                defer_delivery=False,
+                after_transition=lambda results: self._counters.__setitem__(
+                    "unregister_canceled",
+                    self._counters["unregister_canceled"] + len(results),
+                ),
             )
-            self._counters["unregister_canceled"] += 1
-            _set_response(request.future, effective_response)
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-        queue = self._pending.get(rollout_id)
-        if queue is not None:
-            kept = deque(
-                request
-                for request in queue
-                if request.registration_token != registration_token
-            )
-            if kept:
-                self._pending[rollout_id] = kept
-            else:
-                self._pending.pop(rollout_id, None)
         for key in list(self._workers):
             if key[0] == rollout_id:
                 self._workers.pop(key, None)
+        self._wake_rollout_locked(rollout_id)
 
     def _remove_pending_locked(self, request_id: str, rollout_id: str) -> None:
         queue = self._pending.get(rollout_id)
@@ -1354,145 +1622,547 @@ class ModelRelayState:
         request.delivered_at = now
         request.first_delivered_at = request.first_delivered_at or now
         request.delivery_count += 1
+        self._increment_rollout_leased_locked(request.rollout_id)
+        assert request.lease_id is not None
+        heapq.heappush(
+            self._lease_expiry_heaps.setdefault(request.rollout_id, []),
+            (request.lease_expires_at, request.request_id, request.lease_id),
+        )
+        self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
         self._counters["delivered"] += 1
         self._timers["queue_wait_seconds_total"] += now - request.created_at
         return request
 
-    async def _requeue_expired_leases_locked(self, now: float) -> None:
-        expired = [
-            request
-            for request in self._requests.values()
-            if (
-                request.state == "leased"
-                and request.lease_expires_at is not None
-                and request.lease_expires_at <= now
-                and not request.future.done()
-            )
-        ]
-        for request in expired:
-            request.state = "pending"
-            request.lease_id = None
-            request.lease_expires_at = None
-            request.leased_by = None
-            self._pending.setdefault(request.rollout_id, deque()).appendleft(request)
-            self._counters["lease_expired"] += 1
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-        if expired:
-            self._condition.notify_all()
+    async def _requeue_expired_leases_locked(
+        self,
+        now: float,
+        *,
+        rollout_id: str | None = None,
+    ) -> None:
+        rollout_ids = (
+            (rollout_id,)
+            if rollout_id is not None
+            else tuple(self._lease_expiry_heaps)
+        )
+        expired: list[RelayRequest] = []
+        for current_rollout_id in rollout_ids:
+            heap = self._lease_expiry_heaps.get(current_rollout_id)
+            if heap is None:
+                continue
+            while heap and heap[0][0] <= now:
+                expires_at, request_id, lease_id = heapq.heappop(heap)
+                request = self._requests.get(request_id)
+                if (
+                    request is None
+                    or request.state != "leased"
+                    or request.lease_id != lease_id
+                    or request.lease_expires_at != expires_at
+                    or request.future.done()
+                ):
+                    continue
+                request.state = "pending"
+                self._decrement_rollout_leased_locked(request.rollout_id)
+                request.lease_id = None
+                request.lease_expires_at = None
+                request.leased_by = None
+                self._pending.setdefault(request.rollout_id, deque()).appendleft(
+                    request
+                )
+                self._counters["lease_expired"] += 1
+                expired.append(request)
+            if not heap:
+                self._lease_expiry_heaps.pop(current_rollout_id, None)
+            else:
+                self._maybe_compact_lease_expiry_heap_locked(current_rollout_id)
+        if expired and self._store is not None:
+            await _blocking_call(self._store.save_requests, tuple(expired))
+        for expired_rollout_id in {request.rollout_id for request in expired}:
+            self._wake_rollout_locked(expired_rollout_id)
+
+    async def _requeue_request_locked(self, request: RelayRequest) -> None:
+        self._decrement_rollout_leased_locked(request.rollout_id)
+        request.state = "pending"
+        request.lease_id = None
+        request.lease_expires_at = None
+        request.leased_by = None
+        self._pending.setdefault(request.rollout_id, deque()).appendleft(request)
+        self._counters["lease_expired"] += 1
+        if self._store is not None:
+            await _blocking_call(self._store.save_request, request)
+        self._maybe_compact_lease_expiry_heap_locked(request.rollout_id)
+        self._wake_rollout_locked(request.rollout_id)
 
     async def _expire_requests_locked(self, now: float) -> None:
-        expired = [
-            request
-            for request in self._requests.values()
-            if request.expires_at is not None and request.expires_at <= now
-        ]
-        if not expired:
-            return
         response = RelayWorkerResponse(
             504,
             _openai_error("model relay request timed out", "relay_timeout"),
         )
-        for request in expired:
-            self._pop_request_locked(request.request_id)
-            self._remove_pending_locked(request.request_id, request.rollout_id)
-            request.state = "completed"
-            effective_response = await self._remember_completed_locked(
-                request,
+        expired: list[RelayRequest] = []
+        popped: list[tuple[float, str]] = []
+        while self._request_expiry_heap and self._request_expiry_heap[0][0] <= now:
+            expires_at, request_id = heapq.heappop(self._request_expiry_heap)
+            popped.append((expires_at, request_id))
+            request = self._requests.get(request_id)
+            if request is None or request.expires_at != expires_at:
+                continue
+            expired.append(request)
+        if not expired:
+            return
+        try:
+            await self._complete_requests_cancellation_safe_locked(
+                tuple(expired),
                 completed_at=now,
                 response=response,
+                defer_delivery=False,
+                after_transition=lambda results: self._counters.__setitem__(
+                    "timed_out",
+                    self._counters["timed_out"] + len(results),
+                ),
             )
-            self._counters["timed_out"] += 1
-            _set_response(request.future, effective_response)
-            if self._store is not None:
-                await _blocking_call(self._store.save_request, request)
-        self._condition.notify_all()
+        except BaseException:
+            for expires_at, request_id in popped:
+                request = self._requests.get(request_id)
+                if request is not None and request.expires_at == expires_at:
+                    heapq.heappush(
+                        self._request_expiry_heap,
+                        (expires_at, request_id),
+                    )
+            raise
 
-    def _next_lease_expiry_locked(self) -> float | None:
-        expiries = [
-            request.lease_expires_at
+    def _next_lease_expiry_locked(self, rollout_id: str) -> float | None:
+        heap = self._lease_expiry_heaps.get(rollout_id)
+        if heap is None:
+            return None
+        while heap:
+            expires_at, request_id, lease_id = heap[0]
+            request = self._requests.get(request_id)
+            if (
+                request is not None
+                and request.state == "leased"
+                and request.lease_id == lease_id
+                and request.lease_expires_at == expires_at
+            ):
+                return expires_at
+            heapq.heappop(heap)
+        self._lease_expiry_heaps.pop(rollout_id, None)
+        return None
+
+    def _increment_rollout_leased_locked(self, rollout_id: str) -> None:
+        self._rollout_leased_counts[rollout_id] = (
+            self._rollout_leased_counts.get(rollout_id, 0) + 1
+        )
+
+    def _increment_counter_locked(self, counter: str) -> None:
+        self._counters[counter] += 1
+
+    def _decrement_rollout_leased_locked(self, rollout_id: str) -> None:
+        count = self._rollout_leased_counts.get(rollout_id, 0)
+        if count <= 1:
+            self._rollout_leased_counts.pop(rollout_id, None)
+        else:
+            self._rollout_leased_counts[rollout_id] = count - 1
+
+    def _maybe_compact_request_expiry_heap_locked(self) -> None:
+        active_count = len(self._requests)
+        if len(self._request_expiry_heap) <= (
+            2 * active_count + EXPIRY_HEAP_COMPACTION_SLACK
+        ):
+            return
+        self._request_expiry_heap = [
+            (request.expires_at, request.request_id)
             for request in self._requests.values()
-            if request.state == "leased" and request.lease_expires_at is not None
+            if request.expires_at is not None
         ]
-        return min(expiries) if expiries else None
+        heapq.heapify(self._request_expiry_heap)
+
+    def _maybe_compact_lease_expiry_heap_locked(self, rollout_id: str) -> None:
+        heap = self._lease_expiry_heaps.get(rollout_id)
+        if heap is None:
+            return
+        leased_count = self._rollout_leased_counts.get(rollout_id, 0)
+        if len(heap) <= 2 * leased_count + LEASE_HEAP_COMPACTION_SLACK:
+            return
+        current: dict[str, tuple[float, str, str]] = {}
+        for expires_at, request_id, lease_id in heap:
+            request = self._requests.get(request_id)
+            if (
+                request is not None
+                and request.state == "leased"
+                and request.lease_id == lease_id
+                and request.lease_expires_at == expires_at
+            ):
+                current[request_id] = (expires_at, request_id, lease_id)
+        compacted = list(current.values())
+        if compacted:
+            heapq.heapify(compacted)
+            self._lease_expiry_heaps[rollout_id] = compacted
+        else:
+            self._lease_expiry_heaps.pop(rollout_id, None)
 
     async def _prune_completed_locked(self, now: float) -> None:
         cutoff = now - self._completed_request_retention_seconds
-        for request_id, request in list(self._completed.items()):
-            if (request.completed_at or 0.0) < cutoff:
-                self._completed.pop(request_id, None)
-                self._completed_bytes = max(
-                    0,
-                    self._completed_bytes - request.completed_bytes,
-                )
-                if request.idempotency_key is not None and request.reattachable:
-                    self._idempotency.pop(
-                        (
-                            request.rollout_id,
-                            request.registration_token,
-                            request.idempotency_key,
-                        ),
-                        None,
-                    )
-                if self._store is not None:
-                    await _blocking_call(self._store.delete_request, request_id)
+        expired_ids = tuple(
+            request_id
+            for request_id, request in self._completed.items()
+            if (request.completed_at or 0.0) < cutoff
+            and not request.delivery_pending
+        )
+        if self._store is not None and expired_ids:
+            await _blocking_call(self._store.delete_requests, expired_ids)
+        for request_id in expired_ids:
+            self._remove_completed_locked(request_id)
 
-    async def _remember_completed_locked(
+    async def _complete_request_cancellation_safe_locked(
         self,
         request: RelayRequest,
         *,
         completed_at: float,
         response: RelayWorkerResponse,
-    ) -> RelayWorkerResponse:
-        await self._prune_completed_locked(completed_at)
-        completed_bytes = _relay_response_retained_bytes(response)
+        defer_delivery: bool,
+        remove_active: bool = True,
+        after_transition: (
+            Callable[[RelayRequest, RelayWorkerResponse], None] | None
+        ) = None,
+    ) -> tuple[RelayRequest, RelayWorkerResponse]:
+        """Finish journal+memory publication before propagating cancellation.
+
+        The caller owns the state mutex for this entire method.  The child is
+        shielded so cancellation cannot release that mutex in the narrow
+        window after SQLite commits but before the in-memory indexes/future
+        are made terminal.
+        """
+
+        transition = asyncio.create_task(
+            self._complete_request_locked(
+                request,
+                completed_at=completed_at,
+                response=response,
+                defer_delivery=defer_delivery,
+                remove_active=remove_active,
+            )
+        )
+        cancellation: asyncio.CancelledError | None = None
+        while not transition.done():
+            try:
+                await asyncio.shield(transition)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+        result = transition.result()
+        if after_transition is not None:
+            after_transition(*result)
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    async def _complete_requests_cancellation_safe_locked(
+        self,
+        requests: tuple[RelayRequest, ...],
+        *,
+        completed_at: float,
+        response: RelayWorkerResponse,
+        defer_delivery: bool,
+        after_transition: (
+            Callable[[tuple[tuple[RelayRequest, RelayWorkerResponse], ...]], None]
+            | None
+        ) = None,
+    ) -> tuple[tuple[RelayRequest, RelayWorkerResponse], ...]:
+        transition = asyncio.create_task(
+            self._complete_requests_locked(
+                requests,
+                completed_at=completed_at,
+                response=response,
+                defer_delivery=defer_delivery,
+            )
+        )
+        cancellation: asyncio.CancelledError | None = None
+        while not transition.done():
+            try:
+                await asyncio.shield(transition)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+        result = transition.result()
+        if after_transition is not None:
+            after_transition(result)
+        if cancellation is not None:
+            raise cancellation
+        return result
+
+    async def _release_completed_cancellation_safe_locked(
+        self,
+        request: RelayRequest,
+    ) -> None:
+        transition = asyncio.create_task(self._release_completed_locked(request))
+        cancellation: asyncio.CancelledError | None = None
+        while not transition.done():
+            try:
+                await asyncio.shield(transition)
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+        transition.result()
+        if cancellation is not None:
+            raise cancellation
+
+    async def _release_completed_locked(self, request: RelayRequest) -> None:
+        if request.delivery_pending:
+            released = replace(request, delivery_pending=False)
+            if self._store is not None:
+                await _blocking_call(self._store.save_request, released)
+            request.delivery_pending = False
+        assert request.completed_response is not None
+        _set_response(request.future, request.completed_response)
+
+    async def _complete_request_locked(
+        self,
+        request: RelayRequest,
+        *,
+        completed_at: float,
+        response: RelayWorkerResponse,
+        defer_delivery: bool,
+        remove_active: bool = True,
+    ) -> tuple[RelayRequest, RelayWorkerResponse]:
+        """Durably commit a terminal request before publishing it in memory."""
+        results = await self._complete_requests_locked(
+            (request,),
+            completed_at=completed_at,
+            response=response,
+            defer_delivery=defer_delivery,
+            remove_active=remove_active,
+        )
+        return results[0]
+
+    async def _complete_requests_locked(
+        self,
+        requests: tuple[RelayRequest, ...],
+        *,
+        completed_at: float,
+        response: RelayWorkerResponse,
+        defer_delivery: bool,
+        remove_active: bool = True,
+    ) -> tuple[tuple[RelayRequest, RelayWorkerResponse], ...]:
+        if not requests:
+            return ()
+        if len({request.request_id for request in requests}) != len(requests):
+            raise RuntimeError("relay terminal batch contains duplicate requests")
+        if remove_active:
+            for request in requests:
+                if self._requests.get(request.request_id) is not request:
+                    raise RuntimeError("relay request is no longer active")
+
+        planned, evicted_ids, retained_ids = self._plan_terminal_batch_locked(
+            requests,
+            completed_at=completed_at,
+            response=response,
+            defer_delivery=defer_delivery,
+        )
+        durable_requests = tuple(durable for _request, durable, _response in planned)
+        if self._store is not None:
+            await _blocking_call(
+                self._store.commit_request_batch,
+                durable_requests,
+                evicted_ids,
+            )
+
+        removed_ids = {request.request_id for request in requests}
+        affected_rollouts: set[str] = set()
+        if remove_active:
+            for request in requests:
+                self._requests.pop(request.request_id)
+                affected_rollouts.add(request.rollout_id)
+                if request.state == "leased":
+                    self._decrement_rollout_leased_locked(request.rollout_id)
+                self._inflight_bytes = max(
+                    0,
+                    self._inflight_bytes - request.payload_bytes,
+                )
+                count = self._rollout_inflight_counts.get(request.rollout_id, 0)
+                if count <= 1:
+                    self._rollout_inflight_counts.pop(request.rollout_id, None)
+                else:
+                    self._rollout_inflight_counts[request.rollout_id] = count - 1
+            for rollout_id in affected_rollouts:
+                queue = self._pending.get(rollout_id)
+                if queue is None:
+                    continue
+                kept = deque(
+                    queued
+                    for queued in queue
+                    if queued.request_id not in removed_ids
+                )
+                if kept:
+                    self._pending[rollout_id] = kept
+                else:
+                    self._pending.pop(rollout_id, None)
+
+        for request_id in evicted_ids:
+            self._remove_completed_locked(request_id)
+        results: list[tuple[RelayRequest, RelayWorkerResponse]] = []
+        for request, durable, normalized_response in planned:
+            request.completed_at = durable.completed_at
+            request.completed_response = durable.completed_response
+            request.completed_bytes = durable.completed_bytes
+            request.state = durable.state
+            request.body = durable.body
+            request.body_bytes = durable.body_bytes
+            request.headers = durable.headers
+            request.payload_bytes = durable.payload_bytes
+            request.delivery_pending = durable.delivery_pending
+            if request.request_id in retained_ids:
+                self._completed[request.request_id] = request
+                self._completed_bytes += request.completed_bytes
+            elif request.idempotency_key is not None and request.reattachable:
+                self._idempotency.pop(
+                    (
+                        request.rollout_id,
+                        request.registration_token,
+                        request.idempotency_key,
+                    ),
+                    None,
+                )
+            if not defer_delivery:
+                _set_response(request.future, normalized_response)
+            results.append((request, normalized_response))
+
+        if remove_active:
+            self._maybe_compact_request_expiry_heap_locked()
+            for rollout_id in affected_rollouts:
+                self._maybe_compact_lease_expiry_heap_locked(rollout_id)
+        return tuple(results)
+
+    def _plan_terminal_batch_locked(
+        self,
+        requests: tuple[RelayRequest, ...],
+        *,
+        completed_at: float,
+        response: RelayWorkerResponse,
+        defer_delivery: bool,
+    ) -> tuple[
+        tuple[tuple[RelayRequest, RelayRequest, RelayWorkerResponse], ...],
+        tuple[str, ...],
+        frozenset[str],
+    ]:
+        cutoff = completed_at - self._completed_request_retention_seconds
+        retained: dict[str, RelayRequest] = {}
+        evicted: set[str] = set()
+        for request_id, existing in self._completed.items():
+            if (
+                not existing.delivery_pending
+                and (existing.completed_at or 0.0) < cutoff
+            ):
+                evicted.add(request_id)
+            else:
+                retained[request_id] = existing
+
+        retained_count = len(retained)
+        retained_bytes = sum(item.completed_bytes for item in retained.values())
+        evictable: list[tuple[float, str]] = [
+            (existing.completed_at or 0.0, request_id)
+            for request_id, existing in retained.items()
+            if not existing.delivery_pending
+        ]
+        heapq.heapify(evictable)
+
+        def make_room(completed_bytes: int) -> None:
+            nonlocal retained_count, retained_bytes
+            while (
+                retained_count >= self._max_completed_requests
+                or retained_bytes + completed_bytes > self._max_completed_bytes
+            ):
+                while evictable:
+                    _oldest_at, request_id = heapq.heappop(evictable)
+                    existing = retained.pop(request_id, None)
+                    if existing is None or existing.delivery_pending:
+                        continue
+                    evicted.add(request_id)
+                    retained_count -= 1
+                    retained_bytes = max(
+                        0,
+                        retained_bytes - existing.completed_bytes,
+                    )
+                    break
+                else:
+                    raise web.HTTPServiceUnavailable(
+                        text="relay completed-response capacity is pinned",
+                        headers={"Retry-After": "1"},
+                    )
+
+        normalized_response = response
+        completed_bytes = _relay_response_retained_bytes(normalized_response)
         if completed_bytes > self._max_completed_bytes:
-            response = RelayWorkerResponse(
+            normalized_response = RelayWorkerResponse(
                 502,
                 _openai_error(
                     "worker response exceeds relay completed-response capacity",
                     "relay_response_capacity_exceeded",
                 ),
             )
-            completed_bytes = _relay_response_retained_bytes(response)
-        while self._completed and (
-            len(self._completed) >= self._max_completed_requests
-            or self._completed_bytes + completed_bytes > self._max_completed_bytes
-        ):
-            oldest = min(
-                self._completed,
-                key=lambda item: (
-                    self._completed[item].completed_at or 0.0,
-                    item,
-                ),
+            completed_bytes = _relay_response_retained_bytes(normalized_response)
+
+        planned: list[tuple[RelayRequest, RelayRequest, RelayWorkerResponse]] = []
+        for request in requests:
+            make_room(completed_bytes)
+            durable = replace(
+                request,
+                completed_at=completed_at,
+                completed_response=normalized_response,
+                completed_bytes=completed_bytes,
+                state="completed",
+                body=None,
+                body_bytes=b"",
+                headers={},
+                payload_bytes=0,
+                delivery_pending=defer_delivery,
             )
-            evicted = self._completed.pop(oldest)
-            self._completed_bytes = max(
-                0,
-                self._completed_bytes - evicted.completed_bytes,
-            )
-            if evicted.idempotency_key is not None and evicted.reattachable:
-                self._idempotency.pop(
-                    (
-                        evicted.rollout_id,
-                        evicted.registration_token,
-                        evicted.idempotency_key,
-                    ),
-                    None,
+            retained[request.request_id] = durable
+            retained_count += 1
+            retained_bytes += completed_bytes
+            if not defer_delivery:
+                heapq.heappush(
+                    evictable,
+                    (completed_at, request.request_id),
                 )
-            if self._store is not None:
-                await _blocking_call(self._store.delete_request, oldest)
-        request.completed_at = completed_at
-        request.completed_response = response
-        request.completed_bytes = completed_bytes
-        request.state = "completed"
-        request.body = None
-        request.body_bytes = b""
-        request.headers = {}
-        request.payload_bytes = 0
-        self._completed[request.request_id] = request
-        self._completed_bytes += completed_bytes
-        return response
+            planned.append((request, durable, normalized_response))
+        return tuple(planned), tuple(sorted(evicted)), frozenset(retained)
+
+    def _remove_completed_locked(self, request_id: str) -> RelayRequest | None:
+        request = self._completed.pop(request_id, None)
+        if request is None:
+            return None
+        self._completed_bytes = max(
+            0,
+            self._completed_bytes - request.completed_bytes,
+        )
+        if request.idempotency_key is not None and request.reattachable:
+            self._idempotency.pop(
+                (
+                    request.rollout_id,
+                    request.registration_token,
+                    request.idempotency_key,
+                ),
+                None,
+            )
+        return request
+
+    def _rollout_wakeup_locked(self, rollout_id: str) -> asyncio.Event:
+        wakeup = self._rollout_wakeups.get(rollout_id)
+        if wakeup is None:
+            wakeup = asyncio.Event()
+            self._rollout_wakeups[rollout_id] = wakeup
+        return wakeup
+
+    def _wake_rollout_locked(self, rollout_id: str) -> None:
+        wakeup = self._rollout_wakeups.pop(rollout_id, None)
+        if wakeup is not None:
+            wakeup.set()
+
+    async def _wait_for_rollout_wakeup(
+        self,
+        wakeup: asyncio.Event,
+        timeout_seconds: float,
+    ) -> None:
+        try:
+            await asyncio.wait_for(wakeup.wait(), timeout_seconds)
+        except asyncio.TimeoutError:
+            pass
 
     def _prune_workers_locked(self, now: float) -> None:
         cutoff = now - self._worker_retention_seconds
@@ -2478,6 +3148,7 @@ def _persisted_request_payload(request: RelayRequest) -> JsonObject:
         "accepted_notified_at": request.accepted_notified_at,
         "parked_transport_epoch": request.parked_transport_epoch,
         "reattachable": request.reattachable,
+        "delivery_pending": request.delivery_pending,
     }
 
 
@@ -2487,6 +3158,9 @@ def _request_from_persisted_payload(
     loop: asyncio.AbstractEventLoop,
 ) -> RelayRequest:
     raw_response = payload.get("completed_response")
+    raw_delivery_pending = payload["delivery_pending"]
+    if not isinstance(raw_delivery_pending, bool):
+        raise ValueError("persisted relay delivery_pending flag is invalid")
     response = None
     if raw_response is not None:
         if not isinstance(raw_response, dict):
@@ -2532,11 +3206,12 @@ def _request_from_persisted_payload(
         ),
         completed_at=_optional_float(payload.get("completed_at")),
         completed_response=response,
-        completed_bytes=int(payload.get("completed_bytes") or 0),
+        completed_bytes=int(payload["completed_bytes"]),
         wake_notified_at=_optional_float(payload.get("wake_notified_at")),
         accepted_notified_at=_optional_float(payload.get("accepted_notified_at")),
         parked_transport_epoch=_optional_string(payload.get("parked_transport_epoch")),
         reattachable=bool(payload.get("reattachable")),
+        delivery_pending=raw_delivery_pending,
     )
 
 

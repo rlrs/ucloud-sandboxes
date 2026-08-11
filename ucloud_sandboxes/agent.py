@@ -59,7 +59,7 @@ def build_heartbeat(
     draining: bool = False,
     node_url: str | None = None,
     agent_version: str | None = None,
-    deployment_id: str = "",
+    deployment_id: str,
     init_version: str = DEFAULT_INIT_VERSION,
     capabilities: tuple[str, ...] = (),
     total_resources: ResourceQuantity | None = None,
@@ -86,6 +86,9 @@ def build_heartbeat(
     cleaned_job_id = job_id.strip()
     if not cleaned_job_id:
         raise ValueError("job_id is required.")
+    cleaned_deployment_id = deployment_id.strip()
+    if not cleaned_deployment_id:
+        raise ValueError("deployment_id is required.")
     if active_sandboxes < 0:
         raise ValueError("active sandbox count cannot be negative.")
     if active_image_builds < 0:
@@ -133,10 +136,11 @@ def build_heartbeat(
         draining=draining,
         node_url=cleaned_node_url,
         agent_version=(agent_version or package_version()).strip(),
-        deployment_id=deployment_id.strip(),
+        deployment_id=cleaned_deployment_id,
         init_version=init_version.strip(),
         capabilities=tuple(dict.fromkeys(capabilities)),
         total_resources=total_resources or ResourceQuantity(),
+        resources_known=total_resources is not None,
         used_resources=used_resources or ResourceQuantity(),
         cpu_overcommit=cpu_overcommit,
         memory_overcommit=memory_overcommit,

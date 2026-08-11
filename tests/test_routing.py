@@ -7,6 +7,7 @@ import json
 import sqlite3
 from threading import Event
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.models import ResourceQuantity, utc_now
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
@@ -393,6 +394,75 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(updated.spec, spec)
         self.assertEqual(updated.state, "running")
 
+    def test_scoped_node_route_queries_are_indexed(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            store = RoutingStore(path)
+            routes = (
+                sandbox_route(
+                    sandbox_id="exact",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                ),
+                sandbox_route(
+                    sandbox_id="same-node",
+                    node_id="node-1",
+                    job_id="job-2",
+                    node_url="http://node-2:8090",
+                ),
+                sandbox_route(
+                    sandbox_id="same-job",
+                    node_id="node-3",
+                    job_id="job-1",
+                    node_url="http://node-3:8090",
+                ),
+                sandbox_route(
+                    sandbox_id="same-url",
+                    node_id="node-4",
+                    job_id="job-4",
+                    node_url="http://node-1:8090",
+                ),
+                sandbox_route(
+                    sandbox_id="unrelated",
+                    node_id="node-5",
+                    job_id="job-5",
+                    node_url="http://node-5:8090",
+                ),
+            )
+            for route in routes:
+                store.upsert_sandbox(route)
+
+            identity_matches = store.sandbox_routes_matching_node_identity(
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+            )
+            url_matches = store.sandbox_routes_for_node_url(
+                "http://node-1:8090"
+            )
+            with sqlite3.connect(path) as conn:
+                indexes = {
+                    str(row[1])
+                    for row in conn.execute("PRAGMA index_list('sandboxes')")
+                }
+
+        self.assertEqual(
+            [route.sandbox_id for route in identity_matches],
+            ["exact", "same-job", "same-node", "same-url"],
+        )
+        self.assertEqual(
+            [route.sandbox_id for route in url_matches],
+            ["exact", "same-url"],
+        )
+        self.assertTrue(
+            {
+                "sandboxes_node_id",
+                "sandboxes_job_id",
+                "sandboxes_node_url",
+            }.issubset(indexes)
+        )
+
     def test_finalize_sandbox_create_never_overwrites_or_resurrects_delete(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RoutingStore(Path(raw_dir) / "routes.sqlite")
@@ -683,19 +753,28 @@ class RoutingStoreTests(unittest.TestCase):
                 )
             )
 
-            store.reconcile_sandboxes_for_node(
-                "http://node-1:8090",
-                [
-                    sandbox_route(
-                        sandbox_id="active-one",
-                        node_id="node-1",
-                        job_id="job-1",
-                        node_url="http://node-1:8090",
-                        resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-                    )
-                ],
-                observed_at=now.isoformat(),
-            )
+            with patch.object(
+                store,
+                "_load_unlocked",
+                side_effect=AssertionError("reconcile must not load all routes"),
+            ):
+                store.reconcile_sandboxes_for_node(
+                    "http://node-1:8090",
+                    [
+                        sandbox_route(
+                            sandbox_id="active-one",
+                            node_id="node-1",
+                            job_id="job-1",
+                            node_url="http://node-1:8090",
+                            resources=ResourceQuantity(
+                                vcpu=1,
+                                memory_mb=512,
+                                disk_mb=1024,
+                            ),
+                        )
+                    ],
+                    observed_at=now.isoformat(),
+                )
             state = store.load()
 
         self.assertNotIn("stale-one", state.sandboxes)
@@ -1088,11 +1167,28 @@ class RoutingStoreTests(unittest.TestCase):
             demand.prepared_resources,
             ResourceQuantity(vcpu=4, memory_mb=2048, disk_mb=4096),
         )
+        self.assertEqual(demand.placement_requests, ())
+        self.assertEqual(len(demand.prepared_placement_requests), 1)
+        self.assertEqual(demand.prepared_placement_requests[0].count, 4)
         self.assertEqual(demand.desired_resources, demand.prepared_resources)
         self.assertEqual([item.prepare_id for item in consumed], ["prep-1"])
         self.assertEqual(demand_after_consume.prepared_resources, ResourceQuantity())
         self.assertEqual(deleted.prepare_id if deleted else None, "prep-2")
         self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
+
+    def test_prepared_capacity_count_is_bounded_at_the_store(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RoutingStore(Path(raw_dir) / "routes.sqlite")
+
+            with self.assertRaisesRegex(ValueError, "between 1 and 100"):
+                store.upsert_prepared_capacity(
+                    "too-many",
+                    ResourceQuantity(vcpu=1),
+                    count=101,
+                    ttl_seconds=600,
+                )
+
+            self.assertEqual(store.prepared_capacity(), [])
 
     def test_new_matching_routes_claim_prepared_capacity_once(self) -> None:
         resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
@@ -1954,20 +2050,21 @@ class RoutingStoreTests(unittest.TestCase):
             )
             snapshot_reached = Event()
             allow_reconcile_to_continue = Event()
-            original_load = reconciling_store._load_unlocked
-            loaded_exec_sessions: list[bool] = []
+            original_scoped_load = (
+                reconciling_store._sandbox_routes_for_node_url_unlocked
+            )
+            loaded_node_urls: list[str] = []
 
-            def pause_at_snapshot(conn, *, include_exec_sessions=True):
-                loaded_exec_sessions.append(include_exec_sessions)
-                snapshot = original_load(
-                    conn,
-                    include_exec_sessions=include_exec_sessions,
-                )
+            def pause_at_snapshot(conn, node_url):
+                loaded_node_urls.append(node_url)
+                snapshot = original_scoped_load(conn, node_url)
                 snapshot_reached.set()
                 self.assertTrue(allow_reconcile_to_continue.wait(timeout=5))
                 return snapshot
 
-            reconciling_store._load_unlocked = pause_at_snapshot
+            reconciling_store._sandbox_routes_for_node_url_unlocked = (
+                pause_at_snapshot
+            )
 
             def replace_incarnation() -> SandboxRoute:
                 writer_store.delete_sandbox_if_current(
@@ -2010,7 +2107,7 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(stored.generation, 2)
         self.assertEqual(stored.create_operation_id, "create-2")
         self.assertEqual(stored.spec_hash, "2" * 64)
-        self.assertEqual(loaded_exec_sessions, [False])
+        self.assertEqual(loaded_node_urls, [first.node_url])
 
     def test_concurrent_different_spec_allocation_rejects_loser_atomically(self) -> None:
         with TemporaryDirectory() as raw_dir:

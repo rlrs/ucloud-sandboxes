@@ -28,6 +28,7 @@ _ROUTE_LOCKS: dict[Path, RLock] = {}
 _EXEC_ROUTE_CACHES: dict[Path, OrderedDict[str, ExecRoute]] = {}
 _EXEC_ROUTE_CACHE_SANDBOX_INDEXES: dict[Path, dict[str, set[str]]] = {}
 PENDING_DEMAND_TTL_SECONDS = 300
+MAX_PREPARED_CAPACITY_COUNT = 100
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 ROUTING_SCHEMA_VERSION = 1
@@ -413,6 +414,15 @@ class PreparedCapacityDemand:
     expires_at: str
     image: str = ""
 
+    def __post_init__(self) -> None:
+        if isinstance(self.count, bool) or not isinstance(self.count, int):
+            raise ValueError("prepared capacity count must be an integer")
+        if not 1 <= self.count <= MAX_PREPARED_CAPACITY_COUNT:
+            raise ValueError(
+                "prepared capacity count must be between 1 and "
+                f"{MAX_PREPARED_CAPACITY_COUNT}"
+            )
+
     @property
     def total_resources(self) -> ResourceQuantity:
         return ResourceQuantity(
@@ -659,6 +669,49 @@ class RoutingStore:
                 )
                 if route is not None
             ]
+
+    def sandbox_routes_matching_node_identity(
+        self,
+        *,
+        node_id: str,
+        job_id: str,
+        node_url: str,
+    ) -> list[SandboxRoute]:
+        cleaned_node_url = node_url.strip().rstrip("/")
+        node_url_with_slash = f"{cleaned_node_url}/" if cleaned_node_url else ""
+        with self._connect() as conn:
+            return [
+                route
+                for route in (
+                    _sandbox_route_from_row(row)
+                    for row in conn.execute(
+                        """
+                        SELECT sandbox_id, node_id, job_id, node_url,
+                               resources_json, spec_json, state, generation,
+                               create_operation_id, spec_hash, delete_operation_id,
+                               node_epoch, activity_epoch, storage_schema,
+                               snapshot_manifest_digest, snapshot_repository,
+                               snapshot_tag, storage_snapshot_json,
+                               created_at, updated_at
+                        FROM sandboxes
+                        WHERE node_id = ? OR job_id = ?
+                           OR node_url IN (?, ?)
+                        ORDER BY sandbox_id
+                        """,
+                        (
+                            node_id.strip(),
+                            job_id.strip(),
+                            cleaned_node_url,
+                            node_url_with_slash,
+                        ),
+                    )
+                )
+                if route is not None
+            ]
+
+    def sandbox_routes_for_node_url(self, node_url: str) -> list[SandboxRoute]:
+        with self._connect() as conn:
+            return self._sandbox_routes_for_node_url_unlocked(conn, node_url.strip())
 
     def upsert_program_request_transition(
         self,
@@ -1673,9 +1726,13 @@ class RoutingStore:
                         (observed.sandbox_id,),
                     )
 
-                current = self._load_unlocked(conn, include_exec_sessions=False)
-                for sandbox_id, route in current.sandboxes.items():
-                    if route.node_url != node_url or sandbox_id in reported_ids:
+                current_routes = self._sandbox_routes_for_node_url_unlocked(
+                    conn,
+                    node_url,
+                )
+                for route in current_routes:
+                    sandbox_id = route.sandbox_id
+                    if sandbox_id in reported_ids:
                         continue
                     if not inventory_complete:
                         continue
@@ -2252,6 +2309,13 @@ class RoutingStore:
         ttl_seconds: int,
         image: str = "",
     ) -> PreparedCapacityDemand:
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise ValueError("prepared capacity count must be an integer")
+        if not 1 <= count <= MAX_PREPARED_CAPACITY_COUNT:
+            raise ValueError(
+                "prepared capacity count must be between 1 and "
+                f"{MAX_PREPARED_CAPACITY_COUNT}"
+            )
         with self._lock:
             now = utc_now()
             with self._transaction() as conn:
@@ -2259,7 +2323,7 @@ class RoutingStore:
                 stored = PreparedCapacityDemand(
                     prepare_id=prepare_id,
                     resources=resources,
-                    count=max(1, count),
+                    count=count,
                     created_at=existing.created_at if existing else now.isoformat(),
                     updated_at=now.isoformat(),
                     expires_at=(
@@ -2661,8 +2725,8 @@ class RoutingStore:
         suppressed_pending_resources = ResourceQuantity()
         pending_count = 0
         suppressed_pending_count = 0
-        prepared_resources = ResourceQuantity()
         placement_requests: list[SandboxPlacementRequest] = []
+        prepared_placement_requests: list[SandboxPlacementRequest] = []
         oldest_pending_seconds = 0
         for item in pending:
             if not item.is_capacity_demand:
@@ -2696,10 +2760,11 @@ class RoutingStore:
                     int((now - created_at).total_seconds()),
                 )
         for item in prepared:
-            prepared_resources = prepared_resources + item.total_resources
-            placement_requests.extend(
-                SandboxPlacementRequest(resources=item.resources)
-                for _ in range(item.count)
+            prepared_placement_requests.append(
+                SandboxPlacementRequest(
+                    resources=item.resources,
+                    count=item.count,
+                )
             )
             created_at = parse_iso_datetime(item.created_at)
             if created_at is not None:
@@ -2712,9 +2777,9 @@ class RoutingStore:
             suppressed_pending_resources=suppressed_pending_resources,
             pending_count=pending_count,
             suppressed_pending_count=suppressed_pending_count,
-            prepared_resources=prepared_resources,
             oldest_pending_seconds=max(0, oldest_pending_seconds),
             placement_requests=tuple(placement_requests),
+            prepared_placement_requests=tuple(prepared_placement_requests),
         )
 
     def _ensure_db(self) -> None:
@@ -2765,6 +2830,24 @@ class RoutingStore:
                     sandbox_id TEXT PRIMARY KEY,
                     generation INTEGER NOT NULL
                 )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS sandboxes_node_id
+                ON sandboxes(node_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS sandboxes_job_id
+                ON sandboxes(job_id)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS sandboxes_node_url
+                ON sandboxes(node_url)
                 """
             )
             conn.execute(
@@ -3094,6 +3177,34 @@ class RoutingStore:
                 if item is not None
             },
         )
+
+    def _sandbox_routes_for_node_url_unlocked(
+        self,
+        conn: sqlite3.Connection,
+        node_url: str,
+    ) -> list[SandboxRoute]:
+        return [
+            route
+            for route in (
+                _sandbox_route_from_row(row)
+                for row in conn.execute(
+                    """
+                    SELECT sandbox_id, node_id, job_id, node_url,
+                           resources_json, spec_json, state, generation,
+                           create_operation_id, spec_hash, delete_operation_id,
+                           node_epoch, activity_epoch, storage_schema,
+                           snapshot_manifest_digest, snapshot_repository,
+                           snapshot_tag, storage_snapshot_json,
+                           created_at, updated_at
+                    FROM sandboxes
+                    WHERE node_url = ?
+                    ORDER BY sandbox_id
+                    """,
+                    (node_url,),
+                )
+            )
+            if route is not None
+        ]
 
     def _get_sandbox_unlocked(
         self,
@@ -3648,8 +3759,8 @@ def sandbox_demand_from_routing_state(
     suppressed_pending_total = ResourceQuantity()
     pending_count = 0
     suppressed_pending_count = 0
-    prepared_total = ResourceQuantity()
     placement_requests: list[SandboxPlacementRequest] = []
+    prepared_placement_requests: list[SandboxPlacementRequest] = []
     oldest_pending_seconds = 0
     for item in state.pending.values():
         if item.is_expired(now):
@@ -3682,9 +3793,11 @@ def sandbox_demand_from_routing_state(
     for item in state.prepared.values():
         if item.is_expired(now):
             continue
-        prepared_total = prepared_total + item.total_resources
-        placement_requests.extend(
-            SandboxPlacementRequest(resources=item.resources) for _ in range(item.count)
+        prepared_placement_requests.append(
+            SandboxPlacementRequest(
+                resources=item.resources,
+                count=item.count,
+            )
         )
         created_at = parse_iso_datetime(item.created_at)
         if created_at is not None:
@@ -3697,9 +3810,9 @@ def sandbox_demand_from_routing_state(
         suppressed_pending_resources=suppressed_pending_total,
         pending_count=pending_count,
         suppressed_pending_count=suppressed_pending_count,
-        prepared_resources=prepared_total,
         oldest_pending_seconds=max(0, oldest_pending_seconds),
         placement_requests=tuple(placement_requests),
+        prepared_placement_requests=tuple(prepared_placement_requests),
     )
 
 
@@ -3879,7 +3992,7 @@ def _prepared_from_row(row: sqlite3.Row) -> PreparedCapacityDemand:
     return PreparedCapacityDemand(
         prepare_id=str(row["prepare_id"]),
         resources=_resources_from_json(row["resources_json"]),
-        count=max(1, int(row["count"])),
+        count=int(row["count"]),
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
         expires_at=str(row["expires_at"]),

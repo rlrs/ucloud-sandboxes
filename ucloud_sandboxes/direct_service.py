@@ -9,7 +9,7 @@ import logging
 import subprocess
 import threading
 import time
-from typing import Callable, Sequence
+from typing import Callable, Iterator, Sequence
 from uuid import uuid4
 
 from .direct_provisioner import DirectSandboxProvisioner
@@ -52,6 +52,30 @@ class DirectExecResult:
     exit_code: int
     stdout: bytes
     stderr: bytes
+
+
+@dataclass(frozen=True)
+class DirectSandboxInventoryItem:
+    registration: DirectSandboxRegistration
+    record: SandboxRecord
+
+
+@dataclass(frozen=True)
+class DirectServiceInventorySnapshot:
+    """Lifecycle records and their owners from one registry snapshot."""
+
+    items: tuple[DirectSandboxInventoryItem, ...]
+    activity_revision: int
+
+    @property
+    def records(self) -> tuple[SandboxRecord, ...]:
+        return tuple(item.record for item in self.items)
+
+
+@dataclass
+class _LifecycleLockEntry:
+    lock: threading.Lock
+    users: int = 0
 
 
 class DirectProcessRunner:
@@ -168,6 +192,7 @@ class DirectSandboxService:
         max_concurrent_restores: int = 8,
         idle_park_seconds: float = 0.0,
         deletion_reconcile_interval_seconds: float = 5.0,
+        image_reconcile_interval_seconds: float = 300.0,
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
@@ -175,6 +200,8 @@ class DirectSandboxService:
             raise ValueError("idle_park_seconds cannot be negative")
         if deletion_reconcile_interval_seconds <= 0:
             raise ValueError("deletion_reconcile_interval_seconds must be positive")
+        if image_reconcile_interval_seconds <= 0:
+            raise ValueError("image_reconcile_interval_seconds must be positive")
         self.provisioner = provisioner
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
@@ -191,12 +218,18 @@ class DirectSandboxService:
         # predecessor's drain proof by accident.
         self._activity_epoch = time.time_ns()
         self._capacity_guard = threading.Lock()
-        self._locks: dict[tuple[str, int], threading.Lock] = {}
+        self._locks: dict[tuple[str, int], _LifecycleLockEntry] = {}
         self._locks_guard = threading.Lock()
         self._admission_open = True
         self._idle_park_seconds = float(idle_park_seconds)
         self._deletion_reconcile_interval_seconds = float(
             deletion_reconcile_interval_seconds
+        )
+        self._image_reconcile_interval_seconds = float(
+            image_reconcile_interval_seconds
+        )
+        self._next_image_reconcile = (
+            time.monotonic() + self._image_reconcile_interval_seconds
         )
         self._last_activity: dict[tuple[str, int], float] = {}
         self._activity_guard = threading.Lock()
@@ -240,6 +273,9 @@ class DirectSandboxService:
         results = self.provisioner.start()
         records = tuple(self._record(item.registration) for item in results)
         self._stop_event.clear()
+        self._next_image_reconcile = (
+            time.monotonic() + self._image_reconcile_interval_seconds
+        )
         now = time.monotonic()
         with self._activity_guard:
             self._last_activity = {
@@ -296,6 +332,28 @@ class DirectSandboxService:
         while not self._stop_event.wait(self._deletion_reconcile_interval_seconds):
             failures: list[tuple[str, Exception]] = []
             deleted = 0
+            now = time.monotonic()
+            image_reconcile_pending = (
+                self.provisioner.image_cache_reconciliation_pending
+            )
+            if image_reconcile_pending or now >= self._next_image_reconcile:
+                try:
+                    if image_reconcile_pending:
+                        self.provisioner.reconcile_image_cache_if_pending()
+                    else:
+                        # A periodic pass is required even without a prior
+                        # failure so crash-orphaned private tags are eventually
+                        # collected on long-lived nodes.
+                        self.provisioner.reconcile_image_cache()
+                except Exception as exc:
+                    _LOG.warning(
+                        "could not reconcile the direct rootfs cache: %s",
+                        exc,
+                    )
+                finally:
+                    self._next_image_reconcile = (
+                        time.monotonic() + self._image_reconcile_interval_seconds
+                    )
             try:
                 registrations = self.provisioner.registry.list()
             except Exception as exc:
@@ -374,30 +432,37 @@ class DirectSandboxService:
     def list_snapshot(self) -> tuple[SandboxRecord, ...]:
         """Return inventory without waiting for a sandbox lifecycle fence."""
 
-        return tuple(
-            self._record_snapshot(item)
-            for item in self.provisioner.registry.list()
-            if item.phase != "deleting"
+        return self.inventory_snapshot().records
+
+    def inventory_snapshot(self) -> DirectServiceInventorySnapshot:
+        """Build one indexed heartbeat view from one durable registry read."""
+
+        registry = self.provisioner.registry.snapshot()
+        return DirectServiceInventorySnapshot(
+            items=tuple(
+                DirectSandboxInventoryItem(item, self._record_snapshot(item))
+                for item in registry.records
+                if item.phase != "deleting"
+            ),
+            activity_revision=registry.activity_revision,
         )
 
     def try_delete(self, sandbox_id: str, *, generation: int) -> bool:
         """Delete only when no lifecycle operation currently owns the sandbox."""
 
         key = (sandbox_id, generation)
-        lock = self._lock(*key)
-        if not lock.acquire(blocking=False):
-            return False
-        try:
+        with self._try_lock(*key) as acquired:
+            if not acquired:
+                return False
             registration = self.provisioner.registry.get(sandbox_id)
             if registration is None:
-                return True
-            if registration.sandbox_generation != generation:
+                deleted = True
+            elif registration.sandbox_generation != generation:
                 return False
-            self.provisioner.delete(sandbox_id)
-        finally:
-            lock.release()
-        with self._locks_guard:
-            self._locks.pop(key, None)
+            else:
+                self.provisioner.delete(sandbox_id)
+                deleted = True
+        assert deleted
         with self._activity_guard:
             self._last_activity.pop(key, None)
         return True
@@ -418,8 +483,6 @@ class DirectSandboxService:
         key = (sandbox_id, registration.sandbox_generation)
         with self._lock(*key):
             self.provisioner.delete(sandbox_id)
-        with self._locks_guard:
-            self._locks.pop(key, None)
         with self._activity_guard:
             self._last_activity.pop(key, None)
 
@@ -723,8 +786,6 @@ class DirectSandboxService:
                 migration_id=migration_id,
                 migration_sha256=migration_sha256,
             )
-        with self._locks_guard:
-            self._locks.pop(key, None)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self.provisioner.storage_migrations.discard(migration_id)
@@ -762,8 +823,6 @@ class DirectSandboxService:
                 migration_id=migration_id,
                 migration_sha256=migration_sha256,
             )
-        with self._locks_guard:
-            self._locks.pop(key, None)
         with self._activity_guard:
             self._last_activity.pop(key, None)
         self.provisioner.storage_migrations.discard(migration_id)
@@ -1011,25 +1070,25 @@ class DirectSandboxService:
                     last_activity = self._last_activity.setdefault(key, now)
                 if now - last_activity < self._idle_park_seconds:
                     continue
-                lock = self._lock(*key)
-                if not lock.acquire(blocking=False):
-                    continue
                 try:
-                    lifecycle = self.warden.inspect(registration.to_direct_sandbox())
-                    if (
-                        lifecycle is not None
-                        and lifecycle.state == HibernationState.RUNNING
-                    ):
-                        self.warden.park(
-                            registration.to_direct_sandbox(),
-                            operation_id=f"idle-park:{uuid4().hex}",
+                    with self._try_lock(*key) as acquired:
+                        if not acquired:
+                            continue
+                        lifecycle = self.warden.inspect(
+                            registration.to_direct_sandbox()
                         )
+                        if (
+                            lifecycle is not None
+                            and lifecycle.state == HibernationState.RUNNING
+                        ):
+                            self.warden.park(
+                                registration.to_direct_sandbox(),
+                                operation_id=f"idle-park:{uuid4().hex}",
+                            )
                 except DirectWardenError:
                     # Reconciliation and node health expose persistent failures;
                     # one failed background park must not kill the daemon.
                     continue
-                finally:
-                    lock.release()
 
     def read_file(
         self,
@@ -1270,12 +1329,53 @@ class DirectSandboxService:
             raise DirectWardenError("direct sandbox is unavailable")
         return registration
 
-    def _lock(self, sandbox_id: str, generation: int) -> threading.Lock:
+    def _retain_lock(
+        self,
+        sandbox_id: str,
+        generation: int,
+    ) -> tuple[tuple[str, int], _LifecycleLockEntry]:
+        key = (sandbox_id, generation)
         with self._locks_guard:
-            return self._locks.setdefault(
-                (sandbox_id, generation),
-                threading.Lock(),
-            )
+            entry = self._locks.setdefault(key, _LifecycleLockEntry(threading.Lock()))
+            entry.users += 1
+            return key, entry
+
+    def _release_lock_entry(
+        self,
+        key: tuple[str, int],
+        entry: _LifecycleLockEntry,
+    ) -> None:
+        with self._locks_guard:
+            entry.users -= 1
+            if entry.users < 0:
+                raise RuntimeError("direct lifecycle lock reference underflow")
+            if entry.users == 0 and self._locks.get(key) is entry:
+                self._locks.pop(key)
+
+    @contextmanager
+    def _lock(self, sandbox_id: str, generation: int) -> Iterator[None]:
+        key, entry = self._retain_lock(sandbox_id, generation)
+        acquired = False
+        try:
+            entry.lock.acquire()
+            acquired = True
+            yield
+        finally:
+            if acquired:
+                entry.lock.release()
+            self._release_lock_entry(key, entry)
+
+    @contextmanager
+    def _try_lock(self, sandbox_id: str, generation: int) -> Iterator[bool]:
+        key, entry = self._retain_lock(sandbox_id, generation)
+        acquired = False
+        try:
+            acquired = entry.lock.acquire(blocking=False)
+            yield acquired
+        finally:
+            if acquired:
+                entry.lock.release()
+            self._release_lock_entry(key, entry)
 
     def _record(self, registration: DirectSandboxRegistration) -> SandboxRecord:
         state = registration.phase

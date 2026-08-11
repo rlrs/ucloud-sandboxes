@@ -242,8 +242,8 @@ sandbox using the same image id. An explicit `tag` is still accepted for
 external or advanced registry flows. Private registry DNS names and ports are
 deployment details, not client configuration.
 
-`POST /v1/capacity/prepare` accepts `count`, resource fields, `ttl_seconds`,
-and optional `image` and `parkable`. Set `parkable: true` when the future
+`POST /v1/capacity/prepare` accepts `count` from 1 through 100, resource fields,
+`ttl_seconds`, and optional `image` and `parkable`. Set `parkable: true` when the future
 sandboxes will be parkable; the gateway then expands the caller's writable
 `disk_mb` into the same hard checkpoint reservation used during sandbox
 creation, so each sandbox can claim its prepared unit exactly. Each prepared

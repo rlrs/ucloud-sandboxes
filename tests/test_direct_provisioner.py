@@ -76,7 +76,12 @@ class FakeImageStore:
             image_config=DockerImageConfig(command=("sleep", "3600")),
         )
         self.reconciled = False
+        self.reconciled_roots: tuple[str, ...] = ()
+        self.collected_image_ids: list[str] = []
+        self.collection_reference_checks: list[bool] = []
         self.materialized_refs: list[str] = []
+        self.fail_collect = False
+        self.fail_reconcile = False
 
     def materialize(self, image_ref: str) -> MaterializedRootfs:
         if image_ref != "image":
@@ -84,8 +89,27 @@ class FakeImageStore:
         self.materialized_refs.append(image_ref)
         return self.image
 
-    def reconcile_images(self) -> None:
+    @contextmanager
+    def operation_lease(self, image_ref: str):
+        yield self.materialize(image_ref)
+
+    def reconcile_images(self, referenced_image_ids, *, is_referenced) -> None:
+        self.reconciled_roots = tuple(referenced_image_ids)
+        del is_referenced
+        if self.fail_reconcile:
+            raise OSError("injected image reconciliation failure")
         self.reconciled = True
+
+    def collect_image(self, image_id, *, is_referenced) -> bool:
+        self.collected_image_ids.append(image_id)
+        if self.fail_collect:
+            raise OSError("injected image collection failure")
+        referenced = is_referenced(image_id)
+        self.collection_reference_checks.append(referenced)
+        return not referenced
+
+    def warm(self, image_ref: str) -> None:
+        self.materialize(image_ref)
 
     def operation_snapshot(self) -> dict[str, int]:
         return {
@@ -153,13 +177,12 @@ class FakeOverlays:
         *,
         sandbox_id,
         sandbox_generation,
-        image_ref,
+        image,
         config_template,
         spec_sha256,
         imported_parked=False,
     ):
         del config_template
-        image = self.image_store.materialize(image_ref)
         incarnation = f"{sandbox_id}.sandbox-{sandbox_generation}"
         writable = self.writable_root / incarnation
         if not writable.is_dir():
@@ -225,6 +248,7 @@ class FakeWarden:
         self.discarded = []
         self.alive = True
         self.storage = SimpleNamespace(get_metrics=lambda: {})
+        self.storage_snapshot_calls = 0
 
     @staticmethod
     def key(sandbox):
@@ -266,6 +290,13 @@ class FakeWarden:
     @staticmethod
     def _storage_record(_sandbox):
         return {"state": "mounted"}
+
+    def storage_records_snapshot(self, sandboxes):
+        self.storage_snapshot_calls += 1
+        return {
+            sandbox.memory_directory: {"state": "mounted"}
+            for sandbox in sandboxes
+        }
 
     def park(self, sandbox, *, operation_id):
         del operation_id
@@ -390,6 +421,104 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(ledger.inventory().reservations, ())
             self.assertEqual(quota.inventory(), ())
 
+    def test_delete_collects_only_its_digest_and_preserves_shared_root(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, images, _ = self.make(root)
+            first = provisioner.create(
+                spec=replace(self.spec(), id="sandbox-1"),
+                sandbox_generation=1,
+                operation_id="create:1",
+            )
+            second = provisioner.create(
+                spec=replace(self.spec(), id="sandbox-2"),
+                sandbox_generation=1,
+                operation_id="create:2",
+            )
+
+            provisioner.delete(first.registration.sandbox_id)
+            provisioner.delete(second.registration.sandbox_id)
+
+            self.assertFalse(images.reconciled)
+            self.assertEqual(
+                images.collected_image_ids,
+                [images.image.image_id, images.image.image_id],
+            )
+            self.assertEqual(images.collection_reference_checks, [True, False])
+
+    def test_post_commit_image_collection_failure_is_deferred(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, images, _ = self.make(root)
+            provisioner.start()
+            created = provisioner.create(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            images.fail_collect = True
+
+            provisioner.delete(created.registration.sandbox_id)
+
+            self.assertIsNone(registry.get(created.registration.sandbox_id))
+            self.assertTrue(provisioner.image_cache_reconciliation_pending)
+            images.fail_collect = False
+            self.assertTrue(provisioner.reconcile_image_cache_if_pending())
+            self.assertFalse(provisioner.image_cache_reconciliation_pending)
+
+    def test_targeted_image_collection_does_not_serialize_other_digests(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, images, _ = self.make(root)
+            entered_two = Event()
+            release = Event()
+            active_guard = Lock()
+            active = 0
+            maximum_active = 0
+            errors: list[BaseException] = []
+
+            def blocking_collect(image_id, *, is_referenced):
+                nonlocal active, maximum_active
+                if is_referenced(image_id):
+                    raise AssertionError("test digest unexpectedly became referenced")
+                with active_guard:
+                    active += 1
+                    maximum_active = max(maximum_active, active)
+                    if active == 2:
+                        entered_two.set()
+                try:
+                    if not release.wait(timeout=5):
+                        raise AssertionError("test did not release image collection")
+                finally:
+                    with active_guard:
+                        active -= 1
+                return True
+
+            images.collect_image = blocking_collect
+
+            def collect(image_id: str) -> None:
+                try:
+                    provisioner._collect_deleted_image(image_id)
+                except BaseException as exc:
+                    errors.append(exc)
+
+            first = Thread(target=collect, args=("sha256:" + "a" * 64,))
+            second = Thread(target=collect, args=("sha256:" + "b" * 64,))
+            first.start()
+            second.start()
+            concurrent = entered_two.wait(timeout=2)
+            release.set()
+            first.join(timeout=5)
+            second.join(timeout=5)
+
+            self.assertTrue(concurrent)
+            self.assertFalse(first.is_alive())
+            self.assertFalse(second.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(maximum_active, 2)
+
     def test_restart_advances_quota_ready_registration(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -426,7 +555,7 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, _, warden = self.make(root)
+            provisioner, registry, _, _, images, warden = self.make(root)
             network = DirectNetworkManager(
                 root / "network-slots.json",
                 namespace_root=root / "netns",
@@ -458,29 +587,33 @@ class DirectProvisionerTests(unittest.TestCase):
                     )
                 ensure_host_rules.reset_mock()
                 ensure_kernel_lease.reset_mock()
-                original_list = registry.list
+                original_snapshot = registry.snapshot
                 original_get = registry.get
-                list_calls = 0
+                snapshot_calls = 0
                 get_calls = 0
 
-                def counted_list():
-                    nonlocal list_calls
-                    list_calls += 1
-                    return original_list()
+                def counted_snapshot():
+                    nonlocal snapshot_calls
+                    snapshot_calls += 1
+                    return original_snapshot()
 
                 def counted_get(sandbox_id: str):
                     nonlocal get_calls
                     get_calls += 1
                     return original_get(sandbox_id)
 
-                registry.list = counted_list  # type: ignore[method-assign]
+                registry.snapshot = counted_snapshot  # type: ignore[method-assign]
                 registry.get = counted_get  # type: ignore[method-assign]
 
                 results = provisioner.start()
 
             self.assertEqual(len(results), 3)
-            self.assertEqual(list_calls, 1)
+            self.assertEqual(snapshot_calls, 1)
             self.assertEqual(get_calls, 0)
+            self.assertEqual(
+                images.reconciled_roots,
+                (images.image.image_id,) * 3,
+            )
             ensure_host_rules.assert_called_once_with()
             self.assertEqual(ensure_kernel_lease.call_count, 3)
 
@@ -1031,6 +1164,144 @@ class DirectProvisionerTests(unittest.TestCase):
                 {record.state for record in snapshot.activity.records},
                 {"planned", "quota_ready"},
             )
+
+    def test_heartbeat_uses_one_registry_and_one_bulk_storage_snapshot(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _, warden = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            self.create(service, self.spec())
+            self.create(service, replace(self.spec(), id="sandbox-2"))
+            manager = DirectNodeRuntime(service)
+            original_snapshot = registry.snapshot
+            snapshot_calls = 0
+
+            def counted_snapshot():
+                nonlocal snapshot_calls
+                snapshot_calls += 1
+                return original_snapshot()
+
+            def unexpected_registry_read(*_args, **_kwargs):
+                raise AssertionError("heartbeat performed a second registry read")
+
+            registry.snapshot = counted_snapshot  # type: ignore[method-assign]
+            registry.get = unexpected_registry_read  # type: ignore[method-assign]
+            registry.list = unexpected_registry_read  # type: ignore[method-assign]
+            warden.storage_snapshot_calls = 0
+
+            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            self.assertEqual(len(snapshot.activity.records), 2)
+            self.assertEqual(snapshot_calls, 1)
+            self.assertEqual(warden.storage_snapshot_calls, 1)
+
+    def test_heartbeat_epoch_increases_after_highest_revision_is_deleted(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            highest = self.create(
+                service,
+                replace(self.spec(), id="sandbox-highest"),
+                generation=1,
+            )
+            remaining = self.create(
+                service,
+                replace(self.spec(), id="sandbox-remaining"),
+                generation=1,
+            )
+            record = registry.get(highest.spec.id)
+            assert record is not None
+            moving = registry.begin_move_out(
+                highest.spec.id,
+                expected_revision=record.revision,
+                migration_id="move:highest-revision",
+                migration_sha256="c" * 64,
+            )
+            registry.abort_move_out(
+                highest.spec.id,
+                expected_revision=moving.revision,
+                migration_id=moving.migration_id,
+                migration_sha256=moving.migration_sha256,
+            )
+            manager = DirectNodeRuntime(service)
+            before = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            service.delete(highest.spec.id, generation=highest.generation)
+            after = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            self.assertEqual(
+                tuple(record.spec.id for record in after.activity.records),
+                (remaining.spec.id,),
+            )
+            self.assertGreater(
+                after.activity.activity_revision,
+                before.activity.activity_revision,
+            )
+
+    def test_heartbeat_epoch_increases_after_last_registration_is_deleted(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            manager = DirectNodeRuntime(service)
+            before = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            service.delete(created.spec.id, generation=created.generation)
+            after = manager.heartbeat_snapshot(active_build_count=lambda: 0)
+
+            self.assertEqual(after.activity.records, ())
+            self.assertGreater(
+                after.activity.activity_revision,
+                before.activity.activity_revision,
+            )
+
+    def test_try_delete_retires_absent_mismatched_and_busy_lock_entries(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+
+            self.assertTrue(service.try_delete("absent", generation=1))
+            self.assertFalse(
+                service.try_delete(created.spec.id, generation=created.generation + 1)
+            )
+            self.assertEqual(service._locks, {})
+
+            acquired = Event()
+            release = Event()
+
+            def hold_lifecycle_lock() -> None:
+                with service._lock(created.spec.id, created.generation):
+                    acquired.set()
+                    if not release.wait(timeout=5):
+                        raise AssertionError("test did not release lifecycle lock")
+
+            holder = Thread(target=hold_lifecycle_lock)
+            holder.start()
+            self.assertTrue(acquired.wait(timeout=2))
+            self.assertFalse(
+                service.try_delete(created.spec.id, generation=created.generation)
+            )
+            release.set()
+            holder.join(timeout=5)
+
+            self.assertFalse(holder.is_alive())
+            self.assertEqual(service._locks, {})
 
     def test_drain_fences_create_before_rootfs_registration(self) -> None:
         with TemporaryDirectory() as raw:

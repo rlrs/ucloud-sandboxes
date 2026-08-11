@@ -142,6 +142,76 @@ class DirectRegistryTests(unittest.TestCase):
                     runtime_identity_sha256="b" * 64,
                 )
 
+    def test_snapshot_is_resident_and_invalidates_after_external_commit(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            path = (root / "registry.json").resolve()
+            registry = DirectSandboxRegistry(path)
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_identity_sha256="b" * 64,
+            )
+
+            first = registry.snapshot()
+            self.assertIs(registry.snapshot(), first)
+            self.assertIs(first.get("sandbox"), planned)
+
+            external = DirectSandboxRegistry(path)
+            committed = external.commit_quota(
+                "sandbox",
+                expected_revision=planned.revision,
+                project_id=200_000,
+                total_mb=4096,
+                quota_path=(root / "quota" / "sandbox.sandbox-7").resolve(),
+            )
+            refreshed = registry.snapshot()
+
+            self.assertIsNot(refreshed, first)
+            self.assertEqual(refreshed.get("sandbox"), committed)
+            self.assertEqual(refreshed.activity_revision, committed.revision)
+
+    def test_global_activity_revision_survives_last_record_deletion(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw)
+            path = (root / "registry.json").resolve()
+            registry = DirectSandboxRegistry(path)
+
+            self.delete_registration(registry, root, "sandbox", 7)
+            deleted = registry.snapshot()
+            reopened = DirectSandboxRegistry(path).snapshot()
+            payload = json.loads(path.read_text(encoding="utf-8"))
+
+            self.assertEqual(deleted.records, ())
+            self.assertGreater(deleted.activity_revision, 0)
+            self.assertEqual(reopened.activity_revision, deleted.activity_revision)
+            self.assertEqual(payload["version"], 3)
+            self.assertEqual(
+                payload["activity_revision"],
+                deleted.activity_revision,
+            )
+
+    def test_version_two_registry_is_rejected_without_migration(self) -> None:
+        with TemporaryDirectory() as raw:
+            path = (Path(raw) / "registry.json").resolve()
+            path.write_text(
+                json.dumps(
+                    {
+                        "migration_tombstones": {},
+                        "records": [],
+                        "tombstones": {},
+                        "version": 2,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            os.chmod(path, 0o600)
+
+            with self.assertRaisesRegex(DirectRegistryError, "schema is invalid"):
+                DirectSandboxRegistry(path).snapshot()
+
     def test_rejects_noncanonical_registry_schema(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)

@@ -4,7 +4,7 @@ from pathlib import Path
 import sqlite3
 import unittest
 
-from ucloud_sandboxes.agent import build_heartbeat
+from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.metrics import (
     GatewayBusyTraceSampler,
     MetricEvent,
@@ -31,6 +31,11 @@ from ucloud_sandboxes.routing import (
     RoutingState,
     SandboxRoute,
 )
+
+
+def build_heartbeat(**kwargs):
+    kwargs.setdefault("deployment_id", "test-deployment")
+    return _build_heartbeat(**kwargs)
 
 
 class MetricsTests(unittest.TestCase):

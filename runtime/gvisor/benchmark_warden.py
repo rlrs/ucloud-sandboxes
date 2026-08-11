@@ -286,25 +286,25 @@ def main() -> int:
         image_store = DockerOverlay2RootfsStore(
             (args.state_root / "image-cache").resolve()
         )
-        image = image_store.materialize(args.image)
-        oci = DirectOciConfigBuilder()
-        spec = SandboxSpec(
-            id="warden-benchmark",
-            image=args.image,
-            command=initial_command,
-            memory_mb=args.memory_mb,
-            cpus=args.cpus,
-            disk_mb=args.disk_mb,
-            network="none" if args.network == "none" else "bridge",
-            parkable=True,
-            security=SandboxSecuritySpec(
-                user="0:0",
-                cap_drop=(),
-                init=False,
-                no_new_privileges=False,
-            ),
-        )
-        config = oci.build(spec, image)
+        with image_store.operation_lease(args.image) as image:
+            oci = DirectOciConfigBuilder()
+            spec = SandboxSpec(
+                id="warden-benchmark",
+                image=args.image,
+                command=initial_command,
+                memory_mb=args.memory_mb,
+                cpus=args.cpus,
+                disk_mb=args.disk_mb,
+                network="none" if args.network == "none" else "bridge",
+                parkable=True,
+                security=SandboxSecuritySpec(
+                    user="0:0",
+                    cap_drop=(),
+                    init=False,
+                    no_new_privileges=False,
+                ),
+            )
+            config = oci.build(spec, image)
         if args.paused_handoff_workload is not None:
             config["mounts"].append(
                 {
@@ -323,12 +323,13 @@ def main() -> int:
             writable_root=writable_root,
             bundle_root=(args.state_root / "bundles").resolve(),
         )
-        lease = overlays.prepare(
-            sandbox_id="warden-benchmark",
-            sandbox_generation=1,
-            image_ref=args.image,
-            config_template=config,
-        )
+        with image_store.operation_lease(args.image) as image:
+            lease = overlays.prepare(
+                sandbox_id="warden-benchmark",
+                sandbox_generation=1,
+                image=image,
+                config_template=config,
+            )
         if args.paused_handoff_workload is not None:
             paused_probe_source.mkdir(mode=0o700)
             (lease.merged / "handoff-probe").mkdir(mode=0o755)

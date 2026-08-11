@@ -3,10 +3,14 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
+import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -40,11 +44,19 @@ COMMAND_OUTPUT_TRUNCATION_MARKER = "[output truncated; showing retained tail]\n"
 DEFAULT_TERMINAL_BUILD_HISTORY = 256
 BUILD_LOG_FLUSH_CHARS = 16 * 1024
 BUILD_LOG_FLUSH_INTERVAL_SECONDS = 0.25
+MAX_BUILD_CONTEXT_EXTRACTED_BYTES = 2 * 1024**3
+MAX_BUILD_CONTEXT_MEMBER_BYTES = 512 * 1024**2
+MAX_BUILD_CONTEXT_MEMBERS = 100_000
+MAX_BUILD_CONTEXT_DECOMPRESSED_ARCHIVE_BYTES = 2 * 1024**3
 _IMAGE_LOCKS_GUARD = RLock()
 _IMAGE_LOCKS: dict[Path, _AdvisoryFileLock] = {}
 
 
 class ImageBuildCapacityError(RuntimeError):
+    pass
+
+
+class ImageBuildConflictError(RuntimeError):
     pass
 
 
@@ -66,7 +78,9 @@ class ImageBuildSpec:
             id=str(raw.get("id") or image_id_from_tag(tag)),
             tag=tag,
             context_path=str(raw.get("context_path") or "."),
-            dockerfile=str(raw.get("dockerfile") or "Dockerfile"),
+            dockerfile=_normalize_dockerfile_path(
+                str(raw.get("dockerfile") or "Dockerfile")
+            ),
             build_args={str(k): str(v) for k, v in dict(build_args).items()},
             labels={str(k): str(v) for k, v in dict(labels).items()},
         )
@@ -81,9 +95,154 @@ class ImageBuildSpec:
             raise ValueError("image tag is required.")
         if not self.context_path.strip():
             raise ValueError("image context_path is required.")
+        _normalize_dockerfile_path(self.dockerfile)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def image_build_fingerprint(
+    spec: ImageBuildSpec,
+    *,
+    push: bool = False,
+    context_identity: str | None = None,
+) -> str:
+    """Return the exact immutable identity used for build single-flight."""
+
+    spec.validate()
+    immutable_context_identity = context_identity
+    if immutable_context_identity is None:
+        immutable_context_identity = (
+            f"tree:{image_build_context_digest(Path(spec.context_path))}"
+        )
+    payload = {
+        "build_args": dict(spec.build_args),
+        "context_identity": immutable_context_identity,
+        "dockerfile": _normalize_dockerfile_path(spec.dockerfile),
+        "image_id": spec.id,
+        "labels": dict(spec.labels),
+        "push": bool(push),
+        "tag": spec.tag,
+        "version": 1,
+    }
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def image_build_context_digest(context_path: Path) -> str:
+    """Hash a deterministic, mutation-checked snapshot of a local context."""
+
+    try:
+        root = context_path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"image build context is unavailable: {context_path}") from exc
+    if not root.is_dir():
+        raise ValueError(f"image build context must be a directory: {context_path}")
+    digest = hashlib.sha256()
+    digest.update(b"ucloud-image-context-v2\0")
+
+    def visit(directory: Path, relative: Path) -> None:
+        before = directory.stat(follow_symlinks=False)
+        _hash_context_metadata(digest, relative, before, kind="directory")
+        try:
+            entries = sorted(os.scandir(directory), key=lambda item: item.name)
+        except OSError as exc:
+            raise ValueError(f"cannot read image build context: {directory}") from exc
+        for entry in entries:
+            entry_path = Path(entry.path)
+            entry_relative = relative / entry.name
+            try:
+                entry_stat = entry.stat(follow_symlinks=False)
+                if entry.is_symlink():
+                    target = os.readlink(entry_path)
+                    _hash_context_metadata(
+                        digest,
+                        entry_relative,
+                        entry_stat,
+                        kind="symlink",
+                        value=target.encode("utf-8", errors="surrogateescape"),
+                    )
+                elif entry.is_dir(follow_symlinks=False):
+                    visit(entry_path, entry_relative)
+                elif entry.is_file(follow_symlinks=False):
+                    content_digest = hashlib.sha256()
+                    with entry_path.open("rb") as handle:
+                        while chunk := handle.read(1024 * 1024):
+                            content_digest.update(chunk)
+                    after = entry.stat(follow_symlinks=False)
+                    if _context_stat_identity(entry_stat) != _context_stat_identity(
+                        after
+                    ):
+                        raise ValueError(
+                            f"image build context changed while hashing: {entry_path}"
+                        )
+                    _hash_context_metadata(
+                        digest,
+                        entry_relative,
+                        entry_stat,
+                        kind="file",
+                        value=content_digest.digest(),
+                    )
+                else:
+                    raise ValueError(
+                        f"unsupported file type in image build context: {entry_path}"
+                    )
+            except OSError as exc:
+                raise ValueError(
+                    f"cannot read image build context entry: {entry_path}"
+                ) from exc
+        after = directory.stat(follow_symlinks=False)
+        if _context_stat_identity(before) != _context_stat_identity(after):
+            raise ValueError(
+                f"image build context changed while hashing: {directory}"
+            )
+
+    visit(root, Path("."))
+    return digest.hexdigest()
+
+
+def _context_stat_identity(value: os.stat_result) -> tuple[int, ...]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_uid,
+        value.st_gid,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _hash_context_metadata(
+    digest: Any,
+    path: Path,
+    metadata: os.stat_result,
+    *,
+    kind: str,
+    value: bytes = b"",
+) -> None:
+    record = json.dumps(
+        {
+            "kind": kind,
+            "mode": stat.S_IMODE(metadata.st_mode),
+            "mtime_ns": metadata.st_mtime_ns,
+            "path": path.as_posix(),
+            "size": metadata.st_size if kind == "file" else 0,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8", errors="surrogateescape")
+    digest.update(len(record).to_bytes(8, "big"))
+    digest.update(record)
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
 
 
 @dataclass(frozen=True)
@@ -202,6 +361,7 @@ class ImageBuildRecord:
     image: dict[str, Any] = field(default_factory=dict)
     timings: dict[str, Any] = field(default_factory=dict)
     owner_pid: int = 0
+    request_fingerprint: str = ""
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
@@ -221,6 +381,7 @@ class ImageBuildRecord:
             "push",
             "push_command",
             "push_exit_code",
+            "request_fingerprint",
             "started_at",
             "status",
             "tag",
@@ -269,6 +430,7 @@ class ImageBuildRecord:
             image={str(key): value for key, value in image.items()},
             timings={str(key): value for key, value in timings.items()},
             owner_pid=max(0, _optional_int(raw.get("owner_pid")) or 0),
+            request_fingerprint=str(raw.get("request_fingerprint") or ""),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -293,6 +455,7 @@ class ImageBuildRecord:
             "image": dict(self.image),
             "timings": dict(self.timings),
             "owner_pid": self.owner_pid,
+            "request_fingerprint": self.request_fingerprint,
         }
 
     @property
@@ -581,14 +744,27 @@ class ImageBuildStore:
                 (
                     existing
                     for existing in records.values()
-                    if existing.image_id == record.image_id
-                    and existing.tag == record.tag
+                    if (
+                        existing.image_id == record.image_id
+                        or existing.tag == record.tag
+                    )
                     and not existing.terminal
                 ),
                 key=lambda item: (item.created_at, item.build_id),
             )
             if matching:
-                return matching[-1], False
+                exact = [
+                    existing
+                    for existing in matching
+                    if existing.request_fingerprint
+                    and existing.request_fingerprint == record.request_fingerprint
+                ]
+                if exact:
+                    return exact[-1], False
+                raise ImageBuildConflictError(
+                    "an active build already owns this image id or tag with "
+                    "a different build specification"
+                )
             active_count = sum(
                 1 for existing in records.values() if not existing.terminal
             )
@@ -734,6 +910,7 @@ class ImageManager:
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = 4,
         max_concurrent_pulls: int = 8,
+        max_concurrent_context_preparations: int = 2,
     ) -> None:
         self.store = store
         self.runtime = runtime
@@ -742,6 +919,10 @@ class ImageManager:
         )
         self.max_active_builds = max(1, max_active_builds)
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
+        self.max_concurrent_context_preparations = max(
+            1,
+            max_concurrent_context_preparations,
+        )
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
@@ -749,6 +930,14 @@ class ImageManager:
         self._active_pulls = 0
         self._waiting_pulls = 0
         self._pull_slots = BoundedSemaphore(self.max_concurrent_pulls)
+        self._context_preparation_slots = BoundedSemaphore(
+            self.max_concurrent_context_preparations
+        )
+        self._context_preparation_condition = Condition(self._build_lock)
+        self._preparing_image_ids: set[str] = set()
+        self._preparing_tags: set[str] = set()
+        self._active_context_preparations = 0
+        self._waiting_context_preparations = 0
         self._pending_build_logs: dict[str, str] = {}
         self._build_log_last_flush: dict[str, float] = {}
         self.reconcile_interrupted_builds()
@@ -808,6 +997,48 @@ class ImageManager:
                 "max_concurrent_operations": self.max_concurrent_pulls,
             }
 
+    def context_preparation_snapshot(self) -> dict[str, int]:
+        with self._build_lock:
+            return {
+                "active_operations": self._active_context_preparations,
+                "waiting_operations": self._waiting_context_preparations,
+                "max_concurrent_operations": (
+                    self.max_concurrent_context_preparations
+                ),
+            }
+
+    @contextmanager
+    def _local_context_preparation(self, image_id: str, tag: str):
+        acquired_slot = False
+        with self._context_preparation_condition:
+            self._waiting_context_preparations += 1
+            while (
+                image_id in self._preparing_image_ids
+                or tag in self._preparing_tags
+            ):
+                self._context_preparation_condition.wait()
+            self._preparing_image_ids.add(image_id)
+            self._preparing_tags.add(tag)
+        try:
+            self._context_preparation_slots.acquire()
+            acquired_slot = True
+            with self._build_lock:
+                self._waiting_context_preparations -= 1
+                self._active_context_preparations += 1
+            yield
+        finally:
+            if acquired_slot:
+                with self._build_lock:
+                    self._active_context_preparations -= 1
+                self._context_preparation_slots.release()
+            else:
+                with self._build_lock:
+                    self._waiting_context_preparations -= 1
+            with self._context_preparation_condition:
+                self._preparing_image_ids.discard(image_id)
+                self._preparing_tags.discard(tag)
+                self._context_preparation_condition.notify_all()
+
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         with self._build_lock:
             record = self.build_store.get(build_id_or_image_id)
@@ -843,19 +1074,70 @@ class ImageManager:
         *,
         push: bool = False,
         cleanup: Callable[[], None] | None = None,
+        context_identity: str | None = None,
+        materialize_context: Callable[[], MaterializedBuildContext] | None = None,
     ) -> tuple[ImageBuildRecord, bool]:
         spec.validate()
-        with self._build_lock:
-            now = utc_now().isoformat()
-            build_id = str(uuid4())
+        if context_identity is None:
+            with self._local_context_preparation(spec.id, spec.tag):
+                return self._start_build_prepared(
+                    spec,
+                    push=push,
+                    cleanup=cleanup,
+                    context_identity=None,
+                    materialize_context=materialize_context,
+                )
+        return self._start_build_prepared(
+            spec,
+            push=push,
+            cleanup=cleanup,
+            context_identity=context_identity,
+            materialize_context=materialize_context,
+        )
+
+    def _start_build_prepared(
+        self,
+        spec: ImageBuildSpec,
+        *,
+        push: bool,
+        cleanup: Callable[[], None] | None,
+        context_identity: str | None,
+        materialize_context: Callable[[], MaterializedBuildContext] | None,
+    ) -> tuple[ImageBuildRecord, bool]:
+        spec.validate()
+        spec = replace(
+            spec,
+            dockerfile=_normalize_dockerfile_path(spec.dockerfile),
+        )
+        try:
+            if context_identity is None:
+                local_context_path = Path(spec.context_path)
+                context_identity = (
+                    f"tree:{image_build_context_digest(local_context_path)}"
+                )
+
+                def materialize_local_context() -> MaterializedBuildContext:
+                    return snapshot_local_build_context(local_context_path)
+
+                materialize_context = materialize_local_context
+            elif materialize_context is None:
+                raise ValueError(
+                    "an immutable context identity requires a context materializer"
+                )
+            request_fingerprint = image_build_fingerprint(
+                spec,
+                push=push,
+                context_identity=context_identity,
+            )
             direct_push = self.runtime.uses_direct_push(push=push)
-            build_command = (
+            logical_command = (
                 self.runtime.build_command(spec, push=True)
                 if direct_push
                 else self.runtime.build_command(spec)
             )
+            now = utc_now().isoformat()
             record = ImageBuildRecord(
-                build_id=build_id,
+                build_id=str(uuid4()),
                 image_id=spec.id,
                 tag=spec.tag,
                 status="running",
@@ -865,42 +1147,125 @@ class ImageManager:
                 context_path=spec.context_path,
                 dockerfile=spec.dockerfile,
                 push=push,
-                command=build_command,
+                command=logical_command,
                 push_command=(
                     self.runtime.push_command(spec.tag)
                     if push and not direct_push
                     else ()
                 ),
-                timings={
-                    "total_ms": None,
-                    "phases": {},
-                },
+                timings={"total_ms": None, "phases": {}},
                 owner_pid=os.getpid(),
+                request_fingerprint=request_fingerprint,
             )
-            try:
+            with self._build_lock:
                 record, build_started = self.build_store.reserve_build(
                     record,
                     max_active_builds=self.max_active_builds,
                 )
-            except ImageBuildCapacityError:
-                if cleanup is not None:
-                    cleanup()
-                raise
-            if not build_started:
-                if cleanup is not None:
-                    cleanup()
-                return record, False
-            build_id = record.build_id
-            self._build_conditions[build_id] = Condition(self._build_lock)
-            self._build_log_last_flush[build_id] = time.monotonic()
-            thread = Thread(
-                target=self._run_tracked_build,
-                args=(build_id, spec, push, direct_push, cleanup),
-                daemon=True,
+                if not build_started:
+                    if cleanup is not None:
+                        cleanup()
+                    return record, False
+                self._build_conditions[record.build_id] = Condition(self._build_lock)
+                self._build_log_last_flush[record.build_id] = time.monotonic()
+        except Exception:
+            if cleanup is not None:
+                cleanup()
+            raise
+
+        materialized: MaterializedBuildContext | None = None
+        effective_cleanup = cleanup
+        try:
+            assert materialize_context is not None
+            materialized = materialize_context()
+            effective_cleanup = _combine_cleanup(materialized.cleanup, cleanup)
+            if materialized.context_identity != context_identity:
+                raise ImageBuildConflictError(
+                    "image build context changed before its immutable snapshot"
+                )
+            _validate_materialized_dockerfile(
+                materialized.path,
+                spec.dockerfile,
             )
-            self._active_threads[build_id] = thread
-            thread.start()
-            return record, build_started
+            effective_spec = replace(
+                spec,
+                context_path=str(materialized.path),
+            )
+            effective_command = (
+                self.runtime.build_command(effective_spec, push=True)
+                if direct_push
+                else self.runtime.build_command(effective_spec)
+            )
+            record = replace(
+                record,
+                context_path=effective_spec.context_path,
+                command=effective_command,
+                updated_at=utc_now().isoformat(),
+            )
+            self.build_store.upsert(record)
+        except Exception as exc:
+            failure: Exception = exc
+            if effective_cleanup is not None:
+                try:
+                    effective_cleanup()
+                except Exception as cleanup_error:
+                    failure = RuntimeError(
+                        f"{exc}; build context cleanup failed: {cleanup_error}"
+                    )
+            with self._build_lock:
+                self._fail_reserved_build_locked(record, failure)
+            if failure is not exc:
+                raise failure from exc
+            raise
+
+        build_id = record.build_id
+        thread = Thread(
+            target=self._run_tracked_build,
+            args=(
+                build_id,
+                effective_spec,
+                push,
+                direct_push,
+                effective_cleanup,
+            ),
+            daemon=True,
+        )
+        try:
+            with self._build_lock:
+                self._active_threads[build_id] = thread
+                try:
+                    thread.start()
+                except Exception as exc:
+                    self._fail_reserved_build_locked(record, exc)
+                    raise
+        except Exception:
+            if effective_cleanup is not None:
+                effective_cleanup()
+            raise
+        return record, True
+
+    def _fail_reserved_build_locked(
+        self,
+        record: ImageBuildRecord,
+        error: Exception,
+    ) -> ImageBuildRecord:
+        build_id = record.build_id
+        self._active_threads.pop(build_id, None)
+        self._pending_build_logs.pop(build_id, None)
+        self._build_log_last_flush.pop(build_id, None)
+        condition = self._build_conditions.pop(build_id, None)
+        failed_at = utc_now().isoformat()
+        failed = replace(
+            record,
+            status="failed",
+            error=f"image build failed before worker start: {error}",
+            updated_at=failed_at,
+            finished_at=failed_at,
+        )
+        self.build_store.upsert(failed)
+        if condition is not None:
+            condition.notify_all()
+        return failed
 
     def wait_for_build(
         self,
@@ -914,9 +1279,11 @@ class ImageManager:
         with self._build_lock:
             while True:
                 record = self.build_store.get(build_id_or_image_id)
-                if record is None or record.terminal:
+                if record is None:
                     return record
                 condition = self._build_conditions.get(record.build_id)
+                if record.terminal and condition is None:
+                    return record
                 if condition is None:
                     return record
                 wait_seconds = 0.5
@@ -1206,10 +1573,38 @@ def _tail_text(value: str, *, limit: int = BUILD_LOG_TAIL_CHARS) -> str:
 
 
 def _dockerfile_path(context_path: str, dockerfile: str) -> str:
+    return str(Path(context_path) / _normalize_dockerfile_path(dockerfile))
+
+
+def _normalize_dockerfile_path(dockerfile: str) -> str:
+    if not dockerfile.strip() or "\\" in dockerfile:
+        raise ValueError("dockerfile must be a context-relative path")
     path = Path(dockerfile)
-    if path.is_absolute():
-        return dockerfile
-    return str(Path(context_path) / path)
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError("dockerfile must stay within the build context")
+    normalized = path.as_posix()
+    if normalized in {"", "."}:
+        raise ValueError("dockerfile must name a file within the build context")
+    return normalized
+
+
+def _validate_materialized_dockerfile(
+    context_path: Path,
+    dockerfile: str,
+) -> None:
+    root = context_path.resolve(strict=True)
+    candidate = root / _normalize_dockerfile_path(dockerfile)
+    if not candidate.exists() and not candidate.is_symlink():
+        return
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root)
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            "dockerfile must stay within the immutable build context"
+        ) from exc
+    if not resolved.is_file():
+        raise ValueError("dockerfile must name a regular file")
 
 
 @contextmanager
@@ -1231,6 +1626,7 @@ def uploaded_build_context(
 class MaterializedBuildContext:
     path: Path
     _temporary_directory: tempfile.TemporaryDirectory[str]
+    context_identity: str
 
     def cleanup(self) -> None:
         self._temporary_directory.cleanup()
@@ -1290,21 +1686,144 @@ def materialize_uploaded_build_context(
         except Exception:
             temporary_directory.cleanup()
             raise
-        return MaterializedBuildContext(context_dir, temporary_directory)
+        return MaterializedBuildContext(
+            context_dir,
+            temporary_directory,
+            f"archive:{digest}",
+        )
 
     return None
 
 
-def _extract_safe_tar_gz_file(payload: Any, destination: Path) -> None:
+def snapshot_local_build_context(context_path: Path) -> MaterializedBuildContext:
     try:
-        archive = tarfile.open(fileobj=payload, mode="r:gz")
-    except tarfile.TarError as exc:
+        source = context_path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"image build context is unavailable: {context_path}") from exc
+    if not source.is_dir():
+        raise ValueError(f"image build context must be a directory: {context_path}")
+    temporary_directory: tempfile.TemporaryDirectory[str] = (
+        tempfile.TemporaryDirectory(prefix="ucloud-image-context-")
+    )
+    destination = Path(temporary_directory.name)
+    try:
+        ignore = None
+        try:
+            nested_destination = destination.relative_to(source)
+        except ValueError:
+            pass
+        else:
+            nested_parent = Path(*nested_destination.parts[:-1])
+            nested_name = nested_destination.parts[-1]
+
+            def ignore_nested_destination(
+                current: str,
+                names: list[str],
+            ) -> set[str]:
+                relative = Path(current).relative_to(source)
+                if relative == nested_parent and nested_name in names:
+                    return {nested_name}
+                return set()
+
+            ignore = ignore_nested_destination
+        shutil.copytree(
+            source,
+            destination,
+            dirs_exist_ok=True,
+            symlinks=True,
+            ignore=ignore,
+        )
+        digest = image_build_context_digest(destination)
+    except Exception:
+        temporary_directory.cleanup()
+        raise
+    return MaterializedBuildContext(
+        destination,
+        temporary_directory,
+        f"tree:{digest}",
+    )
+
+
+def _combine_cleanup(
+    first: Callable[[], None],
+    second: Callable[[], None] | None,
+) -> Callable[[], None]:
+    if second is None:
+        return first
+
+    def cleanup() -> None:
+        try:
+            first()
+        finally:
+            second()
+
+    return cleanup
+
+
+def _extract_safe_tar_gz_file(
+    payload: Any,
+    destination: Path,
+    *,
+    max_total_bytes: int = MAX_BUILD_CONTEXT_EXTRACTED_BYTES,
+    max_member_bytes: int = MAX_BUILD_CONTEXT_MEMBER_BYTES,
+    max_members: int = MAX_BUILD_CONTEXT_MEMBERS,
+    max_archive_bytes: int = MAX_BUILD_CONTEXT_DECOMPRESSED_ARCHIVE_BYTES,
+) -> None:
+    if min(max_total_bytes, max_member_bytes, max_members, max_archive_bytes) < 0:
+        raise ValueError("context archive limits must be non-negative.")
+    try:
+        with gzip.GzipFile(fileobj=payload, mode="rb") as decompressed:
+            limited = _ByteLimitedReader(decompressed, max_archive_bytes)
+            with tarfile.open(fileobj=limited, mode="r|") as archive:
+                member_count = 0
+                total_bytes = 0
+                for member in archive:
+                    member_count += 1
+                    if member_count > max_members:
+                        raise ValueError(
+                            f"context archive exceeds the {max_members} member limit."
+                        )
+                    _validate_context_member(member)
+                    if member.isfile():
+                        if member.size < 0:
+                            raise ValueError(
+                                "invalid file size in context archive: "
+                                f"{member.name!r}"
+                            )
+                        if member.size > max_member_bytes:
+                            raise ValueError(
+                                "context archive member exceeds the "
+                                f"{max_member_bytes} byte limit: {member.name!r}"
+                            )
+                        if total_bytes + member.size > max_total_bytes:
+                            raise ValueError(
+                                "context archive exceeds the "
+                                f"{max_total_bytes} extracted-byte limit."
+                            )
+                        total_bytes += member.size
+                    archive.extract(member, destination)
+            while limited.read(64 * 1024):
+                pass
+    except (gzip.BadGzipFile, tarfile.TarError, EOFError) as exc:
         raise ValueError("context archive is not a valid tar.gz file.") from exc
-    with archive:
-        members = archive.getmembers()
-        for member in members:
-            _validate_context_member(member)
-        archive.extractall(destination, members=members)
+
+
+class _ByteLimitedReader:
+    def __init__(self, stream: Any, limit: int) -> None:
+        self._stream = stream
+        self._remaining = limit
+        self._limit = limit
+
+    def read(self, size: int = -1) -> bytes:
+        requested = self._remaining + 1 if size < 0 else min(size, self._remaining + 1)
+        chunk = self._stream.read(requested)
+        if len(chunk) > self._remaining:
+            raise ValueError(
+                "context archive exceeds the "
+                f"{self._limit} decompressed-byte limit."
+            )
+        self._remaining -= len(chunk)
+        return chunk
 
 
 def _validate_context_member(member: tarfile.TarInfo) -> None:

@@ -10,8 +10,10 @@ import re
 import sqlite3
 import stat
 import tempfile
+from threading import RLock
 import time
-from typing import Any, Iterator
+from types import MappingProxyType
+from typing import Any, Iterator, Mapping
 
 from .direct_warden import DirectSandbox
 from .sandbox import (
@@ -21,7 +23,7 @@ from .sandbox import (
 )
 
 
-DIRECT_REGISTRY_VERSION = 2
+DIRECT_REGISTRY_VERSION = 3
 DIRECT_REGISTRATION_VERSION = 2
 DIRECT_REGISTRY_MAX_BYTES = 16 * 1024 * 1024
 DIRECT_REGISTRY_MAX_INLINE_TOMBSTONES = 4096
@@ -40,6 +42,7 @@ DIRECT_REGISTRATION_PHASES = {
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
+_CACHE_UNINITIALIZED = object()
 
 
 class DirectRegistryError(RuntimeError):
@@ -286,10 +289,12 @@ class _DirectRegistryState:
     records: tuple[DirectSandboxRegistration, ...]
     tombstones: dict[str, int]
     migration_tombstones: dict[str, tuple[str, ...]]
+    activity_revision: int
     version: int = DIRECT_REGISTRY_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "activity_revision": self.activity_revision,
             "records": [
                 item.to_dict()
                 for item in sorted(self.records, key=lambda value: value.sandbox_id)
@@ -301,6 +306,19 @@ class _DirectRegistryState:
             "tombstones": dict(sorted(self.tombstones.items())),
             "version": self.version,
         }
+
+
+@dataclass(frozen=True)
+class DirectRegistrySnapshot:
+    """One coherent, indexed view of the durable direct registry."""
+
+    records: tuple[DirectSandboxRegistration, ...]
+    by_sandbox_id: Mapping[str, DirectSandboxRegistration]
+    image_ids: frozenset[str]
+    activity_revision: int
+
+    def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
+        return self.by_sandbox_id.get(sandbox_id)
 
 
 class DirectSandboxRegistry:
@@ -327,6 +345,12 @@ class DirectSandboxRegistry:
             1,
             max_inline_migration_tombstones,
         )
+        self._cache_guard = RLock()
+        self._cached_fingerprint: object | tuple[int, int, int, int, int] | None = (
+            _CACHE_UNINITIALIZED
+        )
+        self._cached_state: _DirectRegistryState | None = None
+        self._cached_snapshot: DirectRegistrySnapshot | None = None
 
     def plan(
         self,
@@ -818,16 +842,21 @@ class DirectSandboxRegistry:
 
     def get(self, sandbox_id: str) -> DirectSandboxRegistration | None:
         with self._locked():
-            return self._find(self._load_unlocked(), sandbox_id)
+            return self._snapshot_unlocked().get(sandbox_id)
 
     def list(self) -> tuple[DirectSandboxRegistration, ...]:
+        return self.snapshot().records
+
+    def snapshot(self) -> DirectRegistrySnapshot:
+        """Return records, indexes, roots, and revision from one durable read."""
+
         with self._locked():
-            return tuple(
-                sorted(
-                    self._load_unlocked().records,
-                    key=lambda item: item.sandbox_id,
-                )
-            )
+            return self._snapshot_unlocked()
+
+    def references_image(self, image_id: str) -> bool:
+        """Recheck one Docker image root without reparsing unchanged JSON."""
+
+        return image_id in self.snapshot().image_ids
 
     def _transition(
         self,
@@ -940,17 +969,33 @@ class DirectSandboxRegistry:
 
     def _load_unlocked(self) -> _DirectRegistryState:
         if not os.path.lexists(self.path):
-            return _DirectRegistryState(
+            with self._cache_guard:
+                if (
+                    self._cached_fingerprint is None
+                    and self._cached_state is not None
+                ):
+                    return self._cached_state
+            state = _DirectRegistryState(
                 records=(),
                 tombstones={},
                 migration_tombstones={},
+                activity_revision=0,
             )
+            self._remember_state_unlocked(state, None)
+            return state
         try:
             info = self.path.lstat()
             if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
                 raise DirectRegistryError("direct registry must be a regular file")
             if info.st_uid != os.geteuid() or info.st_mode & 0o077:
                 raise DirectRegistryError("direct registry must be private and owned")
+            fingerprint = self._fingerprint(info)
+            with self._cache_guard:
+                if (
+                    self._cached_fingerprint == fingerprint
+                    and self._cached_state is not None
+                ):
+                    return self._cached_state
             raw = self.path.read_bytes()
             if len(raw) > self._max_bytes:
                 raise DirectRegistryError(
@@ -961,17 +1006,26 @@ class DirectSandboxRegistry:
             raise
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DirectRegistryError("direct registry is unreadable") from exc
-        payload_version = (
-            int(payload.get("version", 0)) if isinstance(payload, dict) else 0
-        )
-        expected_keys = {"migration_tombstones", "records", "tombstones", "version"}
+        payload_version = payload.get("version") if isinstance(payload, dict) else None
+        expected_keys = {
+            "activity_revision",
+            "migration_tombstones",
+            "records",
+            "tombstones",
+            "version",
+        }
         if (
             not isinstance(payload, dict)
             or set(payload) != expected_keys
+            or not isinstance(payload_version, int)
+            or isinstance(payload_version, bool)
             or payload_version != DIRECT_REGISTRY_VERSION
             or not isinstance(payload["records"], list)
             or not isinstance(payload["tombstones"], dict)
             or not isinstance(payload["migration_tombstones"], dict)
+            or not isinstance(payload["activity_revision"], int)
+            or isinstance(payload["activity_revision"], bool)
+            or payload["activity_revision"] < 0
         ):
             raise DirectRegistryError("direct registry schema is invalid")
         raw_migration_tombstones = payload["migration_tombstones"]
@@ -1009,11 +1063,55 @@ class DirectSandboxRegistry:
             )
         ):
             raise DirectRegistryError("direct registry ownership is invalid")
-        return _DirectRegistryState(
+        state = _DirectRegistryState(
             records=records,
             tombstones=tombstones,
             migration_tombstones=migration_tombstones,
+            activity_revision=int(payload["activity_revision"]),
         )
+        if state.activity_revision < max(
+            (record.revision for record in records),
+            default=0,
+        ):
+            raise DirectRegistryError("direct registry activity revision is invalid")
+        self._remember_state_unlocked(state, fingerprint)
+        return state
+
+    @staticmethod
+    def _fingerprint(info: os.stat_result) -> tuple[int, int, int, int, int]:
+        return (
+            info.st_dev,
+            info.st_ino,
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ctime_ns,
+        )
+
+    def _remember_state_unlocked(
+        self,
+        state: _DirectRegistryState,
+        fingerprint: tuple[int, int, int, int, int] | None,
+    ) -> None:
+        records = tuple(sorted(state.records, key=lambda item: item.sandbox_id))
+        by_sandbox_id = {record.sandbox_id: record for record in records}
+        snapshot = DirectRegistrySnapshot(
+            records=records,
+            by_sandbox_id=MappingProxyType(by_sandbox_id),
+            image_ids=frozenset(
+                record.image_id for record in records if record.image_id
+            ),
+            activity_revision=state.activity_revision,
+        )
+        with self._cache_guard:
+            self._cached_fingerprint = fingerprint
+            self._cached_state = state
+            self._cached_snapshot = snapshot
+
+    def _snapshot_unlocked(self) -> DirectRegistrySnapshot:
+        self._load_unlocked()
+        with self._cache_guard:
+            assert self._cached_snapshot is not None
+            return self._cached_snapshot
 
     @contextmanager
     def _tombstone_archive_connection_unlocked(
@@ -1218,6 +1316,7 @@ class DirectSandboxRegistry:
 
     def _save_unlocked(self, state: _DirectRegistryState) -> None:
         state = self._compact_state_unlocked(state)
+        state = replace(state, activity_revision=state.activity_revision + 1)
         payload = (
             json.dumps(
                 state.to_dict(),
@@ -1252,6 +1351,7 @@ class DirectSandboxRegistry:
                 os.fsync(directory)
             finally:
                 os.close(directory)
+            self._remember_state_unlocked(state, self._fingerprint(self.path.lstat()))
         finally:
             try:
                 temporary.unlink()

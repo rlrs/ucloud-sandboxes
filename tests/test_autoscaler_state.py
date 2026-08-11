@@ -11,6 +11,7 @@ from ucloud_sandboxes.autoscaler_state import (
     OperationConflictError,
     stable_provider_operation_id,
 )
+from ucloud_sandboxes.models import InstancePhase, ProviderInstance
 
 
 NOW = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
@@ -19,28 +20,37 @@ NOW = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 def create_request(intent_key: str, deployment_id: str = "prod-a") -> dict:
     operation_id = stable_provider_operation_id(deployment_id, "create", intent_key)
     return {
-        "type": "bulk",
-        "items": [
-            {
-                "labels": {
-                    PROVIDER_OPERATION_LABEL: operation_id,
-                    DEPLOYMENT_LABEL: deployment_id,
-                }
-            }
-        ],
+        # The journal treats provider requests as opaque. Correlation is read
+        # back from normalized ProviderInstance labels, never this payload.
+        "providerSpecific": {
+            "operation": operation_id,
+            "deployment": deployment_id,
+        }
     }
 
 
-def provider_job(operation_id: str, job_id: str, deployment_id: str = "prod-a") -> dict:
-    return {
-        "id": job_id,
-        "specification": {
-            "labels": {
-                PROVIDER_OPERATION_LABEL: operation_id,
-                DEPLOYMENT_LABEL: deployment_id,
-            }
+def provider_job(
+    operation_id: str,
+    job_id: str,
+    deployment_id: str = "prod-a",
+) -> ProviderInstance:
+    return ProviderInstance(
+        id=job_id,
+        name=job_id,
+        application_name="vm-test",
+        application_version="1",
+        product_id="cpu",
+        product_category="cpu",
+        state="RUNNING",
+        phase=InstancePhase.RUNNING,
+        labels={
+            PROVIDER_OPERATION_LABEL: operation_id,
+            DEPLOYMENT_LABEL: deployment_id,
         },
-    }
+        # Deliberately provider-shaped nonsense: recovery must use only the
+        # normalized labels above.
+        raw={"specification": {"labels": {"wrong": "shape"}}},
+    )
 
 
 class AutoscalerStateTests(unittest.TestCase):

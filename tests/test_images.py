@@ -1,25 +1,33 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Event, Lock, Thread
+from io import BytesIO
 import json
 import multiprocessing
 import os
 import sys
+import tarfile
 import time
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.images import (
     COMMAND_OUTPUT_TAIL_CHARS,
     COMMAND_OUTPUT_TRUNCATION_MARKER,
     DockerImageRuntime,
     ImageBuildCapacityError,
+    ImageBuildConflictError,
     ImageBuildRecord,
     ImageBuildSpec,
     ImageBuildStore,
     ImageRecord,
     ImageManager,
     ImageStore,
+    _extract_safe_tar_gz_file,
+    image_build_context_digest,
+    image_build_fingerprint,
     image_id_from_tag,
+    snapshot_local_build_context,
 )
 from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.sandbox import (
@@ -236,6 +244,8 @@ class ImageTests(unittest.TestCase):
 
     def test_build_logs_are_batched_and_condition_history_is_released(self) -> None:
         with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
             build_store = CountingBuildStore(Path(raw_dir) / "builds.json")
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.json"),
@@ -247,7 +257,7 @@ class ImageTests(unittest.TestCase):
                 ImageBuildSpec(
                     id="chatty",
                     tag="local/chatty:latest",
-                    context_path="/tmp/context",
+                    context_path=str(context_path),
                 )
             )
             self.assertTrue(started)
@@ -381,6 +391,8 @@ class ImageTests(unittest.TestCase):
 
     def test_manager_rejects_builds_above_concurrency_limit(self) -> None:
         with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
             executor = BlockingBuildExecutor()
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.json"),
@@ -391,7 +403,7 @@ class ImageTests(unittest.TestCase):
                 ImageBuildSpec(
                     id="one",
                     tag="local/one:latest",
-                    context_path="/tmp/context",
+                    context_path=str(context_path),
                 )
             )
             self.assertTrue(started)
@@ -402,12 +414,380 @@ class ImageTests(unittest.TestCase):
                         ImageBuildSpec(
                             id="two",
                             tag="local/two:latest",
-                            context_path="/tmp/context",
+                            context_path=str(context_path),
                         )
                     )
             finally:
                 executor.release.set()
                 manager.wait_for_build(first.build_id, timeout_seconds=2)
+
+    def test_build_singleflight_requires_exact_immutable_fingerprint(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
+            dockerfile = context_path / "Dockerfile"
+            dockerfile.write_text("FROM scratch\n", encoding="utf-8")
+            executor = BlockingBuildExecutor()
+            build_store = ImageBuildStore(Path(raw_dir) / "builds.json")
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(executor=executor),
+                build_store=build_store,
+            )
+            spec = ImageBuildSpec(
+                id="singleflight",
+                tag="local/singleflight:latest",
+                context_path=str(context_path),
+                build_args={"MODE": "one"},
+            )
+
+            first, started = manager.start_build(spec)
+            self.assertTrue(started)
+            self.assertTrue(executor.started.wait(1))
+            snapshot_path = Path(first.context_path)
+            self.assertNotEqual(snapshot_path, context_path)
+            self.assertEqual(
+                (snapshot_path / "Dockerfile").read_text(encoding="utf-8"),
+                "FROM scratch\n",
+            )
+            duplicate, duplicate_started = manager.start_build(spec)
+            self.assertFalse(duplicate_started)
+            self.assertEqual(duplicate.build_id, first.build_id)
+            self.assertEqual(
+                build_store.load()[first.build_id].request_fingerprint,
+                first.request_fingerprint,
+            )
+
+            cleanup_calls: list[str] = []
+            differing = ImageBuildSpec(
+                id=spec.id,
+                tag=spec.tag,
+                context_path=spec.context_path,
+                build_args={"MODE": "two"},
+            )
+            with self.assertRaisesRegex(ImageBuildConflictError, "different"):
+                manager.start_build(
+                    differing,
+                    cleanup=lambda: cleanup_calls.append("spec"),
+                )
+            old_fingerprint = image_build_fingerprint(spec)
+            dockerfile.write_text("FROM scratch\n# changed\n", encoding="utf-8")
+            self.assertEqual(
+                (snapshot_path / "Dockerfile").read_text(encoding="utf-8"),
+                "FROM scratch\n",
+            )
+            self.assertNotEqual(image_build_fingerprint(spec), old_fingerprint)
+            with self.assertRaisesRegex(ImageBuildConflictError, "different"):
+                manager.start_build(
+                    spec,
+                    cleanup=lambda: cleanup_calls.append("context"),
+                )
+            self.assertEqual(cleanup_calls, ["spec", "context"])
+
+            executor.release.set()
+            manager.wait_for_build(first.build_id, timeout_seconds=2)
+            self.assertFalse(snapshot_path.exists())
+
+    def test_active_build_output_key_conflicts_on_id_or_tag(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
+            executor = BlockingBuildExecutor()
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(executor=executor),
+                max_active_builds=4,
+            )
+            first, started = manager.start_build(
+                ImageBuildSpec(
+                    id="shared-id",
+                    tag="local/shared-tag:latest",
+                    context_path=str(context_path),
+                )
+            )
+            self.assertTrue(started)
+            self.assertTrue(executor.started.wait(1))
+            try:
+                with self.assertRaisesRegex(ImageBuildConflictError, "id or tag"):
+                    manager.start_build(
+                        ImageBuildSpec(
+                            id="shared-id",
+                            tag="local/different-tag:latest",
+                            context_path=str(context_path),
+                        )
+                    )
+                with self.assertRaisesRegex(ImageBuildConflictError, "id or tag"):
+                    manager.start_build(
+                        ImageBuildSpec(
+                            id="different-id",
+                            tag="local/shared-tag:latest",
+                            context_path=str(context_path),
+                        )
+                    )
+            finally:
+                executor.release.set()
+                manager.wait_for_build(first.build_id, timeout_seconds=2)
+
+    def test_reservation_precedes_context_materialization(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
+            executor = BlockingBuildExecutor()
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(executor=executor),
+            )
+            identity = f"tree:{image_build_context_digest(context_path)}"
+            materializations = 0
+
+            def materialize():
+                nonlocal materializations
+                materializations += 1
+                return snapshot_local_build_context(context_path)
+
+            spec = ImageBuildSpec(
+                id="lazy-context",
+                tag="local/lazy-context:latest",
+                context_path=str(context_path),
+            )
+            first, started = manager.start_build(
+                spec,
+                context_identity=identity,
+                materialize_context=materialize,
+            )
+            self.assertTrue(started)
+            self.assertTrue(executor.started.wait(1))
+            duplicate, duplicate_started = manager.start_build(
+                spec,
+                context_identity=identity,
+                materialize_context=materialize,
+            )
+            self.assertFalse(duplicate_started)
+            self.assertEqual(duplicate.build_id, first.build_id)
+            with self.assertRaises(ImageBuildConflictError):
+                manager.start_build(
+                    ImageBuildSpec(
+                        id=spec.id,
+                        tag=spec.tag,
+                        context_path=spec.context_path,
+                        build_args={"DIFFERENT": "1"},
+                    ),
+                    context_identity=identity,
+                    materialize_context=materialize,
+                )
+            self.assertEqual(materializations, 1)
+            executor.release.set()
+            manager.wait_for_build(first.build_id, timeout_seconds=2)
+
+    def test_local_context_preparation_has_a_hard_concurrency_cap(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
+            executor = BlockingBuildExecutor()
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(executor=executor),
+                max_active_builds=4,
+                max_concurrent_context_preparations=1,
+            )
+            original_digest = image_build_context_digest
+            first_digest_started = Event()
+            release_digest = Event()
+            digest_lock = Lock()
+            digest_calls = 0
+            active_digests = 0
+            peak_digests = 0
+            builds: list[ImageBuildRecord] = []
+            failures: list[BaseException] = []
+
+            def blocked_digest(path: Path) -> str:
+                nonlocal digest_calls, active_digests, peak_digests
+                with digest_lock:
+                    digest_calls += 1
+                    active_digests += 1
+                    peak_digests = max(peak_digests, active_digests)
+                    first_digest_started.set()
+                try:
+                    release_digest.wait(2)
+                    return original_digest(path)
+                finally:
+                    with digest_lock:
+                        active_digests -= 1
+
+            def start(image_id: str) -> None:
+                try:
+                    record, _started = manager.start_build(
+                        ImageBuildSpec(
+                            id=image_id,
+                            tag=f"local/{image_id}:latest",
+                            context_path=str(context_path),
+                        )
+                    )
+                    builds.append(record)
+                except BaseException as exc:  # pragma: no cover - thread handoff
+                    failures.append(exc)
+
+            with patch(
+                "ucloud_sandboxes.images.image_build_context_digest",
+                side_effect=blocked_digest,
+            ):
+                first_thread = Thread(target=start, args=("prep-one",))
+                second_thread = Thread(target=start, args=("prep-two",))
+                first_thread.start()
+                self.assertTrue(first_digest_started.wait(1))
+                second_thread.start()
+                deadline = time.monotonic() + 1
+                snapshot = manager.context_preparation_snapshot()
+                while (
+                    snapshot["waiting_operations"] < 1
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+                    snapshot = manager.context_preparation_snapshot()
+                self.assertEqual(snapshot["active_operations"], 1)
+                self.assertEqual(snapshot["waiting_operations"], 1)
+                self.assertEqual(digest_calls, 1)
+                release_digest.set()
+                first_thread.join(2)
+                second_thread.join(2)
+
+            self.assertFalse(failures)
+            self.assertEqual(len(builds), 2)
+            self.assertEqual(peak_digests, 1)
+            self.assertEqual(
+                manager.context_preparation_snapshot()["active_operations"],
+                0,
+            )
+            executor.release.set()
+            for build in builds:
+                manager.wait_for_build(build.build_id, timeout_seconds=2)
+
+    def test_build_worker_thread_start_failure_is_terminal_and_cleans_snapshot(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
+            (context_path / "Dockerfile").write_text(
+                "FROM scratch\n",
+                encoding="utf-8",
+            )
+            build_store = ImageBuildStore(Path(raw_dir) / "builds.json")
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(dry_run=True),
+                build_store=build_store,
+            )
+            cleanup_calls: list[str] = []
+
+            with patch(
+                "ucloud_sandboxes.images.Thread.start",
+                side_effect=RuntimeError("cannot start build worker"),
+            ), self.assertRaisesRegex(RuntimeError, "cannot start"):
+                manager.start_build(
+                    ImageBuildSpec(
+                        id="thread-failure",
+                        tag="local/thread-failure:latest",
+                        context_path=str(context_path),
+                    ),
+                    cleanup=lambda: cleanup_calls.append("caller"),
+                )
+
+            records = list(build_store.load().values())
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].status, "failed")
+            self.assertIn("cannot start build worker", records[0].error)
+            self.assertFalse(Path(records[0].context_path).exists())
+            self.assertEqual(cleanup_calls, ["caller"])
+            self.assertEqual(manager.active_build_count(), 0)
+            self.assertEqual(manager._active_threads, {})  # noqa: SLF001
+            self.assertEqual(manager._build_conditions, {})  # noqa: SLF001
+
+    def test_context_materialization_failure_marks_reserved_build_terminal(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            build_store = ImageBuildStore(Path(raw_dir) / "builds.json")
+            manager = ImageManager(
+                ImageStore(Path(raw_dir) / "images.json"),
+                DockerImageRuntime(dry_run=True),
+                build_store=build_store,
+            )
+
+            def fail_materialization():
+                raise ValueError("cannot extract context")
+
+            with self.assertRaisesRegex(ValueError, "cannot extract"):
+                manager.start_build(
+                    ImageBuildSpec(
+                        id="materialization-failure",
+                        tag="local/materialization-failure:latest",
+                        context_path=".",
+                    ),
+                    context_identity="archive:sha256:deadbeef",
+                    materialize_context=fail_materialization,
+                )
+
+            records = list(build_store.load().values())
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0].status, "failed")
+            self.assertIn("cannot extract context", records[0].error)
+            self.assertEqual(manager._build_conditions, {})  # noqa: SLF001
+
+    def test_context_archive_enforces_stream_and_member_limits(self) -> None:
+        cases = (
+            (
+                "member",
+                _tar_gz(("large", b"12345")),
+                {"max_member_bytes": 4},
+                "member exceeds",
+            ),
+            (
+                "total",
+                _tar_gz(("one", b"123"), ("two", b"456")),
+                {"max_total_bytes": 5},
+                "extracted-byte limit",
+            ),
+            (
+                "count",
+                _tar_gz(("one", b""), ("two", b"")),
+                {"max_members": 1},
+                "member limit",
+            ),
+            (
+                "decompressed-pax",
+                _tar_gz(("empty", b""), pax_value="x" * 4096),
+                {"max_archive_bytes": 1024},
+                "decompressed-byte limit",
+            ),
+        )
+        for name, archive, limits, message in cases:
+            with self.subTest(name=name), TemporaryDirectory() as raw_dir:
+                with self.assertRaisesRegex(ValueError, message):
+                    _extract_safe_tar_gz_file(
+                        BytesIO(archive),
+                        Path(raw_dir),
+                        max_total_bytes=limits.get("max_total_bytes", 1024 * 1024),
+                        max_member_bytes=limits.get(
+                            "max_member_bytes", 1024 * 1024
+                        ),
+                        max_members=limits.get("max_members", 100),
+                        max_archive_bytes=limits.get(
+                            "max_archive_bytes", 1024 * 1024
+                        ),
+                    )
 
     def test_image_id_from_tag_is_store_safe(self) -> None:
         self.assertEqual(
@@ -445,21 +825,57 @@ class ImageTests(unittest.TestCase):
         self.assertIn("role=base", argv)
         self.assertEqual(argv[-1], "/tmp/context")
 
-    def test_build_command_preserves_absolute_dockerfile_path(self) -> None:
+    def test_dockerfile_must_be_normalized_context_relative_path(self) -> None:
         runtime = DockerImageRuntime(dry_run=True)
-        spec = ImageBuildSpec(
-            id="base",
-            tag="local/base:latest",
-            context_path="/tmp/context",
-            dockerfile="/tmp/Dockerfile",
-        )
+        for dockerfile in (
+            "/tmp/Dockerfile",
+            "../Dockerfile",
+            "nested/../../Dockerfile",
+            ".",
+            "nested\\Dockerfile",
+        ):
+            with self.subTest(dockerfile=dockerfile), self.assertRaisesRegex(
+                ValueError,
+                "dockerfile",
+            ):
+                runtime.build_command(
+                    ImageBuildSpec(
+                        id="base",
+                        tag="local/base:latest",
+                        context_path="/tmp/context",
+                        dockerfile=dockerfile,
+                    )
+                )
 
-        argv = runtime.build_command(spec)
-
-        self.assertEqual(
-            argv[:6],
-            ("docker", "build", "-f", "/tmp/Dockerfile", "-t", "local/base:latest"),
+        normalized = ImageBuildSpec.from_dict(
+            {
+                "id": "base",
+                "tag": "local/base:latest",
+                "context_path": "/tmp/context",
+                "dockerfile": "nested/./Containerfile",
+            }
         )
+        self.assertEqual(normalized.dockerfile, "nested/Containerfile")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            context = root / "context"
+            context.mkdir()
+            outside = root / "outside.Dockerfile"
+            outside.write_text("FROM scratch\n", encoding="utf-8")
+            (context / "Dockerfile").symlink_to(outside)
+            manager = ImageManager(
+                ImageStore(root / "images.json"),
+                DockerImageRuntime(dry_run=True),
+            )
+            with self.assertRaisesRegex(ValueError, "immutable build context"):
+                manager.start_build(
+                    ImageBuildSpec(
+                        id="escaped-dockerfile",
+                        tag="local/escaped-dockerfile:latest",
+                        context_path=str(context),
+                    )
+                )
 
     def test_buildx_direct_push_command_uses_registry_cache(self) -> None:
         runtime = DockerImageRuntime(
@@ -507,6 +923,8 @@ class ImageTests(unittest.TestCase):
 
     def test_manager_records_integrated_buildx_push_as_one_command(self) -> None:
         with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
             executor = RecordingExecutor()
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.json"),
@@ -519,7 +937,7 @@ class ImageTests(unittest.TestCase):
             spec = ImageBuildSpec(
                 id="base",
                 tag="registry.example.org/images/base:latest",
-                context_path="/tmp/context",
+                context_path=str(context_path),
             )
 
             started_record, started = manager.start_build(spec, push=True)
@@ -545,6 +963,8 @@ class ImageTests(unittest.TestCase):
 
     def test_manager_preserves_separate_push_by_default(self) -> None:
         with TemporaryDirectory() as raw_dir:
+            context_path = Path(raw_dir) / "context"
+            context_path.mkdir()
             executor = RecordingExecutor()
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.json"),
@@ -553,7 +973,7 @@ class ImageTests(unittest.TestCase):
             spec = ImageBuildSpec(
                 id="base",
                 tag="registry.example.org/images/base:latest",
-                context_path="/tmp/context",
+                context_path=str(context_path),
             )
 
             started_record, _started = manager.start_build(spec, push=True)
@@ -661,6 +1081,18 @@ class BlockingBuildExecutor:
         self.started.set()
         self.release.wait(2)
         return CommandResult(argv=argv, exit_code=0)
+
+
+def _tar_gz(*entries: tuple[str, bytes], pax_value: str = "") -> bytes:
+    payload = BytesIO()
+    with tarfile.open(fileobj=payload, mode="w:gz") as archive:
+        for name, content in entries:
+            member = tarfile.TarInfo(name)
+            member.size = len(content)
+            if pax_value:
+                member.pax_headers = {"comment": pax_value}
+            archive.addfile(member, BytesIO(content))
+    return payload.getvalue()
 
 
 class ChattyBuildRuntime(DockerImageRuntime):

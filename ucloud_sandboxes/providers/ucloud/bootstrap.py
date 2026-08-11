@@ -24,6 +24,7 @@ def bootstrap_access(instance: ProviderInstance) -> InstanceBootstrapAccess:
             command=None,
             runnable=False,
             reason="No SSH access command has been announced by UCloud yet.",
+            refresh_recommended=True,
         )
     return InstanceBootstrapAccess(
         instance=instance,

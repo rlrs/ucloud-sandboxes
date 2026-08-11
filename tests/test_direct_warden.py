@@ -204,6 +204,7 @@ class FakeStorage:
         self.fail_next_mount = False
         self.fail_next_release = False
         self.fail_next_seal = False
+        self.list_calls = 0
         self.record = {
             "mount_path": str(mount_path),
             "revision": 1,
@@ -217,6 +218,10 @@ class FakeStorage:
         if volume_id != self.record["volume_id"]:
             raise AssertionError("wrong volume")
         return {"record": dict(self.record)}
+
+    def list_volumes(self):
+        self.list_calls += 1
+        return {"records": [dict(self.record)]}
 
     def freeze_and_seal(self, **kwargs):
         if self.fail_next_seal:
@@ -515,6 +520,22 @@ class DirectRunscWardenTests(unittest.TestCase):
         )
         self.assertEqual(storage.record["state"], "mounted")
         self.assertTrue(incarnation.is_dir())
+
+    def test_storage_inventory_snapshot_uses_one_bulk_rpc_and_validates_owner(
+        self,
+    ) -> None:
+        storage, _rootfs, _incarnation = self._use_storage_native()
+
+        snapshot = self.warden.storage_records_snapshot((self.sandbox,))
+
+        self.assertEqual(storage.list_calls, 1)
+        self.assertEqual(snapshot[self.sandbox.memory_directory], storage.record)
+
+        storage.list_volumes = lambda: {
+            "records": [dict(storage.record), dict(storage.record)]
+        }
+        with self.assertRaisesRegex(DirectWardenError, "duplicate volume"):
+            self.warden.storage_records_snapshot((self.sandbox,))
 
     def test_storage_native_delete_does_not_remount_or_traverse_volume(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()

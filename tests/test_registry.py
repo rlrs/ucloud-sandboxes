@@ -1,10 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Barrier
 import unittest
 
-from ucloud_sandboxes.agent import build_heartbeat
+from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.deployment import AGENT_VERSION_LABEL, package_version
 from ucloud_sandboxes.models import (
     InstancePhase,
@@ -16,11 +18,17 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 from ucloud_sandboxes.registry import (
+    HeartbeatIdentityError,
     HeartbeatStore,
     heartbeat_from_dict,
     heartbeat_to_dict,
     merge_jobs_and_heartbeats,
 )
+
+
+def build_heartbeat(**kwargs):
+    kwargs.setdefault("deployment_id", "test-deployment")
+    return _build_heartbeat(**kwargs)
 
 
 class RegistryTests(unittest.TestCase):
@@ -398,10 +406,103 @@ class RegistryTests(unittest.TestCase):
             )
 
             self.assertTrue(store.upsert_received(original).accepted)
-            self.assertFalse(store.upsert_received(spoofed).accepted)
+            with self.assertRaises(HeartbeatIdentityError):
+                store.upsert_received(spoofed)
             stored = store.load()["job-1"]
 
         self.assertEqual(stored.node_url, original.node_url)
+
+    def test_cross_job_node_binding_is_atomic(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            barrier = Barrier(3)
+            received_at = utc_now()
+
+            def submit(job_id: str) -> str:
+                heartbeat = replace(
+                    build_heartbeat(
+                        job_id=job_id,
+                        node_id="shared-node",
+                        node_url="http://shared-node:8090",
+                        node_epoch=f"boot-{job_id}",
+                    ),
+                    received_at=received_at,
+                )
+                barrier.wait()
+                try:
+                    result = store.upsert_received(heartbeat)
+                except HeartbeatIdentityError:
+                    return "conflict"
+                return "accepted" if result.accepted else "stale"
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [executor.submit(submit, job_id) for job_id in ("a", "b")]
+                barrier.wait()
+                outcomes = sorted(future.result() for future in futures)
+
+            stored = store.load()
+
+        self.assertEqual(outcomes, ["accepted", "conflict"])
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(next(iter(stored.values())).node_id, "shared-node")
+
+    def test_canonical_node_url_binding_is_atomic(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            barrier = Barrier(3)
+            received_at = utc_now()
+
+            def submit(job_id: str, node_url: str) -> str:
+                heartbeat = replace(
+                    build_heartbeat(
+                        job_id=job_id,
+                        node_id=f"node-{job_id}",
+                        node_url=node_url,
+                        node_epoch=f"boot-{job_id}",
+                    ),
+                    received_at=received_at,
+                )
+                barrier.wait()
+                try:
+                    result = store.upsert_received(heartbeat)
+                except HeartbeatIdentityError:
+                    return "conflict"
+                return "accepted" if result.accepted else "stale"
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [
+                    executor.submit(submit, "a", "HTTP://SHARED-NODE:8090/"),
+                    executor.submit(submit, "b", "http://shared-node:8090"),
+                ]
+                barrier.wait()
+                outcomes = sorted(future.result() for future in futures)
+
+            stored = store.load()
+
+        self.assertEqual(outcomes, ["accepted", "conflict"])
+        self.assertEqual(len(stored), 1)
+
+    def test_heartbeat_schema_requires_deployment_and_resource_knowledge(self) -> None:
+        raw = heartbeat_to_dict(
+            build_heartbeat(
+                job_id="job-1",
+                node_id="node-1",
+                total_resources=ResourceQuantity(),
+            )
+        )
+        missing_deployment = dict(raw)
+        missing_deployment.pop("deployment_id")
+        empty_deployment = {**raw, "deployment_id": "  "}
+        missing_resource_knowledge = dict(raw)
+        missing_resource_knowledge.pop("resources_known")
+
+        self.assertIsNone(heartbeat_from_dict(missing_deployment))
+        self.assertIsNone(heartbeat_from_dict(empty_deployment))
+        self.assertIsNone(heartbeat_from_dict(missing_resource_knowledge))
+        parsed = heartbeat_from_dict(raw)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertTrue(parsed.resources_known)
 
     def test_malformed_heartbeat_numbers_are_rejected(self) -> None:
         malformed = (

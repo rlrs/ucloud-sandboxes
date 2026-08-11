@@ -1894,6 +1894,64 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 "storage-native service returned an invalid volume record"
             )
+        self._validate_storage_record(sandbox, raw)
+        return raw
+
+    def storage_records_snapshot(
+        self,
+        sandboxes: Sequence[DirectSandbox],
+    ) -> dict[str, dict[str, object]]:
+        """Resolve sandbox storage ownership with at most one daemon RPC."""
+
+        if self.storage is None:
+            raise DirectWardenError("storage-native service is not configured")
+        expected: dict[str, DirectSandbox] = {}
+        for sandbox in sandboxes:
+            if sandbox.memory_directory in expected:
+                raise DirectWardenError(
+                    "direct registry contains duplicate storage-native ownership"
+                )
+            expected[sandbox.memory_directory] = sandbox
+        if not expected:
+            return {}
+        result = self.storage.list_volumes()
+        records = result.get("records")
+        if not isinstance(records, list):
+            raise DirectWardenError(
+                "storage-native service returned an invalid volume inventory"
+            )
+        by_volume: dict[str, dict[str, object]] = {}
+        for raw in records:
+            if not isinstance(raw, dict):
+                raise DirectWardenError(
+                    "storage-native service returned an invalid volume inventory"
+                )
+            volume_id = raw.get("volume_id")
+            if not isinstance(volume_id, str) or not volume_id:
+                raise DirectWardenError(
+                    "storage-native service returned an invalid volume inventory"
+                )
+            if volume_id in by_volume:
+                raise DirectWardenError(
+                    "storage-native service returned duplicate volume ownership"
+                )
+            by_volume[volume_id] = raw
+        snapshot: dict[str, dict[str, object]] = {}
+        for volume_id, sandbox in expected.items():
+            raw = by_volume.get(volume_id)
+            if raw is None:
+                raise DirectWardenError(
+                    "storage-native volume does not own this sandbox incarnation"
+                )
+            self._validate_storage_record(sandbox, raw)
+            snapshot[volume_id] = raw
+        return snapshot
+
+    def _validate_storage_record(
+        self,
+        sandbox: DirectSandbox,
+        raw: dict[str, object],
+    ) -> None:
         if (
             raw.get("sandbox_id") != sandbox.sandbox_id
             or raw.get("sandbox_generation") != sandbox.sandbox_generation
@@ -1904,7 +1962,6 @@ class DirectRunscWarden:
             raise DirectWardenError(
                 "storage-native volume does not own this sandbox incarnation"
             )
-        return raw
 
     @staticmethod
     def _storage_operation_id(

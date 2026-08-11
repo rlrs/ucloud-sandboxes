@@ -2,16 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-import json
-from pathlib import Path
 from typing import Any
 
 from .models import SandboxNode, utc_now
 from .providers.base import InstanceBootstrapAccess
 from .vm_init import VmInitOptions
-
-
-VM_BOOTSTRAP_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -100,66 +95,6 @@ class VmBootstrapRecord:
             else retry_seconds
         )
         return (now - self.last_attempt_at).total_seconds() >= max(0, delay)
-
-
-class VmBootstrapStore:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-
-    def load(self) -> dict[str, VmBootstrapRecord]:
-        if not self.path.exists():
-            return {}
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict) or set(raw) != {"version", "jobs"}:
-            raise ValueError("bootstrap state does not match the current schema.")
-        version = raw.get("version")
-        if (
-            isinstance(version, bool)
-            or not isinstance(version, int)
-            or version != VM_BOOTSTRAP_SCHEMA_VERSION
-        ):
-            raise ValueError("unsupported bootstrap state schema version.")
-        records = raw.get("jobs")
-        if not isinstance(records, dict):
-            raise ValueError("bootstrap state jobs must be a JSON object.")
-        result: dict[str, VmBootstrapRecord] = {}
-        for job_id, record in records.items():
-            if not isinstance(job_id, str) or not job_id.strip():
-                raise ValueError("bootstrap state job keys must be non-empty strings.")
-            parsed = VmBootstrapRecord.from_dict(record)
-            if parsed.job_id != job_id:
-                raise ValueError(
-                    "bootstrap state job key does not match the embedded job_id."
-                )
-            result[job_id] = parsed
-        return result
-
-    def save(self, records: dict[str, VmBootstrapRecord]) -> None:
-        validated: dict[str, VmBootstrapRecord] = {}
-        for job_id, record in records.items():
-            if not isinstance(job_id, str) or not job_id.strip():
-                raise ValueError("bootstrap state job keys must be non-empty strings.")
-            if not isinstance(record, VmBootstrapRecord):
-                raise ValueError("bootstrap state values must be bootstrap records.")
-            parsed = VmBootstrapRecord.from_dict(record.to_dict())
-            if parsed.job_id != job_id:
-                raise ValueError(
-                    "bootstrap state job key does not match the embedded job_id."
-                )
-            validated[job_id] = parsed
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "version": VM_BOOTSTRAP_SCHEMA_VERSION,
-            "jobs": {
-                job_id: record.to_dict()
-                for job_id, record in sorted(validated.items())
-            }
-        }
-        tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        tmp_path.replace(self.path)
 
 
 @dataclass(frozen=True)
@@ -322,7 +257,9 @@ def mark_bootstrap_access_refresh(
         node_id=intent.node_id,
         role=intent.role,
         status=existing.status if existing is not None else "",
-        attempts=existing.attempts if existing is not None else intent.previous_attempts,
+        attempts=existing.attempts
+        if existing is not None
+        else intent.previous_attempts,
         last_attempt_at=existing.last_attempt_at if existing is not None else None,
         last_success_at=existing.last_success_at if existing is not None else None,
         last_access_refresh_at=refreshed_at,
@@ -454,9 +391,7 @@ def _required_string(value: object, *, field: str) -> str:
 
 def _nonnegative_integer(value: object, *, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(
-            f"bootstrap record {field} must be a non-negative integer."
-        )
+        raise ValueError(f"bootstrap record {field} must be a non-negative integer.")
     return value
 
 

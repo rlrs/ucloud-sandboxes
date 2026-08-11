@@ -812,19 +812,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   white-space: nowrap;
 }
 
-.menu-mark {
-  display: grid;
-  width: 18px;
-  gap: 4px;
-}
-
-.menu-mark span {
-  display: block;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
 .status-ok {
   color: #bbf7d0;
 }
@@ -839,15 +826,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 .select-control option {
   color: var(--text);
-}
-
-.control-value {
-  display: inline-flex;
-  min-width: 30px;
-  height: 32px;
-  align-items: center;
-  color: #f8fafc;
-  font-weight: 700;
 }
 
 .clock-mark, .refresh-mark, .pause-mark, .moon-mark {
@@ -896,24 +874,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   border-top: 4px solid transparent;
   border-bottom: 4px solid transparent;
   content: "";
-}
-
-.pause-mark::before, .pause-mark::after {
-  position: absolute;
-  top: 3px;
-  width: 4px;
-  height: 12px;
-  border-radius: 1px;
-  background: currentColor;
-  content: "";
-}
-
-.pause-mark::before {
-  left: 4px;
-}
-
-.pause-mark::after {
-  right: 4px;
 }
 
 .moon-mark {
@@ -1027,50 +987,6 @@ h1, h2, p {
   display: block;
 }
 
-.accent-blue {
-  --accent: var(--blue);
-}
-
-.accent-green {
-  --accent: var(--green);
-}
-
-.accent-orange {
-  --accent: var(--orange);
-}
-
-.accent-purple {
-  --accent: var(--purple);
-}
-
-.accent-red {
-  --accent: var(--red);
-}
-
-.sparkline {
-  position: absolute;
-  right: 14px;
-  bottom: 16px;
-  display: block;
-  width: 86px;
-  height: 46px;
-}
-
-.chart-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.chart-wide {
-  grid-column: span 4;
-}
-
-.chart-small {
-  grid-column: span 3;
-}
-
 .chart-panel {
   min-width: 0;
   padding: 12px 14px 11px;
@@ -1130,13 +1046,6 @@ h1, h2, p {
 
 .event-panel {
   overflow: hidden;
-}
-
-.ops-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
 }
 
 .decision-hero, .workspace-hero {
@@ -1379,18 +1288,6 @@ h1, h2, p {
   font-variant-numeric: tabular-nums;
 }
 
-.ops-large {
-  grid-column: span 7;
-}
-
-.ops-small {
-  grid-column: span 5;
-}
-
-.compact-strip {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .inline-badge, .build-status {
   display: inline-flex;
   min-width: 68px;
@@ -1434,18 +1331,6 @@ h1, h2, p {
   min-height: 18px;
   margin-bottom: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-
-.registry-detail {
-  margin: 0 0 8px;
-}
-
-.repo-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 72px;
-  overflow: auto;
 }
 
 .repo-pill, .empty-inline {
@@ -1697,10 +1582,6 @@ h1, h2, p {
   opacity: 0.52;
 }
 
-.empty-inline {
-  color: var(--muted);
-}
-
 .build-panel {
   margin-bottom: 12px;
 }
@@ -1744,14 +1625,6 @@ td:last-child {
 @media (max-width: 1320px) {
   .metric-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .chart-wide, .chart-small {
-    grid-column: span 6;
-  }
-
-  .ops-large, .ops-small {
-    grid-column: 1 / -1;
   }
 
   .registry-full-grid {
@@ -1805,11 +1678,6 @@ td:last-child {
     font-size: 24px;
   }
 
-  .title-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
   .auth-panel {
     grid-template-columns: 1fr 1fr;
   }
@@ -1824,15 +1692,6 @@ td:last-child {
 
   .metric-card {
     min-height: 106px;
-  }
-
-  .sparkline {
-    width: 96px;
-    height: 44px;
-  }
-
-  .chart-wide, .chart-small, .ops-large, .ops-small {
-    grid-column: 1 / -1;
   }
 
   .stat-strip {
@@ -1958,16 +1817,6 @@ td:last-child {
   color: #fecaca;
 }
 
-.page-kicker {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--blue);
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 h1 {
   line-height: 1.15;
   font-weight: 800;
@@ -2024,11 +1873,6 @@ h1 {
   text-transform: uppercase;
 }
 
-.chart-grid, .ops-grid {
-  gap: 10px;
-  margin: 0;
-}
-
 .chart-panel, .ops-panel {
   padding: 14px 15px 12px;
 }
@@ -2057,18 +1901,6 @@ h2 {
 
 .chart-canvas.small {
   height: 184px;
-}
-
-.ops-grid .ops-panel:nth-child(1), .ops-grid .ops-panel:nth-child(2) {
-  grid-column: span 6;
-}
-
-.ops-grid .ops-panel:nth-child(3) {
-  grid-column: span 8;
-}
-
-.ops-grid .ops-panel:nth-child(4) {
-  grid-column: span 4;
 }
 
 .stat-strip {
@@ -2177,14 +2009,6 @@ tbody tr {
     --rail-width: 204px;
   }
 
-  .chart-wide, .chart-small {
-    grid-column: span 6;
-  }
-
-  .ops-grid .ops-panel:nth-child(n) {
-    grid-column: span 6;
-  }
-
   .activity-grid .build-panel, .activity-grid .trace-panel {
     grid-column: 1 / -1;
   }
@@ -2243,11 +2067,6 @@ tbody tr {
     display: none;
   }
 
-  .page-title {
-    flex-direction: row;
-    align-items: center;
-  }
-
   .top-controls {
     width: auto;
     justify-content: flex-end;
@@ -2283,17 +2102,8 @@ tbody tr {
     min-width: 86px;
   }
 
-  .page-title {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .chart-wide, .chart-small, .ops-grid .ops-panel:nth-child(n) {
-    grid-column: 1 / -1;
   }
 
   .health-strip {
@@ -2348,15 +2158,6 @@ tbody tr {
   border-color: #991b1b;
   background: #450a0a;
   color: #fee2e2;
-}
-
-.page-title p {
-  font-weight: 500;
-  margin-top: 3px;
-  font-size: 14px;
-  max-width: 780px;
-  color: var(--muted);
-  line-height: 1.45;
 }
 
 .page-tabs::before {
@@ -2541,24 +2342,6 @@ button.signal-chip:hover {
   min-height: 34px;
   margin: 5px 0 10px;
   line-height: 1.4;
-}
-
-.accent-green, .accent-slate {
-  --accent: var(--selection);
-}
-
-.capacity-rule > span {
-  display: inline-flex;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--warning);
-  color: white;
-  font-size: 10px;
-  font-weight: 900;
 }
 
 .pipeline-stage.attention {
@@ -2981,50 +2764,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="tab"]:fo
   padding: 0;
 }
 
-.page-title {
-  gap: 16px;
-  margin-bottom: var(--space-4);
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  min-height: 52px;
-  margin: 0;
-  padding: 0 0 14px;
-  border: 0;
-}
-
-.page-title h1 {
-  max-width: 840px;
-  margin: 0;
-  color: var(--text);
-  font-size: clamp(1.65rem, 2.3vw, 2.35rem);
-  font-weight: 580;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.page-kicker, .page-title p {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  white-space: nowrap !important;
-  border: 0 !important;
-}
-
-.title-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .last-updated {
   font-weight: 650;
   color: var(--faint);
@@ -3198,12 +2937,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="tab"]:fo
   border-right: 0;
 }
 
-.metric-context {
-  margin-top: auto;
-  font-size: 9px;
-  display: none;
-}
-
 .capacity-card .workspace-copy {
   min-height: 18px;
 }
@@ -3218,19 +2951,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, [role="tab"]:fo
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-}
-
-.capacity-rule {
-  gap: 9px;
-  align-items: flex-start;
-  padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--line));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warning) 7%, var(--surface));
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-  display: none;
 }
 
 .pipeline-stage:last-of-type {
@@ -3458,11 +3178,6 @@ th {
   background: transparent;
 }
 
-.policy-note {
-  margin-top: 10px;
-  display: none;
-}
-
 .equation-footnote {
   flex-wrap: wrap;
   gap: 6px 14px;
@@ -3644,11 +3359,6 @@ th {
 
   .select-control:first-of-type, #pauseButton {
     display: none;
-  }
-
-  .page-title {
-    align-items: flex-start;
-    gap: 10px;
   }
 
   .last-updated {
@@ -4075,10 +3785,6 @@ h1, h2, h3, strong, th {
   font-weight: 600;
   color: #d6dbe3;
   font-size: 0.75rem;
-}
-
-.select-icon {
-  color: #8490a2;
 }
 
 .icon-button, .top-controls #authToggleButton {
@@ -5790,7 +5496,7 @@ function pointFromSnapshot(snapshot) {
     modelWaitP95Seconds: msToSeconds(programs.model_wait_p95_ms),
     hardDiskUtilization: resourcePercent(
       sandboxResources.used || {},
-      sandboxResources.effective || {},
+      sandboxResources.total || {},
       "disk_mb"
     ),
     pendingSandboxes: asNumber(sandboxes.pending),
@@ -5872,7 +5578,7 @@ function renderMetrics(snapshot) {
   setText("diskCommitValue", formatPercentPoint(latest.hardDiskUtilization));
   setText(
     "diskCommitDetail",
-    `${formatMemory((sandboxResources.free || {}).disk_mb)} free of ${formatMemory((sandboxResources.effective || {}).disk_mb)}`
+    `${formatMemory((sandboxResources.free || {}).disk_mb)} free of ${formatMemory((sandboxResources.total || {}).disk_mb)}`
   );
 
   setText("modelWaitValue", formatInteger(programStates.model_wait));
@@ -5955,7 +5661,7 @@ function renderOverviewOperational(snapshot) {
   const load = resources.load || {};
   const free = resources.free || {};
   const used = resources.used || {};
-  const effective = resources.effective || {};
+  const total = resources.total || {};
   const autoscaler = snapshot.autoscaler || {};
   const policy = autoscaler.effective_policy || {};
   const programs = snapshot.programs || {};
@@ -5985,7 +5691,7 @@ function renderOverviewOperational(snapshot) {
   const cpuReserved = ratioToPercent(load.vcpu);
   const memoryActual = nullableNumber(actual.memory_percent);
   const memoryReserved = ratioToPercent(load.memory);
-  const diskPercent = resourcePercent(used, effective, "disk_mb");
+  const diskPercent = resourcePercent(used, total, "disk_mb");
   const hasReadySupply = asNumber(nodes.sandbox_ready) > 0;
   const hasDeficit = resourceHasPositiveValue(autoscaler.resource_deficit);
   els.capacityFitBadge.textContent = hasDeficit ? "Does not fit" : hasReadySupply ? "Fits current supply" : "No ready nodes";
@@ -6005,7 +5711,7 @@ function renderOverviewOperational(snapshot) {
   setMeterWidth("capacityMemoryActualMeter", memoryActual);
   setMeterWidth("capacityMemoryReservedMeter", memoryReserved);
   setText("capacityDiskValue", `${formatMemory(free.disk_mb)} free`);
-  setText("capacityDiskDetail", `${formatMemory(used.disk_mb)} committed of ${formatMemory(effective.disk_mb)} hard capacity`);
+  setText("capacityDiskDetail", `${formatMemory(used.disk_mb)} committed of ${formatMemory(total.disk_mb)} hard capacity`);
   setMeterWidth("capacityDiskMeter", diskPercent);
 
   setText("overviewModelWaitAge", asNumber(states.model_wait) ? `oldest ${formatAge(programs.oldest_model_wait_seconds)}` : "No active wait");
@@ -6385,8 +6091,8 @@ function nodeRow(item, plannedWakes) {
   tr.append(resourceMeterCell(item, "vcpu", "cpu_percent"));
   tr.append(resourceMeterCell(item, "memory_mb", "memory_percent"));
   const free = item.free_resources || {};
-  const effective = item.effective_resources || {};
-  appendCell(tr, `${formatMemory(free.disk_mb)} / ${formatMemory(effective.disk_mb)}`);
+  const total = item.total_resources || {};
+  appendCell(tr, `${formatMemory(free.disk_mb)} / ${formatMemory(total.disk_mb)}`);
   appendCell(tr, nodePressureText(item));
   appendCell(tr, item.fresh ? `${formatAge(item.age_seconds)} ago` : `stale ${formatAge(item.age_seconds)}`);
   return tr;
@@ -6635,33 +6341,20 @@ function normalizeSandboxRecord(record) {
   const raw = plainObject(record);
   const spec = plainObject(raw.spec);
   const node = plainObject(raw.node);
-  const labels = plainObject(raw.labels);
-  const specLabels = plainObject(spec.labels);
-  const resources = plainObject(raw.resources);
   return {
-    id: firstText(raw.id, raw.sandbox_id, spec.id),
-    generation: firstNumber(raw.generation, raw.sandbox_generation, spec.generation),
-    state: firstText(raw.state, raw.status, raw.cached_state, "unknown"),
-    image: firstText(raw.image, spec.image, "-"),
-    profile: firstText(raw.profile, spec.profile, "-"),
-    node: firstText(node.node_id, node.job_id, raw.node_id, raw.job_id, "-"),
+    ...raw,
+    profile: spec.profile,
+    node: node.node_id,
     nodeFresh: node.fresh,
-    resources,
+    resources: plainObject(raw.resources),
     spec,
-    labels: Object.keys(labels).length ? labels : specLabels,
-    createdAt: firstText(raw.created_at, raw.createdAt),
-    updatedAt: firstText(raw.updated_at, raw.updatedAt),
-    operationId: firstText(raw.operation_id, raw.operationId),
-    checkpointId: firstText(raw.checkpoint_id, raw.checkpointId),
-    creationKind: firstText(raw.creation_kind, raw.creationKind),
-    routeOnly: Boolean(raw.route_only),
-    cached: Boolean(raw.cached),
+    labels: plainObject(raw.labels),
   };
 }
 
 function compareSandboxesNewestFirst(a, b) {
-  const aTime = Date.parse(a.createdAt || a.updatedAt || "") || 0;
-  const bTime = Date.parse(b.createdAt || b.updatedAt || "") || 0;
+  const aTime = Date.parse(a.created_at || a.updated_at || "") || 0;
+  const bTime = Date.parse(b.created_at || b.updated_at || "") || 0;
   if (aTime !== bTime) return bTime - aTime;
   return String(a.id || "").localeCompare(String(b.id || ""));
 }
@@ -6681,19 +6374,18 @@ function sandboxMatchesSearch(sandbox, query) {
 function sandboxMatchesState(sandbox, filter) {
   if (!filter || filter === "all") return true;
   const group = sandboxStateGroup(sandbox.state);
-  if (filter === "attention") return ["failed", "stale", "migrating", "transitioning", "pending"].includes(group) || sandbox.nodeFresh === false;
+  if (filter === "attention") return ["failed", "transitioning", "pending"].includes(group) || sandbox.nodeFresh === false;
+  if (filter === "failed") return group === "failed" || sandbox.nodeFresh === false;
   return group === filter;
 }
 
 function sandboxStateGroup(state) {
   const status = String(state || "unknown").toLowerCase();
-  if (["running", "acting", "ready"].includes(status)) return "running";
-  if (["parked", "paused"].includes(status)) return "parked";
-  if (["parking", "waking", "restoring", "moving"].includes(status)) return "transitioning";
-  if (["migrating", "migration_pending"].includes(status)) return "migrating";
-  if (["creating", "pending", "queued"].includes(status)) return "pending";
-  if (["failed", "error", "terminated", "terminating"].includes(status)) return "failed";
-  if (["stale", "orphaned"].includes(status)) return "stale";
+  if (status === "running") return "running";
+  if (status === "parked") return "parked";
+  if (["hibernating", "restoring", "waking", "import_planned", "importing", "import_ready", "moving_out"].includes(status)) return "transitioning";
+  if (["creating", "planned", "quota_ready", "rootfs_ready"].includes(status)) return "pending";
+  if (["recovery-required", "unavailable"].includes(status)) return "failed";
   return "unknown";
 }
 
@@ -6715,7 +6407,7 @@ function sandboxRow(sandbox) {
     tr,
     sandbox.generation === null ? (sandbox.id || "-") : `${sandbox.id || "-"} / g${formatInteger(sandbox.generation)}`,
     "sandbox-id",
-    [sandbox.id, sandbox.operationId, sandbox.checkpointId, sandbox.creationKind].filter(Boolean).join("\\n")
+    [sandbox.id, sandbox.operation_id].filter(Boolean).join("\\n")
   );
   appendClassCell(tr, sandbox.image || "-", "sandbox-image", sandbox.image || "");
   appendClassCell(tr, sandboxNodeText(sandbox), "sandbox-node", sandboxNodeTitle(sandbox));
@@ -6739,7 +6431,7 @@ function sandboxRow(sandbox) {
 
 function sandboxStatusClass(status) {
   const group = sandboxStateGroup(status);
-  if (["running", "parked", "transitioning", "migrating", "pending", "failed", "stale"].includes(group)) return group;
+  if (["running", "parked", "transitioning", "pending", "failed"].includes(group)) return group;
   return "unknown";
 }
 
@@ -6760,9 +6452,9 @@ function sandboxNodeTitle(sandbox) {
 function sandboxResourcesText(sandbox) {
   const resources = sandbox.resources || {};
   const spec = sandbox.spec || {};
-  const cpu = firstNumber(resources.vcpu, resources.cpu, resources.cpus, spec.cpus);
-  const memory = firstNumber(resources.memory_mb, resources.memory, spec.memory_mb);
-  const disk = firstNumber(resources.disk_mb, resources.disk, spec.disk_mb);
+  const cpu = firstNumber(resources.vcpu, spec.cpus);
+  const memory = firstNumber(resources.memory_mb, spec.memory_mb);
+  const disk = firstNumber(resources.disk_mb, spec.disk_mb);
   const parts = [];
   if (cpu !== null && cpu > 0) parts.push(`${formatNumber(cpu)} vCPU`);
   if (memory !== null && memory > 0) parts.push(formatMemory(memory));
@@ -6771,7 +6463,7 @@ function sandboxResourcesText(sandbox) {
 }
 
 function sandboxAge(sandbox) {
-  const created = Date.parse(sandbox.createdAt || "");
+  const created = Date.parse(sandbox.created_at || "");
   if (!Number.isFinite(created)) return "-";
   return formatAge((Date.now() - created) / 1000);
 }
@@ -6876,7 +6568,7 @@ function renderRegistryPage(snapshot) {
   setText("registryPageCoverageValue", configured && total > 0 ? `${formatInteger(scanned)}/${formatInteger(total)}` : "-");
 
   if (!configured) {
-    setText("registryPageHealthDetail", "Set --registry-url or UCLOUD_REGISTRY_URL to show registry health.");
+    setText("registryPageHealthDetail", "Configure the deployment registry to show registry health.");
     setText("registryPageSummary", "No registry configured");
     setText("registryRepoSummary", "No repositories loaded");
     setText("registryTagSummary", "No tags loaded");
@@ -7733,9 +7425,9 @@ function formatResources(value) {
   return `${cpu} vCPU / ${memory}${disk > 0 ? ` / ${formatMemory(disk)} disk` : ""}`;
 }
 
-function resourcePercent(used, effective, key) {
+function resourcePercent(used, total, key) {
   const numerator = nullableNumber((used || {})[key]);
-  const denominator = nullableNumber((effective || {})[key]);
+  const denominator = nullableNumber((total || {})[key]);
   if (numerator === null || denominator === null || denominator <= 0) return null;
   return Math.max(0, Math.min(100, (numerator / denominator) * 100));
 }

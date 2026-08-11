@@ -18,7 +18,7 @@ from typing import Any, Callable, Iterator, Sequence
 
 MIB = 1024 * 1024
 HIBERNATION_SCHEMA_VERSION = 1
-HIBERNATION_MANIFEST_VERSION = 1
+HIBERNATION_MANIFEST_VERSION = 2
 HIBERNATION_ALLOCATOR_CHUNK_MB = 1024
 HIBERNATION_FIXED_OVERHEAD_MB = 64
 MAX_HIBERNATION_JSON_BYTES = 1024 * 1024
@@ -39,14 +39,6 @@ class HibernationConflictError(HibernationError):
 
 
 class HibernationValidationError(HibernationError):
-    pass
-
-
-class HibernationCapacityError(HibernationError):
-    pass
-
-
-class HibernationQuotaError(HibernationError):
     pass
 
 
@@ -127,6 +119,12 @@ def _validate_digest(label: str, value: object) -> str:
     return value
 
 
+def _validate_digest_or_empty(label: str, value: object) -> str:
+    if value == "":
+        return ""
+    return _validate_digest(label, value)
+
+
 def _validate_runtime_value(label: str, value: object) -> str:
     if not isinstance(value, str) or not _RUNTIME_VALUE.fullmatch(value):
         raise ValueError(f"{label} contains unsupported characters")
@@ -176,6 +174,16 @@ class HibernationRuntimeFingerprint:
     @property
     def digest(self) -> str:
         return _sha256_json(self.to_dict())
+
+    @property
+    def node_compatibility_sha256(self) -> str:
+        return _sha256_json(
+            {
+                "boot_config_sha256": self.boot_config_sha256,
+                "runsc_commit": self.runsc_commit,
+                "runsc_sha256": self.runsc_sha256,
+            }
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -227,49 +235,25 @@ class HibernationRuntimeFingerprint:
 class HibernationArtifactFile:
     name: str
     role: HibernationFileRole
-    device: int
-    inode: int
     logical_bytes: int
     allocated_bytes: int
 
     def __post_init__(self) -> None:
         if (
-            not _SAFE_FILE_NAME.fullmatch(self.name)
+            not isinstance(self.name, str)
+            or not _SAFE_FILE_NAME.fullmatch(self.name)
             or self.name in {".", ".."}
             or "/" in self.name
         ):
             raise ValueError("artifact file name must be a safe basename")
         if not isinstance(self.role, HibernationFileRole):
             raise ValueError("artifact file role is invalid")
-        _validate_nonnegative_int("artifact device", self.device)
-        _validate_positive_int("artifact inode", self.inode)
         _validate_nonnegative_int("artifact logical_bytes", self.logical_bytes)
         _validate_nonnegative_int("artifact allocated_bytes", self.allocated_bytes)
-
-    @classmethod
-    def from_path(
-        cls,
-        path: Path,
-        *,
-        role: HibernationFileRole,
-    ) -> "HibernationArtifactFile":
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
-            raise ValueError(f"artifact file must be a regular file: {path.name}")
-        return cls(
-            name=path.name,
-            role=role,
-            device=info.st_dev,
-            inode=info.st_ino,
-            logical_bytes=info.st_size,
-            allocated_bytes=info.st_blocks * 512,
-        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "allocated_bytes": self.allocated_bytes,
-            "device": self.device,
-            "inode": self.inode,
             "logical_bytes": self.logical_bytes,
             "name": self.name,
             "role": self.role.value,
@@ -284,29 +268,88 @@ class HibernationArtifactFile:
             raw,
             {
                 "allocated_bytes",
-                "device",
-                "inode",
                 "logical_bytes",
                 "name",
                 "role",
             },
         )
         try:
-            role = HibernationFileRole(raw["role"])
+            return cls(
+                name=raw["name"],
+                role=HibernationFileRole(raw["role"]),
+                logical_bytes=raw["logical_bytes"],
+                allocated_bytes=raw["allocated_bytes"],
+            )
         except (TypeError, ValueError) as exc:
-            raise ValueError("artifact file role is invalid") from exc
+            raise ValueError("artifact file is invalid") from exc
+
+
+@dataclass(frozen=True)
+class LocalHibernationArtifactFile:
+    artifact: HibernationArtifactFile
+    device: int
+    inode: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.artifact, HibernationArtifactFile):
+            raise ValueError("local artifact metadata is invalid")
+        _validate_nonnegative_int("artifact device", self.device)
+        _validate_positive_int("artifact inode", self.inode)
+
+    @classmethod
+    def from_path(
+        cls,
+        path: Path,
+        *,
+        role: HibernationFileRole,
+    ) -> "LocalHibernationArtifactFile":
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+            raise ValueError(f"artifact file must be a regular file: {path.name}")
         return cls(
-            name=str(raw["name"]),
-            role=role,
-            device=_validate_nonnegative_int("artifact device", raw["device"]),
-            inode=_validate_positive_int("artifact inode", raw["inode"]),
-            logical_bytes=_validate_nonnegative_int(
-                "artifact logical_bytes", raw["logical_bytes"]
+            artifact=HibernationArtifactFile(
+                name=path.name,
+                role=role,
+                logical_bytes=info.st_size,
+                allocated_bytes=info.st_blocks * 512,
             ),
-            allocated_bytes=_validate_nonnegative_int(
-                "artifact allocated_bytes", raw["allocated_bytes"]
-            ),
+            device=info.st_dev,
+            inode=info.st_ino,
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "artifact": self.artifact.to_dict(),
+            "device": self.device,
+            "inode": self.inode,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "LocalHibernationArtifactFile":
+        if not isinstance(raw, dict):
+            raise ValueError("local artifact file must be a JSON object")
+        _require_exact_keys("local artifact file", raw, {"artifact", "device", "inode"})
+        return cls(
+            artifact=HibernationArtifactFile.from_dict(raw["artifact"]),
+            device=raw["device"],
+            inode=raw["inode"],
+        )
+
+
+def _validate_artifact_inventory(
+    label: str,
+    files: Sequence[HibernationArtifactFile],
+) -> None:
+    if not files or len({item.name for item in files}) != len(files):
+        raise ValueError(f"{label} artifact inventory is invalid")
+    roles = [item.role for item in files]
+    for required in (
+        HibernationFileRole.MAIN_MEMORY,
+        HibernationFileRole.KERNEL_STATE,
+        HibernationFileRole.ALLOCATOR_METADATA,
+    ):
+        if roles.count(required) != 1:
+            raise ValueError(f"{label} requires exactly one {required.value} file")
 
 
 @dataclass(frozen=True)
@@ -319,8 +362,8 @@ class HibernationManifest:
     container_id: str
     created_ns: int
     runtime: HibernationRuntimeFingerprint
-    files: tuple[HibernationArtifactFile, ...]
-    managed_process_sha256: str = ""
+    files: tuple[LocalHibernationArtifactFile, ...]
+    managed_process_sha256: str
     version: int = HIBERNATION_MANIFEST_VERSION
 
     def __post_init__(self) -> None:
@@ -336,32 +379,22 @@ class HibernationManifest:
         _validate_positive_int("created_ns", self.created_ns)
         if not isinstance(self.runtime, HibernationRuntimeFingerprint):
             raise ValueError("runtime fingerprint is invalid")
-        if self.managed_process_sha256:
-            _validate_digest(
-                "managed_process_sha256", self.managed_process_sha256
-            )
-        if not self.files:
-            raise ValueError("hibernation manifest must contain artifact files")
-        names = [item.name for item in self.files]
-        if len(names) != len(set(names)):
-            raise ValueError("hibernation manifest contains duplicate file names")
-        roles = [item.role for item in self.files]
-        for required in (
-            HibernationFileRole.MAIN_MEMORY,
-            HibernationFileRole.KERNEL_STATE,
-            HibernationFileRole.ALLOCATOR_METADATA,
+        _validate_digest_or_empty("managed_process_sha256", self.managed_process_sha256)
+        if any(
+            not isinstance(item, LocalHibernationArtifactFile) for item in self.files
         ):
-            if roles.count(required) != 1:
-                raise ValueError(
-                    f"hibernation manifest must contain exactly one {required.value}"
-                )
+            raise ValueError("hibernation manifest local artifact is invalid")
+        _validate_artifact_inventory(
+            "hibernation manifest", tuple(item.artifact for item in self.files)
+        )
 
     def _unsigned_dict(self) -> dict[str, Any]:
-        payload = {
+        return {
             "container_id": self.container_id,
             "created_ns": self.created_ns,
             "files": [item.to_dict() for item in self.files],
             "hibernation_generation": self.hibernation_generation,
+            "managed_process_sha256": self.managed_process_sha256,
             "operation_id": self.operation_id,
             "runtime": self.runtime.to_dict(),
             "sandbox_generation": self.sandbox_generation,
@@ -369,9 +402,6 @@ class HibernationManifest:
             "spec_sha256": self.spec_sha256,
             "version": self.version,
         }
-        if self.managed_process_sha256:
-            payload["managed_process_sha256"] = self.managed_process_sha256
-        return payload
 
     @property
     def metadata_sha256(self) -> str:
@@ -387,22 +417,20 @@ class HibernationManifest:
         if not isinstance(raw, dict):
             raise ValueError("hibernation manifest must be a JSON object")
         required_keys = {
-                "container_id",
-                "created_ns",
-                "files",
-                "hibernation_generation",
-                "metadata_sha256",
-                "operation_id",
-                "runtime",
-                "sandbox_generation",
-                "sandbox_id",
-                "spec_sha256",
-                "version",
-            }
-        if frozenset(raw) not in {
-            frozenset(required_keys),
-            frozenset(required_keys | {"managed_process_sha256"}),
-        }:
+            "container_id",
+            "created_ns",
+            "files",
+            "hibernation_generation",
+            "managed_process_sha256",
+            "metadata_sha256",
+            "operation_id",
+            "runtime",
+            "sandbox_generation",
+            "sandbox_id",
+            "spec_sha256",
+            "version",
+        }
+        if set(raw) != required_keys:
             raise ValueError("hibernation manifest has an invalid schema")
         files_raw = raw["files"]
         if not isinstance(files_raw, list):
@@ -421,13 +449,11 @@ class HibernationManifest:
             container_id=str(raw["container_id"]),
             created_ns=_validate_positive_int("created_ns", raw["created_ns"]),
             runtime=HibernationRuntimeFingerprint.from_dict(raw["runtime"]),
-            files=tuple(HibernationArtifactFile.from_dict(item) for item in files_raw),
-            managed_process_sha256=(
-                _validate_digest(
-                    "managed_process_sha256", raw["managed_process_sha256"]
-                )
-                if "managed_process_sha256" in raw
-                else ""
+            files=tuple(
+                LocalHibernationArtifactFile.from_dict(item) for item in files_raw
+            ),
+            managed_process_sha256=_validate_digest_or_empty(
+                "managed_process_sha256", raw["managed_process_sha256"]
             ),
         )
         supplied_digest = _validate_digest("metadata_sha256", raw["metadata_sha256"])
@@ -477,13 +503,14 @@ class HibernationManifest:
             ) from exc
         try:
             for item in self.files:
+                artifact = item.artifact
                 flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
                 flags |= getattr(os, "O_NOFOLLOW", 0)
                 try:
-                    descriptor = os.open(item.name, flags, dir_fd=root_fd)
+                    descriptor = os.open(artifact.name, flags, dir_fd=root_fd)
                 except OSError as exc:
                     raise HibernationValidationError(
-                        f"cannot safely open hibernation artifact file: {item.name}"
+                        f"cannot safely open hibernation artifact file: {artifact.name}"
                     ) from exc
                 try:
                     info = os.fstat(descriptor)
@@ -491,10 +518,11 @@ class HibernationManifest:
                         not stat.S_ISREG(info.st_mode)
                         or (require_stable_device and info.st_dev != item.device)
                         or info.st_ino != item.inode
-                        or info.st_size != item.logical_bytes
+                        or info.st_size != artifact.logical_bytes
                     ):
                         raise HibernationValidationError(
-                            f"hibernation artifact file identity changed: {item.name}"
+                            "hibernation artifact file identity changed: "
+                            f"{artifact.name}"
                         )
                 finally:
                     os.close(descriptor)
@@ -590,162 +618,6 @@ class HibernationArtifactStore:
             raise HibernationError("hibernation generation path escaped its root")
         return path
 
-    def adopt_file(
-        self,
-        *,
-        active_root: Path,
-        active_name: str,
-        generation: Path,
-        artifact_name: str,
-    ) -> Path:
-        if not _SAFE_FILE_NAME.fullmatch(active_name) or active_name in {".", ".."}:
-            raise ValueError("active file name must be a safe basename")
-        if not _SAFE_FILE_NAME.fullmatch(artifact_name) or artifact_name in {".", ".."}:
-            raise ValueError("artifact file name must be a safe basename")
-        with self._locked():
-            self._ensure_directory(active_root, create=False)
-            self._require_generation_path(generation)
-            if os.path.lexists(generation / self.COMPLETE_NAME):
-                raise HibernationConflictError(
-                    "cannot add files to a complete hibernation generation"
-                )
-            source_fd = self._open_directory(active_root)
-            target_fd = self._open_directory(generation)
-            try:
-                source_info = os.stat(
-                    active_name,
-                    dir_fd=source_fd,
-                    follow_symlinks=False,
-                )
-                if not stat.S_ISREG(source_info.st_mode):
-                    raise HibernationError(
-                        "active memory backing must be a regular file"
-                    )
-                try:
-                    os.stat(
-                        artifact_name,
-                        dir_fd=target_fd,
-                        follow_symlinks=False,
-                    )
-                except FileNotFoundError:
-                    pass
-                else:
-                    raise HibernationConflictError(
-                        "hibernation artifact target already exists"
-                    )
-                try:
-                    os.rename(
-                        active_name,
-                        artifact_name,
-                        src_dir_fd=source_fd,
-                        dst_dir_fd=target_fd,
-                    )
-                except OSError as exc:
-                    raise HibernationError(
-                        "cannot move backing file into hibernation generation; "
-                        "active and artifact roots must share a filesystem"
-                    ) from exc
-                os.fsync(source_fd)
-                os.fsync(target_fd)
-            finally:
-                os.close(target_fd)
-                os.close(source_fd)
-            return generation / artifact_name
-
-    def return_consumed_file(
-        self,
-        manifest: HibernationManifest,
-        *,
-        active_root: Path,
-        file_name: str,
-        artifact_name: str | None = None,
-    ) -> Path:
-        """Return a manifest-owned inode after a failed restore candidate.
-
-        Restore is allowed to consume the main-memory name from a complete
-        single-owner generation. This is the only mutation allowed after
-        ``COMPLETE``: the source must still have the exact device, inode, and
-        size recorded by that manifest, and the original generation name must
-        be absent.
-        """
-        if not _SAFE_FILE_NAME.fullmatch(file_name) or file_name in {".", ".."}:
-            raise ValueError("consumed artifact name must be a safe basename")
-        artifact_name = file_name if artifact_name is None else artifact_name
-        if (
-            not _SAFE_FILE_NAME.fullmatch(artifact_name)
-            or artifact_name in {".", ".."}
-        ):
-            raise ValueError("artifact target name must be a safe basename")
-        expected = next(
-            (item for item in manifest.files if item.name == artifact_name),
-            None,
-        )
-        if expected is None:
-            raise HibernationConflictError(
-                "consumed file is not owned by the hibernation manifest"
-            )
-        with self._locked():
-            generation = self.generation_path(
-                sandbox_id=manifest.sandbox_id,
-                sandbox_generation=manifest.sandbox_generation,
-                hibernation_generation=manifest.hibernation_generation,
-            )
-            self._require_generation_path(generation)
-            marker = self._read_json_at(
-                generation,
-                self.COMPLETE_NAME,
-                "COMPLETE",
-            )
-            if marker.get("metadata_sha256") != manifest.metadata_sha256:
-                raise HibernationConflictError(
-                    "complete generation no longer matches the manifest"
-                )
-            self._ensure_directory(active_root, create=False)
-            source_fd = self._open_directory(active_root)
-            target_fd = self._open_directory(generation)
-            try:
-                source_info = os.stat(
-                    file_name,
-                    dir_fd=source_fd,
-                    follow_symlinks=False,
-                )
-                if (
-                    not stat.S_ISREG(source_info.st_mode)
-                    or (
-                        self.require_stable_device
-                        and source_info.st_dev != expected.device
-                    )
-                    or source_info.st_ino != expected.inode
-                    or source_info.st_size != expected.logical_bytes
-                ):
-                    raise HibernationConflictError(
-                        "active consumed file identity does not match its manifest"
-                    )
-                try:
-                    os.stat(
-                        artifact_name,
-                        dir_fd=target_fd,
-                        follow_symlinks=False,
-                    )
-                except FileNotFoundError:
-                    pass
-                else:
-                    raise HibernationConflictError(
-                        "complete generation already contains the consumed file"
-                    )
-                os.rename(
-                    file_name,
-                    artifact_name,
-                    src_dir_fd=source_fd,
-                    dst_dir_fd=target_fd,
-                )
-                os.fsync(source_fd)
-                os.fsync(target_fd)
-            finally:
-                os.close(target_fd)
-                os.close(source_fd)
-            return generation / artifact_name
-
     def publish_complete(self, manifest: HibernationManifest) -> HibernationManifest:
         with self._locked():
             generation = self.generation_path(
@@ -776,7 +648,7 @@ class HibernationArtifactStore:
                 # reach durable storage before COMPLETE is authoritative.
                 for item in manifest.files:
                     descriptor = os.open(
-                        item.name,
+                        item.artifact.name,
                         os.O_RDONLY
                         | getattr(os, "O_CLOEXEC", 0)
                         | getattr(os, "O_NOFOLLOW", 0),
@@ -960,7 +832,7 @@ class HibernationArtifactStore:
                 raise HibernationConflictError(
                     "published generation changed before deletion"
                 )
-            expected = {item.name: item for item in manifest.files}
+            expected = {item.artifact.name: item for item in manifest.files}
             allowed = set(expected) | {self.MANIFEST_NAME, self.COMPLETE_NAME}
             actual = set(os.listdir(generation))
             unexpected = actual - allowed
@@ -972,9 +844,9 @@ class HibernationArtifactStore:
             missing = set(expected) - actual
             if allow_consumed_main_memory:
                 missing -= {
-                    item.name
+                    item.artifact.name
                     for item in manifest.files
-                    if item.role == HibernationFileRole.MAIN_MEMORY
+                    if item.artifact.role == HibernationFileRole.MAIN_MEMORY
                 }
             if missing:
                 raise HibernationValidationError(
@@ -988,12 +860,9 @@ class HibernationArtifactStore:
                     info = os.stat(name, dir_fd=generation_fd, follow_symlinks=False)
                     if (
                         not stat.S_ISREG(info.st_mode)
-                        or (
-                            self.require_stable_device
-                            and info.st_dev != item.device
-                        )
+                        or (self.require_stable_device and info.st_dev != item.device)
                         or info.st_ino != item.inode
-                        or info.st_size != item.logical_bytes
+                        or info.st_size != item.artifact.logical_bytes
                     ):
                         raise HibernationValidationError(
                             f"published artifact identity changed: {name}"
@@ -1021,48 +890,6 @@ class HibernationArtifactStore:
                 return
             raise
         self._fsync_directory(self.root)
-
-    def inventory(
-        self,
-        *,
-        ignored_root_entries: Sequence[str] = (),
-        ignored_incarnation_entries: Sequence[str] = (),
-    ) -> tuple[HibernationGenerationInventory, ...]:
-        if not os.path.lexists(self.root):
-            return ()
-        self._ensure_directory(self.root, create=False)
-        ignored_root = frozenset(ignored_root_entries)
-        ignored_incarnation = frozenset(ignored_incarnation_entries)
-        inventory: list[HibernationGenerationInventory] = []
-        for incarnation in sorted(self.root.iterdir(), key=lambda path: path.name):
-            if incarnation.name == self.LOCK_NAME:
-                continue
-            if incarnation.name in ignored_root:
-                self._ensure_private_owned_entry(
-                    incarnation,
-                    "ignored hibernation root entry",
-                )
-                continue
-            match = re.fullmatch(
-                r"([A-Za-z0-9][A-Za-z0-9_.:-]{0,127})\.sandbox-([0-9]+)",
-                incarnation.name,
-            )
-            if match is None:
-                raise HibernationError(
-                    f"unexpected entry in hibernation root: {incarnation.name}"
-                )
-            self._ensure_directory(incarnation, create=False)
-            sandbox_id = match.group(1)
-            sandbox_generation = int(match.group(2))
-            inventory.extend(
-                self._inventory_incarnation_path(
-                    incarnation,
-                    sandbox_id=sandbox_id,
-                    sandbox_generation=sandbox_generation,
-                    ignored_entries=ignored_incarnation,
-                )
-            )
-        return tuple(inventory)
 
     def inventory_incarnation(
         self,
@@ -1282,9 +1109,7 @@ class HibernationArtifactStore:
             try:
                 info = os.fstat(descriptor)
                 if not stat.S_ISREG(info.st_mode):
-                    raise HibernationValidationError(
-                        f"{label} must be a regular file"
-                    )
+                    raise HibernationValidationError(f"{label} must be a regular file")
                 if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
                     raise HibernationValidationError(
                         f"{label} cannot be group/world writable"
@@ -2346,12 +2171,6 @@ class HibernationReconciler:
 
 
 class HibernationJournalStore:
-    """Strict inventory and startup reconciliation for node-local journals."""
-
-    _JOURNAL_PATTERN = re.compile(
-        r"([A-Za-z0-9][A-Za-z0-9_.:-]{0,127})\.sandbox-([0-9]+)\.json\Z"
-    )
-
     def __init__(self, root: Path) -> None:
         if not root.is_absolute():
             raise ValueError("hibernation journal root must be absolute")
@@ -2370,80 +2189,6 @@ class HibernationJournalStore:
         )
         return HibernationJournal(
             self.root / f"{sandbox_id}.sandbox-{sandbox_generation}.json"
-        )
-
-    def inventory(self) -> tuple[HibernationRecord, ...]:
-        if not os.path.lexists(self.root):
-            return ()
-        self._require_root()
-        records: list[HibernationRecord] = []
-        for path in sorted(self.root.iterdir(), key=lambda item: item.name):
-            if path.name.startswith(".") and path.name.endswith(".json.lock"):
-                self._require_private_regular_file(path, "hibernation journal lock")
-                journal_name = path.name[1 : -len(".lock")]
-                if (
-                    self._JOURNAL_PATTERN.fullmatch(journal_name) is None
-                    or not (self.root / journal_name).is_file()
-                ):
-                    raise HibernationError(
-                        "hibernation journal lock has no owning journal"
-                    )
-                continue
-            match = self._JOURNAL_PATTERN.fullmatch(path.name)
-            if match is None:
-                raise HibernationError(
-                    f"unexpected entry in hibernation journal root: {path.name}"
-                )
-            self._require_private_regular_file(path, "hibernation journal")
-            record = HibernationJournal(path).load()
-            if record is None:
-                raise HibernationError("inventoried hibernation journal disappeared")
-            if record.sandbox_id != match.group(1) or record.sandbox_generation != int(
-                match.group(2)
-            ):
-                raise HibernationConflictError(
-                    "hibernation journal filename does not match its incarnation"
-                )
-            records.append(record)
-        return tuple(records)
-
-    def reconcile_all(
-        self,
-        artifacts: HibernationArtifactStore,
-        *,
-        runtime_sha256: str,
-        proc_root: Path = Path("/proc"),
-        candidate_identity_resolver: (
-            Callable[[HibernationRecord], tuple[int, int] | None] | None
-        ) = None,
-    ) -> tuple[HibernationReconcileResult, ...]:
-        records = self.inventory()
-        by_incarnation = {
-            (record.sandbox_id, record.sandbox_generation): record for record in records
-        }
-        for artifact in artifacts.inventory():
-            identity = (artifact.sandbox_id, artifact.sandbox_generation)
-            record = by_incarnation.get(identity)
-            if record is None:
-                raise HibernationConflictError(
-                    "hibernation artifact exists without an owning journal"
-                )
-            if artifact.hibernation_generation > record.hibernation_generation:
-                raise HibernationConflictError(
-                    "hibernation artifact generation is ahead of its journal"
-                )
-        return tuple(
-            HibernationReconciler(
-                self.journal(
-                    sandbox_id=record.sandbox_id,
-                    sandbox_generation=record.sandbox_generation,
-                ),
-                artifacts,
-                runtime_sha256=runtime_sha256,
-                proc_root=proc_root,
-                candidate_identity_resolver=candidate_identity_resolver,
-            ).reconcile()
-            for record in records
         )
 
     def remove(
@@ -2478,31 +2223,6 @@ class HibernationJournalStore:
                 os.fsync(directory_fd)
             finally:
                 os.close(directory_fd)
-
-    def _require_root(self) -> None:
-        try:
-            info = self.root.lstat()
-        except FileNotFoundError as exc:
-            raise HibernationError("hibernation journal root does not exist") from exc
-        if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
-            raise HibernationError("hibernation journal root must be a real directory")
-        if info.st_uid != os.geteuid():
-            raise HibernationError("hibernation journal root has an unexpected owner")
-        if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-            raise HibernationError(
-                "hibernation journal root cannot be group/world writable"
-            )
-
-    @staticmethod
-    def _require_private_regular_file(path: Path, label: str) -> None:
-        info = path.lstat()
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or stat.S_ISLNK(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
-        ):
-            raise HibernationError(f"{label} must be an owned private regular file")
 
 
 def linux_process_start_time_ticks(
@@ -2584,541 +2304,3 @@ def hibernation_disk_reservation_mb(
         + private_pages_mb
         + fixed_overhead_mb
     )
-
-
-def manifests_total_allocated_bytes(
-    manifests: Sequence[HibernationManifest],
-) -> int:
-    return sum(
-        item.allocated_bytes for manifest in manifests for item in manifest.files
-    )
-
-
-@dataclass(frozen=True)
-class HibernationDiskReservation:
-    sandbox_id: str
-    sandbox_generation: int
-    project_id: int
-    memory_mb: int
-    writable_disk_mb: int
-    memory_backing_mb: int
-    private_pages_mb: int
-    fixed_overhead_mb: int
-    created_ns: int
-
-    def __post_init__(self) -> None:
-        _validate_safe_id("sandbox_id", self.sandbox_id)
-        _validate_positive_int("sandbox_generation", self.sandbox_generation)
-        _validate_positive_int("project_id", self.project_id)
-        _validate_positive_int("memory_mb", self.memory_mb)
-        _validate_positive_int("writable_disk_mb", self.writable_disk_mb)
-        _validate_positive_int("memory_backing_mb", self.memory_backing_mb)
-        _validate_nonnegative_int("private_pages_mb", self.private_pages_mb)
-        _validate_nonnegative_int("fixed_overhead_mb", self.fixed_overhead_mb)
-        _validate_positive_int("created_ns", self.created_ns)
-        expected_backing = hibernation_memory_backing_reservation_mb(self.memory_mb)
-        if self.memory_backing_mb != expected_backing:
-            raise ValueError(
-                "memory_backing_mb does not match the allocator reservation"
-            )
-
-    @property
-    def hibernation_quota_mb(self) -> int:
-        return self.memory_backing_mb + self.private_pages_mb + self.fixed_overhead_mb
-
-    @property
-    def total_mb(self) -> int:
-        return self.writable_disk_mb + self.hibernation_quota_mb
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "created_ns": self.created_ns,
-            "fixed_overhead_mb": self.fixed_overhead_mb,
-            "memory_backing_mb": self.memory_backing_mb,
-            "memory_mb": self.memory_mb,
-            "private_pages_mb": self.private_pages_mb,
-            "project_id": self.project_id,
-            "sandbox_generation": self.sandbox_generation,
-            "sandbox_id": self.sandbox_id,
-            "writable_disk_mb": self.writable_disk_mb,
-        }
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "HibernationDiskReservation":
-        if not isinstance(raw, dict):
-            raise ValueError("hibernation disk reservation must be a JSON object")
-        _require_exact_keys(
-            "hibernation disk reservation",
-            raw,
-            {
-                "created_ns",
-                "fixed_overhead_mb",
-                "memory_backing_mb",
-                "memory_mb",
-                "private_pages_mb",
-                "project_id",
-                "sandbox_generation",
-                "sandbox_id",
-                "writable_disk_mb",
-            },
-        )
-        return cls(
-            sandbox_id=_validate_safe_id("sandbox_id", raw["sandbox_id"]),
-            sandbox_generation=_validate_nonnegative_int(
-                "sandbox_generation", raw["sandbox_generation"]
-            ),
-            project_id=_validate_positive_int("project_id", raw["project_id"]),
-            memory_mb=_validate_positive_int("memory_mb", raw["memory_mb"]),
-            writable_disk_mb=_validate_positive_int(
-                "writable_disk_mb", raw["writable_disk_mb"]
-            ),
-            memory_backing_mb=_validate_positive_int(
-                "memory_backing_mb", raw["memory_backing_mb"]
-            ),
-            private_pages_mb=_validate_nonnegative_int(
-                "private_pages_mb", raw["private_pages_mb"]
-            ),
-            fixed_overhead_mb=_validate_nonnegative_int(
-                "fixed_overhead_mb", raw["fixed_overhead_mb"]
-            ),
-            created_ns=_validate_positive_int("created_ns", raw["created_ns"]),
-        )
-
-
-@dataclass(frozen=True)
-class HibernationDiskInventory:
-    capacity_mb: int
-    safety_headroom_mb: int
-    reserved_mb: int
-    available_mb: int
-    reservations: tuple[HibernationDiskReservation, ...]
-
-
-@dataclass(frozen=True)
-class _HibernationDiskLedgerState:
-    capacity_mb: int
-    safety_headroom_mb: int
-    next_project_id: int
-    reservations: tuple[HibernationDiskReservation, ...]
-    tombstones: dict[str, int]
-    version: int = 1
-
-    def __post_init__(self) -> None:
-        if self.version != 1:
-            raise ValueError("unsupported hibernation disk ledger version")
-        _validate_positive_int("capacity_mb", self.capacity_mb)
-        _validate_nonnegative_int("safety_headroom_mb", self.safety_headroom_mb)
-        if self.safety_headroom_mb >= self.capacity_mb:
-            raise ValueError("safety_headroom_mb must be smaller than capacity_mb")
-        _validate_positive_int("next_project_id", self.next_project_id)
-        identities: set[tuple[str, int]] = set()
-        project_ids: set[int] = set()
-        sandbox_ids: set[str] = set()
-        for reservation in self.reservations:
-            if not isinstance(reservation, HibernationDiskReservation):
-                raise ValueError("hibernation disk reservation is invalid")
-            identity = (
-                reservation.sandbox_id,
-                reservation.sandbox_generation,
-            )
-            if identity in identities or reservation.sandbox_id in sandbox_ids:
-                raise ValueError("hibernation disk ledger has duplicate reservations")
-            if reservation.project_id in project_ids:
-                raise ValueError("hibernation disk ledger has duplicate project IDs")
-            identities.add(identity)
-            sandbox_ids.add(reservation.sandbox_id)
-            project_ids.add(reservation.project_id)
-        for sandbox_id, generation in self.tombstones.items():
-            _validate_safe_id("tombstone sandbox_id", sandbox_id)
-            _validate_nonnegative_int("tombstone generation", generation)
-        if project_ids and self.next_project_id <= max(project_ids):
-            raise ValueError("next_project_id does not fence allocated project IDs")
-        if sum(item.total_mb for item in self.reservations) > (
-            self.capacity_mb - self.safety_headroom_mb
-        ):
-            raise ValueError("hibernation disk ledger exceeds usable capacity")
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "capacity_mb": self.capacity_mb,
-            "next_project_id": self.next_project_id,
-            "reservations": [
-                item.to_dict()
-                for item in sorted(
-                    self.reservations,
-                    key=lambda value: (value.sandbox_id, value.sandbox_generation),
-                )
-            ],
-            "safety_headroom_mb": self.safety_headroom_mb,
-            "tombstones": dict(sorted(self.tombstones.items())),
-            "version": self.version,
-        }
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "_HibernationDiskLedgerState":
-        if not isinstance(raw, dict):
-            raise ValueError("hibernation disk ledger must be a JSON object")
-        _require_exact_keys(
-            "hibernation disk ledger",
-            raw,
-            {
-                "capacity_mb",
-                "next_project_id",
-                "reservations",
-                "safety_headroom_mb",
-                "tombstones",
-                "version",
-            },
-        )
-        reservations = raw["reservations"]
-        tombstones = raw["tombstones"]
-        if not isinstance(reservations, list):
-            raise ValueError("hibernation disk reservations must be a list")
-        if not isinstance(tombstones, dict):
-            raise ValueError("hibernation disk tombstones must be a JSON object")
-        return cls(
-            version=_validate_positive_int("ledger version", raw["version"]),
-            capacity_mb=_validate_positive_int("capacity_mb", raw["capacity_mb"]),
-            safety_headroom_mb=_validate_nonnegative_int(
-                "safety_headroom_mb", raw["safety_headroom_mb"]
-            ),
-            next_project_id=_validate_positive_int(
-                "next_project_id", raw["next_project_id"]
-            ),
-            reservations=tuple(
-                HibernationDiskReservation.from_dict(item) for item in reservations
-            ),
-            tombstones={
-                _validate_safe_id(
-                    "tombstone sandbox_id", sandbox_id
-                ): _validate_nonnegative_int("tombstone generation", generation)
-                for sandbox_id, generation in tombstones.items()
-            },
-        )
-
-
-class HibernationDiskLedger:
-    """Crash-durable logical disk admission for parkable sandbox incarnations.
-
-    Sparse allocation never changes the charge. Each live incarnation owns one
-    monotonically allocated XFS project ID for its hibernation tree, while the
-    reservation also includes the separately enforced Docker writable quota.
-    """
-
-    def __init__(
-        self,
-        path: Path,
-        *,
-        capacity_mb: int,
-        safety_headroom_mb: int,
-        first_project_id: int = 200_000,
-    ) -> None:
-        if not path.is_absolute():
-            raise ValueError("hibernation disk ledger path must be absolute")
-        self.path = path
-        self.lock_path = path.with_name(f".{path.name}.lock")
-        self.capacity_mb = _validate_positive_int("capacity_mb", capacity_mb)
-        self.safety_headroom_mb = _validate_nonnegative_int(
-            "safety_headroom_mb", safety_headroom_mb
-        )
-        if self.safety_headroom_mb >= self.capacity_mb:
-            raise ValueError("safety_headroom_mb must be smaller than capacity_mb")
-        self.first_project_id = _validate_positive_int(
-            "first_project_id", first_project_id
-        )
-
-    def reserve(
-        self,
-        *,
-        sandbox_id: str,
-        sandbox_generation: int,
-        memory_mb: int,
-        writable_disk_mb: int,
-        private_pages_mb: int | None = None,
-        fixed_overhead_mb: int = HIBERNATION_FIXED_OVERHEAD_MB,
-        allow_released_generation: bool = False,
-    ) -> HibernationDiskReservation:
-        sandbox_id = _validate_safe_id("sandbox_id", sandbox_id)
-        sandbox_generation = _validate_nonnegative_int(
-            "sandbox_generation", sandbox_generation
-        )
-        memory_mb = _validate_positive_int("memory_mb", memory_mb)
-        writable_disk_mb = _validate_positive_int("writable_disk_mb", writable_disk_mb)
-        if private_pages_mb is None:
-            private_pages_mb = memory_mb
-        private_pages_mb = _validate_nonnegative_int(
-            "private_pages_mb", private_pages_mb
-        )
-        fixed_overhead_mb = _validate_nonnegative_int(
-            "fixed_overhead_mb", fixed_overhead_mb
-        )
-        with self._locked():
-            state = self._load_unlocked()
-            for existing in state.reservations:
-                if existing.sandbox_id != sandbox_id:
-                    continue
-                if existing.sandbox_generation != sandbox_generation:
-                    raise HibernationConflictError(
-                        "sandbox already has a disk reservation for another "
-                        "generation"
-                    )
-                expected = (
-                    memory_mb,
-                    writable_disk_mb,
-                    private_pages_mb,
-                    fixed_overhead_mb,
-                )
-                actual = (
-                    existing.memory_mb,
-                    existing.writable_disk_mb,
-                    existing.private_pages_mb,
-                    existing.fixed_overhead_mb,
-                )
-                if actual != expected:
-                    raise HibernationConflictError(
-                        "replayed disk reservation has different resource bounds"
-                    )
-                return existing
-            if (
-                state.tombstones.get(sandbox_id, -1) >= sandbox_generation
-                and not allow_released_generation
-            ):
-                raise HibernationConflictError(
-                    "sandbox disk reservation generation is fenced by a tombstone"
-                )
-            reservation = HibernationDiskReservation(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                project_id=state.next_project_id,
-                memory_mb=memory_mb,
-                writable_disk_mb=writable_disk_mb,
-                memory_backing_mb=hibernation_memory_backing_reservation_mb(memory_mb),
-                private_pages_mb=private_pages_mb,
-                fixed_overhead_mb=fixed_overhead_mb,
-                created_ns=time.time_ns(),
-            )
-            reserved_mb = sum(item.total_mb for item in state.reservations)
-            usable_mb = state.capacity_mb - state.safety_headroom_mb
-            if reserved_mb + reservation.total_mb > usable_mb:
-                raise HibernationCapacityError(
-                    "hibernation disk reservation exceeds fail-closed node "
-                    f"capacity: requested={reservation.total_mb}MB, "
-                    f"reserved={reserved_mb}MB, usable={usable_mb}MB"
-                )
-            updated = replace(
-                state,
-                next_project_id=state.next_project_id + 1,
-                reservations=(*state.reservations, reservation),
-            )
-            self._save_unlocked(updated)
-            return reservation
-
-    def release(
-        self,
-        *,
-        sandbox_id: str,
-        sandbox_generation: int,
-    ) -> HibernationDiskReservation | None:
-        sandbox_id = _validate_safe_id("sandbox_id", sandbox_id)
-        sandbox_generation = _validate_nonnegative_int(
-            "sandbox_generation", sandbox_generation
-        )
-        with self._locked():
-            state = self._load_unlocked()
-            matching = [
-                item for item in state.reservations if item.sandbox_id == sandbox_id
-            ]
-            if not matching:
-                if state.tombstones.get(sandbox_id, -1) >= sandbox_generation:
-                    return None
-                raise HibernationConflictError(
-                    "sandbox disk reservation does not exist"
-                )
-            reservation = matching[0]
-            if reservation.sandbox_generation != sandbox_generation:
-                raise HibernationConflictError(
-                    "cannot release another sandbox generation's disk reservation"
-                )
-            tombstones = dict(state.tombstones)
-            tombstones[sandbox_id] = max(
-                sandbox_generation,
-                tombstones.get(sandbox_id, -1),
-            )
-            self._save_unlocked(
-                replace(
-                    state,
-                    reservations=tuple(
-                        item for item in state.reservations if item != reservation
-                    ),
-                    tombstones=tombstones,
-                )
-            )
-            return reservation
-
-    def inventory(self) -> HibernationDiskInventory:
-        with self._locked():
-            state = self._load_unlocked()
-        reserved_mb = sum(item.total_mb for item in state.reservations)
-        usable_mb = state.capacity_mb - state.safety_headroom_mb
-        return HibernationDiskInventory(
-            capacity_mb=state.capacity_mb,
-            safety_headroom_mb=state.safety_headroom_mb,
-            reserved_mb=reserved_mb,
-            available_mb=usable_mb - reserved_mb,
-            reservations=tuple(
-                sorted(
-                    state.reservations,
-                    key=lambda item: (item.sandbox_id, item.sandbox_generation),
-                )
-            ),
-        )
-
-    def require_quota_consistency(
-        self,
-        *,
-        expected_incarnations: Sequence[tuple[str, int]],
-        project_hard_limits_mb: dict[int, int],
-        path_project_ids: dict[tuple[str, int], int],
-    ) -> HibernationDiskInventory:
-        inventory = self.inventory()
-        expected = {
-            (
-                _validate_safe_id("sandbox_id", sandbox_id),
-                _validate_positive_int("sandbox_generation", sandbox_generation),
-            )
-            for sandbox_id, sandbox_generation in expected_incarnations
-        }
-        actual = {
-            (item.sandbox_id, item.sandbox_generation)
-            for item in inventory.reservations
-        }
-        if actual != expected:
-            raise HibernationQuotaError(
-                "disk reservation inventory does not match live sandbox " "incarnations"
-            )
-        if set(path_project_ids) != actual:
-            raise HibernationQuotaError(
-                "hibernation quota paths do not exactly match reservations"
-            )
-        expected_projects = {item.project_id for item in inventory.reservations}
-        if set(project_hard_limits_mb) != expected_projects:
-            raise HibernationQuotaError(
-                "XFS project quota inventory does not exactly match reservations"
-            )
-        for item in inventory.reservations:
-            identity = (item.sandbox_id, item.sandbox_generation)
-            if path_project_ids[identity] != item.project_id:
-                raise HibernationQuotaError(
-                    "hibernation path has the wrong XFS project ID"
-                )
-            if project_hard_limits_mb[item.project_id] != item.hibernation_quota_mb:
-                raise HibernationQuotaError(
-                    "hibernation XFS project hard limit does not match reservation"
-                )
-        return inventory
-
-    @contextmanager
-    def _locked(self) -> Iterator[None]:
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        parent = self.path.parent.lstat()
-        if not stat.S_ISDIR(parent.st_mode) or stat.S_ISLNK(parent.st_mode):
-            raise HibernationError("disk ledger parent must be a real directory")
-        if parent.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-            raise HibernationError("disk ledger parent cannot be group/world writable")
-        descriptor = os.open(
-            self.lock_path,
-            os.O_RDWR
-            | os.O_CREAT
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-        )
-        try:
-            info = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or info.st_mode & 0o077
-            ):
-                raise HibernationError(
-                    "disk ledger lock must be a private owned regular file"
-                )
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
-
-    def _load_unlocked(self) -> _HibernationDiskLedgerState:
-        if not os.path.lexists(self.path):
-            return _HibernationDiskLedgerState(
-                capacity_mb=self.capacity_mb,
-                safety_headroom_mb=self.safety_headroom_mb,
-                next_project_id=self.first_project_id,
-                reservations=(),
-                tombstones={},
-            )
-        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self.path, flags)
-        try:
-            info = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or info.st_mode & 0o077
-                or info.st_size > MAX_HIBERNATION_JSON_BYTES
-            ):
-                raise HibernationQuotaError(
-                    "disk ledger must be a small private owned regular file"
-                )
-            payload = bytearray()
-            while len(payload) <= MAX_HIBERNATION_JSON_BYTES:
-                block = os.read(
-                    descriptor,
-                    min(
-                        64 * 1024,
-                        MAX_HIBERNATION_JSON_BYTES + 1 - len(payload),
-                    ),
-                )
-                if not block:
-                    break
-                payload.extend(block)
-        finally:
-            os.close(descriptor)
-        if len(payload) > MAX_HIBERNATION_JSON_BYTES:
-            raise HibernationQuotaError("disk ledger is too large")
-        try:
-            raw = json.loads(bytes(payload).decode("utf-8"))
-            state = _HibernationDiskLedgerState.from_dict(raw)
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-            raise HibernationQuotaError("disk ledger is invalid") from exc
-        if (
-            state.capacity_mb != self.capacity_mb
-            or state.safety_headroom_mb != self.safety_headroom_mb
-        ):
-            raise HibernationQuotaError(
-                "configured disk capacity differs from the durable ledger"
-            )
-        return state
-
-    def _save_unlocked(self, state: _HibernationDiskLedgerState) -> None:
-        payload = _canonical_json(state.to_dict()) + b"\n"
-        descriptor, raw_path = tempfile.mkstemp(
-            prefix=f".{self.path.name}.",
-            suffix=".tmp",
-            dir=self.path.parent,
-        )
-        temporary = Path(raw_path)
-        try:
-            os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(payload)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.path)
-            HibernationArtifactStore._fsync_directory(self.path.parent)
-        finally:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass

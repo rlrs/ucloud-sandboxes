@@ -11,15 +11,17 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from .deployment import agent_version_is_schedulable
+from .deployment import BUILDER_LABEL, agent_version_is_schedulable
 from .models import (
     LiveScaleSignals,
     NodeHeartbeat,
     ResourceQuantity,
+    SandboxNode,
     ScalePolicy,
     parse_iso_datetime,
     utc_now,
 )
+from .providers.base import InstanceCreateIntent
 from .routing import (
     PendingSandboxDemand,
     ProgramRequestState,
@@ -48,25 +50,6 @@ class MetricEvent:
     timestamp: str
     kind: str
     data: dict[str, Any]
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "MetricEvent | None":
-        if not isinstance(raw, dict):
-            return None
-        timestamp = raw.get("timestamp")
-        kind = raw.get("kind")
-        data = raw.get("data")
-        if not isinstance(timestamp, str) or not timestamp:
-            return None
-        if not isinstance(kind, str) or not kind:
-            return None
-        if not isinstance(data, dict):
-            data = {}
-        return cls(
-            timestamp=timestamp,
-            kind=kind,
-            data={str(key): value for key, value in data.items()},
-        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -115,25 +98,33 @@ class MetricsStore:
             kind=kind,
             data=data or {},
         )
-        line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode("utf-8")
-        if len(line) > self._max_event_bytes:
+        payload_bytes = _metric_event_bytes(event)
+        if payload_bytes > self._max_event_bytes:
             event = MetricEvent(
                 timestamp=event.timestamp,
                 kind=event.kind,
                 data={
                     "metrics_payload_truncated": True,
-                    "original_bytes": len(line),
+                    "original_bytes": payload_bytes,
                 },
             )
-            line = (json.dumps(event.to_dict(), sort_keys=True) + "\n").encode("utf-8")
         with self._lock:
             connection = self._sqlite_connect_locked()
             try:
+                stored_events = [event]
                 if self._dropped_sqlite_events:
-                    dropped_data = {
-                        "count": self._dropped_sqlite_events,
-                        "reason": "sqlite_busy",
-                    }
+                    stored_events.insert(
+                        0,
+                        MetricEvent(
+                            event.timestamp,
+                            "metrics_dropped_events",
+                            {
+                                "count": self._dropped_sqlite_events,
+                                "reason": "sqlite_busy",
+                            },
+                        ),
+                    )
+                for stored in stored_events:
                     connection.execute(
                         """
                         INSERT INTO metric_events(
@@ -143,41 +134,17 @@ class MetricsStore:
                         VALUES (?, ?, ?, ?, ?)
                         """,
                         (
-                            event.timestamp,
-                            _timestamp_epoch(event.timestamp),
-                            "metrics_dropped_events",
+                            stored.timestamp,
+                            _timestamp_epoch(stored.timestamp),
+                            stored.kind,
                             json.dumps(
-                                dropped_data,
+                                stored.data,
                                 sort_keys=True,
                                 separators=(",", ":"),
                             ),
-                            _metric_event_bytes(
-                                event.timestamp,
-                                "metrics_dropped_events",
-                                dropped_data,
-                            ),
+                            _metric_event_bytes(stored),
                         ),
                     )
-                connection.execute(
-                    """
-                    INSERT INTO metric_events(
-                        timestamp, timestamp_epoch, kind, data_json,
-                        payload_bytes
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        event.timestamp,
-                        _timestamp_epoch(event.timestamp),
-                        event.kind,
-                        json.dumps(
-                            event.data,
-                            sort_keys=True,
-                            separators=(",", ":"),
-                        ),
-                        len(line),
-                    ),
-                )
                 self._prune_sqlite_locked(connection)
                 connection.commit()
                 try:
@@ -381,11 +348,9 @@ class MetricsStore:
                 data = json.loads(str(data_json))
             except (TypeError, json.JSONDecodeError):
                 continue
-            event = MetricEvent.from_dict(
-                {"timestamp": timestamp, "kind": kind, "data": data}
-            )
-            if event is not None:
-                events.append(event)
+            if not isinstance(data, dict):
+                continue
+            events.append(MetricEvent(timestamp=timestamp, kind=kind, data=data))
         return events
 
     def _prune_sqlite_locked(self, connection: sqlite3.Connection) -> None:
@@ -481,15 +446,8 @@ def _timestamp_epoch(value: str) -> float:
     return parsed.timestamp() if parsed is not None else time.time()
 
 
-def _metric_event_bytes(timestamp: str, kind: str, data: dict[str, Any]) -> int:
-    return len(
-        (
-            json.dumps(
-                {"timestamp": timestamp, "kind": kind, "data": data}, sort_keys=True
-            )
-            + "\n"
-        ).encode("utf-8")
-    )
+def _metric_event_bytes(event: MetricEvent) -> int:
+    return len((json.dumps(event.to_dict(), sort_keys=True) + "\n").encode("utf-8"))
 
 
 def _sqlite_storage_bytes(path: Path) -> int:
@@ -790,30 +748,20 @@ def record_vm_submitted(
     *,
     cycle: int,
     job_id: str,
-    intent: Any,
+    intent: InstanceCreateIntent,
 ) -> None:
     if store is None:
         return
-    options = getattr(intent, "options", None)
-    labels = getattr(options, "labels", None) or {}
-    role = "builder" if labels.get("ucloud-sandboxes/builder") == "true" else "sandbox"
-    product = getattr(options, "product", None)
-    application = getattr(options, "application", None)
     store.append(
         "vm_submitted",
         {
             "cycle": cycle,
             "job_id": job_id,
-            "role": role,
-            "node_id": getattr(intent, "node_id", ""),
-            "node_url": getattr(intent, "node_url", ""),
-            "name": getattr(options, "name", ""),
-            "hostname": getattr(options, "hostname", ""),
-            "product_id": getattr(product, "id", ""),
-            "product_category": getattr(product, "category", ""),
-            "application_name": getattr(application, "name", ""),
-            "application_version": getattr(application, "version", ""),
-            "disk_gb": getattr(options, "disk_gb", None),
+            "role": intent.role,
+            "node_id": intent.node_id,
+            "node_url": intent.node_url,
+            "name": intent.name,
+            "hostname": intent.node_id,
         },
     )
 
@@ -822,34 +770,32 @@ def record_vm_observed(
     store: MetricsStore | None,
     *,
     cycle: int,
-    node: Any,
+    node: SandboxNode,
 ) -> None:
     if store is None:
         return
-    job = getattr(node, "job", None)
-    if job is None:
-        return
+    job = node.job
     store.append(
         "vm_observed",
         {
             "cycle": cycle,
-            "job_id": getattr(job, "id", ""),
-            "role": _node_role(node),
-            "state": getattr(job, "state", ""),
-            "name": getattr(job, "name", ""),
-            "hostname": getattr(job, "hostname", "") or "",
-            "created_at": _iso_or_none(getattr(job, "created_at", None)),
-            "started_at": _iso_or_none(getattr(job, "started_at", None)),
-            "expires_at": _iso_or_none(getattr(job, "expires_at", None)),
-            "latest_note": getattr(job, "latest_note", "") or "",
-            "queue_status": getattr(job, "queue_status", "") or "",
-            "product_id": getattr(job, "product_id", ""),
-            "cpu": getattr(job, "cpu", None),
-            "memory_gb": getattr(job, "memory_gb", None),
-            "disk_gb": getattr(job, "disk_gb", None),
-            "ready": bool(getattr(node, "is_ready", False)),
-            "provisioning": bool(getattr(node, "is_provisioning", False)),
-            "heartbeat_fresh": bool(getattr(node, "heartbeat_fresh", False)),
+            "job_id": job.id,
+            "role": "builder" if job.labels.get(BUILDER_LABEL) == "true" else "sandbox",
+            "state": job.state,
+            "name": job.name,
+            "hostname": job.hostname or "",
+            "created_at": _iso_or_none(job.created_at),
+            "started_at": _iso_or_none(job.started_at),
+            "expires_at": _iso_or_none(job.expires_at),
+            "latest_note": job.latest_note or "",
+            "queue_status": job.queue_status or "",
+            "product_id": job.product_id,
+            "cpu": job.cpu,
+            "memory_gb": job.memory_gb,
+            "disk_gb": job.disk_gb,
+            "ready": node.is_ready,
+            "provisioning": node.is_provisioning,
+            "heartbeat_fresh": node.heartbeat_fresh,
         },
     )
 
@@ -909,37 +855,9 @@ def record_node_heartbeat(
 ) -> None:
     if store is None:
         return
-    effective = heartbeat.effective_resources
-    used = heartbeat.used_resources
     store.append(
         "node_heartbeat",
-        {
-            "node_id": heartbeat.node_id,
-            "job_id": heartbeat.job_id,
-            "node_url": heartbeat.node_url or "",
-            "active_sandboxes": heartbeat.active_sandboxes,
-            "active_workloads": heartbeat.active_workloads,
-            "active_sandbox_creates": heartbeat.active_sandbox_creates,
-            "draining": heartbeat.draining,
-            "capabilities": list(heartbeat.capabilities),
-            "agent_version": heartbeat.agent_version,
-            "deployment_id": heartbeat.deployment_id,
-            "init_version": heartbeat.init_version,
-            "total_resources": heartbeat.total_resources.to_dict(),
-            "effective_resources": effective.to_dict(),
-            "used_resources": used.to_dict(),
-            "free_resources": heartbeat.free_resources.to_dict(),
-            "load": _resource_load(used, effective),
-            "actual_usage": (
-                heartbeat.runtime_metrics.to_dict()
-                if heartbeat.runtime_metrics is not None
-                else None
-            ),
-            "idle_since": heartbeat.idle_since.isoformat()
-            if heartbeat.idle_since
-            else None,
-            "heartbeat_updated_at": heartbeat.updated_at.isoformat(),
-        },
+        _heartbeat_metrics(heartbeat),
     )
     if first:
         store.append(
@@ -1037,9 +955,7 @@ def build_live_scale_signals(
             else None
         )
         materialization_limit = (
-            _optional_int(
-                actual.get("image_materialization_max_concurrent_operations")
-            )
+            _optional_int(actual.get("image_materialization_max_concurrent_operations"))
             or 0
         )
         # Occupied materialization slots are useful work, not queue pressure.
@@ -1057,8 +973,7 @@ def build_live_scale_signals(
                 storage_queue is not None
                 and storage_queue >= policy.target_storage_queue_utilization,
                 materialization_queue is not None
-                and materialization_queue
-                >= policy.target_storage_queue_utilization,
+                and materialization_queue >= policy.target_storage_queue_utilization,
             )
         )
         if not is_pressure:
@@ -1098,9 +1013,7 @@ def build_live_scale_signals(
         memory_utilization=latest_memory,
         memory_psi_full_avg10=latest_psi,
         storage_queue_utilization=latest_storage_queue,
-        image_materialization_queue_utilization=(
-            latest_image_materialization_queue
-        ),
+        image_materialization_queue_utilization=(latest_image_materialization_queue),
         create_pressure_samples=create_pressure_samples,
         latest_create_pressure_age_seconds=(
             max(0, int(now.timestamp() - latest_create_pressure_epoch))
@@ -1426,17 +1339,23 @@ def _node_metrics(
     now: Any,
     heartbeat_ttl_seconds: int,
 ) -> dict[str, Any]:
-    effective = heartbeat.effective_resources
-    used = heartbeat.used_resources
     return {
-        "node_id": heartbeat.node_id,
-        "job_id": heartbeat.job_id,
-        "node_url": heartbeat.node_url or "",
+        **_heartbeat_metrics(heartbeat),
         "fresh": heartbeat.is_fresh(now, heartbeat_ttl_seconds),
         "agent_version_compatible": agent_version_is_schedulable(
             heartbeat.agent_version
         ),
         "age_seconds": max(0, int((now - heartbeat.updated_at).total_seconds())),
+    }
+
+
+def _heartbeat_metrics(heartbeat: NodeHeartbeat) -> dict[str, Any]:
+    total = heartbeat.total_resources
+    used = heartbeat.used_resources
+    return {
+        "node_id": heartbeat.node_id,
+        "job_id": heartbeat.job_id,
+        "node_url": heartbeat.node_url or "",
         "active_sandboxes": heartbeat.active_sandboxes,
         "active_image_builds": heartbeat.active_image_builds,
         "active_sandbox_creates": heartbeat.active_sandbox_creates,
@@ -1446,28 +1365,30 @@ def _node_metrics(
         "capabilities": list(heartbeat.capabilities),
         "agent_version": heartbeat.agent_version,
         "deployment_id": heartbeat.deployment_id,
-        "total_resources": heartbeat.total_resources.to_dict(),
-        "effective_resources": effective.to_dict(),
+        "init_version": heartbeat.init_version,
+        "total_resources": total.to_dict(),
         "used_resources": used.to_dict(),
         "free_resources": heartbeat.free_resources.to_dict(),
-        "load": _resource_load(used, effective),
+        "load": _resource_load(used, total),
         "actual_usage": (
             heartbeat.runtime_metrics.to_dict()
             if heartbeat.runtime_metrics is not None
             else None
         ),
+        "idle_since": _iso_or_none(heartbeat.idle_since),
+        "heartbeat_updated_at": heartbeat.updated_at.isoformat(),
     }
 
 
 def _aggregate_node_resources(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
-    effective = ResourceQuantity()
+    total = ResourceQuantity()
     used = ResourceQuantity()
     free = ResourceQuantity()
     active_sandboxes = 0
     active_image_builds = 0
     active_sandbox_creates = 0
     for heartbeat in heartbeats:
-        effective = effective + heartbeat.effective_resources
+        total = total + heartbeat.total_resources
         used = used + heartbeat.used_resources
         free = free + heartbeat.free_resources
         active_sandboxes += heartbeat.active_sandboxes
@@ -1481,10 +1402,10 @@ def _aggregate_node_resources(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]
         "active_workloads": (
             active_sandboxes + active_image_builds + active_sandbox_creates
         ),
-        "effective": effective.to_dict(),
+        "total": total.to_dict(),
         "used": used.to_dict(),
         "free": free.to_dict(),
-        "load": _resource_load(used, effective),
+        "load": _resource_load(used, total),
         "actual_usage": _aggregate_actual_usage(heartbeats),
     }
 
@@ -1982,14 +1903,6 @@ def _duration_ms(start: object, end: object) -> int | None:
     if start_dt is None or end_dt is None:
         return None
     return max(0, int((end_dt - start_dt).total_seconds() * 1000))
-
-
-def _node_role(node: Any) -> str:
-    job = getattr(node, "job", None)
-    labels = getattr(job, "labels", {}) if job is not None else {}
-    if labels.get("ucloud-sandboxes/builder") == "true":
-        return "builder"
-    return "sandbox"
 
 
 def _iso_or_none(value: Any) -> str | None:

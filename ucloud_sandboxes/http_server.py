@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from http.server import ThreadingHTTPServer
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import socket
 from threading import BoundedSemaphore
@@ -10,7 +11,79 @@ from typing import Any
 DEFAULT_HTTP_REQUEST_QUEUE_SIZE = 4096
 DEFAULT_HTTP_CLIENT_SOCKET_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_HTTP_REQUEST_THREADS = 256
+DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 HTTP_OVERLOAD_RETRY_AFTER_SECONDS = 1
+
+
+class RequestBodyTooLargeError(ValueError):
+    pass
+
+
+class JsonHttpHandler(BaseHTTPRequestHandler):
+    max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
+
+    def _read_json_body(self) -> object:
+        raw = self._read_raw_body(max_bytes=self.max_json_body_bytes).decode("utf-8")
+        if not raw:
+            raise ValueError("empty request body")
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid JSON: {exc}") from exc
+
+    def _read_raw_body(self, *, max_bytes: int) -> bytes:
+        length = self._request_content_length(max_bytes=max_bytes)
+        body = self.rfile.read(length)
+        if len(body) != length:
+            raise ValueError("request body ended before Content-Length bytes were read")
+        return body
+
+    def _request_content_length(self, *, max_bytes: int) -> int:
+        if self.headers.get("Transfer-Encoding"):
+            raise ValueError("Transfer-Encoding is not supported; use Content-Length")
+        length_header = self.headers.get("Content-Length")
+        if length_header is None:
+            raise ValueError("Content-Length header is required")
+        try:
+            length = int(length_header)
+        except ValueError as exc:
+            raise ValueError("invalid Content-Length") from exc
+        if length < 0:
+            raise ValueError("Content-Length cannot be negative")
+        if length > max_bytes:
+            message = f"request body exceeds the {max_bytes} byte limit"
+            raise RequestBodyTooLargeError(message)
+        return length
+
+    def _write_json(
+        self,
+        payload: dict[str, Any],
+        *,
+        status: int = HTTPStatus.OK,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+        self._write_bytes(body, "application/json", status=status, headers=headers)
+
+    def _write_bytes(
+        self,
+        body: bytes,
+        content_type: str,
+        *,
+        status: int = HTTPStatus.OK,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        for key, value in (headers or {}).items():
+            if key.lower() not in {"content-length", "content-type"}:
+                self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, _format: str, *args: object) -> None:
+        del args
 
 
 def _http_overload_response() -> bytes:

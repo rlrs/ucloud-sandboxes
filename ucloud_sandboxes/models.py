@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
 import math
@@ -25,16 +25,6 @@ def parse_iso_datetime(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _optional_float(value: object) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return parsed if math.isfinite(parsed) else None
 
 
 @dataclass(frozen=True)
@@ -252,12 +242,10 @@ class NodeRuntimeMetrics:
 
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
-        if not isinstance(raw, dict):
-            return None
         field_names = {item.name for item in fields(cls)}
-        if set(raw) - field_names:
+        if not isinstance(raw, dict) or set(raw) != field_names:
             return None
-        collected_at = parse_iso_datetime(raw.get("collected_at"))
+        collected_at = parse_iso_datetime(raw["collected_at"])
         if collected_at is None:
             return None
         float_fields = {
@@ -271,96 +259,32 @@ class NodeRuntimeMetrics:
             "load_average_15m",
         }
         values: dict[str, object] = {"collected_at": collected_at}
-        for name in field_names - {"collected_at"}:
-            value = raw.get(name)
-            if name in float_fields:
-                parsed = _optional_float(value)
-                if value is not None and parsed is None:
-                    return None
-                values[name] = parsed
-            elif name == "storage_device_pool_enabled":
-                if value is not None and not isinstance(value, bool):
-                    return None
-                values[name] = value if value is not None else False
-            else:
-                if value is None:
-                    values[name] = 0
-                    continue
-                if isinstance(value, bool):
-                    return None
-                try:
-                    parsed_int = int(value)
-                except (TypeError, ValueError, OverflowError):
-                    return None
-                if (
-                    parsed_int < 0
-                    or isinstance(value, float)
-                    and not value.is_integer()
-                ):
-                    return None
-                values[name] = parsed_int
+        for name in float_fields:
+            value = raw[name]
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                return None
+            values[name] = None if value is None else float(value)
+        device_pool_enabled = raw["storage_device_pool_enabled"]
+        if not isinstance(device_pool_enabled, bool):
+            return None
+        values["storage_device_pool_enabled"] = device_pool_enabled
+        integer_fields = field_names - float_fields
+        integer_fields -= {"collected_at", "storage_device_pool_enabled"}
+        for name in integer_fields:
+            value = raw[name]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                return None
+            values[name] = value
         return cls(**values)
 
     def to_dict(self) -> dict[str, float | int | str | None]:
-        return {
-            "collected_at": self.collected_at.isoformat(),
-            "cpu_percent": self.cpu_percent,
-            "cpu_vcpu": self.cpu_vcpu,
-            "cpu_count": self.cpu_count,
-            "memory_total_mb": self.memory_total_mb,
-            "memory_used_mb": self.memory_used_mb,
-            "memory_available_mb": self.memory_available_mb,
-            "memory_percent": self.memory_percent,
-            "swap_total_mb": self.swap_total_mb,
-            "swap_used_mb": self.swap_used_mb,
-            "swap_free_mb": self.swap_free_mb,
-            "memory_psi_some_avg10": self.memory_psi_some_avg10,
-            "memory_psi_full_avg10": self.memory_psi_full_avg10,
-            "load_average_1m": self.load_average_1m,
-            "load_average_5m": self.load_average_5m,
-            "load_average_15m": self.load_average_15m,
-            "storage_hard_capacity_mb": self.storage_hard_capacity_mb,
-            "storage_hard_reserved_mb": self.storage_hard_reserved_mb,
-            "storage_cache_mb": self.storage_cache_mb,
-            "storage_active_operations": self.storage_active_operations,
-            "storage_waiting_operations": self.storage_waiting_operations,
-            "storage_max_concurrent_operations": (
-                self.storage_max_concurrent_operations
-            ),
-            "storage_published_volumes": self.storage_published_volumes,
-            "storage_error_volumes": self.storage_error_volumes,
-            "storage_device_pool_enabled": self.storage_device_pool_enabled,
-            "storage_device_pool_low_watermark": (
-                self.storage_device_pool_low_watermark
-            ),
-            "storage_device_pool_high_watermark": (
-                self.storage_device_pool_high_watermark
-            ),
-            "storage_device_pool_idle_devices": (self.storage_device_pool_idle_devices),
-            "storage_ublk_active_devices": self.storage_ublk_active_devices,
-            "storage_ublk_live_devices": self.storage_ublk_live_devices,
-            "storage_device_pool_acquires": self.storage_device_pool_acquires,
-            "storage_device_pool_reused_acquires": (
-                self.storage_device_pool_reused_acquires
-            ),
-            "storage_device_pool_new_acquires": (self.storage_device_pool_new_acquires),
-            "storage_device_pool_releases": self.storage_device_pool_releases,
-            "storage_device_pool_discards": self.storage_device_pool_discards,
-            "image_materialization_active_operations": (
-                self.image_materialization_active_operations
-            ),
-            "image_materialization_waiting_operations": (
-                self.image_materialization_waiting_operations
-            ),
-            "image_materialization_max_concurrent_operations": (
-                self.image_materialization_max_concurrent_operations
-            ),
-            "image_pull_active_operations": self.image_pull_active_operations,
-            "image_pull_waiting_operations": self.image_pull_waiting_operations,
-            "image_pull_max_concurrent_operations": (
-                self.image_pull_max_concurrent_operations
-            ),
-        }
+        raw = asdict(self)
+        raw["collected_at"] = self.collected_at.isoformat()
+        return raw
 
 
 class InstancePhase(str, Enum):
@@ -401,10 +325,6 @@ class ProviderInstance:
     raw: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     @property
-    def is_vm(self) -> bool:
-        return self.application_name.startswith("vm-")
-
-    @property
     def is_final(self) -> bool:
         return self.phase is InstancePhase.TERMINAL
 
@@ -419,10 +339,6 @@ class ProviderInstance:
     @property
     def is_lost(self) -> bool:
         return self.phase is InstancePhase.LOST
-
-    @property
-    def is_provisioning_or_running(self) -> bool:
-        return self.phase in {InstancePhase.PROVISIONING, InstancePhase.RUNNING}
 
 
 @dataclass(frozen=True)
@@ -443,9 +359,6 @@ class NodeHeartbeat:
     total_resources: ResourceQuantity = ResourceQuantity()
     resources_known: bool = False
     used_resources: ResourceQuantity = ResourceQuantity()
-    cpu_overcommit: float = 1.0
-    memory_overcommit: float = 1.0
-    disk_overcommit: float = 1.0
     labels: dict[str, str] = field(default_factory=dict)
     cached_images: tuple[str, ...] = ()
     cached_images_known: bool = False
@@ -476,22 +389,13 @@ class NodeHeartbeat:
         return self.received_at or self.updated_at
 
     @property
-    def effective_resources(self) -> ResourceQuantity:
-        return self.total_resources.scaled(
-            cpu=max(0.0, self.cpu_overcommit),
-            memory=max(0.0, self.memory_overcommit),
-            disk=min(1.0, max(0.0, self.disk_overcommit)),
-        )
-
-    @property
     def free_resources(self) -> ResourceQuantity:
-        effective = self.effective_resources
         unavailable = (
             self.used_resources
             + self.reserved_resources
             + self.build_reserved_resources
         )
-        disk_mb = max(0, effective.disk_mb - unavailable.disk_mb)
+        disk_mb = max(0, self.total_resources.disk_mb - unavailable.disk_mb)
         metrics = self.runtime_metrics
         if (
             "storage-native-v1" in self.capabilities
@@ -510,8 +414,8 @@ class NodeHeartbeat:
                 ),
             )
         return ResourceQuantity(
-            vcpu=max(0.0, effective.vcpu - unavailable.vcpu),
-            memory_mb=max(0, effective.memory_mb - unavailable.memory_mb),
+            vcpu=max(0.0, self.total_resources.vcpu - unavailable.vcpu),
+            memory_mb=max(0, self.total_resources.memory_mb - unavailable.memory_mb),
             disk_mb=disk_mb,
         )
 
@@ -758,7 +662,6 @@ class ScalePolicy:
     program_aware_autoscaling_enabled: bool = False
     model_wait_capacity_weight: float = 0.10
     model_wait_max_headroom_nodes: int = 1
-    dynamic_active_admission_enabled: bool = False
     default_node_resources: ResourceQuantity = ResourceQuantity(
         vcpu=32.0,
         memory_mb=98304,
@@ -766,19 +669,6 @@ class ScalePolicy:
         # 32-GiB disposable block cache, and 16-GiB safety headroom.
         disk_mb=1_449_984,
     )
-    cpu_overcommit: float = 1.0
-    memory_overcommit: float = 1.0
-    disk_overcommit: float = 1.0
-
-    @property
-    def schedulable_node_resources(self) -> ResourceQuantity:
-        """Expected scheduler capacity of one autoscaled sandbox node."""
-
-        return self.default_node_resources.scaled(
-            cpu=max(0.0, self.cpu_overcommit),
-            memory=max(0.0, self.memory_overcommit),
-            disk=min(1.0, max(0.0, self.disk_overcommit)),
-        )
 
 
 @dataclass(frozen=True)

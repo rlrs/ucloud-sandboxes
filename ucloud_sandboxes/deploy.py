@@ -10,13 +10,10 @@ import shlex
 import subprocess
 from typing import Any
 
+from .config import DeploymentConfig
 from .deployment import package_version
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
-    DEFAULT_STORAGE_NATIVE_CACHE_GB,
-    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-    DEFAULT_STORAGE_NATIVE_REPOSITORY,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
     RUNTIME_KERNEL_MODULES,
     SANDBOX_RUNTIME_PACKAGES,
@@ -27,7 +24,6 @@ from .vm_init import (
 
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_PROJECT_MOUNT_DIR = "/work/data"
-DEFAULT_REGISTRY_ALIAS = "ucloud-sandbox-registry"
 SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-gateway.service",
     "ucloud-sandbox-relay.service",
@@ -120,66 +116,19 @@ def storage_native_build_artifacts(
 @dataclass(frozen=True)
 class AllInOneDeployPlan:
     job_id: str
-    project_id: str
-    deployment_id: str
+    config: DeploymentConfig
     local_wheel: Path
     local_direct_runsc: Path | None = None
     local_managed_init: Path | None = None
-    direct_runsc_commit: str = ""
     local_storage_native_manifest: Path | None = None
-    storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
-    storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
-    storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
-    storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
-    direct_disk_headroom_mb: int = 16 * 1024
-    direct_max_concurrent_restores: int = 8
-    max_concurrent_image_pulls: int = 8
-    install_root: str = DEFAULT_INSTALL_ROOT
-    project_mount_dir: str = DEFAULT_PROJECT_MOUNT_DIR
-    service_user: str = "ucloud"
-    package_version: str = package_version()
-    gateway_port: int = 8090
-    relay_port: int = 8092
-    registry_port: int = 5000
-    heartbeat_ttl_seconds: int = 120
-    registry_alias: str = DEFAULT_REGISTRY_ALIAS
-    registry_private_ip: str = ""
-    gateway_private_host: str = ""
-    private_network_id: str = ""
-    sandbox_product_id: str = "cpu-amd-zen5-32-vcpu"
-    sandbox_disk_gb: int = 2000
-    sandbox_idle_seconds: int = 600
-    builder_product_id: str = "cpu-amd-zen5-16-vcpu"
-    builder_disk_gb: int = 250
-    builder_idle_seconds: int = 900
-    max_builder_nodes: int = 1
-    max_init_per_cycle: int = 4
-    init_retry_seconds: int = 30
-    init_timeout_seconds: int = 1800
-    autoscaler_interval_seconds: float = 5.0
-    cpu_overcommit: float = 3.0
-    memory_overcommit: float = 2.0
-    disk_overcommit: float = 1.0
-    docker_quota_image_gb: int = 440
-    builder_docker_quota_image_gb: int = 200
-    swap_gb: int = 96
-    request_timeout_seconds: int = 7200
-    worker_lease_seconds: int = 600
-    completed_request_retention_seconds: int = 3600
-    registry_retention_days: float = 30.0
-    registry_keep_per_repository: int = 0
-
-    @property
-    def state_dir(self) -> str:
-        return str(PurePosixPath(self.project_mount_dir) / "ucloud-sandboxes" / "state")
 
     @property
     def release_dir(self) -> str:
-        return str(PurePosixPath(self.install_root) / "release")
+        return str(PurePosixPath(DEFAULT_INSTALL_ROOT) / "release")
 
     @property
     def venv_dir(self) -> str:
-        return str(PurePosixPath(self.install_root) / "gateway-venv")
+        return str(PurePosixPath(DEFAULT_INSTALL_ROOT) / "gateway-venv")
 
     @property
     def remote_wheel_path(self) -> str:
@@ -208,316 +157,106 @@ class AllInOneDeployPlan:
         return str(PurePosixPath(self.release_dir) / "storage-native-LICENSE")
 
     @property
-    def storage_native_registry_url(self) -> str:
-        return f"http://{self.registry_endpoint_host}:{self.registry_port}"
-
-    @property
     def staged_session_file(self) -> str:
         return str(PurePosixPath(self.release_dir) / ".deploy-ucloud-session.json")
 
     @property
-    def node_package_bundle_path(self) -> str:
-        return self.sandbox_node_package_bundle_path
+    def remote_session_file(self) -> str:
+        return str(self.config.session_file())
 
     @property
     def sandbox_node_package_bundle_path(self) -> str:
-        return str(
-            PurePosixPath(self.release_dir)
-            / f"{self.local_wheel.stem}-sandbox-node-package.tar.gz"
-        )
+        return str(self.config.sandbox_node_package_bundle())
 
     @property
     def builder_node_package_bundle_path(self) -> str:
-        return str(
-            PurePosixPath(self.release_dir)
-            / f"{self.local_wheel.stem}-builder-node-package.tar.gz"
-        )
+        return str(self.config.builder_node_package_bundle())
 
     @property
-    def remote_session_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "ucloud-session.json")
+    def install_root(self) -> str:
+        return DEFAULT_INSTALL_ROOT
 
     @property
-    def gateway_token_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "gateway-token")
+    def project_mount_dir(self) -> str:
+        return DEFAULT_PROJECT_MOUNT_DIR
 
     @property
-    def heartbeat_token_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "heartbeat-token")
-
-    @property
-    def node_control_token_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "node-control-token")
-
-    @property
-    def relay_sandbox_token_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "relay-sandbox-token")
-
-    @property
-    def relay_worker_token_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "relay-worker-token")
-
-    @property
-    def relay_state_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "model-relay.sqlite3")
-
-    @property
-    def init_ssh_private_key_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "ssh" / "gateway-init")
-
-    @property
-    def init_authorized_key_file(self) -> str:
-        return self.init_ssh_private_key_file + ".pub"
-
-    @property
-    def registry_usage_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "registry-usage.json")
-
-    @property
-    def image_file(self) -> str:
-        return str(PurePosixPath(self.state_dir) / "images.json")
+    def service_user(self) -> str:
+        return "ucloud"
 
     @property
     def registry_data_dir(self) -> str:
-        return str(
-            PurePosixPath(self.project_mount_dir)
-            / "ucloud-sandbox-registry"
-            / "docker-registry"
-        )
+        return str(self.config.registry_data_dir())
 
     @property
-    def init_heartbeat_url(self) -> str:
-        host = self.gateway_private_host
-        if not host:
-            raise ValueError("gateway private host is required.")
-        return f"http://{host}:{self.gateway_port}/v1/nodes/heartbeat"
+    def gateway_token_file(self) -> str:
+        return str(self.config.gateway_token_file())
 
     @property
-    def registry_url(self) -> str:
-        return f"http://127.0.0.1:{self.registry_port}"
+    def heartbeat_token_file(self) -> str:
+        return str(self.config.heartbeat_token_file())
 
     @property
-    def docker_insecure_registry(self) -> str:
-        return f"{self.registry_endpoint_host}:{self.registry_port}"
+    def node_control_token_file(self) -> str:
+        return str(self.config.node_control_token_file())
 
     @property
-    def registry_endpoint_host(self) -> str:
-        # An explicitly supplied address is assumed stable and retains the
-        # friendly alias. Otherwise use UCloud's restart-stable private DNS
-        # hostname directly instead of pinning the gateway VM's current IP.
-        return (
-            self.registry_alias
-            if self.registry_private_ip
-            else self.gateway_private_host
-        )
+    def relay_sandbox_token_file(self) -> str:
+        return str(self.config.relay_sandbox_token_file())
 
     @property
-    def docker_host_alias(self) -> str:
-        if not self.registry_private_ip:
-            return ""
-        return f"{self.registry_alias}={self.registry_private_ip}"
+    def relay_worker_token_file(self) -> str:
+        return str(self.config.relay_worker_token_file())
 
     @property
-    def direct_network_relay_endpoint(self) -> str:
-        gateway_private_endpoint = self.registry_private_ip or self.gateway_private_host
-        return f"{gateway_private_endpoint}:{self.relay_port}"
+    def relay_state_file(self) -> str:
+        return str(self.config.relay_state_file())
+
+    @property
+    def init_ssh_private_key_file(self) -> str:
+        return str(self.config.init_ssh_private_key_file())
+
+    @property
+    def init_authorized_key_file(self) -> str:
+        return str(self.config.init_authorized_key_file())
+
+    @property
+    def direct_runsc_commit(self) -> str:
+        return self.config.sandbox.direct_runsc_commit
+
+    @property
+    def package_version(self) -> str:
+        return package_version()
 
     def validate(self) -> None:
-        for label, value in {
-            "job id": self.job_id,
-            "project id": self.project_id,
-            "deployment id": self.deployment_id,
-            "install root": self.install_root,
-            "project mount dir": self.project_mount_dir,
-            "service user": self.service_user,
-            "gateway private host": self.gateway_private_host,
-            "private network id": self.private_network_id,
-        }.items():
-            _reject_bad_text(label, value)
-            if not value:
-                raise ValueError(f"{label} is required.")
-        for label, value in {
-            "install root": self.install_root,
-            "project mount dir": self.project_mount_dir,
-        }.items():
-            if not PurePosixPath(value).is_absolute():
-                raise ValueError(f"{label} must be an absolute path.")
-        if PurePosixPath(self.project_mount_dir) == PurePosixPath("/"):
-            raise ValueError("project mount dir cannot be the filesystem root.")
-        _reject_bad_text("registry private IP", self.registry_private_ip)
+        if not self.job_id.strip():
+            raise ValueError("job id is required")
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
         if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
-            raise ValueError("deployment requires a local patched runsc binary.")
-        if not re.fullmatch(r"[0-9a-f]{40}", self.direct_runsc_commit):
-            raise ValueError("deployment requires an exact 40-character gVisor commit.")
+            raise ValueError("deployment requires a local patched runsc binary")
         if self.local_managed_init is None or not self.local_managed_init.is_file():
-            raise ValueError("deployment requires a local managed-process init binary.")
+            raise ValueError("deployment requires a local managed-process init binary")
         if self.local_storage_native_manifest is None:
             raise ValueError(
-                "deployment requires a pinned storage-native backend build manifest."
+                "deployment requires a pinned storage-native build manifest"
             )
         storage_native_build_artifacts(self.local_storage_native_manifest)
-        if self.storage_native_cache_gb < 1:
-            raise ValueError("storage-native cache size must be positive.")
-        if self.storage_native_pool_low_watermark < 0:
-            raise ValueError("storage-native pool low watermark cannot be negative.")
-        if self.storage_native_pool_high_watermark < 1:
-            raise ValueError("storage-native pool high watermark must be positive.")
-        if (
-            self.storage_native_pool_low_watermark
-            > self.storage_native_pool_high_watermark
-        ):
-            raise ValueError(
-                "storage-native pool low watermark cannot exceed high watermark."
-            )
-        if not re.fullmatch(
-            r"[a-z0-9]+(?:[._/-][a-z0-9]+)*",
-            self.storage_native_repository,
-        ):
-            raise ValueError("invalid storage-native repository.")
-        if self.direct_disk_headroom_mb < 1:
-            raise ValueError("direct disk headroom must be positive.")
-        if self.direct_max_concurrent_restores < 1:
-            raise ValueError("direct max concurrent restores must be positive.")
-        if self.max_concurrent_image_pulls < 1:
-            raise ValueError("max concurrent image pulls must be positive.")
-        for label, value in {
-            "gateway port": self.gateway_port,
-            "relay port": self.relay_port,
-            "registry port": self.registry_port,
-            "sandbox disk GB": self.sandbox_disk_gb,
-            "builder disk GB": self.builder_disk_gb,
-            "sandbox idle seconds": self.sandbox_idle_seconds,
-            "builder idle seconds": self.builder_idle_seconds,
-            "max builder nodes": self.max_builder_nodes,
-            "max init per cycle": self.max_init_per_cycle,
-            "init retry seconds": self.init_retry_seconds,
-            "init timeout seconds": self.init_timeout_seconds,
-            "docker quota image GB": self.docker_quota_image_gb,
-            "builder docker quota image GB": self.builder_docker_quota_image_gb,
-            "swap GB": self.swap_gb,
-            "registry keep per repository": self.registry_keep_per_repository,
-        }.items():
-            if value < 0:
-                raise ValueError(f"{label} cannot be negative.")
-        if self.sandbox_disk_gb < self.docker_quota_image_gb + self.swap_gb + 32:
-            raise ValueError(
-                "sandbox disk must leave at least 32 GB outside the Docker quota "
-                "image and swap file."
-            )
-        reserved_mb = (
-            self.docker_quota_image_gb * 1024
-            + self.swap_gb * 1024
-            + self.storage_native_cache_gb * 1024
-            + self.direct_disk_headroom_mb
-        )
-        if self.sandbox_disk_gb * 1024 <= reserved_mb:
-            raise ValueError(
-                "sandbox disk must exceed the bounded Docker image, swap, "
-                "storage cache, and safety headroom."
-            )
-        if self.builder_disk_gb < self.builder_docker_quota_image_gb + 32:
-            raise ValueError(
-                "builder disk must leave at least 32 GB outside the Docker quota image."
-            )
-        if self.registry_retention_days <= 0:
-            raise ValueError("registry retention days must be positive.")
-        for port_label, port in {
-            "gateway port": self.gateway_port,
-            "relay port": self.relay_port,
-            "registry port": self.registry_port,
-        }.items():
-            if port < 1 or port > 65535:
-                raise ValueError(f"{port_label} must be in [1, 65535].")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "jobId": self.job_id,
-            "projectId": self.project_id,
-            "deploymentId": self.deployment_id,
+            "deployment": self.config.to_dict(),
             "packageVersion": self.package_version,
             "localWheel": str(self.local_wheel),
             "remoteWheelPath": self.remote_wheel_path,
-            "localDirectRunsc": (
-                str(self.local_direct_runsc)
-                if self.local_direct_runsc is not None
-                else None
-            ),
+            "localDirectRunsc": str(self.local_direct_runsc),
             "remoteDirectRunscPath": self.remote_direct_runsc_path,
-            "directRunscCommit": self.direct_runsc_commit,
-            "localManagedInit": (
-                str(self.local_managed_init)
-                if self.local_managed_init is not None
-                else None
-            ),
+            "localManagedInit": str(self.local_managed_init),
             "remoteManagedInitPath": self.remote_managed_init_path,
-            "localStorageNativeManifest": (
-                str(self.local_storage_native_manifest)
-                if self.local_storage_native_manifest is not None
-                else None
-            ),
-            "storageNativeCacheGb": self.storage_native_cache_gb,
-            "storageNativePoolLowWatermark": (self.storage_native_pool_low_watermark),
-            "storageNativePoolHighWatermark": (self.storage_native_pool_high_watermark),
-            "storageNativeRepository": self.storage_native_repository,
-            "storageNativeRegistryUrl": self.storage_native_registry_url,
-            "directDiskHeadroomMb": self.direct_disk_headroom_mb,
-            "directMaxConcurrentRestores": self.direct_max_concurrent_restores,
-            "maxConcurrentImagePulls": self.max_concurrent_image_pulls,
-            "nodePackageBundlePath": self.node_package_bundle_path,
-            "installRoot": self.install_root,
-            "stateDir": self.state_dir,
-            "projectMountDir": self.project_mount_dir,
-            "registryDataDir": self.registry_data_dir,
-            "gatewayPort": self.gateway_port,
-            "relayPort": self.relay_port,
-            "registryPort": self.registry_port,
-            "registryRetentionDays": self.registry_retention_days,
-            "registryKeepPerRepository": self.registry_keep_per_repository,
-            "registryUsageFile": self.registry_usage_file,
-            "imageFile": self.image_file,
-            "gatewayPrivateHost": self.gateway_private_host,
-            "registryAlias": self.registry_alias,
-            "registryPrivateIp": self.registry_private_ip,
-            "privateNetworkId": self.private_network_id,
-            "initHeartbeatUrl": self.init_heartbeat_url,
-            "dockerInsecureRegistry": self.docker_insecure_registry,
-            "dockerHostAlias": self.docker_host_alias,
-            "remoteSessionFile": self.remote_session_file,
-            "stagedSessionFile": self.staged_session_file,
-            "gatewayTokenFile": self.gateway_token_file,
-            "heartbeatTokenFile": self.heartbeat_token_file,
-            "nodeControlTokenFile": self.node_control_token_file,
-            "relaySandboxTokenFile": self.relay_sandbox_token_file,
-            "relayWorkerTokenFile": self.relay_worker_token_file,
-            "relayStateFile": self.relay_state_file,
-            "initSshPrivateKeyFile": self.init_ssh_private_key_file,
-            "initAuthorizedKeyFile": self.init_authorized_key_file,
-            "autoscaler": {
-                "intervalSeconds": self.autoscaler_interval_seconds,
-                "sandboxProductId": self.sandbox_product_id,
-                "sandboxDiskGb": self.sandbox_disk_gb,
-                "sandboxIdleSeconds": self.sandbox_idle_seconds,
-                "builderProductId": self.builder_product_id,
-                "builderDiskGb": self.builder_disk_gb,
-                "builderIdleSeconds": self.builder_idle_seconds,
-                "maxBuilderNodes": self.max_builder_nodes,
-                "cpuOvercommit": self.cpu_overcommit,
-                "memoryOvercommit": self.memory_overcommit,
-                "diskOvercommit": self.disk_overcommit,
-                "dockerQuotaImageGb": self.docker_quota_image_gb,
-                "builderDockerQuotaImageGb": self.builder_docker_quota_image_gb,
-                "swapGb": self.swap_gb,
-                "storageNativeCacheGb": self.storage_native_cache_gb,
-                "storageNativePoolLowWatermark": (
-                    self.storage_native_pool_low_watermark
-                ),
-                "storageNativePoolHighWatermark": (
-                    self.storage_native_pool_high_watermark
-                ),
-                "storageNativeRepository": self.storage_native_repository,
-            },
+            "localStorageNativeManifest": str(self.local_storage_native_manifest),
+            "sandboxNodePackageBundlePath": self.sandbox_node_package_bundle_path,
+            "builderNodePackageBundlePath": self.builder_node_package_bundle_path,
         }
 
 
@@ -535,121 +274,6 @@ class RemoteCommandResult:
             "stdout": self.stdout,
             "stderr": self.stderr,
         }
-
-
-def gateway_env(plan: AllInOneDeployPlan) -> dict[str, str]:
-    return {
-        "UCLOUD_DEPLOYMENT_ID": plan.deployment_id,
-        "UCLOUD_STATE_DIR": plan.state_dir,
-        "UCLOUD_SESSION_FILE": plan.remote_session_file,
-        "UCLOUD_GATEWAY_PORT": str(plan.gateway_port),
-        "UCLOUD_HEARTBEAT_TTL_SECONDS": str(plan.heartbeat_ttl_seconds),
-        "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
-        "UCLOUD_HEARTBEAT_TOKEN_FILE": plan.heartbeat_token_file,
-        "UCLOUD_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
-        "UCLOUD_REGISTRY_URL": plan.registry_url,
-        "UCLOUD_REGISTRY_WORKER_URL": plan.storage_native_registry_url,
-        "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
-    }
-
-
-def relay_env(plan: AllInOneDeployPlan) -> dict[str, str]:
-    return {
-        "UCLOUD_RELAY_HOST": "0.0.0.0",
-        "UCLOUD_RELAY_PORT": str(plan.relay_port),
-        "UCLOUD_RELAY_SANDBOX_TOKEN_FILE": plan.relay_sandbox_token_file,
-        "UCLOUD_RELAY_WORKER_TOKEN_FILE": plan.relay_worker_token_file,
-        "UCLOUD_RELAY_STATE_PATH": plan.relay_state_file,
-        "UCLOUD_RELAY_GATEWAY_URL": f"http://127.0.0.1:{plan.gateway_port}",
-        "UCLOUD_RELAY_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
-        "UCLOUD_RELAY_REQUEST_TIMEOUT_SECONDS": str(plan.request_timeout_seconds),
-        "UCLOUD_RELAY_WORKER_LEASE_SECONDS": str(plan.worker_lease_seconds),
-        "UCLOUD_RELAY_COMPLETED_REQUEST_RETENTION_SECONDS": str(
-            plan.completed_request_retention_seconds
-        ),
-    }
-
-
-def registry_env(plan: AllInOneDeployPlan) -> dict[str, str]:
-    return {
-        "UCLOUD_REGISTRY_URL": plan.registry_url,
-        "UCLOUD_REGISTRY_IMAGE": "registry:2",
-        "UCLOUD_REGISTRY_BIND": "0.0.0.0",
-        "UCLOUD_REGISTRY_PORT": str(plan.registry_port),
-        "UCLOUD_REGISTRY_DATA_DIR": plan.registry_data_dir,
-        "UCLOUD_REGISTRY_RETENTION_DAYS": f"{plan.registry_retention_days:g}",
-        "UCLOUD_REGISTRY_KEEP_PER_REPOSITORY": str(plan.registry_keep_per_repository),
-        "UCLOUD_REGISTRY_USAGE_FILE": plan.registry_usage_file,
-        "UCLOUD_IMAGE_FILE": plan.image_file,
-    }
-
-
-def autoscaler_env(plan: AllInOneDeployPlan) -> dict[str, str]:
-    return {
-        "UCLOUD_PROJECT_ID": plan.project_id,
-        "UCLOUD_DEPLOYMENT_ID": plan.deployment_id,
-        "UCLOUD_STATE_DIR": plan.state_dir,
-        "UCLOUD_SESSION_FILE": plan.remote_session_file,
-        "UCLOUD_PRIVATE_NETWORK_ID": plan.private_network_id,
-        "UCLOUD_AUTOSCALER_INTERVAL_SECONDS": f"{plan.autoscaler_interval_seconds:g}",
-        "UCLOUD_SANDBOX_PRODUCT_ID": plan.sandbox_product_id,
-        "UCLOUD_SANDBOX_DISK_GB": str(plan.sandbox_disk_gb),
-        "UCLOUD_SANDBOX_IDLE_SECONDS": str(plan.sandbox_idle_seconds),
-        "UCLOUD_BUILDER_PRODUCT_ID": plan.builder_product_id,
-        "UCLOUD_BUILDER_DISK_GB": str(plan.builder_disk_gb),
-        "UCLOUD_BUILDER_IDLE_SECONDS": str(plan.builder_idle_seconds),
-        "UCLOUD_MAX_BUILDER_NODES": str(plan.max_builder_nodes),
-        "UCLOUD_MAX_INIT_PER_CYCLE": str(plan.max_init_per_cycle),
-        "UCLOUD_INIT_RETRY_SECONDS": str(plan.init_retry_seconds),
-        "UCLOUD_INIT_TIMEOUT_SECONDS": str(plan.init_timeout_seconds),
-        "UCLOUD_INIT_HEARTBEAT_URL": plan.init_heartbeat_url,
-        "UCLOUD_INIT_HEARTBEAT_TOKEN_FILE": plan.heartbeat_token_file,
-        "UCLOUD_INIT_HEARTBEAT_TOKEN_SOURCE_FILE": plan.heartbeat_token_file,
-        "UCLOUD_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
-        "UCLOUD_INIT_NODE_CONTROL_TOKEN_FILE": plan.node_control_token_file,
-        "UCLOUD_INIT_NODE_CONTROL_TOKEN_SOURCE_FILE": plan.node_control_token_file,
-        "UCLOUD_GATEWAY_TOKEN_FILE": plan.gateway_token_file,
-        "UCLOUD_INIT_AUTHORIZED_KEY_FILE": plan.init_authorized_key_file,
-        "UCLOUD_INIT_SSH_PRIVATE_KEY_FILE": plan.init_ssh_private_key_file,
-        "UCLOUD_INIT_PACKAGE_SPEC": plan.sandbox_node_package_bundle_path,
-        "UCLOUD_INIT_BUILDER_PACKAGE_SPEC": plan.builder_node_package_bundle_path,
-        "UCLOUD_DOCKER_INSECURE_REGISTRY": plan.docker_insecure_registry,
-        "UCLOUD_DOCKER_HOST_ALIAS": plan.docker_host_alias,
-        "UCLOUD_INIT_DOCKER_QUOTA_IMAGE_GB": str(plan.docker_quota_image_gb),
-        "UCLOUD_INIT_BUILDER_DOCKER_QUOTA_IMAGE_GB": str(
-            plan.builder_docker_quota_image_gb
-        ),
-        "UCLOUD_INIT_SWAP_GB": str(plan.swap_gb),
-        "UCLOUD_INIT_CPU_OVERCOMMIT": f"{plan.cpu_overcommit:g}",
-        "UCLOUD_INIT_MEMORY_OVERCOMMIT": f"{plan.memory_overcommit:g}",
-        "UCLOUD_INIT_DISK_OVERCOMMIT": f"{plan.disk_overcommit:g}",
-        "UCLOUD_INIT_DIRECT_RUNSC_COMMIT": plan.direct_runsc_commit,
-        "UCLOUD_INIT_DIRECT_NETWORK": "sandbox",
-        "UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP": (plan.direct_network_relay_endpoint),
-        "UCLOUD_INIT_DIRECT_DISK_HEADROOM_MB": str(plan.direct_disk_headroom_mb),
-        "UCLOUD_INIT_DIRECT_MAX_CONCURRENT_RESTORES": str(
-            plan.direct_max_concurrent_restores
-        ),
-        "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS": str(plan.max_concurrent_image_pulls),
-        "UCLOUD_INIT_STORAGE_NATIVE_REGISTRY_URL": (plan.storage_native_registry_url),
-        "UCLOUD_INIT_STORAGE_NATIVE_REPOSITORY": (plan.storage_native_repository),
-        "UCLOUD_INIT_STORAGE_NATIVE_CACHE_GB": str(plan.storage_native_cache_gb),
-        "UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK": str(
-            plan.storage_native_pool_low_watermark
-        ),
-        "UCLOUD_INIT_STORAGE_NATIVE_POOL_HIGH_WATERMARK": str(
-            plan.storage_native_pool_high_watermark
-        ),
-    }
-
-
-def render_env_file(values: dict[str, str]) -> str:
-    lines: list[str] = []
-    for key, value in values.items():
-        _reject_bad_env_key(key)
-        _reject_bad_text(key, value)
-        lines.append(f"{key}={_systemd_env_quote(value)}")
-    return "\n".join(lines) + "\n"
 
 
 def packaged_systemd_units() -> dict[str, str]:
@@ -672,25 +296,18 @@ def render_remote_deploy_script(
         else None
     )
     unit_texts = units if units is not None else packaged_systemd_units()
-    if plan.install_root != DEFAULT_INSTALL_ROOT:
-        # Packaged units contain the production default as their executable and
-        # working-directory anchor.  ``--install-root`` is also used for
-        # isolated canaries, so rebase those paths together with the env files
-        # instead of leaving services pointed at a nonexistent default tree.
-        unit_texts = {
-            name: content.replace(DEFAULT_INSTALL_ROOT, plan.install_root)
-            for name, content in unit_texts.items()
-        }
-    env_files = {
-        "/etc/ucloud-sandboxes/gateway.env": render_env_file(gateway_env(plan)),
-        "/etc/ucloud-sandboxes/relay.env": render_env_file(relay_env(plan)),
-        "/etc/ucloud-sandboxes/registry.env": render_env_file(registry_env(plan)),
-        "/etc/ucloud-sandboxes/autoscaler.env": render_env_file(autoscaler_env(plan)),
-    }
+    deployment_json = (
+        json.dumps(
+            plan.config.to_dict(),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     unit_files = {
         f"/etc/systemd/system/{name}": unit_texts[name] for name in SYSTEMD_UNIT_NAMES
     }
-    persistent_mount = _systemd_env_quote(plan.project_mount_dir)
+    persistent_mount = plan.project_mount_dir
     persistent_storage_dropin = "\n".join(
         (
             "[Unit]",
@@ -709,8 +326,7 @@ def render_remote_deploy_script(
         "set -euo pipefail",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
-        f"STATE_DIR={shlex.quote(plan.state_dir)}",
-        f"REGISTRY_USAGE_FILE={shlex.quote(plan.registry_usage_file)}",
+        f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
@@ -726,7 +342,7 @@ def render_remote_deploy_script(
         f"SESSION_FILE={shlex.quote(plan.remote_session_file)}",
         f"STAGED_SESSION_FILE={shlex.quote(plan.staged_session_file)}",
         f"INIT_KEY={shlex.quote(plan.init_ssh_private_key_file)}",
-        f"INIT_KEY_COMMENT={shlex.quote(plan.deployment_id + ' gateway init')}",
+        f"INIT_KEY_COMMENT={shlex.quote(plan.config.deployment_id + ' gateway init')}",
         "",
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
         'if ! mountpoint -q "$PROJECT_MOUNT_DIR"; then',
@@ -1029,10 +645,10 @@ def render_remote_deploy_script(
         '    sudo systemctl stop "$unit"',
         "  fi",
         "done",
-        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"',
-        'sudo chmod 0700 "$STATE_DIR"',
-        'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"',
-        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR/ssh"',
+        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DATA_ROOT"',
+        'sudo chmod 0700 "$DATA_ROOT"',
+        'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$DATA_ROOT"',
+        'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DATA_ROOT/ssh"',
         'if [ -s "$STAGED_SESSION_FILE" ]; then',
         '  sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STAGED_SESSION_FILE" "$SESSION_FILE"',
         '  rm -f "$STAGED_SESSION_FILE"',
@@ -1043,13 +659,6 @@ def render_remote_deploy_script(
         "fi",
         'chmod 600 "$SESSION_FILE"',
         'sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$SESSION_FILE"',
-        'for path in "$REGISTRY_USAGE_FILE" "$REGISTRY_USAGE_FILE.lock"; do',
-        '  if [ -e "$path" ]; then',
-        '    sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
-        '    sudo chmod 600 "$path"',
-        "  fi",
-        "done",
-        "",
         "create_secret() {",
         '  path="$1"',
         '  if [ ! -s "$path" ]; then',
@@ -1074,8 +683,13 @@ def render_remote_deploy_script(
         "",
         "sudo install -d -m 0755 /etc/ucloud-sandboxes",
     ]
-    for path, content in env_files.items():
-        script_parts.append(_install_root_file_snippet(path, content, mode="0640"))
+    script_parts.append(
+        _install_root_file_snippet(
+            "/etc/ucloud-sandboxes/deployment.json",
+            deployment_json,
+            mode="0644",
+        )
+    )
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
     for unit_name in PERSISTENT_STORAGE_SYSTEMD_UNITS:
@@ -1116,9 +730,9 @@ def render_remote_deploy_script(
             '  printf "Timed out waiting for %s at %s\\n" "$name" "$url" >&2',
             "  return 1",
             "}",
-            f"wait_for_http gateway http://127.0.0.1:{plan.gateway_port}/healthz",
-            f"wait_for_http relay http://127.0.0.1:{plan.relay_port}/healthz",
-            f"wait_for_http registry http://127.0.0.1:{plan.registry_port}/v2/_catalog",
+            f"wait_for_http gateway http://127.0.0.1:{plan.config.gateway_port}/healthz",
+            f"wait_for_http relay http://127.0.0.1:{plan.config.relay_port}/healthz",
+            f"wait_for_http registry http://127.0.0.1:{plan.config.registry_port}/v2/_catalog",
         ]
     )
     return "\n".join(script_parts) + "\n"
@@ -1244,32 +858,12 @@ def _install_root_file_snippet(path: str, content: str, *, mode: str) -> str:
     )
 
 
-def _systemd_env_quote(value: str) -> str:
-    if value == "":
-        return ""
-    safe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-"
-    if all(char in safe for char in value):
-        return value
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
-
-
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _reject_bad_env_key(key: str) -> None:
-    if not key:
-        raise ValueError("environment key cannot be empty.")
-    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-    if any(char not in allowed for char in key):
-        raise ValueError(f"invalid environment key: {key}")
-    if key[0].isdigit():
-        raise ValueError(f"environment key cannot start with a digit: {key}")
 
 
 def _reject_bad_text(label: str, value: str) -> None:

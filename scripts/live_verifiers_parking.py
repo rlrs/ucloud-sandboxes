@@ -550,9 +550,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         timeout_seconds=1,
                         lease_seconds=600,
                     )
-                    request = polled.request
-                    if request is None:
+                    if not polled.requests:
                         continue
+                    request = polled.requests[0]
                     print(
                         json.dumps(
                             {

@@ -1,8 +1,12 @@
 import hashlib
+import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import ucloud_sandboxes.vm_init as vm_init
 from ucloud_sandboxes.models import ResourceQuantity
@@ -11,12 +15,83 @@ from ucloud_sandboxes.providers.ucloud.bootstrap import (
     extract_ssh_command,
 )
 from ucloud_sandboxes.vm_init import (
+    BUILDER_RUNTIME_PACKAGES,
+    PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
     RUNTIME_KERNEL_MODULES,
+    SANDBOX_RUNTIME_PACKAGES,
     VmInitOptions,
     parse_vm_init_phases,
     render_vm_init_script,
     stage_vm_init_package_over_ssh,
 )
+
+ARCHITECTURE = "amd64" if os.uname().machine == "x86_64" else "arm64"
+HOST_ARCHITECTURE = "x86_64" if ARCHITECTURE == "amd64" else "aarch64"
+RUNSC_COMMIT = "9f653e577965df2ddd13875b5530cd2588661f1c"
+CORRUPTIONS = """\
+m runtime.platform.os_id "debian"
+m runtime.role "builder"
+m runtime.packages []
+f runtime/debs/runtime.deb
+m runtime.agent.python "0.0"
+f runtime/agent/node-agent-runtime.tar
+m runtime.kernel.release "wrong"
+f runtime/kernel/{release}/runtime.ko
+m runtime.direct_runsc.commit "0"
+f runtime/direct/runsc
+f runtime/direct/ucloud-sandbox-init
+m runtime.storage_native.host_architecture "wrong"
+f runtime/storage-native/backend
+f runtime/storage-native/build-manifest.json
+f runtime/storage-native/LICENSE
+b patch
+""".format(release=os.uname().release).splitlines()
+
+
+def write_bundle(root: Path, role: str) -> dict:
+    def artifact(relative, content=None, *, basename=False, **values):
+        content = content or relative.encode()
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        return {"name" if basename else "file": path.name if basename else relative, "sha256": hashlib.sha256(content).hexdigest(), "size": len(content), **values}  # fmt: skip
+
+    # fmt: off
+    runtime = {
+        "platform": {"os_id": "ubuntu", "version_id": "24.04", "codename": "noble", "architecture": ARCHITECTURE},
+        "role": role,
+        "packages": list(BUILDER_RUNTIME_PACKAGES if role == "builder" else SANDBOX_RUNTIME_PACKAGES),
+        "files": [artifact("runtime/debs/runtime.deb", basename=True)],
+        "agent": artifact("runtime/agent/node-agent-runtime.tar", python=f"{sys.version_info.major}.{sys.version_info.minor}"),
+        "kernel": {
+            "release": os.uname().release,
+            "load": list(RUNTIME_KERNEL_MODULES),
+            "files": [artifact(f"runtime/kernel/{os.uname().release}/runtime.ko", basename=True)],
+        },
+    }
+    if role == "sandbox":
+        backend = artifact("runtime/storage-native/backend")
+        license_metadata = artifact("runtime/storage-native/LICENSE")
+        patch_names = ("agentenv-streaming-dense-export.patch", "agentenv-pooled-delete.patch", "agentenv-owner-identity.patch")
+        build = {  # fmt: skip
+            "schema": 3, "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
+            "artifact_sha256": backend["sha256"], "host_architecture": HOST_ARCHITECTURE, "license": "MIT",
+            "patches": [{"name": name, "sha256": character * 64} for name, character in zip(patch_names, "abc", strict=True)],
+        }
+        build_metadata = artifact("runtime/storage-native/build-manifest.json", (json.dumps(build) + "\n").encode())
+        runtime.update(
+            direct_runsc=artifact("runtime/direct/runsc", commit=RUNSC_COMMIT),
+            managed_init=artifact("runtime/direct/ucloud-sandbox-init"),
+            storage_native=backend | {
+                "agentenv_commit": PINNED_STORAGE_NATIVE_AGENTENV_COMMIT, "host_architecture": HOST_ARCHITECTURE,
+                "license_file": license_metadata["file"], "license_sha256": license_metadata["sha256"],
+                "manifest_file": build_metadata["file"], "manifest_sha256": build_metadata["sha256"],
+            },
+        )
+    # fmt: on
+    manifest = {"version": 1, "runtime": runtime}
+    (root / "package-bundle.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest
 
 
 class VmInitTests(unittest.TestCase):
@@ -32,7 +107,7 @@ class VmInitTests(unittest.TestCase):
             "deployment_id": "test-deployment",
             "package_spec": "/tmp/node-package.tar.gz",
             "package_sha256": "a" * 64,
-            "direct_runsc_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+            "direct_runsc_commit": RUNSC_COMMIT,
             "storage_native_registry_url": "http://registry.internal:5000",
             "docker_quota_image_gb": 440,
             "total_resources": ResourceQuantity(
@@ -44,35 +119,42 @@ class VmInitTests(unittest.TestCase):
         values.update(overrides)
         return VmInitOptions(**values)
 
+    def _bundle_validator(self, role="sandbox"):
+        script = render_vm_init_script(self._options(role=role))
+        start = script.index("import hashlib\nimport json\nimport os")
+        end = script.index('\nPY\n)"', start)
+        return script, script[start:end]
+
+    @staticmethod
+    def _run_bundle_validator(validator, root):
+        return subprocess.run(
+            [sys.executable, "-", str(root), "ubuntu", "24.04", "noble", ARCHITECTURE],
+            input=validator,
+            text=True,
+            capture_output=True,
+        )
+
     def test_sandbox_boot_uses_only_verified_bundle(self) -> None:
         script = render_vm_init_script(self._options(direct_network="sandbox"))
-
-        self.assertIn("serve-direct-node-agent", script)
-        self.assertIn("A staged node package bundle is required", script)
-        self.assertIn("Node package bundle checksum does not match", script)
-        self.assertIn("Verified pinned Docker/gVisor bundle", script)
-        self.assertIn("install_bundled_runtime", script)
-        self.assertIn("bundle-verified patched runsc", script)
-        self.assertIn("bundle-verified storage-native backend", script)
-        self.assertIn("Activating bundled ucloud-sandboxes runtime", script)
-        self.assertIn("--storage-native-socket", script)
-        self.assertIn("--volume-mount-root", script)
-        self.assertNotIn("apt-get update", script)
-        self.assertNotIn("package repository", script.lower())
-        self.assertNotIn("runtime-conformance", script)
-        self.assertNotIn("Preassembled runtime unavailable", script)
-        self.assertNotIn("installed-package.fingerprint", script)
-        self.assertNotIn("serve-node-agent", script)
-        self.assertNotIn("legacy", script.lower())
+        present = (
+            "serve-direct-node-agent|A staged node package bundle is required|Node package bundle checksum does not match|"
+            "Verified pinned Docker/gVisor bundle|install_bundled_runtime|bundle-verified direct runsc|"
+            "bundle-verified storage-native backend|Activating bundled ucloud-sandboxes runtime|"
+            "--storage-native-socket|--volume-mount-root"
+        )
+        absent = "apt-get update|package repository|runtime-conformance|Preassembled runtime unavailable|installed-package.fingerprint|serve-node-agent|legacy"
+        for expected in present.split("|"):
+            self.assertIn(expected, script)
+        for obsolete in absent.split("|"):
+            self.assertNotIn(
+                obsolete, script if obsolete != "package repository" else script.lower()
+            )
 
     def test_builder_keeps_image_build_runtime(self) -> None:
         script = render_vm_init_script(
             self._options(
-                enable_image_builds=True,
-                buildx_direct_push=True,
+                role="builder",
                 buildx_cache_ref="registry.internal:5000/cache/buildkit",
-                cpu_overcommit=4,
-                memory_overcommit=2,
                 docker_quota_image_gb=200,
             )
         )
@@ -98,26 +180,90 @@ class VmInitTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
                 render_vm_init_script(self._options(**{field: ""}))
 
-    def test_direct_runtime_requires_exact_capacity(self) -> None:
-        with self.assertRaisesRegex(ValueError, "CPU and memory overcommit"):
-            render_vm_init_script(self._options(cpu_overcommit=2))
+    def test_direct_runtime_requires_bounded_image_storage(self) -> None:
         with self.assertRaisesRegex(ValueError, "bounded Docker image"):
             render_vm_init_script(self._options(docker_quota_image_gb=0))
 
     def test_embedded_runtime_validator_and_shell_compile(self) -> None:
-        script = render_vm_init_script(self._options())
-        start = script.index("import hashlib\nimport json\nimport os")
-        end = script.index('\nPY\necho "Verified pinned', start)
-        compile(script[start:end], "<bundle-validator>", "exec")
+        script, validator = self._bundle_validator()
+        compile(validator, "<bundle-validator>", "exec")
+        self.assertEqual(script.count('UCLOUD_PACKAGE_METADATA="$(python3 -'), 1)
+        self.assertEqual(
+            script.count('(bundle_dir / "package-bundle.json").read_text'), 1
+        )
+        self.assertNotRegex(
+            script,
+            r"UCLOUD_(?:DIRECT_RUNSC|MANAGED_INIT|STORAGE_NATIVE|AGENT_RUNTIME)_SPEC",
+        )
+        markers = (
+            "UCLOUD_PACKAGE_METADATA=|Installing Docker, gVisor, and host support|"
+            "Installing bundled container-runtime kernel module closure|Installing bundle-verified direct runsc runtime|"
+            "Activating bundled ucloud-sandboxes runtime|Writing node-agent systemd service"
+        ).split("|")
+        self.assertEqual(
+            [script.index(item) for item in markers],
+            sorted(script.index(item) for item in markers),
+        )
 
         syntax = subprocess.run(
             ["bash", "-n"],
             input=script,
             text=True,
             capture_output=True,
-            check=False,
         )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_bundle_validator_returns_exact_role_metadata(self) -> None:
+        for role in ("sandbox", "builder"):
+            with self.subTest(role=role), TemporaryDirectory() as raw_dir:
+                _script, validator = self._bundle_validator(role)
+                root = Path(raw_dir)
+                manifest = write_bundle(root, role)
+                runtime = manifest["runtime"]
+                completed = self._run_bundle_validator(validator, root)
+                expected = [runtime["agent"]["sha256"]]
+                if role == "sandbox":
+                    expected.extend(
+                        runtime[name]["sha256"]
+                        for name in "direct_runsc managed_init storage_native".split()
+                    )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(completed.stdout.strip().split("\t"), expected)
+
+    def test_bundle_validator_fails_closed_on_provenance_corruption(self) -> None:
+        _script, validator = self._bundle_validator()
+        self.assertEqual(len(CORRUPTIONS), 16)
+        for corruption in CORRUPTIONS:
+            with self.subTest(corruption=corruption), TemporaryDirectory() as raw_dir:
+                root = Path(raw_dir)
+                manifest = write_bundle(root, "sandbox")
+                kind, target, *raw = corruption.split(maxsplit=2)
+                if kind == "f":
+                    path = root / target
+                    path.write_bytes(bytes(value ^ 0xFF for value in path.read_bytes()))
+                elif kind == "b":
+                    build_path = root / "runtime/storage-native/build-manifest.json"
+                    build = json.loads(build_path.read_text(encoding="utf-8"))
+                    build["patches"][0]["name"] = "wrong.patch"
+                    content = (json.dumps(build) + "\n").encode()
+                    build_path.write_bytes(content)
+                    manifest["runtime"]["storage_native"]["manifest_sha256"] = (
+                        hashlib.sha256(content).hexdigest()
+                    )
+                else:
+                    keys = target.split(".")
+                    container = manifest
+                    for key in keys[:-1]:
+                        container = container[key]
+                    value = json.loads(raw[0])
+                    container[keys[-1]] = (
+                        value * 40 if target.endswith("commit") else value
+                    )
+                (root / "package-bundle.json").write_text(
+                    json.dumps(manifest), encoding="utf-8"
+                )
+                completed = self._run_bundle_validator(validator, root)
+                self.assertNotEqual(completed.returncode, 0)
 
     def test_runtime_module_closure_keeps_project_mounts_rebootable(self) -> None:
         self.assertIn("virtiofs", RUNTIME_KERNEL_MODULES)
@@ -148,38 +294,25 @@ class VmInitTests(unittest.TestCase):
     def test_stages_bundle_with_digest(self) -> None:
         calls: list[tuple[tuple[str, ...], bytes | None]] = []
 
-        class Completed:
-            def __init__(self, returncode: int) -> None:
-                self.returncode = returncode
-
         def fake_run(command, *, stdin=None, check=None, timeout=None):
             del check, timeout
             body = stdin.read() if stdin is not None else None
             calls.append((tuple(command), body))
-            return Completed(1 if stdin is None else 0)
+            return subprocess.CompletedProcess(command, 1 if stdin is None else 0)
 
-        original = vm_init.subprocess.run
-        vm_init.subprocess.run = fake_run
-        try:
-            with TemporaryDirectory() as raw_dir:
-                package = Path(raw_dir) / "node-package.tar.gz"
-                package.write_bytes(b"verified-bundle")
-                result = stage_vm_init_package_over_ssh(
-                    "ssh ucloud@example -p 22",
-                    self._options(package_spec=str(package)),
-                    timeout_seconds=10,
-                )
-        finally:
-            vm_init.subprocess.run = original
+        with patch.object(
+            vm_init.subprocess, "run", side_effect=fake_run
+        ), TemporaryDirectory() as raw_dir:
+            package = Path(raw_dir) / "node-package.tar.gz"
+            package.write_bytes(b"verified-bundle")
+            result = stage_vm_init_package_over_ssh(
+                "ssh ucloud@example -p 22",
+                self._options(package_spec=str(package)),
+                timeout_seconds=10,
+            )
 
         assert result is not None
-        self.assertEqual(
-            result.package_sha256,
-            hashlib.sha256(b"verified-bundle").hexdigest(),
-        )
+        expected_digest = hashlib.sha256(b"verified-bundle").hexdigest()
+        self.assertEqual(result.package_sha256, expected_digest)
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1][1], b"verified-bundle")
-
-
-if __name__ == "__main__":
-    unittest.main()

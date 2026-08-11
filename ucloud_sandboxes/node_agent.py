@@ -1,26 +1,35 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import base64
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler
 import hmac
-import json
-from pathlib import Path
 import shutil
 import time
+from dataclasses import replace
+from http import HTTPStatus
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 from .agent import build_heartbeat
-from .build_context_store import BuildContextBlobStore, ContentLengthReader
-from .deployment import service_health
-from .storage_native_migration import (
-    STORAGE_NATIVE_MIGRATION_SCHEMA,
-    StorageNativeMigration,
+from .build_context_store import (
+    BuildContextBlobStore,
+    BuildContextHttpHandler,
+    build_context_digest_from_path,
 )
-from .http_server import HighBacklogThreadingHTTPServer
+from .capabilities import (
+    DISK_QUOTA_CAPABILITY,
+    HIBERNATE_LOCAL_CAPABILITY,
+    MANAGED_PRIMARY_CAPABILITY,
+    STORAGE_NATIVE_CAPABILITY,
+    STORAGE_NATIVE_MIGRATION_CAPABILITY,
+)
+from .deployment import service_health
+from .http_server import (
+    DEFAULT_MAX_JSON_BODY_BYTES,
+    HighBacklogThreadingHTTPServer,
+    RequestBodyTooLargeError,
+)
 from .images import (
     DockerImageRuntime,
     ImageBuildConflictError,
@@ -30,19 +39,11 @@ from .images import (
     materialize_uploaded_build_context,
     uploaded_build_context_reference,
 )
+from .managed_process import ManagedProcessError, ManagedProcessStart
+from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from .node_runtime import BuilderNodeRuntime, DirectNodeRuntime, NodeStateStore
 from .registry import heartbeat_to_dict
-from .models import NodeRuntimeMetrics, ResourceQuantity, SandboxInventoryEntry, utc_now
 from .runtime_metrics import sample_node_runtime_metrics
-from .capabilities import (
-    DISK_QUOTA_CAPABILITY,
-    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    HIBERNATE_LOCAL_CAPABILITY,
-    MANAGED_PRIMARY_CAPABILITY,
-    STORAGE_NATIVE_CAPABILITY,
-    STORAGE_NATIVE_MIGRATION_CAPABILITY,
-)
-from .managed_process import ManagedProcessError, ManagedProcessStart
 from .sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
@@ -50,14 +51,15 @@ from .sandbox import (
     SandboxConflictError,
     SandboxFileTooLargeError,
     SandboxOperation,
-    SandboxRecord,
     SandboxSpec,
     sandbox_spec_fingerprint,
 )
 from .sandbox_exec import ExecSessionManager, SandboxExecSpec
+from .storage_native_migration import (
+    STORAGE_NATIVE_MIGRATION_SCHEMA,
+    StorageNativeMigration,
+)
 
-
-DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_ENTRIES = 128
@@ -67,11 +69,7 @@ SANDBOX_GENERATION_HEADER = "X-UCloud-Sandbox-Generation"
 SANDBOX_OPERATION_ID_HEADER = "X-UCloud-Sandbox-Operation-Id"
 
 
-class RequestBodyTooLargeError(ValueError):
-    pass
-
-
-class NodeAgentHandler(BaseHTTPRequestHandler):
+class NodeAgentHandler(BuildContextHttpHandler):
     manager: Any
     exec_manager: ExecSessionManager | None
     image_manager: ImageManager
@@ -83,9 +81,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     deployment_id: str
     init_version: str
     total_resources: ResourceQuantity
-    cpu_overcommit: float
-    memory_overcommit: float
-    disk_overcommit: float
     capabilities: tuple[str, ...]
     image_builds_enabled: bool
     sandboxes_enabled: bool
@@ -95,7 +90,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
     image_materializer: Callable[[str], object] | None = None
     rootfs_metrics_provider: Callable[[], dict[str, int]] | None = None
     node_control_bearer_token: str
-    max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
 
@@ -146,9 +140,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                             capabilities=self.capabilities,
                             total_resources=self.total_resources,
                             used_resources=activity.used_resources,
-                            cpu_overcommit=self.cpu_overcommit,
-                            memory_overcommit=self.memory_overcommit,
-                            disk_overcommit=self.disk_overcommit,
                             cached_images=_cached_image_refs(self.image_manager),
                             runtime_metrics=self._runtime_metrics_snapshot(),
                             node_epoch=self.node_epoch,
@@ -228,7 +219,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 }
             )
             return
-        context_digest = _build_context_digest_from_path(parsed.path)
+        context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None and self.image_builds_enabled:
             try:
                 size = self.build_context_store.size(context_digest)
@@ -393,7 +384,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         if not self._check_node_control_authorized():
             return
         parsed = urlparse(self.path)
-        context_digest = _build_context_digest_from_path(parsed.path)
+        context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None and self.image_builds_enabled:
             self._store_build_context(context_digest)
             return
@@ -404,40 +395,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             self._upload_file(parsed)
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
-
-    def _store_build_context(self, digest: str) -> None:
-        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
-        if content_type.strip().lower() != "application/gzip":
-            self.close_connection = True
-            self._write_json(
-                {"error": "build contexts require Content-Type: application/gzip"},
-                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
-            )
-            return
-        try:
-            length = self._request_content_length(
-                max_bytes=self.build_context_store.max_blob_bytes
-            )
-            result = self.build_context_store.put_with_status(
-                digest,
-                ContentLengthReader(self.rfile, length),
-                content_length=length,
-            )
-            self.build_context_store.gc(protected=(digest,))
-        except RequestBodyTooLargeError as exc:
-            self.close_connection = True
-            self._write_json(
-                {"error": str(exc)}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
-            )
-            return
-        except (OSError, ValueError) as exc:
-            self.close_connection = True
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-            return
-        self._write_json(
-            {"digest": digest, "size": length, "deduplicated": result.deduplicated},
-            status=HTTPStatus.OK if result.deduplicated else HTTPStatus.CREATED,
-        )
 
     def _create_sandbox(self) -> None:
         started = time.monotonic()
@@ -456,7 +413,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             spec = SandboxSpec.from_dict(spec_raw)
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
-            record, result, manager_timings = self.manager.create_with_timings(
+            record, manager_timings = self.manager.create_with_timings(
                 spec,
                 operation=operation,
             )
@@ -493,8 +450,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         self._write_json(
             {
                 "sandbox": record.to_dict(),
-                "command": list(result.argv),
-                "exit_code": result.exit_code,
                 "timings": {
                     "total_ms": _elapsed_ms(started),
                     "phases": phases,
@@ -649,7 +604,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 return
             registration = service._require_registration(sandbox_id)
             storage_record = warden._storage_record(registration.to_direct_sandbox())
-            if storage_record.get("state") != "published":
+            if storage_record.state.value != "published":
                 self._write_json(payload)
                 return
             snapshot = service.describe_storage_native_snapshot(sandbox_id)
@@ -673,7 +628,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         try:
             registration = service._require_registration(record.spec.id)
             storage_record = warden._storage_record(registration.to_direct_sandbox())
-            if storage_record.get("state") != "published":
+            if storage_record.state.value != "published":
                 return payload
             snapshot = service.describe_storage_native_snapshot(record.spec.id)
         except (RuntimeError, ValueError):
@@ -740,7 +695,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             migration_id = str(raw.get("migration_id") or "").strip()
             requested_format = str(raw.get("format") or "").strip()
             service = self._direct_service()
-            if requested_format not in {"", STORAGE_NATIVE_MIGRATION_SCHEMA}:
+            if requested_format != STORAGE_NATIVE_MIGRATION_SCHEMA:
                 raise ValueError("unsupported migration storage schema")
             migration = service.prepare_storage_native_move(
                 sandbox_id,
@@ -949,7 +904,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         try:
             content = self._read_raw_body(max_bytes=self.max_file_body_bytes)
-            result = self.manager.upload_file(sandbox_id, container_path, content)
+            self.manager.upload_file(sandbox_id, container_path, content)
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -959,8 +914,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
                 "sandbox_id": sandbox_id,
                 "path": container_path,
                 "size": len(content),
-                "command": list(result.argv),
-                "exit_code": result.exit_code,
             }
         )
 
@@ -974,7 +927,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             )
             return
         try:
-            content, result = self.manager.download_file(
+            content = self.manager.download_file(
                 sandbox_id,
                 container_path,
                 max_bytes=self.max_file_body_bytes,
@@ -988,8 +941,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             headers={
                 "X-Sandbox-Id": sandbox_id,
                 "X-Sandbox-Path": container_path,
-                "X-Docker-Command": json.dumps(list(result.argv)),
-                "X-Docker-Exit-Code": str(result.exit_code),
             },
         )
 
@@ -1012,24 +963,17 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             wait = bool(raw.get("wait", True))
             logical_spec = ImageBuildSpec.from_dict(raw)
             phase = time.monotonic()
-            context_reference = uploaded_build_context_reference(
+            (digest, _stored_size) = uploaded_build_context_reference(
                 raw,
                 self.build_context_store,
             )
-            context_identity = None
-            materialize_context = None
-            if context_reference is not None:
-                digest, _stored_size = context_reference
-                context_identity = f"archive:{digest}"
+            context_identity = f"archive:{digest}"
 
-                def materialize_context():
-                    materialized = materialize_uploaded_build_context(
-                        raw,
-                        self.build_context_store,
-                    )
-                    if materialized is None:  # pragma: no cover - guarded above
-                        raise RuntimeError("uploaded build context disappeared")
-                    return materialized
+            def materialize_context():
+                return materialize_uploaded_build_context(
+                    digest,
+                    self.build_context_store,
+                )
 
             phases["parse_spec_ms"] = _elapsed_ms(phase)
             phase = time.monotonic()
@@ -1221,7 +1165,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
             return
         try:
             generation, operation_id = self._delete_operation_headers()
-            record, result = self.manager.delete(
+            record = self.manager.delete(
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
@@ -1232,12 +1176,7 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
-        payload: dict[str, Any] = {
-            "deleted": record.to_dict() if record is not None else None,
-            "command": list(result.argv),
-            "exit_code": result.exit_code,
-        }
-        self._write_json(payload)
+        self._write_json({"deleted": record.to_dict() if record is not None else None})
 
     def _delete_operation_headers(self) -> tuple[int, str]:
         generation_header = self.headers.get(SANDBOX_GENERATION_HEADER)
@@ -1267,51 +1206,12 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         )
         if supplied and hmac.compare_digest(supplied, expected):
             return True
-        body = json.dumps({"error": "unauthorized"}).encode("utf-8")
-        self.send_response(HTTPStatus.UNAUTHORIZED)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("WWW-Authenticate", "Bearer")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._write_json(
+            {"error": "unauthorized"},
+            status=HTTPStatus.UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         return False
-
-    def log_message(self, format: str, *args: object) -> None:
-        del format, args
-
-    def _read_json_body(self) -> object:
-        raw = self._read_raw_body(max_bytes=self.max_json_body_bytes).decode("utf-8")
-        if not raw:
-            raise ValueError("empty request body")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"invalid JSON: {exc}") from exc
-
-    def _read_raw_body(self, *, max_bytes: int | None = None) -> bytes:
-        length = self._request_content_length(max_bytes=max_bytes)
-        body = self.rfile.read(length)
-        if len(body) != length:
-            raise ValueError("request body ended before Content-Length bytes were read")
-        return body
-
-    def _request_content_length(self, *, max_bytes: int | None = None) -> int:
-        if self.headers.get("Transfer-Encoding"):
-            raise ValueError("Transfer-Encoding is not supported; use Content-Length")
-        length_header = self.headers.get("Content-Length")
-        if length_header is None:
-            raise ValueError("Content-Length header is required")
-        try:
-            length = int(length_header)
-        except ValueError as exc:
-            raise ValueError("invalid Content-Length") from exc
-        if length < 0:
-            raise ValueError("Content-Length cannot be negative")
-        if max_bytes is not None and length > max_bytes:
-            raise RequestBodyTooLargeError(
-                f"request body exceeds the {max_bytes} byte limit"
-            )
-        return length
 
     def _write_exception(self, exc: RuntimeError | ValueError) -> None:
         if isinstance(exc, (RequestBodyTooLargeError, SandboxFileTooLargeError)):
@@ -1323,35 +1223,6 @@ class NodeAgentHandler(BaseHTTPRequestHandler):
         else:
             status = HTTPStatus.BAD_REQUEST
         self._write_json({"error": str(exc)}, status=status)
-
-    def _write_json(
-        self,
-        payload: dict[str, Any],
-        *,
-        status: HTTPStatus = HTTPStatus.OK,
-    ) -> None:
-        body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _write_bytes(
-        self,
-        body: bytes,
-        content_type: str,
-        *,
-        status: HTTPStatus = HTTPStatus.OK,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
 
 
 def build_builder_node_agent_server(
@@ -1422,9 +1293,6 @@ def build_builder_node_agent_server(
     BuilderHandler.deployment_id = deployment_id
     BuilderHandler.init_version = init_version
     BuilderHandler.total_resources = resources
-    BuilderHandler.cpu_overcommit = 1.0
-    BuilderHandler.memory_overcommit = 1.0
-    BuilderHandler.disk_overcommit = 1.0
     BuilderHandler.capabilities = ("image-cache", "image-build")
     BuilderHandler.image_builds_enabled = True
     BuilderHandler.sandboxes_enabled = False
@@ -1452,8 +1320,6 @@ def build_direct_node_agent_server(
     deployment_id: str,
     init_version: str = "",
     total_resources: ResourceQuantity | None = None,
-    cpu_overcommit: float = 1.0,
-    memory_overcommit: float = 1.0,
     image_runtime: DockerImageRuntime,
     node_control_bearer_token: str,
     max_json_body_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
@@ -1472,30 +1338,15 @@ def build_direct_node_agent_server(
     configured_resources = total_resources or ResourceQuantity()
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
-    if cpu_overcommit != 1.0 or memory_overcommit != 1.0:
-        raise ValueError(
-            "direct node CPU and memory overcommit factors must be exactly 1.0"
-        )
-    if service.warden.storage is None:
-        raise ValueError("direct node requires storage-native ownership")
     host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
-            configured_resources.scaled(
-                cpu=cpu_overcommit,
-                memory=memory_overcommit,
-                disk=0.0,
-            ),
-            dynamic=True,
+            configured_resources,
             runtime_metrics_provider=host_runtime_metrics,
         )
     service.start()
     manager = DirectNodeRuntime(service)
-    exec_manager = ExecSessionManager(
-        manager,
-        route_node_id=node_id,
-        route_job_id=job_id,
-    )
+    exec_manager = ExecSessionManager(manager)
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime,
@@ -1523,9 +1374,6 @@ def build_direct_node_agent_server(
     DirectBoundHandler.deployment_id = deployment_id
     DirectBoundHandler.init_version = init_version
     DirectBoundHandler.total_resources = configured_resources
-    DirectBoundHandler.cpu_overcommit = cpu_overcommit
-    DirectBoundHandler.memory_overcommit = memory_overcommit
-    DirectBoundHandler.disk_overcommit = 1.0
     direct_capabilities = [
         "sandbox",
         "image-cache",
@@ -1535,8 +1383,6 @@ def build_direct_node_agent_server(
     ]
     if service.provisioner.oci.managed_init_binary is not None:
         direct_capabilities.append(MANAGED_PRIMARY_CAPABILITY)
-    if service.dynamic_active_admission_enabled:
-        direct_capabilities.append(DYNAMIC_ACTIVE_ADMISSION_CAPABILITY)
     direct_capabilities.extend(
         (
             STORAGE_NATIVE_CAPABILITY,
@@ -1615,10 +1461,6 @@ def build_direct_node_agent_server(
     return DirectServiceHTTPServer((host, port), DirectBoundHandler)
 
 
-def sandbox_record_to_dict(record: SandboxRecord) -> dict[str, Any]:
-    return record.to_dict()
-
-
 def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:
     refs: list[str] = []
     for record in image_manager.list():
@@ -1628,13 +1470,6 @@ def _cached_image_refs(image_manager: ImageManager) -> tuple[str, ...]:
         if record.digest_ref:
             refs.append(record.digest_ref)
     return tuple(dict.fromkeys(refs))
-
-
-def _default_physical_disk_path(sandbox_file: Path) -> Path:
-    docker_quota_root = Path("/var/lib/ucloud-sandboxes/docker-xfs")
-    if docker_quota_root.exists():
-        return docker_quota_root
-    return sandbox_file.parent
 
 
 def _physical_disk_usage_mb(path: Path) -> tuple[int, int]:
@@ -1682,14 +1517,6 @@ def _managed_process_path(path: str) -> tuple[str, str, str] | None:
     if len(parts) == 7 and parts[5] == "logs" and parts[6] in {"stdout", "stderr"}:
         return f"logs:{parts[6]}", sandbox_id, job_id
     return None
-
-
-def _build_context_digest_from_path(path: str) -> str | None:
-    prefix = "/v1/image-contexts/"
-    if not path.startswith(prefix):
-        return None
-    digest = unquote(path[len(prefix) :])
-    return digest if digest and "/" not in digest else None
 
 
 def _image_build_key_from_path(path: str) -> str | None:

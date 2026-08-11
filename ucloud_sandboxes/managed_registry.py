@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import astuple, dataclass, field
 from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
@@ -10,8 +10,8 @@ import math
 import os
 from pathlib import Path
 import re
-from threading import RLock, get_ident
-import time
+import sqlite3
+from threading import RLock
 from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib import error, request
 from urllib.parse import quote, urlencode, urlparse
@@ -35,6 +35,7 @@ MAX_REGISTRY_JSON_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_REGISTRY_ERROR_PREVIEW_BYTES = 64 * 1024
 _MANIFEST_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _DIGEST_PROTECTION_TAG_RE = re.compile(r"^ucloud-digest-sha256-[0-9a-f]{64}$")
+_REGISTRY_USAGE_ERROR = "registry usage database is invalid or unavailable"
 
 
 @dataclass(frozen=True)
@@ -79,37 +80,6 @@ class RegistryImageUsage:
     tag: str
     last_used_at: str
 
-    @classmethod
-    def from_dict(cls, raw: object) -> "RegistryImageUsage | None":
-        if not isinstance(raw, dict):
-            return None
-        if set(raw) != {"image_ref", "repository", "tag", "last_used_at"}:
-            return None
-        if any(not isinstance(raw[key], str) for key in raw):
-            return None
-        image_ref = raw["image_ref"]
-        repository = raw["repository"]
-        tag = raw["tag"]
-        last_used_at = raw["last_used_at"]
-        if not image_ref or not repository or not tag or not last_used_at:
-            return None
-        if parse_iso_datetime(last_used_at) is None:
-            return None
-        return cls(
-            image_ref=image_ref,
-            repository=repository,
-            tag=tag,
-            last_used_at=last_used_at,
-        )
-
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "image_ref": self.image_ref,
-            "repository": self.repository,
-            "tag": self.tag,
-            "last_used_at": self.last_used_at,
-        }
-
 
 @dataclass(frozen=True)
 class RegistryImageLease:
@@ -121,54 +91,6 @@ class RegistryImageLease:
     expires_at: str
     digest: str
 
-    def __post_init__(self) -> None:
-        if _validate_lease_digest(self.digest) != self.digest:
-            raise ValueError("registry lease digest must be canonical")
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "RegistryImageLease | None":
-        if not isinstance(raw, dict):
-            return None
-        if set(raw) != {
-            "repository",
-            "tag",
-            "owner",
-            "acquired_at",
-            "renewed_at",
-            "expires_at",
-            "digest",
-        }:
-            return None
-        if any(not isinstance(raw[key], str) for key in raw):
-            return None
-        repository = raw["repository"].strip()
-        tag = raw["tag"].strip()
-        owner = raw["owner"].strip()
-        acquired_at = raw["acquired_at"]
-        renewed_at = raw["renewed_at"]
-        expires_at = raw["expires_at"]
-        raw_digest = raw["digest"]
-        digest = normalize_manifest_digest(raw_digest)
-        if not repository or not tag or not owner:
-            return None
-        if (
-            parse_iso_datetime(acquired_at) is None
-            or parse_iso_datetime(renewed_at) is None
-            or (expires_at and parse_iso_datetime(expires_at) is None)
-        ):
-            return None
-        if not digest:
-            return None
-        return cls(
-            repository=repository,
-            tag=tag,
-            owner=owner,
-            acquired_at=acquired_at,
-            renewed_at=renewed_at,
-            expires_at=expires_at,
-            digest=digest,
-        )
-
     @property
     def key(self) -> tuple[str, str, str]:
         return (self.repository, self.tag, self.owner)
@@ -178,17 +100,6 @@ class RegistryImageLease:
             return True
         expires_at = parse_iso_datetime(self.expires_at)
         return expires_at is not None and expires_at > _as_utc(now)
-
-    def to_dict(self) -> dict[str, str]:
-        return {
-            "repository": self.repository,
-            "tag": self.tag,
-            "owner": self.owner,
-            "acquired_at": self.acquired_at,
-            "renewed_at": self.renewed_at,
-            "expires_at": self.expires_at,
-            "digest": self.digest,
-        }
 
 
 @dataclass(frozen=True)
@@ -211,6 +122,10 @@ class RegistryUsageSnapshot:
 
 
 class RegistryUsageGenerationChanged(RuntimeError):
+    pass
+
+
+class RegistryUsageStateError(ValueError):
     pass
 
 
@@ -651,16 +566,101 @@ class RegistryClient:
 
 
 class RegistryUsageStore:
+    _COLUMNS = {
+        "registry_meta": "singleton generation",
+        "registry_images": "image_ref repository tag last_used_at",
+        "registry_leases": "repository tag owner acquired_at renewed_at expires_at digest",
+    }
+    _SCHEMA = """
+        BEGIN IMMEDIATE;
+        CREATE TABLE IF NOT EXISTS registry_meta (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), generation INTEGER NOT NULL CHECK (generation >= 0)) STRICT;
+        CREATE TABLE IF NOT EXISTS registry_images (image_ref TEXT NOT NULL, repository TEXT NOT NULL, tag TEXT NOT NULL, last_used_at TEXT NOT NULL, PRIMARY KEY (repository, tag)) STRICT;
+        CREATE TABLE IF NOT EXISTS registry_leases (repository TEXT NOT NULL, tag TEXT NOT NULL, owner TEXT NOT NULL, acquired_at TEXT NOT NULL, renewed_at TEXT NOT NULL, expires_at TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY (repository, tag, owner)) STRICT;
+        INSERT OR IGNORE INTO registry_meta VALUES (1, 0);
+        PRAGMA user_version = 1;
+        COMMIT;
+    """
+    _USAGE_UPSERT = "INSERT OR REPLACE INTO registry_images VALUES (?, ?, ?, ?)"
+
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        conn = self._connect()
+        try:
+            version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            if version == 0 and tables:
+                raise sqlite3.DatabaseError(
+                    "unsupported registry usage schema version 0"
+                )
+            if version == 0:
+                conn.executescript(self._SCHEMA)
+                tables = set(self._COLUMNS)
+            elif version != 1:
+                raise sqlite3.DatabaseError(
+                    f"unsupported registry usage schema version {version}"
+                )
+            if tables != set(self._COLUMNS):
+                raise sqlite3.DatabaseError("invalid registry usage database schema")
+            for table, expected in self._COLUMNS.items():
+                columns = " ".join(
+                    row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+                )
+                strict = conn.execute(
+                    "SELECT strict FROM pragma_table_list WHERE name = ?", (table,)
+                ).fetchone()
+                if columns != expected or strict is None or strict[0] != 1:
+                    raise sqlite3.DatabaseError(
+                        f"invalid registry usage table: {table}"
+                    )
+            journal = conn.execute("PRAGMA journal_mode = DELETE").fetchone()
+            if journal is None or str(journal[0]).lower() != "delete":
+                raise sqlite3.DatabaseError(
+                    "registry usage database requires DELETE journal mode"
+                )
+        except sqlite3.Error as exc:
+            raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
+        finally:
+            conn.close()
+        os.chmod(self.path, 0o600)
+        with self.path.open("rb") as database:
+            _adopt_shared_state_owner(database.fileno(), self.path.parent)
+
+    def _connect(self) -> sqlite3.Connection:
+        try:
+            return sqlite3.connect(self.path, timeout=60, isolation_level=None)
+        except sqlite3.Error as exc:
+            raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
+
+    @contextmanager
+    def _transaction(self) -> Iterator[sqlite3.Connection]:
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            conn.commit()
+        except BaseException as exc:
+            if conn.in_transaction:
+                conn.rollback()
+            if isinstance(exc, sqlite3.Error):
+                raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
+            raise
+        finally:
+            conn.close()
 
     def load(self) -> dict[tuple[str, str], RegistryImageUsage]:
         return self.snapshot().records
 
     def snapshot(self, *, now: datetime | None = None) -> RegistryUsageSnapshot:
-        with _registry_file_lock(self.path):
-            return self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
+        with self._transaction() as conn:
+            return self._prune_expired_unlocked(
+                conn,
                 now=_as_utc(now or datetime.now(timezone.utc)),
             )
 
@@ -670,32 +670,21 @@ class RegistryUsageStore:
         *,
         expected_generation: int | None = None,
     ) -> int:
-        with _registry_file_lock(self.path):
-            current = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
+        with self._transaction() as conn:
+            snapshot = self._prune_expired_unlocked(
+                conn,
                 now=datetime.now(timezone.utc),
             )
             if (
                 expected_generation is not None
-                and current.generation != expected_generation
+                and snapshot.generation != expected_generation
             ):
                 raise RegistryUsageGenerationChanged(
                     "registry usage changed while maintenance was planned"
                 )
-            generation = current.generation + 1
-            self._save_unlocked(
-                records,
-                current.leases,
-                generation=generation,
-            )
-            return generation
-
-    def assert_generation(self, expected_generation: int) -> None:
-        actual = self.snapshot().generation
-        if actual != expected_generation:
-            raise RegistryUsageGenerationChanged(
-                f"registry usage generation changed from {expected_generation} to {actual}"
-            )
+            conn.execute("DELETE FROM registry_images")
+            conn.executemany(self._USAGE_UPSERT, map(astuple, records.values()))
+            return self._advance_generation_unlocked(conn)
 
     def touch_image(
         self,
@@ -703,8 +692,7 @@ class RegistryUsageStore:
         *,
         when: datetime | None = None,
     ) -> RegistryImageUsage | None:
-        records = self.touch_images((image_ref,), when=when)
-        return records[0] if records else None
+        return next(iter(self.touch_images((image_ref,), when=when)), None)
 
     def touch_images(
         self,
@@ -712,39 +700,19 @@ class RegistryUsageStore:
         *,
         when: datetime | None = None,
     ) -> tuple[RegistryImageUsage, ...]:
-        timestamp = when or datetime.now(timezone.utc)
-        if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=timezone.utc)
-        usage_records: list[RegistryImageUsage] = []
-        for image_ref in image_refs:
-            parsed = registry_repository_tag_from_image_ref(image_ref)
-            if parsed is None:
-                continue
-            repository, tag = parsed
-            usage_records.append(
-                RegistryImageUsage(
-                    image_ref=image_ref,
-                    repository=repository,
-                    tag=tag,
-                    last_used_at=timestamp.astimezone(timezone.utc).isoformat(),
-                )
-            )
-        if not usage_records:
+        timestamp = _as_utc(when or datetime.now(timezone.utc))
+        records = [
+            RegistryImageUsage(image_ref, parsed[0], parsed[1], timestamp.isoformat())
+            for image_ref in image_refs
+            if (parsed := registry_repository_tag_from_image_ref(image_ref)) is not None
+        ]
+        if not records:
             return ()
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
-                now=timestamp,
-            )
-            records = dict(snapshot.records)
-            for record in usage_records:
-                records[(record.repository, record.tag)] = record
-            self._save_unlocked(
-                records,
-                snapshot.leases,
-                generation=snapshot.generation + 1,
-            )
-        return tuple(usage_records)
+        with self._transaction() as conn:
+            self._prune_expired_unlocked(conn, now=timestamp)
+            conn.executemany(self._USAGE_UPSERT, map(astuple, records))
+            self._advance_generation_unlocked(conn)
+        return tuple(records)
 
     def acquire_lease(
         self,
@@ -756,40 +724,7 @@ class RegistryUsageStore:
         digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
-        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
-        ttl = _validate_lease_ttl(ttl_seconds)
-        normalized_digest = _validate_lease_digest(digest)
-        timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
-                now=timestamp,
-            )
-            key = (repository, tag, owner)
-            previous = snapshot.leases.get(key)
-            if previous is not None and previous.digest != normalized_digest:
-                raise ValueError("registry lease digest is immutable")
-            lease = RegistryImageLease(
-                repository=repository,
-                tag=tag,
-                owner=owner,
-                acquired_at=(
-                    previous.acquired_at
-                    if previous is not None
-                    else timestamp.isoformat()
-                ),
-                renewed_at=timestamp.isoformat(),
-                expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
-                digest=normalized_digest,
-            )
-            leases = dict(snapshot.leases)
-            leases[key] = lease
-            self._save_unlocked(
-                snapshot.records,
-                leases,
-                generation=snapshot.generation + 1,
-            )
-            return lease
+        return self._put_lease(repository, tag, owner, ttl_seconds, digest, now)
 
     def acquire_reference(
         self,
@@ -800,47 +735,7 @@ class RegistryUsageStore:
         digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
-        """Persist a non-expiring reference to an actively used image tag.
-
-        Routes and accepted builds are durable facts rather than liveness
-        leases. A leaked reference is conservative and may be reconciled
-        explicitly; it must never disappear merely because a controller was
-        unavailable for a renewal interval.
-        """
-
-        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
-        normalized_digest = _validate_lease_digest(digest)
-        timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
-                now=timestamp,
-            )
-            key = (repository, tag, owner)
-            previous = snapshot.leases.get(key)
-            if previous is not None and previous.digest != normalized_digest:
-                raise ValueError("registry reference digest is immutable")
-            reference = RegistryImageLease(
-                repository=repository,
-                tag=tag,
-                owner=owner,
-                acquired_at=(
-                    previous.acquired_at
-                    if previous is not None
-                    else timestamp.isoformat()
-                ),
-                renewed_at=timestamp.isoformat(),
-                expires_at="",
-                digest=normalized_digest,
-            )
-            leases = dict(snapshot.leases)
-            leases[key] = reference
-            self._save_unlocked(
-                snapshot.records,
-                leases,
-                generation=snapshot.generation + 1,
-            )
-            return reference
+        return self._put_lease(repository, tag, owner, None, digest, now)
 
     def renew_lease(
         self,
@@ -852,38 +747,55 @@ class RegistryUsageStore:
         digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
+        return self._put_lease(repository, tag, owner, ttl_seconds, digest, now, True)
+
+    def _put_lease(
+        self,
+        repository: str,
+        tag: str,
+        owner: str,
+        ttl_seconds: float | None,
+        digest: str,
+        now: datetime | None,
+        require_existing: bool = False,
+    ) -> RegistryImageLease:
         repository, tag, owner = _validate_lease_identity(repository, tag, owner)
-        ttl = _validate_lease_ttl(ttl_seconds)
-        normalized_digest = _validate_lease_digest(digest)
+        digest = _validate_lease_digest(digest)
         timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
+        expires_at = (
+            ""
+            if ttl_seconds is None
+            else (
+                timestamp + timedelta(seconds=_validate_lease_ttl(ttl_seconds))
+            ).isoformat()
+        )
+        key = (repository, tag, owner)
+        lease = None
+        with self._transaction() as conn:
+            previous = self._prune_expired_unlocked(
+                conn,
                 now=timestamp,
-            )
-            key = (repository, tag, owner)
-            previous = snapshot.leases.get(key)
-            if previous is None:
-                raise RegistryImageLeaseNotFound(key)
-            if previous.digest != normalized_digest:
-                raise ValueError("registry lease digest is immutable")
-            lease = RegistryImageLease(
-                repository=repository,
-                tag=tag,
-                owner=owner,
-                acquired_at=previous.acquired_at,
-                renewed_at=timestamp.isoformat(),
-                expires_at=(timestamp + timedelta(seconds=ttl)).isoformat(),
-                digest=normalized_digest,
-            )
-            leases = dict(snapshot.leases)
-            leases[key] = lease
-            self._save_unlocked(
-                snapshot.records,
-                leases,
-                generation=snapshot.generation + 1,
-            )
-            return lease
+            ).leases.get(key)
+            if previous is not None and previous.digest != digest:
+                raise ValueError("registry lease/reference digest is immutable")
+            if previous is not None or not require_existing:
+                lease = RegistryImageLease(
+                    repository,
+                    tag,
+                    owner,
+                    previous.acquired_at if previous else timestamp.isoformat(),
+                    timestamp.isoformat(),
+                    expires_at,
+                    digest,
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO registry_leases VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    astuple(lease),
+                )
+                self._advance_generation_unlocked(conn)
+        if lease is None:
+            raise RegistryImageLeaseNotFound(key)
+        return lease
 
     def release_lease(
         self,
@@ -893,31 +805,21 @@ class RegistryUsageStore:
         *,
         now: datetime | None = None,
     ) -> bool:
-        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
-        timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
-                now=timestamp,
+        key = _validate_lease_identity(repository, tag, owner)
+        with self._transaction() as conn:
+            snapshot = self._prune_expired_unlocked(
+                conn,
+                now=_as_utc(now or datetime.now(timezone.utc)),
             )
-            key = (repository, tag, owner)
             if key not in snapshot.leases:
                 return False
-            leases = dict(snapshot.leases)
-            leases.pop(key, None)
-            self._save_unlocked(
-                snapshot.records,
-                leases,
-                generation=snapshot.generation + 1,
+            conn.execute(
+                "DELETE FROM registry_leases "
+                "WHERE repository = ? AND tag = ? AND owner = ?",
+                key,
             )
+            self._advance_generation_unlocked(conn)
             return True
-
-    def prune_expired_leases(self, *, now: datetime | None = None) -> int:
-        timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            before = self._load_snapshot_unlocked()
-            after = self._prune_expired_leases_unlocked(before, now=timestamp)
-            return len(before.leases) - len(after.leases)
 
     @contextmanager
     def lease_fence(
@@ -926,13 +828,10 @@ class RegistryUsageStore:
         expected_generation: int | None = None,
         now: datetime | None = None,
     ) -> Iterator[RegistryUsageSnapshot]:
-        """Hold the usage-file lock across one bounded remote delete decision."""
-
-        timestamp = _as_utc(now or datetime.now(timezone.utc))
-        with _registry_file_lock(self.path):
-            snapshot = self._prune_expired_leases_unlocked(
-                self._load_snapshot_unlocked(),
-                now=timestamp,
+        with self._transaction() as conn:
+            snapshot = self._prune_expired_unlocked(
+                conn,
+                now=_as_utc(now or datetime.now(timezone.utc)),
             )
             if (
                 expected_generation is not None
@@ -943,126 +842,79 @@ class RegistryUsageStore:
                 )
             yield snapshot
 
-    def _load_snapshot_unlocked(self) -> RegistryUsageSnapshot:
-        if not self.path.exists():
-            return RegistryUsageSnapshot(generation=0, records={}, leases={})
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("registry usage store must contain a JSON object.")
-        if set(raw) != {"generation", "images", "leases"}:
-            raise ValueError("registry usage store has an invalid schema.")
-        items = raw.get("images", [])
-        if not isinstance(items, list):
-            raise ValueError("registry usage store must contain an images list.")
-        records: dict[tuple[str, str], RegistryImageUsage] = {}
-        for index, item in enumerate(items):
-            record = RegistryImageUsage.from_dict(item)
-            if record is None:
-                raise ValueError(
-                    f"registry usage store contains an invalid image at index {index}."
-                )
-            if (record.repository, record.tag) in records:
-                raise ValueError("registry usage store contains a duplicate image.")
+    @staticmethod
+    def _generation_unlocked(conn: sqlite3.Connection) -> int:
+        row = conn.execute("SELECT generation FROM registry_meta").fetchone()
+        if row is None or type(row[0]) is not int or row[0] < 0:
+            raise ValueError("registry usage generation must be a nonnegative integer")
+        return int(row[0])
+
+    @classmethod
+    def _advance_generation_unlocked(cls, conn: sqlite3.Connection) -> int:
+        conn.execute(
+            "UPDATE registry_meta SET generation = generation + 1 "
+            "WHERE singleton = 1"
+        )
+        return cls._generation_unlocked(conn)
+
+    def _snapshot_unlocked(
+        self,
+        conn: sqlite3.Connection,
+    ) -> RegistryUsageSnapshot:
+        records = {}
+        for row in conn.execute(
+            "SELECT image_ref, repository, tag, last_used_at FROM registry_images"
+        ):
+            if (
+                any(type(value) is not str or not value for value in row)
+                or parse_iso_datetime(row[3]) is None
+            ):
+                raise ValueError("registry usage database contains an invalid image")
+            record = RegistryImageUsage(*row)
             records[(record.repository, record.tag)] = record
-        raw_leases = raw.get("leases", [])
-        leases: dict[tuple[str, str, str], RegistryImageLease] = {}
-        if not isinstance(raw_leases, list):
-            raise ValueError("registry usage store must contain a leases list.")
-        for index, item in enumerate(raw_leases):
-            lease = RegistryImageLease.from_dict(item)
-            if lease is None:
-                # A malformed/partially-written lease must never disappear from
-                # prune protection as though it had expired.
-                raise ValueError(
-                    f"registry usage store contains an invalid lease at index {index}."
-                )
-            if lease.key in leases:
-                raise ValueError("registry usage store contains a duplicate lease.")
+        leases = {}
+        for row in conn.execute(
+            "SELECT repository, tag, owner, acquired_at, renewed_at, "
+            "expires_at, digest FROM registry_leases"
+        ):
+            if (
+                any(type(value) is not str for value in row)
+                or any(not value for value in row[:5])
+                or parse_iso_datetime(row[3]) is None
+                or parse_iso_datetime(row[4]) is None
+                or (row[5] and parse_iso_datetime(row[5]) is None)
+                or not row[6]
+                or normalize_manifest_digest(row[6]) != row[6]
+            ):
+                raise ValueError("registry usage database contains an invalid lease")
+            lease = RegistryImageLease(*row)
             leases[lease.key] = lease
-        generation = raw["generation"]
-        if isinstance(generation, bool) or not isinstance(generation, int):
-            raise ValueError("registry usage store generation must be an integer.")
-        if generation < 0:
-            raise ValueError("registry usage store generation cannot be negative.")
-        return RegistryUsageSnapshot(
-            generation=generation,
-            records=records,
-            leases=leases,
-        )
+        return RegistryUsageSnapshot(self._generation_unlocked(conn), records, leases)
 
-    def _save_unlocked(
+    def _prune_expired_unlocked(
         self,
-        records: dict[tuple[str, str], RegistryImageUsage],
-        leases: dict[tuple[str, str, str], RegistryImageLease],
-        *,
-        generation: int,
-    ) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_name(
-            f"{self.path.name}.tmp-{os.getpid()}-{get_ident()}-{time.monotonic_ns()}"
-        )
-        payload = {
-            "generation": generation,
-            "images": [
-                records[key].to_dict()
-                for key in sorted(records, key=lambda item: (item[0], item[1]))
-            ],
-            "leases": [
-                leases[key].to_dict()
-                for key in sorted(
-                    leases,
-                    key=lambda item: (item[0], item[1], item[2]),
-                )
-            ],
-        }
-        try:
-            descriptor = os.open(
-                tmp_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o600,
-            )
-            try:
-                _adopt_shared_state_owner(
-                    descriptor,
-                    self.path if self.path.exists() else self.path.parent,
-                )
-            except BaseException:
-                os.close(descriptor)
-                raise
-            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-                file.write(json.dumps(payload, indent=2, sort_keys=True))
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(tmp_path, self.path)
-            os.chmod(self.path, 0o600)
-            directory_fd = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        finally:
-            try:
-                tmp_path.unlink()
-            except FileNotFoundError:
-                pass
-
-    def _prune_expired_leases_unlocked(
-        self,
-        snapshot: RegistryUsageSnapshot,
+        conn: sqlite3.Connection,
         *,
         now: datetime,
     ) -> RegistryUsageSnapshot:
-        active = {
-            key: lease for key, lease in snapshot.leases.items() if lease.is_active(now)
-        }
-        if len(active) == len(snapshot.leases):
+        snapshot = self._snapshot_unlocked(conn)
+        expired = [
+            key for key, lease in snapshot.leases.items() if not lease.is_active(now)
+        ]
+        if not expired:
             return snapshot
-        generation = snapshot.generation + 1
-        self._save_unlocked(snapshot.records, active, generation=generation)
+        conn.executemany(
+            "DELETE FROM registry_leases "
+            "WHERE repository = ? AND tag = ? AND owner = ?",
+            expired,
+        )
+        active = dict(snapshot.leases)
+        for key in expired:
+            active.pop(key)
         return RegistryUsageSnapshot(
-            generation=generation,
-            records=snapshot.records,
-            leases=active,
+            self._advance_generation_unlocked(conn),
+            snapshot.records,
+            active,
         )
 
 
@@ -1125,9 +977,8 @@ def execute_registry_prune(
     for (repository, digest), aliases in grouped.items():
         digest_aliases = all_grouped.get((repository, digest), aliases)
         if usage_store is not None:
-            # The cross-process store lock remains held through this one remote
-            # delete. RegistryClient bounds the critical section with its
-            # request timeout; other digest decisions release and reacquire it.
+            # The write transaction remains held through this bounded remote
+            # delete, serializing new leases and references with the decision.
             with usage_store.lease_fence(
                 expected_generation=expected_usage_generation,
                 now=now,
@@ -1613,12 +1464,7 @@ def _registry_file_lock(
 
 
 def _adopt_shared_state_owner(descriptor: int, owner_source: Path) -> None:
-    """Keep root maintenance writes accessible to the service account.
-
-    Atomic replacement creates a new inode owned by the writing process. The
-    registry maintenance jobs run as root while the gateway runs as the owner
-    of the state directory, so root must explicitly retain that shared owner.
-    """
+    """Keep root-created shared state accessible to the service account."""
 
     if os.geteuid() != 0:
         return

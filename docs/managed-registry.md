@@ -25,26 +25,25 @@ whose title is `data`, so it appears inside the VM as `/work/data`:
 
 ```bash
 ucloud-sandboxes submit-vm \
+  --config /path/to/deployment.json \
   --role gateway \
-  --private-network-id 12345327 \
-  --public-link-id 12345368 \
-  --public-link-port 8090 \
   --mount /<drive-id> \
   ...
 ```
 
 ## Gateway Service
 
-The normal path is `deploy-all-in-one`; it installs Docker, writes
-`/etc/ucloud-sandboxes/registry.env`, installs the packaged registry and GC
+The normal path is `deploy-all-in-one`; it installs Docker and the exact
+`/etc/ucloud-sandboxes/deployment.json`, installs the packaged registry and GC
 systemd units, and starts the registry:
 
 ```bash
 uv run ucloud-sandboxes deploy-all-in-one <job-id> \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
-  --private-network-id <private-network-id> \
+  --config /path/to/deployment.json \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --direct-runsc /path/to/ucloud-direct-runsc \
+  --managed-init /path/to/managed-init \
+  --storage-native-manifest /path/to/storage-native-manifest.json \
   --execute
 ```
 
@@ -63,15 +62,15 @@ Do not bind the registry to a UCloud public link in the default deployment. The
 registry is an internal control-plane service for builders and sandbox nodes on
 the private network.
 
-The generated gateway env file sets
-`UCLOUD_REGISTRY_URL=http://127.0.0.1:5000`. This enables the dashboard registry
+The deployment manifest fixes the loopback registry URL from `registry_port`.
+This enables the dashboard registry
 page and the `/v1/registry` status endpoint without exposing the registry itself
-publicly. `UCLOUD_REGISTRY_WORKER_URL` separately names the same service as
-builders and sandbox nodes reach it. The latter is gateway deployment state;
+publicly. The derived worker registry URL separately names the same service as
+builders and sandbox nodes reach it. That URL is gateway deployment state;
 clients never need its hostname or port.
 
 The current registry service will survive container and service restarts as
-long as `UCLOUD_REGISTRY_DATA_DIR` points at the mounted project folder. A
+long as the manifest-derived registry data directory is on the mounted project folder. A
 control-plane VM replacement must attach the same project drive before starting
 the registry, otherwise it will start with an empty registry.
 
@@ -95,22 +94,9 @@ until this change is released and converged.
 ## Node Init
 
 Builders and sandbox nodes must trust the private registry if it is served over
-HTTP. Use the gateway's restart-stable private-network DNS name during VM init:
-
-```bash
-ucloud-sandboxes init-vm <job-id> \
-  --docker-insecure-registry <gateway-private-host>:5000 \
-  ...
-```
-
-For autoscaled nodes, pass the prefixed option to the autoscaler:
-
-```bash
-ucloud-sandboxes autoscaler-loop \
-  --execute-init \
-  --init-docker-insecure-registry <gateway-private-host>:5000 \
-  ...
-```
+HTTP. VM initialization derives the restart-stable registry endpoint and any
+private-IP host alias from `deployment.json`; there is no second init or
+autoscaler override.
 
 The init script writes Docker's `insecure-registries` daemon setting and
 restarts Docker before starting the node agent. UCloud's restart-stable private
@@ -165,15 +151,15 @@ deliberate: many generated build repositories have only one tag, so a keep
 floor would prevent those images from ever becoming eligible for cleanup.
 
 The gateway records successful sandbox creation and idempotent create recovery
-in `<state_dir>/registry-usage.json`. Scheduled pruning uses that file as the
+in `<data_root>/registry-usage.sqlite`. Scheduled pruning uses that database as the
 age source. Tags with no usage entry are kept, because deleting by image
 creation time can remove shared base images that are still actively used.
 
-The same file persists both durable image references and finite transient
+The same database persists both durable image references and finite transient
 leases. Every lease requires the exact immutable manifest digest; repository,
 tag, and owner identify its lifecycle, while pruning protects only the digest.
 Durable references have no expiry; transient pull and warmup leases retain an
-expiry. The file schema is strict: canonical snake-case fields, `generation`,
+expiry. The schema is strict: canonical snake-case fields, `generation`,
 and digest-bearing leases are required.
 
 Every resolved managed digest also has a deterministic internal
@@ -226,7 +212,7 @@ retains the complete registry tag list, then calls `execute_registry_prune` with
 change aborts that stale execution and rebuilds the plan, with a bounded retry
 limit, rather than continuing to delete from the old snapshot.
 
-The prune service also receives `<state_dir>/images.json`. When it deletes a
+The prune service also receives `<data_root>/images.sqlite`. When it deletes a
 private-registry manifest, it removes matching pushed build records from that
 image metadata cache. It also prunes stale pushed build records whose manifests
 are already missing. This matters for SDK clients because `list_images()` is
@@ -238,40 +224,24 @@ non-blocking maintenance fence, so they cannot mutate the registry at the same
 time. The GC helper holds that fence while it stops the registry, runs Docker
 Distribution garbage collection with `--delete-untagged`, and starts the
 registry again in a failure-safe cleanup path. GC and the live registry use the
-same `UCLOUD_REGISTRY_DATA_DIR` on the persistent project mount.
+same manifest-derived directory on the persistent project mount.
 
-Tune the scheduled policy with deployment flags:
-
-```bash
-ucloud-sandboxes deploy-all-in-one ... \
-  --registry-retention-days 30 \
-  --registry-keep-per-repository 0 \
-  --execute
-```
+Tune `registry_retention_days` and `registry_keep_per_repository` in
+`deployment.json`, then converge the deployment.
 
 For manual inspection, the registry prune command can plan deletions by
 last-used age, repository keep floor, or both:
 
 ```bash
 ucloud-sandboxes registry-prune \
-  --registry-url http://127.0.0.1:5000 \
-  --max-age-days 30 \
-  --keep-per-repository 0 \
-  --usage-file /work/data/ucloud-sandboxes/state/registry-usage.json \
-  --image-file /work/data/ucloud-sandboxes/state/images.json \
-  --prune-stale-image-records
+  --config /etc/ucloud-sandboxes/deployment.json
 ```
 
 Add `--execute` to delete the selected manifest digests:
 
 ```bash
 ucloud-sandboxes registry-prune \
-  --registry-url http://127.0.0.1:5000 \
-  --max-age-days 30 \
-  --keep-per-repository 0 \
-  --usage-file /work/data/ucloud-sandboxes/state/registry-usage.json \
-  --image-file /work/data/ucloud-sandboxes/state/images.json \
-  --prune-stale-image-records \
+  --config /etc/ucloud-sandboxes/deployment.json \
   --execute
 ```
 

@@ -247,12 +247,12 @@ it does not require a warm pool.
 
 The supported topology has one control host. Every mutating autoscaler process
 therefore contends on one process-lifetime POSIX lock beside
-`<state_dir>/autoscaler-state.sqlite`. The kernel releases the lock if the
+`<data_root>/autoscaler-state.sqlite`. The kernel releases the lock if the
 process exits; there is no renewable wall-clock leader lease or renewal thread.
 The SQLite file retains the provider-operation ambiguity journal and durable
-drain desired state. `autoscaler-loop` is the only mutating entry point, and
-`autoscaler-loop --once` runs one operational cycle. `reconcile` is always
-read-only.
+drain desired state. `autoscaler` is the only controller entry point. It is
+dry-run by default, `--execute` authorizes all controller mutations, and
+`--once` exits after one cycle.
 
 No executing autoscaler sends a provider terminate request directly from a
 scale-down decision. While holding the local controller lock it first writes a durable
@@ -285,7 +285,7 @@ fresh, gateway-receipt-stamped heartbeat that proves all of the following:
 
 Only then is a provider stop written to the operation journal, and that journal
 is the only autoscaler terminate path. Consequently, two
-`autoscaler-loop --once --execute-stops` cycles are normally required: the first
+`autoscaler --once --execute` cycles are normally required: the first
 persists and posts the drain, while the later cycle observes the fresh heartbeat
 acknowledgement and performs the journaled terminate. Draining or
 admission-closed nodes remain in the provider pool count but contribute no ready
@@ -322,7 +322,7 @@ callers retry `POST /v1/images/build` once a builder is ready. `POST
 known upcoming build bursts; it asks for `count` builder VMs, is consumed after
 an executing reconciliation cycle, and can be canceled with
 `DELETE /v1/builders/prepare/<id>` before it is consumed. The autoscaler creates
-up to `--max-builder-nodes` builder-only VMs for
+up to `builder.max_nodes` builder-only VMs for
 `max(1 if pending_builds else 0, prepared_builder_count)`, and stops idle
 builder VMs after `builder_scale_down_idle_seconds` once pending builds are
 zero and prepared builder signals have been consumed. Keep this grace longer
@@ -341,11 +341,10 @@ will likely be launched shortly afterward.
 
 ## Direct-runtime placement and wake
 
-The direct runtime has no fixed CPU or memory overcommit multiplier. Each node
-advertises physical CPU and RAM, but resident sandbox CPU and memory limits are
-not treated as additive lifetime reservations. They are limits, while actual
-usage is bursty. Parked and running sandboxes retain their exact hard disk
-reservation on their current node. Disk is never overallocated.
+Each direct node advertises physical CPU and RAM, but resident sandbox CPU and
+memory limits are not treated as additive lifetime reservations. They are
+limits, while actual usage is bursty. Parked and running sandboxes retain their
+exact hard disk reservation on their current node. Disk is never overallocated.
 
 This produces two independent capacity questions:
 
@@ -385,9 +384,9 @@ Scale-down requires a proven empty node or a completed storage-native migration:
    migration;
 4. journal and execute the provider stop.
 
-The autoscaler derives the gateway base from `--init-heartbeat-url`, or accepts
-`--gateway-control-url` explicitly. It starts at most
-`--max-storage-native-migrations-per-cycle` drain migrations. A node is not a
+The autoscaler derives the gateway address and credentials from
+`deployment.json`. It starts at most
+`autoscaler_max_storage_native_migrations_per_cycle` drain migrations. A node is not a
 stop candidate when any parked route lacks the canonical storage schema,
 manifest digest, or a fitting migration destination.
 
@@ -400,9 +399,9 @@ Until we have measurements, prefer:
 - Two provisioning VMs max.
 - Prepared-capacity signals for known near-term bursts.
 - Standing warm resources only for a measured latency SLO that justifies the cost.
-- CPU and memory overcommit factors of `1.0` for direct-runtime nodes, with
-  live-pressure dynamic admission instead of fixed limit aggregation.
-- No disk overcommit by default.
+- Physical node capacity with live-pressure admission instead of fixed CPU and
+  memory limit aggregation.
+- Hard disk reservations that never exceed daemon-reported capacity.
 
 The controller records VM lifecycle events into the indexed SQLite metrics
 database:

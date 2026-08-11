@@ -1,13 +1,9 @@
 [Unit]
-Description=Garbage collect UCloud sandbox private Docker registry
+Description=Garbage collect UCloud sandbox private registry
 Requires=docker.service
 After=docker.service
 Conflicts=ucloud-sandbox-registry-prune.service
 
 [Service]
 Type=oneshot
-Environment=UCLOUD_REGISTRY_IMAGE=registry:2
-Environment=UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
-Environment=UCLOUD_REGISTRY_MAINTENANCE_LOCK=/run/lock/ucloud-sandbox-registry-maintenance
-EnvironmentFile=-/etc/ucloud-sandboxes/registry.env
-ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-gc --data-dir ${UCLOUD_REGISTRY_DATA_DIR} --registry-image ${UCLOUD_REGISTRY_IMAGE} --lock-file ${UCLOUD_REGISTRY_MAINTENANCE_LOCK}
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-gc --config /etc/ucloud-sandboxes/deployment.json

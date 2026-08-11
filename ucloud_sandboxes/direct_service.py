@@ -207,7 +207,6 @@ class DirectSandboxService:
         self.process_runner = process_runner or DirectProcessRunner()
         self._restore_slots = threading.Semaphore(max_concurrent_restores)
         self._active_capacity: ResourceQuantity | None = None
-        self._dynamic_active_admission = False
         self._runtime_metrics_provider: (
             Callable[[], NodeRuntimeMetrics | None] | None
         ) = None
@@ -225,9 +224,7 @@ class DirectSandboxService:
         self._deletion_reconcile_interval_seconds = float(
             deletion_reconcile_interval_seconds
         )
-        self._image_reconcile_interval_seconds = float(
-            image_reconcile_interval_seconds
-        )
+        self._image_reconcile_interval_seconds = float(image_reconcile_interval_seconds)
         self._next_image_reconcile = (
             time.monotonic() + self._image_reconcile_interval_seconds
         )
@@ -245,33 +242,22 @@ class DirectSandboxService:
         self,
         capacity: ResourceQuantity,
         *,
-        dynamic: bool = False,
-        runtime_metrics_provider: (
-            Callable[[], NodeRuntimeMetrics | None] | None
-        ) = None,
+        runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None],
     ) -> None:
         """Install the per-shape and concurrent CPU/RAM admission ceiling."""
 
         if not capacity.is_valid:
             raise ValueError("direct active capacity cannot be negative")
-        if dynamic and runtime_metrics_provider is None:
-            raise ValueError("dynamic direct admission requires runtime metrics")
         with self._capacity_guard:
             self._active_capacity = ResourceQuantity(
                 vcpu=capacity.vcpu,
                 memory_mb=capacity.memory_mb,
             )
-            self._dynamic_active_admission = bool(dynamic)
             self._runtime_metrics_provider = runtime_metrics_provider
-
-    @property
-    def dynamic_active_admission_enabled(self) -> bool:
-        with self._capacity_guard:
-            return self._dynamic_active_admission
 
     def start(self) -> tuple[SandboxRecord, ...]:
         results = self.provisioner.start()
-        records = tuple(self._record(item.registration) for item in results)
+        records = tuple(self._record(item) for item in results)
         self._stop_event.clear()
         self._next_image_reconcile = (
             time.monotonic() + self._image_reconcile_interval_seconds
@@ -410,13 +396,13 @@ class DirectSandboxService:
                 operation.generation,
                 spec.requested_resources(),
             ):
-                result = self.provisioner.create(
+                registration = self.provisioner.create(
                     spec=spec,
                     sandbox_generation=operation.generation,
                     operation_id=operation.operation_id,
                 )
             self.mark_activity(spec.id, operation.generation)
-            return self._record(result.registration)
+            return self._record(registration)
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
         registration = self.provisioner.registry.get(sandbox_id)
@@ -507,7 +493,7 @@ class DirectSandboxService:
             ):
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
-                if background and getattr(self.warden, "storage", None) is not None:
+                if background:
                     self._start_storage_publication(
                         registration,
                         operation_id=f"{operation_id}:publish",
@@ -523,7 +509,7 @@ class DirectSandboxService:
                 sandbox,
                 operation_id=operation_id,
             )
-            if background and getattr(self.warden, "storage", None) is not None:
+            if background:
                 self._start_storage_publication(
                     registration,
                     operation_id=f"{operation_id}:publish",
@@ -622,14 +608,16 @@ class DirectSandboxService:
     ) -> StorageNativeMigration:
         """Publish a parked source and fence its portable metadata."""
 
-        if self.warden.storage is None:
-            raise DirectWardenError("storage-native migration is not configured")
         existing = self.provisioner.registry.get(sandbox_id)
         if existing is not None and existing.phase == "moving_out":
-            return self.prepared_storage_native_move(
-                sandbox_id,
-                migration_id=migration_id,
-            )
+            if existing.migration_id != migration_id or not existing.migration_sha256:
+                raise DirectWardenError("source does not own this prepared migration")
+            migration = self.provisioner.storage_migrations.load(migration_id)
+            if migration.sha256 != existing.migration_sha256:
+                raise DirectWardenError(
+                    "prepared storage-native migration changed identity"
+                )
+            return migration
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
             migration = self._storage_native_snapshot_locked(registration)
@@ -648,8 +636,6 @@ class DirectSandboxService:
     ) -> StorageNativeMigration:
         """Return a complete portable descriptor for durable parked authority."""
 
-        if self.warden.storage is None:
-            raise DirectWardenError("storage-native snapshots are not configured")
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
             return self._storage_native_snapshot_locked(registration)
@@ -684,46 +670,24 @@ class DirectSandboxService:
         portable = StorageNativeSandboxManifest.from_local(
             registration,
             local_manifest,
-            runtime_identity=self.provisioner.identity,
             source_guest_ip=source_guest_ip,
         )
         storage = self.warden._storage_record(sandbox)
-        if storage.get("state") != "published":
+        if storage.state.value != "published":
             storage = self.warden.publish_storage_snapshot(
                 sandbox,
                 operation_id=(
                     "snapshot:" f"{lifecycle.hibernation_generation}:publish"
                 ),
             )
-        if storage.get("state") != "published":
+        if storage.state.value != "published":
             raise DirectWardenError(
                 "storage-native publication did not return durable authority"
             )
         return StorageNativeMigration(
             manifest=portable,
-            publication=self.provisioner._publication_from_storage_record(storage),
+            publication=storage.publication(),
         )
-
-    def prepared_storage_native_move(
-        self,
-        sandbox_id: str,
-        *,
-        migration_id: str,
-    ) -> StorageNativeMigration:
-        registration = self.provisioner.registry.get(sandbox_id)
-        if (
-            registration is None
-            or registration.phase != "moving_out"
-            or registration.migration_id != migration_id
-            or not registration.migration_sha256
-        ):
-            raise DirectWardenError("source does not own this prepared migration")
-        migration = self.provisioner.storage_migrations.load(migration_id)
-        if migration.sha256 != registration.migration_sha256:
-            raise DirectWardenError(
-                "prepared storage-native migration changed identity"
-            )
-        return migration
 
     def abort_move(
         self,
@@ -760,13 +724,13 @@ class DirectSandboxService:
         if registration is None:
             raise DirectWardenError("migration destination is absent")
         with self._lock(sandbox_id, registration.sandbox_generation):
-            result = self.provisioner.activate_import(
+            registration = self.provisioner.activate_import(
                 sandbox_id,
                 migration_id=migration_id,
                 migration_sha256=migration_sha256,
             )
             self.mark_activity(sandbox_id, registration.sandbox_generation)
-            return self._record(result.registration)
+            return self._record(registration)
 
     def abort_import(
         self,
@@ -796,14 +760,11 @@ class DirectSandboxService:
         *,
         migration_id: str,
     ) -> tuple[SandboxRecord, StorageNativeMigration]:
-        result = self.provisioner.stage_storage_native_import(
+        registration, stored = self.provisioner.stage_storage_native_import(
             migration,
             migration_id=migration_id,
         )
-        return (
-            self._record(result.provisioning.registration),
-            result.migration,
-        )
+        return self._record(registration), stored
 
     def finalize_moved_source(
         self,
@@ -1234,26 +1195,6 @@ class DirectSandboxService:
                 for candidate_key, reservation in self._active_reservations.items():
                     if candidate_key != key:
                         used = used + reservation
-                if not self._dynamic_active_admission:
-                    for candidate in self.provisioner.registry.list():
-                        if candidate.phase != "owned":
-                            continue
-                        candidate_key = (
-                            candidate.sandbox_id,
-                            candidate.sandbox_generation,
-                        )
-                        if candidate_key == key:
-                            continue
-                        lifecycle = self.warden.inspect(candidate.to_direct_sandbox())
-                        if (
-                            lifecycle is None
-                            or lifecycle.state != HibernationState.RUNNING
-                        ):
-                            continue
-                        used = used + ResourceQuantity(
-                            vcpu=candidate.spec.cpus or 0,
-                            memory_mb=candidate.spec.memory_mb or 0,
-                        )
                 available = ResourceQuantity(
                     vcpu=max(0.0, capacity.vcpu - used.vcpu),
                     memory_mb=max(0, capacity.memory_mb - used.memory_mb),
@@ -1267,8 +1208,7 @@ class DirectSandboxService:
                         "direct node has insufficient active CPU or memory "
                         "admission headroom; retry on another node"
                     )
-                if self._dynamic_active_admission:
-                    self._require_dynamic_headroom(active_requested)
+                self._require_dynamic_headroom(active_requested)
             self._active_reservations[key] = requested
             self._activity_epoch += 1
         try:

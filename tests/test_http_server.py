@@ -6,6 +6,7 @@ from threading import Event, Thread
 import unittest
 
 from ucloud_sandboxes.http_server import HighBacklogThreadingHTTPServer
+from ucloud_sandboxes.http_server import JsonHttpHandler, RequestBodyTooLargeError
 
 
 class _NoopHandler:
@@ -28,7 +29,72 @@ class _BlockingHandler(BaseHTTPRequestHandler):
         del args
 
 
+class _JsonHandler(JsonHttpHandler):
+    max_json_body_bytes = 4
+
+    def do_POST(self) -> None:
+        try:
+            payload = self._read_json_body()
+        except RequestBodyTooLargeError as exc:
+            self._write_json({"error": str(exc)}, status=413)
+            return
+        except ValueError as exc:
+            self._write_json({"error": str(exc)}, status=400)
+            return
+        self._write_json(
+            {"payload": payload},
+            headers={
+                "Content-Length": "999",
+                "Content-Type": "text/plain",
+                "X-Test": "preserved",
+            },
+        )
+
+
 class HttpServerTests(unittest.TestCase):
+    def test_json_handler_owns_bounded_framing_and_response_headers(self) -> None:
+        server = HighBacklogThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            _JsonHandler,
+        )
+        Thread(target=server.serve_forever, daemon=True).start()
+        try:
+
+            def post(headers: dict[str, str], body: bytes = b""):
+                connection = HTTPConnection(*server.server_address, timeout=5)
+                connection.putrequest("POST", "/")
+                for key, value in headers.items():
+                    connection.putheader(key, value)
+                connection.endheaders(body)
+                response = connection.getresponse()
+                payload = json.loads(response.read())
+                connection.close()
+                return response, payload
+
+            for headers, status in (
+                ({"Transfer-Encoding": "chunked", "Content-Length": "0"}, 400),
+                ({}, 400),
+                ({"Content-Length": "invalid"}, 400),
+                ({"Content-Length": "-1"}, 400),
+                ({"Content-Length": "5"}, 413),
+            ):
+                with self.subTest(headers=headers):
+                    response, _payload = post(headers)
+                    self.assertEqual(response.status, status)
+
+            response, payload = post({"Content-Length": "2"}, b"{}")
+            self.assertEqual(response.status, 200)
+            self.assertEqual(payload, {"payload": {}})
+            self.assertEqual(response.getheader("Content-Type"), "application/json")
+            self.assertEqual(response.getheader("X-Test"), "preserved")
+            self.assertEqual(
+                int(response.getheader("Content-Length", "0")),
+                len(json.dumps(payload, indent=2, sort_keys=True).encode()),
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_accepted_clients_get_read_timeout_and_limits_are_validated(self) -> None:
         with self.assertRaisesRegex(ValueError, "timeout"):
             HighBacklogThreadingHTTPServer(
@@ -80,8 +146,7 @@ class HttpServerTests(unittest.TestCase):
             second.request(
                 "POST",
                 "/v1/sandboxes",
-                body=b"{}",
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Length": "0"},
             )
             response = second.getresponse()
             body = json.loads(response.read().decode("utf-8"))
@@ -89,9 +154,7 @@ class HttpServerTests(unittest.TestCase):
             self.assertEqual(response.status, 503)
             self.assertEqual(response.getheader("Content-Type"), "application/json")
             self.assertEqual(response.getheader("Retry-After"), "1")
-            self.assertEqual(
-                response.getheader("X-UCloud-Sandbox-Retryable"), "true"
-            )
+            self.assertEqual(response.getheader("X-UCloud-Sandbox-Retryable"), "true")
             self.assertTrue(body["retryable"])
         finally:
             _BlockingHandler.release.set()

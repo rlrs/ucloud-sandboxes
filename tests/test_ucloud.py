@@ -89,19 +89,6 @@ class UCloudClientTests(unittest.TestCase):
         with self.assertRaisesRegex(UCloudError, "repeated a cursor"):
             RepeatingCursorClient().browse_all_jobs("project-1")
 
-    def test_complete_browse_rejects_page_limit_before_end(self) -> None:
-        class MorePagesClient(FakeUCloudClient):
-            def request_json(self, *args, **kwargs):
-                del args, kwargs
-                return {"items": [{"id": "job-1"}], "next": "more"}
-
-        with self.assertRaisesRegex(UCloudError, "max_pages"):
-            MorePagesClient().browse_jobs(
-                "project-1",
-                max_pages=1,
-                require_complete=True,
-            )
-
     def test_browse_ssh_keys_reads_every_page_and_rejects_cursor_loops(self) -> None:
         class PaginatedClient(FakeUCloudClient):
             def request_json(self, method, path, **kwargs):

@@ -9,7 +9,6 @@ import time
 from typing import Any
 
 
-STORAGE_NATIVE_SCHEMA = "ucloud-storage-native-v1"
 AGENTENV_UBLK_PROTOCOL_MAX_BYTES = 16 * 1024 * 1024
 
 

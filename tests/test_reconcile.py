@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import timedelta
 import unittest
 
-from ucloud_sandboxes.config import AutoscalerConfig
+from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.models import (
     InstancePhase,
     NodeHeartbeat,
@@ -11,28 +11,23 @@ from ucloud_sandboxes.models import (
     SandboxDemand,
     SandboxNode,
     SandboxPlacementRequest,
-    ScaleAction,
-    ScaleDecision,
     ScalePolicy,
     ProviderInstance,
     utc_now,
 )
 from ucloud_sandboxes.policy import evaluate_scale
 from ucloud_sandboxes.reconcile import (
-    NodeCreateDefaults,
-    build_builder_create_intents,
-    build_sandbox_create_intents,
+    build_create_intents,
     evaluate_builder_scale,
     node_drain_ready,
     partition_safe_stop_job_ids,
-    stop_job_ids_from_decision,
 )
 from ucloud_sandboxes.providers.ucloud import UCloudCreateProfile, UCloudProvider
 from ucloud_sandboxes.providers.ucloud.config import UCloudSettings
 from ucloud_sandboxes.providers.ucloud.payloads import VmProductRef
 
 
-def ucloud_config(**values) -> AutoscalerConfig:
+def ucloud_config(**values) -> DeploymentConfig:
     defaults = UCloudSettings.default()
     settings = replace(
         defaults,
@@ -45,7 +40,14 @@ def ucloud_config(**values) -> AutoscalerConfig:
             "gateway_public_link_id", defaults.gateway_public_link_id
         ),
     )
-    return AutoscalerConfig(provider=settings.to_provider(), **values)
+    values.pop("ucloud_session_file", None)
+    data_root = values.pop("data_root", "/tmp/ucloud-state")
+    return replace(
+        DeploymentConfig.default(scope_id=settings.project_id or "project-1"),
+        provider=settings.to_provider(),
+        data_root=data_root,
+        **values,
+    )
 
 
 class ReconcileTests(unittest.TestCase):
@@ -259,7 +261,7 @@ class ReconcileTests(unittest.TestCase):
             deployment_id="prod-a",
             private_network_id="net-1",
             ucloud_session_file="/tmp/session.json",
-            state_dir="/tmp/state",
+            data_root="/tmp/state",
         )
         decision = evaluate_builder_scale(
             [],
@@ -268,10 +270,10 @@ class ReconcileTests(unittest.TestCase):
             max_builder_nodes=1,
         )
 
-        intents = build_builder_create_intents(
+        intents = build_create_intents(
             config,
             decision,
-            NodeCreateDefaults(),
+            role="builder",
             seed_prefix="cycle-1",
         )
 
@@ -300,7 +302,7 @@ class ReconcileTests(unittest.TestCase):
             private_network_id="net-1",
             gateway_public_link_id="link-gateway",
             ucloud_session_file="/tmp/session.json",
-            state_dir="/tmp/state",
+            data_root="/tmp/state",
         )
         decision = evaluate_scale(
             [],
@@ -315,10 +317,10 @@ class ReconcileTests(unittest.TestCase):
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
 
-        intents = build_sandbox_create_intents(
+        intents = build_create_intents(
             config,
             decision,
-            NodeCreateDefaults(),
+            role="sandbox",
             seed_prefix="cycle-1",
         )
 
@@ -348,7 +350,7 @@ class ReconcileTests(unittest.TestCase):
             project_id="project-1",
             private_network_id="net-1",
             ucloud_session_file="/tmp/session.json",
-            state_dir="/tmp/state",
+            data_root="/tmp/state",
         )
         decision = evaluate_scale(
             [],
@@ -362,10 +364,10 @@ class ReconcileTests(unittest.TestCase):
             ),
             ScalePolicy(max_nodes=5, max_create_per_cycle=5),
         )
-        intents = build_sandbox_create_intents(
+        intents = build_create_intents(
             config,
             decision,
-            NodeCreateDefaults(),
+            role="sandbox",
             seed_prefix="cycle-1",
         )
 
@@ -379,21 +381,6 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(payload["type"], "bulk")
         self.assertEqual(len(payload["items"]), 1)
         self.assertEqual(payload["items"][0]["hostname"], "sandbox-node-cycle-1-1")
-
-    def test_extracts_stop_job_ids_from_decision(self) -> None:
-        decision = ScaleDecision(
-            actions=(ScaleAction(kind="stop", count=2, job_ids=("job-1", "job-2")),),
-            ready_nodes=2,
-            provisioning_nodes=0,
-            total_nodes=2,
-            reasons=("idle",),
-            pending_resources=ResourceQuantity(),
-            desired_resources=ResourceQuantity(),
-            projected_free_resources=ResourceQuantity(),
-            resource_deficit=ResourceQuantity(),
-        )
-
-        self.assertEqual(stop_job_ids_from_decision(decision), ("job-1", "job-2"))
 
     def test_partitions_stop_job_ids_by_deployment_label(self) -> None:
         class Node:

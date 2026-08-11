@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-import json
 import multiprocessing
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
+from threading import Event
 import unittest
 from unittest.mock import call, patch
 
@@ -16,6 +18,7 @@ from ucloud_sandboxes.managed_registry import (
     RegistryRequestError,
     RegistryImageLeaseNotFound,
     RegistryUsageGenerationChanged,
+    RegistryUsageStateError,
     RegistryUsageStore,
     RegistryTag,
     _next_link_path,
@@ -217,7 +220,7 @@ class ManagedRegistryTests(unittest.TestCase):
             ), patch("ucloud_sandboxes.managed_registry.os.fchown") as fchown:
                 RegistryUsageStore(path).touch_image("registry.test/models/demo:latest")
 
-            self.assertGreaterEqual(fchown.call_count, 2)
+            self.assertEqual(fchown.call_count, 1)
             self.assertTrue(
                 all(
                     item.args[1:] == (owner.st_uid, owner.st_gid)
@@ -600,29 +603,16 @@ class ManagedRegistryTests(unittest.TestCase):
                     digest="sha256:" + "e" * 64,
                 )
 
-    def test_registry_usage_file_rejects_camel_case_fields(self) -> None:
+    def test_existing_json_usage_state_is_rejected(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "usage.json"
             path.write_text(
-                json.dumps(
-                    {
-                        "generation": 1,
-                        "images": [
-                            {
-                                "imageRef": "registry/repo/a:v1",
-                                "repository": "repo/a",
-                                "tag": "v1",
-                                "lastUsedAt": "2026-07-01T00:00:00+00:00",
-                            }
-                        ],
-                        "leases": [],
-                    }
-                ),
+                '{"generation": 1, "images": [], "leases": []}',
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(ValueError, "invalid image"):
-                RegistryUsageStore(path).snapshot()
+            with self.assertRaises(RegistryUsageStateError):
+                RegistryUsageStore(path)
 
     def test_usage_updates_preserve_active_leases(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -657,85 +647,98 @@ class ManagedRegistryTests(unittest.TestCase):
                         digest=LEASE_DIGEST,
                     )
 
-    def test_usage_file_requires_generation(self) -> None:
+    def test_unversioned_sqlite_usage_state_is_rejected(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "images": [
-                            {
-                                "image_ref": "registry/repo/a:v1",
-                                "repository": "repo/a",
-                                "tag": "v1",
-                                "last_used_at": "2026-07-01T00:00:00+00:00",
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+            path = Path(raw_dir) / "usage.sqlite"
+            with sqlite3.connect(path) as conn:
+                conn.execute("CREATE TABLE obsolete_state (value TEXT)")
 
-            with self.assertRaisesRegex(ValueError, "invalid schema"):
-                RegistryUsageStore(path).snapshot()
+            with self.assertRaisesRegex(
+                RegistryUsageStateError,
+                "invalid or unavailable",
+            ):
+                RegistryUsageStore(path)
 
-    def test_digestless_lease_is_rejected(self) -> None:
+    def test_wrong_sqlite_schema_version_is_rejected(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "generation": 1,
-                        "images": [],
-                        "leases": [
-                            {
-                                "repository": "repo/a",
-                                "tag": "v1",
-                                "owner": "sandbox:one",
-                                "acquired_at": "2026-07-10T00:00:00+00:00",
-                                "renewed_at": "2026-07-10T00:00:00+00:00",
-                                "expires_at": "",
-                                "persistent": True,
-                            }
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
+            path = Path(raw_dir) / "usage.sqlite"
+            with sqlite3.connect(path) as conn:
+                conn.execute("PRAGMA user_version = 2")
+
+            with self.assertRaises(RegistryUsageStateError):
+                RegistryUsageStore(path)
+
+    def test_wrong_sqlite_columns_are_rejected(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.sqlite"
+            RegistryUsageStore(path)
+            with sqlite3.connect(path) as conn:
+                conn.execute(
+                    "ALTER TABLE registry_images "
+                    "RENAME COLUMN last_used_at TO lastUsedAt"
+                )
+
+            with self.assertRaises(RegistryUsageStateError):
+                RegistryUsageStore(path)
+
+    def test_nonstrict_sqlite_tables_are_rejected(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.sqlite"
+            with sqlite3.connect(path) as conn:
+                conn.executescript(RegistryUsageStore._SCHEMA.replace(" STRICT", ""))
+
+            with self.assertRaises(RegistryUsageStateError):
+                RegistryUsageStore(path)
+
+    def test_sqlite_busy_error_uses_registry_state_contract(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.sqlite"
+            store = RegistryUsageStore(path)
+            blocker = sqlite3.connect(path, isolation_level=None)
+            blocker.execute("BEGIN EXCLUSIVE")
+            try:
+                with patch.object(
+                    store,
+                    "_connect",
+                    side_effect=lambda: sqlite3.connect(
+                        path,
+                        timeout=0,
+                        isolation_level=None,
+                    ),
+                ), self.assertRaises(RegistryUsageStateError):
+                    store.touch_image("localhost:5000/repo/a:v1")
+            finally:
+                blocker.rollback()
+                blocker.close()
+
+    def test_malformed_sqlite_rows_fail_closed(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.sqlite"
+            store = RegistryUsageStore(path)
+            with sqlite3.connect(path) as conn:
+                conn.execute(
+                    "INSERT INTO registry_images VALUES (?, ?, ?, ?)",
+                    ("registry/repo/a:v1", "repo/a", "v1", "not-a-timestamp"),
+                )
+            with self.assertRaisesRegex(ValueError, "invalid image"):
+                store.snapshot()
+
+            with sqlite3.connect(path) as conn:
+                conn.execute("DELETE FROM registry_images")
+                conn.execute(
+                    "INSERT INTO registry_leases VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        "repo/a",
+                        "v1",
+                        "sandbox:one",
+                        "2026-07-10T00:00:00+00:00",
+                        "2026-07-10T00:00:00+00:00",
+                        "",
+                        "",
+                    ),
+                )
             with self.assertRaisesRegex(ValueError, "invalid lease"):
-                RegistryUsageStore(path).snapshot()
-
-    def test_malformed_lease_state_fails_closed(self) -> None:
-        valid = {
-            "repository": "repo/a",
-            "tag": "v1",
-            "owner": "sandbox:one",
-            "acquired_at": "2026-07-10T00:00:00+00:00",
-            "renewed_at": "2026-07-10T00:00:00+00:00",
-            "expires_at": "2026-07-10T01:00:00+00:00",
-        }
-        cases = (
-            {"generation": 1, "images": [], "leases": {}},
-            {"generation": 1, "images": [], "leases": [None]},
-            {"generation": 1, "images": [], "leases": [valid, valid]},
-            {"generation": "broken", "images": [], "leases": []},
-            {"generation": -1, "images": [], "leases": []},
-        )
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.json"
-            for payload in cases:
-                with self.subTest(payload=payload):
-                    path.write_text(json.dumps(payload), encoding="utf-8")
-                    with self.assertRaises(ValueError):
-                        RegistryUsageStore(path).snapshot()
-
-    def test_usage_store_fsyncs_file_and_parent_directory(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
-            with patch("ucloud_sandboxes.managed_registry.os.fsync") as fsync:
-                store.touch_image("localhost:5000/repo/a:v1")
-
-            self.assertGreaterEqual(fsync.call_count, 2)
+                store.snapshot()
 
     def test_concurrent_process_lease_acquisition_loses_no_owner(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -806,6 +809,52 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(deleted, [])
             self.assertEqual(client.deleted, [])
+
+    def test_lease_fence_serializes_reference_with_remote_delete(self) -> None:
+        delete_started = Event()
+        finish_delete = Event()
+        reference_acquired = Event()
+
+        class BlockingRegistryClient:
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted = (repository, digest)
+                delete_started.set()
+                if not finish_delete.wait(timeout=5):
+                    raise TimeoutError("test did not release remote delete")
+
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "usage.sqlite"
+            store = RegistryUsageStore(path)
+            records = [RegistryTag("repo/a", "v1", LEASE_DIGEST)]
+
+            def acquire_reference():
+                lease = RegistryUsageStore(path).acquire_reference(
+                    "repo/a",
+                    "v1",
+                    "sandbox:new",
+                    digest=LEASE_DIGEST,
+                )
+                reference_acquired.set()
+                return lease
+
+            client = BlockingRegistryClient()
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                deletion = executor.submit(
+                    execute_registry_prune,
+                    client,  # type: ignore[arg-type]
+                    records,
+                    usage_store=store,
+                    all_records=records,
+                )
+                self.assertTrue(delete_started.wait(timeout=5))
+                acquisition = executor.submit(acquire_reference)
+                self.assertFalse(reference_acquired.wait(timeout=0.1))
+                finish_delete.set()
+
+                self.assertEqual(deletion.result(timeout=5), records)
+                self.assertEqual(acquisition.result(timeout=5).owner, "sandbox:new")
+
+            self.assertEqual(client.deleted, ("repo/a", LEASE_DIGEST))
 
     def test_registry_maintenance_lock_creates_cross_process_lock_file(self) -> None:
         with TemporaryDirectory() as raw_dir:

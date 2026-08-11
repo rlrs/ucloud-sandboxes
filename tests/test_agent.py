@@ -23,13 +23,6 @@ def build_heartbeat(**kwargs):
 
 
 class AgentTests(unittest.TestCase):
-    def test_disk_overcommit_is_never_accepted(self) -> None:
-        with self.assertRaisesRegex(ValueError, "cannot exceed 1.0"):
-            build_heartbeat(
-                job_id="job-1",
-                disk_overcommit=1.01,
-            )
-
     def test_detects_job_id_from_environment_mapping(self) -> None:
         self.assertEqual(detect_job_id({"UCLOUD_JOB_ID": "123"}), "123")
         self.assertEqual(detect_job_id({"JOB_ID": "456"}), "456")
@@ -48,7 +41,6 @@ class AgentTests(unittest.TestCase):
             capabilities=("sandbox", "image-build"),
             total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
             used_resources=ResourceQuantity(vcpu=1.5, memory_mb=1024, disk_mb=4096),
-            cpu_overcommit=2.0,
             labels={"pool": "default"},
             node_epoch="boot-1",
             activity_epoch=4,
@@ -89,8 +81,8 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(heartbeat.deployment_id, "prod-a")
         self.assertEqual(heartbeat.init_version, "init-1")
         self.assertEqual(heartbeat.capabilities, ("sandbox", "image-build"))
-        self.assertEqual(heartbeat.effective_resources.vcpu, 8)
-        self.assertEqual(heartbeat.free_resources.vcpu, 6)
+        self.assertEqual(heartbeat.total_resources.vcpu, 4)
+        self.assertEqual(heartbeat.free_resources.vcpu, 2)
         self.assertEqual(heartbeat.free_resources.memory_mb, 6656)
         self.assertEqual(heartbeat.free_resources.disk_mb, 95_648)
         self.assertEqual(heartbeat.active_workloads, 2)
@@ -147,14 +139,12 @@ class AgentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "deployment_id"):
             build_heartbeat(job_id="123", deployment_id="")
 
-    def test_rejects_invalid_resources_and_overcommit(self) -> None:
+    def test_rejects_invalid_resources(self) -> None:
         with self.assertRaises(ValueError):
             build_heartbeat(
                 job_id="123",
                 used_resources=ResourceQuantity(memory_mb=-1),
             )
-        with self.assertRaises(ValueError):
-            build_heartbeat(job_id="123", cpu_overcommit=float("nan"))
 
     def test_fetches_node_agent_heartbeat(self) -> None:
         heartbeat = build_heartbeat(

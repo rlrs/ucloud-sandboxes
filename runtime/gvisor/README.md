@@ -50,9 +50,8 @@ The repository benchmarks exercise the current direct-Warden boundary:
 
 - `benchmark_disk_memory.py`: disk-backed application-memory behavior;
 - `benchmark_hibernate.py`: park/wake latency and content verification;
-- `benchmark_warden.py`: Warden lifecycle and rootfs integration;
-- `benchmark_direct_node.py`: bounded stateful wake bursts;
-- `benchmark_direct_density.py`: live and parked density;
+- [`../storage_native/benchmark_warden.py`](../storage_native/benchmark_warden.py):
+  storage-native Warden lifecycle, wake-burst, and density qualification;
 - `benchmark_direct_node_api.py`: product-facing API lifecycle;
 - `benchmark_crash_recovery.py`: durable recovery;
 - `benchmark_fsync.py`: artifact publication cost.

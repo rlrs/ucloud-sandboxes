@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
-import math
 import os
 from typing import Mapping
 from urllib import error, request
@@ -64,9 +63,6 @@ def build_heartbeat(
     capabilities: tuple[str, ...] = (),
     total_resources: ResourceQuantity | None = None,
     used_resources: ResourceQuantity | None = None,
-    cpu_overcommit: float = 1.0,
-    memory_overcommit: float = 1.0,
-    disk_overcommit: float = 1.0,
     labels: dict[str, str] | None = None,
     cached_images: tuple[str, ...] | None = None,
     runtime_metrics: NodeRuntimeMetrics | None = None,
@@ -111,17 +107,9 @@ def build_heartbeat(
     }
     for field_name, quantity in resource_fields.items():
         if quantity is not None and not quantity.is_valid:
-            raise ValueError(f"{field_name} cannot contain negative or non-finite values.")
-    overcommit_fields = {
-        "cpu_overcommit": cpu_overcommit,
-        "memory_overcommit": memory_overcommit,
-        "disk_overcommit": disk_overcommit,
-    }
-    for field_name, factor in overcommit_fields.items():
-        if not math.isfinite(factor) or factor < 0:
-            raise ValueError(f"{field_name} must be finite and non-negative.")
-    if disk_overcommit > 1.0:
-        raise ValueError("disk_overcommit cannot exceed 1.0.")
+            raise ValueError(
+                f"{field_name} cannot contain negative or non-finite values."
+            )
     cleaned_node_url = node_url.strip() if node_url else None
     if cleaned_node_url and ("\n" in cleaned_node_url or "\r" in cleaned_node_url):
         raise ValueError("node_url cannot contain newlines.")
@@ -142,9 +130,6 @@ def build_heartbeat(
         total_resources=total_resources or ResourceQuantity(),
         resources_known=total_resources is not None,
         used_resources=used_resources or ResourceQuantity(),
-        cpu_overcommit=cpu_overcommit,
-        memory_overcommit=memory_overcommit,
-        disk_overcommit=disk_overcommit,
         labels=labels or {},
         cached_images=tuple(dict.fromkeys(cached_images or ())),
         cached_images_known=cached_images is not None,
@@ -218,9 +203,7 @@ def fetch_node_agent_heartbeat(
     if bearer_token is not None and not bearer_token.strip():
         raise ValueError("node control bearer token cannot be empty")
     headers = (
-        {"Authorization": f"Bearer {bearer_token}"}
-        if bearer_token is not None
-        else {}
+        {"Authorization": f"Bearer {bearer_token}"} if bearer_token is not None else {}
     )
     req = request.Request(url, method="GET", headers=headers)
     try:

@@ -1,5 +1,4 @@
 DISK_QUOTA_CAPABILITY = "disk-quota"
-DYNAMIC_ACTIVE_ADMISSION_CAPABILITY = "dynamic-active-admission-v1"
 HIBERNATE_LOCAL_CAPABILITY = "hibernate-local-v1"
 MANAGED_PRIMARY_CAPABILITY = "managed-primary-v1"
 STORAGE_NATIVE_CAPABILITY = "storage-native-v1"

@@ -64,12 +64,8 @@ submit it explicitly:
 
 ```bash
 uv run ucloud-sandboxes submit-vm \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
+  --config /path/to/deployment.json \
   --role gateway \
-  --private-network-id <network-id> \
-  --public-link-id <gateway-link-id> \
-  --public-link-port 8090 \
   --mount <project-drive-id> \
   --hostname-seed gateway-1 \
   --output json
@@ -84,19 +80,16 @@ Render the remote convergence script first:
 
 ```bash
 uv run ucloud-sandboxes deploy-all-in-one <gateway-job-id> \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
-  --private-network-id <network-id> \
+  --config /path/to/deployment.json \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
   --direct-runsc /path/to/ucloud-direct-runsc \
-  --direct-runsc-commit <40-character-commit> \
   --managed-init /path/to/managed-init \
   --storage-native-manifest /path/to/storage-native-manifest.json \
   --output script
 ```
 
 Run the same command with `--execute` to stage the release, build the verified
-node bundles, write deployment environment files, create credentials, install
+node bundles, install the exact `deployment.json`, create credentials, install
 systemd units, restart services, register the gateway SSH key, and open the
 configured web ports.
 

@@ -38,6 +38,16 @@ def build_heartbeat(**kwargs):
     return _build_heartbeat(**kwargs)
 
 
+def sandbox_route(**values: object) -> SandboxRoute:
+    values.setdefault("resources", ResourceQuantity())
+    values.setdefault("spec", {"id": values.get("sandbox_id")})
+    values.setdefault("state", "unknown")
+    values.setdefault("generation", 1)
+    values.setdefault("create_operation_id", "create-test-route")
+    values.setdefault("spec_hash", "a" * 64)
+    return SandboxRoute(**values)  # type: ignore[arg-type]
+
+
 class MetricsTests(unittest.TestCase):
     def test_sqlite_store_filters_indexed_recent_events(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -473,12 +483,10 @@ class MetricsTests(unittest.TestCase):
                         "placed": 150,
                         "unplaced_count": 150,
                         "placements": [
-                            {"request_id": f"placed-{index}"}
-                            for index in range(150)
+                            {"request_id": f"placed-{index}"} for index in range(150)
                         ],
                         "unplaced": [
-                            {"request_id": f"unplaced-{index}"}
-                            for index in range(150)
+                            {"request_id": f"unplaced-{index}"} for index in range(150)
                         ],
                     },
                     "effectivePolicy": {
@@ -496,9 +504,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(wake_plan["placements_truncated"], 50)
         self.assertEqual(wake_plan["unplaced_truncated"], 50)
         self.assertTrue(
-            event.data["effective_policy"][
-                "program_aware_autoscaling_enabled"
-            ]
+            event.data["effective_policy"]["program_aware_autoscaling_enabled"]
         )
 
     def test_builds_dashboard_snapshot_from_heartbeats_routes_and_events(self) -> None:
@@ -528,7 +534,7 @@ class MetricsTests(unittest.TestCase):
         )
         routing = RoutingState(
             sandboxes={
-                "active-one": SandboxRoute(
+                "active-one": sandbox_route(
                     sandbox_id="active-one",
                     node_id="node-1",
                     job_id="job-1",
@@ -536,7 +542,7 @@ class MetricsTests(unittest.TestCase):
                     resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
                     created_at=now.isoformat(),
                 ),
-                "stale-one": SandboxRoute(
+                "stale-one": sandbox_route(
                     sandbox_id="stale-one",
                     node_id="stale-node",
                     job_id="stale-job",
@@ -672,7 +678,7 @@ class MetricsTests(unittest.TestCase):
         )
         routing = RoutingState(
             sandboxes={
-                "new-one": SandboxRoute(
+                "new-one": sandbox_route(
                     sandbox_id="new-one",
                     node_id="node-1",
                     job_id="job-1",
@@ -702,7 +708,7 @@ class MetricsTests(unittest.TestCase):
     def test_portable_parked_route_is_not_stale_after_source_node_loss(self) -> None:
         routing = RoutingState(
             sandboxes={
-                "portable": SandboxRoute(
+                "portable": sandbox_route(
                     sandbox_id="portable",
                     node_id="lost-node",
                     job_id="lost-job",
@@ -770,6 +776,11 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(sample["data"]["load"]["vcpu"], 0.375)
         self.assertEqual(sample["data"]["actual_usage"]["cpu_vcpu"], 3.0)
         self.assertEqual(sample["data"]["actual_usage"]["memory_percent"], 25.0)
+        node = snapshot["nodes"]["items"][0]
+        self.assertEqual(
+            sample["data"],
+            {key: node[key] for key in sample["data"]},
+        )
 
     def test_builds_vm_lifecycle_summary(self) -> None:
         now = utc_now()

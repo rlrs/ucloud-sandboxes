@@ -26,7 +26,7 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             source = BytesIO(payload + b"next-request")
             store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=8)
 
-            store.put(
+            store.put_with_status(
                 _digest(payload),
                 ContentLengthReader(source, len(payload)),
                 content_length=len(payload),
@@ -40,7 +40,9 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             payload = b"context"
             digest = _digest(payload)
 
-            path = store.put(digest, BytesIO(payload), content_length=len(payload))
+            path = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            ).path
 
             self.assertEqual(path, store.path(digest))
             self.assertEqual(store.size(digest), len(payload))
@@ -56,10 +58,12 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             for declared, body, length, message in invalid_cases:
                 with self.subTest(message=message):
                     with self.assertRaisesRegex(ValueError, message):
-                        store.put(declared, BytesIO(body), content_length=length)
+                        store.put_with_status(
+                            declared, BytesIO(body), content_length=length
+                        )
 
             with self.assertRaisesRegex(ValueError, "limit is 8"):
-                store.put(digest, BytesIO(payload), content_length=9)
+                store.put_with_status(digest, BytesIO(payload), content_length=9)
 
     def test_rejects_non_normalized_digests(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -81,7 +85,9 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=100)
             payload = b"same content"
             digest = _digest(payload)
-            first = store.put(digest, BytesIO(payload), content_length=len(payload))
+            first = store.put_with_status(
+                digest, BytesIO(payload), content_length=len(payload)
+            ).path
             first_inode = first.stat().st_ino
             first_mtime_ns = first.stat().st_mtime_ns
             first.chmod(0o644)
@@ -125,11 +131,11 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 paths = list(
                     executor.map(
-                        lambda store: store.put(
+                        lambda store: store.put_with_status(
                             digest,
                             BytesIO(payload),
                             content_length=len(payload),
-                        ),
+                        ).path,
                         stores,
                     )
                 )
@@ -153,7 +159,9 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             payloads = (b"old", b"lru", b"new")
             digests = tuple(_digest(payload) for payload in payloads)
             for payload, digest in zip(payloads, digests):
-                store.put(digest, BytesIO(payload), content_length=len(payload))
+                store.put_with_status(
+                    digest, BytesIO(payload), content_length=len(payload)
+                )
             os.utime(store.path(digests[0]), (800, 800))
             os.utime(store.path(digests[1]), (950, 950))
             os.utime(store.path(digests[2]), (975, 975))
@@ -183,7 +191,7 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             )
             payload = b"protected"
             digest = _digest(payload)
-            store.put(digest, BytesIO(payload), content_length=len(payload))
+            store.put_with_status(digest, BytesIO(payload), content_length=len(payload))
 
             result = store.gc(protected={digest}, now=10**10)
 
@@ -202,7 +210,9 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             payloads = (b"oldest", b"middle", b"newest")
             digests = tuple(_digest(payload) for payload in payloads)
             for index, (payload, digest) in enumerate(zip(payloads, digests)):
-                store.put(digest, BytesIO(payload), content_length=len(payload))
+                store.put_with_status(
+                    digest, BytesIO(payload), content_length=len(payload)
+                )
                 os.utime(store.path(digest), (100 + index, 100 + index))
 
             result = store.gc()

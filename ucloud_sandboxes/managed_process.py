@@ -9,10 +9,8 @@ import re
 from typing import Any, Mapping
 
 from .models import parse_iso_datetime
-from .capabilities import MANAGED_PRIMARY_CAPABILITY
 
 
-MANAGED_PROCESS_CAPABILITY = MANAGED_PRIMARY_CAPABILITY
 MANAGED_PROCESS_BINARY = "/.ucloud-job-init"
 MANAGED_PROCESS_PROTOCOL_VERSION = 1
 DEFAULT_MAX_STDOUT_BYTES = 16 * 1024 * 1024

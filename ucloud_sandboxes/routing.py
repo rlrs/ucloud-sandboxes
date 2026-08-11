@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -15,6 +15,7 @@ from uuid import uuid4
 from .models import (
     ResourceQuantity,
     SandboxDemand,
+    SandboxInventoryEntry,
     SandboxPlacementRequest,
     parse_iso_datetime,
     utc_now,
@@ -24,14 +25,18 @@ from .sandbox import OPERATION_ID_RE
 
 
 _ROUTE_LOCKS_GUARD = RLock()
-_ROUTE_LOCKS: dict[Path, RLock] = {}
-_EXEC_ROUTE_CACHES: dict[Path, OrderedDict[str, ExecRoute]] = {}
-_EXEC_ROUTE_CACHE_SANDBOX_INDEXES: dict[Path, dict[str, set[str]]] = {}
+_ROUTE_LOCKS: defaultdict[Path, RLock] = defaultdict(RLock)
+_EXEC_ROUTE_CACHES: defaultdict[Path, OrderedDict[str, ExecRoute]] = defaultdict(
+    OrderedDict
+)
+_EXEC_ROUTE_CACHE_SANDBOX_INDEXES: defaultdict[Path, dict[str, set[str]]] = defaultdict(
+    dict
+)
 PENDING_DEMAND_TTL_SECONDS = 300
 MAX_PREPARED_CAPACITY_COUNT = 100
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
-ROUTING_SCHEMA_VERSION = 1
+ROUTING_SCHEMA_VERSION = 2
 PROGRAM_REQUEST_STATES = (
     "model_wait",
     "ready_to_wake",
@@ -49,17 +54,33 @@ class SandboxRouteConflictError(RuntimeError):
 
 
 def _validate_sandbox_route_identity(route: "SandboxRoute") -> None:
+    if (
+        not route.sandbox_id
+        or not route.node_id
+        or not route.job_id
+        or not route.node_url
+    ):
+        raise ValueError("sandbox route requires exact sandbox and node identity")
     if route.spec.get("id") != route.sandbox_id:
         raise ValueError("sandbox route spec must contain its exact id")
+    if not route.state.strip():
+        raise ValueError("sandbox route state is required")
+    if not route.resources.is_valid:
+        raise ValueError("sandbox route resources are invalid")
     if route.generation < 1:
         raise ValueError("sandbox route generation must be positive")
     if not OPERATION_ID_RE.fullmatch(route.create_operation_id):
         raise ValueError("sandbox route create_operation_id is invalid")
-    if (
-        len(route.spec_hash) != 64
-        or any(character not in "0123456789abcdef" for character in route.spec_hash)
+    if route.delete_operation_id and not OPERATION_ID_RE.fullmatch(
+        route.delete_operation_id
+    ):
+        raise ValueError("sandbox route delete_operation_id is invalid")
+    if len(route.spec_hash) != 64 or any(
+        character not in "0123456789abcdef" for character in route.spec_hash
     ):
         raise ValueError("sandbox route spec_hash must be a lowercase SHA-256 digest")
+    if route.activity_epoch < 0:
+        raise ValueError("sandbox route activity_epoch must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -68,12 +89,12 @@ class SandboxRoute:
     node_id: str
     job_id: str
     node_url: str
-    resources: ResourceQuantity = ResourceQuantity()
-    spec: dict[str, Any] = field(default_factory=dict)
-    state: str = "unknown"
-    generation: int = 0
-    create_operation_id: str = ""
-    spec_hash: str = ""
+    resources: ResourceQuantity
+    spec: dict[str, Any]
+    state: str
+    generation: int
+    create_operation_id: str
+    spec_hash: str
     delete_operation_id: str = ""
     node_epoch: str = ""
     activity_epoch: int = 0
@@ -84,6 +105,9 @@ class SandboxRoute:
     storage_snapshot: dict[str, Any] = field(default_factory=dict)
     created_at: str = ""
     updated_at: str = ""
+
+    def __post_init__(self) -> None:
+        _validate_sandbox_route_identity(self)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,6 +132,26 @@ class SandboxRoute:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
+
+
+@dataclass(frozen=True)
+class SandboxRouteAllocation:
+    sandbox_id: str
+    node_id: str
+    job_id: str
+    node_url: str
+    resources: ResourceQuantity
+    spec: dict[str, Any]
+    node_epoch: str = ""
+    activity_epoch: int = 0
+
+    def __post_init__(self) -> None:
+        if self.spec.get("id") != self.sandbox_id:
+            raise ValueError("sandbox allocation spec must contain its exact id")
+        if not self.node_id or not self.job_id or not self.node_url:
+            raise ValueError("sandbox allocation requires exact node identity")
+        if not self.resources.is_valid:
+            raise ValueError("sandbox allocation resources are invalid")
 
 
 def is_portable_parked_route(route: SandboxRoute) -> bool:
@@ -242,8 +286,38 @@ class SandboxMigration:
         }
 
 
+class _ExpiringDemand:
+    created_at: str
+    updated_at: str
+
+    def is_expired(
+        self,
+        now: datetime,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> bool:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
+        if reference is None:
+            return False
+        return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
+
+    def expires_at(
+        self,
+        *,
+        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
+    ) -> str:
+        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
+            self.created_at
+        )
+        if reference is None:
+            return ""
+        return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
+
+
 @dataclass(frozen=True)
-class PendingSandboxDemand:
+class PendingSandboxDemand(_ExpiringDemand):
     sandbox_id: str
     resources: ResourceQuantity
     created_at: str
@@ -290,34 +364,9 @@ class PendingSandboxDemand:
             payload["expires_at"] = expires_at
         return payload
 
-    def is_expired(
-        self,
-        now: datetime,
-        *,
-        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
-    ) -> bool:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
-            self.created_at
-        )
-        if reference is None:
-            return False
-        return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
-
-    def expires_at(
-        self,
-        *,
-        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
-    ) -> str:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
-            self.created_at
-        )
-        if reference is None:
-            return ""
-        return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
-
 
 @dataclass(frozen=True)
-class PendingImageBuildDemand:
+class PendingImageBuildDemand(_ExpiringDemand):
     image_id: str
     tag: str
     created_at: str
@@ -337,31 +386,6 @@ class PendingImageBuildDemand:
             payload["expires_at"] = expires_at
         return payload
 
-    def is_expired(
-        self,
-        now: datetime,
-        *,
-        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
-    ) -> bool:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
-            self.created_at
-        )
-        if reference is None:
-            return False
-        return reference + timedelta(seconds=max(1, ttl_seconds)) <= now
-
-    def expires_at(
-        self,
-        *,
-        ttl_seconds: int = PENDING_DEMAND_TTL_SECONDS,
-    ) -> str:
-        reference = parse_iso_datetime(self.updated_at) or parse_iso_datetime(
-            self.created_at
-        )
-        if reference is None:
-            return ""
-        return (reference + timedelta(seconds=max(1, ttl_seconds))).isoformat()
-
 
 @dataclass(frozen=True)
 class PendingImageWarmup:
@@ -378,11 +402,7 @@ class PendingImageWarmup:
 
     @property
     def total_resources(self) -> ResourceQuantity:
-        return ResourceQuantity(
-            vcpu=self.resources.vcpu * self.count,
-            memory_mb=self.resources.memory_mb * self.count,
-            disk_mb=self.resources.disk_mb * self.count,
-        )
+        return self.resources.scaled(cpu=self.count, memory=self.count, disk=self.count)
 
     def is_expired(self, now: datetime) -> bool:
         expires_at = parse_iso_datetime(self.expires_at)
@@ -425,11 +445,7 @@ class PreparedCapacityDemand:
 
     @property
     def total_resources(self) -> ResourceQuantity:
-        return ResourceQuantity(
-            vcpu=self.resources.vcpu * self.count,
-            memory_mb=self.resources.memory_mb * self.count,
-            disk_mb=self.resources.disk_mb * self.count,
-        )
+        return self.resources.scaled(cpu=self.count, memory=self.count, disk=self.count)
 
     def is_expired(self, now: datetime) -> bool:
         expires_at = parse_iso_datetime(self.expires_at)
@@ -507,35 +523,6 @@ class RoutingStore:
                 self._load_unlocked(conn, include_exec_sessions=False),
                 exec_session_count,
             )
-
-    def save(self, state: RoutingState) -> None:
-        with self._lock:
-            with self._transaction() as conn:
-                conn.execute("DELETE FROM sandboxes")
-                conn.execute("DELETE FROM exec_sessions")
-                conn.execute("DELETE FROM pending")
-                conn.execute("DELETE FROM image_builds")
-                conn.execute("DELETE FROM prepared_capacity")
-                conn.execute("DELETE FROM prepared_builders")
-                conn.execute("DELETE FROM image_warmups")
-                for route in state.sandboxes.values():
-                    self._write_sandbox(conn, route)
-                for route in state.exec_sessions.values():
-                    self._write_exec(conn, route)
-                for item in state.pending.values():
-                    self._write_pending(conn, item)
-                for item in state.image_builds.values():
-                    self._write_image_build(conn, item)
-                for item in state.prepared.values():
-                    self._write_prepared(conn, item)
-                for item in state.prepared_builders.values():
-                    self._write_prepared_builder(conn, item)
-                for item in state.image_warmups.values():
-                    self._write_image_warmup(conn, item)
-            self._exec_route_cache.clear()
-            self._exec_route_cache_sandbox_index.clear()
-            for route in state.exec_sessions.values():
-                self._cache_exec_route_unlocked(route)
 
     def get_sandbox(self, sandbox_id: str) -> SandboxRoute | None:
         with self._lock:
@@ -708,36 +695,6 @@ class RoutingStore:
                 )
                 if route is not None
             ]
-
-    def sandbox_routes_for_node_url(self, node_url: str) -> list[SandboxRoute]:
-        with self._connect() as conn:
-            return self._sandbox_routes_for_node_url_unlocked(conn, node_url.strip())
-
-    def upsert_program_request_transition(
-        self,
-        route: SandboxRoute,
-        *,
-        request_id: str,
-        rollout_id: str,
-        state: str,
-        transition_at: str | None = None,
-        accepted_at: str | None = None,
-        parked_at: str | None = None,
-        last_error: str = "",
-        clear_error: bool = False,
-    ) -> ProgramRequestState:
-        program, _changed = self.upsert_program_request_transition_with_change(
-            route,
-            request_id=request_id,
-            rollout_id=rollout_id,
-            state=state,
-            transition_at=transition_at,
-            accepted_at=accepted_at,
-            parked_at=parked_at,
-            last_error=last_error,
-            clear_error=clear_error,
-        )
-        return program
 
     def upsert_program_request_transition_with_change(
         self,
@@ -992,7 +949,6 @@ class RoutingStore:
             return stored
 
     def upsert_sandbox(self, route: SandboxRoute) -> SandboxRoute:
-        _validate_sandbox_route_identity(route)
         with self._lock:
             now = utc_now().isoformat()
             with self._transaction() as conn:
@@ -1016,47 +972,6 @@ class RoutingStore:
                 self._write_sandbox(conn, stored)
                 conn.execute(
                     "DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,)
-                )
-            return stored
-
-    def finalize_sandbox_create(self, route: SandboxRoute) -> SandboxRoute | None:
-        """Finalize an exact create reservation unless DELETE already won.
-
-        A long-running create may complete after a concurrent delete has
-        marked or removed its route.  This compare-and-swap prevents the late
-        success response from clearing that delete intent or resurrecting the
-        deleted route.
-        """
-
-        with self._lock:
-            now = utc_now().isoformat()
-            with self._transaction() as conn:
-                existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
-                if (
-                    existing is None
-                    or existing.generation != route.generation
-                    or existing.create_operation_id != route.create_operation_id
-                    or existing.spec_hash != route.spec_hash
-                    or existing.node_id != route.node_id
-                    or existing.node_url != route.node_url
-                    or bool(existing.delete_operation_id)
-                ):
-                    return None
-                stored = replace(
-                    route,
-                    delete_operation_id="",
-                    node_epoch=existing.node_epoch,
-                    activity_epoch=max(
-                        existing.activity_epoch,
-                        route.activity_epoch,
-                    ),
-                    created_at=existing.created_at or route.created_at,
-                    updated_at=now,
-                )
-                self._write_sandbox(conn, stored)
-                conn.execute(
-                    "DELETE FROM pending WHERE sandbox_id = ?",
-                    (route.sandbox_id,),
                 )
             return stored
 
@@ -1113,73 +1028,64 @@ class RoutingStore:
             )
         return selected
 
-    def allocate_sandbox_create(
-        self,
-        route: SandboxRoute,
-        *,
-        spec_hash: str,
-        create_operation_id: str | None = None,
-    ) -> SandboxRoute:
-        """Persist a new route incarnation before its node create is dispatched."""
-
-        stored, _pending = self.allocate_sandbox_create_with_pending(
-            route,
-            spec_hash=spec_hash,
-            create_operation_id=create_operation_id,
-        )
-        return stored
-
     def allocate_sandbox_create_with_pending(
         self,
-        route: SandboxRoute,
+        allocation: SandboxRouteAllocation,
         *,
         spec_hash: str,
         create_operation_id: str | None = None,
     ) -> tuple[SandboxRoute, PendingSandboxDemand | None]:
         """Allocate a route and atomically return the demand it consumed."""
 
-        operation_id = (create_operation_id or f"create-{uuid4().hex}").strip()
+        operation_id = (
+            f"create-{uuid4().hex}"
+            if create_operation_id is None
+            else create_operation_id.strip()
+        )
         if not operation_id or not spec_hash.strip():
             raise ValueError("create operation id and spec hash are required")
         with self._lock:
             now = utc_now().isoformat()
             with self._transaction() as conn:
-                pending = self._get_pending_unlocked(conn, route.sandbox_id)
-                existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                pending = self._get_pending_unlocked(conn, allocation.sandbox_id)
+                existing = self._get_sandbox_unlocked(conn, allocation.sandbox_id)
                 if existing is not None:
                     if (existing.spec_hash and existing.spec_hash != spec_hash) or (
-                        existing.spec and route.spec and existing.spec != route.spec
+                        existing.spec
+                        and allocation.spec
+                        and existing.spec != allocation.spec
                     ):
                         raise SandboxRouteConflictError(
                             f"sandbox route already exists with a different spec: "
-                            f"{route.sandbox_id}"
+                            f"{allocation.sandbox_id}"
                         )
                     return existing, pending
                 row = conn.execute(
                     "SELECT generation FROM sandbox_generation_hwm WHERE sandbox_id = ?",
-                    (route.sandbox_id,),
+                    (allocation.sandbox_id,),
                 ).fetchone()
                 high_water = int(row["generation"]) if row is not None else 0
                 generation = high_water + 1
                 stored = SandboxRoute(
-                    sandbox_id=route.sandbox_id,
-                    node_id=route.node_id,
-                    job_id=route.job_id,
-                    node_url=route.node_url,
-                    resources=route.resources,
-                    spec=dict(route.spec),
+                    sandbox_id=allocation.sandbox_id,
+                    node_id=allocation.node_id,
+                    job_id=allocation.job_id,
+                    node_url=allocation.node_url,
+                    resources=allocation.resources,
+                    spec=dict(allocation.spec),
                     state="creating",
                     generation=generation,
                     create_operation_id=operation_id,
                     spec_hash=spec_hash.strip(),
-                    node_epoch=route.node_epoch,
-                    activity_epoch=max(0, route.activity_epoch),
-                    created_at=route.created_at or now,
+                    node_epoch=allocation.node_epoch,
+                    activity_epoch=max(0, allocation.activity_epoch),
+                    created_at=now,
                     updated_at=now,
                 )
                 self._write_sandbox(conn, stored)
                 conn.execute(
-                    "DELETE FROM pending WHERE sandbox_id = ?", (route.sandbox_id,)
+                    "DELETE FROM pending WHERE sandbox_id = ?",
+                    (allocation.sandbox_id,),
                 )
                 self._claim_prepared_capacity_unlocked(conn, stored)
             return stored, pending
@@ -1202,64 +1108,6 @@ class RoutingStore:
                     }
                 )
                 self._write_sandbox(conn, stored)
-            return stored
-
-    def move_sandbox_if_current(
-        self,
-        source: SandboxRoute,
-        *,
-        destination_node_id: str,
-        destination_job_id: str,
-        destination_node_url: str,
-        destination_node_epoch: str = "",
-        destination_activity_epoch: int = 0,
-    ) -> SandboxRoute | None:
-        """Atomically move one exact sandbox incarnation to another node.
-
-        The sandbox generation and create identity do not change during a
-        parked migration. A stale coordinator therefore cannot redirect a
-        replacement incarnation or move a route that has already gone
-        elsewhere.
-        """
-
-        cleaned_url = destination_node_url.strip().rstrip("/")
-        if (
-            not destination_node_id.strip()
-            or not destination_job_id.strip()
-            or not cleaned_url
-        ):
-            raise ValueError("destination node identity is required")
-        with self._lock:
-            now = utc_now().isoformat()
-            with self._transaction() as conn:
-                existing = self._get_sandbox_unlocked(conn, source.sandbox_id)
-                if (
-                    existing is None
-                    or existing.generation != source.generation
-                    or existing.create_operation_id != source.create_operation_id
-                    or existing.spec_hash != source.spec_hash
-                    or existing.node_id != source.node_id
-                    or existing.job_id != source.job_id
-                    or existing.node_url.rstrip("/") != source.node_url.rstrip("/")
-                    or bool(existing.delete_operation_id)
-                ):
-                    return None
-                stored = replace(
-                    existing,
-                    node_id=destination_node_id.strip(),
-                    job_id=destination_job_id.strip(),
-                    node_url=cleaned_url,
-                    state="parked",
-                    node_epoch=destination_node_epoch.strip(),
-                    activity_epoch=max(0, destination_activity_epoch),
-                    updated_at=now,
-                )
-                self._write_sandbox(conn, stored)
-                conn.execute(
-                    "DELETE FROM exec_sessions WHERE sandbox_id = ?",
-                    (source.sandbox_id,),
-                )
-            self._drop_cached_exec_routes_for_sandbox_unlocked(source.sandbox_id)
             return stored
 
     def begin_sandbox_migration(
@@ -1598,132 +1446,84 @@ class RoutingStore:
                     and existing.delete_operation_id != delete_operation_id
                 ):
                     return None
-                conn.execute(
-                    "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
-                )
-                conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
-                conn.execute(
-                    "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
-                )
-                self._terminalize_program_requests_unlocked(
-                    conn,
-                    sandbox_id,
-                    generation=generation,
-                )
+                self._delete_sandbox_unlocked(conn, existing)
             self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
             return existing
 
     def reconcile_sandboxes_for_node(
         self,
         node_url: str,
-        routes: list[SandboxRoute],
+        observations: Iterable[SandboxInventoryEntry],
         *,
+        node_id: str,
+        job_id: str,
+        reported_sandbox_ids: Iterable[str],
         observed_at: str,
         node_epoch: str = "",
         activity_epoch: int = 0,
         inventory_complete: bool = True,
     ) -> None:
         node_url = node_url.strip()
-        if not node_url:
-            return
-        # Include rejected/stale observations in this set.  A malformed or
-        # delayed report is not evidence of absence, so it must conservatively
-        # protect the corresponding route from this reconciliation pass.
-        reported_ids = {route.sandbox_id for route in routes}
+        node_id = node_id.strip()
+        job_id = job_id.strip()
+        if not node_url or not node_id or not job_id:
+            raise ValueError("sandbox inventory requires exact node identity")
+        observed = tuple(observations)
+        # Malformed or delayed reports are not proof of absence.
+        reported_ids = {
+            sandbox_id
+            for raw_sandbox_id in reported_sandbox_ids
+            if (sandbox_id := str(raw_sandbox_id).strip())
+        }
+        reported_ids.update(item.sandbox_id for item in observed)
         observed_at_dt = parse_iso_datetime(observed_at)
         with self._lock:
             removed_sandbox_ids: list[str] = []
             with self._transaction() as conn:
-                # BEGIN IMMEDIATE precedes every read in this method.  A second
-                # RoutingStore (or process) therefore cannot install a newer
-                # incarnation between validation and the writes/deletes below.
-                for route in routes:
-                    candidate_node_url = route.node_url.strip() or node_url
-                    if candidate_node_url != node_url:
-                        continue
-                    if (
-                        route.generation < 1
-                        or not route.create_operation_id
-                        or not route.spec_hash
-                    ):
-                        continue
-                    existing = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                for item in observed:
+                    existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
                     if existing is None:
                         continue
-                    observed = SandboxRoute(
-                        sandbox_id=route.sandbox_id,
-                        node_id=route.node_id,
-                        job_id=route.job_id,
-                        node_url=candidate_node_url,
+                    parked = item.state.lower() == "parked"
+                    candidate = replace(
+                        existing,
+                        node_id=node_id,
+                        job_id=job_id,
+                        node_url=node_url,
                         resources=(
-                            route.resources
-                            if route.resources != ResourceQuantity()
+                            item.resources
+                            if item.resources != ResourceQuantity()
                             else existing.resources
                         ),
-                        spec=dict(route.spec) or dict(existing.spec),
-                        state=(
-                            route.state
-                            if route.state != "unknown"
-                            else existing.state
-                        ),
-                        generation=route.generation,
-                        create_operation_id=route.create_operation_id,
-                        spec_hash=route.spec_hash,
-                        delete_operation_id=(
-                            existing.delete_operation_id
-                        ),
-                        node_epoch=route.node_epoch or node_epoch,
+                        state=item.state,
+                        generation=item.generation,
+                        create_operation_id=item.operation_id,
+                        spec_hash=item.spec_hash,
+                        node_epoch=node_epoch,
                         # Activity counters are scoped to a node epoch.  Do not
                         # carry the old epoch's high water into a proven restart.
-                        activity_epoch=max(route.activity_epoch, activity_epoch),
-                        storage_schema=route.storage_schema or existing.storage_schema,
+                        activity_epoch=max(0, activity_epoch),
+                        storage_schema=existing.storage_schema if parked else "",
                         snapshot_manifest_digest=(
-                            route.snapshot_manifest_digest
-                            or (
-                                existing.snapshot_manifest_digest
-                                if route.state.lower() == "parked"
-                                else ""
-                            )
+                            existing.snapshot_manifest_digest if parked else ""
                         ),
                         snapshot_repository=(
-                            route.snapshot_repository
-                            or (
-                                existing.snapshot_repository
-                                if route.state.lower() == "parked"
-                                else ""
-                            )
+                            existing.snapshot_repository if parked else ""
                         ),
-                        snapshot_tag=(
-                            route.snapshot_tag
-                            or (
-                                existing.snapshot_tag
-                                if route.state.lower() == "parked"
-                                else ""
-                            )
-                        ),
+                        snapshot_tag=existing.snapshot_tag if parked else "",
                         storage_snapshot=(
-                            dict(route.storage_snapshot)
-                            or (
-                                dict(existing.storage_snapshot)
-                                if route.state.lower() == "parked"
-                                else {}
-                            )
+                            dict(existing.storage_snapshot) if parked else {}
                         ),
-                        created_at=route.created_at or existing.created_at,
                         updated_at=observed_at,
                     )
-                    # Inventory observes the incarnation already assigned by
-                    # the control plane; it cannot authorize a new lifecycle
-                    # generation. Create and migration transactions install a
-                    # new generation before its heartbeat may update it.
-                    if observed.generation != existing.generation:
+                    if candidate.generation != existing.generation:
                         continue
-                    if not _route_update_is_current(existing, observed):
+                    if not _route_update_is_current(existing, candidate):
                         continue
-                    self._write_sandbox(conn, observed)
+                    self._write_sandbox(conn, candidate)
                     conn.execute(
                         "DELETE FROM pending WHERE sandbox_id = ?",
-                        (observed.sandbox_id,),
+                        (candidate.sandbox_id,),
                     )
 
                 current_routes = self._sandbox_routes_for_node_url_unlocked(
@@ -1757,36 +1557,8 @@ class RoutingStore:
                         or route_updated_at <= observed_at_dt
                     ):
                         continue
-                    # Keep the identity predicate even though BEGIN IMMEDIATE
-                    # already excludes concurrent writers.  It documents and
-                    # enforces that dependent cleanup happens only after the
-                    # exact incarnation selected above was removed.
-                    removed = conn.execute(
-                        """
-                        DELETE FROM sandboxes
-                        WHERE sandbox_id = ? AND generation = ?
-                          AND create_operation_id = ? AND spec_hash = ?
-                        """,
-                        (
-                            sandbox_id,
-                            route.generation,
-                            route.create_operation_id,
-                            route.spec_hash,
-                        ),
-                    ).rowcount
-                    if not removed:
+                    if not self._delete_sandbox_unlocked(conn, route):
                         continue
-                    conn.execute(
-                        "DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,)
-                    )
-                    conn.execute(
-                        "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
-                    )
-                    self._terminalize_program_requests_unlocked(
-                        conn,
-                        sandbox_id,
-                        generation=route.generation,
-                    )
                     removed_sandbox_ids.append(sandbox_id)
             for sandbox_id in removed_sandbox_ids:
                 self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
@@ -1794,14 +1566,7 @@ class RoutingStore:
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:
             with self._transaction() as conn:
-                conn.execute(
-                    "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
-                )
-                conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
-                conn.execute(
-                    "DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,)
-                )
-                self._terminalize_program_requests_unlocked(conn, sandbox_id)
+                self._delete_sandbox_unlocked(conn, sandbox_id)
             self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
 
     def delete_sandboxes_for_jobs(self, job_ids: Iterable[str]) -> list[SandboxRoute]:
@@ -1857,23 +1622,10 @@ class RoutingStore:
                         (route.sandbox_id,),
                     )
                 for route in removed:
-                    conn.execute(
-                        "DELETE FROM sandboxes WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    conn.execute(
-                        "DELETE FROM pending WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    conn.execute(
-                        "DELETE FROM exec_sessions WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    self._terminalize_program_requests_unlocked(
+                    self._delete_sandbox_unlocked(
                         conn,
-                        route.sandbox_id,
-                        generation=route.generation,
-                        last_error=terminal_error,
+                        route,
+                        terminal_error=terminal_error,
                     )
             if not removed and not preserved:
                 return []
@@ -1921,28 +1673,50 @@ class RoutingStore:
                         continue
                     removed.append(route)
                 for route in removed:
-                    conn.execute(
-                        "DELETE FROM sandboxes WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    conn.execute(
-                        "DELETE FROM pending WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    conn.execute(
-                        "DELETE FROM exec_sessions WHERE sandbox_id = ?",
-                        (route.sandbox_id,),
-                    )
-                    self._terminalize_program_requests_unlocked(
-                        conn,
-                        route.sandbox_id,
-                        generation=route.generation,
-                    )
+                    self._delete_sandbox_unlocked(conn, route)
             if not removed:
                 return []
             for route in removed:
                 self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
             return removed
+
+    def _delete_sandbox_unlocked(
+        self,
+        conn: sqlite3.Connection,
+        route: SandboxRoute | str,
+        *,
+        terminal_error: str = "",
+    ) -> bool:
+        sandbox_id = route.sandbox_id if isinstance(route, SandboxRoute) else route
+        if isinstance(route, SandboxRoute):
+            removed = conn.execute(
+                """
+                DELETE FROM sandboxes
+                WHERE sandbox_id = ? AND generation = ?
+                  AND create_operation_id = ? AND spec_hash = ?
+                """,
+                (
+                    sandbox_id,
+                    route.generation,
+                    route.create_operation_id,
+                    route.spec_hash,
+                ),
+            ).rowcount
+            if not removed:
+                return False
+        else:
+            removed = conn.execute(
+                "DELETE FROM sandboxes WHERE sandbox_id = ?", (sandbox_id,)
+            ).rowcount
+        conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
+        conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,))
+        self._terminalize_program_requests_unlocked(
+            conn,
+            sandbox_id,
+            generation=route.generation if isinstance(route, SandboxRoute) else None,
+            last_error=terminal_error,
+        )
+        return bool(removed)
 
     @staticmethod
     def _terminalize_program_requests_unlocked(
@@ -2356,44 +2130,6 @@ class RoutingStore:
             prepared = self._active_prepared_unlocked(now)
             return list(prepared.values())
 
-    def consume_prepared_capacity(
-        self,
-        items: Iterable[PreparedCapacityDemand] | None = None,
-    ) -> list[PreparedCapacityDemand]:
-        now = utc_now()
-        with self._lock:
-            prepared = self._active_prepared_unlocked(now)
-            if not prepared:
-                return []
-            targets = list(items) if items is not None else list(prepared.values())
-            if not targets:
-                return []
-            consumed: list[PreparedCapacityDemand] = []
-            with self._transaction() as conn:
-                for item in targets:
-                    cursor = conn.execute(
-                        """
-                        DELETE FROM prepared_capacity
-                        WHERE prepare_id = ?
-                          AND count = ?
-                          AND updated_at = ?
-                          AND expires_at = ?
-                          AND image = ?
-                        """,
-                        (
-                            item.prepare_id,
-                            item.count,
-                            item.updated_at,
-                            item.expires_at,
-                            item.image,
-                        ),
-                    )
-                    if cursor.rowcount:
-                        consumed.append(item)
-            if not consumed:
-                return []
-            return consumed
-
     def upsert_prepared_builder(
         self,
         prepare_id: str,
@@ -2483,15 +2219,6 @@ class RoutingStore:
         now = utc_now()
         with self._lock:
             return len(self._active_image_builds_unlocked(now))
-
-    def oldest_pending_image_build_seconds(self) -> int:
-        now = utc_now()
-        with self._lock:
-            timestamps = [
-                item.created_at
-                for item in self._active_image_builds_unlocked(now).values()
-            ]
-        return _oldest_seconds(timestamps)
 
     def pending_demand(self) -> SandboxDemand:
         with self._lock:
@@ -2801,35 +2528,40 @@ class RoutingStore:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sandboxes (
-                    sandbox_id TEXT PRIMARY KEY,
-                    node_id TEXT NOT NULL,
-                    job_id TEXT NOT NULL,
-                    node_url TEXT NOT NULL,
+                    sandbox_id TEXT PRIMARY KEY CHECK (length(trim(sandbox_id)) > 0),
+                    node_id TEXT NOT NULL CHECK (length(trim(node_id)) > 0),
+                    job_id TEXT NOT NULL CHECK (length(trim(job_id)) > 0),
+                    node_url TEXT NOT NULL CHECK (length(trim(node_url)) > 0),
                     resources_json TEXT NOT NULL,
-                    spec_json TEXT NOT NULL DEFAULT '{}',
-                    state TEXT NOT NULL DEFAULT 'unknown',
-                    generation INTEGER NOT NULL DEFAULT 0,
-                    create_operation_id TEXT NOT NULL DEFAULT '',
-                    spec_hash TEXT NOT NULL DEFAULT '',
+                    spec_json TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK (length(trim(state)) > 0),
+                    generation INTEGER NOT NULL CHECK (generation > 0),
+                    create_operation_id TEXT NOT NULL
+                        CHECK (length(create_operation_id) BETWEEN 1 AND 128),
+                    spec_hash TEXT NOT NULL CHECK (
+                        length(spec_hash) = 64
+                        AND spec_hash NOT GLOB '*[^0-9a-f]*'
+                    ),
                     delete_operation_id TEXT NOT NULL DEFAULT '',
                     node_epoch TEXT NOT NULL DEFAULT '',
-                    activity_epoch INTEGER NOT NULL DEFAULT 0,
+                    activity_epoch INTEGER NOT NULL DEFAULT 0
+                        CHECK (activity_epoch >= 0),
                     storage_schema TEXT NOT NULL DEFAULT '',
                     snapshot_manifest_digest TEXT NOT NULL DEFAULT '',
                     snapshot_repository TEXT NOT NULL DEFAULT '',
                     snapshot_tag TEXT NOT NULL DEFAULT '',
                     storage_snapshot_json TEXT NOT NULL DEFAULT '{}',
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
+                    created_at TEXT NOT NULL CHECK (length(trim(created_at)) > 0),
+                    updated_at TEXT NOT NULL CHECK (length(trim(updated_at)) > 0)
+                ) STRICT
                 """
             )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS sandbox_generation_hwm (
                     sandbox_id TEXT PRIMARY KEY,
-                    generation INTEGER NOT NULL
-                )
+                    generation INTEGER NOT NULL CHECK (generation > 0)
+                ) STRICT
                 """
             )
             conn.execute(
@@ -3379,7 +3111,6 @@ class RoutingStore:
         return _image_warmup_from_row(row) if row is not None else None
 
     def _write_sandbox(self, conn: sqlite3.Connection, route: SandboxRoute) -> None:
-        _validate_sandbox_route_identity(route)
         conn.execute(
             """
             INSERT INTO sandboxes (
@@ -3716,31 +3447,24 @@ def _nonnegative_int(value: object) -> int:
 
 
 def _route_update_is_current(existing: SandboxRoute, candidate: SandboxRoute) -> bool:
-    if candidate.generation < existing.generation:
+    if candidate.generation != existing.generation:
         return False
-    if candidate.generation > existing.generation:
+    if (
+        existing.create_operation_id != candidate.create_operation_id
+        or existing.spec_hash != candidate.spec_hash
+        or candidate.node_url != existing.node_url
+    ):
+        return False
+    # Exact incarnation identity on the same assigned node proves that the
+    # sandbox survived a node-agent restart. Epoch counters cannot be compared
+    # across that boundary, so permit adoption of the new epoch.
+    if candidate.node_epoch and candidate.node_epoch != existing.node_epoch:
         return True
-    if existing.generation > 0:
-        if not existing.create_operation_id or not candidate.create_operation_id:
-            return False
-        if existing.create_operation_id != candidate.create_operation_id:
-            return False
-        if not existing.spec_hash or not candidate.spec_hash:
-            return False
-        if existing.spec_hash != candidate.spec_hash:
-            return False
-        if existing.node_url and candidate.node_url != existing.node_url:
-            return False
-        # Exact incarnation identity on the same assigned node proves that the
-        # sandbox survived a node-agent restart. Epoch counters cannot be
-        # compared across that boundary, so permit adoption of the new epoch.
-        if candidate.node_epoch and candidate.node_epoch != existing.node_epoch:
-            return True
-        if (
-            existing.node_epoch == candidate.node_epoch
-            and candidate.activity_epoch < existing.activity_epoch
-        ):
-            return False
+    if (
+        existing.node_epoch == candidate.node_epoch
+        and candidate.activity_epoch < existing.activity_epoch
+    ):
+        return False
     return True
 
 
@@ -3817,33 +3541,18 @@ def sandbox_demand_from_routing_state(
 
 
 def _route_lock(path: Path) -> RLock:
-    key = path.resolve()
     with _ROUTE_LOCKS_GUARD:
-        lock = _ROUTE_LOCKS.get(key)
-        if lock is None:
-            lock = RLock()
-            _ROUTE_LOCKS[key] = lock
-        return lock
+        return _ROUTE_LOCKS[path.resolve()]
 
 
 def _exec_route_cache(path: Path) -> OrderedDict[str, ExecRoute]:
-    key = path.resolve()
     with _ROUTE_LOCKS_GUARD:
-        cache = _EXEC_ROUTE_CACHES.get(key)
-        if cache is None:
-            cache = OrderedDict()
-            _EXEC_ROUTE_CACHES[key] = cache
-        return cache
+        return _EXEC_ROUTE_CACHES[path.resolve()]
 
 
 def _exec_route_cache_sandbox_index(path: Path) -> dict[str, set[str]]:
-    key = path.resolve()
     with _ROUTE_LOCKS_GUARD:
-        index = _EXEC_ROUTE_CACHE_SANDBOX_INDEXES.get(key)
-        if index is None:
-            index = {}
-            _EXEC_ROUTE_CACHE_SANDBOX_INDEXES[key] = index
-        return index
+        return _EXEC_ROUTE_CACHE_SANDBOX_INDEXES[path.resolve()]
 
 
 def _is_sqlite_file(path: Path) -> bool:
@@ -3856,7 +3565,8 @@ def _is_sqlite_file(path: Path) -> bool:
 
 
 def _resources_json(resources: ResourceQuantity) -> str:
-    return json.dumps(resources.to_dict(), sort_keys=True, separators=(",", ":"))
+    normalized = ResourceQuantity.from_dict(resources.to_dict())
+    return json.dumps(normalized.to_dict(), sort_keys=True, separators=(",", ":"))
 
 
 def _resources_from_json(raw: object) -> ResourceQuantity:
@@ -3872,39 +3582,27 @@ def _object_json(raw: dict[str, Any]) -> str:
     return json.dumps(raw, sort_keys=True, separators=(",", ":"))
 
 
-def _object_from_json(raw: object) -> dict[str, Any]:
-    if not isinstance(raw, str):
-        return {}
-    try:
-        decoded = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return dict(decoded) if isinstance(decoded, dict) else {}
-
-
 def _sandbox_route_from_row(row: sqlite3.Row) -> SandboxRoute:
-    return SandboxRoute(
-        sandbox_id=str(row["sandbox_id"]),
-        node_id=str(row["node_id"]),
-        job_id=str(row["job_id"]),
-        node_url=str(row["node_url"]),
-        resources=_resources_from_json(row["resources_json"]),
-        spec=_object_from_json(row["spec_json"]),
-        state=str(row["state"] or "unknown"),
-        generation=_nonnegative_int(row["generation"]),
-        create_operation_id=str(row["create_operation_id"] or ""),
-        spec_hash=str(row["spec_hash"] or ""),
-        delete_operation_id=str(row["delete_operation_id"] or ""),
-        node_epoch=str(row["node_epoch"] or ""),
-        activity_epoch=_nonnegative_int(row["activity_epoch"]),
-        storage_schema=str(row["storage_schema"] or ""),
-        snapshot_manifest_digest=str(row["snapshot_manifest_digest"] or ""),
-        snapshot_repository=str(row["snapshot_repository"] or ""),
-        snapshot_tag=str(row["snapshot_tag"] or ""),
-        storage_snapshot=_object_from_json(row["storage_snapshot_json"]),
-        created_at=str(row["created_at"]),
-        updated_at=str(row["updated_at"]),
-    )
+    try:
+        values = dict(row)
+        values["resources"] = ResourceQuantity.from_dict(
+            json.loads(values.pop("resources_json"))
+        )
+        values["spec"] = json.loads(values.pop("spec_json"))
+        values["storage_snapshot"] = json.loads(values.pop("storage_snapshot_json"))
+        if not isinstance(values["spec"], dict) or not isinstance(
+            values["storage_snapshot"], dict
+        ):
+            raise ValueError("route JSON fields must be objects")
+        return SandboxRoute(**values)
+    except (
+        AttributeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise sqlite3.DatabaseError("invalid sandbox route row") from exc
 
 
 def _program_request_from_row(row: sqlite3.Row) -> ProgramRequestState:

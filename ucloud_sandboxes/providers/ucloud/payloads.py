@@ -71,10 +71,6 @@ def private_network_ids_from_resources(raw_resources: object) -> tuple[str, ...]
     return _resource_ids(raw_resources, "private_network")
 
 
-def public_link_ids_from_resources(raw_resources: object) -> tuple[str, ...]:
-    return _resource_ids(raw_resources, "ingress")
-
-
 def _copy_resources(job_item: dict[str, Any]) -> tuple[dict[str, Any], list[Any]]:
     updated = deepcopy(job_item)
     raw_resources = updated.get("resources")

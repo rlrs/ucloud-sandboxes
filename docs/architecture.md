@@ -9,8 +9,9 @@ The sandbox-node runtime is one privileged direct-runsc Warden per node.
 It owns every sandbox task lifecycle on that node. Docker/containerd remain
 image infrastructure and never own a sandbox task.
 
-Each node deployment has one immutable runtime identity. Admission, routing,
-heartbeats, and storage authority all refer to that same Warden-owned runtime.
+Each node registry binds one immutable runtime-compatibility digest derived from
+the runsc binary, commit, and boot configuration. Hibernation and migration add
+the exact sandbox runtime fingerprint, including its image-specific rootfs.
 
 - Provider instances are pool nodes. Native instance state is normalized at a
   small compute-provider boundary before it reaches policy or reconciliation.

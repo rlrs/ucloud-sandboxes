@@ -53,7 +53,6 @@ Provider settings live in one strictly tagged object:
   "provider": {
     "kind": "ucloud",
     "scope_id": "project-1",
-    "session_file": "/path/to/ucloud-session.json",
     "private_network_id": "network-1",
     "template_job_id": null,
     "gateway_public_link_id": null,
@@ -61,6 +60,10 @@ Provider settings live in one strictly tagged object:
   }
 }
 ```
+
+The UCloud session file is an operational credential override, supplied with
+`--session-file` to local operator commands when needed. It is deliberately
+not persisted in `deployment.json`.
 
 UCloud rejects unknown keys. An external provider owns and validates the keys
 inside its tagged object; provider-specific credentials, image references,

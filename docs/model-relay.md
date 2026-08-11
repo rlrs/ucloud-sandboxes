@@ -30,17 +30,18 @@ registration-scoped capability is the only relay credential an arbitrary
 harness needs; the worker and gateway bearer tokens remain confined to trusted
 control-plane processes.
 
-In the standard all-in-one deployment, `deploy-all-in-one` writes
-`/etc/ucloud-sandboxes/relay.env`, installs the relay unit, creates the sandbox
+In the standard all-in-one deployment, `deploy-all-in-one` installs the exact
+`/etc/ucloud-sandboxes/deployment.json`, installs the relay unit, creates the sandbox
 and worker token files if missing, and starts the service. Run it from the
 source checkout after `uv build`:
 
 ```bash
 uv run ucloud-sandboxes deploy-all-in-one <job-id> \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
-  --private-network-id <private-network-id> \
+  --config /path/to/deployment.json \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
+  --direct-runsc /path/to/ucloud-direct-runsc \
+  --managed-init /path/to/managed-init \
+  --storage-native-manifest /path/to/storage-native-manifest.json \
   --execute
 ```
 
@@ -48,17 +49,8 @@ For local development, run the relay directly:
 
 ```bash
 uv run ucloud-sandboxes serve-model-relay \
-  --host 0.0.0.0 \
-  --port 8092 \
-  --sandbox-bearer-token-file /work/data/ucloud-sandboxes/state/relay-sandbox-token \
-  --worker-bearer-token-file /work/data/ucloud-sandboxes/state/relay-worker-token \
-  --state-path /work/data/ucloud-sandboxes/state/model-relay.sqlite3 \
-  --gateway-url http://127.0.0.1:8090 \
-  --gateway-bearer-token-file /work/data/ucloud-sandboxes/state/gateway-token \
-  --request-timeout-seconds 7200 \
-  --worker-lease-seconds 600 \
-  --completed-request-retention-seconds 3600 \
-  --max-completed-bytes 268435456
+  --config /path/to/deployment.json \
+  --host 0.0.0.0
 ```
 
 Use the worker bearer token for `/v1/relay/rollouts`, `/worker/poll`,
@@ -66,8 +58,8 @@ Use the worker bearer token for `/v1/relay/rollouts`, `/worker/poll`,
 sandbox bearer token. General tunnels use their registration-scoped URL and
 preserve `Authorization` for the upstream protocol.
 
-The relay retains completed responses for idempotent replay, bounded by both
-the retention interval and `--max-completed-bytes` (256 MiB by default). Once a
+The relay retains completed responses for idempotent replay, bounded by the
+manifest retention interval and a fixed byte limit. Once a
 request completes, its original request body is removed from the retained and
 durable record.
 
@@ -125,10 +117,10 @@ upstream `Authorization` header unchanged. The shared
 is not required by arbitrary harnesses using the capability URL.
 
 Workers use the same rollout identity, long-poll, lease, renewal, and
-fenced-response protocol as model calls. A tunnel request envelope uses the
-canonical `rollout_id` and adds `body_base64` and `body_size`; `body_base64` is
-authoritative for arbitrary bytes. Workers return
-binary bodies with `body_base64` on `/worker/respond`. Methods, raw
+fenced-response protocol as model calls. A tunnel request envelope carries one
+tagged `body`: JSON uses `{"encoding":"json","value":...}` and arbitrary
+bytes use `{"encoding":"base64","value":"..."}`. Workers use the same
+representation on `/worker/respond`. Methods, raw
 percent-encoded paths, query strings, safe end-to-end headers, status codes, and
 request/response bodies are preserved.
 
@@ -193,32 +185,31 @@ curl -sS "https://relay.example.org/worker/poll?rollout_id=run-001&registration_
 ```
 
 If no request is available before the timeout, the relay returns
-`{"request": null, "requests": []}`.
+`{"requests": []}`.
 
-The response contains `requests`; `request` is the first item for convenience:
+The response contains only the canonical `requests` batch:
 
 ```json
 {
-  "request": {
-    "request_id": "7fd...",
-    "rollout_id": "run-001",
-    "registration_token": "a91...",
-    "lease_id": "c4b...",
-    "lease_expires_at": 1780000000.0,
-    "leased_by": "lumi-worker-1",
-    "delivery_count": 1,
-    "endpoint": "/v1/chat/completions",
-    "method": "POST",
-    "headers": {},
-    "body": {
-      "model": "local-model",
-      "messages": []
-    }
-  },
   "requests": [
     {
       "request_id": "7fd...",
-      "lease_id": "c4b..."
+      "rollout_id": "run-001",
+      "registration_token": "a91...",
+      "lease_id": "c4b...",
+      "lease_expires_at": 1780000000.0,
+      "leased_by": "lumi-worker-1",
+      "delivery_count": 1,
+      "endpoint": "/v1/chat/completions",
+      "method": "POST",
+      "headers": {},
+      "body": {
+        "encoding": "json",
+        "value": {
+          "model": "local-model",
+          "messages": []
+        }
+      }
     }
   ]
 }
@@ -249,7 +240,7 @@ After calling local inference, post the OpenAI-compatible response body:
 curl -sS -X POST https://relay.example.org/worker/respond \
   -H "Authorization: Bearer $WORKER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"response\":{\"choices\":[]}}"
+  -d "{\"registration_token\":\"$REGISTRATION_TOKEN\",\"request_id\":\"7fd...\",\"lease_id\":\"c4b...\",\"body\":{\"encoding\":\"json\",\"value\":{\"choices\":[]}}}"
 ```
 
 Duplicate responses for already-completed requests are accepted and reported as

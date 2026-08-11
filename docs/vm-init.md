@@ -18,9 +18,6 @@ Each init request includes:
 - for sandbox nodes, the exact patched `runsc` commit, storage-native registry,
   cache, and network policy.
 
-Sandbox CPU, memory, and disk overcommit are fixed at `1.0`. Builder nodes may
-advertise separate compute overcommit because they do not admit sandboxes.
-
 ## Verified bundle
 
 `deploy-all-in-one` produces separate sandbox and builder bundles. Each bundle

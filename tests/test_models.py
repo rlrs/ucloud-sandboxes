@@ -56,7 +56,6 @@ class VmJobParsingTests(unittest.TestCase):
         job = instance_from_payload(payload)
 
         self.assertEqual(job.id, "12345311")
-        self.assertTrue(job.is_vm)
         self.assertEqual(job.state, "IN_QUEUE")
         self.assertEqual(job.product_id, "cpu-amd-zen5-2-vcpu")
         self.assertEqual(job.cpu, 2)
@@ -104,18 +103,26 @@ class VmJobParsingTests(unittest.TestCase):
 
 class HeartbeatContractTests(unittest.TestCase):
     def test_runtime_metrics_reject_malformed_or_noncanonical_values(self) -> None:
-        timestamp = utc_now().isoformat()
+        metrics = NodeRuntimeMetrics(collected_at=utc_now(), cpu_percent=12.5)
+        canonical = metrics.to_dict()
         malformed = (
-            {"collected_at": timestamp, "cpu_percent": "nan"},
-            {"collected_at": timestamp, "cpu_count": "invalid"},
-            {"collected_at": timestamp, "memory_total_mb": -1},
-            {"collected_at": timestamp, "imagePullActiveOperations": 3},
-            {"collected_at": timestamp, "storage_device_pool_enabled": 1},
+            {**canonical, "cpu_percent": "12.5"},
+            {**canonical, "cpu_percent": True},
+            {**canonical, "cpu_vcpu": float("nan")},
+            {**canonical, "cpu_count": "1"},
+            {**canonical, "cpu_count": True},
+            {**canonical, "memory_total_mb": -1},
+            {**canonical, "storage_device_pool_enabled": 1},
+            {key: value for key, value in canonical.items() if key != "cpu_count"},
+            {**canonical, "imagePullActiveOperations": 3},
         )
 
         for payload in malformed:
             with self.subTest(payload=payload):
                 self.assertIsNone(NodeRuntimeMetrics.from_dict(payload))
+
+        self.assertEqual(canonical["collected_at"], metrics.collected_at.isoformat())
+        self.assertEqual(NodeRuntimeMetrics.from_dict(canonical), metrics)
 
     def test_resource_quantity_rejects_permissive_values(self) -> None:
         with self.assertRaises(ValueError):

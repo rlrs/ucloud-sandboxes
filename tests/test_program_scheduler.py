@@ -17,11 +17,21 @@ from ucloud_sandboxes.program_scheduler import (
 from ucloud_sandboxes.routing import ProgramRequestState, SandboxRoute
 
 
+def sandbox_route(**values: object) -> SandboxRoute:
+    values.setdefault("resources", ResourceQuantity())
+    values.setdefault("spec", {"id": values.get("sandbox_id")})
+    values.setdefault("state", "unknown")
+    values.setdefault("generation", 1)
+    values.setdefault("create_operation_id", "create-test-route")
+    values.setdefault("spec_hash", "a" * 64)
+    return SandboxRoute(**values)  # type: ignore[arg-type]
+
+
 class ProgramSchedulerTests(unittest.TestCase):
     def test_shadow_wake_queue_ages_first_and_prefers_local_hard_fit(self) -> None:
         now = utc_now()
         routes = [
-            SandboxRoute(
+            sandbox_route(
                 sandbox_id=f"sandbox-{index}",
                 node_id="node-1",
                 job_id="job-1",
@@ -97,7 +107,7 @@ class ProgramSchedulerTests(unittest.TestCase):
         self.assertEqual(plan["unplaced_count"], 0)
 
     def test_shadow_wake_queue_reports_unplaced_hard_shape(self) -> None:
-        route = SandboxRoute(
+        route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
             job_id="job-1",
@@ -144,7 +154,7 @@ class ProgramSchedulerTests(unittest.TestCase):
 
     def test_program_demand_deduplicates_concurrent_requests_per_sandbox(self) -> None:
         now = utc_now()
-        route = SandboxRoute(
+        route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
             job_id="job-1",
@@ -204,7 +214,7 @@ class ProgramSchedulerTests(unittest.TestCase):
         )
 
     def test_completed_acting_request_does_not_hide_new_model_wait(self) -> None:
-        route = SandboxRoute(
+        route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
             job_id="job-1",
@@ -260,7 +270,7 @@ class ProgramSchedulerTests(unittest.TestCase):
         routes = []
         requests = []
         for index in range(4):
-            route = SandboxRoute(
+            route = sandbox_route(
                 sandbox_id=f"sandbox-{index}",
                 node_id="node-1",
                 job_id="job-1",
@@ -303,7 +313,7 @@ class ProgramSchedulerTests(unittest.TestCase):
         )
 
     def test_pending_wake_is_not_counted_twice(self) -> None:
-        route = SandboxRoute(
+        route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
             job_id="job-1",
@@ -341,7 +351,7 @@ class ProgramSchedulerTests(unittest.TestCase):
                 disk_mb=100000,
             ),
         )
-        route = SandboxRoute(
+        route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
             job_id="job-1",

@@ -6,23 +6,19 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from ucloud_sandboxes.hibernation import (
-    HibernationArtifactFile,
     HibernationArtifactStore,
     HibernationAuthority,
-    HibernationCapacityError,
     HibernationValidationError,
     HibernationConflictError,
-    HibernationDiskLedger,
     HibernationError,
     HibernationFileRole,
     HibernationJournal,
-    HibernationJournalStore,
     HibernationManifest,
     HibernationReconciler,
     HibernationRecoveryAction,
     HibernationRuntimeFingerprint,
     HibernationState,
-    HibernationQuotaError,
+    LocalHibernationArtifactFile,
     classify_hibernation_recovery,
     hibernation_disk_reservation_mb,
     hibernation_memory_backing_reservation_mb,
@@ -86,9 +82,10 @@ class HibernationTests(unittest.TestCase):
             created_ns=1,
             runtime=self._runtime(),
             files=tuple(
-                HibernationArtifactFile.from_path(path, role=role)
+                LocalHibernationArtifactFile.from_path(path, role=role)
                 for role, path in paths.items()
             ),
+            managed_process_sha256=DIGEST_C,
         )
 
     def test_manifest_round_trip_and_metadata_tampering(self) -> None:
@@ -120,6 +117,23 @@ class HibernationTests(unittest.TestCase):
                     runtime_sha256=DIGEST_C,
                 )
 
+    def test_node_compatibility_excludes_only_sandbox_rootfs(self) -> None:
+        runtime = self._runtime()
+        self.assertEqual(
+            replace(runtime, rootfs_sha256=DIGEST_C).node_compatibility_sha256,
+            runtime.node_compatibility_sha256,
+        )
+        for field, value in (
+            ("runsc_sha256", DIGEST_C),
+            ("runsc_commit", "f" * 40),
+            ("boot_config_sha256", DIGEST_A),
+        ):
+            with self.subTest(field=field):
+                self.assertNotEqual(
+                    replace(runtime, **{field: value}).node_compatibility_sha256,
+                    runtime.node_compatibility_sha256,
+                )
+
     def test_manifest_validates_exact_file_identity_without_hashing_contents(
         self,
     ) -> None:
@@ -132,9 +146,7 @@ class HibernationTests(unittest.TestCase):
             replacement = root / "replacement"
             replacement.write_bytes(memory.read_bytes())
             os.replace(replacement, memory)
-            with self.assertRaisesRegex(
-                HibernationValidationError, "identity changed"
-            ):
+            with self.assertRaisesRegex(HibernationValidationError, "identity changed"):
                 manifest.validate_files(root)
 
     def test_storage_native_manifest_allows_device_reassignment_only(self) -> None:
@@ -144,8 +156,7 @@ class HibernationTests(unittest.TestCase):
             remounted = replace(
                 manifest,
                 files=tuple(
-                    replace(item, device=item.device + 1)
-                    for item in manifest.files
+                    replace(item, device=item.device + 1) for item in manifest.files
                 ),
             )
 
@@ -182,8 +193,7 @@ class HibernationTests(unittest.TestCase):
             remounted = replace(
                 manifest,
                 files=tuple(
-                    replace(item, device=item.device + 1)
-                    for item in manifest.files
+                    replace(item, device=item.device + 1) for item in manifest.files
                 ),
             )
 
@@ -216,29 +226,31 @@ class HibernationTests(unittest.TestCase):
             raw["unexpected"] = True
             with self.assertRaisesRegex(ValueError, "invalid schema"):
                 HibernationManifest.from_dict(raw)
+            raw = manifest.to_dict()
+            raw.pop("managed_process_sha256")
+            with self.assertRaisesRegex(ValueError, "invalid schema"):
+                HibernationManifest.from_dict(raw)
+            raw = manifest.to_dict()
+            raw["version"] = 1
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                HibernationManifest.from_dict(raw)
+            raw = manifest.to_dict()
+            local = raw["files"][0]
+            local.update(local.pop("artifact"))
+            with self.assertRaisesRegex(ValueError, "invalid schema"):
+                HibernationManifest.from_dict(raw)
 
-    def test_artifact_store_adopts_and_durably_publishes_generation(self) -> None:
+    def test_artifact_store_durably_publishes_generation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             store_root = root / "artifacts"
-            active_root = root / "active"
-            active_root.mkdir(mode=0o700)
-            active_memory = active_root / "application_memory.img"
-            active_memory.write_bytes(b"memory")
             store = HibernationArtifactStore(store_root.resolve())
             generation = store.prepare_generation(
                 sandbox_id="sandbox-1",
                 sandbox_generation=7,
                 hibernation_generation=1,
             )
-            adopted = store.adopt_file(
-                active_root=active_root,
-                active_name=active_memory.name,
-                generation=generation,
-                artifact_name=active_memory.name,
-            )
-            self.assertFalse(active_memory.exists())
-            self.assertEqual(adopted.read_bytes(), b"memory")
+            (generation / "application_memory.img").write_bytes(b"memory")
             (generation / "checkpoint.img").write_bytes(b"kernel")
             (generation / "pages_meta.img").write_bytes(b"metadata")
             manifest = HibernationManifest(
@@ -251,19 +263,20 @@ class HibernationTests(unittest.TestCase):
                 created_ns=1,
                 runtime=self._runtime(),
                 files=(
-                    HibernationArtifactFile.from_path(
+                    LocalHibernationArtifactFile.from_path(
                         generation / "application_memory.img",
                         role=HibernationFileRole.MAIN_MEMORY,
                     ),
-                    HibernationArtifactFile.from_path(
+                    LocalHibernationArtifactFile.from_path(
                         generation / "checkpoint.img",
                         role=HibernationFileRole.KERNEL_STATE,
                     ),
-                    HibernationArtifactFile.from_path(
+                    LocalHibernationArtifactFile.from_path(
                         generation / "pages_meta.img",
                         role=HibernationFileRole.ALLOCATOR_METADATA,
                     ),
                 ),
+                managed_process_sha256=DIGEST_C,
             )
 
             store.publish_complete(manifest)
@@ -276,7 +289,10 @@ class HibernationTests(unittest.TestCase):
                 manifest,
             )
             self.assertEqual(
-                store.inventory()[0].metadata_sha256,
+                store.inventory_incarnation(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=7,
+                )[0].metadata_sha256,
                 manifest.metadata_sha256,
             )
 
@@ -288,7 +304,13 @@ class HibernationTests(unittest.TestCase):
                 sandbox_generation=7,
                 hibernation_generation=1,
             )
-            self.assertEqual(store.inventory()[0].state, "pending")
+            self.assertEqual(
+                store.inventory_incarnation(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=7,
+                )[0].state,
+                "pending",
+            )
             with self.assertRaisesRegex(
                 HibernationValidationError, "COMPLETE is absent"
             ):
@@ -300,9 +322,7 @@ class HibernationTests(unittest.TestCase):
 
     def test_ignored_overlay_root_can_be_traversable_but_not_writable(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = HibernationArtifactStore(
-                (Path(raw_dir) / "artifacts").resolve()
-            )
+            store = HibernationArtifactStore((Path(raw_dir) / "artifacts").resolve())
             store.root.mkdir(mode=0o700)
             incarnation = store.root / "sandbox-1.sandbox-7"
             incarnation.mkdir(mode=0o700)
@@ -870,65 +890,6 @@ class HibernationTests(unittest.TestCase):
             self.assertFalse(replay.changed)
             self.assertEqual(resolver_calls, 1)
 
-    def test_journal_store_reconciles_complete_startup_inventory(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            proc_root = root / "proc"
-            proc_root.mkdir()
-            store = HibernationJournalStore((root / "journals").resolve())
-            artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            for index in range(2):
-                pid = 101 + index
-                ticks = 1001 + index
-                store.journal(
-                    sandbox_id=f"sandbox-{index}",
-                    sandbox_generation=7,
-                ).initialize_running(
-                    sandbox_id=f"sandbox-{index}",
-                    sandbox_generation=7,
-                    spec_sha256=DIGEST_B,
-                    operation_id=f"create:{index}",
-                    sentry_pid=pid,
-                    sentry_start_time_ticks=ticks,
-                )
-                self._write_proc_identity(proc_root, pid, ticks)
-
-            results = store.reconcile_all(
-                artifacts,
-                runtime_sha256=self._runtime().digest,
-                proc_root=proc_root,
-            )
-
-            self.assertEqual(len(results), 2)
-            self.assertTrue(
-                all(
-                    item.action == HibernationRecoveryAction.ADOPT_RUNNING
-                    and not item.changed
-                    for item in results
-                )
-            )
-
-    def test_journal_store_refuses_orphan_artifact_generation(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            store = HibernationJournalStore((root / "journals").resolve())
-            artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            artifacts.prepare_generation(
-                sandbox_id="orphan",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-
-            with self.assertRaisesRegex(
-                HibernationConflictError,
-                "without an owning journal",
-            ):
-                store.reconcile_all(
-                    artifacts,
-                    runtime_sha256=self._runtime().digest,
-                    proc_root=root / "proc",
-                )
-
     def test_reconciler_rejects_complete_artifact_from_another_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -991,192 +952,6 @@ class HibernationTests(unittest.TestCase):
             ),
             8192 + 5120 + 64 + 64,
         )
-
-    def test_disk_ledger_reserves_worst_case_and_replays_exactly(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            ledger = HibernationDiskLedger(
-                (Path(raw_dir) / "disk-ledger.json").resolve(),
-                capacity_mb=30_000,
-                safety_headroom_mb=2_000,
-                first_project_id=300_000,
-            )
-            reservation = ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                memory_mb=4096,
-                writable_disk_mb=8192,
-            )
-            self.assertEqual(reservation.project_id, 300_000)
-            self.assertEqual(reservation.hibernation_quota_mb, 5120 + 4096 + 64)
-            self.assertEqual(reservation.total_mb, 8192 + 5120 + 4096 + 64)
-            self.assertEqual(
-                ledger.reserve(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                    memory_mb=4096,
-                    writable_disk_mb=8192,
-                ),
-                reservation,
-            )
-            inventory = ledger.inventory()
-            self.assertEqual(inventory.reserved_mb, reservation.total_mb)
-            self.assertEqual(
-                inventory.available_mb,
-                30_000 - 2_000 - reservation.total_mb,
-            )
-
-            restarted = HibernationDiskLedger(
-                ledger.path,
-                capacity_mb=30_000,
-                safety_headroom_mb=2_000,
-                first_project_id=1,
-            )
-            self.assertEqual(restarted.inventory(), inventory)
-
-    def test_disk_ledger_rejects_overcommit_and_resource_shape_changes(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            ledger = HibernationDiskLedger(
-                (Path(raw_dir) / "disk-ledger.json").resolve(),
-                capacity_mb=20_000,
-                safety_headroom_mb=1_000,
-            )
-            ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                memory_mb=4096,
-                writable_disk_mb=4096,
-            )
-            with self.assertRaisesRegex(
-                HibernationConflictError, "different resource bounds"
-            ):
-                ledger.reserve(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=1,
-                    memory_mb=4096,
-                    writable_disk_mb=4097,
-                )
-            with self.assertRaisesRegex(HibernationCapacityError, "fail-closed"):
-                ledger.reserve(
-                    sandbox_id="sandbox-2",
-                    sandbox_generation=1,
-                    memory_mb=4096,
-                    writable_disk_mb=4096,
-                )
-            self.assertEqual(len(ledger.inventory().reservations), 1)
-
-    def test_disk_ledger_fences_release_and_project_id_reuse(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            ledger = HibernationDiskLedger(
-                (Path(raw_dir) / "disk-ledger.json").resolve(),
-                capacity_mb=40_000,
-                safety_headroom_mb=1_000,
-                first_project_id=400_000,
-            )
-            first = ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                memory_mb=1024,
-                writable_disk_mb=2048,
-            )
-            self.assertEqual(
-                ledger.release(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                ),
-                first,
-            )
-            self.assertIsNone(
-                ledger.release(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                )
-            )
-            with self.assertRaisesRegex(HibernationConflictError, "tombstone"):
-                ledger.reserve(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                    memory_mb=1024,
-                    writable_disk_mb=2048,
-                )
-            second = ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=8,
-                memory_mb=1024,
-                writable_disk_mb=2048,
-            )
-            self.assertEqual(second.project_id, first.project_id + 1)
-            with self.assertRaisesRegex(
-                HibernationConflictError, "another sandbox generation"
-            ):
-                ledger.release(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                )
-
-    def test_disk_ledger_quota_reconciliation_is_exact_and_fail_closed(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            ledger = HibernationDiskLedger(
-                (Path(raw_dir) / "disk-ledger.json").resolve(),
-                capacity_mb=40_000,
-                safety_headroom_mb=1_000,
-            )
-            reservation = ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                memory_mb=1024,
-                writable_disk_mb=2048,
-            )
-            identity = ("sandbox-1", 7)
-            self.assertEqual(
-                ledger.require_quota_consistency(
-                    expected_incarnations=[identity],
-                    project_hard_limits_mb={
-                        reservation.project_id: reservation.hibernation_quota_mb,
-                    },
-                    path_project_ids={identity: reservation.project_id},
-                ).reservations,
-                (reservation,),
-            )
-            with self.assertRaisesRegex(HibernationQuotaError, "hard limit"):
-                ledger.require_quota_consistency(
-                    expected_incarnations=[identity],
-                    project_hard_limits_mb={reservation.project_id: 1},
-                    path_project_ids={identity: reservation.project_id},
-                )
-            with self.assertRaisesRegex(HibernationQuotaError, "incarnations"):
-                ledger.require_quota_consistency(
-                    expected_incarnations=[],
-                    project_hard_limits_mb={
-                        reservation.project_id: reservation.hibernation_quota_mb,
-                    },
-                    path_project_ids={identity: reservation.project_id},
-                )
-
-    def test_disk_ledger_rejects_corruption_and_capacity_drift(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = (Path(raw_dir) / "disk-ledger.json").resolve()
-            ledger = HibernationDiskLedger(
-                path,
-                capacity_mb=40_000,
-                safety_headroom_mb=1_000,
-            )
-            ledger.reserve(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                memory_mb=1024,
-                writable_disk_mb=2048,
-            )
-            with self.assertRaisesRegex(HibernationQuotaError, "differs"):
-                HibernationDiskLedger(
-                    path,
-                    capacity_mb=39_999,
-                    safety_headroom_mb=1_000,
-                ).inventory()
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            raw["unexpected"] = True
-            path.write_text(json.dumps(raw), encoding="utf-8")
-            with self.assertRaisesRegex(HibernationQuotaError, "invalid"):
-                ledger.inventory()
 
     def test_json_record_round_trip_is_strict(self) -> None:
         with TemporaryDirectory() as raw_dir:

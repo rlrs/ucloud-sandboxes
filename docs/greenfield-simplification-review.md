@@ -1,6 +1,7 @@
 # Greenfield simplification review
 
-Status: implemented and validated, 2026-08-07.
+Status: historical review, 2026-08-07. Active implementation and remaining
+compatibility deletions are tracked in `simplification-roadmap.md`.
 
 This project is greenfield. Runtime compatibility, wire aliases, legacy state
 adoption, downgrade paths, deprecated flags, and parallel implementations are

@@ -6,7 +6,6 @@ from ucloud_sandboxes.providers.ucloud.payloads import (
     apply_private_network_attachment,
     apply_public_link_attachment,
     private_network_ids_from_resources,
-    public_link_ids_from_resources,
 )
 from ucloud_sandboxes.networking import (
     stable_hostname,
@@ -94,19 +93,6 @@ class NetworkingTests(unittest.TestCase):
                 ]
             ),
             ("net-1", "net-2"),
-        )
-
-    def test_extracts_public_link_ids(self) -> None:
-        self.assertEqual(
-            public_link_ids_from_resources(
-                [
-                    {"type": "ingress", "id": "link-1", "port": 8090},
-                    {"type": "ingress", "id": "link-1", "port": 8080},
-                    {"type": "private_network", "id": "net-1"},
-                    {"type": "ingress", "id": "link-2"},
-                ]
-            ),
-            ("link-1", "link-2"),
         )
 
     def test_stable_hostname_is_dns_label_like(self) -> None:

@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+from typing import Literal
 
 from .deployment import DEFAULT_INIT_VERSION, package_version
 from .direct_network import DirectNetworkTcpEgress
@@ -93,6 +94,7 @@ DEFAULT_SSH_OPTIONS = (
 class VmInitOptions:
     job_id: str
     heartbeat_url: str
+    role: Literal["sandbox", "builder"] = "sandbox"
     heartbeat_bearer_token_file: str = ""
     heartbeat_bearer_token: str = ""
     node_control_bearer_token_file: str = ""
@@ -105,25 +107,15 @@ class VmInitOptions:
     package_sha256: str = ""
     node_agent_host: str = DEFAULT_NODE_AGENT_HOST
     node_agent_port: int = DEFAULT_NODE_AGENT_PORT
-    node_url: str = ""
-    agent_version: str = ""
     deployment_id: str = ""
-    init_version: str = DEFAULT_INIT_VERSION
     ssh_port_start: int = DEFAULT_SSH_PORT_START
     ssh_port_end: int = DEFAULT_SSH_PORT_END
     total_resources: ResourceQuantity = ResourceQuantity()
-    cpu_overcommit: float = 1.0
-    memory_overcommit: float = 1.0
-    disk_overcommit: float = 1.0
     docker_quota_image_gb: int = DEFAULT_DOCKER_QUOTA_IMAGE_GB
     swap_gb: int = DEFAULT_SWAP_GB
-    docker_mtu: int = DEFAULT_DOCKER_MTU
-    docker_max_concurrent_downloads: int = DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS
     max_concurrent_image_pulls: int = DEFAULT_MAX_CONCURRENT_IMAGE_PULLS
     docker_insecure_registries: tuple[str, ...] = ()
     host_aliases: tuple[str, ...] = ()
-    enable_image_builds: bool = False
-    buildx_direct_push: bool = False
     buildx_cache_ref: str = ""
     direct_runsc_commit: str = ""
     direct_network: str = "none"
@@ -142,13 +134,10 @@ class VmInitOptions:
         return self.node_id or f"ucloud-vm-{self.job_id}"
 
     def advertised_node_url(self) -> str:
-        return (
-            self.node_url
-            or f"http://{self.normalized_node_id()}:{self.node_agent_port}"
-        )
+        return f"http://{self.normalized_node_id()}:{self.node_agent_port}"
 
     def capabilities(self) -> tuple[str, ...]:
-        if self.enable_image_builds:
+        if self.role == "builder":
             return ("image-cache", "image-build", "snapshot")
         return ("sandbox", "image-cache")
 
@@ -200,10 +189,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
     heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
     authorized_keys_blob = "\n".join(options.init_authorized_keys)
-    runtime_role = "builder" if options.enable_image_builds else "sandbox"
+    runtime_role = options.role
     runtime_packages = (
         BUILDER_RUNTIME_PACKAGES
-        if options.enable_image_builds
+        if options.role == "builder"
         else SANDBOX_RUNTIME_PACKAGES
     )
     runtime_packages_python = repr(list(runtime_packages))
@@ -216,9 +205,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         for key, value in sorted((options.labels or {}).items())
     )
     builder_flags = ""
-    if options.enable_image_builds and options.buildx_direct_push:
+    if options.role == "builder":
         builder_flags += " --buildx-direct-push"
-    if options.enable_image_builds and options.buildx_cache_ref:
+    if options.role == "builder" and options.buildx_cache_ref:
         builder_flags += f" --buildx-cache-ref {shlex.quote(options.buildx_cache_ref)}"
     deployment_flag = " --deployment-id ${UCLOUD_DEPLOYMENT_ID}"
     heartbeat_auth_flag = " --bearer-token-file ${UCLOUD_HEARTBEAT_BEARER_TOKEN_FILE}"
@@ -228,7 +217,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     version_flags = (
         " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
     )
-    if not options.enable_image_builds:
+    if options.role == "sandbox":
         writable_disk_mb = (
             int(options.total_resources.disk_mb)
             - options.docker_quota_image_gb * 1024
@@ -255,7 +244,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             f"{deployment_flag}{version_flags}"
             " --state-root ${UCLOUD_STATE_DIR}/direct-runtime"
             " --image-cache-root ${UCLOUD_DIRECT_IMAGE_CACHE_ROOT}"
-            " --image-file ${UCLOUD_STATE_DIR}/images.json"
+            " --image-file ${UCLOUD_STATE_DIR}/images.sqlite"
             " --volume-mount-root ${UCLOUD_STORAGE_NATIVE_MOUNT_ROOT}"
             " --runsc ${UCLOUD_DIRECT_RUNSC}"
             " --runsc-commit ${UCLOUD_DIRECT_RUNSC_COMMIT}"
@@ -270,9 +259,6 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
-            " --cpu-overcommit ${UCLOUD_CPU_OVERCOMMIT}"
-            " --memory-overcommit ${UCLOUD_MEMORY_OVERCOMMIT}"
-            " --disk-overcommit 1"
             f"{node_control_auth_flag}"
         )
         node_service_user = "root"
@@ -297,13 +283,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --port ${UCLOUD_NODE_AGENT_PORT}"
             f"{deployment_flag}{version_flags}"
             " --state-file ${UCLOUD_STATE_DIR}/builder-node.json"
-            " --image-file ${UCLOUD_STATE_DIR}/images.json"
+            " --image-file ${UCLOUD_STATE_DIR}/images.sqlite"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_TOTAL_DISK_MB}"
-            " --cpu-overcommit ${UCLOUD_CPU_OVERCOMMIT}"
-            " --memory-overcommit ${UCLOUD_MEMORY_OVERCOMMIT}"
-            " --disk-overcommit ${UCLOUD_DISK_OVERCOMMIT}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             f"{builder_flags}{node_control_auth_flag}"
         )
@@ -344,21 +327,18 @@ UCLOUD_PACKAGE_EXPECTED_SHA256={shlex.quote(options.package_sha256)}
 UCLOUD_NODE_AGENT_HOST={shlex.quote(options.node_agent_host)}
 UCLOUD_NODE_AGENT_PORT={options.node_agent_port}
 UCLOUD_NODE_URL={shlex.quote(options.advertised_node_url())}
-UCLOUD_AGENT_VERSION={shlex.quote(options.agent_version or package_version())}
+UCLOUD_AGENT_VERSION={shlex.quote(package_version())}
 UCLOUD_DEPLOYMENT_ID={shlex.quote(options.deployment_id)}
-UCLOUD_INIT_VERSION={shlex.quote(options.init_version)}
+UCLOUD_INIT_VERSION={shlex.quote(DEFAULT_INIT_VERSION)}
 UCLOUD_SSH_PORT_START={options.ssh_port_start}
 UCLOUD_SSH_PORT_END={options.ssh_port_end}
 UCLOUD_TOTAL_VCPU={options.total_resources.vcpu}
 UCLOUD_TOTAL_MEMORY_MB={options.total_resources.memory_mb}
 UCLOUD_TOTAL_DISK_MB={options.total_resources.disk_mb}
-UCLOUD_CPU_OVERCOMMIT={options.cpu_overcommit}
-UCLOUD_MEMORY_OVERCOMMIT={options.memory_overcommit}
-UCLOUD_DISK_OVERCOMMIT={options.disk_overcommit}
 UCLOUD_DOCKER_QUOTA_IMAGE_GB={options.docker_quota_image_gb}
 UCLOUD_SWAP_GB={options.swap_gb}
-UCLOUD_DOCKER_MTU={options.docker_mtu}
-UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS={options.docker_max_concurrent_downloads}
+UCLOUD_DOCKER_MTU={DEFAULT_DOCKER_MTU}
+UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS={DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS}
 UCLOUD_MAX_CONCURRENT_IMAGE_PULLS={options.max_concurrent_image_pulls}
 UCLOUD_DOCKER_QUOTA_IMAGE={shlex.quote(docker_quota_image)}
 UCLOUD_DOCKER_QUOTA_ROOT={shlex.quote(docker_quota_root)}
@@ -416,7 +396,6 @@ if [ -z "$UCLOUD_SERVICE_HOME" ]; then
   echo "Could not determine home for $UCLOUD_SERVICE_USER" >&2
   exit 1
 fi
-
 $SUDO mkdir -p "$UCLOUD_WORK_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/ucloud-sandboxes
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_WORK_DIR"
 $SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
@@ -454,20 +433,6 @@ UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
 UCLOUD_OS_VERSION_ID="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
 UCLOUD_OS_CODENAME="$(. /etc/os-release && printf '%s' "${{UBUNTU_CODENAME:-${{VERSION_CODENAME:-}}}}")"
 UCLOUD_ARCHITECTURE="$(dpkg --print-architecture)"
-UCLOUD_PACKAGE_BUNDLE_DIR=""
-UCLOUD_PACKAGE_BUNDLE_SHA256=""
-UCLOUD_PREBUILT_AGENT_ARCHIVE=""
-UCLOUD_PREBUILT_AGENT_SHA256=""
-UCLOUD_BUNDLED_KERNEL_MODULE_DIR=""
-UCLOUD_BUNDLED_DIRECT_RUNSC=""
-UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256=""
-UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT=""
-UCLOUD_BUNDLED_MANAGED_INIT=""
-UCLOUD_BUNDLED_MANAGED_INIT_SHA256=""
-UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND=""
-UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256=""
-UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST=""
-UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE=""
 if [ ! -f "$UCLOUD_PACKAGE_SPEC" ]; then
   echo "A staged node package bundle is required" >&2
   exit 1
@@ -493,152 +458,7 @@ tar --no-same-owner --no-same-permissions -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOU
 rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
 mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
 echo "Using verified node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
-if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
-    UCLOUD_DIRECT_RUNSC_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
-import json
-from pathlib import Path
-import re
-import sys
-
-runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
-direct = runtime.get("direct_runsc") if isinstance(runtime, dict) else None
-if not isinstance(direct, dict):
-    raise SystemExit("direct runtime binary metadata is absent")
-if direct.get("file") != "runtime/direct/runsc":
-    raise SystemExit("invalid direct runtime binary filename")
-sha256 = str(direct.get("sha256") or "")
-commit = str(direct.get("commit") or "")
-size = direct.get("size")
-if (
-    not re.fullmatch(r"[0-9a-f]{{64}}", sha256)
-    or not re.fullmatch(r"[0-9a-f]{{40}}", commit)
-    or not isinstance(size, int)
-    or size <= 0
-):
-    raise SystemExit("invalid direct runtime binary metadata")
-print(f"{{sha256}}\t{{commit}}\t{{size}}")
-PY
-)"
-    IFS=$'\t' read -r UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256 UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT UCLOUD_BUNDLED_DIRECT_RUNSC_SIZE <<< "$UCLOUD_DIRECT_RUNSC_SPEC"
-    UCLOUD_BUNDLED_DIRECT_RUNSC="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/runsc"
-    test -f "$UCLOUD_BUNDLED_DIRECT_RUNSC"
-    test "$(stat -c %s "$UCLOUD_BUNDLED_DIRECT_RUNSC")" = "$UCLOUD_BUNDLED_DIRECT_RUNSC_SIZE"
-    printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_BUNDLED_DIRECT_RUNSC" | sha256sum --check --status -
-    if [ "$UCLOUD_BUNDLED_DIRECT_RUNSC_COMMIT" != "$UCLOUD_DIRECT_RUNSC_COMMIT" ]; then
-      echo "Bundled direct runsc commit does not match deployment configuration" >&2
-      exit 1
-    fi
-    UCLOUD_MANAGED_INIT_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
-import json
-from pathlib import Path
-import re
-import sys
-
-runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("runtime")
-managed = runtime.get("managed_init") if isinstance(runtime, dict) else None
-if not isinstance(managed, dict):
-    raise SystemExit("managed-process init metadata is absent")
-if managed.get("file") != "runtime/direct/ucloud-sandbox-init":
-    raise SystemExit("invalid managed-process init filename")
-sha256 = str(managed.get("sha256") or "")
-size = managed.get("size")
-if not re.fullmatch(r"[0-9a-f]{{64}}", sha256) or not isinstance(size, int) or size <= 0:
-    raise SystemExit("invalid managed-process init metadata")
-print(f"{{sha256}}\t{{size}}")
-PY
-)"
-    IFS=$'\t' read -r UCLOUD_BUNDLED_MANAGED_INIT_SHA256 UCLOUD_BUNDLED_MANAGED_INIT_SIZE <<< "$UCLOUD_MANAGED_INIT_SPEC"
-    UCLOUD_BUNDLED_MANAGED_INIT="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/ucloud-sandbox-init"
-    test -f "$UCLOUD_BUNDLED_MANAGED_INIT"
-    test "$(stat -c %s "$UCLOUD_BUNDLED_MANAGED_INIT")" = "$UCLOUD_BUNDLED_MANAGED_INIT_SIZE"
-    printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_BUNDLED_MANAGED_INIT" | sha256sum --check --status -
-    UCLOUD_STORAGE_NATIVE_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" "$UCLOUD_PACKAGE_BUNDLE_DIR" "$UCLOUD_ARCHITECTURE" <<'PY'
-import json
-import hashlib
-from pathlib import Path
-import re
-import sys
-
-bundle_manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-bundle_dir = Path(sys.argv[2])
-architecture = sys.argv[3]
-runtime = bundle_manifest.get("runtime")
-storage = runtime.get("storage_native") if isinstance(runtime, dict) else None
-if not isinstance(storage, dict):
-    raise SystemExit("storage-native backend metadata is absent")
-expected_files = {{
-    "file": "runtime/storage-native/backend",
-    "manifest_file": "runtime/storage-native/build-manifest.json",
-    "license_file": "runtime/storage-native/LICENSE",
-}}
-for key, expected in expected_files.items():
-    if storage.get(key) != expected:
-        raise SystemExit(f"invalid storage-native {{key}}")
-for key in ("sha256", "manifest_sha256", "license_sha256"):
-    if not re.fullmatch(r"[0-9a-f]{{64}}", str(storage.get(key) or "")):
-        raise SystemExit(f"invalid storage-native {{key}}")
-if storage.get("agentenv_commit") != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:
-    raise SystemExit("storage-native backend is not the pinned AgentEnv commit")
-host_arch = str(storage.get("host_architecture") or "")
-accepted_arches = {{"amd64": {{"x86_64"}}, "arm64": {{"aarch64"}}}}
-if host_arch not in accepted_arches.get(architecture, set()):
-    raise SystemExit("storage-native backend architecture does not match this VM")
-if not isinstance(storage.get("size"), int) or storage["size"] <= 0:
-    raise SystemExit("invalid storage-native backend size")
-paths = {{key: bundle_dir / value for key, value in expected_files.items()}}
-for key, path in paths.items():
-    if not path.is_file():
-        raise SystemExit(f"missing storage-native {{key}}")
-if paths["file"].stat().st_size != storage["size"]:
-    raise SystemExit("storage-native backend size mismatch")
-def digest(path: Path) -> str:
-    value = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            value.update(chunk)
-    return value.hexdigest()
-if digest(paths["file"]) != storage["sha256"]:
-    raise SystemExit("storage-native backend checksum mismatch")
-if digest(paths["manifest_file"]) != storage["manifest_sha256"]:
-    raise SystemExit("storage-native build manifest checksum mismatch")
-if digest(paths["license_file"]) != storage["license_sha256"]:
-    raise SystemExit("storage-native license checksum mismatch")
-build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
-patches = build.get("patches")
-expected_patches = [
-    "agentenv-streaming-dense-export.patch",
-    "agentenv-pooled-delete.patch",
-    "agentenv-owner-identity.patch",
-]
-if (
-    build.get("schema") != 3
-    or build.get("agentenv_commit") != storage["agentenv_commit"]
-    or build.get("artifact_sha256") != storage["sha256"]
-    or build.get("host_architecture") != host_arch
-    or build.get("license") != "MIT"
-    or not isinstance(patches, list)
-    or [item.get("name") for item in patches if isinstance(item, dict)] != expected_patches
-    or not all(
-        re.fullmatch(r"[0-9a-f]{{64}}", str(item.get("sha256") or ""))
-        for item in patches
-    )
-):
-    raise SystemExit("storage-native build manifest provenance mismatch")
-print(
-    f"{{storage['sha256']}}\t"
-    f"{{paths['file']}}\t{{paths['manifest_file']}}\t{{paths['license_file']}}"
-)
-PY
-)"
-    IFS=$'\t' read -r \
-      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256 \
-      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND \
-      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST \
-      UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE \
-      <<< "$UCLOUD_STORAGE_NATIVE_SPEC"
-fi
-python3 - \
-      "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" \
+UCLOUD_PACKAGE_METADATA="$(python3 - \
       "$UCLOUD_PACKAGE_BUNDLE_DIR" \
       "$UCLOUD_OS_ID" "$UCLOUD_OS_VERSION_ID" "$UCLOUD_OS_CODENAME" \
       "$UCLOUD_ARCHITECTURE" <<'PY'
@@ -649,15 +469,16 @@ import re
 from pathlib import Path
 import sys
 
-manifest_path = Path(sys.argv[1])
-bundle_dir = Path(sys.argv[2])
+bundle_dir = Path(sys.argv[1])
 expected_platform = {{
-    "os_id": sys.argv[3],
-    "version_id": sys.argv[4],
-    "codename": sys.argv[5],
-    "architecture": sys.argv[6],
+    "os_id": sys.argv[2],
+    "version_id": sys.argv[3],
+    "codename": sys.argv[4],
+    "architecture": sys.argv[5],
 }}
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest = json.loads(
+    (bundle_dir / "package-bundle.json").read_text(encoding="utf-8")
+)
 if manifest.get("version") != 1:
     raise SystemExit("unsupported node package bundle version")
 runtime = manifest.get("runtime")
@@ -665,9 +486,30 @@ if not isinstance(runtime, dict) or runtime.get("platform") != expected_platform
     raise SystemExit("bundled runtime platform does not match this VM")
 if runtime.get("role") != {runtime_role!r}:
     raise SystemExit("bundled runtime role does not match this VM")
-expected_packages = {runtime_packages_python}
-if runtime.get("packages") != expected_packages:
+if runtime.get("packages") != {runtime_packages_python}:
     raise SystemExit("invalid bundled runtime package list")
+
+def digest(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+
+def verified_artifact(metadata: dict, file_name: str, label: str) -> str:
+    sha256 = str(metadata.get("sha256") or "")
+    size = metadata.get("size")
+    if not re.fullmatch(r"[0-9a-f]{{64}}", sha256) or not isinstance(size, int) or size <= 0:
+        raise SystemExit(f"invalid {{label}} metadata")
+    path = bundle_dir / file_name
+    if not path.is_file():
+        raise SystemExit(f"missing {{label}}")
+    if path.stat().st_size != size:
+        raise SystemExit(f"{{label}} size mismatch")
+    if digest(path) != sha256:
+        raise SystemExit(f"{{label}} checksum mismatch")
+    return sha256
+
 package_dir = bundle_dir / "runtime" / "debs"
 actual_files = {{path.name for path in package_dir.glob("*.deb")}}
 declared_files = set()
@@ -684,11 +526,7 @@ for item in files:
     path = package_dir / filename
     if not path.is_file() or path.stat().st_size != item.get("size"):
         raise SystemExit(f"bundled runtime file size mismatch: {{filename}}")
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    if digest.hexdigest() != item.get("sha256"):
+    if digest(path) != item.get("sha256"):
         raise SystemExit(f"runtime file checksum mismatch: {{filename}}")
 if actual_files != declared_files:
     raise SystemExit("bundled runtime file set mismatch")
@@ -699,15 +537,11 @@ if agent.get("file") != "runtime/agent/node-agent-runtime.tar":
     raise SystemExit("invalid preassembled node-agent runtime filename")
 if agent.get("python") != f"{{sys.version_info.major}}.{{sys.version_info.minor}}":
     raise SystemExit("preassembled node-agent Python version does not match this VM")
-agent_archive = bundle_dir / agent["file"]
-if not agent_archive.is_file() or agent_archive.stat().st_size != agent.get("size"):
-    raise SystemExit("preassembled node-agent runtime size mismatch")
-agent_digest = hashlib.sha256()
-with agent_archive.open("rb") as handle:
-    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-        agent_digest.update(chunk)
-if agent_digest.hexdigest() != agent.get("sha256"):
-    raise SystemExit("preassembled node-agent runtime checksum mismatch")
+agent_sha256 = verified_artifact(
+    agent,
+    "runtime/agent/node-agent-runtime.tar",
+    "preassembled node-agent runtime",
+)
 kernel = runtime.get("kernel")
 if not isinstance(kernel, dict):
     raise SystemExit("bundled kernel metadata is absent")
@@ -734,29 +568,115 @@ for module in modules:
     module_path = module_dir / file_name
     if not module_path.is_file() or module_path.stat().st_size != module.get("size"):
         raise SystemExit(f"bundled kernel module size mismatch: {{file_name}}")
-    module_digest = hashlib.sha256()
-    with module_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            module_digest.update(chunk)
-    if module_digest.hexdigest() != module.get("sha256"):
+    if digest(module_path) != module.get("sha256"):
         raise SystemExit(f"kernel module checksum mismatch: {{file_name}}")
 if actual_modules != declared_modules:
     raise SystemExit("bundled kernel module file set mismatch")
-PY
-echo "Verified pinned Docker/gVisor bundle for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
-UCLOUD_AGENT_RUNTIME_SPEC="$(python3 - "$UCLOUD_PACKAGE_BUNDLE_DIR/package-bundle.json" <<'PY'
-import json
-from pathlib import Path
-import sys
 
-runtime = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["runtime"]
-agent = runtime["agent"]
-print(f"{{agent['sha256']}}\\t{{agent['size']}}")
+result = [agent_sha256]
+if runtime.get("role") == "sandbox":
+    direct = runtime.get("direct_runsc")
+    if not isinstance(direct, dict):
+        raise SystemExit("direct runtime binary metadata is absent")
+    if direct.get("file") != "runtime/direct/runsc":
+        raise SystemExit("invalid direct runtime binary filename")
+    commit = str(direct.get("commit") or "")
+    if not re.fullmatch(r"[0-9a-f]{{40}}", commit):
+        raise SystemExit("invalid direct runtime binary metadata")
+    if commit != {options.direct_runsc_commit!r}:
+        raise SystemExit(
+            "bundled direct runsc commit does not match deployment configuration"
+        )
+    direct_sha256 = verified_artifact(
+        direct, "runtime/direct/runsc", "direct runtime binary"
+    )
+
+    managed = runtime.get("managed_init")
+    if not isinstance(managed, dict):
+        raise SystemExit("managed-process init metadata is absent")
+    if managed.get("file") != "runtime/direct/ucloud-sandbox-init":
+        raise SystemExit("invalid managed-process init filename")
+    managed_sha256 = verified_artifact(
+        managed,
+        "runtime/direct/ucloud-sandbox-init",
+        "managed-process init",
+    )
+
+    storage = runtime.get("storage_native")
+    if not isinstance(storage, dict):
+        raise SystemExit("storage-native backend metadata is absent")
+    expected_files = {{
+        "file": "runtime/storage-native/backend",
+        "manifest_file": "runtime/storage-native/build-manifest.json",
+        "license_file": "runtime/storage-native/LICENSE",
+    }}
+    for key, expected in expected_files.items():
+        if storage.get(key) != expected:
+            raise SystemExit(f"invalid storage-native {{key}}")
+    for key in ("sha256", "manifest_sha256", "license_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{{64}}", str(storage.get(key) or "")):
+            raise SystemExit(f"invalid storage-native {{key}}")
+    if storage.get("agentenv_commit") != {PINNED_STORAGE_NATIVE_AGENTENV_COMMIT!r}:
+        raise SystemExit("storage-native backend is not the pinned AgentEnv commit")
+    host_arch = str(storage.get("host_architecture") or "")
+    accepted_arches = {{"amd64": {{"x86_64"}}, "arm64": {{"aarch64"}}}}
+    if host_arch not in accepted_arches.get(expected_platform["architecture"], set()):
+        raise SystemExit("storage-native backend architecture does not match this VM")
+    storage_sha256 = verified_artifact(
+        storage, expected_files["file"], "storage-native backend"
+    )
+    paths = {{key: bundle_dir / value for key, value in expected_files.items()}}
+    for key in ("manifest_file", "license_file"):
+        if not paths[key].is_file():
+            raise SystemExit(f"missing storage-native {{key}}")
+    if digest(paths["manifest_file"]) != storage["manifest_sha256"]:
+        raise SystemExit("storage-native build manifest checksum mismatch")
+    if digest(paths["license_file"]) != storage["license_sha256"]:
+        raise SystemExit("storage-native license checksum mismatch")
+    build = json.loads(paths["manifest_file"].read_text(encoding="utf-8"))
+    patches = build.get("patches")
+    expected_patches = [
+        "agentenv-streaming-dense-export.patch",
+        "agentenv-pooled-delete.patch",
+        "agentenv-owner-identity.patch",
+    ]
+    if (
+        build.get("schema") != 3
+        or build.get("agentenv_commit") != storage["agentenv_commit"]
+        or build.get("artifact_sha256") != storage["sha256"]
+        or build.get("host_architecture") != host_arch
+        or build.get("license") != "MIT"
+        or not isinstance(patches, list)
+        or [item.get("name") for item in patches if isinstance(item, dict)]
+        != expected_patches
+        or not all(
+            isinstance(item, dict)
+            and re.fullmatch(r"[0-9a-f]{{64}}", str(item.get("sha256") or ""))
+            for item in patches
+        )
+    ):
+        raise SystemExit("storage-native build manifest provenance mismatch")
+    result.extend((direct_sha256, managed_sha256, storage_sha256))
+
+print("\\t".join(result))
 PY
 )"
-IFS=$'\t' read -r UCLOUD_PREBUILT_AGENT_SHA256 UCLOUD_PREBUILT_AGENT_SIZE <<< "$UCLOUD_AGENT_RUNTIME_SPEC"
+IFS=$'\t' read -r \
+  UCLOUD_PREBUILT_AGENT_SHA256 \
+  UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256 \
+  UCLOUD_BUNDLED_MANAGED_INIT_SHA256 \
+  UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256 \
+  <<< "$UCLOUD_PACKAGE_METADATA"
 UCLOUD_PREBUILT_AGENT_ARCHIVE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/agent/node-agent-runtime.tar"
 UCLOUD_BUNDLED_KERNEL_MODULE_DIR="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/kernel/$(uname -r)"
+if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  UCLOUD_BUNDLED_DIRECT_RUNSC="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/runsc"
+  UCLOUD_BUNDLED_MANAGED_INIT="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/direct/ucloud-sandbox-init"
+  UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/backend"
+  UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/build-manifest.json"
+  UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/LICENSE"
+fi
+echo "Verified pinned Docker/gVisor bundle for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
 log_init_phase "package-bundle"
 
 install_bundled_runtime() {{
@@ -884,6 +804,7 @@ for module in "${{UCLOUD_RUNTIME_KERNEL_MODULES[@]}}"; do
 done
 log_init_phase "kernel-modules"
 
+
 if [ "$UCLOUD_SWAP_GB" -gt 0 ]; then
   echo "Preparing bounded host swap"
   $SUDO mkdir -p "$(dirname "$UCLOUD_SWAP_FILE")"
@@ -948,18 +869,6 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   # lifecycle journals.
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
-  if [ -z "$UCLOUD_BUNDLED_DIRECT_RUNSC" ]; then
-    echo "Direct runtime requires a bundle-verified patched runsc binary" >&2
-    exit 1
-  fi
-  if [ -z "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" ]; then
-    echo "Direct runtime requires a bundle-verified storage-native backend" >&2
-    exit 1
-  fi
-  if [ -z "$UCLOUD_BUNDLED_MANAGED_INIT" ]; then
-    echo "Direct runtime requires a bundle-verified managed-process init" >&2
-    exit 1
-  fi
   echo "Installing bundle-verified direct runsc runtime"
   $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
   $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
@@ -1026,7 +935,6 @@ PY
   fi
 fi
 log_init_phase "direct-runtime"
-
 detect_default_route_mtu() {{
   local iface mtu
   iface="$(ip -o route get 1.1.1.1 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
@@ -1101,6 +1009,7 @@ fi
 $SUDO usermod -aG docker "$UCLOUD_SERVICE_USER"
 log_init_phase "docker-daemon"
 
+
 echo "Activating bundled ucloud-sandboxes runtime"
 UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_STATE_DIR/agent-runtimes/$UCLOUD_PREBUILT_AGENT_SHA256"
 UCLOUD_AGENT_RUNTIME_TMP="$UCLOUD_AGENT_RUNTIME_DIR.tmp.$$"
@@ -1145,9 +1054,6 @@ UCLOUD_SSH_PORT_END=$UCLOUD_SSH_PORT_END
 UCLOUD_TOTAL_VCPU=$UCLOUD_TOTAL_VCPU
 UCLOUD_TOTAL_MEMORY_MB=$UCLOUD_TOTAL_MEMORY_MB
 UCLOUD_TOTAL_DISK_MB=$UCLOUD_TOTAL_DISK_MB
-UCLOUD_CPU_OVERCOMMIT=$UCLOUD_CPU_OVERCOMMIT
-UCLOUD_MEMORY_OVERCOMMIT=$UCLOUD_MEMORY_OVERCOMMIT
-UCLOUD_DISK_OVERCOMMIT=$UCLOUD_DISK_OVERCOMMIT
 UCLOUD_DOCKER_DATA_ROOT=$UCLOUD_DOCKER_DATA_ROOT
 UCLOUD_DOCKER_QUOTA_IMAGE_GB=$UCLOUD_DOCKER_QUOTA_IMAGE_GB
 UCLOUD_DOCKER_MTU=$UCLOUD_DOCKER_MTU
@@ -1215,7 +1121,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.json --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
 Restart=always
 RestartSec=2
 
@@ -1327,7 +1233,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("ssh port start must be <= ssh port end.")
     if options.heartbeat_interval_seconds < 1:
         raise ValueError("heartbeat interval must be positive.")
-    if not options.enable_image_builds:
+    if options.role not in {"sandbox", "builder"}:
+        raise ValueError("node role must be sandbox or builder")
+    if options.role == "sandbox":
         if not re.fullmatch(r"[0-9a-f]{40}", options.direct_runsc_commit):
             raise ValueError(
                 "direct runtime requires an exact 40-character runsc commit"
@@ -1371,12 +1279,6 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "storage-native pool low watermark cannot exceed high watermark."
             )
-        if options.disk_overcommit != 1.0:
-            raise ValueError("direct runtime disk overcommit must be exactly 1.0.")
-        if options.cpu_overcommit != 1.0 or options.memory_overcommit != 1.0:
-            raise ValueError(
-                "direct runtime CPU and memory overcommit must be exactly 1.0."
-            )
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")
         guaranteed_mb = (
@@ -1397,10 +1299,6 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         raise ValueError("docker quota image size cannot be negative.")
     if options.swap_gb < 0:
         raise ValueError("swap size cannot be negative.")
-    if options.docker_mtu < 0:
-        raise ValueError("docker mtu cannot be negative.")
-    if options.docker_max_concurrent_downloads < 1:
-        raise ValueError("Docker max concurrent downloads must be positive.")
     if options.max_concurrent_image_pulls < 1:
         raise ValueError("max concurrent image pulls must be positive.")
     _validate_service_user(options.service_user)
@@ -1414,10 +1312,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "service user": options.service_user,
         "node id": options.node_id,
         "node agent host": options.node_agent_host,
-        "node url": options.node_url,
-        "agent version": options.agent_version,
         "deployment id": options.deployment_id,
-        "init version": options.init_version,
         "work dir": options.work_dir,
         "package spec": options.package_spec,
         "package sha256": options.package_sha256,
@@ -1461,8 +1356,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         if "=" in key:
             raise ValueError("label keys cannot contain '='.")
     _reject_newline("buildx cache ref", options.buildx_cache_ref)
-    if options.buildx_cache_ref and not options.buildx_direct_push:
-        raise ValueError("buildx_cache_ref requires buildx_direct_push.")
+    if options.buildx_cache_ref and options.role != "builder":
+        raise ValueError("buildx_cache_ref requires the builder role")
     for key in options.init_authorized_keys:
         if not key.strip():
             raise ValueError("init authorized keys cannot contain empty keys.")

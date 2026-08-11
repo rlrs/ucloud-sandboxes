@@ -5,7 +5,7 @@ import hashlib
 import ipaddress
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import stat
 import tempfile
@@ -17,20 +17,23 @@ from .hibernation import (
     HibernationArtifactFile,
     HibernationArtifactStore,
     HibernationValidationError,
-    HibernationFileRole,
     HibernationManifest,
     HibernationRuntimeFingerprint,
+    LocalHibernationArtifactFile,
+    _validate_artifact_inventory,
+    _validate_digest,
+    _validate_digest_or_empty,
+    _validate_positive_int,
+    _validate_safe_id,
 )
-from .runtime_identity import NodeRuntimeIdentity
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint
 from .storage_native_registry import StorageSnapshotPublication
 
 
-STORAGE_NATIVE_RUNTIME_SCHEMA = "storage-native-runtime-v1"
+STORAGE_NATIVE_RUNTIME_SCHEMA = "storage-native-runtime-v2"
 STORAGE_NATIVE_MIGRATION_SCHEMA = "storage-native-v1"
 MIGRATION_CONNECTION_POLICY_DISCONNECT = "disconnect"
 MIGRATION_CONNECTION_POLICY_NONE = "none"
-_DIGEST_LENGTH = 64
 
 
 class StorageNativeMigrationError(RuntimeError):
@@ -47,56 +50,10 @@ def _canonical_json(value: object) -> bytes:
 
 
 @dataclass(frozen=True)
-class StorageNativeArtifactFile:
-    name: str
-    role: HibernationFileRole
-    logical_bytes: int
-    allocated_bytes: int
-
-    def __post_init__(self) -> None:
-        if (
-            not self.name
-            or self.name in {".", ".."}
-            or "/" in self.name
-            or PurePosixPath(self.name).name != self.name
-        ):
-            raise ValueError("portable artifact name must be a safe basename")
-        if not isinstance(self.role, HibernationFileRole):
-            raise ValueError("portable artifact role is invalid")
-        if self.logical_bytes < 0 or self.allocated_bytes < 0:
-            raise ValueError("portable artifact sizes cannot be negative")
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "allocated_bytes": self.allocated_bytes,
-            "logical_bytes": self.logical_bytes,
-            "name": self.name,
-            "role": self.role.value,
-        }
-
-    @classmethod
-    def from_dict(cls, raw: object) -> "StorageNativeArtifactFile":
-        if not isinstance(raw, dict) or set(raw) != {
-            "allocated_bytes",
-            "logical_bytes",
-            "name",
-            "role",
-        }:
-            raise ValueError("portable artifact file has an invalid schema")
-        return cls(
-            name=str(raw["name"]),
-            role=HibernationFileRole(str(raw["role"])),
-            logical_bytes=int(raw["logical_bytes"]),
-            allocated_bytes=int(raw["allocated_bytes"]),
-        )
-
-
-@dataclass(frozen=True)
 class StorageNativeSandboxManifest:
     spec: SandboxSpec
     sandbox_generation: int
     create_operation_id: str
-    runtime_identity: NodeRuntimeIdentity
     hibernation_generation: int
     park_operation_id: str
     captured_ns: int
@@ -104,7 +61,7 @@ class StorageNativeSandboxManifest:
     source_manifest_sha256: str
     source_guest_ip: str | None
     connection_policy: str
-    files: tuple[StorageNativeArtifactFile, ...]
+    files: tuple[HibernationArtifactFile, ...]
     managed_process_sha256: str = ""
     schema: str = STORAGE_NATIVE_RUNTIME_SCHEMA
 
@@ -112,25 +69,13 @@ class StorageNativeSandboxManifest:
         if self.schema != STORAGE_NATIVE_RUNTIME_SCHEMA:
             raise ValueError("unsupported storage-native runtime schema")
         self.spec.validate()
-        if self.sandbox_generation < 1 or self.hibernation_generation < 1:
-            raise ValueError("direct migration generations are invalid")
-        if not self.create_operation_id or not self.park_operation_id:
-            raise ValueError("direct migration operation identities are required")
-        if self.captured_ns < 1:
-            raise ValueError("direct migration capture timestamp is invalid")
-        if len(self.source_manifest_sha256) != _DIGEST_LENGTH or any(
-            character not in "0123456789abcdef"
-            for character in self.source_manifest_sha256
-        ):
-            raise ValueError("source manifest digest is invalid")
-        if self.managed_process_sha256 and (
-            len(self.managed_process_sha256) != _DIGEST_LENGTH
-            or any(
-                character not in "0123456789abcdef"
-                for character in self.managed_process_sha256
-            )
-        ):
-            raise ValueError("managed-process digest is invalid")
+        _validate_positive_int("sandbox generation", self.sandbox_generation)
+        _validate_positive_int("hibernation generation", self.hibernation_generation)
+        _validate_safe_id("create operation", self.create_operation_id)
+        _validate_safe_id("park operation", self.park_operation_id)
+        _validate_positive_int("capture timestamp", self.captured_ns)
+        _validate_digest("source manifest digest", self.source_manifest_sha256)
+        _validate_digest_or_empty("managed-process digest", self.managed_process_sha256)
         expected_connection_policy = (
             MIGRATION_CONNECTION_POLICY_NONE
             if self.spec.network == "none"
@@ -140,6 +85,10 @@ class StorageNativeSandboxManifest:
             raise ValueError(
                 "direct migration connection policy does not match sandbox networking"
             )
+        if self.source_guest_ip is not None and not isinstance(
+            self.source_guest_ip, str
+        ):
+            raise ValueError("source guest IP is invalid")
         if self.spec.network == "none":
             if self.source_guest_ip is not None:
                 raise ValueError(
@@ -156,18 +105,9 @@ class StorageNativeSandboxManifest:
                 raise ValueError("source guest IP must be IPv4")
             if source_guest_ip not in NETWORK_CIDR:
                 raise ValueError("source guest IP is outside the direct network")
-        if not self.files or len({item.name for item in self.files}) != len(self.files):
-            raise ValueError("direct migration artifact inventory is invalid")
-        roles = [item.role for item in self.files]
-        for required in (
-            HibernationFileRole.MAIN_MEMORY,
-            HibernationFileRole.KERNEL_STATE,
-            HibernationFileRole.ALLOCATOR_METADATA,
-        ):
-            if roles.count(required) != 1:
-                raise ValueError(
-                    f"direct migration requires exactly one {required.value} file"
-                )
+        if any(not isinstance(item, HibernationArtifactFile) for item in self.files):
+            raise ValueError("direct migration artifact metadata is invalid")
+        _validate_artifact_inventory("direct migration", self.files)
 
     @property
     def sandbox_id(self) -> str:
@@ -187,7 +127,6 @@ class StorageNativeSandboxManifest:
             "park_operation_id": self.park_operation_id,
             "connection_policy": self.connection_policy,
             "runtime": self.runtime.to_dict(),
-            "runtime_identity": self.runtime_identity.to_dict(),
             "sandbox_generation": self.sandbox_generation,
             "schema": self.schema,
             "source_manifest_sha256": self.source_manifest_sha256,
@@ -207,7 +146,6 @@ class StorageNativeSandboxManifest:
             "park_operation_id",
             "connection_policy",
             "runtime",
-            "runtime_identity",
             "sandbox_generation",
             "schema",
             "source_manifest_sha256",
@@ -222,25 +160,20 @@ class StorageNativeSandboxManifest:
             raise ValueError("direct migration files must be a list")
         manifest = cls(
             spec=SandboxSpec.from_dict(raw["spec"]),
-            sandbox_generation=int(raw["sandbox_generation"]),
-            create_operation_id=str(raw["create_operation_id"]),
-            runtime_identity=NodeRuntimeIdentity.from_dict(raw["runtime_identity"]),
-            hibernation_generation=int(raw["hibernation_generation"]),
-            park_operation_id=str(raw["park_operation_id"]),
-            connection_policy=str(raw["connection_policy"]),
-            captured_ns=int(raw["captured_ns"]),
+            sandbox_generation=raw["sandbox_generation"],
+            create_operation_id=raw["create_operation_id"],
+            hibernation_generation=raw["hibernation_generation"],
+            park_operation_id=raw["park_operation_id"],
+            connection_policy=raw["connection_policy"],
+            captured_ns=raw["captured_ns"],
             runtime=HibernationRuntimeFingerprint.from_dict(raw["runtime"]),
-            source_manifest_sha256=str(raw["source_manifest_sha256"]),
-            source_guest_ip=(
-                str(raw["source_guest_ip"])
-                if raw["source_guest_ip"] is not None
-                else None
-            ),
-            files=tuple(StorageNativeArtifactFile.from_dict(item) for item in files),
-            managed_process_sha256=str(raw["managed_process_sha256"]),
-            schema=str(raw["schema"]),
+            source_manifest_sha256=raw["source_manifest_sha256"],
+            source_guest_ip=raw["source_guest_ip"],
+            files=tuple(HibernationArtifactFile.from_dict(item) for item in files),
+            managed_process_sha256=raw["managed_process_sha256"],
+            schema=raw["schema"],
         )
-        if str(raw["spec_sha256"]) != manifest.spec_sha256:
+        if raw["spec_sha256"] != manifest.spec_sha256:
             raise ValueError("direct migration spec digest does not match")
         return manifest
 
@@ -250,7 +183,6 @@ class StorageNativeSandboxManifest:
         registration: DirectSandboxRegistration,
         manifest: HibernationManifest,
         *,
-        runtime_identity: NodeRuntimeIdentity,
         source_guest_ip: str | None,
     ) -> "StorageNativeSandboxManifest":
         manifest.validate_identity(
@@ -266,21 +198,19 @@ class StorageNativeSandboxManifest:
         ).hexdigest()
         if (
             registration.phase != "owned"
-            or registration.runtime_identity_sha256 != runtime_identity.digest
-            or NodeRuntimeIdentity.from_fingerprint(manifest.runtime)
-            != runtime_identity
+            or registration.runtime_compatibility_sha256
+            != manifest.runtime.node_compatibility_sha256
             or registration.rootfs_sha256 != manifest.runtime.rootfs_sha256
             or registration.container_id != manifest.container_id
             or registration.container_id != expected_container_id
         ):
             raise StorageNativeMigrationError(
-                "source registration is not owned by this runtime identity"
+                "source registration has another runtime compatibility"
             )
         return cls(
             spec=registration.spec,
             sandbox_generation=registration.sandbox_generation,
             create_operation_id=registration.operation_id,
-            runtime_identity=runtime_identity,
             hibernation_generation=manifest.hibernation_generation,
             park_operation_id=manifest.operation_id,
             captured_ns=manifest.created_ns,
@@ -292,15 +222,7 @@ class StorageNativeSandboxManifest:
                 if registration.spec.network == "none"
                 else MIGRATION_CONNECTION_POLICY_DISCONNECT
             ),
-            files=tuple(
-                StorageNativeArtifactFile(
-                    name=item.name,
-                    role=item.role,
-                    logical_bytes=item.logical_bytes,
-                    allocated_bytes=item.allocated_bytes,
-                )
-                for item in manifest.files
-            ),
+            files=tuple(item.artifact for item in manifest.files),
             managed_process_sha256=manifest.managed_process_sha256,
         )
 
@@ -428,7 +350,6 @@ class StorageNativeMigrationStore:
         self,
         migration: StorageNativeMigration,
         *,
-        expected_runtime_identity: NodeRuntimeIdentity,
         expected_runtime: HibernationRuntimeFingerprint,
         artifact_store: HibernationArtifactStore,
         writable_incarnation: Path,
@@ -436,10 +357,7 @@ class StorageNativeMigrationStore:
         """Replace source-local file identities after mounting a remote snapshot."""
 
         portable = migration.manifest
-        if (
-            portable.runtime_identity != expected_runtime_identity
-            or portable.runtime != expected_runtime
-        ):
+        if portable.runtime != expected_runtime:
             raise HibernationValidationError(
                 "storage-native snapshot does not match the required runtime"
             )
@@ -458,16 +376,16 @@ class StorageNativeMigrationStore:
             f"hibernate-{portable.hibernation_generation}"
         )
         local_files = tuple(
-            HibernationArtifactFile.from_path(
+            LocalHibernationArtifactFile.from_path(
                 generation / item.name,
                 role=item.role,
             )
             for item in portable.files
         )
         for expected, actual in zip(portable.files, local_files):
-            if actual.logical_bytes != expected.logical_bytes:
+            if actual.artifact.logical_bytes != expected.logical_bytes:
                 raise StorageNativeMigrationError(
-                    f"migrated artifact size changed: {actual.name}"
+                    f"migrated artifact size changed: {actual.artifact.name}"
                 )
         local_manifest = HibernationManifest(
             sandbox_id=portable.sandbox_id,

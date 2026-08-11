@@ -5,6 +5,7 @@ import base64
 from collections import deque
 from contextlib import asynccontextmanager
 import heapq
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -126,7 +127,7 @@ class RelayHarness:
                 "request_id": request["request_id"],
                 "registration_token": registration_token,
                 "lease_id": request["lease_id"],
-                "response": body,
+                "body": {"encoding": "json", "value": body},
             },
         )
         return payload
@@ -151,7 +152,10 @@ class RelayHarness:
                 "request_id": request["request_id"],
                 "registration_token": registration_token,
                 "lease_id": request["lease_id"],
-                "body_base64": base64.b64encode(body).decode("ascii"),
+                "body": {
+                    "encoding": "base64",
+                    "value": base64.b64encode(body).decode("ascii"),
+                },
                 "status": status,
                 "headers": headers or {},
             },
@@ -231,9 +235,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             {"sandbox_id": "sandbox-1", "sandboxGeneration": 1},
             {"sandbox_id": "sandbox-1", "sandbox_generation": "1"},
         ):
-            with self.subTest(metadata=metadata), self.assertRaises(
-                web.HTTPBadRequest
-            ):
+            with self.subTest(metadata=metadata), self.assertRaises(web.HTTPBadRequest):
                 await state.register_rollout("strict-metadata", metadata)
 
     async def test_completed_responses_obey_byte_budget_and_drop_request_bodies(
@@ -265,7 +267,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(
             all(
                 request.body is None
-                and request.body_bytes == b""
                 and request.headers == {}
                 and request.payload_bytes == 0
                 for request in completed_requests
@@ -302,9 +303,12 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             stats = await restored.stats()
             await restored.aclose()
             with sqlite3.connect(state_path) as connection:
-                completed_rows = connection.execute(
-                    "SELECT count(*) FROM relay_requests WHERE state = 'completed'"
-                ).fetchone()[0]
+                rows = connection.execute(
+                    "SELECT payload FROM relay_requests"
+                ).fetchall()
+                completed_rows = sum(
+                    json.loads(row[0])["state"] == "completed" for row in rows
+                )
 
         self.assertEqual(stats["completed_retained"], 1)
         self.assertLessEqual(stats["completed_bytes"], 1200)
@@ -418,7 +422,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("registration-failure", state._pending)  # noqa: SLF001
             await state.aclose()
 
-    async def test_enqueue_cancellation_after_commit_publishes_memory_state(self) -> None:
+    async def test_enqueue_cancellation_after_commit_publishes_memory_state(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
             await state.register_rollout("enqueue-cancel")
@@ -463,11 +469,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(len(state._pending["enqueue-cancel"]), 1)  # noqa: SLF001
             with store._lock:  # noqa: SLF001
-                row_state = store._connection.execute(  # noqa: SLF001
-                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                row_payload = store._connection.execute(  # noqa: SLF001
+                    "SELECT payload FROM relay_requests WHERE request_id = ?",
                     (request.request_id,),
                 ).fetchone()[0]
-            self.assertEqual(row_state, "pending")
+            self.assertEqual(json.loads(row_payload)["state"], "pending")
             await state.aclose()
 
     async def test_terminal_commit_failure_never_publishes_in_memory(self) -> None:
@@ -507,11 +513,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(request.state, "leased")
             self.assertFalse(request.future.done())
             with store._lock:  # noqa: SLF001
-                row_state = store._connection.execute(  # noqa: SLF001
-                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                row_payload = store._connection.execute(  # noqa: SLF001
+                    "SELECT payload FROM relay_requests WHERE request_id = ?",
                     (request.request_id,),
                 ).fetchone()[0]
-            self.assertEqual(row_state, "leased")
+            self.assertEqual(json.loads(row_payload)["state"], "leased")
 
             store.commit_request_batch = original_commit  # type: ignore[method-assign]
             await state.respond(
@@ -563,11 +569,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(request.future.done())
             self.assertEqual(state._counters["completed"], 1)  # noqa: SLF001
             with store._lock:  # noqa: SLF001
-                row_state = store._connection.execute(  # noqa: SLF001
-                    "SELECT state FROM relay_requests WHERE request_id = ?",
+                row_payload = store._connection.execute(  # noqa: SLF001
+                    "SELECT payload FROM relay_requests WHERE request_id = ?",
                     (request.request_id,),
                 ).fetchone()[0]
-            self.assertEqual(row_state, "completed")
+            self.assertEqual(json.loads(row_payload)["state"], "completed")
             await state.aclose()
 
     async def test_deferred_response_pin_survives_restart_until_durable_release(
@@ -605,15 +611,17 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             await restored.aclose()
 
             with sqlite3.connect(state_path) as connection:
-                delivery_pending = connection.execute(
-                    "SELECT delivery_pending FROM relay_requests WHERE request_id = ?",
+                row_payload = connection.execute(
+                    "SELECT payload FROM relay_requests WHERE request_id = ?",
                     (request.request_id,),
                 ).fetchone()[0]
-            self.assertEqual(delivery_pending, 0)
+            self.assertIs(json.loads(row_payload)["delivery_pending"], False)
 
     async def test_completed_capacity_never_evicts_deferred_pins(self) -> None:
         state = ModelRelayState(max_completed_requests=1)
-        token = str((await state.register_rollout("pin-capacity"))["registration_token"])
+        token = str(
+            (await state.register_rollout("pin-capacity"))["registration_token"]
+        )
         first, first_delivery = await enqueue_and_poll(state, "pin-capacity", token)
         await state.respond(
             request_id=first_delivery.request_id,
@@ -764,7 +772,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
     async def test_sqlite_poll_batch_uses_one_explicit_transaction(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
-            token = str((await state.register_rollout("batch-tx"))["registration_token"])
+            token = str(
+                (await state.register_rollout("batch-tx"))["registration_token"]
+            )
             for _index in range(3):
                 await state.enqueue(
                     rollout_id="batch-tx",
@@ -786,7 +796,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             with store._lock:  # noqa: SLF001
                 store._connection.set_trace_callback(None)  # noqa: SLF001
             self.assertEqual(
-                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                sum(
+                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
+                ),
                 1,
             )
             self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
@@ -842,7 +854,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stats["counters"]["timed_out"], 128)
             self.assertEqual(queue.iterations, 1)
             self.assertEqual(
-                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                sum(
+                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
+                ),
                 1,
             )
             self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
@@ -887,7 +901,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state._requests, {})  # noqa: SLF001
             self.assertEqual(state._counters["unregister_canceled"], 128)  # noqa: SLF001
             self.assertEqual(
-                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                sum(
+                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
+                ),
                 1,
             )
             self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
@@ -926,6 +942,14 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(restored._requests, {})  # noqa: SLF001
             self.assertEqual(restored._pending, {})  # noqa: SLF001
             self.assertEqual(restored._inflight_bytes, 0)  # noqa: SLF001
+
+            missing_field = dict(rows[1])
+            missing_field.pop("request_digest")
+            store.load_requests = lambda: [rows[0], missing_field]  # type: ignore[method-assign]
+            with self.assertRaisesRegex(KeyError, "request_digest"):
+                await restored.stats()
+            self.assertFalse(restored._loaded)  # noqa: SLF001
+            self.assertEqual(restored._requests, {})  # noqa: SLF001
 
             store.load_requests = original_load  # type: ignore[method-assign]
             stats = await restored.stats()
@@ -1010,7 +1034,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(stats["inflight"], 0)
             self.assertEqual(stats["completed_retained"], 64)
             self.assertEqual(
-                sum(statement.startswith("BEGIN IMMEDIATE") for statement in statements),
+                sum(
+                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
+                ),
                 1,
             )
             self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
@@ -1059,7 +1085,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         async with relay_app(worker_poll_timeout_seconds=1) as relay:
             token = await relay.register("transient-worker")
             caller = asyncio.create_task(relay.model_call("transient-worker"))
-            first = (await relay.poll("transient-worker", token))["request"]
+            first = (await relay.poll("transient-worker", token))["requests"][0]
 
             _status, retry = await relay.request(
                 "POST",
@@ -1073,7 +1099,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "error": "Server disconnected",
                 },
             )
-            second = (await relay.poll("transient-worker", token))["request"]
+            second = (await relay.poll("transient-worker", token))["requests"][0]
             await relay.respond(second, token, {"ok": True})
             caller_status, caller_body = await caller
             stats = await relay.stats()
@@ -1093,7 +1119,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             endpoint="/v1/chat/completions",
             method="POST",
             body={"model": "m"},
-            body_bytes=b'{"model":"m"}',
             headers={},
             idempotency_key="auto/request-fingerprint",
             defer_idempotency_until_disconnect=True,
@@ -1104,7 +1129,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             endpoint="/v1/chat/completions",
             method="POST",
             body={"model": "m"},
-            body_bytes=b'{"model":"m"}',
             headers={},
             idempotency_key="auto/request-fingerprint",
             defer_idempotency_until_disconnect=True,
@@ -1150,7 +1174,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 endpoint="/v1/responses",
                 method="POST",
                 body={"model": "m"},
-                body_bytes=b'{"model":"m"}',
                 headers={"Content-Type": "application/json"},
                 idempotency_key="request-7",
             )
@@ -1171,7 +1194,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     {"Content-Type": "text/event-stream"},
                 ),
             )
-            state.close()
+            await state.aclose()
 
             restored = ModelRelayState(state_path=state_path)
             replay = await restored.enqueue(
@@ -1179,12 +1202,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 endpoint="/v1/responses",
                 method="POST",
                 body={"model": "m"},
-                body_bytes=b'{"model":"m"}',
                 headers={"Content-Type": "application/json"},
                 idempotency_key="request-7",
             )
             response = await restored.wait_for_response(replay, timeout_seconds=1)
-            restored.close()
+            await restored.aclose()
 
         self.assertEqual(replay.request_id, request.request_id)
         self.assertEqual(replay.sandbox_id, "sandbox-7")
@@ -1208,12 +1230,11 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 endpoint="/v1/chat/completions",
                 method="POST",
                 body={"model": "m"},
-                body_bytes=b'{"model":"m"}',
                 headers={},
                 idempotency_key="auto/restart-fingerprint",
                 defer_idempotency_until_disconnect=True,
             )
-            state.close()
+            await state.aclose()
 
             restored = ModelRelayState(state_path=state_path)
             replay = await restored.enqueue(
@@ -1221,13 +1242,12 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 endpoint="/v1/chat/completions",
                 method="POST",
                 body={"model": "m"},
-                body_bytes=b'{"model":"m"}',
                 headers={},
                 idempotency_key="auto/restart-fingerprint",
                 defer_idempotency_until_disconnect=True,
             )
             stats = await restored.stats()
-            restored.close()
+            await restored.aclose()
 
         self.assertEqual(replay.request_id, request.request_id)
         self.assertEqual(stats["counters"]["reattached"], 1)
@@ -1280,10 +1300,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )
             )
-            delivery = (await relay.poll("lifecycle", token))["request"]
+            delivery = (await relay.poll("lifecycle", token))["requests"][0]
             forwarded = {
-                key.lower(): value
-                for key, value in delivery["headers"].items()
+                key.lower(): value for key, value in delivery["headers"].items()
             }
             await relay.respond_bytes(
                 delivery,
@@ -1502,12 +1521,20 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_admission_limits_release_capacity_after_cancellation(self) -> None:
         state = ModelRelayState(
-            max_inflight_requests=1,
-            max_inflight_requests_per_rollout=1,
+            max_inflight_requests=2,
+            max_inflight_requests_per_rollout=2,
             max_inflight_bytes=1024,
         )
-        await state.register_rollout("bounded")
+        token = str((await state.register_rollout("bounded"))["registration_token"])
         first = await state.enqueue(
+            rollout_id="bounded", endpoint="/v1/responses", body={}, headers={}
+        )
+        await state.poll(
+            rollout_id="bounded",
+            registration_token=token,
+            timeout_seconds=0,
+        )
+        second = await state.enqueue(
             rollout_id="bounded", endpoint="/v1/responses", body={}, headers={}
         )
         with self.assertRaises(web.HTTPTooManyRequests):
@@ -1519,15 +1546,22 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             request_id=first.request_id,
             response=RelayWorkerResponse(499, {}),
         )
-        second = await state.enqueue(
-            rollout_id="bounded", endpoint="/v1/responses", body={}, headers={}
-        )
         await state.cancel_request(
             request_id=second.request_id,
             response=RelayWorkerResponse(499, {}),
         )
+        replacement = await state.enqueue(
+            rollout_id="bounded", endpoint="/v1/responses", body={}, headers={}
+        )
+        await state.cancel_request(
+            request_id=replacement.request_id,
+            response=RelayWorkerResponse(499, {}),
+        )
         released = await state.stats()
-        self.assertEqual(rejected["inflight"], 1)
+        self.assertEqual(rejected["inflight"], 2)
+        self.assertEqual(
+            (rejected["pending"]["bounded"], rejected["leased"]["bounded"]), (1, 1)
+        )
         self.assertEqual(rejected["counters"]["admission_rejected"], 1)
         self.assertEqual((released["inflight"], released["inflight_bytes"]), (0, 0))
 
@@ -1614,7 +1648,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 headers=worker_headers,
                 params={"rollout_id": "rollout-1", "registration_token": token},
             )
-            request = polled["request"]
+            request = polled["requests"][0]
             await relay.request(
                 "POST",
                 "/worker/respond",
@@ -1624,7 +1658,10 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "request_id": request["request_id"],
                     "registration_token": token,
                     "lease_id": request["lease_id"],
-                    "response": {"choices": [{"message": {"content": "pong"}}]},
+                    "body": {
+                        "encoding": "json",
+                        "value": {"choices": [{"message": {"content": "pong"}}]},
+                    },
                 },
             )
             status, body = await sandbox_task
@@ -1635,7 +1672,8 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(polled["requests"][0]["request_id"], request["request_id"])
         self.assertIsInstance(request["lease_id"], str)
         self.assertEqual(request["endpoint"], "/v1/chat/completions")
-        self.assertEqual(request["body"]["model"], "local-model")
+        self.assertEqual(request["body"]["encoding"], "json")
+        self.assertEqual(request["body"]["value"]["model"], "local-model")
         self.assertNotIn("authorization", forwarded)
         self.assertNotIn("proxy-authorization", forwarded)
         self.assertNotIn("x-ucloud-sandbox-token", forwarded)
@@ -1688,7 +1726,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "registration_token": token,
                 },
             )
-            request = polled["request"]
+            request = polled["requests"][0]
             await relay.respond_bytes(
                 request,
                 token,
@@ -1713,9 +1751,8 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             request["endpoint"],
             "/api/a%2Fb%20c?x=1&x=2&literal=one+two",
         )
-        self.assertEqual(base64.b64decode(request["body_base64"]), request_body)
-        self.assertEqual(request["body_size"], len(request_body))
-        self.assertIsNone(request["body"])
+        self.assertEqual(request["body"]["encoding"], "base64")
+        self.assertEqual(base64.b64decode(request["body"]["value"]), request_body)
         self.assertEqual(forwarded["authorization"], "Bearer upstream-secret")
         self.assertEqual(forwarded["content-type"], "application/octet-stream")
         self.assertEqual(forwarded["x-custom"], "safe")
@@ -1746,7 +1783,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     json={"hello": "world"},
                 )
             )
-            request = (await relay.poll("json-tunnel", token))["request"]
+            request = (await relay.poll("json-tunnel", token))["requests"][0]
             invalid_status, _payload = await relay.request(
                 "POST",
                 "/worker/respond",
@@ -1754,7 +1791,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "request_id": request["request_id"],
                     "registration_token": token,
                     "lease_id": request["lease_id"],
-                    "body_base64": "not base64!",
+                    "body": {"encoding": "base64", "value": "not base64!"},
                 },
             )
             await relay.respond_bytes(
@@ -1765,7 +1802,12 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             status, body, _headers = await client_task
 
-        self.assertEqual(request["body"], {"hello": "world"}, repr(request))
+        self.assertEqual(request["body"]["encoding"], "base64")
+        self.assertEqual(
+            json.loads(base64.b64decode(request["body"]["value"])),
+            {"hello": "world"},
+            repr(request),
+        )
         self.assertEqual(invalid_status, 400)
         self.assertEqual((status, body), (200, b'{"echo":true}'))
 
@@ -1790,7 +1832,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     "timeout_seconds": "0",
                 },
             )
-        self.assertEqual(body, {"request": None, "requests": []})
+        self.assertEqual(body, {"requests": []})
 
     async def test_worker_can_poll_batches_and_respond_idempotently(self) -> None:
         async with relay_app(request_timeout_seconds=5) as relay:
@@ -1819,14 +1861,14 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 await relay.respond(
                     request,
                     token,
-                    {"index": request["body"]["messages"][0]["content"]},
+                    {"index": request["body"]["value"]["messages"][0]["content"]},
                 )
             duplicate = await relay.respond(first[0], token, {"ignored": True})
-            last = (await relay.poll("rollout-batch", token, limit="2"))["request"]
+            last = (await relay.poll("rollout-batch", token, limit="2"))["requests"][0]
             await relay.respond(
                 last,
                 token,
-                {"index": last["body"]["messages"][0]["content"]},
+                {"index": last["body"]["value"]["messages"][0]["content"]},
             )
             results = await asyncio.gather(*tasks)
             stats = await relay.stats()
@@ -1851,7 +1893,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     worker_id="slow-worker",
                     lease_seconds="0.01",
                 )
-            )["request"]
+            )["requests"][0]
             await asyncio.sleep(0.03)
             second = (
                 await relay.poll(
@@ -1860,7 +1902,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     worker_id="fast-worker",
                     lease_seconds="1",
                 )
-            )["request"]
+            )["requests"][0]
             await relay.respond(first, token, {"stale": True}, expected=409)
             await relay.respond(second, token, {"ok": True})
             result, stats = await task, await relay.stats()
@@ -1884,7 +1926,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     worker_id="worker-renew",
                     lease_seconds="0.05",
                 )
-            )["request"]
+            )["requests"][0]
             await asyncio.sleep(0.02)
             _status, renewed_payload = await relay.request(
                 "POST",
@@ -1916,7 +1958,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             task = asyncio.create_task(relay.model_call("rollout-expired-renew"))
             leased = (
                 await relay.poll("rollout-expired-renew", token, lease_seconds="0.01")
-            )["request"]
+            )["requests"][0]
             await asyncio.sleep(0.03)
             status, _payload = await relay.request(
                 "POST",
@@ -1930,7 +1972,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             retried = (
                 await relay.poll("rollout-expired-renew", token, lease_seconds="1")
-            )["request"]
+            )["requests"][0]
             await relay.respond(retried, token, {"ok": True})
             result = await task
 

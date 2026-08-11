@@ -25,7 +25,6 @@ from ucloud_sandboxes.direct_warden import (  # noqa: E402
 )
 from ucloud_sandboxes.storage_native_migration import (  # noqa: E402
     MIGRATION_CONNECTION_POLICY_NONE,
-    StorageNativeArtifactFile,
     StorageNativeMigration,
     StorageNativeMigrationStore,
     StorageNativeSandboxManifest,
@@ -39,7 +38,6 @@ from ucloud_sandboxes.image_rootfs import (  # noqa: E402
     OverlayRootfsManager,
 )
 from ucloud_sandboxes.managed_registry import RegistryClient  # noqa: E402
-from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentity  # noqa: E402
 from ucloud_sandboxes.sandbox import (  # noqa: E402
     SandboxSpec,
     sandbox_spec_fingerprint,
@@ -50,11 +48,11 @@ from ucloud_sandboxes.storage_native_daemon import (  # noqa: E402
     StorageNativeNodeConfig,
     StorageNativeNodeServer,
     StorageNativeNodeService,
+    StorageVolumeOwner,
+    StorageVolumeState,
 )
 from ucloud_sandboxes.storage_native_registry import (  # noqa: E402
-    PublishedStorageLayer,
     RegistrySnapshotPublisher,
-    StorageSnapshotPublication,
 )
 
 
@@ -228,9 +226,7 @@ def _oci_config(namespace: str) -> dict[str, Any]:
 
 def _cpu_features_sha256() -> str:
     lines = Path("/proc/cpuinfo").read_text(encoding="ascii").splitlines()
-    features = next(
-        line for line in lines if line.startswith(("flags", "Features"))
-    )
+    features = next(line for line in lines if line.startswith(("flags", "Features")))
     return hashlib.sha256(features.encode("ascii")).hexdigest()
 
 
@@ -249,27 +245,6 @@ def _runtime_fingerprint(runsc: Path) -> HibernationRuntimeFingerprint:
     )
 
 
-def _record(client: StorageNativeNodeClient, volume_id: str) -> dict[str, Any]:
-    raw = client.get_volume(volume_id).get("record")
-    if not isinstance(raw, dict):
-        raise RuntimeError("storage service returned an invalid volume record")
-    return raw
-
-
-def _publication(record: dict[str, Any]) -> StorageSnapshotPublication:
-    layers = record.get("published_layers")
-    if not isinstance(layers, list):
-        raise RuntimeError("published storage record has no layer inventory")
-    return StorageSnapshotPublication(
-        manifest_digest=str(record.get("published_manifest_digest") or ""),
-        tag=str(record.get("published_tag") or ""),
-        repository=str(record.get("published_repository") or ""),
-        repo_blob_url=str(record.get("published_repo_blob_url") or ""),
-        virtual_size=int(record.get("virtual_size") or 0),
-        layers=tuple(PublishedStorageLayer.from_dict(item) for item in layers),
-    )
-
-
 def _registry_metrics(path: Path | None) -> dict[str, int]:
     if path is None:
         return {}
@@ -279,20 +254,14 @@ def _registry_metrics(path: Path | None) -> dict[str, int]:
         return {}
     if not isinstance(raw, dict):
         return {}
-    return {
-        key: int(raw.get(key) or 0)
-        for key in ("bytes_served", "requests")
-    }
+    return {key: int(raw.get(key) or 0) for key in ("bytes_served", "requests")}
 
 
 def _metrics_delta(
     before: dict[str, int],
     after: dict[str, int],
 ) -> dict[str, int]:
-    return {
-        key: after.get(key, 0) - before.get(key, 0)
-        for key in after
-    }
+    return {key: after.get(key, 0) - before.get(key, 0) for key in after}
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -385,9 +354,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             RegistrySnapshotPublisher(
                 RegistryClient(args.registry_url, timeout_seconds=120),
                 repository=args.repository,
-                stream_socket_root=Path(
-                    "/run/ucloud-storage-native-publication"
-                ),
+                stream_socket_root=Path("/run/ucloud-storage-native-publication"),
             )
             if args.registry_url
             else None
@@ -405,14 +372,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sandbox_id = "warden-benchmark"
         sandbox_generation = 1
         volume_id = f"{sandbox_id}.sandbox-{sandbox_generation}"
+        owner = StorageVolumeOwner(volume_id, sandbox_id, sandbox_generation)
         started = time.monotonic()
-        client.create_volume(
-            sandbox_id=sandbox_id,
-            sandbox_generation=sandbox_generation,
-            volume_id=volume_id,
+        client.prepare_volume(
+            owner,
             operation_id="create-volume:1",
             virtual_size=GIB,
-            accounting_id=1,
         )
         create_volume_seconds = time.monotonic() - started
 
@@ -474,17 +439,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 memory_root=mount_root,
                 bundle_root=root / "bundles",
                 journal_root=root / "warden-journal",
-                artifact_root=mount_root,
                 runtime_fingerprint=_runtime_fingerprint(args.runsc),
                 network="sandbox",
                 command_timeout_seconds=120,
-                restore_background=True,
-                restore_cpu_startup_burst=False,
-                restore_reflink=False,
-                restore_start_paused=True,
-                allow_connected_on_save=True,
                 readiness_command=("/noop",),
-                remove_memory_directory_on_delete=False,
             ),
             storage=client,
             rootfs_lifecycle=overlay,
@@ -503,12 +461,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         started = time.monotonic()
         parked = warden.park(sandbox, operation_id="park:1")
         park_seconds = time.monotonic() - started
-        parked_storage = _record(client, volume_id)
+        parked_storage = client.get_volume(volume_id)
         if parked.state.value != "parked":
             raise RuntimeError("Warden did not commit PARKED")
-        if parked_storage["state"] != "released":
+        if parked_storage.state != StorageVolumeState.RELEASED:
             raise RuntimeError("parked volume retained runtime resources")
-        if Path(parked_storage["mount_path"]).is_mount():
+        if Path(parked_storage.mount_path).is_mount():
             raise RuntimeError("parked volume remained mounted")
         if (sandbox.bundle / "rootfs").is_mount():
             raise RuntimeError("parked overlay remained mounted")
@@ -521,9 +479,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 spec=spec,
                 sandbox_generation=sandbox_generation,
                 create_operation_id="create-runtime:1",
-                runtime_identity=NodeRuntimeIdentity.from_fingerprint(
-                    source_manifest.runtime
-                ),
                 hibernation_generation=source_manifest.hibernation_generation,
                 park_operation_id=source_manifest.operation_id,
                 captured_ns=source_manifest.created_ns,
@@ -531,45 +486,28 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 source_manifest_sha256=source_manifest.metadata_sha256,
                 source_guest_ip=None,
                 connection_policy=MIGRATION_CONNECTION_POLICY_NONE,
-                files=tuple(
-                    StorageNativeArtifactFile(
-                        name=item.name,
-                        role=item.role,
-                        logical_bytes=item.logical_bytes,
-                        allocated_bytes=item.allocated_bytes,
-                    )
-                    for item in source_manifest.files
-                ),
+                files=tuple(item.artifact for item in source_manifest.files),
+                managed_process_sha256=source_manifest.managed_process_sha256,
             )
             started = time.monotonic()
             source_published_record = warden.publish_storage_snapshot(
                 sandbox,
                 operation_id="migration:1:publish-source",
             )
-            migration_timings["source_publication_seconds"] = (
-                time.monotonic() - started
-            )
-            source_published_layers = source_published_record.get(
-                "published_layers"
-            )
-            if (
-                not isinstance(source_published_layers, list)
-                or not source_published_layers
-            ):
+            migration_timings["source_publication_seconds"] = time.monotonic() - started
+            source_published_layers = source_published_record.published_layers
+            if not source_published_layers:
                 raise RuntimeError("source publication returned no dense layer")
             migration_timings["source_dense_layer_bytes"] = int(
                 source_published_layers[-1]["size"]
             )
             migration = StorageNativeMigration(
                 manifest=portable,
-                publication=_publication(source_published_record),
+                publication=source_published_record.publication(),
             )
             client.delete_volume(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                volume_id=volume_id,
+                owner,
                 operation_id="migration:1:delete-source-volume",
-                expected_revision=int(source_published_record["revision"]),
             )
             source_deleted_before_destination_resume = True
 
@@ -578,9 +516,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             thread = None
             destination_mount_root = root / "destination-volumes"
             destination_config = StorageNativeNodeConfig(
-                journal_path=(
-                    root / "destination-storage-journal" / "storage.sqlite"
-                ),
+                journal_path=(root / "destination-storage-journal" / "storage.sqlite"),
                 runtime_root=root / "destination-storage-runtime",
                 mount_root=destination_mount_root,
                 hard_capacity_bytes=4 * GIB,
@@ -599,31 +535,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             client = StorageNativeNodeClient(destination_socket)
 
             started = time.monotonic()
-            client.acquire_snapshot(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                volume_id=volume_id,
+            acquired = client.prepare_import(
+                owner,
                 operation_id="migration:1:acquire-manifest",
-                publication=migration.publication.to_dict(),
-                accounting_id=1,
-            )
-            acquired = client.mount_snapshot_cow(
-                sandbox_id=sandbox_id,
-                sandbox_generation=sandbox_generation,
-                volume_id=volume_id,
-                operation_id="migration:1:mount-destination",
-                expected_revision=1,
+                publication=migration.publication,
             )
             migration_timings["destination_acquire_mount_seconds"] = (
                 time.monotonic() - started
             )
-            migration_timings["destination_acquire_range_delta"] = (
-                _metrics_delta(
-                    registry_metrics_before,
-                    _registry_metrics(args.registry_metrics),
-                )
+            migration_timings["destination_acquire_range_delta"] = _metrics_delta(
+                registry_metrics_before,
+                _registry_metrics(args.registry_metrics),
             )
-            if acquired["record"]["state"] != "mounted":
+            if acquired.state != StorageVolumeState.MOUNTED:
                 raise RuntimeError("destination snapshot was not mounted")
 
             destination_overlay = OverlayRootfsManager(
@@ -649,17 +573,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     memory_root=destination_mount_root,
                     bundle_root=root / "destination-bundles",
                     journal_root=root / "destination-warden-journal",
-                    artifact_root=destination_mount_root,
                     runtime_fingerprint=_runtime_fingerprint(args.runsc),
                     network="sandbox",
                     command_timeout_seconds=120,
-                    restore_background=True,
-                    restore_cpu_startup_burst=False,
-                    restore_reflink=False,
-                    restore_start_paused=True,
-                    allow_connected_on_save=True,
                     readiness_command=("/noop",),
-                    remove_memory_directory_on_delete=False,
                 ),
                 storage=client,
                 rootfs_lifecycle=destination_overlay,
@@ -668,7 +585,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 root / "destination-migrations"
             ).rebind_mounted_snapshot(
                 migration,
-                expected_runtime_identity=portable.runtime_identity,
                 expected_runtime=portable.runtime,
                 artifact_store=destination_warden.artifacts,
                 writable_incarnation=destination_mount_root / volume_id,
@@ -680,29 +596,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             migration_timings["destination_rebind_adopt_seconds"] = (
                 time.monotonic() - started
             )
-            migration_timings["destination_rebind_range_delta"] = (
-                _metrics_delta(
-                    registry_metrics_before,
-                    _registry_metrics(args.registry_metrics),
-                )
+            migration_timings["destination_rebind_range_delta"] = _metrics_delta(
+                registry_metrics_before,
+                _registry_metrics(args.registry_metrics),
             )
             started = time.monotonic()
-            destination_published_record = (
-                destination_warden.publish_storage_snapshot(
-                    destination_sandbox,
-                    operation_id="migration:1:publish-destination",
-                )
+            destination_published_record = destination_warden.publish_storage_snapshot(
+                destination_sandbox,
+                operation_id="migration:1:publish-destination",
             )
             migration_timings["destination_publication_seconds"] = (
                 time.monotonic() - started
             )
-            destination_published_layers = destination_published_record.get(
-                "published_layers"
-            )
-            if (
-                not isinstance(destination_published_layers, list)
-                or len(destination_published_layers) < 2
-            ):
+            destination_published_layers = destination_published_record.published_layers
+            if len(destination_published_layers) < 2:
                 raise RuntimeError(
                     "destination publication did not preserve and extend its chain"
                 )
@@ -710,7 +617,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 destination_published_layers[-1]["size"]
             )
             migration_timings["destination_sealed_file_bytes"] = int(
-                destination_published_record["sealed_layer_bytes"]
+                destination_published_record.sealed_layer_bytes
             )
             migration_timings["destination_layer_count"] = len(
                 destination_published_layers
@@ -728,8 +635,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         resume_seconds = time.monotonic() - started
         metrics_after_resume = _registry_metrics(args.registry_metrics)
-        resumed_storage = _record(client, volume_id)
-        if resumed_storage["state"] != "mounted":
+        resumed_storage = client.get_volume(volume_id)
+        if resumed_storage.state != StorageVolumeState.MOUNTED:
             raise RuntimeError("resumed volume is not mounted")
         if not (sandbox.bundle / "rootfs").is_mount():
             raise RuntimeError("resumed overlay is not mounted")
@@ -766,13 +673,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         warden.delete(sandbox)
         overlay.release_sandbox(sandbox)
         overlay = None
-        record = _record(client, volume_id)
         client.delete_volume(
-            sandbox_id=sandbox_id,
-            sandbox_generation=sandbox_generation,
-            volume_id=volume_id,
-            operation_id=f"delete-volume:{record['revision']}",
-            expected_revision=int(record["revision"]),
+            owner,
+            operation_id="delete-volume:1",
         )
         result.update(
             {
@@ -780,15 +683,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "create_volume_seconds": create_volume_seconds,
                 "noop_seconds": noop_seconds,
                 "park_seconds": park_seconds,
-                "parked_storage": parked_storage,
+                "parked_storage": parked_storage.to_json(),
                 "migration_timings": migration_timings,
                 "response": response,
                 "registry_range_delta": registry_range_delta,
                 "registry_phase_deltas": registry_phase_deltas,
                 "resume_seconds": resume_seconds,
                 "resume_timings_ms": resume_timings,
-                "resumed_storage_revision": resumed_storage["revision"],
-                "sealed_layer_bytes": parked_storage["sealed_layer_bytes"],
+                "resumed_storage_revision": resumed_storage.revision,
+                "sealed_layer_bytes": parked_storage.sealed_layer_bytes,
                 "source_deleted_before_destination_resume": (
                     source_deleted_before_destination_resume
                 ),

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from .autoscaler_state import PROVIDER_OPERATION_LABEL
-from .config import AutoscalerConfig
+from .config import DeploymentConfig
 from .deployment import (
     AGENT_VERSION_LABEL,
     CREATE_INDEX_LABEL,
@@ -28,13 +27,8 @@ from .models import (
     ScalePolicy,
     utc_now,
 )
-from .policy import unreachable_node_stop_ready
+from .policy import incompatible_stop_candidates, unreachable_node_stop_ready
 from .providers.base import InstanceCreateIntent
-
-
-@dataclass(frozen=True)
-class NodeCreateDefaults:
-    labels: dict[str, str] = field(default_factory=dict)
 
 
 def with_provider_operation_label(
@@ -62,80 +56,46 @@ def with_provider_operation_label(
     return intent.with_labels(labels)
 
 
-def build_sandbox_create_intents(
-    config: AutoscalerConfig,
+def build_create_intents(
+    config: DeploymentConfig,
     decision: ScaleDecision,
-    defaults: NodeCreateDefaults,
     *,
+    role: Literal["sandbox", "builder"],
     seed_prefix: str | None = None,
 ) -> list[InstanceCreateIntent]:
-    count = create_count_from_decision(decision)
-    if count <= 0:
+    if decision.creates <= 0:
         return []
 
+    seed_role, node_prefix, name_prefix, role_label = {
+        "sandbox": ("", "sandbox-node", "ucloud-sandbox-node", NODE_LABEL),
+        "builder": (
+            "-builder",
+            "sandbox-builder",
+            "ucloud-sandbox-builder",
+            BUILDER_LABEL,
+        ),
+    }[role]
     cycle_seed = stable_hostname(seed_prefix or uuid4().hex[:10], prefix="")
     intents: list[InstanceCreateIntent] = []
-    for index in range(1, count + 1):
-        seed = f"{cycle_seed}-{index}"
-        hostname = stable_hostname(seed, prefix=config.node_hostname_prefix)
-        name = stable_hostname(seed, prefix=config.job_name_prefix.rstrip("-"))
-        labels = dict(defaults.labels)
-        labels.setdefault(NODE_LABEL, "true")
-        labels.setdefault(RECONCILE_LABEL, "true")
-        labels[RECONCILE_CYCLE_LABEL] = cycle_seed
-        labels[CREATE_INDEX_LABEL] = str(index)
-        if config.deployment_id:
-            labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
-        labels.setdefault(AGENT_VERSION_LABEL, package_version())
-        labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
+    for index in range(1, decision.creates + 1):
+        seed = f"{cycle_seed}{seed_role}-{index}"
+        hostname = stable_hostname(seed, prefix=node_prefix)
         intents.append(
             InstanceCreateIntent(
                 seed=seed,
-                role="sandbox",
-                name=name,
+                role=role,
+                name=stable_hostname(seed, prefix=name_prefix),
                 node_id=hostname,
                 node_url=f"http://{hostname}:8090",
-                labels=labels,
-            )
-        )
-    return intents
-
-
-def build_builder_create_intents(
-    config: AutoscalerConfig,
-    decision: ScaleDecision,
-    defaults: NodeCreateDefaults,
-    *,
-    seed_prefix: str | None = None,
-) -> list[InstanceCreateIntent]:
-    count = create_count_from_decision(decision)
-    if count <= 0:
-        return []
-
-    cycle_seed = stable_hostname(seed_prefix or uuid4().hex[:10], prefix="")
-    intents: list[InstanceCreateIntent] = []
-    for index in range(1, count + 1):
-        seed = f"{cycle_seed}-builder-{index}"
-        hostname = stable_hostname(seed, prefix="sandbox-builder")
-        name = stable_hostname(seed, prefix="ucloud-sandbox-builder")
-        labels = dict(defaults.labels)
-        labels.pop(NODE_LABEL, None)
-        labels.setdefault(BUILDER_LABEL, "true")
-        labels.setdefault(RECONCILE_LABEL, "true")
-        labels[RECONCILE_CYCLE_LABEL] = cycle_seed
-        labels[CREATE_INDEX_LABEL] = str(index)
-        if config.deployment_id:
-            labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
-        labels.setdefault(AGENT_VERSION_LABEL, package_version())
-        labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
-        intents.append(
-            InstanceCreateIntent(
-                seed=seed,
-                role="builder",
-                name=name,
-                node_id=hostname,
-                node_url=f"http://{hostname}:8090",
-                labels=labels,
+                labels={
+                    role_label: "true",
+                    RECONCILE_LABEL: "true",
+                    RECONCILE_CYCLE_LABEL: cycle_seed,
+                    CREATE_INDEX_LABEL: str(index),
+                    DEPLOYMENT_LABEL: config.deployment_id,
+                    AGENT_VERSION_LABEL: package_version(),
+                    INIT_VERSION_LABEL: DEFAULT_INIT_VERSION,
+                },
             )
         )
     return intents
@@ -159,7 +119,7 @@ def evaluate_builder_scale(
         if unreachable_node_stop_ready(node, policy, now=now)
     ][:stop_budget]
     unreachable_job_ids = {node.job_id for node in unreachable_stop_candidates}
-    incompatible_stop_candidates = _incompatible_stop_candidates(
+    incompatible_candidates = incompatible_stop_candidates(
         [node for node in builder_nodes if node.job_id not in unreachable_job_ids],
         now=now,
     )[: max(0, stop_budget - len(unreachable_stop_candidates))]
@@ -192,8 +152,8 @@ def evaluate_builder_scale(
         )
         reasons.append(reason)
 
-    if incompatible_stop_candidates:
-        job_ids = tuple(node.job_id for node in incompatible_stop_candidates)
+    if incompatible_candidates:
+        job_ids = tuple(node.job_id for node in incompatible_candidates)
         reason = "idle builder node(s) have incompatible agent version"
         actions.append(
             ScaleAction(
@@ -273,18 +233,6 @@ def evaluate_builder_scale(
     )
 
 
-def create_count_from_decision(decision: ScaleDecision) -> int:
-    return sum(action.count for action in decision.actions if action.kind == "create")
-
-
-def stop_job_ids_from_decision(decision: ScaleDecision) -> tuple[str, ...]:
-    job_ids: list[str] = []
-    for action in decision.actions:
-        if action.kind == "stop":
-            job_ids.extend(action.job_ids)
-    return tuple(job_ids)
-
-
 def node_drain_ready(node: SandboxNode, token: str) -> bool:
     """Return whether a heartbeat proves that one drain incarnation is empty.
 
@@ -326,11 +274,8 @@ def partition_safe_stop_job_ids(
     requested_job_ids: tuple[str, ...],
     *,
     deployment_id: str,
-    allow_unlabeled: bool = False,
     ownership_label: str = NODE_LABEL,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if allow_unlabeled:
-        return requested_job_ids, ()
     if not deployment_id:
         return (), requested_job_ids
 
@@ -369,26 +314,3 @@ def _past_idle_grace(
     if reference is None:
         return False
     return (now - reference).total_seconds() >= idle_seconds
-
-
-def _incompatible_stop_candidates(
-    nodes: list[SandboxNode],
-    *,
-    now: datetime,
-) -> list[SandboxNode]:
-    candidates: list[SandboxNode] = []
-    for node in nodes:
-        if node.job.is_final or node.agent_version_compatible:
-            continue
-        if node.job.is_provisioning:
-            candidates.append(node)
-            continue
-        if node.job.is_running and node.heartbeat_fresh and node.is_idle:
-            candidates.append(node)
-    return sorted(
-        candidates,
-        key=lambda node: (
-            node.job.started_at or node.job.created_at or now,
-            node.job_id,
-        ),
-    )

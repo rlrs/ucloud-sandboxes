@@ -3,22 +3,17 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import signal
 import subprocess
 import tempfile
-from threading import Condition, Event, RLock, Thread, local
+from threading import Condition, RLock
 from typing import Any, Iterator, Protocol
 
-from .hibernation import (
-    HibernationDiskReservation,
-    hibernation_disk_reservation_mb,
-)
+from .hibernation import hibernation_disk_reservation_mb
 from .models import ResourceQuantity, utc_now
 
 
@@ -52,49 +47,6 @@ DEFAULT_LINUX_HOST_WRITABLE_PATHS = (
 )
 
 
-class _AdvisoryFileLock:
-    """A thread-reentrant advisory lock shared through a sidecar lock file."""
-
-    def __init__(self, data_path: Path) -> None:
-        self.lock_path = data_path.with_name(f".{data_path.name}.lock")
-        self._thread_lock = RLock()
-        self._local = local()
-
-    @contextmanager
-    def hold(self, *, exclusive: bool) -> Iterator[None]:
-        with self._thread_lock:
-            depth = int(getattr(self._local, "depth", 0))
-            if depth == 0:
-                self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-                handle = self.lock_path.open("a+b")
-                try:
-                    fcntl.flock(
-                        handle.fileno(),
-                        fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
-                    )
-                except Exception:
-                    handle.close()
-                    raise
-                self._local.handle = handle
-                self._local.exclusive = exclusive
-            elif exclusive and not bool(getattr(self._local, "exclusive", False)):
-                raise RuntimeError("cannot upgrade a shared state-file lock")
-            self._local.depth = depth + 1
-            try:
-                yield
-            finally:
-                remaining = int(self._local.depth) - 1
-                self._local.depth = remaining
-                if remaining == 0:
-                    handle = self._local.handle
-                    try:
-                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-                    finally:
-                        handle.close()
-                        del self._local.handle
-                        del self._local.exclusive
-
-
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     """Durably replace a JSON file using a process-unique sibling temporary."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -118,9 +70,6 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
             try:
                 os.fsync(directory_fd)
             except OSError:
-                # Some network and virtual filesystems do not support
-                # directory fsync.  The file itself was already fsynced and
-                # atomically replaced, so durability is best-effort there.
                 pass
         finally:
             os.close(directory_fd)
@@ -129,10 +78,6 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
             tmp_path.unlink()
         except FileNotFoundError:
             pass
-
-
-_SANDBOX_LOCKS_GUARD = RLock()
-_SANDBOX_LOCKS: dict[Path, _AdvisoryFileLock] = {}
 
 
 class SandboxConflictError(ValueError):
@@ -811,254 +756,6 @@ class SubprocessExecutor:
             stderr_bytes=stderr,
         )
 
-    def run_with_timeout(
-        self,
-        argv: tuple[str, ...],
-        *,
-        timeout_seconds: float,
-        input: bytes | None = None,
-        max_stdout_bytes: int = 64 * 1024,
-        max_stderr_bytes: int = 64 * 1024,
-    ) -> CommandResult:
-        """Run a lifecycle hook with a hard host-side deadline.
-
-        A fresh process group ensures helper children cannot keep the node
-        operation wedged after the deadline.  Exit 124 is reserved for timeout.
-        """
-
-        if max_stdout_bytes < 0 or max_stderr_bytes < 0:
-            raise ValueError("command output limits cannot be negative")
-        process = subprocess.Popen(
-            list(argv),
-            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        )
-        assert process.stdout is not None
-        assert process.stderr is not None
-        stdout = bytearray()
-        stderr = bytearray()
-        output_overflow = Event()
-
-        def drain(
-            stream: Any,
-            retained: bytearray,
-            limit: int,
-        ) -> None:
-            try:
-                while chunk := stream.read(64 * 1024):
-                    remaining = limit - len(retained)
-                    if remaining > 0:
-                        retained.extend(chunk[:remaining])
-                    if len(chunk) > remaining and not output_overflow.is_set():
-                        output_overflow.set()
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
-            finally:
-                stream.close()
-
-        stdout_thread = Thread(
-            target=drain,
-            args=(process.stdout, stdout, max_stdout_bytes),
-            daemon=True,
-        )
-        stderr_thread = Thread(
-            target=drain,
-            args=(process.stderr, stderr, max_stderr_bytes),
-            daemon=True,
-        )
-        stdout_thread.start()
-        stderr_thread.start()
-        if input is not None:
-            assert process.stdin is not None
-            try:
-                process.stdin.write(input)
-            except BrokenPipeError:
-                pass
-            finally:
-                process.stdin.close()
-        try:
-            exit_code = process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait()
-            detail = f"command timed out after {timeout_seconds:g}s".encode()
-            stderr.extend(detail[: max(0, max_stderr_bytes - len(stderr))])
-            exit_code = 124
-        stdout_thread.join()
-        stderr_thread.join()
-        if output_overflow.is_set() and exit_code != 124:
-            detail = b"command output exceeded limit"
-            stderr.extend(detail[: max(0, max_stderr_bytes - len(stderr))])
-            exit_code = 125
-        stdout_bytes = bytes(stdout)
-        stderr_bytes = bytes(stderr)
-        return CommandResult(
-            argv=argv,
-            exit_code=exit_code,
-            stdout=stdout_bytes.decode("utf-8", errors="replace"),
-            stderr=stderr_bytes.decode("utf-8", errors="replace"),
-            stdout_bytes=stdout_bytes,
-            stderr_bytes=stderr_bytes,
-        )
-
-    def run_bounded_stdout(
-        self,
-        argv: tuple[str, ...],
-        *,
-        max_stdout_bytes: int,
-        max_stderr_bytes: int = 64 * 1024,
-    ) -> CommandResult:
-        """Run a command while retaining at most stdout-limit+1 and bounded stderr.
-
-        Both pipes are drained concurrently so a noisy diagnostic stream cannot
-        deadlock the child.  Once one byte beyond the stdout limit is observed,
-        the child is killed; readers continue draining until the pipes close.
-        """
-        if max_stdout_bytes < 0 or max_stderr_bytes < 0:
-            raise ValueError("command output limits cannot be negative")
-        process = subprocess.Popen(
-            list(argv),
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        assert process.stdout is not None
-        assert process.stderr is not None
-        stdout = bytearray()
-        stderr = bytearray()
-        stdout_overflow = Event()
-
-        def drain_stdout() -> None:
-            try:
-                while chunk := process.stdout.read(64 * 1024):
-                    retained_limit = max_stdout_bytes + 1
-                    remaining = retained_limit - len(stdout)
-                    if remaining > 0:
-                        stdout.extend(chunk[:remaining])
-                    if len(stdout) > max_stdout_bytes and not stdout_overflow.is_set():
-                        stdout_overflow.set()
-                        try:
-                            process.kill()
-                        except ProcessLookupError:
-                            pass
-            finally:
-                process.stdout.close()
-
-        def drain_stderr() -> None:
-            try:
-                while chunk := process.stderr.read(64 * 1024):
-                    remaining = max_stderr_bytes - len(stderr)
-                    if remaining > 0:
-                        stderr.extend(chunk[:remaining])
-            finally:
-                process.stderr.close()
-
-        stdout_thread = Thread(target=drain_stdout, daemon=True)
-        stderr_thread = Thread(target=drain_stderr, daemon=True)
-        stdout_thread.start()
-        stderr_thread.start()
-        exit_code = process.wait()
-        stdout_thread.join()
-        stderr_thread.join()
-        stdout_bytes = bytes(stdout)
-        stderr_bytes = bytes(stderr)
-        return CommandResult(
-            argv=argv,
-            exit_code=exit_code,
-            stdout=stdout_bytes.decode("utf-8", errors="replace"),
-            stderr=stderr_bytes.decode("utf-8", errors="replace"),
-            stdout_bytes=stdout_bytes,
-            stderr_bytes=stderr_bytes,
-        )
-
-
-class RecordingExecutor:
-    def __init__(
-        self,
-        exit_code: int = 0,
-        *,
-        stdout: str = "",
-        stderr: str = "",
-        stdout_bytes: bytes | None = None,
-        stderr_bytes: bytes | None = None,
-    ) -> None:
-        self.exit_code = exit_code
-        self.stdout = stdout
-        self.stderr = stderr
-        self.stdout_bytes = (
-            stdout_bytes if stdout_bytes is not None else stdout.encode()
-        )
-        self.stderr_bytes = (
-            stderr_bytes if stderr_bytes is not None else stderr.encode()
-        )
-        self.commands: list[tuple[str, ...]] = []
-        self.inputs: list[bytes | None] = []
-
-    def run(
-        self, argv: tuple[str, ...], *, input: bytes | None = None
-    ) -> CommandResult:
-        self.commands.append(argv)
-        self.inputs.append(input)
-        return CommandResult(
-            argv=argv,
-            exit_code=self.exit_code,
-            stdout=self.stdout,
-            stderr=self.stderr,
-            stdout_bytes=self.stdout_bytes,
-            stderr_bytes=self.stderr_bytes,
-        )
-
-    def run_with_timeout(
-        self,
-        argv: tuple[str, ...],
-        *,
-        timeout_seconds: float,
-        input: bytes | None = None,
-    ) -> CommandResult:
-        del timeout_seconds
-        return self.run(argv, input=input)
-
-    def run_bounded_stdout(
-        self,
-        argv: tuple[str, ...],
-        *,
-        max_stdout_bytes: int,
-        max_stderr_bytes: int = 64 * 1024,
-    ) -> CommandResult:
-        self.commands.append(argv)
-        self.inputs.append(None)
-        stdout_bytes = self.stdout_bytes[: max_stdout_bytes + 1]
-        stderr_bytes = self.stderr_bytes[:max_stderr_bytes]
-        return CommandResult(
-            argv=argv,
-            exit_code=self.exit_code,
-            stdout=stdout_bytes.decode("utf-8", errors="replace"),
-            stderr=stderr_bytes.decode("utf-8", errors="replace"),
-            stdout_bytes=stdout_bytes,
-            stderr_bytes=stderr_bytes,
-        )
-
-
-class HibernationQuotaBackend(Protocol):
-    def prepare(
-        self,
-        reservation: HibernationDiskReservation,
-    ) -> dict[str, Any]: ...
-
-    def drop(
-        self,
-        reservation: HibernationDiskReservation,
-    ) -> dict[str, Any]: ...
-
-    def inventory(self) -> tuple[dict[str, Any], ...]: ...
-
 
 def linux_host_default_security() -> SandboxSecuritySpec:
     return SandboxSecuritySpec(
@@ -1267,9 +964,3 @@ def validate_container_path(name: str, value: str) -> None:
         raise ValueError(f"{name} cannot contain '..'.")
     if not CONTAINER_PATH_RE.match(value):
         raise ValueError(f"{name} contains unsupported characters.")
-
-
-def validate_container_file_path(name: str, value: str) -> None:
-    validate_container_path(name, value)
-    if value == "/" or value.endswith("/"):
-        raise ValueError(f"{name} must identify a file, not a directory.")

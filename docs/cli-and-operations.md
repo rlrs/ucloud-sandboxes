@@ -1,8 +1,7 @@
 # CLI and operations
 
-The CLI separates inspection from mutation. Planning commands are read-only;
-provider create, stop, bootstrap, and deployment actions require their own
-explicit execution flags.
+The autoscaler is dry-run by default. Its single `--execute` flag authorizes
+provider create/stop calls, route reconciliation, and VM initialization.
 
 ## Configuration and inspection
 
@@ -20,33 +19,28 @@ kind without changing reconciliation or policy. See
 Inspect a UCloud job:
 
 ```bash
-uv run ucloud-sandboxes inspect-job <job-id> --project <project-id>
+uv run ucloud-sandboxes inspect-job --config /path/to/deployment.json <job-id>
 ```
 
-Plan resource demand against live jobs and node heartbeats:
+Preview one complete autoscaler cycle without changing provider or routing
+state:
 
 ```bash
-uv run ucloud-sandboxes plan \
-  --project <project-id> \
-  --pending-vcpu 2 \
-  --pending-memory-mb 4096 \
-  --pending-disk-mb 10240
-```
-
-Use `--jobs-file` and `--heartbeats` for an entirely local plan. Sandbox demand
-is always expressed as CPU, memory, and disk shapes.
-
-Render one complete reconcile result without changing UCloud:
-
-```bash
-uv run ucloud-sandboxes reconcile \
-  --project <project-id> \
-  --private-network-id <network-id> \
-  --pending-vcpu 2 \
-  --pending-memory-mb 4096 \
-  --pending-disk-mb 10240 \
+uv run ucloud-sandboxes autoscaler --once \
+  --config /path/to/deployment.json \
   --output json
 ```
+
+`control-state.sqlite` is the shared gateway/autoscaler authority for node
+heartbeats and VM bootstrap retry state. It has no JSON import or migration
+path; use the same file for `serve-control-plane`, `autoscaler`, and
+`heartbeats`.
+
+Use `--jobs-file` for an offline provider-inventory fixture. Automatic
+discovery accepts only jobs carrying the matching deployment label and an
+explicit sandbox or builder ownership label. `--include-job <id>` is the sole
+rescue path for inspecting a known job outside that ownership filter; names and
+name prefixes never establish ownership or role.
 
 ## VM submission
 
@@ -54,10 +48,8 @@ Render a VM job payload:
 
 ```bash
 uv run ucloud-sandboxes submit-vm \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
+  --config /path/to/deployment.json \
   --role sandbox \
-  --private-network-id <network-id> \
   --hostname-seed sandbox-1 \
   --output json
 ```
@@ -68,11 +60,11 @@ resource fragments:
 
 ```bash
 uv run ucloud-sandboxes vm-network-attachment \
-  --private-network-id <network-id> \
+  --config /path/to/deployment.json \
   --hostname-seed sandbox-1
 
 uv run ucloud-sandboxes vm-public-link-attachment \
-  --public-link-id <link-id> \
+  --config /path/to/deployment.json \
   --port 8090
 ```
 
@@ -83,12 +75,9 @@ The normal release path is:
 ```bash
 uv build
 uv run ucloud-sandboxes deploy-all-in-one <gateway-job-id> \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
-  --private-network-id <network-id> \
+  --config /path/to/deployment.json \
   --wheel dist/ucloud_sandboxes-<version>-py3-none-any.whl \
   --direct-runsc /path/to/ucloud-direct-runsc \
-  --direct-runsc-commit <40-character-commit> \
   --managed-init /path/to/managed-init \
   --storage-native-manifest /path/to/storage-native-manifest.json \
   --output script
@@ -101,22 +90,17 @@ Run the same command with `--execute` to apply it. See
 
 ## Autoscaler execution
 
-`reconcile` never mutates provider state. Use a one-shot autoscaler cycle for an
-operator-controlled mutation:
+Add `--execute` to apply a reviewed cycle. `--once` exits after that cycle;
+without it, the same command runs continuously:
 
 ```bash
-uv run ucloud-sandboxes autoscaler-loop --once \
-  --project <project-id> \
-  --deployment-id <deployment-id> \
-  --private-network-id <network-id> \
-  --route-file /work/data/ucloud-sandboxes/state/routes.sqlite \
-  --execute \
-  --execute-stops \
-  --execute-init
+uv run ucloud-sandboxes autoscaler --once \
+  --config /path/to/deployment.json \
+  --execute
 ```
 
 The recurring systemd service uses the same process lock and provider journal.
-Create, stop, and node initialization permissions are intentionally distinct.
+All controller mutations share the same execution fence and process lock.
 
 New nodes are initialized with a role-specific bundle. The autoscaler stages
 the local bundle, computes its SHA-256 digest, supplies mandatory deployment and
@@ -143,6 +127,7 @@ with UCloud and keep the private key on the control-plane VM:
 
 ```bash
 uv run ucloud-sandboxes ensure-ucloud-ssh-key \
+  --config /path/to/deployment.json \
   --session-file /work/data/ucloud-sandboxes/state/ucloud-session.json \
   --public-key-file /work/data/ucloud-sandboxes/state/ssh/gateway-init.pub \
   --title "ucloud-sandboxes gateway init"

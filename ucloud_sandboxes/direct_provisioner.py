@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 import logging
-import shutil
 from threading import Lock
-import time
 from typing import Any
 
 from .storage_native_migration import (
@@ -23,40 +21,20 @@ from .direct_registry import (
     DirectSandboxRegistry,
 )
 from .direct_warden import DirectRunscWarden, DirectWardenError
-from .hibernation import (
-    HIBERNATION_FIXED_OVERHEAD_MB,
-    HibernationCapacityError,
-    HibernationDiskLedger,
-    HibernationDiskReservation,
-    HibernationState,
-    hibernation_memory_backing_reservation_mb,
-)
+from .hibernation import HibernationState, hibernation_disk_reservation_mb
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
-from .runtime_identity import (
-    NodeRuntimeIdentity,
-    NodeRuntimeIdentityStore,
-)
-from .sandbox import HibernationQuotaBackend, SandboxSpec
-from .storage_native_quota import StorageNativeQuotaBackend
-from .storage_native_registry import (
-    PublishedStorageLayer,
-    StorageSnapshotPublication,
+from .sandbox import SandboxSpec
+from .storage_native_daemon import (
+    StorageNativeConflictError,
+    StorageNativeNodeError,
+    StorageVolumeOwner,
+    StorageVolumeRecord,
+    StorageVolumeState,
 )
 
 
 _LOG = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class DirectProvisioningResult:
-    registration: DirectSandboxRegistration
-    lifecycle_state: HibernationState
-
-
-@dataclass(frozen=True)
-class DirectStorageNativeImportResult:
-    provisioning: DirectProvisioningResult
-    migration: StorageNativeMigration
+_MIB = 1024 * 1024
 
 
 class DirectSandboxProvisioner:
@@ -65,10 +43,7 @@ class DirectSandboxProvisioner:
     def __init__(
         self,
         *,
-        identity_store: NodeRuntimeIdentityStore,
         registry: DirectSandboxRegistry,
-        disk_ledger: HibernationDiskLedger,
-        quota_backend: HibernationQuotaBackend,
         image_store: DockerOverlay2RootfsStore,
         overlays: OverlayRootfsManager,
         oci: DirectOciConfigBuilder,
@@ -76,10 +51,7 @@ class DirectSandboxProvisioner:
         network_manager: DirectNetworkManager | None = None,
         storage_migrations: StorageNativeMigrationStore | None = None,
     ) -> None:
-        self.identity_store = identity_store
         self.registry = registry
-        self.disk_ledger = disk_ledger
-        self.quota_backend = quota_backend
         self.image_store = image_store
         self.overlays = overlays
         self.oci = oci
@@ -88,25 +60,24 @@ class DirectSandboxProvisioner:
         self.storage_migrations = storage_migrations or StorageNativeMigrationStore(
             registry.path.parent / "storage-native-migrations"
         )
-        self.identity = NodeRuntimeIdentity.from_fingerprint(
-            warden.config.runtime_fingerprint
+        self.runtime_compatibility_sha256 = (
+            warden.config.runtime_fingerprint.node_compatibility_sha256
         )
+        self.registry.bind_runtime_compatibility(self.runtime_compatibility_sha256)
         self._image_gc_state_guard = Lock()
         self._image_sweep_guard = Lock()
         self._image_gc_failure_generation = 1
         self._image_gc_reconciled_generation = 0
         self._validate_layout()
 
-    def start(self) -> tuple[DirectProvisioningResult, ...]:
-        """Bind node identity, audit all owners, and reconcile every incarnation."""
-        self.identity_store.bind(self.identity)
+    def start(self) -> tuple[DirectSandboxRegistration, ...]:
+        """Reconcile every registered incarnation."""
         registrations = self.registry.snapshot().records
         self.reconcile_image_cache(registrations)
-        self._audit_ownership(registrations)
         host_rules_ready = self.network_manager is not None
         if self.network_manager is not None:
             self.network_manager.reconcile()
-        results: list[DirectProvisioningResult] = []
+        results: list[DirectSandboxRegistration] = []
         deletion_failures: list[tuple[str, Exception]] = []
         # Reclaim every durably deleted sandbox before advancing any pending
         # create. A node at its hard storage limit must still be able to free
@@ -146,7 +117,7 @@ class DirectSandboxProvisioner:
                     raise DirectRegistryError(
                         "migration registration has no lifecycle journal"
                     )
-                results.append(DirectProvisioningResult(item, record.state))
+                results.append(item)
             else:
                 results.append(
                     self._advance(
@@ -170,8 +141,7 @@ class DirectSandboxProvisioner:
         spec: SandboxSpec,
         sandbox_generation: int,
         operation_id: str,
-    ) -> DirectProvisioningResult:
-        self.identity_store.bind(self.identity)
+    ) -> DirectSandboxRegistration:
         self._validate_spec(spec)
         # Resolve immutable image metadata and validate the full OCI translation
         # before persisting an operation or reserving node capacity.
@@ -180,22 +150,13 @@ class DirectSandboxProvisioner:
                 spec=spec,
                 sandbox_generation=sandbox_generation,
                 operation_id=operation_id,
-                runtime_identity_sha256=self.identity.digest,
+                runtime_compatibility_sha256=self.runtime_compatibility_sha256,
             )
             if registration.phase == "planned":
-                try:
-                    reservation = self._reserve(registration)
-                except HibernationCapacityError:
-                    self.registry.abort_planned(
-                        spec.id,
-                        expected_revision=registration.revision,
-                    )
-                    raise
-                registration = self._prepare_quota(registration, reservation)
+                registration = self._prepare_quota(registration)
             return self._advance(registration, image=image)
 
-    def reconcile(self, sandbox_id: str) -> DirectProvisioningResult:
-        self.identity_store.bind(self.identity)
+    def reconcile(self, sandbox_id: str) -> DirectSandboxRegistration:
         registration = self.registry.get(sandbox_id)
         if registration is None:
             raise DirectRegistryError("direct sandbox registration is absent")
@@ -206,18 +167,17 @@ class DirectSandboxProvisioner:
         migration: StorageNativeMigration,
         *,
         migration_id: str,
-    ) -> DirectStorageNativeImportResult:
+    ) -> tuple[DirectSandboxRegistration, StorageNativeMigration]:
         """Adopt a durable remote snapshot by its published storage identity."""
 
-        if not isinstance(self.quota_backend, StorageNativeQuotaBackend):
-            raise StorageNativeMigrationError(
-                "storage-native migration requires the storage-native quota backend"
-            )
         portable = migration.manifest
-        if portable.runtime_identity != self.identity:
+        if (
+            portable.runtime.node_compatibility_sha256
+            != self.runtime_compatibility_sha256
+        ):
             raise StorageNativeMigrationError(
-                "storage-native migration belongs to another runtime identity"
-        )
+                "storage-native migration belongs to another runtime compatibility"
+            )
         self._validate_spec(portable.spec)
         with self.image_store.operation_lease(portable.spec.image) as image:
             return self._stage_storage_native_import_materialized(
@@ -232,47 +192,34 @@ class DirectSandboxProvisioner:
         *,
         migration_id: str,
         image,
-    ) -> DirectStorageNativeImportResult:
+    ) -> tuple[DirectSandboxRegistration, StorageNativeMigration]:
         portable = migration.manifest
         migration_sha256 = migration.sha256
         registration = self.registry.plan_import(
             spec=portable.spec,
             sandbox_generation=portable.sandbox_generation,
             operation_id=portable.create_operation_id,
-            runtime_identity_sha256=self.identity.digest,
+            runtime_compatibility_sha256=self.runtime_compatibility_sha256,
             migration_id=migration_id,
             migration_sha256=migration_sha256,
         )
         if registration.phase == "import_planned":
-            try:
-                reservation = self._reserve(
-                    registration,
-                    allow_released_generation=True,
-                )
-            except HibernationCapacityError:
-                self.registry.abort_import_planned(
-                    portable.sandbox_id,
-                    expected_revision=registration.revision,
-                    migration_id=migration_id,
-                    migration_sha256=migration_sha256,
-                    retire=False,
-                )
-                raise
-            prepared = self.quota_backend.prepare_import(
-                reservation,
-                migration.publication,
-                migration_id=migration_id,
+            total_mb = self._quota_total_mb(registration)
+            prepared = self.warden.storage.prepare_import(
+                self._storage_owner(registration),
+                publication=migration.publication,
+                operation_id=f"quota-import:{migration_id}",
             )
-            quota_path = Path(str(prepared["path"]))
-            if quota_path != self._quota_path(registration):
-                raise DirectRegistryError(
-                    "storage-native import returned another sandbox incarnation"
-                )
+            quota_path = self._require_storage_record(
+                registration,
+                prepared,
+                total_mb=total_mb,
+            )
             registration = self.registry.commit_import_quota(
                 registration.sandbox_id,
                 expected_revision=registration.revision,
-                project_id=reservation.project_id,
-                total_mb=reservation.total_mb,
+                project_id=prepared.accounting_id,
+                total_mb=total_mb,
                 quota_path=quota_path,
             )
         config = self.oci.build(
@@ -289,10 +236,7 @@ class DirectSandboxProvisioner:
             if record is None:
                 raise DirectRegistryError("activated import has no lifecycle journal")
             stored = self.storage_migrations.load(migration_id)
-            return DirectStorageNativeImportResult(
-                DirectProvisioningResult(registration, record.state),
-                stored,
-            )
+            return registration, stored
         if (
             registration.migration_id != migration_id
             or registration.migration_sha256 != migration_sha256
@@ -301,7 +245,6 @@ class DirectSandboxProvisioner:
         if registration.phase == "importing":
             local_manifest = self.storage_migrations.rebind_mounted_snapshot(
                 migration,
-                expected_runtime_identity=self.identity,
                 expected_runtime=replace(
                     self.warden.config.runtime_fingerprint,
                     rootfs_sha256=image.rootfs_identity_sha256,
@@ -328,7 +271,7 @@ class DirectSandboxProvisioner:
             record = self.warden.inspect(sandbox)
             if record is None:
                 storage_record = self.warden._storage_record(sandbox)
-                if storage_record.get("state") == "published":
+                if storage_record.state.value == "published":
                     self.warden._mount_storage(
                         sandbox,
                         operation_id=f"import:{migration_id}:remount",
@@ -336,7 +279,6 @@ class DirectSandboxProvisioner:
                     self.overlays.resume_sandbox(sandbox)
                     self.storage_migrations.rebind_mounted_snapshot(
                         migration,
-                        expected_runtime_identity=self.identity,
                         expected_runtime=replace(
                             self.warden.config.runtime_fingerprint,
                             rootfs_sha256=image.rootfs_identity_sha256,
@@ -360,7 +302,7 @@ class DirectSandboxProvisioner:
             )
             destination_migration = StorageNativeMigration(
                 manifest=portable,
-                publication=self._publication_from_storage_record(published),
+                publication=published.publication(),
             )
             self.storage_migrations.save(migration_id, destination_migration)
             registration = self.registry.commit_import_ready(
@@ -369,40 +311,16 @@ class DirectSandboxProvisioner:
                 migration_id=migration_id,
                 migration_sha256=migration_sha256,
             )
-            return DirectStorageNativeImportResult(
-                DirectProvisioningResult(registration, record.state),
-                destination_migration,
-            )
+            return registration, destination_migration
         if registration.phase == "import_ready":
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None or record.state != HibernationState.PARKED:
                 raise DirectRegistryError(
                     "storage-native import-ready sandbox is not durably parked"
                 )
-            return DirectStorageNativeImportResult(
-                DirectProvisioningResult(registration, record.state),
-                self.storage_migrations.load(migration_id),
-            )
+            return registration, self.storage_migrations.load(migration_id)
         raise DirectRegistryError(
             f"storage-native import cannot continue from {registration.phase}"
-        )
-
-    @staticmethod
-    def _publication_from_storage_record(
-        record: dict[str, object],
-    ) -> StorageSnapshotPublication:
-        layers = record.get("published_layers")
-        if not isinstance(layers, list):
-            raise DirectRegistryError(
-                "published storage-native volume has invalid layers"
-            )
-        return StorageSnapshotPublication(
-            manifest_digest=str(record.get("published_manifest_digest") or ""),
-            tag=str(record.get("published_tag") or ""),
-            repository=str(record.get("published_repository") or ""),
-            repo_blob_url=str(record.get("published_repo_blob_url") or ""),
-            virtual_size=int(record.get("virtual_size") or 0),
-            layers=tuple(PublishedStorageLayer.from_dict(layer) for layer in layers),
         )
 
     def activate_import(
@@ -411,7 +329,7 @@ class DirectSandboxProvisioner:
         *,
         migration_id: str,
         migration_sha256: str,
-    ) -> DirectProvisioningResult:
+    ) -> DirectSandboxRegistration:
         registration = self.registry.get(sandbox_id)
         if registration is None:
             raise DirectRegistryError("migration destination is absent")
@@ -426,7 +344,7 @@ class DirectSandboxProvisioner:
             record = self.warden.inspect(registration.to_direct_sandbox())
             if record is None:
                 raise DirectRegistryError("activated import has no lifecycle journal")
-            return DirectProvisioningResult(registration, record.state)
+            return registration
         registration = self.registry.activate_import(
             sandbox_id,
             expected_revision=registration.revision,
@@ -436,7 +354,7 @@ class DirectSandboxProvisioner:
         record = self.warden.inspect(registration.to_direct_sandbox())
         if record is None or record.state != HibernationState.PARKED:
             raise DirectRegistryError("activated migration is not parked")
-        return DirectProvisioningResult(registration, record.state)
+        return registration
 
     def abort_import(
         self,
@@ -453,20 +371,10 @@ class DirectSandboxProvisioner:
                 "an activated migration cannot be aborted as an import"
             )
         if registration.phase == "import_planned":
-            matching = [
-                item
-                for item in self.disk_ledger.inventory().reservations
-                if item.sandbox_id == registration.sandbox_id
-                and item.sandbox_generation == registration.sandbox_generation
-            ]
-            if len(matching) > 1:
-                raise DirectRegistryError("import plan owns multiple disk reservations")
-            if matching:
-                self.quota_backend.drop(matching[0])
-                self.disk_ledger.release(
-                    sandbox_id=registration.sandbox_id,
-                    sandbox_generation=registration.sandbox_generation,
-                )
+            self._drop_storage(
+                registration,
+                expected_project_id=None,
+            )
             self.registry.abort_import_planned(
                 sandbox_id,
                 expected_revision=registration.revision,
@@ -507,12 +415,11 @@ class DirectSandboxProvisioner:
         self._delete_registration(registration)
 
     def delete(self, sandbox_id: str) -> None:
-        self.identity_store.bind(self.identity)
         registration = self.registry.get(sandbox_id)
         if registration is None:
             return
         if registration.phase not in {"owned", "deleting"}:
-            registration = self._advance(registration).registration
+            registration = self._advance(registration)
         if registration.phase == "owned":
             registration = self.registry.begin_delete(
                 sandbox_id,
@@ -532,13 +439,13 @@ class DirectSandboxProvisioner:
                 registration.sandbox_generation,
             )
         self.overlays.release_sandbox(sandbox)
-        reservation = self._deletion_reservation_for(registration)
-        self.quota_backend.drop(reservation)
-        # Logical node capacity is released only after the physical quota tree
-        # is gone. Replays after this boundary are fenced by the ledger tombstone.
-        self.disk_ledger.release(
-            sandbox_id=registration.sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
+        if registration.quota_project_id is None or registration.quota_total_mb is None:
+            raise DirectRegistryError(
+                "deleting direct registration lacks immutable quota identity"
+            )
+        self._drop_storage(
+            registration,
+            expected_project_id=registration.quota_project_id,
         )
         self.registry.commit_deleted(
             sandbox_id,
@@ -551,8 +458,7 @@ class DirectSandboxProvisioner:
     def image_cache_reconciliation_pending(self) -> bool:
         with self._image_gc_state_guard:
             return (
-                self._image_gc_reconciled_generation
-                < self._image_gc_failure_generation
+                self._image_gc_reconciled_generation < self._image_gc_failure_generation
             )
 
     def reconcile_image_cache_if_pending(self) -> bool:
@@ -619,85 +525,6 @@ class DirectSandboxProvisioner:
                     failure_generation,
                 )
 
-    def _deletion_reservation_for(
-        self,
-        registration: DirectSandboxRegistration,
-    ) -> HibernationDiskReservation:
-        """Recover cleanup identity across the ledger-release crash boundary.
-
-        Physical quota is removed before logical admission is released. A
-        crash after the ledger tombstone but before registry completion must
-        still be able to replay quota deletion and commit the DELETING record.
-        The immutable registry record contains every field needed to recreate
-        that cleanup capability, and the total is checked against the original
-        quota commitment before it is used.
-        """
-
-        matching = [
-            item
-            for item in self.disk_ledger.inventory().reservations
-            if item.sandbox_id == registration.sandbox_id
-            and item.sandbox_generation == registration.sandbox_generation
-        ]
-        if len(matching) > 1:
-            raise DirectRegistryError(
-                "deleting direct registration owns multiple disk reservations"
-            )
-        if matching:
-            return matching[0]
-        if registration.phase != "deleting":
-            raise DirectRegistryError(
-                "direct registration does not have exactly one disk reservation"
-            )
-        if (
-            registration.quota_project_id is None
-            or registration.quota_total_mb is None
-            or registration.spec.memory_mb is None
-            or registration.spec.disk_mb is None
-        ):
-            raise DirectRegistryError(
-                "deleting direct registration lacks immutable quota identity"
-            )
-        reservation = HibernationDiskReservation(
-            sandbox_id=registration.sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
-            project_id=registration.quota_project_id,
-            memory_mb=registration.spec.memory_mb,
-            writable_disk_mb=registration.spec.disk_mb,
-            memory_backing_mb=hibernation_memory_backing_reservation_mb(
-                registration.spec.memory_mb
-            ),
-            private_pages_mb=registration.spec.memory_mb,
-            fixed_overhead_mb=HIBERNATION_FIXED_OVERHEAD_MB,
-            created_ns=max(1, registration.created_ns or time.time_ns()),
-        )
-        if reservation.total_mb != registration.quota_total_mb:
-            raise DirectRegistryError(
-                "deleting direct registration quota identity changed"
-            )
-        return reservation
-
-    def _reset_interrupted_import(
-        self,
-        registration: DirectSandboxRegistration,
-    ) -> None:
-        """Remove only non-authoritative state owned by an IMPORTING record."""
-        if registration.phase != "importing":
-            raise DirectRegistryError("only an importing registration may reset")
-        self.overlays.discard_unregistered(
-            sandbox_id=registration.sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
-        )
-        writable = Path(registration.quota_path)
-        expected = self._quota_path(registration)
-        if writable != expected or writable.parent != self.overlays.writable_root:
-            raise DirectRegistryError("import reset escaped its quota incarnation")
-        for child in tuple(writable.iterdir()):
-            if child.is_dir() and not child.is_symlink():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
-
     def _advance(
         self,
         registration: DirectSandboxRegistration,
@@ -705,14 +532,16 @@ class DirectSandboxProvisioner:
         image=None,
         config: dict[str, Any] | None = None,
         host_rules_ready: bool = False,
-    ) -> DirectProvisioningResult:
-        if registration.runtime_identity_sha256 != self.identity.digest:
+    ) -> DirectSandboxRegistration:
+        if (
+            registration.runtime_compatibility_sha256
+            != self.runtime_compatibility_sha256
+        ):
             raise DirectRegistryError(
-                "direct registration belongs to another runtime identity"
+                "direct registration belongs to another runtime compatibility"
             )
         if registration.phase == "planned":
-            reservation = self._reserve(registration)
-            registration = self._prepare_quota(registration, reservation)
+            registration = self._prepare_quota(registration)
         if registration.phase == "quota_ready" and image is None:
             with self.image_store.operation_lease(registration.spec.image) as image:
                 return self._advance(
@@ -824,7 +653,7 @@ class DirectSandboxProvisioner:
                 raise DirectWardenError(
                     f"direct sandbox requires operator action: {record.state.value}"
                 )
-            return DirectProvisioningResult(registration, record.state)
+            return registration
         if registration.phase == "deleting":
             self.delete(registration.sandbox_id)
             raise DirectRegistryError(
@@ -837,156 +666,120 @@ class DirectSandboxProvisioner:
     def _prepare_quota(
         self,
         registration: DirectSandboxRegistration,
-        reservation: HibernationDiskReservation,
     ) -> DirectSandboxRegistration:
-        payload = self.quota_backend.prepare(reservation)
-        expected = self._quota_path(registration)
-        if Path(str(payload.get("path", ""))) != expected:
-            raise DirectWardenError(
-                "quota helper prepared an unexpected direct sandbox path"
-            )
-        if (
-            payload.get("project_id") != reservation.project_id
-            or payload.get("hard_limit_mb") != reservation.total_mb
-        ):
-            raise DirectWardenError(
-                "quota helper did not enforce the full direct sandbox reservation"
-            )
+        total_mb = self._quota_total_mb(registration)
+        record = self.warden.storage.prepare_volume(
+            self._storage_owner(registration),
+            operation_id=registration.operation_id,
+            virtual_size=total_mb * _MIB,
+        )
+        expected = self._require_storage_record(
+            registration,
+            record,
+            total_mb=total_mb,
+        )
         return self.registry.commit_quota(
             registration.sandbox_id,
             expected_revision=registration.revision,
-            project_id=reservation.project_id,
-            total_mb=reservation.total_mb,
+            project_id=record.accounting_id,
+            total_mb=total_mb,
             quota_path=expected,
         )
 
-    def _reserve(
+    def _drop_storage(
         self,
         registration: DirectSandboxRegistration,
         *,
-        allow_released_generation: bool = False,
-    ) -> HibernationDiskReservation:
-        assert registration.spec.memory_mb is not None
-        assert registration.spec.disk_mb is not None
-        return self.disk_ledger.reserve(
-            sandbox_id=registration.sandbox_id,
-            sandbox_generation=registration.sandbox_generation,
-            memory_mb=registration.spec.memory_mb,
-            writable_disk_mb=registration.spec.disk_mb,
-            allow_released_generation=allow_released_generation,
+        expected_project_id: int | None,
+    ) -> None:
+        owner = self._storage_owner(registration)
+        total_mb = registration.quota_total_mb or self._quota_total_mb(registration)
+        try:
+            record = self.warden.storage.get_volume(owner.volume_id)
+        except StorageNativeConflictError as exc:
+            if expected_project_id is None:
+                return
+            raise StorageNativeNodeError(
+                "storage-native quota owner is absent"
+            ) from exc
+        self._require_storage_record(
+            registration,
+            record,
+            total_mb=total_mb,
+            expected_project_id=expected_project_id,
+        )
+        if record.state == StorageVolumeState.DELETED:
+            return
+        self.warden.storage.delete_volume(
+            owner,
+            operation_id=f"quota-delete:{record.accounting_id}",
+            expected_accounting_id=expected_project_id,
+            expected_virtual_size=total_mb * _MIB,
         )
 
-    def _reservation_for(
+    def _require_storage_record(
         self,
         registration: DirectSandboxRegistration,
-    ) -> HibernationDiskReservation:
-        matching = [
-            item
-            for item in self.disk_ledger.inventory().reservations
-            if item.sandbox_id == registration.sandbox_id
-            and item.sandbox_generation == registration.sandbox_generation
-        ]
-        if len(matching) != 1:
-            raise DirectRegistryError(
-                "direct registration does not have exactly one disk reservation"
+        record: StorageVolumeRecord,
+        *,
+        total_mb: int,
+        expected_project_id: int | None = None,
+    ) -> Path:
+        if (
+            record.owner != self._storage_owner(registration)
+            or record.virtual_size != total_mb * _MIB
+            or (
+                expected_project_id is not None
+                and record.accounting_id != expected_project_id
             )
-        reservation = matching[0]
-        if registration.quota_project_id not in {None, reservation.project_id}:
-            raise DirectRegistryError(
-                "direct registration quota project mismatches ledger"
+        ):
+            raise StorageNativeNodeError(
+                "storage-native volume belongs to another quota owner"
             )
-        if registration.quota_total_mb not in {None, reservation.total_mb}:
-            raise DirectRegistryError(
-                "direct registration quota limit mismatches ledger"
+        expected = self.overlays.writable_root / record.volume_id
+        if Path(record.mount_path) != expected:
+            raise StorageNativeNodeError(
+                "storage-native service returned an unexpected mount path"
             )
-        return reservation
+        if record.accounting_id <= 0:
+            raise StorageNativeNodeError(
+                "storage-native service returned an invalid accounting ID"
+            )
+        return expected
 
-    def _quota_path(self, registration: DirectSandboxRegistration) -> Path:
-        return self.overlays.writable_root / (
-            f"{registration.sandbox_id}.sandbox-{registration.sandbox_generation}"
+    @staticmethod
+    def _storage_owner(
+        registration: DirectSandboxRegistration,
+    ) -> StorageVolumeOwner:
+        return StorageVolumeOwner(
+            volume_id=(
+                f"{registration.sandbox_id}.sandbox-"
+                f"{registration.sandbox_generation}"
+            ),
+            sandbox_id=registration.sandbox_id,
+            sandbox_generation=registration.sandbox_generation,
         )
 
-    def _audit_ownership(
-        self,
-        registrations_snapshot: tuple[DirectSandboxRegistration, ...],
-    ) -> None:
-        registrations = {
-            (item.sandbox_id, item.sandbox_generation): item
-            for item in registrations_snapshot
-        }
-        reservations = {
-            (item.sandbox_id, item.sandbox_generation): item
-            for item in self.disk_ledger.inventory().reservations
-        }
-        quota_inventory = {
-            (str(item["sandbox_id"]), int(item["sandbox_generation"])): item
-            for item in self.quota_backend.inventory()
-        }
-        if set(reservations) - set(registrations):
+    @staticmethod
+    def _quota_total_mb(registration: DirectSandboxRegistration) -> int:
+        memory_mb = registration.spec.memory_mb
+        disk_mb = registration.spec.disk_mb
+        if memory_mb is None or disk_mb is None:
             raise DirectRegistryError(
-                "disk ledger contains an owner absent from the direct registry"
+                "direct registration lacks explicit memory and disk limits"
             )
-        if set(quota_inventory) - set(registrations):
-            raise DirectRegistryError(
-                "quota backend contains an owner absent from the direct registry"
-            )
-        for identity, registration in registrations.items():
-            if registration.runtime_identity_sha256 != self.identity.digest:
-                raise DirectRegistryError(
-                    "direct registry contains another runtime identity"
-                )
-            reservation = reservations.get(identity)
-            quota = quota_inventory.get(identity)
-            if (
-                registration.phase not in {"planned", "import_planned"}
-                and (reservation is None)
-                and registration.phase != "deleting"
-            ):
-                raise DirectRegistryError(
-                    "registered direct sandbox is missing disk admission"
-                )
-            if (
-                registration.phase
-                in {
-                    "quota_ready",
-                    "importing",
-                    "rootfs_ready",
-                    "import_ready",
-                    "owned",
-                    "moving_out",
-                    "deleting",
-                }
-                and quota is None
-            ):
-                if registration.phase != "deleting":
-                    raise DirectRegistryError(
-                        "registered direct sandbox is missing physical quota"
-                    )
-            if quota is not None:
-                ownership = reservation
-                if ownership is None and registration.phase == "deleting":
-                    ownership = self._deletion_reservation_for(registration)
-                if ownership is None:
-                    raise DirectRegistryError(
-                        "physical quota has no logical disk reservation"
-                    )
-                if (
-                    quota["project_id"] != ownership.project_id
-                    or quota["hard_limit_mb"] != ownership.total_mb
-                    or Path(quota["path"]) != self._quota_path(registration)
-                ):
-                    raise DirectRegistryError(
-                        "direct sandbox physical quota ownership is inconsistent"
-                    )
+        return hibernation_disk_reservation_mb(
+            memory_mb=memory_mb,
+            writable_disk_mb=disk_mb,
+        )
 
     def _validate_layout(self) -> None:
         config = self.warden.config
         if (
             self.overlays.bundle_root != config.bundle_root
             or self.overlays.writable_root != config.memory_root
-            or config.memory_root != config.artifact_root
             or not self.overlays.require_precreated_writable
-            or config.remove_memory_directory_on_delete
+            or self.warden.rootfs_lifecycle is not self.overlays
         ):
             raise ValueError(
                 "direct provisioner requires the unified quota-owned runtime layout"

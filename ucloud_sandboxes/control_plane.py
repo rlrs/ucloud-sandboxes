@@ -5,7 +5,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler
 import fcntl
 import hashlib
 import hmac
@@ -24,14 +23,17 @@ from uuid import uuid4
 
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
-    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
     has_capability,
 )
-from .build_context_store import BuildContextBlobStore, ContentLengthReader
+from .build_context_store import (
+    BuildContextBlobStore,
+    BuildContextHttpHandler,
+    build_context_digest_from_path,
+)
 from .dashboard import dashboard_asset
 from .deployment import agent_version_is_schedulable, service_health
 from .storage_native_migration import (
@@ -39,7 +41,7 @@ from .storage_native_migration import (
     StorageNativeMigration,
 )
 from .hibernation import hibernation_disk_reservation_mb
-from .http_server import HighBacklogThreadingHTTPServer
+from .http_server import DEFAULT_MAX_JSON_BODY_BYTES, HighBacklogThreadingHTTPServer
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -76,6 +78,7 @@ from .metrics import (
 from .models import (
     NodeHeartbeat,
     ResourceQuantity,
+    SandboxInventoryEntry,
     ScalePolicy,
     parse_iso_datetime,
     utc_now,
@@ -85,9 +88,9 @@ from .program_scheduler import (
     node_pressure_score,
     plan_shadow_wake_queue,
 )
+from .control_state import ControlStateStore
 from .registry import (
     HeartbeatIdentityError,
-    HeartbeatStore,
     heartbeat_from_dict,
     heartbeat_to_dict,
 )
@@ -99,14 +102,10 @@ from .routing import (
     ProgramRequestState,
     RoutingStore,
     SandboxRoute,
+    SandboxRouteAllocation,
     SandboxRouteConflictError,
 )
-from .sandbox import (
-    OPERATION_ID_RE,
-    SandboxSpec,
-    sandbox_spec_fingerprint,
-    sandbox_specs_match,
-)
+from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
 
 
 _IMAGE_PULL_LOCKS_GUARD = RLock()
@@ -132,7 +131,6 @@ IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
 # behind other creates on a dense direct node.
 SANDBOX_CREATE_PROXY_TIMEOUT_SECONDS = 10 * 60
 DEFAULT_PROXY_TIMEOUT_SECONDS = 60
-DEFAULT_MAX_JSON_BODY_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_PROXY_RESPONSE_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROXY_ERROR_BYTES = 1024 * 1024
@@ -242,15 +240,29 @@ class NodePlacementState:
 
 
 @dataclass(frozen=True)
+class PlacementReservation:
+    reservation_id: str
+    node_id: str
+    job_id: str
+    node_url: str
+    resources: ResourceQuantity
+    image: str
+    state: str = "creating"
+
+
+PlacementRecord = SandboxRoute | PlacementReservation
+
+
+@dataclass(frozen=True)
 class PlacementRouteIndex:
     """Route lookup tables built once for a gateway placement decision."""
 
-    by_node_id: dict[str, tuple[SandboxRoute, ...]]
-    by_job_id: dict[str, tuple[SandboxRoute, ...]]
-    by_node_url: dict[str, tuple[SandboxRoute, ...]]
+    by_node_id: dict[str, tuple[PlacementRecord, ...]]
+    by_job_id: dict[str, tuple[PlacementRecord, ...]]
+    by_node_url: dict[str, tuple[PlacementRecord, ...]]
 
-    def routes_for(self, heartbeat: NodeHeartbeat) -> list[SandboxRoute]:
-        matches: list[SandboxRoute] = []
+    def routes_for(self, heartbeat: NodeHeartbeat) -> list[PlacementRecord]:
+        matches: list[PlacementRecord] = []
         seen: set[int] = set()
         keys = (
             self.by_node_id.get(heartbeat.node_id, ()),
@@ -382,10 +394,6 @@ class RegistryLayerMetadataCache:
         return key, repository, digest
 
 
-class RequestBodyTooLargeError(ValueError):
-    pass
-
-
 class GatewaySchedulingBusyError(RuntimeError):
     """Placement serialization is occupied and the caller should retry."""
 
@@ -456,18 +464,17 @@ def _open_node_request(
     return request.urlopen(req, timeout=timeout)
 
 
-class ControlPlaneHandler(BaseHTTPRequestHandler):
-    store: HeartbeatStore
-    routing_store: RoutingStore | None
-    upstream_node_url: str | None
+class ControlPlaneHandler(BuildContextHttpHandler):
+    store: ControlStateStore
+    routing_store: RoutingStore
     gateway_bearer_token: str
     heartbeat_bearer_token: str
     node_control_bearer_token: str
     deployment_id: str
     heartbeat_ttl_seconds: int
-    image_manager: ImageManager | None
+    image_manager: ImageManager
     build_context_store: BuildContextBlobStore
-    metrics_store: MetricsStore | None
+    metrics_store: MetricsStore
     registry_url: str | None
     registry_worker_url: str | None = None
     registry_status_cache: dict[str, Any] | None
@@ -520,7 +527,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if not self._check_authorized():
             return
-        context_digest = _build_context_digest_from_path(parsed.path)
+        context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None:
             try:
                 size = self.build_context_store.size(context_digest)
@@ -536,11 +543,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/nodes":
             nodes = [
-                heartbeat_to_dict(heartbeat) for heartbeat in self.store.load().values()
+                heartbeat_to_dict(heartbeat)
+                for heartbeat in self.store.load_heartbeats().values()
             ]
             self._write_json({"nodes": nodes})
             return
-        if parsed.path == "/v1/demand" and self.routing_store is not None:
+        if parsed.path == "/v1/demand":
             try:
                 demand_payload = self._demand_payload()
             except sqlite3.DatabaseError as exc:
@@ -551,8 +559,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/metrics":
             try:
                 body = self._metrics_response_bytes(
-                    full=_truthy_query_param(parsed, "full")
-                    or _truthy_query_param(parsed, "detail"),
+                    full=_truthy_query_param(parsed, "full"),
                     refresh_registry=_truthy_query_param(parsed, "refresh_registry"),
                 )
             except sqlite3.DatabaseError as exc:
@@ -569,8 +576,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if self._route_to_nodes(parsed.path):
             return
-        if self._proxy_to_node():
-            return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
@@ -582,8 +587,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if not self._check_authorized():
                 return
             if self._route_to_nodes(parsed.path):
-                return
-            if self._proxy_to_node():
                 return
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
@@ -645,7 +648,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
 
         try:
-            receipt = self.store.upsert_received(heartbeat)
+            receipt = self.store.receive_heartbeat(heartbeat)
         except HeartbeatIdentityError as exc:
             self._write_json(
                 {"error": str(exc)},
@@ -661,30 +664,15 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
             if self.registry_layer_cache is not None:
                 self.registry_layer_cache.hydrate_async(stored_heartbeat.cached_images)
-            if (
-                self.routing_store is not None
-                and stored_heartbeat.inventory_complete
-                and stored_heartbeat.node_url
-            ):
-                inventory_routes = [
-                    SandboxRoute(
-                        sandbox_id=item.sandbox_id,
-                        node_id=stored_heartbeat.node_id,
-                        job_id=stored_heartbeat.job_id,
-                        node_url=stored_heartbeat.node_url,
-                        resources=item.resources,
-                        state=item.state or "running",
-                        generation=item.generation,
-                        create_operation_id=item.operation_id,
-                        spec_hash=item.spec_hash,
-                        node_epoch=stored_heartbeat.node_epoch,
-                        activity_epoch=stored_heartbeat.activity_epoch,
-                    )
-                    for item in stored_heartbeat.inventory
-                ]
+            if stored_heartbeat.inventory_complete and stored_heartbeat.node_url:
                 self.routing_store.reconcile_sandboxes_for_node(
                     stored_heartbeat.node_url,
-                    inventory_routes,
+                    stored_heartbeat.inventory,
+                    node_id=stored_heartbeat.node_id,
+                    job_id=stored_heartbeat.job_id,
+                    reported_sandbox_ids=(
+                        item.sandbox_id for item in stored_heartbeat.inventory
+                    ),
                     observed_at=stored_heartbeat.freshness_at.isoformat(),
                     node_epoch=stored_heartbeat.node_epoch,
                     activity_epoch=stored_heartbeat.activity_epoch,
@@ -700,8 +688,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not heartbeat.node_id or not heartbeat.job_id or not heartbeat.node_epoch:
             return "heartbeat node_id, job_id, and node_epoch are required"
 
-        if self.routing_store is None:
-            return None
         for route in self.routing_store.sandbox_routes_matching_node_identity(
             node_id=heartbeat.node_id,
             job_id=heartbeat.job_id,
@@ -720,49 +706,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self._check_authorized():
             return
-        context_digest = _build_context_digest_from_path(parsed.path)
+        context_digest = build_context_digest_from_path(parsed.path)
         if context_digest is not None:
             self._store_build_context(context_digest)
             return
         if self._route_to_nodes(parsed.path):
             return
-        if self._proxy_to_node():
-            return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
-
-    def _store_build_context(self, digest: str) -> None:
-        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
-        if content_type.strip().lower() != "application/gzip":
-            self.close_connection = True
-            self._write_json(
-                {"error": "build contexts require Content-Type: application/gzip"},
-                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
-            )
-            return
-        try:
-            length = self._request_content_length(
-                max_bytes=self.build_context_store.max_blob_bytes
-            )
-            result = self.build_context_store.put_with_status(
-                digest,
-                ContentLengthReader(self.rfile, length),
-                content_length=length,
-            )
-            self.build_context_store.gc(protected=(digest,))
-        except RequestBodyTooLargeError as exc:
-            self.close_connection = True
-            self._write_json(
-                {"error": str(exc)}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
-            )
-            return
-        except (OSError, ValueError) as exc:
-            self.close_connection = True
-            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-            return
-        self._write_json(
-            {"digest": digest, "size": length, "deduplicated": result.deduplicated},
-            status=HTTPStatus.OK if result.deduplicated else HTTPStatus.CREATED,
-        )
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
@@ -770,86 +720,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if self._route_to_nodes(parsed.path):
             return
-        if self._proxy_to_node():
-            return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
-    def log_message(self, format: str, *args: object) -> None:
-        del format, args
-
-    def _read_json_body(self) -> object:
-        raw = self._read_raw_body().decode("utf-8")
-        if not raw:
-            raise ValueError("empty request body")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"invalid JSON: {exc}") from exc
-
-    def _read_raw_body(
-        self,
-        *,
-        max_bytes: int = DEFAULT_MAX_JSON_BODY_BYTES,
-    ) -> bytes:
-        length = self._request_content_length(max_bytes=max_bytes)
-        body = self.rfile.read(length)
-        if len(body) != length:
-            raise ValueError("request body ended before Content-Length bytes were read")
-        return body
-
-    def _request_content_length(self, *, max_bytes: int | None = None) -> int:
-        if self.headers.get("Transfer-Encoding"):
-            raise ValueError("Transfer-Encoding is not supported; use Content-Length")
-        length_header = self.headers.get("Content-Length")
-        if length_header is None:
-            raise ValueError("Content-Length header is required")
-        try:
-            length = int(length_header)
-        except ValueError as exc:
-            raise ValueError("invalid Content-Length") from exc
-        if length < 0:
-            raise ValueError("Content-Length cannot be negative")
-        if max_bytes is not None and length > max_bytes:
-            raise RequestBodyTooLargeError(
-                f"request body exceeds the {max_bytes} byte limit"
-            )
-        return length
-
-    def _write_json(
-        self,
-        payload: dict[str, Any],
-        *,
-        status: HTTPStatus = HTTPStatus.OK,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _write_bytes(
-        self,
-        body: bytes,
-        content_type: str,
-        *,
-        status: HTTPStatus = HTTPStatus.OK,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        self.wfile.write(body)
-
     def _route_to_nodes(self, path: str) -> bool:
-        if self.routing_store is None:
-            return False
         try:
             return self._route_to_nodes_unchecked(path)
         except sqlite3.DatabaseError as exc:
@@ -923,12 +796,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         return False
 
     def _migrate_sandbox_on_node(self, sandbox_id: str) -> None:
-        if self.routing_store is None:
-            self._write_json(
-                {"error": "routing state unavailable"},
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
         try:
             raw = self._read_json_body()
             if not isinstance(raw, dict):
@@ -1222,7 +1089,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ):
         advance_started = time.monotonic()
         measured = timings_ms if timings_ms is not None else {}
-        assert self.routing_store is not None
         if migration.phase == "planned":
             route_snapshot: StorageNativeMigration | None = None
             source_route = self.routing_store.get_sandbox_readonly(migration.sandbox_id)
@@ -1516,7 +1382,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
 
     def _cancel_sandbox_migration(self, sandbox_id: str) -> None:
-        assert self.routing_store is not None
         query = parse_qs(urlparse(self.path).query, keep_blank_values=True)
         migration_id = (query.get("migration_id") or [""])[0].strip()
         migration = self.routing_store.get_sandbox_migration(migration_id)
@@ -1625,12 +1490,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return "state file is unavailable"
         return ""
 
-    def _write_routing_store_unavailable(self, exc: sqlite3.DatabaseError) -> None:
+    def _write_routing_store_unavailable(self, _exc: sqlite3.DatabaseError) -> None:
         self._write_json(
             {
                 "error": "routing state unavailable",
                 "retryable": True,
-                "details": str(exc),
             },
             status=HTTPStatus.SERVICE_UNAVAILABLE,
         )
@@ -1686,59 +1550,49 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ):
                 return handler_cls.metrics_response_cache
 
-            routing_state = None
             exec_session_count = 0
-            if self.routing_store is not None:
-                load_metrics = getattr(self.routing_store, "load_metrics", None)
-                if load_metrics is None:
-                    routing_state = self.routing_store.load()
-                    exec_session_count = len(routing_state.exec_sessions)
-                else:
-                    routing_state, exec_session_count = load_metrics()
-            events = []
-            if self.metrics_store is not None:
-                events = self.metrics_store.load_events(
-                    max_events=(
-                        FULL_METRICS_EVENT_LIMIT
-                        if full
-                        else DEFAULT_METRICS_EVENT_LIMIT
-                    )
+            load_metrics = getattr(self.routing_store, "load_metrics", None)
+            if load_metrics is None:
+                routing_state = self.routing_store.load()
+                exec_session_count = len(routing_state.exec_sessions)
+            else:
+                routing_state, exec_session_count = load_metrics()
+            events = self.metrics_store.load_events(
+                max_events=(
+                    FULL_METRICS_EVENT_LIMIT if full else DEFAULT_METRICS_EVENT_LIMIT
                 )
-                # High-rate heartbeats must not crowd the sparse provisioning
-                # and autoscaler records out of the dashboard snapshot.
-                supplemental = self.metrics_store.load_events(
-                    max_events=2_000 if full else 500,
-                    kinds=(
-                        "vm_submitted",
-                        "node_first_heartbeat",
-                        "sandbox_scheduled",
-                        "autoscaler_cycle",
-                    ),
-                    since_seconds=7 * 24 * 60 * 60,
-                )
-                keyed = {
-                    (
-                        event.timestamp,
-                        event.kind,
-                        json.dumps(event.data, sort_keys=True),
-                    ): event
-                    for event in [*events, *supplemental]
-                }
-                events = sorted(
-                    keyed.values(),
-                    key=lambda event: event.timestamp,
-                )
+            )
+            # High-rate heartbeats must not crowd the sparse provisioning
+            # and autoscaler records out of the dashboard snapshot.
+            supplemental = self.metrics_store.load_events(
+                max_events=2_000 if full else 500,
+                kinds=(
+                    "vm_submitted",
+                    "node_first_heartbeat",
+                    "sandbox_scheduled",
+                    "autoscaler_cycle",
+                ),
+                since_seconds=7 * 24 * 60 * 60,
+            )
+            keyed = {
+                (
+                    event.timestamp,
+                    event.kind,
+                    json.dumps(event.data, sort_keys=True),
+                ): event
+                for event in [*events, *supplemental]
+            }
+            events = sorted(
+                keyed.values(),
+                key=lambda event: event.timestamp,
+            )
             snapshot = build_metrics_snapshot(
-                self.store.load(),
+                self.store.load_heartbeats(),
                 routing_state,
                 events,
                 heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
                 exec_session_count=exec_session_count,
-                program_requests=(
-                    self.routing_store.program_requests_readonly()
-                    if self.routing_store is not None
-                    else []
-                ),
+                program_requests=self.routing_store.program_requests_readonly(),
             )
             builds = self._cached_image_build_records()
             active_builds = [
@@ -1822,9 +1676,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 raise ValueError("prepare id must be non-empty and cannot contain '/'.")
             count = _strict_positive_integer(raw.get("count", 1), "count")
             if count > MAX_PREPARED_CAPACITY_COUNT:
-                raise ValueError(
-                    f"count cannot exceed {MAX_PREPARED_CAPACITY_COUNT}."
-                )
+                raise ValueError(f"count cannot exceed {MAX_PREPARED_CAPACITY_COUNT}.")
             ttl_seconds = _strict_positive_integer(
                 raw.get("ttl_seconds", 900),
                 "ttl_seconds",
@@ -1950,7 +1802,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
 
     def _list_sandboxes_from_cache(self) -> None:
-        heartbeats = self.store.load()
+        heartbeats = self.store.load_heartbeats()
         heartbeats_by_node_id = {
             heartbeat.node_id: heartbeat for heartbeat in heartbeats.values()
         }
@@ -1993,61 +1845,66 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             raw_sandboxes = payload.get("sandboxes")
             if not isinstance(raw_sandboxes, list):
                 continue
-            routes: list[SandboxRoute] = []
+            observations: list[SandboxInventoryEntry] = []
+            reported_ids: set[str] = set()
+            records_by_id: dict[str, dict[str, Any]] = {}
             for record in raw_sandboxes:
                 if not isinstance(record, dict):
                     continue
                 spec = record.get("spec")
                 sandbox_id = spec.get("id") if isinstance(spec, dict) else None
                 if isinstance(sandbox_id, str) and sandbox_id:
+                    reported_ids.add(sandbox_id)
                     try:
-                        observed_route = _route_with_sandbox_record(
-                            _sandbox_route_from_heartbeat(
-                                heartbeat,
-                                sandbox_id,
-                                spec,
-                                state=_sandbox_record_state(record, default="running"),
-                            ),
-                            record,
-                        )
+                        observation = _sandbox_inventory_from_record(record)
                     except (TypeError, ValueError):
                         # Protect a known route from absence reconciliation, but do
                         # not publish malformed node state as a gateway record.
-                        routes.append(
-                            _sandbox_route_from_heartbeat(
-                                heartbeat,
-                                sandbox_id,
-                                spec,
-                            )
-                        )
                         continue
                     observed_ids.add(sandbox_id)
-                    routes.append(observed_route)
-                    sandboxes.append(_enrich_sandbox_record(record, heartbeat))
+                    observations.append(observation)
+                    records_by_id[sandbox_id] = record
             self.routing_store.reconcile_sandboxes_for_node(
                 heartbeat.node_url or "",
-                routes,
+                observations,
+                node_id=heartbeat.node_id,
+                job_id=heartbeat.job_id,
+                reported_sandbox_ids=reported_ids,
                 observed_at=observed_at,
+                node_epoch=heartbeat.node_epoch,
+                activity_epoch=heartbeat.activity_epoch,
             )
-            for observed_route in routes:
-                stored_route = (
-                    self.routing_store.get_sandbox_readonly(observed_route.sandbox_id)
-                    or observed_route
-                )
+            for sandbox_id in reported_ids:
+                stored_route = self.routing_store.get_sandbox_readonly(sandbox_id)
+                record = records_by_id.get(sandbox_id)
+                if stored_route is None or record is None:
+                    continue
+                if _route_targets_node(stored_route, heartbeat):
+                    try:
+                        confirmed = _route_with_sandbox_record(stored_route, record)
+                    except (TypeError, ValueError):
+                        continue
+                    if (
+                        confirmed.generation == stored_route.generation
+                        and confirmed.create_operation_id
+                        == stored_route.create_operation_id
+                        and confirmed.spec_hash == stored_route.spec_hash
+                    ):
+                        stored_route = self.routing_store.upsert_sandbox(confirmed)
+                sandboxes.append(_enrich_sandbox_record(record, heartbeat))
                 self._ensure_registry_route_reference(stored_route, touch=True)
-        if self.routing_store is not None:
-            for route in self.routing_store.sandbox_routes_readonly():
-                if route.sandbox_id in observed_ids:
-                    continue
-                if route.node_url.rstrip("/") in reconciled_node_urls:
-                    continue
-                sandboxes.append(
-                    _route_only_sandbox_record(
-                        route,
-                        heartbeats_by_node_id.get(route.node_id),
-                        heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-                    )
+        for route in self.routing_store.sandbox_routes_readonly():
+            if route.sandbox_id in observed_ids:
+                continue
+            if route.node_url.rstrip("/") in reconciled_node_urls:
+                continue
+            sandboxes.append(
+                _route_only_sandbox_record(
+                    route,
+                    heartbeats_by_node_id.get(route.node_id),
+                    heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
                 )
+            )
         self._write_json({"sandboxes": sandboxes, "cached": False})
 
     def _list_images_across_nodes(self) -> None:
@@ -2059,17 +1916,16 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         image_id: str | None = None,
     ) -> list[dict[str, Any]]:
         images: list[dict[str, Any]] = []
-        if self.image_manager is not None:
-            for record in sorted(self.image_manager.list(), key=lambda item: item.id):
-                if image_id is not None and record.id != image_id:
-                    continue
-                enriched = record.to_dict()
-                enriched["location"] = "control-plane"
-                if self._image_record_missing_registry_manifest(enriched):
-                    self.image_manager.store.delete_by_tags([record.tag])
-                    continue
-                enriched = self._image_record_with_registry_digest(enriched)
-                images.append(enriched)
+        for record in sorted(self.image_manager.list(), key=lambda item: item.id):
+            if image_id is not None and record.id != image_id:
+                continue
+            enriched = record.to_dict()
+            enriched["location"] = "control-plane"
+            if self._image_record_missing_registry_manifest(enriched):
+                self.image_manager.store.delete_by_tags([record.tag])
+                continue
+            enriched = self._image_record_with_registry_digest(enriched)
+            images.append(enriched)
         for heartbeat in self._ready_heartbeats():
             response = self._proxy_request(
                 heartbeat.node_url or "",
@@ -2117,11 +1973,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ),
         )[-1]
         selected_image_id = str(selected.get("image_id") or "")
-        if (
-            self.routing_store is not None
-            and selected_image_id
-            and _image_build_response_terminal({"build": selected})
-        ):
+        if selected_image_id and _image_build_response_terminal({"build": selected}):
             self.routing_store.clear_pending_image_build(selected_image_id)
         self._record_successful_build_image(selected)
         self._write_json({"build": selected})
@@ -2153,14 +2005,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _cached_image_build_records(self) -> list[dict[str, Any]]:
         builds: list[dict[str, Any]] = []
-        if self.image_manager is not None:
-            for record in sorted(
-                self.image_manager.list_builds(),
-                key=lambda item: (item.created_at, item.build_id),
-            ):
-                enriched = record.to_dict()
-                enriched["location"] = "control-plane"
-                builds.append(enriched)
+        for record in sorted(
+            self.image_manager.list_builds(),
+            key=lambda item: (item.created_at, item.build_id),
+        ):
+            enriched = record.to_dict()
+            enriched["location"] = "control-plane"
+            builds.append(enriched)
         return builds
 
     def _registry_status(self) -> dict[str, Any]:
@@ -2217,7 +2068,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return result
 
     def _record_successful_build_image(self, build: dict[str, Any]) -> None:
-        if self.image_manager is None or build.get("status") != "succeeded":
+        if build.get("status") != "succeeded":
             return
         raw_image = build.get("image")
         if not isinstance(raw_image, dict) or not _image_record_available_to_sandboxes(
@@ -2428,11 +2279,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         root.set_attribute("outcome", "recovered_existing")
                         return
                     if (
-                        existing.generation > 0
-                        and existing.create_operation_id
-                        and existing.spec_hash == requested_hash
-                        and (existing.state or "unknown").lower()
-                        in {"creating", "unknown"}
+                        existing.spec_hash == requested_hash
+                        and existing.state.lower() in {"creating", "unknown"}
                     ):
                         root.set_attribute("outcome", "retry_same_generation")
                         self._retry_sandbox_create_on_assigned_node(existing, spec)
@@ -2440,11 +2288,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     # Age and aggregate active counts cannot fence a delayed
                     # create. Only generation-aware complete inventory or a
                     # successful same-generation delete may remove this route.
-                    if existing is not None:
-                        root.status = "error"
-                        root.set_attribute("outcome", "route_pending")
-                        self._write_create_in_progress_response(spec.id)
-                        return
+                    root.status = "error"
+                    root.set_attribute("outcome", "route_pending")
+                    self._write_create_in_progress_response(spec.id)
+                    return
 
             if existing is not None:
                 root.status = "error"
@@ -2776,11 +2623,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     ) -> None:
         """Replay an ambiguous create without changing its node or identity."""
 
-        if (
-            route.generation <= 0
-            or not route.create_operation_id
-            or route.spec_hash != sandbox_spec_fingerprint(spec)
-        ):
+        if route.spec_hash != sandbox_spec_fingerprint(spec):
             self._write_json(
                 {"error": f"sandbox already exists with different spec: {spec.id}"},
                 status=HTTPStatus.CONFLICT,
@@ -3052,13 +2895,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _write_registry_lease_unavailable(
         self,
-        exc: RegistryImageReferenceUnavailable,
+        _exc: RegistryImageReferenceUnavailable,
     ) -> None:
         self._write_json(
             {
                 "error": "registry image-use state is unavailable",
                 "retryable": True,
-                "details": str(exc),
             },
             status=HTTPStatus.SERVICE_UNAVAILABLE,
             headers={"Retry-After": "2"},
@@ -3105,7 +2947,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _route_image_build(self) -> None:
         try:
-            body = self._read_raw_body()
+            body = self._read_raw_body(max_bytes=self.max_json_body_bytes)
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image build payload must be a JSON object")
@@ -3162,11 +3004,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                         "selected_job_id", heartbeat.job_id if heartbeat else ""
                     )
                 if heartbeat is None:
-                    if self.routing_store is not None:
-                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                        pending_builds = self.routing_store.pending_image_build_count()
-                    else:
-                        pending_builds = 0
+                    self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                    pending_builds = self.routing_store.pending_image_build_count()
                     root.status = "error"
                     root.set_attribute("outcome", "queued_no_builder")
                     root.set_attribute("pending_image_builds", pending_builds)
@@ -3185,32 +3024,30 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     parent_span_id=root.span_id,
                     attributes={"node_id": heartbeat.node_id},
                 ):
-                    if self.routing_store is not None:
-                        self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                if context_reference is not None:
-                    with trace_span(
-                        self.metrics_store,
-                        trace_id,
-                        "gateway.image_build_context_sync",
-                        parent_span_id=root.span_id,
-                        attributes={"node_id": heartbeat.node_id},
-                    ) as span:
-                        context_response = self._ensure_node_build_context(
-                            heartbeat.node_url or "", context_reference
+                    self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
+                with trace_span(
+                    self.metrics_store,
+                    trace_id,
+                    "gateway.image_build_context_sync",
+                    parent_span_id=root.span_id,
+                    attributes={"node_id": heartbeat.node_id},
+                ) as span:
+                    context_response = self._ensure_node_build_context(
+                        heartbeat.node_url or "", context_reference
+                    )
+                    span.set_attribute("status_code", int(context_response.status))
+                    context_payload = context_response.json()
+                    if "deduplicated" in context_payload:
+                        span.set_attribute(
+                            "deduplicated",
+                            bool(context_payload["deduplicated"]),
                         )
-                        span.set_attribute("status_code", int(context_response.status))
-                        context_payload = context_response.json()
-                        if "deduplicated" in context_payload:
-                            span.set_attribute(
-                                "deduplicated",
-                                bool(context_payload["deduplicated"]),
-                            )
-                    if not 200 <= context_response.status < 300:
-                        root.status = "error"
-                        root.set_attribute("outcome", "context_proxy_failed")
-                        root.set_attribute("status_code", int(context_response.status))
-                        self._send_proxied_response(context_response)
-                        return
+                if not 200 <= context_response.status < 300:
+                    root.status = "error"
+                    root.set_attribute("outcome", "context_proxy_failed")
+                    root.set_attribute("status_code", int(context_response.status))
+                    self._send_proxied_response(context_response)
+                    return
                 build_reference = self._begin_registry_image_build_reference(
                     spec,
                     push=push,
@@ -3253,13 +3090,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     and response.status < 500
                     and response.status not in {408, 425, 429}
                 )
-                if (
-                    accepted_build_response or terminal_build_response
-                ) and self.routing_store is not None:
+                if accepted_build_response or terminal_build_response:
                     self.routing_store.clear_pending_image_build(spec.id)
                 if terminal_build_response:
                     self._release_registry_image_build_reference(build_reference)
-                if 200 <= response.status < 300 and self.image_manager is not None:
+                if 200 <= response.status < 300:
                     raw_image = response_payload.get("image")
                     if isinstance(
                         raw_image, dict
@@ -3328,7 +3163,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def _route_image_pull(self) -> None:
         try:
-            body = self._read_raw_body()
+            body = self._read_raw_body(max_bytes=self.max_json_body_bytes)
             raw = json.loads(body.decode("utf-8")) if body else None
             if not isinstance(raw, dict):
                 raise ValueError("image pull payload must be a JSON object")
@@ -3427,12 +3262,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         # tool traffic into a registration that is still planned, quota-ready,
         # or preparing its rootfs. Reconcile a completed node record first;
         # otherwise keep the caller on the retryable create boundary.
-        if (
-            self.command != "DELETE"
-            and route.generation > 0
-            and route.create_operation_id
-            and (route.state or "unknown").lower() in {"creating", "unknown"}
-        ):
+        if self.command != "DELETE" and route.state.lower() in {"creating", "unknown"}:
             try:
                 routed_spec = SandboxSpec.from_dict(route.spec)
             except (TypeError, ValueError):
@@ -3533,7 +3363,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         wake_program: ProgramRequestState | None = None
         wake_became_ready = False
-        wake_placement_routes: list[SandboxRoute] | None = None
+        wake_placement_routes: list[PlacementRecord] | None = None
         if lifecycle_action and lifecycle_payload.get("request_id"):
             wake_program, wake_became_ready = self._record_program_request_transition(
                 route,
@@ -3587,7 +3417,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             )
 
         extra_headers: dict[str, str] | None = None
-        if self.command == "DELETE" and route.generation > 0:
+        if self.command == "DELETE":
             route = self.routing_store.prepare_sandbox_delete(sandbox_id) or route
             extra_headers = {
                 SANDBOX_GENERATION_HEADER: str(route.generation),
@@ -3795,7 +3625,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     state="acting",
                     clear_error=True,
                 )
-                if self.metrics_store is not None and wake_completed:
+                if wake_completed:
                     self.metrics_store.append(
                         "program_wake_actual",
                         {
@@ -3887,20 +3717,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
             )
         except (OSError, sqlite3.Error, ValueError, SandboxRouteConflictError) as exc:
-            if self.metrics_store is not None:
-                self.metrics_store.append(
-                    "program_state_projection_error",
-                    {
-                        "request_id": request_id,
-                        "rollout_id": rollout_id,
-                        "sandbox_id": route.sandbox_id,
-                        "sandbox_generation": route.generation,
-                        "state": state,
-                        "error": str(exc),
-                    },
-                )
+            self.metrics_store.append(
+                "program_state_projection_error",
+                {
+                    "request_id": request_id,
+                    "rollout_id": rollout_id,
+                    "sandbox_id": route.sandbox_id,
+                    "sandbox_generation": route.generation,
+                    "state": state,
+                    "error": str(exc),
+                },
+            )
             return None, False
-        if self.metrics_store is not None and changed:
+        if changed:
             self.metrics_store.append(
                 "program_state_transition",
                 program.to_dict(),
@@ -3911,25 +3740,23 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self,
         lifecycle_payload: dict[str, Any],
         program: ProgramRequestState,
-        routes: list[SandboxRoute],
+        routes: list[PlacementRecord],
     ) -> None:
         """Observe every response-ready event without changing wake behavior."""
 
-        if self.metrics_store is None or self.routing_store is None:
-            return
         request_id = str(lifecycle_payload.get("request_id") or "").strip()
         if not request_id:
             return
         try:
             plan = plan_shadow_wake_queue(
                 [program],
-                routes,
+                [route for route in routes if isinstance(route, SandboxRoute)],
                 [
                     WakeNodeCandidate(
                         node_id=heartbeat.node_id,
                         job_id=heartbeat.job_id,
                         available=_node_available_resources(heartbeat, routes),
-                        total=heartbeat.effective_resources,
+                        total=heartbeat.total_resources,
                         pressure=node_pressure_score(heartbeat),
                     )
                     for heartbeat in self._ready_sandbox_heartbeats()
@@ -4183,22 +4010,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         )
         self._send_proxied_response(response)
 
-    def _sandbox_route_is_proven_stale(self, route: SandboxRoute) -> bool:
-        if (route.state or "unknown").lower() in {"creating", "unknown"}:
-            return False
-        heartbeat = self._heartbeat_for_route(
-            node_id=route.node_id,
-            job_id=route.job_id,
-            node_url=route.node_url,
-        )
-        return _heartbeat_proves_route_absent(
-            heartbeat,
-            sandbox_id=route.sandbox_id,
-            route_created_at=route.created_at,
-            route_updated_at=route.updated_at,
-            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
-        )
-
     def _exec_route_is_proven_stale(self, route: ExecRoute) -> bool:
         heartbeat = self._heartbeat_for_route(
             node_id=route.node_id,
@@ -4221,7 +4032,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         node_url: str,
     ) -> NodeHeartbeat | None:
         normalized_node_url = node_url.rstrip("/")
-        for heartbeat in self.store.load().values():
+        for heartbeat in self.store.load_heartbeats().values():
             if heartbeat.node_id == node_id or heartbeat.job_id == job_id:
                 return heartbeat
             if (
@@ -4329,7 +4140,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             ),
         )[0]
 
-    def _placement_routes(self) -> list[SandboxRoute]:
+    def _placement_routes(self) -> list[PlacementRecord]:
         """Include in-flight destination imports in normal node admission."""
 
         routes = list(self.routing_store.sandbox_routes_readonly())
@@ -4351,16 +4162,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     memory_mb=source.resources.memory_mb,
                 )
             routes.append(
-                replace(
-                    source,
-                    sandbox_id=f"__migration__:{migration.migration_id}",
+                PlacementReservation(
+                    reservation_id=migration.migration_id,
                     node_id=migration.destination_node_id,
                     job_id=migration.destination_job_id,
                     node_url=migration.destination_node_url,
                     resources=reservation,
-                    state="creating",
-                    node_epoch="",
-                    activity_epoch=0,
+                    image=str(source.spec.get("image") or ""),
                 )
             )
         return routes
@@ -4412,21 +4220,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                 )
                 if heartbeat is None:
                     return None
-                now = utc_now()
                 route, pending = (
                     self.routing_store.allocate_sandbox_create_with_pending(
-                        SandboxRoute(
+                        SandboxRouteAllocation(
                             sandbox_id=sandbox_id,
                             node_id=heartbeat.node_id,
                             job_id=heartbeat.job_id,
                             node_url=heartbeat.node_url or "",
                             resources=requested,
                             spec=dict(spec),
-                            state="creating",
                             node_epoch=heartbeat.node_epoch,
                             activity_epoch=heartbeat.activity_epoch,
-                            created_at=now.isoformat(),
-                            updated_at=now.isoformat(),
                         ),
                         spec_hash=spec_hash,
                     )
@@ -4504,11 +4308,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
                     "retryable": True,
                     "image_id": image,
                 }
-            if (
-                digest
-                and selected.get("location") == "control-plane"
-                and self.image_manager is not None
-            ):
+            if digest and selected.get("location") == "control-plane":
                 try:
                     self.image_manager.store.upsert(ImageRecord.from_dict(selected))
                 except ValueError:
@@ -4567,36 +4367,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except (OSError, ValueError):
             return False
 
-    def _select_capable_node(self, capability: str) -> NodeHeartbeat | None:
-        candidates = [
-            heartbeat
-            for heartbeat in self._ready_heartbeats()
-            if capability in heartbeat.capabilities
-            and agent_version_is_schedulable(heartbeat.agent_version)
-        ]
-        if not candidates:
-            return None
-        return sorted(
-            candidates,
-            key=lambda heartbeat: (
-                -heartbeat.free_resources.disk_mb,
-                -heartbeat.free_resources.memory_mb,
-                -heartbeat.free_resources.vcpu,
-                heartbeat.node_id,
-            ),
-        )[0]
-
     def _image_cache_candidates(
         self,
         *,
         resources: ResourceQuantity,
         sandbox_nodes_only: bool,
     ) -> list[NodeHeartbeat]:
-        routes = (
-            list(self.routing_store.sandbox_routes_readonly())
-            if self.routing_store is not None
-            else []
-        )
+        routes = list(self.routing_store.sandbox_routes_readonly())
         candidates = []
         for heartbeat in self._ready_heartbeats():
             if "image-cache" not in heartbeat.capabilities:
@@ -4683,8 +4460,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         return node_ids
 
     def _schedule_image_warmups(self) -> dict[str, Any]:
-        if self.routing_store is None:
-            return {"scheduled": 0, "completed": 0, "warmups": []}
         warmups = self.routing_store.image_warmups()
         if not warmups:
             return {"scheduled": 0, "completed": 0, "warmups": []}
@@ -4956,7 +4731,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         now = utc_now()
         return [
             heartbeat
-            for heartbeat in self.store.load().values()
+            for heartbeat in self.store.load_heartbeats().values()
             if heartbeat.node_url
             and not heartbeat.draining
             and heartbeat.is_fresh(now, self.heartbeat_ttl_seconds)
@@ -4968,75 +4743,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             for heartbeat in self._ready_heartbeats()
             if "sandbox" in heartbeat.capabilities
         ]
-
-    def _proxy_to_node(self) -> bool:
-        if self.upstream_node_url is None:
-            return False
-        if not _is_node_api_path(self.path):
-            return False
-
-        body = None
-        is_sandbox_create = (
-            self.command == "POST" and urlparse(self.path).path == "/v1/sandboxes"
-        )
-        limiter = self.sandbox_create_limiter if is_sandbox_create else None
-        limiter_acquired = False
-        try:
-            if limiter is not None and not limiter.acquire(blocking=False):
-                self._write_json(
-                    {
-                        "error": "gateway is busy creating sandboxes; retry shortly",
-                        "retryable": True,
-                        "max_concurrent_sandbox_creates": (
-                            self.max_concurrent_sandbox_creates
-                        ),
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": str(SANDBOX_CREATE_BUSY_RETRY_AFTER_SECONDS),
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
-                return True
-            limiter_acquired = limiter is not None
-            if self.command in {"POST", "PUT", "PATCH"}:
-                try:
-                    body = self._read_raw_body(
-                        max_bytes=(
-                            DEFAULT_MAX_JSON_BODY_BYTES
-                            if is_sandbox_create
-                            else DEFAULT_MAX_PROXY_BODY_BYTES
-                        )
-                    )
-                except ValueError as exc:
-                    self._write_json(
-                        {"error": str(exc)},
-                        status=HTTPStatus.BAD_REQUEST,
-                    )
-                    return True
-            if self.command == "GET" and urlparse(self.path).path.endswith("/files"):
-                self._stream_proxy_request(
-                    self.upstream_node_url,
-                    self.path,
-                    method=self.command,
-                )
-                return True
-            response = self._proxy_request(
-                self.upstream_node_url,
-                self.path,
-                method=self.command,
-                body=body,
-            )
-            self._send_proxied_response(response)
-        except OSError as exc:
-            self._write_json(
-                {"error": f"upstream node request failed: {exc}"},
-                status=HTTPStatus.BAD_GATEWAY,
-            )
-        finally:
-            if limiter_acquired:
-                limiter.release()
-        return True
 
     def _proxy_request(
         self,
@@ -5296,30 +5002,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         return False
 
     def _write_unauthorized(self) -> bool:
-        body = json.dumps({"error": "unauthorized"}, indent=2).encode("utf-8")
-        self.send_response(HTTPStatus.UNAUTHORIZED)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("WWW-Authenticate", "Bearer")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._write_json(
+            {"error": "unauthorized"},
+            status=HTTPStatus.UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         return False
 
 
 def build_server(
     host: str,
     port: int,
-    heartbeat_file: Path,
+    control_state_file: Path,
     *,
     gateway_bearer_token: str,
     heartbeat_bearer_token: str,
     node_control_bearer_token: str,
     deployment_id: str,
-    routing_file: Path | None = None,
-    upstream_node_url: str | None = None,
+    routing_file: Path,
+    image_file: Path,
+    metrics_file: Path,
     heartbeat_ttl_seconds: int = 120,
-    image_file: Path | None = None,
-    metrics_file: Path | None = None,
     registry_url: str | None = None,
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
@@ -5344,26 +5047,20 @@ def build_server(
     deployment_id = deployment_id.strip()
     if not deployment_id:
         raise ValueError("deployment id cannot be empty")
-    store = HeartbeatStore(heartbeat_file)
-    routing_store = RoutingStore(routing_file) if routing_file is not None else None
-    metrics_store = MetricsStore(metrics_file) if metrics_file is not None else None
+    store = ControlStateStore(control_state_file)
+    routing_store = RoutingStore(routing_file)
+    metrics_store = MetricsStore(metrics_file)
     registry_usage_store = (
         RegistryUsageStore(registry_usage_file)
         if registry_usage_file is not None
         else None
     )
-    image_manager = (
-        ImageManager(
-            ImageStore(image_file),
-            DockerImageRuntime(dry_run=True),
-        )
-        if image_file is not None
-        else None
+    image_manager = ImageManager(
+        ImageStore(image_file),
+        DockerImageRuntime(dry_run=True),
     )
-    context_path_source = image_file or heartbeat_file
     build_context_store = BuildContextBlobStore(
-        build_context_store_dir
-        or context_path_source.parent / f"{context_path_source.stem}-contexts",
+        build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
         max_blob_bytes=DEFAULT_MAX_PROXY_BODY_BYTES,
         max_total_bytes=DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES,
         max_entries=DEFAULT_MAX_BUILD_CONTEXT_ENTRIES,
@@ -5375,7 +5072,6 @@ def build_server(
 
     BoundHandler.store = store
     BoundHandler.routing_store = routing_store
-    BoundHandler.upstream_node_url = upstream_node_url
     BoundHandler.gateway_bearer_token = gateway_bearer_token
     BoundHandler.heartbeat_bearer_token = heartbeat_bearer_token
     BoundHandler.node_control_bearer_token = node_control_bearer_token
@@ -5407,7 +5103,7 @@ def build_server(
         int(max_concurrent_sandbox_creates),
     )
     BoundHandler.max_sandbox_resources = (
-        max_sandbox_resources or ScalePolicy().schedulable_node_resources
+        max_sandbox_resources or ScalePolicy().default_node_resources
     )
     BoundHandler.sandbox_create_limiter = (
         BoundedSemaphore(BoundHandler.max_concurrent_sandbox_creates)
@@ -5419,16 +5115,6 @@ def build_server(
         (host, port),
         BoundHandler,
         max_request_threads=max_http_request_threads,
-    )
-
-
-def _is_node_api_path(path: str) -> bool:
-    return path == "/v1/images" or path.startswith(
-        (
-            "/v1/sandboxes",
-            "/v1/exec",
-            "/v1/images/",
-        )
     )
 
 
@@ -5452,14 +5138,17 @@ def _safe_trace_component(value: str) -> str:
     return cleaned or "trace"
 
 
-def _sandbox_id_from_path(path: str) -> str | None:
-    prefix = "/v1/sandboxes/"
+def _collection_id_from_path(path: str, prefix: str) -> str | None:
     if not path.startswith(prefix):
         return None
     rest = path[len(prefix) :]
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
+
+
+def _sandbox_id_from_path(path: str) -> str | None:
+    return _collection_id_from_path(path, "/v1/sandboxes/")
 
 
 def _sandbox_migration_id_from_path(path: str) -> str | None:
@@ -5474,52 +5163,20 @@ def _sandbox_migration_id_from_path(path: str) -> str | None:
     return sandbox_id
 
 
-def _build_context_digest_from_path(path: str) -> str | None:
-    prefix = "/v1/image-contexts/"
-    if not path.startswith(prefix):
-        return None
-    digest = unquote(path[len(prefix) :])
-    return digest if digest and "/" not in digest else None
-
-
 def _image_build_key_from_path(path: str) -> str | None:
-    prefix = "/v1/images/builds/"
-    if not path.startswith(prefix):
-        return None
-    rest = path[len(prefix) :]
-    if not rest:
-        return None
-    return unquote(rest.split("/", 1)[0])
+    return _collection_id_from_path(path, "/v1/images/builds/")
 
 
 def _exec_session_id_from_path(path: str) -> str | None:
-    prefix = "/v1/exec/"
-    if not path.startswith(prefix):
-        return None
-    rest = path[len(prefix) :]
-    if not rest:
-        return None
-    return unquote(rest.split("/", 1)[0])
+    return _collection_id_from_path(path, "/v1/exec/")
 
 
 def _prepare_id_from_path(path: str) -> str | None:
-    prefix = "/v1/capacity/prepare/"
-    if not path.startswith(prefix):
-        return None
-    rest = path[len(prefix) :]
-    if not rest:
-        return None
-    return unquote(rest.split("/", 1)[0])
+    return _collection_id_from_path(path, "/v1/capacity/prepare/")
 
 
 def _builder_prepare_id_from_path(path: str) -> str | None:
-    prefix = "/v1/builders/prepare/"
-    if not path.startswith(prefix):
-        return None
-    rest = path[len(prefix) :]
-    if not rest:
-        return None
-    return unquote(rest.split("/", 1)[0])
+    return _collection_id_from_path(path, "/v1/builders/prepare/")
 
 
 def _truthy_query_param(parsed: Any, name: str) -> bool:
@@ -5605,29 +5262,29 @@ def _validate_prepared_resources(resources: ResourceQuantity) -> None:
         raise ValueError("prepared capacity resources are required.")
 
 
-def _sandbox_route_from_heartbeat(
-    heartbeat: NodeHeartbeat,
-    sandbox_id: str,
-    spec: dict[str, Any] | None,
-    *,
-    state: str = "unknown",
-) -> SandboxRoute:
-    stored_spec = dict(spec) if isinstance(spec, dict) else {}
-    resources = (
-        SandboxSpec.from_dict(stored_spec).requested_resources()
-        if stored_spec
-        else ResourceQuantity()
-    )
-    return SandboxRoute(
-        sandbox_id=sandbox_id,
-        node_id=heartbeat.node_id,
-        job_id=heartbeat.job_id,
-        node_url=heartbeat.node_url or "",
-        resources=resources,
-        spec=stored_spec,
-        state=state,
-        node_epoch=heartbeat.node_epoch,
-        activity_epoch=heartbeat.activity_epoch,
+def _sandbox_inventory_from_record(record: dict[str, Any]) -> SandboxInventoryEntry:
+    spec = record.get("spec")
+    if not isinstance(spec, dict):
+        raise ValueError("sandbox record is missing its spec")
+    parsed_spec = SandboxSpec.from_dict(spec)
+    parsed_spec.validate()
+    generation = _record_generation(record)
+    operation_id = record.get("operation_id")
+    spec_hash = record.get("spec_hash")
+    state = record.get("state")
+    if generation is None:
+        raise ValueError("sandbox record generation must be positive")
+    if spec_hash != sandbox_spec_fingerprint(parsed_spec):
+        raise ValueError("sandbox record spec_hash does not match its spec")
+    if not isinstance(state, str) or not state.strip():
+        raise ValueError("sandbox record state is required")
+    return SandboxInventoryEntry(
+        sandbox_id=parsed_spec.id,
+        generation=generation,
+        operation_id=operation_id,
+        spec_hash=spec_hash,
+        state=state.strip(),
+        resources=parsed_spec.requested_resources(),
     )
 
 
@@ -5635,27 +5292,9 @@ def _route_with_sandbox_record(
     route: SandboxRoute,
     record: dict[str, Any],
 ) -> SandboxRoute:
-    spec = record.get("spec")
-    if not isinstance(spec, dict):
-        raise ValueError("sandbox record is missing its spec")
-    parsed_spec = SandboxSpec.from_dict(spec)
-    parsed_spec.validate()
-    if parsed_spec.id != route.sandbox_id:
+    observation = _sandbox_inventory_from_record(record)
+    if observation.sandbox_id != route.sandbox_id:
         raise ValueError("sandbox record id does not match its route")
-    generation = _record_generation(record)
-    operation_id = record.get("operation_id")
-    spec_hash = record.get("spec_hash")
-    state = record.get("state")
-    if generation is None:
-        raise ValueError("sandbox record generation must be positive")
-    if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(operation_id):
-        raise ValueError("sandbox record operation_id is invalid")
-    if not isinstance(spec_hash, str) or not spec_hash.strip():
-        raise ValueError("sandbox record spec_hash is required")
-    if spec_hash != sandbox_spec_fingerprint(parsed_spec):
-        raise ValueError("sandbox record spec_hash does not match its spec")
-    if not isinstance(state, str) or not state.strip():
-        raise ValueError("sandbox record state is required")
     storage_schema = str(record.get("storage_schema") or "")
     storage_snapshot: dict[str, Any] = {}
     snapshot_manifest_digest = ""
@@ -5669,24 +5308,27 @@ def _route_with_sandbox_record(
         )
         if (
             parsed_snapshot.sha256 != str(record.get("snapshot_sha256") or "")
-            or parsed_snapshot.manifest.sandbox_id != route.sandbox_id
+            or parsed_snapshot.manifest.sandbox_id != observation.sandbox_id
         ):
             raise ValueError("inventory snapshot identity does not match")
         storage_snapshot = parsed_snapshot.to_dict()
         snapshot_manifest_digest = parsed_snapshot.publication.manifest_digest
         snapshot_repository = parsed_snapshot.publication.repository
         snapshot_tag = parsed_snapshot.publication.tag
-    return SandboxRoute(
-        sandbox_id=route.sandbox_id,
-        node_id=route.node_id,
-        job_id=route.job_id,
-        node_url=route.node_url,
-        resources=route.resources,
-        spec=dict(spec),
-        state=state.strip(),
-        generation=generation,
-        create_operation_id=operation_id.strip(),
-        spec_hash=spec_hash,
+    elif observation.state.lower() == "parked":
+        storage_schema = route.storage_schema
+        storage_snapshot = dict(route.storage_snapshot)
+        snapshot_manifest_digest = route.snapshot_manifest_digest
+        snapshot_repository = route.snapshot_repository
+        snapshot_tag = route.snapshot_tag
+    return replace(
+        route,
+        resources=observation.resources,
+        spec=dict(record["spec"]),
+        state=observation.state,
+        generation=observation.generation,
+        create_operation_id=observation.operation_id,
+        spec_hash=observation.spec_hash,
         delete_operation_id=route.delete_operation_id,
         node_epoch=route.node_epoch,
         activity_epoch=route.activity_epoch,
@@ -5695,16 +5337,7 @@ def _route_with_sandbox_record(
         snapshot_repository=snapshot_repository,
         snapshot_tag=snapshot_tag,
         storage_snapshot=storage_snapshot,
-        created_at=route.created_at,
-        updated_at=route.updated_at,
     )
-
-
-def _sandbox_record_state(record: dict[str, Any], *, default: str) -> str:
-    raw = record.get("state")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return default
 
 
 def _sandbox_record_is_ready(
@@ -5712,7 +5345,7 @@ def _sandbox_record_is_ready(
 ) -> bool:
     """Return true only for externally usable lifecycle states."""
 
-    state = _sandbox_record_state(record, default="unknown").lower()
+    state = str(record.get("state") or "unknown").strip().lower()
     return state in {
         "running",
         "parked",
@@ -5884,7 +5517,7 @@ def _heartbeat_proves_route_absent(
 def _node_can_fit(
     heartbeat: NodeHeartbeat,
     requested: ResourceQuantity,
-    routes: list[SandboxRoute],
+    routes: list[PlacementRecord],
 ) -> bool:
     return _node_can_fit_available(
         heartbeat,
@@ -5911,26 +5544,20 @@ def _node_can_fit_available(
         return False
     if not _node_storage_pressure_allows(heartbeat, requested):
         return False
-    if has_capability(
-        heartbeat.capabilities,
-        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    ):
-        # CPU and memory are deliberately admitted from fresh runtime pressure
-        # on direct nodes. Keep the route-accounted disk check so concurrent
-        # creates cannot outrun the storage daemon's next heartbeat, but do not
-        # add a separate nominal CPU/RAM ceiling here.
-        return requested.disk_mb <= available.disk_mb
-    return requested.fits_within(available)
+    # CPU and memory are admitted from fresh runtime pressure on direct nodes.
+    # Keep the route-accounted disk check so concurrent creates cannot outrun
+    # the storage daemon's next heartbeat.
+    return requested.disk_mb <= available.disk_mb
 
 
 def _node_placement_state(
     heartbeat: NodeHeartbeat,
-    node_routes: list[SandboxRoute],
+    node_routes: list[PlacementRecord],
 ) -> NodePlacementState:
     inflight_images = frozenset(
         identity
         for route in node_routes
-        if (route.state or "unknown").lower() in {"creating", "unknown"}
+        if route.state.lower() in {"creating", "unknown"}
         and (identity := _route_image_identity(route))
         and not _heartbeat_has_image(heartbeat, identity)
     )
@@ -5938,7 +5565,7 @@ def _node_placement_state(
     projected_images.update(
         identity
         for route in node_routes
-        if (route.state or "unknown").lower() in {"creating", "unknown", "running"}
+        if route.state.lower() in {"creating", "unknown", "running"}
         and (identity := _route_image_identity(route))
     )
     return NodePlacementState(
@@ -5948,7 +5575,7 @@ def _node_placement_state(
         active_creates=max(
             heartbeat.active_sandbox_creates,
             sum(
-                (route.state or "unknown").lower()
+                route.state.lower()
                 in {
                     "creating",
                     "planned",
@@ -5968,14 +5595,8 @@ def _node_memory_pressure_allows(
 ) -> bool:
     """Require one-request headroom and stop on real memory pressure."""
 
-    dynamic = has_capability(
-        heartbeat.capabilities,
-        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    )
     if heartbeat.runtime_metrics is None:
-        return not dynamic
-    if not dynamic and heartbeat.memory_overcommit <= 1.0:
-        return True
+        return False
     metrics = heartbeat.runtime_metrics
     if (
         metrics.memory_psi_full_avg10 is not None
@@ -5993,11 +5614,6 @@ def _node_memory_pressure_allows(
 def _node_cpu_pressure_allows(heartbeat: NodeHeartbeat) -> bool:
     """Use actual CPU pressure as the direct-runtime admission brake."""
 
-    if not has_capability(
-        heartbeat.capabilities,
-        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-    ):
-        return True
     metrics = heartbeat.runtime_metrics
     if metrics is None:
         return False
@@ -6033,7 +5649,7 @@ def _node_storage_pressure_allows(
 
 def _node_available_resources(
     heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
+    routes: list[PlacementRecord],
 ) -> ResourceQuantity:
     route_reservations = _node_reserved_route_resources(heartbeat, routes)
     free = heartbeat.free_resources
@@ -6046,10 +5662,10 @@ def _node_available_resources(
 
 def _node_reserved_route_resources(
     heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
+    routes: list[PlacementRecord],
 ) -> ResourceQuantity:
     resources = ResourceQuantity()
-    seen_routes: set[tuple[str, int, str]] = set()
+    seen_routes: set[tuple[str, ...]] = set()
     inventory_by_identity: dict[tuple[str, int, str, str], Any] = {}
     for item in heartbeat.inventory:
         inventory_by_identity.setdefault(
@@ -6064,14 +5680,13 @@ def _node_reserved_route_resources(
     for route in routes:
         if not _route_targets_node(route, heartbeat):
             continue
-        identity = (
-            route.sandbox_id,
-            route.generation,
-            route.create_operation_id,
-        )
+        identity = _placement_identity(route)
         if identity in seen_routes:
             continue
         seen_routes.add(identity)
+        if isinstance(route, PlacementReservation):
+            resources = resources + route.resources
+            continue
         matching_inventory = inventory_by_identity.get(
             (
                 route.sandbox_id,
@@ -6081,9 +5696,10 @@ def _node_reserved_route_resources(
             )
         )
         if matching_inventory is not None:
-            if (route.state or "unknown").lower() == "waking" and (
-                matching_inventory.state or "unknown"
-            ).lower() == "parked":
+            if (
+                route.state.lower() == "waking"
+                and (matching_inventory.state or "unknown").lower() == "parked"
+            ):
                 storage_disk = (
                     route.resources.disk_mb
                     if route.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
@@ -6099,7 +5715,7 @@ def _node_reserved_route_resources(
                 )
             continue
         if (
-            (route.state or "unknown").lower() == "parked"
+            route.state.lower() == "parked"
             and route.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
             and route.snapshot_manifest_digest
         ):
@@ -6108,10 +5724,10 @@ def _node_reserved_route_resources(
     return resources
 
 
-def _placement_route_index(routes: list[SandboxRoute]) -> PlacementRouteIndex:
-    by_node_id: dict[str, list[SandboxRoute]] = {}
-    by_job_id: dict[str, list[SandboxRoute]] = {}
-    by_node_url: dict[str, list[SandboxRoute]] = {}
+def _placement_route_index(routes: list[PlacementRecord]) -> PlacementRouteIndex:
+    by_node_id: dict[str, list[PlacementRecord]] = {}
+    by_job_id: dict[str, list[PlacementRecord]] = {}
+    by_node_url: dict[str, list[PlacementRecord]] = {}
     for route in routes:
         if route.node_id:
             by_node_id.setdefault(route.node_id, []).append(route)
@@ -6126,7 +5742,7 @@ def _placement_route_index(routes: list[SandboxRoute]) -> PlacementRouteIndex:
     )
 
 
-def _route_targets_node(route: SandboxRoute, heartbeat: NodeHeartbeat) -> bool:
+def _route_targets_node(route: PlacementRecord, heartbeat: NodeHeartbeat) -> bool:
     return bool(
         (route.node_id and route.node_id == heartbeat.node_id)
         or (route.job_id and route.job_id == heartbeat.job_id)
@@ -6138,109 +5754,24 @@ def _route_targets_node(route: SandboxRoute, heartbeat: NodeHeartbeat) -> bool:
     )
 
 
-def _route_image_identity(route: SandboxRoute) -> str:
-    image = str(route.spec.get("image") or "").strip()
+def _route_image_identity(route: PlacementRecord) -> str:
+    image = (
+        str(route.spec.get("image") or "")
+        if isinstance(route, SandboxRoute)
+        else route.image
+    ).strip()
     return canonical_image_digest_ref(image) or image
 
 
-def _node_inflight_image_identities(
-    heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
-) -> set[str]:
-    return {
-        identity
-        for route in routes
-        if (route.state or "unknown").lower() in {"creating", "unknown"}
-        and _route_targets_node(route, heartbeat)
-        and (identity := _route_image_identity(route))
-        and not _heartbeat_has_image(heartbeat, identity)
-    }
-
-
-def _node_cold_image_pressure(
-    heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
-) -> int:
-    """Count distinct cold images currently being prepared on a node."""
-
-    return len(_node_inflight_image_identities(heartbeat, routes))
-
-
-def _node_projected_layer_digests(
-    heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
-    layer_cache: RegistryLayerMetadataCache,
-) -> set[str]:
-    image_refs = set(heartbeat.cached_images)
-    image_refs.update(
-        identity
-        for route in routes
-        if (route.state or "unknown").lower() in {"creating", "unknown", "running"}
-        and _route_targets_node(route, heartbeat)
-        and (identity := _route_image_identity(route))
-    )
-    layers: set[str] = set()
-    for image_ref in image_refs:
-        manifest = layer_cache.get(image_ref)
-        if manifest is not None:
-            layers.update(layer.digest for layer in manifest.layers)
-    return layers
-
-
-def _image_transfer_estimate(
-    heartbeat: NodeHeartbeat,
-    image: str,
-    routes: list[SandboxRoute],
-    layer_cache: RegistryLayerMetadataCache,
-    *,
-    target_manifest: RegistryManifestLayers | None = None,
-) -> dict[str, int] | None:
-    manifest = target_manifest or layer_cache.get(image)
-    if manifest is None:
-        return None
-    available_layers = _node_projected_layer_digests(
-        heartbeat,
-        routes,
-        layer_cache,
-    )
-    missing_bytes = sum(
-        layer.size for layer in manifest.layers if layer.digest not in available_layers
-    )
-    return {
-        "target_layer_count": len(manifest.layers),
-        "target_compressed_bytes": manifest.total_size,
-        "estimated_missing_layer_bytes": missing_bytes,
-        "estimated_reused_layer_bytes": max(0, manifest.total_size - missing_bytes),
-    }
-
-
-def _cold_image_placement_cost(
-    heartbeat: NodeHeartbeat,
-    routes: list[SandboxRoute],
-    target_manifest: RegistryManifestLayers | None,
-    layer_cache: RegistryLayerMetadataCache | None,
-    *,
-    spread_cold_image: bool,
-) -> tuple[int, int]:
-    if not spread_cold_image:
-        return (0, 0)
-    pressure = _node_cold_image_pressure(heartbeat, routes)
-    if target_manifest is None or layer_cache is None:
-        return (1, pressure)
-    estimate = _image_transfer_estimate(
-        heartbeat,
-        "",
-        routes,
-        layer_cache,
-        target_manifest=target_manifest,
-    )
-    if estimate is None:
-        return (1, pressure)
-    return (
-        0,
-        estimate["estimated_missing_layer_bytes"]
-        + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
-    )
+def _placement_identity(route: PlacementRecord) -> tuple[str, ...]:
+    if isinstance(route, SandboxRoute):
+        return (
+            "sandbox",
+            route.sandbox_id,
+            str(route.generation),
+            route.create_operation_id,
+        )
+    return ("migration", route.reservation_id)
 
 
 def _cold_image_placement_cost_for_state(
@@ -6269,21 +5800,6 @@ def _cold_image_placement_cost_for_state(
         0,
         missing_bytes + pressure * COLD_PULL_PRESSURE_PENALTY_BYTES,
     )
-
-
-def _nodes_preparing_image(
-    image: str,
-    heartbeats: list[NodeHeartbeat],
-    routes: list[SandboxRoute],
-) -> set[str]:
-    identity = canonical_image_digest_ref(image) or image.strip()
-    if not identity:
-        return set()
-    return {
-        heartbeat.node_id
-        for heartbeat in heartbeats
-        if identity in _node_inflight_image_identities(heartbeat, routes)
-    }
 
 
 def _image_pull_lock(node_url: str, image: str) -> RLock:
@@ -6798,7 +6314,7 @@ def _lifecycle_proxy_error(response: ProxiedResponse) -> str:
     try:
         payload = response.json()
         if isinstance(payload, dict):
-            detail = str(payload.get("error") or payload.get("message") or "").strip()
+            detail = str(payload.get("error") or "").strip()
     except (TypeError, ValueError, json.JSONDecodeError):
         pass
     if not detail:

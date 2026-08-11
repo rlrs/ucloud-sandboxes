@@ -221,18 +221,19 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
                                 timeout_seconds=0.1,
                                 lease_seconds=30,
                             )
-                            if polled.request is None:
+                            if not polled.requests:
                                 continue
+                            request = polled.requests[0]
                             self.assertEqual(
-                                polled.request.sandbox_id,
+                                request.sandbox_id,
                                 sandbox_id,
                             )
                             self.assertEqual(
-                                polled.request.sandbox_generation,
+                                request.sandbox_generation,
                                 sandbox_generation,
                             )
                             await sdk.forward_to(
-                                polled.request,
+                                request,
                                 interception.base_url,
                                 timeout_seconds=30,
                             )

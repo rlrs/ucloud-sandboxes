@@ -1,33 +1,25 @@
-from contextlib import contextmanager
-from dataclasses import replace
-from pathlib import Path
-from types import SimpleNamespace
-from tempfile import TemporaryDirectory
-from threading import Event, Lock, Thread
-from time import monotonic, sleep
-from urllib import request
 import hashlib
 import json
 import shutil
 import unittest
+from contextlib import contextmanager
+from dataclasses import replace
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from threading import Event, Lock, Thread
+from time import monotonic, sleep
+from types import SimpleNamespace
 from unittest.mock import patch
+from urllib import request
 
 from ucloud_sandboxes.direct_network import DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
-from ucloud_sandboxes.node_runtime import (
-    DirectNodeRuntime,
-    NodeStateStore,
-)
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
+from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
 from ucloud_sandboxes.direct_service import DirectExecResult, DirectSandboxService
-from ucloud_sandboxes.direct_registry import (
-    DirectRegistryError,
-    DirectSandboxRegistry,
-)
 from ucloud_sandboxes.direct_warden import DirectSandbox
 from ucloud_sandboxes.hibernation import (
     HibernationArtifactStore,
-    HibernationDiskLedger,
     HibernationRuntimeFingerprint,
     HibernationState,
 )
@@ -37,11 +29,11 @@ from ucloud_sandboxes.image_rootfs import (
     OverlayRootfsLease,
 )
 from ucloud_sandboxes.images import DockerImageRuntime
-from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentityStore
+from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
 from ucloud_sandboxes.node_agent import (
     build_direct_node_agent_server as _build_direct_node_agent_server,
 )
-from ucloud_sandboxes.models import NodeRuntimeMetrics, ResourceQuantity, utc_now
+from ucloud_sandboxes.node_runtime import DirectNodeRuntime
 from ucloud_sandboxes.sandbox import (
     SandboxAdmissionClosedError,
     SandboxBusyError,
@@ -50,6 +42,13 @@ from ucloud_sandboxes.sandbox import (
     SandboxSecuritySpec,
     SandboxSpec,
     sandbox_spec_fingerprint,
+)
+from ucloud_sandboxes.storage_native_daemon import (
+    StorageNativeConflictError,
+    StorageNativeNodeError,
+    StorageVolumeOwner,
+    StorageVolumeRecord,
+    StorageVolumeState,
 )
 
 
@@ -119,42 +118,123 @@ class FakeImageStore:
         }
 
 
-class FakeQuota:
+class FakeStorage:
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.items: dict[tuple[str, int], dict] = {}
+        self.records: dict[tuple[str, int], StorageVolumeRecord] = {}
+        self.next_project_id = 200_000
+        self.delete_operation_ids: list[str] = []
 
-    def prepare(self, reservation):
-        path = self.root / (
-            f"{reservation.sandbox_id}.sandbox-{reservation.sandbox_generation}"
-        )
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        payload = {
-            "hard_limit_mb": reservation.total_mb,
-            "path": str(path),
-            "project_id": reservation.project_id,
-            "sandbox_generation": reservation.sandbox_generation,
-            "sandbox_id": reservation.sandbox_id,
-            "state": "ready",
-        }
-        self.items[(reservation.sandbox_id, reservation.sandbox_generation)] = payload
-        return payload
-
-    def drop(self, reservation):
-        key = (reservation.sandbox_id, reservation.sandbox_generation)
-        payload = self.items.pop(key, None)
-        if payload is not None:
-            shutil.rmtree(payload["path"])
+    @property
+    def active_records(self) -> dict[tuple[str, int], StorageVolumeRecord]:
         return {
-            "project_id": reservation.project_id,
-            "removed": payload is not None,
-            "sandbox_generation": reservation.sandbox_generation,
-            "sandbox_id": reservation.sandbox_id,
-            "state": "absent",
+            key: record
+            for key, record in self.records.items()
+            if record.state != StorageVolumeState.DELETED
         }
 
-    def inventory(self):
-        return tuple(self.items.values())
+    def prepare_volume(
+        self,
+        owner: StorageVolumeOwner,
+        *,
+        operation_id: str,
+        virtual_size: int,
+    ) -> StorageVolumeRecord:
+        key = (owner.sandbox_id, owner.sandbox_generation)
+        existing = self.records.get(key)
+        if existing is not None:
+            if (
+                existing.state == StorageVolumeState.DELETED
+                or existing.owner != owner
+                or existing.virtual_size != virtual_size
+            ):
+                raise StorageNativeConflictError(
+                    "replayed storage preparation changed its owner"
+                )
+            return existing
+        project_id = self.next_project_id
+        self.next_project_id += 1
+        record = self._record(
+            owner,
+            operation_id=operation_id,
+            virtual_size=virtual_size,
+            accounting_id=project_id,
+        )
+        self.records[key] = record
+        return record
+
+    def get_volume(self, volume_id: str) -> StorageVolumeRecord:
+        for record in self.records.values():
+            if record.volume_id == volume_id:
+                return record
+        raise StorageNativeConflictError("storage-native volume does not exist")
+
+    def delete_volume(
+        self,
+        owner: StorageVolumeOwner,
+        *,
+        operation_id: str,
+        expected_accounting_id: int | None = None,
+        expected_virtual_size: int | None = None,
+    ) -> StorageVolumeRecord:
+        record = self.get_volume(owner.volume_id)
+        if (
+            record.owner != owner
+            or (
+                expected_accounting_id is not None
+                and record.accounting_id != expected_accounting_id
+            )
+            or (
+                expected_virtual_size is not None
+                and record.virtual_size != expected_virtual_size
+            )
+        ):
+            raise StorageNativeNodeError(
+                "storage-native volume belongs to another owner"
+            )
+        if record.state == StorageVolumeState.DELETED:
+            return record
+        self.delete_operation_ids.append(operation_id)
+        path = Path(record.mount_path)
+        if path.exists():
+            shutil.rmtree(path)
+        deleted = replace(
+            record,
+            revision=record.revision + 1,
+            state=StorageVolumeState.DELETED,
+            operation_id=operation_id,
+        )
+        self.records[(owner.sandbox_id, owner.sandbox_generation)] = deleted
+        return deleted
+
+    def get_metrics(self) -> dict:
+        return {}
+
+    def _record(
+        self,
+        owner: StorageVolumeOwner,
+        *,
+        operation_id: str,
+        virtual_size: int,
+        accounting_id: int,
+    ) -> StorageVolumeRecord:
+        path = self.root / owner.volume_id
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        runtime = self.root.parent / "storage-runtime" / owner.volume_id
+        return StorageVolumeRecord(
+            volume_id=owner.volume_id,
+            sandbox_id=owner.sandbox_id,
+            sandbox_generation=owner.sandbox_generation,
+            revision=1,
+            state=StorageVolumeState.MOUNTED,
+            operation_id=operation_id,
+            virtual_size=virtual_size,
+            runtime_dir=str(runtime / "runtime"),
+            mount_path=str(path),
+            source_image_config=str(runtime / "source.json"),
+            device_owner_id="",
+            accounting_id=accounting_id,
+        )
 
 
 class FakeOverlays:
@@ -222,7 +302,7 @@ class FakeOverlays:
 
 
 class FakeWarden:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, storage: FakeStorage) -> None:
         fingerprint = HibernationRuntimeFingerprint(
             runsc_sha256="d" * 64,
             runsc_commit="e" * 40,
@@ -236,18 +316,16 @@ class FakeWarden:
         quota = root / "quota"
         bundles = root / "bundles"
         self.config = SimpleNamespace(
-            artifact_root=quota,
             bundle_root=bundles,
             memory_root=quota,
             network="none",
-            remove_memory_directory_on_delete=False,
             runtime_fingerprint=fingerprint,
         )
         self.artifacts = HibernationArtifactStore(quota)
         self.records = {}
         self.discarded = []
         self.alive = True
-        self.storage = SimpleNamespace(get_metrics=lambda: {})
+        self.storage = storage
         self.storage_snapshot_calls = 0
 
     @staticmethod
@@ -289,12 +367,12 @@ class FakeWarden:
 
     @staticmethod
     def _storage_record(_sandbox):
-        return {"state": "mounted"}
+        return SimpleNamespace(state=StorageVolumeState.MOUNTED)
 
     def storage_records_snapshot(self, sandboxes):
         self.storage_snapshot_calls += 1
         return {
-            sandbox.memory_directory: {"state": "mounted"}
+            sandbox.memory_directory: SimpleNamespace(state=StorageVolumeState.MOUNTED)
             for sandbox in sandboxes
         }
 
@@ -349,27 +427,18 @@ class DirectProvisionerTests(unittest.TestCase):
     def make(self, root: Path):
         images = FakeImageStore(root)
         overlays = FakeOverlays(images, root)
-        quota = FakeQuota(overlays.writable_root)
-        warden = FakeWarden(root)
-        registry = DirectSandboxRegistry((root / "registry.json").resolve())
-        ledger = HibernationDiskLedger(
-            (root / "ledger.json").resolve(),
-            capacity_mb=100_000,
-            safety_headroom_mb=1_000,
-        )
+        storage = FakeStorage(overlays.writable_root)
+        warden = FakeWarden(root, storage)
+        warden.rootfs_lifecycle = overlays
+        registry = DirectSandboxRegistry((root / "registry.sqlite").resolve())
         provisioner = DirectSandboxProvisioner(
-            identity_store=NodeRuntimeIdentityStore(
-                (root / "runtime-identity.json").resolve()
-            ),
             registry=registry,
-            disk_ledger=ledger,
-            quota_backend=quota,
             image_store=images,
             overlays=overlays,
             oci=DirectOciConfigBuilder(),
             warden=warden,
         )
-        return provisioner, registry, ledger, quota, images, warden
+        return provisioner, registry, storage, images, warden
 
     @staticmethod
     def spec() -> SandboxSpec:
@@ -401,7 +470,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_create_and_delete_order_all_owners(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            provisioner, registry, quota, _, warden = self.make(root)
 
             created = provisioner.create(
                 spec=self.spec(),
@@ -409,22 +478,66 @@ class DirectProvisionerTests(unittest.TestCase):
                 operation_id="create:7",
             )
 
-            self.assertEqual(created.registration.phase, "owned")
-            self.assertEqual(created.lifecycle_state, HibernationState.RUNNING)
-            self.assertEqual(len(ledger.inventory().reservations), 1)
-            self.assertEqual(len(quota.inventory()), 1)
+            self.assertEqual(created.phase, "owned")
+            self.assertEqual(len(quota.active_records), 1)
             self.assertIn(("sandbox", 7), warden.discarded)
 
             provisioner.delete("sandbox")
 
             self.assertIsNone(registry.get("sandbox"))
-            self.assertEqual(ledger.inventory().reservations, ())
-            self.assertEqual(quota.inventory(), ())
+            self.assertEqual(quota.active_records, {})
+            self.assertEqual(quota.delete_operation_ids, ["quota-delete:200000"])
+
+    def test_create_rejects_noncanonical_storage_record(self) -> None:
+        cases = (
+            (
+                "owner",
+                lambda record, _root: replace(record, sandbox_id="other"),
+                "another quota owner",
+            ),
+            (
+                "path",
+                lambda record, root: replace(
+                    record,
+                    mount_path=str(root / "unexpected"),
+                ),
+                "unexpected mount path",
+            ),
+            (
+                "size",
+                lambda record, _root: replace(
+                    record,
+                    virtual_size=record.virtual_size + 1,
+                ),
+                "another quota owner",
+            ),
+            (
+                "accounting",
+                lambda record, _root: replace(record, accounting_id=0),
+                "invalid accounting ID",
+            ),
+        )
+        for label, mutate, message in cases:
+            with self.subTest(label=label), TemporaryDirectory() as raw:
+                root = Path(raw).resolve()
+                provisioner, _, storage, _, _ = self.make(root)
+                prepare = storage.prepare_volume
+
+                def invalid(owner, **kwargs):
+                    return mutate(prepare(owner, **kwargs), root)
+
+                storage.prepare_volume = invalid
+                with self.assertRaisesRegex(StorageNativeNodeError, message):
+                    provisioner.create(
+                        spec=self.spec(),
+                        sandbox_generation=7,
+                        operation_id="create:7",
+                    )
 
     def test_delete_collects_only_its_digest_and_preserves_shared_root(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, images, _ = self.make(root)
+            provisioner, _, _, images, _ = self.make(root)
             first = provisioner.create(
                 spec=replace(self.spec(), id="sandbox-1"),
                 sandbox_generation=1,
@@ -436,8 +549,8 @@ class DirectProvisionerTests(unittest.TestCase):
                 operation_id="create:2",
             )
 
-            provisioner.delete(first.registration.sandbox_id)
-            provisioner.delete(second.registration.sandbox_id)
+            provisioner.delete(first.sandbox_id)
+            provisioner.delete(second.sandbox_id)
 
             self.assertFalse(images.reconciled)
             self.assertEqual(
@@ -449,7 +562,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_post_commit_image_collection_failure_is_deferred(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, images, _ = self.make(root)
+            provisioner, registry, _, images, _ = self.make(root)
             provisioner.start()
             created = provisioner.create(
                 spec=self.spec(),
@@ -458,9 +571,9 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             images.fail_collect = True
 
-            provisioner.delete(created.registration.sandbox_id)
+            provisioner.delete(created.sandbox_id)
 
-            self.assertIsNone(registry.get(created.registration.sandbox_id))
+            self.assertIsNone(registry.get(created.sandbox_id))
             self.assertTrue(provisioner.image_cache_reconciliation_pending)
             images.fail_collect = False
             self.assertTrue(provisioner.reconcile_image_cache_if_pending())
@@ -471,7 +584,7 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, images, _ = self.make(root)
+            provisioner, _, _, images, _ = self.make(root)
             entered_two = Event()
             release = Event()
             active_guard = Lock()
@@ -522,40 +635,39 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_restart_advances_quota_ready_registration(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, images, _ = self.make(root)
+            provisioner, registry, quota, images, _ = self.make(root)
             planned = registry.plan(
                 spec=self.spec(),
                 sandbox_generation=9,
                 operation_id="create:9",
-                runtime_identity_sha256=provisioner.identity.digest,
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
-            reservation = ledger.reserve(
-                sandbox_id="sandbox",
-                sandbox_generation=9,
-                memory_mb=1024,
-                writable_disk_mb=2048,
+            total_mb = provisioner._quota_total_mb(planned)
+            record = quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
             )
-            payload = quota.prepare(reservation)
             registry.commit_quota(
                 "sandbox",
                 expected_revision=planned.revision,
-                project_id=reservation.project_id,
-                total_mb=reservation.total_mb,
-                quota_path=Path(payload["path"]),
+                project_id=record.accounting_id,
+                total_mb=total_mb,
+                quota_path=Path(record.mount_path),
             )
 
             results = provisioner.start()
 
             self.assertTrue(images.reconciled)
             self.assertEqual(len(results), 1)
-            self.assertEqual(results[0].registration.phase, "owned")
+            self.assertEqual(results[0].phase, "owned")
 
     def test_restart_uses_one_registry_snapshot_and_one_host_network_pass(
         self,
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, images, warden = self.make(root)
+            provisioner, registry, _, images, warden = self.make(root)
             network = DirectNetworkManager(
                 root / "network-slots.json",
                 namespace_root=root / "netns",
@@ -617,35 +729,59 @@ class DirectProvisionerTests(unittest.TestCase):
             ensure_host_rules.assert_called_once_with()
             self.assertEqual(ensure_kernel_lease.call_count, 3)
 
-    def test_restart_never_turns_interrupted_import_into_new_sandbox(self) -> None:
+    def test_restart_reuses_storage_id_after_prepare_before_registry_commit(
+        self,
+    ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            provisioner, registry, quota, _, _ = self.make(root)
             planned = registry.plan(
                 spec=self.spec(),
                 sandbox_generation=9,
-                operation_id="create:9",
-                runtime_identity_sha256=provisioner.identity.digest,
+                operation_id="create:prepared",
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
-            reservation = ledger.reserve(
-                sandbox_id="sandbox",
+            total_mb = provisioner._quota_total_mb(planned)
+            prepared = quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
+            )
+
+            results = provisioner.start()
+
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0].phase, "owned")
+            self.assertEqual(
+                results[0].quota_project_id,
+                prepared.accounting_id,
+            )
+            self.assertEqual(quota.next_project_id, 200_001)
+
+    def test_restart_never_turns_interrupted_import_into_new_sandbox(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, _, warden = self.make(root)
+            planned = registry.plan_import(
+                spec=self.spec(),
                 sandbox_generation=9,
-                memory_mb=1024,
-                writable_disk_mb=2048,
-            )
-            payload = quota.prepare(reservation)
-            quota_ready = registry.commit_quota(
-                "sandbox",
-                expected_revision=planned.revision,
-                project_id=reservation.project_id,
-                total_mb=reservation.total_mb,
-                quota_path=Path(payload["path"]),
-            )
-            registry.begin_import(
-                "sandbox",
-                expected_revision=quota_ready.revision,
+                operation_id="create:9",
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
                 migration_id="move:interrupted",
                 migration_sha256="a" * 64,
+            )
+            total_mb = provisioner._quota_total_mb(planned)
+            record = quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
+            )
+            registry.commit_import_quota(
+                "sandbox",
+                expected_revision=planned.revision,
+                project_id=record.accounting_id,
+                total_mb=total_mb,
+                quota_path=Path(record.mount_path),
             )
 
             results = provisioner.start()
@@ -654,79 +790,99 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(registry.get("sandbox").phase, "importing")
             self.assertNotIn(("sandbox", 9), warden.records)
 
-    def test_restart_completes_delete_after_ledger_release_boundary(self) -> None:
+    def test_restart_completes_delete_after_storage_delete_boundary(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            provisioner, registry, quota, _, warden = self.make(root)
             created = provisioner.create(
                 spec=self.spec(),
                 sandbox_generation=7,
                 operation_id="create:7",
             )
             deleting = registry.begin_delete(
-                created.registration.sandbox_id,
-                expected_revision=created.registration.revision,
+                created.sandbox_id,
+                expected_revision=created.revision,
             )
-            reservation = provisioner._reservation_for(deleting)
-
             warden.delete(deleting.to_direct_sandbox())
             provisioner.overlays.release_sandbox(deleting.to_direct_sandbox())
-            quota.drop(reservation)
-            ledger.release(
-                sandbox_id=deleting.sandbox_id,
-                sandbox_generation=deleting.sandbox_generation,
+            quota.delete_volume(
+                provisioner._storage_owner(deleting),
+                operation_id=f"quota-delete:{deleting.quota_project_id}",
+                expected_accounting_id=deleting.quota_project_id,
+                expected_virtual_size=deleting.quota_total_mb * 1024 * 1024,
             )
 
             self.assertEqual(registry.get(deleting.sandbox_id).phase, "deleting")
-            self.assertEqual(ledger.inventory().reservations, ())
-            self.assertEqual(quota.inventory(), ())
+            self.assertEqual(quota.active_records, {})
 
             results = provisioner.start()
 
             self.assertEqual(results, ())
             self.assertIsNone(registry.get(deleting.sandbox_id))
 
+    def test_delete_fails_closed_when_storage_authority_is_absent(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, _, _ = self.make(root)
+            created = provisioner.create(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            identity = (
+                created.sandbox_id,
+                created.sandbox_generation,
+            )
+            quota.records.pop(identity)
+
+            with self.assertRaisesRegex(RuntimeError, "quota owner is absent"):
+                provisioner.delete(created.sandbox_id)
+
+            deleting = registry.get(created.sandbox_id)
+            assert deleting is not None
+            self.assertEqual(deleting.phase, "deleting")
+
     def test_restart_reclaims_all_deletions_before_advancing_planned_work(
         self,
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, quota, _, _ = self.make(root)
+            provisioner, registry, quota, _, _ = self.make(root)
             created = provisioner.create(
                 spec=replace(self.spec(), id="z-deleting"),
                 sandbox_generation=7,
                 operation_id="create:7",
             )
             registry.begin_delete(
-                created.registration.sandbox_id,
-                expected_revision=created.registration.revision,
+                created.sandbox_id,
+                expected_revision=created.revision,
             )
             registry.plan(
                 spec=replace(self.spec(), id="a-planned"),
                 sandbox_generation=9,
                 operation_id="create:9",
-                runtime_identity_sha256=provisioner.identity.digest,
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
-            original_prepare = quota.prepare
+            original_prepare = quota.prepare_volume
 
-            def prepare_only_after_reclaim(reservation):
-                if quota.items:
+            def prepare_only_after_reclaim(owner, **kwargs):
+                if quota.active_records:
                     raise RuntimeError("storage hard capacity is exhausted")
-                return original_prepare(reservation)
+                return original_prepare(owner, **kwargs)
 
-            quota.prepare = prepare_only_after_reclaim
+            quota.prepare_volume = prepare_only_after_reclaim
 
             results = provisioner.start()
 
             self.assertIsNone(registry.get("z-deleting"))
             self.assertEqual(len(results), 1)
-            self.assertEqual(results[0].registration.sandbox_id, "a-planned")
-            self.assertEqual(results[0].registration.phase, "owned")
+            self.assertEqual(results[0].sandbox_id, "a-planned")
+            self.assertEqual(results[0].phase, "owned")
 
     def test_service_retries_durable_delete_without_node_restart(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, _, _ = self.make(root)
+            provisioner, registry, quota, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -735,17 +891,17 @@ class DirectProvisionerTests(unittest.TestCase):
             service.start()
             try:
                 created = self.create(service, self.spec())
-                original_drop = quota.drop
+                original_drop = quota.delete_volume
                 failures_remaining = 1
 
-                def transient_drop(reservation):
+                def transient_drop(owner, **kwargs):
                     nonlocal failures_remaining
                     if failures_remaining:
                         failures_remaining -= 1
                         raise OSError("injected transient quota delete failure")
-                    return original_drop(reservation)
+                    return original_drop(owner, **kwargs)
 
-                quota.drop = transient_drop
+                quota.delete_volume = transient_drop
                 with self.assertRaisesRegex(OSError, "transient quota delete"):
                     service.delete(
                         created.spec.id,
@@ -760,23 +916,22 @@ class DirectProvisionerTests(unittest.TestCase):
                     sleep(0.01)
 
                 self.assertIsNone(registry.get(created.spec.id))
-                self.assertEqual(ledger.inventory().reservations, ())
-                self.assertEqual(quota.inventory(), ())
+                self.assertEqual(quota.active_records, {})
             finally:
                 service.stop()
 
     def test_start_serves_while_failed_warden_delete_retries(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, ledger, quota, _, warden = self.make(root)
+            provisioner, registry, quota, _, warden = self.make(root)
             created = provisioner.create(
                 spec=self.spec(),
                 sandbox_generation=7,
                 operation_id="create:7",
             )
             registry.begin_delete(
-                created.registration.sandbox_id,
-                expected_revision=created.registration.revision,
+                created.sandbox_id,
+                expected_revision=created.revision,
             )
             original_delete = warden.delete
             failures_remaining = 1
@@ -796,36 +951,38 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             service.start()
             try:
-                sandbox_id = created.registration.sandbox_id
+                sandbox_id = created.sandbox_id
                 self.assertEqual(registry.get(sandbox_id).phase, "deleting")
                 deadline = monotonic() + 2
                 while registry.get(sandbox_id) is not None and monotonic() < deadline:
                     sleep(0.01)
 
                 self.assertIsNone(registry.get(sandbox_id))
-                self.assertEqual(ledger.inventory().reservations, ())
-                self.assertEqual(quota.inventory(), ())
+                self.assertEqual(quota.active_records, {})
             finally:
                 service.stop()
 
-    def test_start_fails_closed_on_orphan_capacity_owner(self) -> None:
+    def test_start_does_not_cross_audit_storage_owners(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, ledger, _, _, _ = self.make(root)
-            ledger.reserve(
-                sandbox_id="orphan",
-                sandbox_generation=1,
-                memory_mb=1024,
-                writable_disk_mb=1024,
+            provisioner, _, quota, _, _ = self.make(root)
+            quota.prepare_volume(
+                StorageVolumeOwner(
+                    volume_id="orphan.sandbox-1",
+                    sandbox_id="orphan",
+                    sandbox_generation=1,
+                ),
+                operation_id="create:orphan",
+                virtual_size=4096 * 1024 * 1024,
             )
 
-            with self.assertRaisesRegex(DirectRegistryError, "absent"):
-                provisioner.start()
+            self.assertEqual(provisioner.start(), ())
+            self.assertIn(("orphan", 1), quota.active_records)
 
     def test_service_wakes_for_exec_and_supports_binary_file_input(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             runner = FakeProcessRunner()
             service = DirectSandboxService(provisioner, process_runner=runner)
             created = self.create(service, self.spec())
@@ -846,10 +1003,9 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, warden = self.make(root)
+            provisioner, _, _, _, warden = self.make(root)
             publication_started = Event()
             allow_publication = Event()
-            warden.storage = object()
 
             def publish_storage_snapshot(
                 _sandbox,
@@ -890,9 +1046,8 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, warden = self.make(root)
+            provisioner, _, _, _, warden = self.make(root)
             publications: list[str] = []
-            warden.storage = object()
 
             def publish_storage_snapshot(_sandbox, *, operation_id):
                 publications.append(operation_id)
@@ -916,7 +1071,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_service_quarantines_dead_running_sentry_on_read(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, warden = self.make(root)
+            provisioner, _, _, _, warden = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -929,41 +1084,16 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertIsNotNone(observed)
             self.assertEqual(observed.state, HibernationState.RECOVERY_REQUIRED.value)
 
-    def test_service_rejects_restore_beyond_hard_active_capacity(self) -> None:
+    def test_active_admission_reuses_idle_cpu_and_memory_limits(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            first = self.create(service, replace(self.spec(), id="sandbox-a"))
-            second = self.create(service, replace(self.spec(), id="sandbox-b"))
-            service.park(first.spec.id, operation_id="park:first")
-            service.park(second.spec.id, operation_id="park:second")
-            service.configure_active_capacity(ResourceQuantity(vcpu=1, memory_mb=1024))
-
-            service.exec(first.spec.id, ("/bin/true",))
-            with self.assertRaisesRegex(
-                SandboxCapacityUnavailableError,
-                "insufficient active CPU or memory",
-            ):
-                service.exec(second.spec.id, ("/bin/true",))
-
-            self.assertEqual(service.get(first.spec.id).state, "running")
-            self.assertEqual(service.get(second.spec.id).state, "parked")
-
-    def test_dynamic_active_admission_reuses_idle_cpu_and_memory_limits(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=1, memory_mb=1024),
-                dynamic=True,
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
                     collected_at=utc_now(),
                     cpu_percent=1.0,
@@ -983,17 +1113,16 @@ class DirectProvisionerTests(unittest.TestCase):
                 {"running"},
             )
 
-    def test_dynamic_active_admission_stops_on_live_pressure(self) -> None:
+    def test_active_admission_stops_on_live_pressure(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=4, memory_mb=8192),
-                dynamic=True,
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
                     collected_at=utc_now(),
                     cpu_percent=95.0,
@@ -1009,17 +1138,16 @@ class DirectProvisionerTests(unittest.TestCase):
             ):
                 self.create(service, self.spec())
 
-    def test_dynamic_active_admission_fails_closed_without_metrics(self) -> None:
+    def test_active_admission_fails_closed_without_metrics(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=4, memory_mb=8192),
-                dynamic=True,
                 runtime_metrics_provider=lambda: None,
             )
 
@@ -1029,17 +1157,16 @@ class DirectProvisionerTests(unittest.TestCase):
             ):
                 self.create(service, self.spec())
 
-    def test_dynamic_active_admission_stops_on_cpu_load(self) -> None:
+    def test_active_admission_stops_on_cpu_load(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
             service.configure_active_capacity(
                 ResourceQuantity(vcpu=4, memory_mb=8192),
-                dynamic=True,
                 runtime_metrics_provider=lambda: NodeRuntimeMetrics(
                     collected_at=utc_now(),
                     cpu_percent=20.0,
@@ -1061,7 +1188,7 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1093,7 +1220,7 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1111,7 +1238,7 @@ class DirectProvisionerTests(unittest.TestCase):
             with self.assertRaisesRegex(SandboxBusyError, "active exec"):
                 manager.park(created.spec.id, operation_id="park-busy")
 
-            deleted, _ = manager.delete(
+            deleted = manager.delete(
                 created.spec.id,
                 generation=created.generation,
                 operation_id="delete:test",
@@ -1126,7 +1253,7 @@ class DirectProvisionerTests(unittest.TestCase):
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, _, _ = self.make(root)
+            provisioner, registry, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1137,13 +1264,13 @@ class DirectProvisionerTests(unittest.TestCase):
                 spec=planned_spec,
                 sandbox_generation=1,
                 operation_id="create:planned",
-                runtime_identity_sha256=provisioner.identity.digest,
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
             quota_planned = registry.plan(
                 spec=quota_spec,
                 sandbox_generation=2,
                 operation_id="create:quota-ready",
-                runtime_identity_sha256=provisioner.identity.digest,
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
             )
             registry.commit_quota(
                 quota_spec.id,
@@ -1168,7 +1295,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_heartbeat_uses_one_registry_and_one_bulk_storage_snapshot(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, _, warden = self.make(root)
+            provisioner, registry, _, _, warden = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1201,7 +1328,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_heartbeat_epoch_increases_after_highest_revision_is_deleted(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, registry, _, _, _, _ = self.make(root)
+            provisioner, registry, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1248,7 +1375,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_heartbeat_epoch_increases_after_last_registration_is_deleted(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1269,7 +1396,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_try_delete_retires_absent_mismatched_and_busy_lock_entries(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1306,7 +1433,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_drain_fences_create_before_rootfs_registration(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, images, _ = self.make(root)
+            provisioner, _, _, images, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1357,7 +1484,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_drain_waits_for_an_inflight_heartbeat_empty_proof(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1430,7 +1557,7 @@ class DirectProvisionerTests(unittest.TestCase):
 
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1456,7 +1583,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_node_adapter_heartbeat_does_not_join_exec_lifecycle_fence(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, warden = self.make(root)
+            provisioner, _, _, _, warden = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1478,23 +1605,19 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_direct_node_drain_survives_adapter_restart(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            state_store = NodeStateStore(root / "direct-node-state.json")
-            manager = DirectNodeRuntime(service, state_store=state_store)
+            manager = DirectNodeRuntime(service)
 
             drained = manager.configure_drain(
                 "drain-test",
                 True,
                 active_build_count=lambda: 0,
             )
-            restarted = DirectNodeRuntime(
-                service,
-                state_store=NodeStateStore(root / "direct-node-state.json"),
-            )
+            restarted = DirectNodeRuntime(service)
             restarted_snapshot = restarted.heartbeat_snapshot(
                 active_build_count=lambda: 0
             )
@@ -1514,7 +1637,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_direct_node_server_binds_only_direct_manager(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1534,18 +1657,14 @@ class DirectProvisionerTests(unittest.TestCase):
                     "direct-runsc-v1",
                     server.RequestHandlerClass.capabilities,
                 )
-                self.assertNotIn(
-                    "dynamic-active-admission-v1",
-                    server.RequestHandlerClass.capabilities,
-                )
                 self.assertIsNone(service._parking_thread)
             finally:
                 server.server_close()
 
-    def test_direct_node_advertises_dynamic_admission_with_live_metrics(self) -> None:
+    def test_direct_node_wire_uses_domain_results_without_docker_facades(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1557,29 +1676,91 @@ class DirectProvisionerTests(unittest.TestCase):
                 image_file=root / "images.json",
                 job_id="job",
                 node_id="node",
-                total_resources=ResourceQuantity(vcpu=32, memory_mb=98304),
-                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
-                    collected_at=utc_now(),
-                    cpu_percent=1.0,
-                    cpu_count=32,
-                    memory_total_mb=98304,
-                    memory_available_mb=90000,
-                ),
             )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
             try:
-                self.assertIn(
-                    "dynamic-active-admission-v1",
-                    server.RequestHandlerClass.capabilities,
+                host, port = server.server_address
+                base = f"http://{host}:{port}"
+                spec = self.spec()
+                create_payload = {
+                    **spec.to_dict(),
+                    "_ucloud_operation": {
+                        "generation": 1,
+                        "kind": "create",
+                        "operation_id": "create:wire-domain",
+                        "spec_hash": sandbox_spec_fingerprint(spec),
+                    },
+                }
+                create_request = request.Request(
+                    f"{base}/v1/sandboxes",
+                    data=json.dumps(create_payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
                 )
+                with request.urlopen(create_request) as response:
+                    created = json.load(response)
+
+                upload_request = request.Request(
+                    f"{base}/v1/sandboxes/{spec.id}/files?path=/workspace/data.txt",
+                    data=b"content",
+                    headers={"Content-Type": "application/octet-stream"},
+                    method="PUT",
+                )
+                with request.urlopen(upload_request) as response:
+                    uploaded = json.load(response)
+
+                download_request = request.Request(
+                    f"{base}/v1/sandboxes/{spec.id}/files?path=/workspace/data.txt"
+                )
+                with request.urlopen(download_request) as response:
+                    downloaded = response.read()
+                    download_headers = {
+                        key.lower(): value for key, value in response.headers.items()
+                    }
+
+                delete_request = request.Request(
+                    f"{base}/v1/sandboxes/{spec.id}",
+                    headers={
+                        "X-UCloud-Sandbox-Generation": "1",
+                        "X-UCloud-Sandbox-Operation-Id": "delete:wire-domain",
+                    },
+                    method="DELETE",
+                )
+                with request.urlopen(delete_request) as response:
+                    deleted = json.load(response)
             finally:
+                server.shutdown()
                 server.server_close()
+                thread.join(timeout=1)
+
+            self.assertEqual(set(created), {"sandbox", "timings"})
+            self.assertEqual(
+                uploaded,
+                {
+                    "ok": True,
+                    "path": "/workspace/data.txt",
+                    "sandbox_id": spec.id,
+                    "size": 7,
+                },
+            )
+            self.assertEqual(downloaded, b"ok\n")
+            self.assertEqual(download_headers["x-sandbox-id"], spec.id)
+            self.assertEqual(
+                download_headers["x-sandbox-path"],
+                "/workspace/data.txt",
+            )
+            self.assertNotIn("x-docker-command", download_headers)
+            self.assertNotIn("x-docker-exit-code", download_headers)
+            self.assertEqual(set(deleted), {"deleted"})
+            self.assertEqual(deleted["deleted"]["id"], spec.id)
 
     def test_direct_image_warmup_materializes_rootfs_before_reporting_ready(
         self,
     ) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, images, _ = self.make(root)
+            provisioner, _, _, images, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),
@@ -1630,7 +1811,7 @@ class DirectProvisionerTests(unittest.TestCase):
     def test_direct_node_park_and_explicit_wake_endpoints(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            provisioner, _, _, _, _, _ = self.make(root)
+            provisioner, _, _, _, _ = self.make(root)
             service = DirectSandboxService(
                 provisioner,
                 process_runner=FakeProcessRunner(),

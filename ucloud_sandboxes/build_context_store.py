@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 import fcntl
 import hashlib
+from http import HTTPStatus
 import math
 import os
 from pathlib import Path
@@ -12,6 +13,9 @@ import stat
 from threading import RLock, get_ident
 import time
 from typing import BinaryIO, Collection, Iterator
+from urllib.parse import unquote
+
+from .http_server import JsonHttpHandler, RequestBodyTooLargeError
 
 
 _DIGEST_RE = re.compile(r"sha256:([0-9a-f]{64})")
@@ -90,17 +94,6 @@ class BuildContextBlobStore:
 
     def path(self, digest: str) -> Path:
         return self.blob_dir / _digest_hex(digest)
-
-    def put(
-        self,
-        digest: str,
-        reader: BinaryIO,
-        *,
-        content_length: int,
-    ) -> Path:
-        return self.put_with_status(
-            digest, reader, content_length=content_length
-        ).path
 
     def put_with_status(
         self,
@@ -295,6 +288,52 @@ class BuildContextBlobStore:
                     yield
                 finally:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+class BuildContextHttpHandler(JsonHttpHandler):
+    build_context_store: BuildContextBlobStore
+
+    def _store_build_context(self, digest: str) -> None:
+        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0]
+        if content_type.strip().lower() != "application/gzip":
+            self.close_connection = True
+            self._write_json(
+                {"error": "build contexts require Content-Type: application/gzip"},
+                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return
+        try:
+            length = self._request_content_length(
+                max_bytes=self.build_context_store.max_blob_bytes
+            )
+            result = self.build_context_store.put_with_status(
+                digest,
+                ContentLengthReader(self.rfile, length),
+                content_length=length,
+            )
+            self.build_context_store.gc(protected=(digest,))
+        except RequestBodyTooLargeError as exc:
+            self.close_connection = True
+            self._write_json(
+                {"error": str(exc)}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            )
+            return
+        except (OSError, ValueError) as exc:
+            self.close_connection = True
+            self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json(
+            {"digest": digest, "size": length, "deduplicated": result.deduplicated},
+            status=HTTPStatus.OK if result.deduplicated else HTTPStatus.CREATED,
+        )
+
+
+def build_context_digest_from_path(path: str) -> str | None:
+    prefix = "/v1/image-contexts/"
+    if not path.startswith(prefix):
+        return None
+    digest = unquote(path[len(prefix) :])
+    return digest if digest and "/" not in digest else None
 
 
 def _digest_hex(digest: str) -> str:

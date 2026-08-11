@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from threading import get_ident
 import time
-from typing import Any, Iterable
+from typing import Any
 from urllib import error, parse, request
 
 
@@ -38,33 +38,6 @@ class UCloudHttpError(UCloudError):
 
 class UCloudTransportError(UCloudError):
     pass
-
-
-def job_labels(payload: object) -> dict[str, str]:
-    if not isinstance(payload, dict):
-        return {}
-    specification = payload.get("specification")
-    if not isinstance(specification, dict):
-        return {}
-    labels = specification.get("labels")
-    if not isinstance(labels, dict):
-        return {}
-    return {str(key): str(value) for key, value in labels.items()}
-
-
-def jobs_matching_labels(
-    jobs: Iterable[dict[str, Any]],
-    required_labels: dict[str, str],
-) -> list[dict[str, Any]]:
-    required = {str(key): str(value) for key, value in required_labels.items()}
-    if not required:
-        return []
-    return [
-        job
-        for job in jobs
-        if isinstance(job, dict)
-        and all(job_labels(job).get(key) == value for key, value in required.items())
-    ]
 
 
 @dataclass
@@ -160,15 +133,15 @@ class UCloudClient:
         self.store = store
         self.session = store.load()
 
-    def browse_jobs(
+    def browse_all_jobs(
         self,
         project_id: str,
         *,
         items_per_page: int = 100,
-        max_pages: int = 1,
         include_application: bool = False,
-        require_complete: bool = False,
     ) -> list[dict[str, Any]]:
+        """Return a complete job inventory or fail instead of returning a prefix."""
+
         params: dict[str, str] = {
             "itemsPerPage": str(items_per_page),
             "includeApplication": str(include_application).lower(),
@@ -176,9 +149,7 @@ class UCloudClient:
         items: list[dict[str, Any]] = []
         next_token: str | None = None
         seen_tokens: set[str] = set()
-        pages = 0
-
-        while True:
+        for _page in range(MAX_UCLOUD_PAGINATION_PAGES):
             page_params = dict(params)
             if next_token:
                 page_params["next"] = next_token
@@ -189,66 +160,30 @@ class UCloudClient:
                 params=page_params,
             )
             if not isinstance(payload, dict):
-                if require_complete:
-                    raise UCloudError("Invalid jobs browse response while paginating.")
-                return items
+                raise UCloudError("Invalid jobs browse response while paginating.")
             page_items = payload.get("items")
-            if require_complete and not isinstance(page_items, list):
+            if not isinstance(page_items, list):
                 raise UCloudError("Jobs browse response is missing an items list.")
-            if isinstance(page_items, list):
-                items.extend(item for item in page_items if isinstance(item, dict))
-                if len(items) > MAX_UCLOUD_INVENTORY_ITEMS:
-                    raise UCloudError(
-                        "Jobs browse inventory exceeded the configured safety limit."
-                    )
-            pages += 1
-            if pages > MAX_UCLOUD_PAGINATION_PAGES:
+            items.extend(item for item in page_items if isinstance(item, dict))
+            if len(items) > MAX_UCLOUD_INVENTORY_ITEMS:
                 raise UCloudError(
-                    "Jobs browse pagination exceeded the configured safety limit."
+                    "Jobs browse inventory exceeded the configured safety limit."
                 )
 
             raw_next = payload.get("next")
-            if (
-                require_complete
-                and raw_next not in (None, "")
-                and not isinstance(raw_next, str)
-            ):
+            if raw_next in (None, ""):
+                return items
+            if not isinstance(raw_next, str):
                 raise UCloudError(
                     "Jobs browse response contains an invalid next cursor."
                 )
-            next_token = raw_next if isinstance(raw_next, str) and raw_next else None
-            if not next_token:
-                return items
-            if next_token in seen_tokens:
-                if require_complete:
-                    raise UCloudError(
-                        "Jobs browse pagination repeated a cursor; refusing partial inventory."
-                    )
-                return items
-            seen_tokens.add(next_token)
-            if max_pages > 0 and pages >= max_pages:
-                if require_complete:
-                    raise UCloudError(
-                        "Jobs browse pagination reached max_pages before completion."
-                    )
-                return items
-
-    def browse_all_jobs(
-        self,
-        project_id: str,
-        *,
-        items_per_page: int = 100,
-        include_application: bool = False,
-    ) -> list[dict[str, Any]]:
-        """Return a complete job inventory or fail instead of returning a prefix."""
-
-        return self.browse_jobs(
-            project_id,
-            items_per_page=items_per_page,
-            max_pages=0,
-            include_application=include_application,
-            require_complete=True,
-        )
+            if raw_next in seen_tokens:
+                raise UCloudError(
+                    "Jobs browse pagination repeated a cursor; refusing partial inventory."
+                )
+            seen_tokens.add(raw_next)
+            next_token = raw_next
+        raise UCloudError("Jobs browse pagination exceeded the safety limit.")
 
     def retrieve_job(
         self,

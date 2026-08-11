@@ -62,22 +62,6 @@ class UCloudProvider:
             "builder": builder_profile,
         }
 
-    @classmethod
-    def from_session_file(
-        cls,
-        project_id: str,
-        session_file: str | Path,
-        *,
-        sandbox_profile: UCloudCreateProfile,
-        builder_profile: UCloudCreateProfile,
-    ) -> "UCloudProvider":
-        return cls(
-            project_id,
-            session_file=session_file,
-            sandbox_profile=sandbox_profile,
-            builder_profile=builder_profile,
-        )
-
     @property
     def client(self) -> UCloudClient:
         if self._client is None:

@@ -23,9 +23,6 @@
     "memory_mb": 4096,
     "disk_mb": 20000
   },
-  "cpu_overcommit": 3,
-  "memory_overcommit": 2.0,
-  "disk_overcommit": 1.0,
   "labels": {
     "pool": "default"
   }
@@ -55,7 +52,7 @@ refreshed.
   },
   "resources": {
     "sandbox": {
-      "effective": {"vcpu": 16, "memory_mb": 32768, "disk_mb": 204800},
+      "total": {"vcpu": 16, "memory_mb": 32768, "disk_mb": 204800},
       "used": {"vcpu": 1, "memory_mb": 512, "disk_mb": 1024},
       "load": {"vcpu": 0.0625, "memory": 0.015625, "disk": 0.005},
       "actual_usage": {

@@ -6,14 +6,8 @@ Requires=docker.service
 
 [Service]
 Type=simple
-Environment=UCLOUD_REGISTRY_IMAGE=registry:2
-Environment=UCLOUD_REGISTRY_BIND=0.0.0.0
-Environment=UCLOUD_REGISTRY_PORT=5000
-Environment=UCLOUD_REGISTRY_DATA_DIR=/work/data/ucloud-sandbox-registry/docker-registry
-EnvironmentFile=/etc/ucloud-sandboxes/registry.env
-ExecStartPre=/usr/bin/install -d -m 0755 ${UCLOUD_REGISTRY_DATA_DIR}
 ExecStartPre=-/usr/bin/docker rm -f ucloud-sandbox-registry
-ExecStart=/usr/bin/docker run --rm --name ucloud-sandbox-registry -p ${UCLOUD_REGISTRY_BIND}:${UCLOUD_REGISTRY_PORT}:5000 -v ${UCLOUD_REGISTRY_DATA_DIR}:/var/lib/registry -e REGISTRY_STORAGE_DELETE_ENABLED=true ${UCLOUD_REGISTRY_IMAGE}
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry --config /etc/ucloud-sandboxes/deployment.json
 ExecStop=/usr/bin/docker stop ucloud-sandbox-registry
 Restart=always
 RestartSec=5

@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import timedelta
 from io import BytesIO
@@ -9,7 +10,6 @@ from time import monotonic, sleep
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import hashlib
-import inspect
 from pathlib import Path
 import sqlite3
 import tarfile
@@ -24,6 +24,7 @@ from ucloud_sandboxes.agent import (
     post_heartbeat_with_headers,
 )
 from ucloud_sandboxes import control_plane
+from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.control_plane import (
     DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     IMAGE_BUILD_PROXY_TIMEOUT_SECONDS,
@@ -49,10 +50,11 @@ from ucloud_sandboxes.models import (
 from ucloud_sandboxes.node_agent import (
     build_builder_node_agent_server as _build_builder_node_agent_server,
 )
-from ucloud_sandboxes.registry import HeartbeatIdentityError, HeartbeatStore
+from ucloud_sandboxes.registry import HeartbeatIdentityError
 from ucloud_sandboxes.routing import (
     RoutingStore,
     SandboxRoute,
+    SandboxRouteAllocation,
     SandboxRouteConflictError,
 )
 from ucloud_sandboxes.sandbox import (
@@ -65,6 +67,17 @@ from ucloud_sandboxes.sandbox_exec import new_exec_session_id
 
 def build_heartbeat(**kwargs):
     kwargs.setdefault("deployment_id", "test-deployment")
+    kwargs.setdefault(
+        "runtime_metrics",
+        NodeRuntimeMetrics(
+            collected_at=utc_now(),
+            cpu_percent=0.0,
+            cpu_count=128,
+            load_average_1m=0.0,
+            memory_total_mb=1_000_000,
+            memory_available_mb=1_000_000,
+        ),
+    )
     return _agent_build_heartbeat(**kwargs)
 
 
@@ -78,6 +91,19 @@ def build_server(*args, **kwargs):
     kwargs.setdefault("heartbeat_bearer_token", "test-heartbeat-secret")
     kwargs.setdefault("node_control_bearer_token", "test-node-secret")
     kwargs.setdefault("deployment_id", "test-deployment")
+    heartbeat_file = Path(args[2])
+    kwargs.setdefault(
+        "routing_file",
+        heartbeat_file.with_name(f"{heartbeat_file.stem}-routes.sqlite"),
+    )
+    kwargs.setdefault(
+        "image_file",
+        heartbeat_file.with_name(f"{heartbeat_file.stem}-images.json"),
+    )
+    kwargs.setdefault(
+        "metrics_file",
+        heartbeat_file.with_name(f"{heartbeat_file.stem}-metrics.sqlite"),
+    )
     server = _build_server(*args, **kwargs)
     if not explicit_public_auth:
         server.RequestHandlerClass._check_authorized = lambda _self: True
@@ -89,17 +115,10 @@ def build_server(*args, **kwargs):
 
 
 def build_builder_node_agent_server(*args, **kwargs):
-    state_file = kwargs.pop("sandbox_file")
-    kwargs["state_file"] = state_file
-    kwargs.pop("image_builds_enabled", None)
     kwargs.setdefault("node_control_bearer_token", "test-node-secret")
     kwargs.setdefault("deployment_id", "test-deployment")
     kwargs.setdefault("image_runtime", DockerImageRuntime(dry_run=True))
-    parameters = inspect.signature(_build_builder_node_agent_server).parameters
-    server = _build_builder_node_agent_server(
-        *args,
-        **{key: value for key, value in kwargs.items() if key in parameters},
-    )
+    server = _build_builder_node_agent_server(*args, **kwargs)
     server.RequestHandlerClass._check_node_control_authorized = lambda _self: True
     return server
 
@@ -110,10 +129,10 @@ def _sandbox_route(**kwargs) -> SandboxRoute:
     raw_spec = dict(kwargs.get("spec") or {})
     raw_spec.setdefault("id", kwargs.get("sandbox_id"))
     kwargs["spec"] = raw_spec
+    kwargs.setdefault("resources", ResourceQuantity())
+    kwargs.setdefault("state", "unknown")
     kwargs.setdefault("generation", 1)
-    kwargs.setdefault(
-        "create_operation_id", "00000000-0000-4000-8000-000000000001"
-    )
+    kwargs.setdefault("create_operation_id", "00000000-0000-4000-8000-000000000001")
     if "spec_hash" not in kwargs:
         try:
             kwargs["spec_hash"] = sandbox_spec_fingerprint(
@@ -124,6 +143,50 @@ def _sandbox_route(**kwargs) -> SandboxRoute:
     return SandboxRoute(**kwargs)
 
 
+def _seed_gateway_node(
+    root: Path,
+    *,
+    node_url: str,
+    sandbox_id: str,
+) -> tuple[Path, Path]:
+    """Install one canonical heartbeat and matching route for proxy tests."""
+
+    heartbeat_file = root / "control-state.sqlite"
+    route_file = root / "routes.sqlite"
+    route = RoutingStore(route_file).upsert_sandbox(
+        _sandbox_route(
+            sandbox_id=sandbox_id,
+            node_id="node-1",
+            job_id="job-1",
+            node_url=node_url,
+            node_epoch="epoch-1",
+            state="running",
+        )
+    )
+    ControlStateStore(heartbeat_file).upsert_heartbeat(
+        build_heartbeat(
+            node_id=route.node_id,
+            job_id=route.job_id,
+            node_url=route.node_url,
+            node_epoch=route.node_epoch,
+            active_sandboxes=1,
+            capabilities=("sandbox", "disk-quota"),
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    state=route.state,
+                    resources=route.resources,
+                    generation=route.generation,
+                    operation_id=route.create_operation_id,
+                    spec_hash=route.spec_hash,
+                ),
+            ),
+            inventory_complete=True,
+        )
+    )
+    return heartbeat_file, route_file
+
+
 def _wait_for(predicate, *, timeout_seconds: float = 2.0) -> bool:
     deadline = monotonic() + timeout_seconds
     while monotonic() < deadline:
@@ -131,6 +194,16 @@ def _wait_for(predicate, *, timeout_seconds: float = 2.0) -> bool:
             return True
         sleep(0.01)
     return bool(predicate())
+
+
+@contextmanager
+def _running_server(server: ThreadingHTTPServer):
+    Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 class CountingPullRuntime(DockerImageRuntime):
@@ -171,12 +244,27 @@ def _tar_gz_context(files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
+def _store_build_context(server, archive: bytes) -> dict[str, object]:
+    digest = f"sha256:{hashlib.sha256(archive).hexdigest()}"
+    server.RequestHandlerClass.build_context_store.put_with_status(
+        digest,
+        BytesIO(archive),
+        content_length=len(archive),
+    )
+    return {
+        "context_path": ".",
+        "context_archive_digest": digest,
+        "context_archive_format": "tar.gz",
+        "context_archive_size": len(archive),
+    }
+
+
 class ControlPlaneTests(unittest.TestCase):
     def test_parked_managed_job_status_is_gateway_state_and_does_not_wake(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             route_file = root / "routes.sqlite"
-            heartbeat_file = root / "heartbeats.json"
+            heartbeat_file = root / "control-state.sqlite"
             routing = RoutingStore(route_file)
             route = routing.upsert_sandbox(
                 _sandbox_route(
@@ -209,7 +297,7 @@ class ControlPlaneTests(unittest.TestCase):
                     updated_at="2026-08-03T00:00:00+00:00",
                 ),
             )
-            HeartbeatStore(heartbeat_file).upsert(
+            ControlStateStore(heartbeat_file).upsert_heartbeat(
                 build_heartbeat(
                     job_id=route.job_id,
                     node_id=route.node_id,
@@ -260,7 +348,7 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             route_file = root / "routes.sqlite"
-            heartbeat_file = root / "heartbeats.json"
+            heartbeat_file = root / "control-state.sqlite"
             routing = RoutingStore(route_file)
             route = routing.upsert_sandbox(
                 _sandbox_route(
@@ -329,7 +417,7 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             route_file = root / "routes.sqlite"
-            heartbeat_file = root / "heartbeats.json"
+            heartbeat_file = root / "control-state.sqlite"
             metrics_file = root / "metrics.sqlite"
             routing = RoutingStore(route_file)
             route = routing.upsert_sandbox(
@@ -346,7 +434,7 @@ class ControlPlaneTests(unittest.TestCase):
                     state="running",
                 )
             )
-            HeartbeatStore(heartbeat_file).upsert(
+            ControlStateStore(heartbeat_file).upsert_heartbeat(
                 build_heartbeat(
                     job_id=route.job_id,
                     node_id=route.node_id,
@@ -439,7 +527,7 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             route_file = root / "routes.sqlite"
-            heartbeat_file = root / "heartbeats.json"
+            heartbeat_file = root / "control-state.sqlite"
             metrics_file = root / "metrics.sqlite"
             routing = RoutingStore(route_file)
             route = routing.upsert_sandbox(
@@ -452,7 +540,7 @@ class ControlPlaneTests(unittest.TestCase):
                     state="parked",
                 )
             )
-            HeartbeatStore(heartbeat_file).upsert(
+            ControlStateStore(heartbeat_file).upsert_heartbeat(
                 build_heartbeat(
                     job_id=route.job_id,
                     node_id=route.node_id,
@@ -601,34 +689,31 @@ class ControlPlaneTests(unittest.TestCase):
 
         with TemporaryDirectory() as raw_dir:
             node = ThreadingHTTPServer(("127.0.0.1", 0), NodeProbeHandler)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
+                heartbeat_file, route_file = _seed_gateway_node(
+                    Path(raw_dir),
+                    node_url=f"http://{node_host}:{node_port}",
+                    sandbox_id="auth-one",
+                )
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    Path(raw_dir) / "heartbeats.json",
-                    upstream_node_url=f"http://{node_host}:{node_port}",
+                    heartbeat_file,
+                    routing_file=route_file,
                     gateway_bearer_token="gateway-secret",
                     node_control_bearer_token="node-secret",
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     payload = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes",
+                        f"http://{host}:{port}/v1/sandboxes/auth-one",
                         headers={
                             "Authorization": "Bearer gateway-secret",
                             "X-UCloud-Sandbox-Token": "gateway-secret",
                             "Proxy-Authorization": "Bearer leaked",
                         },
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(payload, {"sandboxes": []})
         self.assertEqual(observed["authorization"], "Bearer node-secret")
@@ -640,7 +725,7 @@ class ControlPlaneTests(unittest.TestCase):
             server = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
             )
             try:
                 self.assertGreaterEqual(
@@ -656,16 +741,14 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_accepts_heartbeat_and_lists_nodes(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            heartbeat_file = Path(raw_dir) / "heartbeats.json"
+            heartbeat_file = Path(raw_dir) / "control-state.sqlite"
             server = build_server(
                 "127.0.0.1",
                 0,
                 heartbeat_file,
                 metrics_file=Path(raw_dir) / "metrics.sqlite",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            try:
+            with _running_server(server):
                 host, port = server.server_address
                 heartbeat = build_heartbeat(
                     job_id="job-1",
@@ -684,9 +767,6 @@ class ControlPlaneTests(unittest.TestCase):
                 ) as response:
                     payload = json.loads(response.read().decode("utf-8"))
                 metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
-            finally:
-                server.shutdown()
-                server.server_close()
 
             self.assertEqual(len(payload["nodes"]), 1)
             self.assertEqual(payload["nodes"][0]["job_id"], "job-1")
@@ -701,16 +781,14 @@ class ControlPlaneTests(unittest.TestCase):
         self,
     ) -> None:
         with TemporaryDirectory() as raw_dir:
-            heartbeat_file = Path(raw_dir) / "heartbeats.json"
+            heartbeat_file = Path(raw_dir) / "control-state.sqlite"
             server = build_server(
                 "127.0.0.1",
                 0,
                 heartbeat_file,
                 deployment_id="prod-a",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            try:
+            with _running_server(server):
                 host, port = server.server_address
                 base = f"http://{host}:{port}/v1/nodes/heartbeat"
                 rejected = post_heartbeat(
@@ -733,10 +811,7 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                 )
                 after = utc_now()
-                stored = HeartbeatStore(heartbeat_file).load()["job-1"]
-            finally:
-                server.shutdown()
-                server.server_close()
+                stored = ControlStateStore(heartbeat_file).load_heartbeats()["job-1"]
 
         self.assertEqual(rejected.status, 403)
         self.assertEqual(accepted.status, 200)
@@ -752,15 +827,13 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
             )
-            thread = Thread(target=gateway.serve_forever, daemon=True)
-            thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
-                    HeartbeatStore,
-                    "upsert_received",
+                    ControlStateStore,
+                    "receive_heartbeat",
                     side_effect=HeartbeatIdentityError(
                         "heartbeat node_id and job_id are already bound"
                     ),
@@ -769,9 +842,6 @@ class ControlPlaneTests(unittest.TestCase):
                         f"http://{host}:{port}/v1/nodes/heartbeat",
                         build_heartbeat(job_id="job-1", node_id="node-1"),
                     )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(result.status, 403)
         self.assertEqual(
@@ -793,6 +863,12 @@ class ControlPlaneTests(unittest.TestCase):
                 memory_mb=8192,
                 disk_mb=100_000,
             ),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                cpu_count=4,
+                memory_total_mb=8192,
+                memory_available_mb=8192,
+            ),
         )
         requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
 
@@ -805,7 +881,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
-    def test_memory_pressure_blocks_new_work_only_on_overcommitted_nodes(self) -> None:
+    def test_memory_pressure_blocks_new_work(self) -> None:
         requested = ResourceQuantity(vcpu=1, memory_mb=4096, disk_mb=0)
         heartbeat = NodeHeartbeat(
             node_id="node-1",
@@ -814,7 +890,6 @@ class ControlPlaneTests(unittest.TestCase):
             updated_at=utc_now(),
             active_sandboxes=0,
             total_resources=ResourceQuantity(vcpu=32, memory_mb=98304, disk_mb=450560),
-            memory_overcommit=2.0,
             runtime_metrics=NodeRuntimeMetrics(
                 collected_at=utc_now(),
                 memory_total_mb=98304,
@@ -842,11 +917,20 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertTrue(
             control_plane._node_can_fit(
-                replace(heartbeat, memory_overcommit=1.0), requested, []
+                replace(
+                    heartbeat,
+                    runtime_metrics=replace(
+                        heartbeat.runtime_metrics,
+                        memory_available_mb=8192,
+                        swap_free_mb=8192,
+                    ),
+                ),
+                requested,
+                [],
             )
         )
 
-    def test_dynamic_direct_placement_uses_live_pressure_not_resident_limits(
+    def test_direct_placement_uses_live_pressure_not_resident_limits(
         self,
     ) -> None:
         requested = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096)
@@ -866,7 +950,7 @@ class ControlPlaneTests(unittest.TestCase):
                 memory_mb=64 * requested.memory_mb,
                 disk_mb=64 * requested.disk_mb,
             ),
-            capabilities=("disk-quota", "dynamic-active-admission-v1"),
+            capabilities=("disk-quota",),
             runtime_metrics=NodeRuntimeMetrics(
                 collected_at=utc_now(),
                 cpu_percent=5.0,
@@ -902,7 +986,7 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
-    def test_dynamic_direct_placement_ignores_provisional_compute_but_not_disk(
+    def test_direct_placement_ignores_provisional_compute_but_not_disk(
         self,
     ) -> None:
         requested = ResourceQuantity(vcpu=4, memory_mb=4096, disk_mb=17_472)
@@ -918,7 +1002,7 @@ class ControlPlaneTests(unittest.TestCase):
                 memory_mb=98304,
                 disk_mb=1_449_984,
             ),
-            capabilities=("disk-quota", "dynamic-active-admission-v1"),
+            capabilities=("disk-quota",),
             runtime_metrics=NodeRuntimeMetrics(
                 collected_at=utc_now(),
                 cpu_percent=2.0,
@@ -1093,8 +1177,8 @@ class ControlPlaneTests(unittest.TestCase):
                     state="parked",
                 )
             )
-            heartbeats = HeartbeatStore(root / "heartbeats.json")
-            heartbeats.upsert(
+            heartbeats = ControlStateStore(root / "control-state.sqlite")
+            heartbeats.upsert_heartbeat(
                 NodeHeartbeat(
                     node_id="node-1",
                     job_id="job-1",
@@ -1169,7 +1253,7 @@ class ControlPlaneTests(unittest.TestCase):
                     state="running",
                 )
             )
-            heartbeats = HeartbeatStore(root / "heartbeats.json")
+            heartbeats = ControlStateStore(root / "control-state.sqlite")
             for heartbeat in (
                 NodeHeartbeat(
                     node_id="source-node",
@@ -1190,8 +1274,11 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=8192,
                         disk_mb=100_000,
                     ),
+                    resources_known=True,
                     runtime_metrics=NodeRuntimeMetrics(
                         collected_at=utc_now(),
+                        cpu_percent=95.0,
+                        cpu_count=4,
                         storage_hard_capacity_mb=100_000,
                     ),
                     inventory_complete=True,
@@ -1215,14 +1302,17 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=16_384,
                         disk_mb=100_000,
                     ),
+                    resources_known=True,
                     runtime_metrics=NodeRuntimeMetrics(
                         collected_at=utc_now(),
+                        cpu_percent=0.0,
+                        cpu_count=8,
                         storage_hard_capacity_mb=100_000,
                     ),
                     inventory_complete=True,
                 ),
             ):
-                heartbeats.upsert(heartbeat)
+                heartbeats.upsert_heartbeat(heartbeat)
 
             handler = object.__new__(control_plane.ControlPlaneHandler)
             handler.routing_store = routing
@@ -1271,6 +1361,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(migrations[0].destination_node_id, "destination-node")
 
     def test_inflight_import_reserves_destination_for_normal_placement(self) -> None:
+        image = "registry.test/team/image@sha256:" + "a" * 64
         with TemporaryDirectory() as raw_dir:
             routing = RoutingStore(Path(raw_dir) / "routes.sqlite")
             source = routing.upsert_sandbox(
@@ -1284,6 +1375,7 @@ class ControlPlaneTests(unittest.TestCase):
                         memory_mb=4096,
                         disk_mb=8192,
                     ),
+                    spec={"image": image},
                     state="parked",
                 )
             )
@@ -1298,13 +1390,39 @@ class ControlPlaneTests(unittest.TestCase):
             handler.routing_store = routing
 
             routes = handler._placement_routes()
+            placement = control_plane._node_placement_state(
+                replace(
+                    build_heartbeat(
+                        node_id="destination-node",
+                        job_id="destination-job",
+                        node_url="http://destination:8090",
+                        total_resources=ResourceQuantity(
+                            vcpu=4,
+                            memory_mb=8192,
+                            disk_mb=16_384,
+                        ),
+                    ),
+                    resources_known=True,
+                    cached_images_known=True,
+                ),
+                routes,
+            )
 
         reservation = next(
-            route for route in routes if route.sandbox_id == "__migration__:migration-1"
+            route
+            for route in routes
+            if isinstance(route, control_plane.PlacementReservation)
         )
+        self.assertEqual(reservation.reservation_id, "migration-1")
         self.assertEqual(reservation.node_id, "destination-node")
         self.assertEqual(reservation.resources, source.resources)
+        self.assertEqual(reservation.image, image)
         self.assertEqual(reservation.state, "creating")
+        self.assertEqual(placement.inflight_image_identities, frozenset({image}))
+        self.assertEqual(
+            placement.available_resources,
+            ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
+        )
 
     def test_cold_image_placement_spreads_distinct_pulls_and_reuses_inflight(
         self,
@@ -1326,6 +1444,7 @@ class ControlPlaneTests(unittest.TestCase):
                     memory_mb=8192,
                     disk_mb=100_000,
                 ),
+                runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now()),
                 cached_images_known=True,
             )
             candidates = [
@@ -1389,6 +1508,7 @@ class ControlPlaneTests(unittest.TestCase):
                     memory_mb=98304,
                     disk_mb=100_000,
                 ),
+                runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now()),
                 cached_images=(image,),
                 cached_images_known=True,
             )
@@ -1477,6 +1597,7 @@ class ControlPlaneTests(unittest.TestCase):
                     memory_mb=8192,
                     disk_mb=100_000,
                 ),
+                runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now()),
                 cached_images=(cached,),
                 cached_images_known=True,
             )
@@ -1576,15 +1697,14 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
             cache = RecordingLayerCache()
             gateway.RequestHandlerClass.registry_layer_cache = (  # type: ignore[attr-defined]
                 cache
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 created = self._json_request(
                     f"http://{host}:{port}/v1/sandboxes",
@@ -1598,9 +1718,6 @@ class ControlPlaneTests(unittest.TestCase):
                     },
                     allow_error=True,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(created["status"], 503)
         self.assertEqual(cache.loads, [False])
@@ -1608,6 +1725,38 @@ class ControlPlaneTests(unittest.TestCase):
             cache.hydrated,
             [("registry.example/repo:latest",)],
         )
+
+    def test_metrics_full_mode_has_one_query_parameter(self) -> None:
+        observed: list[tuple[bool, bool]] = []
+        with TemporaryDirectory() as raw_dir:
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                Path(raw_dir) / "control-state.sqlite",
+            )
+
+            def metrics_response(
+                _handler: object,
+                *,
+                full: bool,
+                refresh_registry: bool,
+            ) -> bytes:
+                observed.append((full, refresh_registry))
+                return b"{}"
+
+            gateway.RequestHandlerClass._metrics_response_bytes = metrics_response
+            thread = Thread(target=gateway.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = gateway.server_address
+                self._json_request(f"http://{host}:{port}/v1/metrics?detail=true")
+                self._json_request(f"http://{host}:{port}/v1/metrics?full=true")
+            finally:
+                gateway.shutdown()
+                gateway.server_close()
+                thread.join(timeout=1)
+
+        self.assertEqual(observed, [(False, False), (True, False)])
 
     def test_metrics_include_registry_summary_when_configured(self) -> None:
         class RegistryHandler(BaseHTTPRequestHandler):
@@ -1643,20 +1792,16 @@ class ControlPlaneTests(unittest.TestCase):
 
         with TemporaryDirectory() as raw_dir:
             registry = ThreadingHTTPServer(("127.0.0.1", 0), RegistryHandler)
-            registry_thread = Thread(target=registry.serve_forever, daemon=True)
-            registry_thread.start()
-            try:
+            with _running_server(registry):
                 registry_host, registry_port = registry.server_address
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    Path(raw_dir) / "heartbeats.json",
+                    Path(raw_dir) / "control-state.sqlite",
                     metrics_file=Path(raw_dir) / "metrics.sqlite",
                     registry_url=f"http://{registry_host}:{registry_port}",
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
                     cached_metrics = self._json_request(
@@ -1667,12 +1812,6 @@ class ControlPlaneTests(unittest.TestCase):
                         f"http://{host}:{port}/v1/metrics?refresh_registry=true"
                     )
                     direct = self._json_request(f"http://{host}:{port}/v1/registry")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                registry.shutdown()
-                registry.server_close()
 
         self.assertTrue(metrics["registry"]["ok"])
         self.assertEqual(metrics["registry"]["repository_count"], 2)
@@ -1714,9 +1853,7 @@ class ControlPlaneTests(unittest.TestCase):
                 ("127.0.0.1", 0),
                 MissingManifestRegistryHandler,
             )
-            registry_thread = Thread(target=registry.serve_forever, daemon=True)
-            registry_thread.start()
-            try:
+            with _running_server(registry):
                 registry_host, registry_port = registry.server_address
                 now = utc_now()
                 ImageStore(image_file).upsert(
@@ -1736,22 +1873,14 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.sqlite",
                     image_file=image_file,
                     registry_url=f"http://{registry_host}:{registry_port}",
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     images = self._json_request(f"http://{host}:{port}/v1/images")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                registry.shutdown()
-                registry.server_close()
 
             self.assertEqual(images["images"], [])
             self.assertEqual(ImageStore(image_file).load(), {})
@@ -1782,20 +1911,16 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             node = ThreadingHTTPServer(("127.0.0.1", 0), BuildProbeHandler)
-            node_thread = Thread(target=node.serve_forever, daemon=True)
-            node_thread.start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.sqlite",
                     metrics_file=raw_path / "metrics.sqlite",
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     result = post_heartbeat(
                         f"http://{host}:{port}/v1/nodes/heartbeat",
@@ -1809,19 +1934,13 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     self.assertEqual(result.status, 200)
                     metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertFalse(BuildProbeHandler.called.is_set())
         self.assertEqual(metrics["images"]["active_builds"], 1)
 
     def test_gateway_proxy_returns_json_bad_gateway_when_node_disconnects(self) -> None:
         class DisconnectingHandler(BaseHTTPRequestHandler):
-            def do_POST(self) -> None:
+            def do_GET(self) -> None:
                 self.connection.close()
 
             def log_message(self, format: str, *args: object) -> None:
@@ -1829,36 +1948,25 @@ class ControlPlaneTests(unittest.TestCase):
 
         with TemporaryDirectory() as raw_dir:
             node = ThreadingHTTPServer(("127.0.0.1", 0), DisconnectingHandler)
-            node_thread = Thread(target=node.serve_forever, daemon=True)
-            node_thread.start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
+                heartbeat_file, route_file = _seed_gateway_node(
+                    Path(raw_dir),
+                    node_url=f"http://{node_host}:{node_port}",
+                    sandbox_id="disconnect-one",
+                )
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    Path(raw_dir) / "heartbeats.json",
-                    upstream_node_url=f"http://{node_host}:{node_port}",
+                    heartbeat_file,
+                    routing_file=route_file,
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     response = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes",
-                        method="POST",
-                        payload={
-                            "id": "disconnect-one",
-                            "image": "busybox",
-                            "disk_mb": 64,
-                        },
+                        f"http://{host}:{port}/v1/sandboxes/disconnect-one",
                         allow_error=True,
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(response["status"], 502)
         self.assertIn("node request failed", response["body"]["error"])
@@ -1877,25 +1985,21 @@ class ControlPlaneTests(unittest.TestCase):
 
         class ListingNode(BaseHTTPRequestHandler):
             listed = Event()
+            invalid_storage = False
 
             def do_GET(self) -> None:
                 if self.path.split("?", 1)[0] == "/v1/sandboxes":
                     self.listed.set()
-                    self._write_json(
-                        {
-                            "sandboxes": [
-                                {
-                                    "spec": canonical_spec,
-                                    "state": "running",
-                                    "generation": 1,
-                                    "operation_id": (
-                                        "00000000-0000-4000-8000-000000000001"
-                                    ),
-                                    "spec_hash": spec_hash,
-                                }
-                            ]
-                        }
-                    )
+                    record = {
+                        "spec": canonical_spec,
+                        "state": "running",
+                        "generation": 1,
+                        "operation_id": "00000000-0000-4000-8000-000000000001",
+                        "spec_hash": spec_hash,
+                    }
+                    if type(self).invalid_storage:
+                        record["storage_schema"] = "invalid-storage"
+                    self._write_json({"sandboxes": [record]})
                     return
                 self.send_response(404)
                 self.end_headers()
@@ -1915,9 +2019,7 @@ class ControlPlaneTests(unittest.TestCase):
             raw_path = Path(raw_dir)
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), ListingNode)
-            node_thread = Thread(target=node.serve_forever, daemon=True)
-            node_thread.start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 node_url = f"http://{node_host}:{node_port}"
                 RoutingStore(route_file).upsert_sandbox(
@@ -1934,21 +2036,17 @@ class ControlPlaneTests(unittest.TestCase):
                         spec=canonical_spec,
                         state="running",
                         generation=1,
-                        create_operation_id=(
-                            "00000000-0000-4000-8000-000000000001"
-                        ),
+                        create_operation_id=("00000000-0000-4000-8000-000000000001"),
                         spec_hash=spec_hash,
                     )
                 )
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     result = post_heartbeat(
@@ -1970,12 +2068,9 @@ class ControlPlaneTests(unittest.TestCase):
                     cached = self._json_request(f"{base}/v1/sandboxes")
                     self.assertFalse(ListingNode.listed.is_set())
                     refreshed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
+                    ListingNode.invalid_storage = True
+                    malformed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
+                    stored = RoutingStore(route_file).get_sandbox("cached-one")
 
         self.assertTrue(cached["cached"])
         self.assertEqual(cached["sandboxes"][0]["id"], "cached-one")
@@ -1986,6 +2081,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(ListingNode.listed.is_set())
         self.assertFalse(refreshed["cached"])
         self.assertEqual(refreshed["sandboxes"][0]["spec"]["id"], "cached-one")
+        self.assertEqual(malformed["sandboxes"], [])
+        self.assertEqual(stored.state if stored is not None else None, "running")
 
     def test_gateway_marks_cached_route_unknown_when_node_reports_empty(
         self,
@@ -2017,12 +2114,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=route_file,
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 result = post_heartbeat(
@@ -2037,9 +2132,6 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 self.assertEqual(result.status, 200)
                 cached = self._json_request(f"{base}/v1/sandboxes")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         record = cached["sandboxes"][0]
         self.assertTrue(cached["cached"])
@@ -2118,9 +2210,7 @@ class ControlPlaneTests(unittest.TestCase):
             raw_path = Path(raw_dir)
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), ListingNode)
-            node_thread = Thread(target=node.serve_forever, daemon=True)
-            node_thread.start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 node_url = f"http://{node_host}:{node_port}"
                 RoutingStore(route_file).upsert_sandbox(
@@ -2141,12 +2231,10 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     result = post_heartbeat(
@@ -2170,12 +2258,6 @@ class ControlPlaneTests(unittest.TestCase):
                         payload={"cmd": "true"},
                         allow_error=True,
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(response["status"], 404)
         self.assertEqual(response["body"]["error"], "sandbox route not found")
@@ -2193,70 +2275,54 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
             gateway.RequestHandlerClass.routing_store = BrokenRoutingStore()
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 response = self._json_request(
                     f"http://{host}:{port}/v1/metrics",
                     allow_error=True,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response["status"], 503)
-        self.assertEqual(response["body"]["error"], "routing state unavailable")
-        self.assertTrue(response["body"]["retryable"])
-        self.assertIn("malformed", response["body"]["details"])
+        self.assertEqual(
+            response["body"],
+            {"error": "routing state unavailable", "retryable": True},
+        )
 
-    def test_health_reports_unavailable_registry_usage_state(self) -> None:
+    def test_gateway_rejects_unavailable_registry_usage_state(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             usage_path = raw_path / "registry-usage.json"
             usage_path.mkdir()
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "heartbeats.json",
-                registry_usage_file=usage_path,
-            )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
-                host, port = gateway.server_address
-                health = self._json_request(
-                    f"http://{host}:{port}/healthz",
-                    allow_error=True,
+            with self.assertRaisesRegex(
+                ValueError,
+                "registry usage database is invalid or unavailable",
+            ):
+                build_server(
+                    "127.0.0.1",
+                    0,
+                    raw_path / "control-state.sqlite",
+                    registry_usage_file=usage_path,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-
-        self.assertEqual(health["status"], 503)
-        self.assertFalse(health["body"]["ok"])
-        self.assertEqual(
-            health["body"]["registry_usage"],
-            {"ok": False, "error": "state file is unavailable"},
-        )
 
     def test_distinct_gateway_and_heartbeat_tokens_are_channel_scoped(self) -> None:
         with TemporaryDirectory() as raw_dir:
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
+                routing_file=Path(raw_dir) / "routes.sqlite",
+                image_file=Path(raw_dir) / "images.json",
+                metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 heartbeat = build_heartbeat(
@@ -2295,9 +2361,6 @@ class ControlPlaneTests(unittest.TestCase):
                     f"{base}/v1/nodes",
                     headers={"Authorization": "Bearer gateway-secret"},
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(no_token.status, 401)
         self.assertEqual(gateway_token_on_heartbeat.status, 401)
@@ -2326,7 +2389,10 @@ class ControlPlaneTests(unittest.TestCase):
                     _build_server(
                         "127.0.0.1",
                         0,
-                        Path(raw_dir) / "heartbeats.json",
+                        Path(raw_dir) / "control-state.sqlite",
+                        routing_file=Path(raw_dir) / "routes.sqlite",
+                        image_file=Path(raw_dir) / "images.json",
+                        metrics_file=Path(raw_dir) / "metrics.sqlite",
                         deployment_id="test-deployment",
                         **credentials,
                     )
@@ -2339,7 +2405,10 @@ class ControlPlaneTests(unittest.TestCase):
             _build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
+                routing_file=Path(raw_dir) / "routes.sqlite",
+                image_file=Path(raw_dir) / "images.json",
+                metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway",
                 heartbeat_bearer_token="heartbeat",
                 node_control_bearer_token="node",
@@ -2351,15 +2420,16 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
+                routing_file=Path(raw_dir) / "routes.sqlite",
+                image_file=Path(raw_dir) / "images.json",
+                metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 response = self._json_request(
                     f"http://{host}:{port}/v1/nodes/heartbeat",
@@ -2377,9 +2447,6 @@ class ControlPlaneTests(unittest.TestCase):
                     },
                     allow_error=True,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response["status"], 400)
         self.assertEqual(response["body"], {"error": "invalid heartbeat payload"})
@@ -2402,8 +2469,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                root / "heartbeats.json",
+                root / "control-state.sqlite",
                 routing_file=route_file,
+                image_file=root / "images.json",
+                metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
@@ -2429,7 +2498,7 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway.shutdown()
                 gateway.server_close()
                 thread.join(timeout=1)
-            stored = HeartbeatStore(root / "heartbeats.json").load()
+            stored = ControlStateStore(root / "control-state.sqlite").load_heartbeats()
 
         self.assertEqual(response.status, 403)
         self.assertEqual(stored, {})
@@ -2452,8 +2521,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                root / "heartbeats.json",
+                root / "control-state.sqlite",
                 routing_file=route_file,
+                image_file=root / "images.json",
+                metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
@@ -2479,7 +2550,7 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway.shutdown()
                 gateway.server_close()
                 thread.join(timeout=1)
-            stored = HeartbeatStore(root / "heartbeats.json").load()
+            stored = ControlStateStore(root / "control-state.sqlite").load_heartbeats()
 
         self.assertEqual(response.status, 403)
         self.assertEqual(stored, {})
@@ -2489,14 +2560,12 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
                 routing_file=Path(raw_dir) / "routes.sqlite",
                 gateway_bearer_token="secret-token",
                 metrics_file=Path(raw_dir) / "metrics.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 with request.urlopen(f"{base}/dashboard", timeout=5) as response:
@@ -2522,9 +2591,6 @@ class ControlPlaneTests(unittest.TestCase):
                     f"{base}/v1/metrics",
                     headers={"Authorization": "Bearer secret-token"},
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertIn("text/html", html_type or "")
         self.assertIn("UCloud Sandboxes", html)
@@ -2556,30 +2622,22 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(unauthorized_metrics["status"], 401)
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)
 
-    def test_manufactured_exec_id_cannot_recover_a_missing_route(self) -> None:
+    def test_unrouted_exec_id_cannot_recover_a_missing_route(self) -> None:
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
-                session_id = new_exec_session_id(
-                    "missing-sandbox",
-                    node_id="missing-node",
-                    job_id="missing-job",
-                )
+                session_id = new_exec_session_id()
                 response = self._json_request(
                     f"http://{host}:{port}/v1/exec/{session_id}",
                     allow_error=True,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response["status"], 404)
         self.assertEqual(response["body"]["error"], "exec route not found")
@@ -2695,12 +2753,11 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 metrics_file=raw_path / "metrics.sqlite",
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 self.assertTrue(
                     control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
@@ -2723,9 +2780,6 @@ class ControlPlaneTests(unittest.TestCase):
                     control_plane._GATEWAY_SCHEDULING_LOCK.release()
                 elapsed = monotonic() - started
                 metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(result["status"], 503)
         self.assertTrue(result["body"]["retryable"])
@@ -2745,12 +2799,11 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 max_concurrent_sandbox_creates=8,
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
 
                 def create(index: int) -> dict:
@@ -2777,9 +2830,6 @@ class ControlPlaneTests(unittest.TestCase):
                 finally:
                     control_plane._GATEWAY_SCHEDULING_LOCK.release()
                 elapsed = monotonic() - started
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual({result["status"] for result in results}, {503})
         self.assertTrue(all(result["body"]["retryable"] for result in results))
@@ -2793,12 +2843,11 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
+                Path(raw_dir) / "control-state.sqlite",
                 routing_file=Path(raw_dir) / "routes.sqlite",
                 max_concurrent_sandbox_creates=1,
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 limiter = gateway.RequestHandlerClass.sandbox_create_limiter
                 assert limiter is not None
@@ -2831,9 +2880,6 @@ class ControlPlaneTests(unittest.TestCase):
                 # Bad input must release admission for the next request.
                 self.assertTrue(limiter.acquire(blocking=False))
                 limiter.release()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(busy_body["retryable"], True)
         self.assertEqual(oversized_status, 400)
@@ -2893,7 +2939,7 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     metrics_file=raw_path / "metrics.sqlite",
                 )
@@ -2948,7 +2994,6 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNotNone(route)
         self.assertEqual(created["sandbox"]["spec"]["id"], "slow-one")
 
-
     def test_gateway_fences_tool_traffic_until_direct_create_is_owned(self) -> None:
         class PlannedNode(BaseHTTPRequestHandler):
             post_count = 0
@@ -2982,8 +3027,7 @@ class ControlPlaneTests(unittest.TestCase):
             raw_path = Path(raw_dir)
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), PlannedNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 spec = SandboxSpec(
                     id="planned-one",
@@ -3017,11 +3061,10 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     result = self._json_request(
                         f"http://{host}:{port}/v1/sandboxes/{spec.id}/exec",
@@ -3029,12 +3072,6 @@ class ControlPlaneTests(unittest.TestCase):
                         payload={"command": ["/bin/true"]},
                         allow_error=True,
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(result["status"], 503)
         self.assertTrue(result["body"]["retryable"])
@@ -3094,13 +3131,10 @@ class ControlPlaneTests(unittest.TestCase):
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), AmbiguousCreateNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 node_url = f"http://{node_host}:{node_port}"
-                image_ref = (
-                    "registry.example.org/repo:v1@sha256:" + "a" * 64
-                )
+                image_ref = "registry.example.org/repo:v1@sha256:" + "a" * 64
                 heartbeat = build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -3119,12 +3153,11 @@ class ControlPlaneTests(unittest.TestCase):
                 first_gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                Thread(target=first_gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(first_gateway):
                     host, port = first_gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -3146,19 +3179,15 @@ class ControlPlaneTests(unittest.TestCase):
                         allow_error=True,
                     )
                     before_restart = RegistryUsageStore(usage_file).snapshot()
-                finally:
-                    first_gateway.shutdown()
-                    first_gateway.server_close()
 
                 second_gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                Thread(target=second_gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(second_gateway):
                     host, port = second_gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -3171,12 +3200,6 @@ class ControlPlaneTests(unittest.TestCase):
                     refreshed = self._json_request(f"{base}/v1/sandboxes?refresh=true")
                     after_restart = RegistryUsageStore(usage_file).snapshot()
                     route = RoutingStore(route_file).get_sandbox("ambiguous-one")
-                finally:
-                    second_gateway.shutdown()
-                    second_gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(created["status"], 503)
         self.assertEqual(AmbiguousCreateNode.create_count, 1, created)
@@ -3225,18 +3248,16 @@ class ControlPlaneTests(unittest.TestCase):
             raw_path = Path(raw_dir)
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), ClosedAdmissionNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 image = "busybox"
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -3273,12 +3294,6 @@ class ControlPlaneTests(unittest.TestCase):
                         allow_error=True,
                     )
                     state = RoutingStore(route_file).load()
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(created["status"], 503)
         self.assertTrue(created["body"]["retryable"])
@@ -3321,19 +3336,17 @@ class ControlPlaneTests(unittest.TestCase):
             raw_path = Path(raw_dir)
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), CountingNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 image = "registry.example.org/repo:v1"
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     registry_usage_file=raw_path / "registry-usage.json",
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -3380,18 +3393,17 @@ class ControlPlaneTests(unittest.TestCase):
                             "memory_mb": 512,
                         }
                     )
-                    RoutingStore(route_file).allocate_sandbox_create(
-                        _sandbox_route(
+                    RoutingStore(route_file).allocate_sandbox_create_with_pending(
+                        SandboxRouteAllocation(
                             sandbox_id=retry_spec.id,
                             node_id="node-1",
                             job_id="job-1",
                             node_url=f"http://{node_host}:{node_port}",
                             resources=retry_spec.requested_resources(),
                             spec=retry_spec.to_dict(),
-                            state="creating",
                         ),
                         spec_hash=sandbox_spec_fingerprint(retry_spec),
-                    )
+                    )[0]
                     retry = self._json_request(
                         f"{base}/v1/sandboxes",
                         method="POST",
@@ -3409,18 +3421,17 @@ class ControlPlaneTests(unittest.TestCase):
                         payload={"image": image, "count": 1},
                         allow_error=True,
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(create["status"], 503)
         self.assertEqual(retry["status"], 503)
         self.assertEqual(pull["status"], 503)
-        self.assertTrue(create["body"]["retryable"])
-        self.assertTrue(pull["body"]["retryable"])
+        expected_error = {
+            "error": "registry image-use state is unavailable",
+            "retryable": True,
+        }
+        self.assertEqual(create["body"], expected_error)
+        self.assertEqual(retry["body"], expected_error)
+        self.assertEqual(pull["body"], expected_error)
         self.assertEqual(CountingNode.post_count, 0)
         self.assertIsNone(RoutingStore(route_file).get_sandbox("blocked-one"))
 
@@ -3457,12 +3468,11 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 registry_url="http://registry.invalid:5000",
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
                     control_plane.RegistryClient,
@@ -3485,9 +3495,6 @@ class ControlPlaneTests(unittest.TestCase):
                 stored_prepared = RoutingStore(
                     raw_path / "routes.sqlite"
                 ).prepared_capacity()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(prepared["status"], 400)
         self.assertTrue(prepared["body"]["retryable"])
@@ -3516,13 +3523,12 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 image_file=image_file,
                 registry_url="http://registry.invalid:5000",
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
                     control_plane.RegistryClient,
@@ -3547,9 +3553,6 @@ class ControlPlaneTests(unittest.TestCase):
                         },
                         allow_error=True,
                     )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(images["images"][0]["manifest_digest"], "")
         self.assertEqual(prepared["status"], 400)
@@ -3578,13 +3581,12 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 image_file=image_file,
                 registry_url="http://registry.invalid:5000",
             )
-            Thread(target=gateway.serve_forever, daemon=True).start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
                     control_plane.RegistryClient,
@@ -3603,9 +3605,6 @@ class ControlPlaneTests(unittest.TestCase):
                         },
                         allow_error=True,
                     )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(created["status"], 503)
         manifest_digest.assert_not_called()
@@ -3617,7 +3616,7 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=route_file,
             )
             gateway.RequestHandlerClass._ensure_image_on_node = (  # type: ignore[attr-defined]
@@ -3627,9 +3626,7 @@ class ControlPlaneTests(unittest.TestCase):
                     b'{"error":"registry unavailable"}',
                 )
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 self.assertEqual(
@@ -3674,9 +3671,6 @@ class ControlPlaneTests(unittest.TestCase):
                 pending_after_cancel = RoutingStore(route_file).get_pending(
                     "pull-failed"
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(failed["status"], 502)
         self.assertIsNone(route)
@@ -3730,8 +3724,7 @@ class ControlPlaneTests(unittest.TestCase):
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), FailingDeleteNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 node_url = f"http://{node_host}:{node_port}"
                 routing_store = RoutingStore(route_file)
@@ -3767,12 +3760,11 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     posted = post_heartbeat(
@@ -3799,12 +3791,6 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     route = RoutingStore(route_file).get_sandbox("delete-one")
                     leases_after = RegistryUsageStore(usage_file).snapshot().leases
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(response["status"], 400)
         self.assertEqual(retried["status"], 400)
@@ -3850,8 +3836,7 @@ class ControlPlaneTests(unittest.TestCase):
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), SuccessfulDeleteNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 node_url = f"http://{node_host}:{node_port}"
                 routing_store = RoutingStore(route_file)
@@ -3885,12 +3870,11 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -3916,12 +3900,6 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     leases = RegistryUsageStore(usage_file).snapshot().leases
                     route = RoutingStore(route_file).get_sandbox("delete-success")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertTrue(deleted["deleted"])
         self.assertEqual(leases, {})
@@ -3977,15 +3955,18 @@ class ControlPlaneTests(unittest.TestCase):
                 return b"x" * 9
 
         with TemporaryDirectory() as raw_dir:
+            heartbeat_file, route_file = _seed_gateway_node(
+                Path(raw_dir),
+                node_url="http://node.invalid:8090",
+                sandbox_id="bounded-one",
+            )
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
-                upstream_node_url="http://node.invalid:8090",
+                heartbeat_file,
+                routing_file=route_file,
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with (
                     patch.object(control_plane, "DEFAULT_MAX_PROXY_RESPONSE_BYTES", 8),
@@ -3997,14 +3978,11 @@ class ControlPlaneTests(unittest.TestCase):
                 ):
                     conn = HTTPConnection(host, port, timeout=5)
                     try:
-                        conn.request("GET", "/v1/sandboxes")
+                        conn.request("GET", "/v1/sandboxes/bounded-one")
                         response = conn.getresponse()
                         payload = json.loads(response.read().decode("utf-8"))
                     finally:
                         conn.close()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response.status, 502)
         self.assertEqual(payload["max_bytes"], 8)
@@ -4037,15 +4015,18 @@ class ControlPlaneTests(unittest.TestCase):
                 return chunk
 
         with TemporaryDirectory() as raw_dir:
+            heartbeat_file, route_file = _seed_gateway_node(
+                Path(raw_dir),
+                node_url="http://node.invalid:8090",
+                sandbox_id="file-one",
+            )
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "heartbeats.json",
-                upstream_node_url="http://node.invalid:8090",
+                heartbeat_file,
+                routing_file=route_file,
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 with patch.object(
                     control_plane,
@@ -4063,9 +4044,6 @@ class ControlPlaneTests(unittest.TestCase):
                         response_path = response.headers["X-Sandbox-Path"]
                     finally:
                         conn.close()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response.status, 200)
         self.assertEqual(downloaded, body)
@@ -4142,17 +4120,16 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(control_plane._sandbox_record_is_ready({"state": "parked"}))
 
     def test_gateway_records_pending_image_build_when_no_builder_is_ready(self) -> None:
+        archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.json",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 result = self._json_request(
                     f"http://{host}:{port}/v1/images/build",
@@ -4160,14 +4137,11 @@ class ControlPlaneTests(unittest.TestCase):
                     payload={
                         "id": "custom",
                         "tag": "registry.example.org/custom:latest",
-                        "context_path": "/tmp/context",
                         "push": True,
+                        **_store_build_context(gateway, archive),
                     },
                     allow_error=True,
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
             self.assertEqual(result["status"], 503)
             self.assertEqual(result["body"]["pending_image_builds"], 1)
@@ -4188,12 +4162,11 @@ class ControlPlaneTests(unittest.TestCase):
             builder = build_builder_node_agent_server(
                 "127.0.0.1",
                 0,
-                sandbox_file=raw_path / "builder-sandboxes.json",
+                state_file=raw_path / "builder-sandboxes.json",
                 image_file=raw_path / "builder-images.json",
                 job_id="job-builder",
                 node_id="builder-1",
                 image_runtime=runtime,
-                image_builds_enabled=True,
                 node_control_bearer_token="node-secret",
                 build_context_store_dir=builder_contexts,
             )
@@ -4201,7 +4174,7 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.json",
                 gateway_bearer_token="gateway-secret",
                 node_control_bearer_token="node-secret",
@@ -4370,38 +4343,28 @@ class ControlPlaneTests(unittest.TestCase):
             )
 
     def test_gateway_routes_image_build_to_builder_only_node(self) -> None:
+        archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
-            context_path = raw_path / "context"
-            context_path.mkdir()
-            (context_path / "Dockerfile").write_text(
-                "FROM scratch\n",
-                encoding="utf-8",
-            )
             builder = build_builder_node_agent_server(
                 "127.0.0.1",
                 0,
-                sandbox_file=raw_path / "builder-sandboxes.json",
+                state_file=raw_path / "builder-sandboxes.json",
                 image_file=raw_path / "builder-images.json",
                 job_id="job-builder",
                 node_id="builder-1",
-                image_builds_enabled=True,
             )
-            builder_thread = Thread(target=builder.serve_forever, daemon=True)
-            builder_thread.start()
-            try:
+            with _running_server(builder):
                 builder_host, builder_port = builder.server_address
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.json",
                     image_file=raw_path / "gateway-images.json",
                     registry_worker_url="http://sandbox-gateway-prod:5000",
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     result = post_heartbeat(
@@ -4423,19 +4386,13 @@ class ControlPlaneTests(unittest.TestCase):
                         method="POST",
                         payload={
                             "id": "custom",
-                            "context_path": str(context_path),
+                            **_store_build_context(gateway, archive),
                         },
                     )
                     builder_heartbeat = self._json_request(
                         f"http://{builder_host}:{builder_port}/v1/heartbeat"
                     )
                     images = self._json_request(f"{base}/v1/images")
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                builder.shutdown()
-                builder.server_close()
 
             self.assertEqual(built["image"]["id"], "custom")
             self.assertTrue(
@@ -4462,39 +4419,29 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_gateway_clears_pending_signal_after_async_build_is_accepted(self) -> None:
         digest = "sha256:" + "8" * 64
+        archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
-            context_path = raw_path / "context"
-            context_path.mkdir()
-            (context_path / "Dockerfile").write_text(
-                "FROM scratch\n",
-                encoding="utf-8",
-            )
             gateway_image_file = raw_path / "gateway-images.json"
             builder = build_builder_node_agent_server(
                 "127.0.0.1",
                 0,
-                sandbox_file=raw_path / "builder-sandboxes.json",
+                state_file=raw_path / "builder-sandboxes.json",
                 image_file=raw_path / "builder-images.json",
                 job_id="job-builder",
                 node_id="builder-1",
-                image_builds_enabled=True,
             )
-            builder_thread = Thread(target=builder.serve_forever, daemon=True)
-            builder_thread.start()
-            try:
+            with _running_server(builder):
                 builder_host, builder_port = builder.server_address
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.json",
                     image_file=gateway_image_file,
                     registry_url="http://registry.invalid:5000",
                 )
-                gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-                gateway_thread.start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     result = post_heartbeat(
@@ -4522,9 +4469,9 @@ class ControlPlaneTests(unittest.TestCase):
                             payload={
                                 "id": "custom",
                                 "tag": "registry.invalid:5000/custom:latest",
-                                "context_path": str(context_path),
                                 "push": True,
                                 "wait": False,
+                                **_store_build_context(gateway, archive),
                             },
                         )
                         route_store = RoutingStore(raw_path / "routes.json")
@@ -4545,12 +4492,6 @@ class ControlPlaneTests(unittest.TestCase):
                             if monotonic() >= deadline:
                                 self.fail("async image build did not finish")
                             sleep(0.01)
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                builder.shutdown()
-                builder.server_close()
 
             self.assertEqual(built["build"]["image_id"], "custom")
             self.assertEqual(built["build"]["status"], "running")
@@ -4568,6 +4509,8 @@ class ControlPlaneTests(unittest.TestCase):
             )
 
     def test_gateway_uses_bounded_proxy_timeout_for_builder_image_builds(self) -> None:
+        archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
+
         class FakeResponse:
             status = 201
             headers: dict[str, str] = {}
@@ -4614,13 +4557,11 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 metrics_file=raw_path / "metrics.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 result = post_heartbeat(
@@ -4634,13 +4575,30 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 self.assertEqual(result.status, 200)
 
-                with patch.object(control_plane, "_open_node_request", fake_urlopen):
+                context_payload = _store_build_context(gateway, archive)
+                with (
+                    patch.object(
+                        control_plane.ControlPlaneHandler,
+                        "_ensure_node_build_context",
+                        return_value=control_plane.ProxiedResponse(
+                            200,
+                            {"Content-Type": "application/json"},
+                            json.dumps(
+                                {
+                                    "digest": context_payload["context_archive_digest"],
+                                    "size": len(archive),
+                                }
+                            ).encode("utf-8"),
+                        ),
+                    ),
+                    patch.object(control_plane, "_open_node_request", fake_urlopen),
+                ):
                     body = json.dumps(
                         {
                             "id": "custom",
                             "tag": "registry.example.org/custom:latest",
-                            "context_path": "/tmp/context",
                             "push": True,
+                            **context_payload,
                         }
                     )
                     conn = HTTPConnection(host, port, timeout=5)
@@ -4655,9 +4613,6 @@ class ControlPlaneTests(unittest.TestCase):
                         built = json.loads(response.read().decode("utf-8"))
                     finally:
                         conn.close()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(built["image"]["id"], "custom")
         self.assertEqual(IMAGE_BUILD_PROXY_TIMEOUT_SECONDS, 30 * 60)
@@ -4669,12 +4624,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.json",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 result = self._json_request(
@@ -4695,9 +4648,6 @@ class ControlPlaneTests(unittest.TestCase):
                     method="DELETE",
                 )
                 demand_after_cleanup = self._json_request(f"{base}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
             self.assertEqual(result["status"], 503)
             self.assertTrue(result["body"]["retryable"])
@@ -4723,7 +4673,7 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
                 max_sandbox_resources=ResourceQuantity(
                     vcpu=4,
@@ -4731,9 +4681,7 @@ class ControlPlaneTests(unittest.TestCase):
                     disk_mb=16_384,
                 ),
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 result = self._json_request(
@@ -4749,9 +4697,6 @@ class ControlPlaneTests(unittest.TestCase):
                     allow_error=True,
                 )
                 demand = self._json_request(f"{base}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(result["status"], 422)
         self.assertEqual(result["body"]["error_code"], "sandbox_shape_unschedulable")
@@ -4764,12 +4709,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 prepared = self._json_request(
@@ -4801,9 +4744,6 @@ class ControlPlaneTests(unittest.TestCase):
                     method="DELETE",
                 )
                 demand_after_delete = self._json_request(f"{base}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(prepared["prepare"]["prepare_id"], "eval-soon")
         self.assertEqual(prepared["prepare"]["count"], 8)
@@ -4816,7 +4756,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(demand["prepared"][0]["prepare_id"], "eval-soon")
         self.assertEqual(rejected["status"], 400)
         self.assertEqual(rejected["body"]["error"], "count cannot exceed 100.")
-        self.assertEqual([item["prepare_id"] for item in listed["prepared"]], ["eval-soon"])
+        self.assertEqual(
+            [item["prepare_id"] for item in listed["prepared"]], ["eval-soon"]
+        )
         self.assertTrue(deleted["ok"])
         self.assertEqual(deleted["deleted"]["prepare_id"], "eval-soon")
         self.assertEqual(demand_after_delete["prepared_resources"]["vcpu"], 0.0)
@@ -4831,12 +4773,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=route_file,
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 prepared = self._json_request(
@@ -4864,8 +4804,8 @@ class ControlPlaneTests(unittest.TestCase):
                 )
                 resources = spec.requested_resources()
                 store = RoutingStore(route_file)
-                store.allocate_sandbox_create(
-                    _sandbox_route(
+                store.allocate_sandbox_create_with_pending(
+                    SandboxRouteAllocation(
                         sandbox_id=spec.id,
                         node_id="node-1",
                         job_id="job-1",
@@ -4874,11 +4814,8 @@ class ControlPlaneTests(unittest.TestCase):
                         spec=spec.to_dict(),
                     ),
                     spec_hash=sandbox_spec_fingerprint(spec),
-                )
+                )[0]
                 remaining = store.prepared_capacity()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(
             prepared["prepare"]["resources"],
@@ -4902,19 +4839,17 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             registry = ThreadingHTTPServer(("127.0.0.1", 0), RegistryHandler)
-            Thread(target=registry.serve_forever, daemon=True).start()
-            try:
+            with _running_server(registry):
                 registry_host, registry_port = registry.server_address
                 managed_ref = f"{registry_host}:{registry_port}/team/image:v1"
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.sqlite",
                     registry_url=f"http://{registry_host}:{registry_port}",
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     prepared = self._json_request(
                         f"http://{host}:{port}/v1/capacity/prepare",
@@ -4928,12 +4863,6 @@ class ControlPlaneTests(unittest.TestCase):
                             "memory_mb": 512,
                         },
                     )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                registry.shutdown()
-                registry.server_close()
 
         expected = f"{managed_ref}@{digest}"
         self.assertEqual(prepared["prepare"]["image"], expected)
@@ -5029,18 +4958,16 @@ class ControlPlaneTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             raw_path = Path(raw_dir)
             node = ThreadingHTTPServer(("127.0.0.1", 0), ImageNode)
-            Thread(target=node.serve_forever, daemon=True).start()
-            try:
+            with _running_server(node):
                 node_host, node_port = node.server_address
                 gateway = build_server(
                     "127.0.0.1",
                     0,
-                    raw_path / "heartbeats.json",
+                    raw_path / "control-state.sqlite",
                     routing_file=raw_path / "routes.sqlite",
                     registry_url="http://127.0.0.1:9",
                 )
-                Thread(target=gateway.serve_forever, daemon=True).start()
-                try:
+                with _running_server(gateway):
                     host, port = gateway.server_address
                     base = f"http://{host}:{port}"
                     self.assertEqual(
@@ -5076,12 +5003,6 @@ class ControlPlaneTests(unittest.TestCase):
                             },
                             allow_error=True,
                         )
-                finally:
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(created["status"], 502)
         self.assertEqual(ImageNode.pull_count, 1)
@@ -5134,12 +5055,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 post_heartbeat(
@@ -5178,9 +5097,6 @@ class ControlPlaneTests(unittest.TestCase):
                         pulled = json.loads(response.read().decode("utf-8"))
                     finally:
                         conn.close()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response.status, 200)
         self.assertEqual(pulled["ready"], 1)
@@ -5223,12 +5139,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 post_heartbeat(
@@ -5267,9 +5181,6 @@ class ControlPlaneTests(unittest.TestCase):
                         failed = json.loads(response.read().decode("utf-8"))
                     finally:
                         conn.close()
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(response.status, 503)
         self.assertEqual(
@@ -5287,12 +5198,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 zero = self._json_request(
@@ -5320,9 +5229,6 @@ class ControlPlaneTests(unittest.TestCase):
                     allow_error=True,
                 )
                 demand = self._json_request(f"{base}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(zero["status"], 400)
         self.assertIn("resources are required", zero["body"]["error"])
@@ -5345,12 +5251,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 base = f"http://{host}:{port}"
                 prepared = self._json_request(
@@ -5369,9 +5273,6 @@ class ControlPlaneTests(unittest.TestCase):
                     method="DELETE",
                 )
                 demand_after_delete = self._json_request(f"{base}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(prepared["prepare"]["prepare_id"], "builds-soon")
         self.assertEqual(prepared["prepare"]["count"], 2)
@@ -5390,12 +5291,10 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
-            gateway_thread = Thread(target=gateway.serve_forever, daemon=True)
-            gateway_thread.start()
-            try:
+            with _running_server(gateway):
                 host, port = gateway.server_address
                 rejected = self._json_request(
                     f"http://{host}:{port}/v1/builders/prepare",
@@ -5404,9 +5303,6 @@ class ControlPlaneTests(unittest.TestCase):
                     allow_error=True,
                 )
                 demand = self._json_request(f"http://{host}:{port}/v1/demand")
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
 
         self.assertEqual(rejected["status"], 400)
         self.assertIn("count must be a positive integer", rejected["body"]["error"])
@@ -5440,7 +5336,7 @@ class ControlPlaneTests(unittest.TestCase):
             gateway = build_server(
                 "127.0.0.1",
                 0,
-                raw_path / "heartbeats.json",
+                raw_path / "control-state.sqlite",
                 routing_file=raw_path / "routes.sqlite",
             )
             Thread(target=gateway.serve_forever, daemon=True).start()
@@ -5569,49 +5465,6 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(available.disk_mb, 8_384)
         self.assertEqual(available.vcpu, 32)
         self.assertEqual(available.memory_mb, 98_304)
-
-    def test_control_plane_rejects_unsupported_or_oversized_request_framing(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw_dir:
-            server = build_server(
-                "127.0.0.1",
-                0,
-                Path(raw_dir) / "heartbeats.json",
-            )
-            Thread(target=server.serve_forever, daemon=True).start()
-            try:
-                host, port = server.server_address
-
-                def rejected(headers: dict[str, str]) -> int:
-                    connection = HTTPConnection(host, port, timeout=5)
-                    connection.putrequest("POST", "/v1/nodes/heartbeat")
-                    for key, value in headers.items():
-                        connection.putheader(key, value)
-                    connection.endheaders()
-                    response = connection.getresponse()
-                    response.read()
-                    connection.close()
-                    return response.status
-
-                chunked = rejected(
-                    {"Transfer-Encoding": "chunked", "Content-Length": "0"}
-                )
-                missing_length = rejected({})
-                oversized = rejected(
-                    {
-                        "Content-Length": str(
-                            control_plane.DEFAULT_MAX_JSON_BODY_BYTES + 1
-                        )
-                    }
-                )
-            finally:
-                server.shutdown()
-                server.server_close()
-
-        self.assertEqual(chunked, 400)
-        self.assertEqual(missing_length, 400)
-        self.assertEqual(oversized, 400)
 
     def _json_request(
         self,

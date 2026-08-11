@@ -14,12 +14,7 @@ from .direct_service import DirectSandboxService
 from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
 from .hibernation import HibernationRuntimeFingerprint
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
-from .runtime_identity import NodeRuntimeIdentityStore
 from .storage_native_daemon import StorageNativeNodeClient
-from .storage_native_quota import (
-    StorageNativeQuotaBackend,
-    StorageNativeReservationLedger,
-)
 
 
 def build_direct_runtime_service(
@@ -66,17 +61,9 @@ def build_direct_runtime_service(
         {
             "network": network,
             "platform": "systrap",
-            "allow_connected_on_save": True,
-            "remove_memory_directory_on_delete": False,
-            "restore_background": True,
-            "restore_cpu_startup_burst": True,
-            "restore_prefetch_memory": False,
-            "restore_reflink": False,
-            "restore_start_paused": True,
-            # The mounted layer view preserves the same merged OCI filesystem
-            # contract as the former export. Keep the migration fingerprint
-            # stable so only the per-image semantic identity gates restore.
-            "rootfs_format": "docker-export-overlay-v2",
+            # These identifiers describe the only shipped mounted-overlay and
+            # storage-native layout; changing either must fence old snapshots.
+            "rootfs_format": "ucloud-overlay2-rootfs-v1",
             "quota_layout": "storage-native-v1",
         }
     )
@@ -118,29 +105,14 @@ def build_direct_runtime_service(
             memory_root=volume_mount_root,
             bundle_root=state_root / "bundles",
             journal_root=state_root / "journals",
-            artifact_root=volume_mount_root,
             runtime_fingerprint=fingerprint,
             network=network,
-            restore_background=True,
-            restore_cpu_startup_burst=True,
-            restore_reflink=False,
-            restore_start_paused=True,
-            allow_connected_on_save=True,
-            remove_memory_directory_on_delete=False,
         ),
         storage=storage_client,
         rootfs_lifecycle=overlays,
     )
     provisioner = DirectSandboxProvisioner(
-        identity_store=NodeRuntimeIdentityStore(state_root / "runtime-identity.json"),
-        registry=DirectSandboxRegistry(state_root / "direct-registry.json"),
-        disk_ledger=StorageNativeReservationLedger(
-            state_root / "storage-native-identities.json"
-        ),
-        quota_backend=StorageNativeQuotaBackend(
-            storage_client,
-            mount_root=volume_mount_root,
-        ),
+        registry=DirectSandboxRegistry(state_root / "direct-registry.sqlite"),
         image_store=image_store,
         overlays=overlays,
         oci=DirectOciConfigBuilder(

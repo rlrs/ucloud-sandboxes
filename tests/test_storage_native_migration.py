@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import hashlib
@@ -6,7 +7,6 @@ import time
 import unittest
 
 from ucloud_sandboxes.storage_native_migration import (
-    StorageNativeArtifactFile,
     StorageNativeMigration,
     StorageNativeMigrationStore,
     StorageNativeSandboxManifest,
@@ -18,8 +18,9 @@ from ucloud_sandboxes.hibernation import (
     HibernationFileRole,
     HibernationManifest,
     HibernationRuntimeFingerprint,
+    HibernationValidationError,
+    LocalHibernationArtifactFile,
 )
-from ucloud_sandboxes.runtime_identity import NodeRuntimeIdentity
 from ucloud_sandboxes.sandbox import SandboxSecuritySpec, SandboxSpec
 from ucloud_sandboxes.storage_native_registry import (
     PublishedStorageLayer,
@@ -54,15 +55,9 @@ class StorageNativeMigrationTests(unittest.TestCase):
     def make_source(
         self,
         root: Path,
-    ) -> tuple[
-        DirectSandboxRegistration,
-        HibernationManifest,
-        NodeRuntimeIdentity,
-        Path,
-    ]:
+    ) -> tuple[DirectSandboxRegistration, HibernationManifest, Path]:
         spec = self.spec()
         runtime = self.runtime()
-        identity = NodeRuntimeIdentity.from_fingerprint(runtime)
         container_id = hashlib.sha256(b"sandbox:7").hexdigest()
         incarnation = root / "sandbox.sandbox-7"
         generation = incarnation / "hibernate-3"
@@ -83,15 +78,15 @@ class StorageNativeMigrationTests(unittest.TestCase):
         allocator = generation / "pages_meta.img"
         allocator.write_bytes(b"allocator-state")
         files = (
-            HibernationArtifactFile.from_path(
+            LocalHibernationArtifactFile.from_path(
                 memory,
                 role=HibernationFileRole.MAIN_MEMORY,
             ),
-            HibernationArtifactFile.from_path(
+            LocalHibernationArtifactFile.from_path(
                 checkpoint,
                 role=HibernationFileRole.KERNEL_STATE,
             ),
-            HibernationArtifactFile.from_path(
+            LocalHibernationArtifactFile.from_path(
                 allocator,
                 role=HibernationFileRole.ALLOCATOR_METADATA,
             ),
@@ -105,7 +100,7 @@ class StorageNativeMigrationTests(unittest.TestCase):
                 spec=spec,
                 sandbox_generation=7,
                 operation_id="create:7",
-                runtime_identity_sha256=identity.digest,
+                runtime_compatibility_sha256=runtime.node_compatibility_sha256,
                 phase="planned",
                 revision=1,
                 created_ns=time.time_ns(),
@@ -115,13 +110,14 @@ class StorageNativeMigrationTests(unittest.TestCase):
             created_ns=time.time_ns(),
             runtime=runtime,
             files=files,
+            managed_process_sha256="a" * 64,
         )
         HibernationArtifactStore(root).publish_complete(manifest)
         registration = DirectSandboxRegistration(
             spec=spec,
             sandbox_generation=7,
             operation_id="create:7",
-            runtime_identity_sha256=identity.digest,
+            runtime_compatibility_sha256=runtime.node_compatibility_sha256,
             phase="owned",
             revision=4,
             created_ns=time.time_ns(),
@@ -135,7 +131,18 @@ class StorageNativeMigrationTests(unittest.TestCase):
             bundle=str(root / "bundles" / "sandbox.sandbox-7"),
             memory_directory="sandbox.sandbox-7",
         )
-        return registration, manifest, identity, incarnation
+        return registration, manifest, incarnation
+
+    @staticmethod
+    def portable_files() -> tuple[HibernationArtifactFile, ...]:
+        return tuple(
+            HibernationArtifactFile(name, role, 1, 1)
+            for name, role in (
+                ("application_memory.img", HibernationFileRole.MAIN_MEMORY),
+                ("checkpoint.img", HibernationFileRole.KERNEL_STATE),
+                ("pages_meta.img", HibernationFileRole.ALLOCATOR_METADATA),
+            )
+        )
 
     def test_storage_snapshot_metadata_is_durable_and_rebound_locally(self) -> None:
         with TemporaryDirectory() as raw:
@@ -144,15 +151,16 @@ class StorageNativeMigrationTests(unittest.TestCase):
             destination_root = root / "destination"
             source_root.mkdir()
             destination_root.mkdir()
-            registration, source_manifest, identity, source = self.make_source(
-                source_root
-            )
+            registration, source_manifest, source = self.make_source(source_root)
             portable = StorageNativeSandboxManifest.from_local(
                 registration,
                 source_manifest,
-                runtime_identity=identity,
                 source_guest_ip=None,
             )
+            legacy = portable.to_dict()
+            legacy["schema"] = "storage-native-runtime-v1"
+            with self.assertRaisesRegex(ValueError, "unsupported"):
+                StorageNativeSandboxManifest.from_dict(legacy)
             migration = StorageNativeMigration(
                 manifest=portable,
                 publication=StorageSnapshotPublication(
@@ -175,9 +183,17 @@ class StorageNativeMigrationTests(unittest.TestCase):
 
             destination = destination_root / source.name
             shutil.copytree(source, destination, symlinks=True)
+            with self.assertRaisesRegex(HibernationValidationError, "required runtime"):
+                store.rebind_mounted_snapshot(
+                    migration,
+                    expected_runtime=replace(
+                        self.runtime(), cpu_features_sha256="9" * 64
+                    ),
+                    artifact_store=HibernationArtifactStore(destination_root),
+                    writable_incarnation=destination,
+                )
             rebound = store.rebind_mounted_snapshot(
                 migration,
-                expected_runtime_identity=identity,
                 expected_runtime=self.runtime(),
                 artifact_store=HibernationArtifactStore(destination_root),
                 writable_incarnation=destination,
@@ -198,7 +214,6 @@ class StorageNativeMigrationTests(unittest.TestCase):
             self.assertEqual(
                 store.rebind_mounted_snapshot(
                     migration,
-                    expected_runtime_identity=identity,
                     expected_runtime=self.runtime(),
                     artifact_store=HibernationArtifactStore(destination_root),
                     writable_incarnation=destination,
@@ -222,7 +237,6 @@ class StorageNativeMigrationTests(unittest.TestCase):
                 spec=spec,
                 sandbox_generation=7,
                 create_operation_id="create:7",
-                runtime_identity=NodeRuntimeIdentity.from_fingerprint(self.runtime()),
                 hibernation_generation=3,
                 park_operation_id="park:test",
                 captured_ns=time.time_ns(),
@@ -230,36 +244,16 @@ class StorageNativeMigrationTests(unittest.TestCase):
                 source_manifest_sha256="a" * 64,
                 source_guest_ip=None,
                 connection_policy="disconnect",
-                files=(
-                    StorageNativeArtifactFile(
-                        "application_memory.img",
-                        HibernationFileRole.MAIN_MEMORY,
-                        1,
-                        1,
-                    ),
-                    StorageNativeArtifactFile(
-                        "checkpoint.img",
-                        HibernationFileRole.KERNEL_STATE,
-                        1,
-                        1,
-                    ),
-                    StorageNativeArtifactFile(
-                        "pages_meta.img",
-                        HibernationFileRole.ALLOCATOR_METADATA,
-                        1,
-                        1,
-                    ),
-                ),
+                files=self.portable_files(),
             )
 
     def test_runtime_manifest_requires_positive_sandbox_generation(self) -> None:
         runtime = self.runtime()
-        with self.assertRaisesRegex(ValueError, "generations are invalid"):
+        with self.assertRaisesRegex(ValueError, "sandbox generation.*positive"):
             StorageNativeSandboxManifest(
                 spec=self.spec(),
                 sandbox_generation=0,
                 create_operation_id="create:zero",
-                runtime_identity=NodeRuntimeIdentity.from_fingerprint(runtime),
                 hibernation_generation=1,
                 park_operation_id="park:zero",
                 captured_ns=1,
@@ -267,26 +261,7 @@ class StorageNativeMigrationTests(unittest.TestCase):
                 source_manifest_sha256="a" * 64,
                 source_guest_ip=None,
                 connection_policy="none",
-                files=(
-                    StorageNativeArtifactFile(
-                        "application_memory.img",
-                        HibernationFileRole.MAIN_MEMORY,
-                        1,
-                        1,
-                    ),
-                    StorageNativeArtifactFile(
-                        "checkpoint.img",
-                        HibernationFileRole.KERNEL_STATE,
-                        1,
-                        1,
-                    ),
-                    StorageNativeArtifactFile(
-                        "pages_meta.img",
-                        HibernationFileRole.ALLOCATOR_METADATA,
-                        1,
-                        1,
-                    ),
-                ),
+                files=self.portable_files(),
             )
 
 

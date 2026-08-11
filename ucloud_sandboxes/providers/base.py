@@ -49,11 +49,6 @@ class ProviderConfiguration:
     def to_dict(self) -> dict[str, Any]:
         return {"kind": self.kind, "scope_id": self.scope_id, **self.settings}
 
-    def with_scope(self, scope_id: str | None) -> "ProviderConfiguration":
-        if scope_id in (None, ""):
-            return self
-        return replace(self, scope_id=str(scope_id).strip())
-
     def with_setting(self, name: str, value: object | None) -> "ProviderConfiguration":
         if value in (None, ""):
             return self

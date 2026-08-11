@@ -6,7 +6,6 @@ from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 import json
-import math
 import os
 from pathlib import Path
 import sys
@@ -26,16 +25,15 @@ from .agent import (
     post_heartbeat_with_headers,
 )
 from .autoscaler_state import (
-    RECOVERABLE_CREATE_STATES,
     AutoscalerStateError,
     AutoscalerProcessLock,
     AutoscalerStateStore,
     DrainIntent,
     ProviderOperation,
+    ProviderOperationOutcome,
     stable_provider_operation_id,
 )
 from .capabilities import (
-    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
     merge_capabilities,
@@ -43,7 +41,6 @@ from .capabilities import (
 from .bootstrap import (
     VmBootstrapIntent,
     VmBootstrapRecord,
-    VmBootstrapStore,
     build_vm_bootstrap_intents,
     mark_bootstrap_access_refresh,
     mark_bootstrap_attempt,
@@ -51,12 +48,9 @@ from .bootstrap import (
     mark_bootstrap_success,
     prune_bootstrap_records,
 )
-from .config import AutoscalerConfig
-from .control_plane import (
-    DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
-    DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
-    build_server,
-)
+from .config import DeploymentConfig
+from .control_state import ControlStateStore
+from .control_plane import build_server
 from .deployment import (
     AGENT_VERSION_LABEL,
     BUILDER_LABEL,
@@ -70,8 +64,6 @@ from .deployment import (
 from .deploy import (
     AllInOneDeployPlan,
     DEFAULT_INSTALL_ROOT,
-    DEFAULT_PROJECT_MOUNT_DIR,
-    DEFAULT_REGISTRY_ALIAS,
     read_remote_text_over_ssh,
     render_remote_deploy_script,
     run_remote_script_over_ssh,
@@ -145,19 +137,14 @@ from .program_scheduler import (
     plan_shadow_wake_queue,
 )
 from .reconcile import (
-    NodeCreateDefaults,
-    build_builder_create_intents,
-    build_sandbox_create_intents,
+    build_create_intents,
     evaluate_builder_scale,
     node_drain_ready,
     partition_safe_stop_job_ids,
-    stop_job_ids_from_decision,
     with_provider_operation_label,
 )
 from .registry import (
-    HeartbeatStore,
     heartbeat_to_dict,
-    load_heartbeats,
     merge_jobs_and_heartbeats,
 )
 from .routing import (
@@ -173,23 +160,14 @@ from .providers.ucloud.api import (
     UCloudError,
 )
 from .vm_init import (
-    DEFAULT_DIRECT_DISK_HEADROOM_MB,
-    DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-    DEFAULT_DOCKER_QUOTA_IMAGE_GB,
     DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
     DEFAULT_MANAGED_INIT,
-    DEFAULT_STORAGE_NATIVE_CACHE_GB,
-    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-    DEFAULT_STORAGE_NATIVE_REPOSITORY,
     VmInitOptions,
     render_vm_init_script,
     run_init_over_ssh,
     stage_vm_init_package_over_ssh,
 )
 from .providers.ucloud.payloads import (
-    DEFAULT_BUILDER_DISK_GB,
-    DEFAULT_BUILDER_PRODUCT_ID,
     DEFAULT_PUBLIC_LINK_PORT,
     DEFAULT_GATEWAY_VM_PRODUCT_ID,
     DEFAULT_VM_APPLICATION_NAME,
@@ -210,8 +188,23 @@ from .providers.ucloud.payloads import (
 )
 
 
-def ucloud_settings(config: AutoscalerConfig) -> UCloudSettings:
-    return UCloudSettings.from_provider(config.provider)
+_MAX_CONTROL_RESPONSE_BYTES = 1024 * 1024
+
+
+def ucloud_settings(
+    config: DeploymentConfig,
+    session_file: Path | None = None,
+) -> UCloudSettings:
+    settings = UCloudSettings.from_provider(config.provider)
+    configured_session = (
+        settings.session_file
+        if "session_file" in config.provider.settings
+        else str(config.session_file())
+    )
+    return replace(
+        settings,
+        session_file=str(session_file or configured_session),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -251,8 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
         "inspect-job", help="Inspect one UCloud VM job."
     )
     add_config_args(inspect_job)
+    add_session_arg(inspect_job)
     inspect_job.add_argument("job_id")
-    inspect_job.add_argument("--project", help="UCloud project id.")
     inspect_job.add_argument(
         "--output", choices=("text", "json"), default="text", help="Output format."
     )
@@ -262,7 +255,7 @@ def build_parser() -> argparse.ArgumentParser:
         "agent-heartbeat",
         help="Emit or submit one VM node heartbeat.",
     )
-    add_config_args(agent_heartbeat)
+    agent_heartbeat.add_argument("--deployment-id", required=True)
     agent_heartbeat.add_argument("--job-id", help="UCloud VM job id.")
     agent_heartbeat.add_argument(
         "--node-id", help="Stable node id. Defaults to hostname."
@@ -318,9 +311,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Authenticate the local node-agent heartbeat fetch with this token.",
     )
     agent_heartbeat.add_argument(
-        "--heartbeat-file",
+        "--control-state-file",
         type=Path,
-        help="Local heartbeat file to upsert into. Defaults to config state only when supplied.",
+        help="Local control-state database to upsert into when explicitly supplied.",
     )
     agent_heartbeat.add_argument(
         "--output", choices=("text", "json"), default="text", help="Output format."
@@ -329,117 +322,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = subparsers.add_parser(
         "serve-control-plane",
-        help="Run the local heartbeat receiver for VM node agents.",
+        help="Run the gateway/control-plane service.",
     )
     add_config_args(serve)
-    serve.add_argument("--host", default="127.0.0.1", help="Bind host.")
-    serve.add_argument("--port", type=int, default=8080, help="Bind port.")
-    serve.add_argument(
-        "--heartbeat-file",
-        type=Path,
-        help="Heartbeat state file. Defaults to <state_dir>/heartbeats.json.",
-    )
-    serve.add_argument(
-        "--route-file",
-        type=Path,
-        help=(
-            "Gateway route recovery and pending-demand database. "
-            "Defaults to <state_dir>/routes.sqlite."
-        ),
-    )
-    serve.add_argument(
-        "--heartbeat-ttl-seconds",
-        type=int,
-        help="Freshness window for schedulable node heartbeats.",
-    )
-    serve.add_argument(
-        "--max-concurrent-sandbox-creates",
-        type=int,
-        default=DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
-        help=(
-            "Maximum concurrent sandbox create requests handled by the gateway. "
-            "Set 0 to disable gateway create backpressure."
-        ),
-    )
-    serve.add_argument(
-        "--max-http-request-threads",
-        type=int,
-        default=DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
-        help=(
-            "Maximum concurrent HTTP request handlers at the gateway. Long-poll "
-            "exec requests occupy a handler until they return."
-        ),
-    )
-    serve.add_argument(
-        "--gateway-upstream-node-url",
-        help=(
-            "Proxy node-agent JSON API requests to this private-network node URL. "
-            "If omitted, the gateway routes across nodes from heartbeat state."
-        ),
-    )
-    serve.add_argument(
-        "--gateway-bearer-token-file",
-        type=Path,
-        required=True,
-        help=(
-            "Require a gateway token for control-plane routes. The gateway accepts "
-            "X-UCloud-Sandbox-Token, plus Authorization: Bearer for private callers."
-        ),
-    )
-    serve.add_argument(
-        "--heartbeat-bearer-token-file",
-        type=Path,
-        required=True,
-        help=("Distinct bearer token required for node heartbeat POSTs."),
-    )
-    serve.add_argument(
-        "--node-control-bearer-token-file",
-        type=Path,
-        required=True,
-        help=(
-            "Private credential used by the gateway for every node-agent call. "
-            "It is distinct from gateway and heartbeat credentials."
-        ),
-    )
-    serve.add_argument(
-        "--image-file",
-        type=Path,
-        help="Control-plane image build state file. Defaults to <state_dir>/images.json.",
-    )
-    serve.add_argument(
-        "--metrics-file",
-        type=Path,
-        help="SQLite metrics database. Defaults to <state_dir>/metrics.sqlite.",
-    )
-    serve.add_argument(
-        "--registry-url",
-        help=(
-            "Docker Distribution registry URL to include in gateway metrics. "
-            "Defaults to UCLOUD_REGISTRY_URL."
-        ),
-    )
-    serve.add_argument(
-        "--registry-worker-url",
-        help=(
-            "Private registry URL used in worker pull/push references. Clients "
-            "never need this address. Defaults to UCLOUD_REGISTRY_WORKER_URL."
-        ),
-    )
-    serve.add_argument(
-        "--registry-usage-file",
-        type=Path,
-        help=(
-            "Persistent image usage state used by registry retention pruning. "
-            "Defaults to <state_dir>/registry-usage.json."
-        ),
-    )
+    serve.add_argument("--host", default="0.0.0.0", help="Bind host.")
     serve.set_defaults(func=cmd_serve_control_plane)
 
     direct_node_agent = subparsers.add_parser(
         "serve-direct-node-agent",
         help="Run the direct-runsc sandbox node daemon.",
     )
-    add_config_args(direct_node_agent)
+    direct_node_agent.add_argument("--deployment-id", required=True)
     direct_node_agent.add_argument("--host", default="127.0.0.1")
     direct_node_agent.add_argument("--port", type=int, default=8090)
     direct_node_agent.add_argument("--job-id")
@@ -447,7 +340,7 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument("--node-url")
     add_node_version_args(direct_node_agent)
     add_resource_args(direct_node_agent)
-    direct_node_agent.add_argument("--state-root", type=Path)
+    direct_node_agent.add_argument("--state-root", type=Path, required=True)
     direct_node_agent.add_argument(
         "--image-cache-root",
         type=Path,
@@ -456,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Defaults to <state-root>/image-cache."
         ),
     )
-    direct_node_agent.add_argument("--image-file", type=Path)
+    direct_node_agent.add_argument("--image-file", type=Path, required=True)
     direct_node_agent.add_argument("--volume-mount-root", type=Path, required=True)
     direct_node_agent.add_argument(
         "--storage-native-socket",
@@ -501,7 +394,7 @@ def build_parser() -> argparse.ArgumentParser:
     direct_node_agent.add_argument(
         "--network",
         choices=("none", "sandbox"),
-        default=os.environ.get("UCLOUD_DIRECT_NETWORK", "none"),
+        default="none",
         help=(
             "Node-wide gVisor network mode. sandbox uses node-owned isolated "
             "network namespaces, veth links, and NAT."
@@ -528,7 +421,7 @@ def build_parser() -> argparse.ArgumentParser:
         "serve-builder-agent",
         help="Run an image-only builder node.",
     )
-    add_config_args(builder_agent)
+    builder_agent.add_argument("--deployment-id", required=True)
     builder_agent.add_argument("--host", default="127.0.0.1")
     builder_agent.add_argument("--port", type=int, default=8090)
     builder_agent.add_argument("--job-id")
@@ -554,119 +447,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     model_relay = subparsers.add_parser(
         "serve-model-relay",
-        help="Run an outbound-only OpenAI-compatible model-call relay.",
+        help="Run the deployment model relay.",
     )
-    model_relay.add_argument("--host", default="127.0.0.1", help="Bind host.")
-    model_relay.add_argument("--port", type=int, default=8092, help="Bind port.")
-    model_relay.add_argument(
-        "--sandbox-bearer-token-file",
-        type=Path,
-        help=(
-            "Require this bearer token for sandbox OpenAI-compatible requests. "
-            "Use the token value as OPENAI_API_KEY."
-        ),
-    )
-    model_relay.add_argument(
-        "--worker-bearer-token-file",
-        type=Path,
-        help="Require this bearer token for worker register/poll/respond routes.",
-    )
-    model_relay.add_argument(
-        "--state-path",
-        type=Path,
-        help="Absolute path to the crash-durable SQLite relay journal.",
-    )
-    model_relay.add_argument(
-        "--gateway-url",
-        help=(
-            "Gateway control URL used to park a sandbox after durable acceptance "
-            "and wake it after committing the worker response."
-        ),
-    )
-    model_relay.add_argument(
-        "--gateway-bearer-token-file",
-        type=Path,
-        help="Bearer token used for relay park/wake requests to the gateway.",
-    )
-    model_relay.add_argument(
-        "--max-inflight-requests",
-        type=int,
-        default=DEFAULT_MAX_INFLIGHT_REQUESTS,
-        help="Global active relay-request admission limit.",
-    )
-    model_relay.add_argument(
-        "--max-inflight-requests-per-rollout",
-        type=int,
-        default=DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT,
-        help="Per-rollout active relay-request admission limit.",
-    )
-    model_relay.add_argument(
-        "--max-inflight-bytes",
-        type=int,
-        default=DEFAULT_MAX_INFLIGHT_BYTES,
-        help="Global serialized active request-envelope byte limit.",
-    )
-    model_relay.add_argument(
-        "--max-completed-bytes",
-        type=int,
-        default=DEFAULT_MAX_COMPLETED_BYTES,
-        help="Global retained completed-response byte limit.",
-    )
-    model_relay.add_argument(
-        "--request-timeout-seconds",
-        type=float,
-        default=3600.0,
-        help="Maximum time a sandbox model request waits for a worker response.",
-    )
-    model_relay.add_argument(
-        "--worker-poll-timeout-seconds",
-        type=float,
-        default=30.0,
-        help="Default long-poll timeout for /worker/poll.",
-    )
-    model_relay.add_argument(
-        "--worker-lease-seconds",
-        type=float,
-        default=600.0,
-        help="How long a polled request is reserved for one worker before retry.",
-    )
-    model_relay.add_argument(
-        "--completed-request-retention-seconds",
-        type=float,
-        default=3600.0,
-        help="How long completed request ids are retained for idempotent responses.",
-    )
+    add_config_args(model_relay)
+    model_relay.add_argument("--host", default="0.0.0.0", help="Bind host.")
     model_relay.set_defaults(func=cmd_serve_model_relay)
 
     init_vm = subparsers.add_parser(
         "init-vm",
-        help="Plan or execute post-boot init for a running UCloud VM job.",
+        help="Plan or execute strict deployment init for one running VM.",
     )
     add_config_args(init_vm)
+    add_session_arg(init_vm)
     init_vm.add_argument("job_id", help="UCloud VM job id.")
-    init_vm.add_argument("--project", help="UCloud project id.")
-    add_vm_init_args(init_vm, include_job_id=False)
-    init_vm.add_argument(
-        "--execute",
-        action="store_true",
-        help="Run the init script over the announced SSH command. Default is dry-run.",
-    )
-    init_vm.add_argument(
-        "--timeout-seconds",
-        type=int,
-        default=1800,
-        help="Timeout for remote init execution.",
-    )
-    init_vm.add_argument(
-        "--ssh-private-key-file",
-        help="Private key file passed to ssh when executing VM init.",
-    )
-    init_vm.add_argument(
-        "--output",
-        choices=("text", "json"),
-        default="text",
-        help="Output format.",
-    )
+    init_vm.add_argument("--role", choices=("sandbox", "builder"), required=True)
+    init_vm.add_argument("--package-spec", type=Path, required=True)
+    init_vm.add_argument("--execute", action="store_true")
+    init_vm.add_argument("--timeout-seconds", type=int, default=1800)
+    init_vm.add_argument("--ssh-private-key-file")
+    init_vm.add_argument("--output", choices=("text", "json"), default="text")
     init_vm.set_defaults(func=cmd_init_vm)
 
     ensure_ssh_key = subparsers.add_parser(
@@ -674,6 +473,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a UCloud account SSH key if the public key is not already registered.",
     )
     add_config_args(ensure_ssh_key)
+    add_session_arg(ensure_ssh_key)
     ensure_ssh_key.add_argument(
         "--title",
         default="ucloud-sandboxes gateway init",
@@ -709,7 +509,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     network_attachment.add_argument(
         "--hostname-prefix",
-        help="Prefix used with --hostname-seed. Defaults to config.node_hostname_prefix.",
+        help="Prefix used with --hostname-seed. Defaults to sandbox-node.",
     )
     network_attachment.add_argument(
         "--output", choices=("text", "json"), default="json", help="Output format."
@@ -740,58 +540,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     registry_prune = subparsers.add_parser(
         "registry-prune",
-        help="Plan or delete old tags from a Docker registry.",
+        help="Plan or execute deployment registry retention.",
     )
-    registry_prune.add_argument(
-        "--registry-url",
-        default="http://127.0.0.1:5000",
-        help="Base URL for the registry API.",
-    )
-    registry_prune.add_argument(
-        "--keep-per-repository",
-        type=int,
-        default=5,
-        help="Number of newest tags to retain per repository.",
-    )
-    registry_prune.add_argument(
-        "--max-age-days",
-        type=float,
-        help=(
-            "Only delete tags older than this many days. Tags without a parsed "
-            "creation time are kept."
-        ),
-    )
-    registry_prune.add_argument(
-        "--repository-prefix",
-        default="",
-        help="Only consider repositories with this prefix.",
-    )
-    registry_prune.add_argument(
-        "--usage-file",
-        type=Path,
-        help=(
-            "Use registry image last-used timestamps from this state file. "
-            "Tags with no usage entry are kept when --max-age-days is set."
-        ),
-    )
-    registry_prune.add_argument(
-        "--image-file",
-        type=Path,
-        help=("Gateway image metadata file to update when registry tags are deleted."),
-    )
-    registry_prune.add_argument(
-        "--prune-stale-image-records",
-        action="store_true",
-        help=(
-            "When --image-file is set, also remove pushed build image records "
-            "whose registry manifest is already missing."
-        ),
-    )
-    registry_prune.add_argument(
-        "--execute",
-        action="store_true",
-        help="Delete selected manifests. Without this flag, only print the plan.",
-    )
+    add_config_args(registry_prune)
+    registry_prune.add_argument("--repository-prefix", default="")
+    registry_prune.add_argument("--execute", action="store_true")
     registry_prune.set_defaults(func=cmd_registry_prune)
 
     submit_vm = subparsers.add_parser(
@@ -799,7 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render or submit one UCloud VM job, including gateway VMs.",
     )
     add_config_args(submit_vm)
-    submit_vm.add_argument("--project", help="UCloud project id.")
+    add_session_arg(submit_vm)
     submit_vm.add_argument("--name", help="UCloud job name.")
     submit_vm.add_argument(
         "--role",
@@ -820,7 +573,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     submit_vm.add_argument(
         "--hostname-prefix",
-        help="Hostname prefix. Defaults to config.node_hostname_prefix.",
+        help="Hostname prefix. Defaults to the selected role.",
     )
     submit_vm.add_argument(
         "--private-network-id",
@@ -958,8 +711,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Open/configure a UCloud VM web session for a public-link target port.",
     )
     add_config_args(open_vm_web)
+    add_session_arg(open_vm_web)
     open_vm_web.add_argument("job_id", help="UCloud VM job id.")
-    open_vm_web.add_argument("--project", help="UCloud project id.")
     open_vm_web.add_argument(
         "--port",
         type=int,
@@ -979,185 +732,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     deploy_all = subparsers.add_parser(
         "deploy-all-in-one",
-        help=(
-            "Converge a running gateway VM into the all-in-one deployment: "
-            "gateway, relay, registry, and autoscaler."
-        ),
+        help="Install one strict deployment on a running gateway VM.",
     )
     add_config_args(deploy_all)
-    deploy_all.add_argument("job_id", help="Running UCloud gateway VM job id.")
-    deploy_all.add_argument("--project", help="UCloud project id.")
+    add_session_arg(deploy_all)
+    deploy_all.add_argument("job_id", help="Running gateway VM job id.")
+    deploy_all.add_argument("--wheel", required=True, type=Path)
+    deploy_all.add_argument("--direct-runsc", required=True, type=Path)
+    deploy_all.add_argument("--managed-init", required=True, type=Path)
+    deploy_all.add_argument("--storage-native-manifest", required=True, type=Path)
+    deploy_all.add_argument("--ssh-command")
+    deploy_all.add_argument("--ssh-private-key-file")
+    deploy_all.add_argument("--ssh-key-title")
+    deploy_all.add_argument("--no-copy-session", action="store_true")
+    deploy_all.add_argument("--no-open-public-links", action="store_true")
+    deploy_all.add_argument("--timeout-seconds", type=int, default=1800)
+    deploy_all.add_argument("--execute", action="store_true")
     deploy_all.add_argument(
-        "--wheel",
-        required=True,
-        type=Path,
-        help="Built ucloud-sandboxes wheel to install on the gateway VM.",
-    )
-    deploy_all.add_argument(
-        "--direct-runsc",
-        type=Path,
-        help="Locally built patched runsc binary staged into direct worker bundles.",
-    )
-    deploy_all.add_argument(
-        "--direct-runsc-commit",
-        default="",
-        help="Exact gVisor commit used to build --direct-runsc.",
-    )
-    deploy_all.add_argument(
-        "--managed-init",
-        type=Path,
-        help=(
-            "Statically linked Linux amd64 primary-process supervisor built by "
-            "runtime/managed_process/build.sh."
-        ),
-    )
-    deploy_all.add_argument(
-        "--storage-native-manifest",
-        type=Path,
-        help=(
-            "Build manifest emitted beside the pinned storage-native backend "
-            "binary and license by runtime/storage_native/build_pinned.sh."
-        ),
-    )
-    deploy_all.add_argument(
-        "--storage-native-cache-gb",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
-        help="Maximum disposable lazy-block cache per storage-native worker.",
-    )
-    deploy_all.add_argument(
-        "--storage-native-pool-low-watermark",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-        help="Minimum number of idle warm ublk devices per sandbox node.",
-    )
-    deploy_all.add_argument(
-        "--storage-native-pool-high-watermark",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-        help="Maximum number of idle warm ublk devices per sandbox node.",
-    )
-    deploy_all.add_argument(
-        "--storage-native-repository",
-        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
-        help="Private Registry repository for durable sandbox snapshots.",
-    )
-    deploy_all.add_argument(
-        "--direct-disk-headroom-mb",
-        type=int,
-        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
-        help="Physical XFS capacity withheld from direct sandbox admission.",
-    )
-    deploy_all.add_argument(
-        "--direct-max-concurrent-restores",
-        type=int,
-        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-        help="Maximum simultaneous direct-runtime restores per worker node.",
-    )
-    deploy_all.add_argument(
-        "--max-concurrent-image-pulls",
-        type=int,
-        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-        help="Maximum distinct cold Docker pulls per sandbox worker node.",
-    )
-    deploy_all.add_argument(
-        "--ssh-command",
-        help=(
-            "SSH command for the gateway VM. If omitted, the command is read from "
-            "UCloud job updates."
-        ),
-    )
-    deploy_all.add_argument(
-        "--ssh-private-key-file",
-        help="Private key file passed to ssh/scp operations.",
-    )
-    deploy_all.add_argument(
-        "--private-network-id",
-        help="Private network id used by autoscaled sandbox and builder nodes.",
-    )
-    deploy_all.add_argument(
-        "--gateway-private-host",
-        help="Private-network hostname used by autoscaled nodes to reach the gateway.",
-    )
-    deploy_all.add_argument(
-        "--registry-private-ip",
-        help=(
-            "Optional stable private-network IP override for the all-in-one VM. "
-            "When omitted, nodes use --gateway-private-host through private DNS."
-        ),
-    )
-    deploy_all.add_argument(
-        "--registry-alias",
-        default=DEFAULT_REGISTRY_ALIAS,
-        help="Stable hostname used in private registry tags.",
-    )
-    deploy_all.add_argument("--install-root", default=DEFAULT_INSTALL_ROOT)
-    deploy_all.add_argument("--project-mount-dir", default=DEFAULT_PROJECT_MOUNT_DIR)
-    deploy_all.add_argument("--service-user", default="ucloud")
-    deploy_all.add_argument("--gateway-port", type=int, default=8090)
-    deploy_all.add_argument("--relay-port", type=int, default=8092)
-    deploy_all.add_argument("--registry-port", type=int, default=5000)
-    deploy_all.add_argument(
-        "--registry-retention-days",
-        type=float,
-        default=30.0,
-        help="Delete registry tags older than this many days during scheduled prune.",
-    )
-    deploy_all.add_argument(
-        "--registry-keep-per-repository",
-        type=int,
-        default=0,
-        help="Newest tags to protect per repository during scheduled prune.",
-    )
-    deploy_all.add_argument("--sandbox-product-id", default=DEFAULT_VM_PRODUCT_ID)
-    deploy_all.add_argument("--sandbox-disk-gb", type=int, default=2000)
-    deploy_all.add_argument("--sandbox-idle-seconds", type=int, default=600)
-    deploy_all.add_argument("--builder-product-id", default=DEFAULT_BUILDER_PRODUCT_ID)
-    deploy_all.add_argument(
-        "--builder-disk-gb", type=int, default=DEFAULT_BUILDER_DISK_GB
-    )
-    deploy_all.add_argument("--builder-idle-seconds", type=int, default=900)
-    deploy_all.add_argument("--max-builder-nodes", type=int, default=1)
-    deploy_all.add_argument("--autoscaler-interval-seconds", type=float, default=5.0)
-    deploy_all.add_argument("--cpu-overcommit", type=float, default=3.0)
-    deploy_all.add_argument("--memory-overcommit", type=float, default=2.0)
-    deploy_all.add_argument("--disk-overcommit", type=float, default=1.0)
-    deploy_all.add_argument("--docker-quota-image-gb", type=int, default=440)
-    deploy_all.add_argument("--builder-docker-quota-image-gb", type=int, default=200)
-    deploy_all.add_argument("--swap-gb", type=int, default=96)
-    deploy_all.add_argument(
-        "--ssh-key-title",
-        help=(
-            "Title used when registering the generated gateway init public key "
-            "with UCloud."
-        ),
-    )
-    deploy_all.add_argument(
-        "--no-copy-session",
-        action="store_true",
-        help="Do not copy the local UCloud session file to the gateway VM.",
-    )
-    deploy_all.add_argument(
-        "--no-open-public-links",
-        action="store_true",
-        help="Skip UCloud VM web-session activation for gateway and relay ports.",
-    )
-    deploy_all.add_argument(
-        "--timeout-seconds",
-        type=int,
-        default=1800,
-        help="Timeout for each remote staging or install operation.",
-    )
-    deploy_all.add_argument(
-        "--execute",
-        action="store_true",
-        help="Stage files and run the remote deployment. Default is dry-run.",
-    )
-    deploy_all.add_argument(
-        "--output",
-        choices=("text", "json", "script"),
-        default="text",
-        help="Output format. script prints the remote install script.",
+        "--output", choices=("text", "json", "script"), default="text"
     )
     deploy_all.set_defaults(func=cmd_deploy_all_in_one)
 
@@ -1167,381 +759,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_config_args(heartbeats)
     heartbeats.add_argument(
-        "--heartbeat-file",
-        type=Path,
-        help="Heartbeat state file. Defaults to <state_dir>/heartbeats.json.",
-    )
-    heartbeats.add_argument(
         "--output", choices=("text", "json"), default="text", help="Output format."
     )
     heartbeats.set_defaults(func=cmd_heartbeats)
 
-    plan = subparsers.add_parser(
-        "plan", help="Plan one autoscaler reconciliation cycle."
-    )
-    add_config_args(plan)
-    plan.add_argument(
-        "--project",
-        help="Provider scope override (the UCloud project id for the built-in adapter).",
-    )
-    plan.add_argument(
-        "--pending-vcpu",
-        type=float,
-        default=0.0,
-        help="Total pending vCPU demand for unscheduled sandboxes.",
-    )
-    plan.add_argument(
-        "--pending-memory-mb",
-        type=int,
-        default=0,
-        help="Total pending memory demand in MB.",
-    )
-    plan.add_argument(
-        "--pending-disk-mb",
-        type=int,
-        default=0,
-        help="Total pending disk demand in MB.",
-    )
-    plan.add_argument(
-        "--oldest-pending-seconds",
-        type=int,
-        default=0,
-        help="Age of the oldest unscheduled sandbox request, for policy reporting.",
-    )
-    plan.add_argument(
-        "--heartbeats",
-        type=Path,
-        help="Optional node heartbeat JSON file produced by VM node agents.",
-    )
-    plan.add_argument(
-        "--jobs-file",
-        type=Path,
-        help="Optional UCloud jobs JSON fixture. If omitted, live UCloud jobs are browsed.",
-    )
-    plan.add_argument(
-        "--include-job",
-        action="append",
-        default=[],
-        help="Explicit job id to include even if it does not match the name prefix.",
-    )
-    plan.add_argument(
-        "--all-vm-jobs",
-        action="store_true",
-        help="Treat every VM job in the project as part of the observed pool.",
-    )
-    plan.add_argument(
-        "--output", choices=("text", "json"), default="text", help="Output format."
-    )
-    plan.set_defaults(func=cmd_plan)
-
-    reconcile = subparsers.add_parser(
-        "reconcile",
-        help="Plan one autoscaler cycle and optionally execute VM mutations.",
-    )
-    add_config_args(reconcile)
-    reconcile.add_argument(
-        "--project",
-        help="Provider scope override (the UCloud project id for the built-in adapter).",
-    )
-    reconcile.add_argument(
-        "--pending-vcpu",
-        type=float,
-        default=0.0,
-        help="Total pending vCPU demand for unscheduled sandboxes.",
-    )
-    reconcile.add_argument(
-        "--pending-memory-mb",
-        type=int,
-        default=0,
-        help="Total pending memory demand in MB.",
-    )
-    reconcile.add_argument(
-        "--pending-disk-mb",
-        type=int,
-        default=0,
-        help="Total pending disk demand in MB.",
-    )
-    reconcile.add_argument(
-        "--oldest-pending-seconds",
-        type=int,
-        default=0,
-        help="Age of the oldest unscheduled sandbox request.",
-    )
-    add_builder_autoscale_args(reconcile)
-    add_vm_bootstrap_args(reconcile)
-    reconcile.add_argument(
-        "--heartbeats",
-        type=Path,
-        help="Optional node heartbeat JSON file produced by VM node agents.",
-    )
-    reconcile.add_argument(
-        "--jobs-file",
-        type=Path,
-        help="Optional UCloud jobs JSON fixture. If omitted, live UCloud jobs are browsed.",
-    )
-    reconcile.add_argument(
-        "--include-job",
-        action="append",
-        default=[],
-        help="Explicit job id to include even if it does not match the name prefix.",
-    )
-    reconcile.add_argument(
-        "--all-vm-jobs",
-        action="store_true",
-        help="Treat every VM job in the project as part of the observed pool.",
-    )
-    reconcile.add_argument(
-        "--seed-prefix",
-        help="Seed prefix for planned VM names. Defaults to a random cycle id.",
-    )
-    reconcile.add_argument(
-        "--private-network-id",
-        help="UCloud private network id. Defaults to provider.private_network_id.",
-    )
-    reconcile.add_argument(
-        "--no-private-network",
-        action="store_true",
-        help="Submit planned VM jobs without private-network attachment.",
-    )
-    reconcile.add_argument(
-        "--app-name",
-        default=DEFAULT_VM_APPLICATION_NAME,
-        help="UCloud VM application name.",
-    )
-    reconcile.add_argument(
-        "--app-version",
-        default=DEFAULT_VM_APPLICATION_VERSION,
-        help="UCloud VM application version.",
-    )
-    reconcile.add_argument(
-        "--product-id",
-        default=DEFAULT_VM_PRODUCT_ID,
-        help="UCloud VM product id.",
-    )
-    reconcile.add_argument(
-        "--product-category",
-        default=DEFAULT_VM_PRODUCT_CATEGORY,
-        help="UCloud VM product category.",
-    )
-    reconcile.add_argument(
-        "--product-provider",
-        default=DEFAULT_VM_PRODUCT_PROVIDER,
-        help="UCloud VM product provider.",
-    )
-    reconcile.add_argument(
-        "--disk-gb",
-        type=int,
-        default=DEFAULT_VM_DISK_GB,
-        help="VM disk size parameter in GB.",
-    )
-    reconcile.add_argument(
-        "--time-hours",
-        type=int,
-        default=1,
-        help="VM time allocation hours.",
-    )
-    reconcile.add_argument(
-        "--time-minutes",
-        type=int,
-        default=0,
-        help="VM time allocation minutes.",
-    )
-    reconcile.add_argument(
-        "--time-seconds",
-        type=int,
-        default=0,
-        help="VM time allocation seconds.",
-    )
-    reconcile.add_argument(
-        "--ssh",
-        action="store_true",
-        help=(
-            "Request sshEnabled=true. The current vm-ubuntu:24.04 app rejects this "
-            "on the live API."
-        ),
-    )
-    reconcile.add_argument(
-        "--no-ssh",
-        action="store_true",
-        help="Submit planned VM jobs without sshEnabled=true. This is the default.",
-    )
-    reconcile.add_argument(
-        "--allow-duplicate-job",
-        action="store_true",
-        help="Allow UCloud to submit even when it detects duplicate jobs.",
-    )
-    reconcile.add_argument(
-        "--label",
-        action="append",
-        default=[],
-        help="UCloud job label as key=value. Repeat for multiple labels.",
-    )
-    reconcile.add_argument(
-        "--execute",
-        action="store_true",
-        help="Submit planned create jobs. Default is dry-run.",
-    )
-    reconcile.add_argument(
-        "--execute-stops",
-        action="store_true",
-        help="Terminate planned stop jobs. This is separate because it is destructive.",
-    )
-    reconcile.add_argument(
-        "--allow-unlabeled-stops",
-        action="store_true",
-        help=(
-            "Allow terminate requests for stop candidates without the matching "
-            "deployment label. Unsafe; intended only for manual cleanup."
-        ),
-    )
-    reconcile.add_argument(
-        "--output", choices=("text", "json"), default="text", help="Output format."
-    )
-    reconcile.set_defaults(func=cmd_reconcile)
-
     loop = subparsers.add_parser(
-        "autoscaler-loop",
-        help="Run the autoscaler reconcile loop continuously on a gateway/control VM.",
+        "autoscaler",
+        help="Plan or execute the deployment autoscaler.",
     )
     add_config_args(loop)
-    loop.add_argument(
-        "--project",
-        help="Provider scope override (the UCloud project id for the built-in adapter).",
-    )
-    loop.add_argument(
-        "--interval-seconds",
-        type=float,
-        default=5.0,
-        help="Delay between reconcile cycles.",
-    )
-    loop.add_argument(
-        "--once",
-        action="store_true",
-        help="Run one loop cycle and exit.",
-    )
-    loop.add_argument(
-        "--route-file",
-        type=Path,
-        help=(
-            "Gateway route recovery and pending-demand database. "
-            "Defaults to <state_dir>/routes.sqlite."
-        ),
-    )
-    loop.add_argument(
-        "--metrics-file",
-        type=Path,
-        help="SQLite metrics database. Defaults to <state_dir>/metrics.sqlite.",
-    )
-    loop.add_argument(
-        "--heartbeats",
-        type=Path,
-        help="Node heartbeat JSON file. Defaults to <state_dir>/heartbeats.json.",
-    )
-    loop.add_argument(
-        "--jobs-file",
-        type=Path,
-        help="Optional UCloud jobs JSON fixture. If omitted, live UCloud jobs are browsed.",
-    )
-    loop.add_argument(
-        "--include-job",
-        action="append",
-        default=[],
-        help="Explicit job id to include even if it does not match the name prefix.",
-    )
-    loop.add_argument(
-        "--all-vm-jobs",
-        action="store_true",
-        help="Treat every VM job in the project as part of the observed pool.",
-    )
-    loop.add_argument(
-        "--seed-prefix",
-        help="Seed prefix for planned VM names. Defaults to a random cycle id per cycle.",
-    )
-    loop.add_argument(
-        "--private-network-id",
-        help="UCloud private network id. Defaults to provider.private_network_id.",
-    )
-    loop.add_argument(
-        "--no-private-network",
-        action="store_true",
-        help="Submit planned VM jobs without private-network attachment.",
-    )
-    loop.add_argument("--app-name", default=DEFAULT_VM_APPLICATION_NAME)
-    loop.add_argument("--app-version", default=DEFAULT_VM_APPLICATION_VERSION)
-    loop.add_argument("--product-id", default=DEFAULT_VM_PRODUCT_ID)
-    loop.add_argument("--product-category", default=DEFAULT_VM_PRODUCT_CATEGORY)
-    loop.add_argument("--product-provider", default=DEFAULT_VM_PRODUCT_PROVIDER)
-    loop.add_argument("--disk-gb", type=int, default=DEFAULT_VM_DISK_GB)
-    loop.add_argument(
-        "--gateway-control-url",
-        default="",
-        help=(
-            "Gateway base URL used to migrate parked storage-native sandboxes "
-            "from draining nodes. Defaults to the base of --init-heartbeat-url."
-        ),
-    )
-    loop.add_argument(
-        "--gateway-control-bearer-token-file",
-        type=Path,
-        help="Gateway bearer token used for storage-native migration requests.",
-    )
-    loop.add_argument(
-        "--max-storage-native-migrations-per-cycle",
-        type=int,
-        default=2,
-        help="Maximum storage-native migrations started by one autoscaler cycle.",
-    )
-    add_builder_autoscale_args(loop)
-    add_vm_bootstrap_args(loop)
-    loop.add_argument("--time-hours", type=int, default=1)
-    loop.add_argument("--time-minutes", type=int, default=0)
-    loop.add_argument("--time-seconds", type=int, default=0)
-    loop.add_argument("--ssh", action="store_true")
-    loop.add_argument("--no-ssh", action="store_true")
-    loop.add_argument("--allow-duplicate-job", action="store_true")
-    loop.add_argument(
-        "--label",
-        action="append",
-        default=[],
-        help="UCloud job label as key=value. Repeat for multiple labels.",
-    )
-    loop.add_argument(
-        "--execute",
-        action="store_true",
-        help="Submit planned create jobs. Default is dry-run.",
-    )
-    loop.add_argument(
-        "--execute-stops",
-        action="store_true",
-        help="Terminate planned stop jobs. This is separate because it is destructive.",
-    )
-    loop.add_argument(
-        "--allow-unlabeled-stops",
-        action="store_true",
-        help="Allow terminate requests for stop candidates without matching deployment label.",
-    )
-    loop.add_argument(
-        "--output", choices=("text", "json"), default="text", help="Output format."
-    )
-    loop.set_defaults(func=cmd_autoscaler_loop)
+    loop.add_argument("--once", action="store_true")
+    loop.add_argument("--jobs-file", type=Path)
+    loop.add_argument("--include-job", action="append", default=[])
+    loop.add_argument("--seed-prefix")
+    loop.add_argument("--execute", action="store_true")
+    loop.add_argument("--output", choices=("text", "json"), default="text")
+    loop.set_defaults(func=cmd_autoscaler)
     return parser
 
 
 def add_config_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", type=Path, help="JSON autoscaler config file.")
     parser.add_argument(
-        "--deployment-id",
-        help="Deployment identity used in node heartbeats and UCloud job labels.",
-    )
-    parser.add_argument(
-        "--state-dir",
+        "--config",
         type=Path,
-        help="Autoscaler state directory. Defaults to the platform state directory.",
+        required=True,
+        help="Exact deployment JSON configuration.",
     )
+
+
+def add_session_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--session-file",
         type=Path,
-        help="UCloud CLI session file. Defaults to the ucloud-cli session path.",
+        help="Operational local UCloud credential override.",
     )
 
 
@@ -1568,741 +818,28 @@ def add_resource_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--total-disk-mb", type=int, default=0, help="Node usable sandbox disk in MB."
     )
-    parser.add_argument(
-        "--cpu-overcommit",
-        type=float,
-        default=1.0,
-        help="CPU overcommit multiplier used for scheduling/accounting.",
-    )
-    parser.add_argument(
-        "--memory-overcommit",
-        type=float,
-        default=1.0,
-        help="Memory overcommit multiplier used for scheduling/accounting.",
-    )
-    parser.add_argument(
-        "--disk-overcommit",
-        type=float,
-        default=1.0,
-        help="Disk overcommit multiplier used for scheduling/accounting.",
-    )
 
 
-def add_builder_autoscale_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--scale-down-idle-seconds",
-        type=int,
-        default=None,
-        help=(
-            "Idle grace before stopping sandbox VMs after they become idle. "
-            "Defaults to policy.scale_down_idle_seconds."
-        ),
+def load_config(args: argparse.Namespace) -> DeploymentConfig:
+    config = DeploymentConfig.from_file(args.config)
+    session_file = getattr(args, "session_file", None)
+    if session_file is None:
+        return config
+    return replace(
+        config,
+        provider=config.provider.with_setting("session_file", str(session_file)),
     )
-    parser.add_argument(
-        "--pending-image-builds",
-        type=int,
-        default=0,
-        help="Pending image build requests needing builder capacity.",
-    )
-    parser.add_argument(
-        "--max-builder-nodes",
-        type=int,
-        default=1,
-        help="Maximum autoscaled builder VMs. Use 0 to disable builder creation.",
-    )
-    parser.add_argument(
-        "--builder-product-id",
-        default=DEFAULT_BUILDER_PRODUCT_ID,
-        help="UCloud product id used for autoscaled builder VMs.",
-    )
-    parser.add_argument(
-        "--builder-disk-gb",
-        type=int,
-        default=DEFAULT_BUILDER_DISK_GB,
-        help="Disk size parameter in GB for autoscaled builder VMs.",
-    )
-    parser.add_argument(
-        "--builder-scale-down-idle-seconds",
-        type=int,
-        default=None,
-        help=(
-            "Idle grace before stopping builder VMs after image-build demand "
-            "drops to zero. Defaults to policy.builder_scale_down_idle_seconds."
-        ),
-    )
-    parser.add_argument(
-        "--live-pressure-enabled",
-        type=_parse_cli_bool,
-        default=None,
-        help="Enable live-pressure headroom and latency-aware scale-down.",
-    )
-    parser.add_argument(
-        "--live-pressure-window-seconds",
-        type=int,
-        default=None,
-        help="Recent heartbeat window used for live-pressure samples.",
-    )
-    parser.add_argument(
-        "--live-pressure-min-samples",
-        type=int,
-        default=None,
-        help="Pressure samples required before adding a headroom node.",
-    )
-    parser.add_argument(
-        "--live-pressure-fresh-seconds",
-        type=int,
-        default=None,
-        help="Maximum age of the newest pressure sample for scale-up.",
-    )
-    parser.add_argument(
-        "--create-pressure-enabled",
-        type=_parse_cli_bool,
-        default=None,
-        help="Enable temporary capacity from gateway create saturation.",
-    )
-    parser.add_argument(
-        "--create-pressure-window-seconds",
-        type=int,
-        default=None,
-        help="Recent gateway-busy window used for create-pressure samples.",
-    )
-    parser.add_argument(
-        "--create-pressure-min-samples",
-        type=int,
-        default=None,
-        help="Gateway-busy samples required before adding temporary nodes.",
-    )
-    parser.add_argument(
-        "--create-pressure-fresh-seconds",
-        type=int,
-        default=None,
-        help="Maximum age of the newest gateway-busy sample for scale-up.",
-    )
-    parser.add_argument(
-        "--create-target-concurrency-per-node",
-        type=int,
-        default=None,
-        help="Target concurrent sandbox creates per ready node.",
-    )
-    parser.add_argument(
-        "--create-pressure-max-headroom-nodes",
-        type=int,
-        default=None,
-        help="Maximum temporary nodes beyond hard resource demand.",
-    )
-    parser.add_argument(
-        "--target-cpu-utilization",
-        type=float,
-        default=None,
-        help="Actual host CPU fraction that triggers live pressure.",
-    )
-    parser.add_argument(
-        "--target-memory-utilization",
-        type=float,
-        default=None,
-        help="Actual host memory fraction that triggers live pressure.",
-    )
-    parser.add_argument(
-        "--max-memory-psi-full-avg10",
-        type=float,
-        default=None,
-        help="Maximum full-memory PSI avg10 before adding headroom.",
-    )
-    parser.add_argument(
-        "--target-storage-queue-utilization",
-        type=float,
-        default=None,
-        help="Storage operation slot/queue fraction that triggers pressure.",
-    )
-    parser.add_argument(
-        "--pressure-scale-down-cooldown-seconds",
-        type=int,
-        default=None,
-        help="Scale-down cooldown after the newest pressure sample.",
-    )
-    parser.add_argument(
-        "--provisioning-latency-lookback-seconds",
-        type=int,
-        default=None,
-        help="Lookback used to calculate VM provisioning p95.",
-    )
-    parser.add_argument(
-        "--provisioning-scale-down-multiplier",
-        type=float,
-        default=None,
-        help="Provisioning p95 multiplier used as an idle-grace floor.",
-    )
-    parser.add_argument(
-        "--program-aware-autoscaling-enabled",
-        type=_parse_cli_bool,
-        default=None,
-        help="Apply rollout-phase demand to autoscaling; false is shadow-only.",
-    )
-    parser.add_argument(
-        "--model-wait-capacity-weight",
-        type=float,
-        default=None,
-        help="CPU/memory weight assigned to parked model-wait sandboxes.",
-    )
-    parser.add_argument(
-        "--model-wait-max-headroom-nodes",
-        type=int,
-        default=None,
-        help="Maximum node-equivalents retained for weighted model waits.",
-    )
-
-
-def add_vm_bootstrap_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--execute-init",
-        action="store_true",
-        help="Run post-boot init over SSH for eligible RUNNING autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-state-file",
-        type=Path,
-        help="VM init attempt state file. Defaults to <state_dir>/vm-bootstrap.json.",
-    )
-    parser.add_argument(
-        "--max-init-per-cycle",
-        type=int,
-        default=4,
-        help=(
-            "Maximum VM init attempts admitted and executed concurrently per "
-            "reconcile cycle."
-        ),
-    )
-    parser.add_argument(
-        "--init-retry-seconds",
-        type=int,
-        default=30,
-        help="Minimum delay before retrying VM init for the same job.",
-    )
-    parser.add_argument(
-        "--init-timeout-seconds",
-        type=int,
-        default=1800,
-        help="Timeout for one remote VM init attempt.",
-    )
-    parser.add_argument(
-        "--init-heartbeat-url",
-        default="",
-        help="Heartbeat endpoint installed into autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-heartbeat-bearer-token-file",
-        default="",
-        help="Node-local token file used by the heartbeat service.",
-    )
-    parser.add_argument(
-        "--init-heartbeat-bearer-token-source-file",
-        type=Path,
-        help=(
-            "Gateway-local token file whose contents are installed on the node at "
-            "--init-heartbeat-bearer-token-file."
-        ),
-    )
-    parser.add_argument(
-        "--node-control-bearer-token-file",
-        type=Path,
-        help="Gateway-local node-control token used for drain requests.",
-    )
-    parser.add_argument(
-        "--init-node-control-bearer-token-file",
-        default="",
-        help="Node-local path where the node-control token is installed.",
-    )
-    parser.add_argument(
-        "--init-node-control-bearer-token-source-file",
-        type=Path,
-        help="Gateway-local source containing the node-control token to install.",
-    )
-    parser.add_argument(
-        "--init-service-user",
-        default="ucloud",
-        help="Linux user that owns autoscaled node services.",
-    )
-    parser.add_argument(
-        "--init-authorized-key",
-        action="append",
-        default=[],
-        help="SSH public key installed for the service user during autoscaled VM init.",
-    )
-    parser.add_argument(
-        "--init-authorized-key-file",
-        action="append",
-        default=[],
-        type=Path,
-        help="Read SSH public keys installed during autoscaled VM init.",
-    )
-    parser.add_argument(
-        "--init-work-dir",
-        default="/work/ucloud-sandboxes",
-        help="Persistent node work directory for autoscaled VM init.",
-    )
-    parser.add_argument(
-        "--init-package-spec",
-        default="ucloud-sandboxes",
-        help="pip package spec installed into autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-builder-package-spec",
-        default="",
-        help=(
-            "Builder-specific package or offline bundle. Defaults to "
-            "--init-package-spec when omitted."
-        ),
-    )
-    parser.add_argument(
-        "--init-node-agent-host",
-        default="0.0.0.0",
-        help="Bind address for autoscaled node agents.",
-    )
-    parser.add_argument(
-        "--init-node-agent-port",
-        type=int,
-        default=8090,
-        help="Node-agent port for autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-ssh-port-start",
-        type=int,
-        default=22000,
-        help="First host port for per-sandbox SSH on autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-ssh-port-end",
-        type=int,
-        default=22999,
-        help="Last host port for per-sandbox SSH on autoscaled VMs.",
-    )
-    parser.add_argument(
-        "--init-heartbeat-interval-seconds",
-        type=int,
-        default=20,
-        help="systemd timer interval for autoscaled node heartbeats.",
-    )
-    parser.add_argument(
-        "--init-docker-quota-image-gb",
-        type=int,
-        default=DEFAULT_DOCKER_QUOTA_IMAGE_GB,
-        help="Sparse XFS image size in GB for autoscaled VM Docker quotas.",
-    )
-    parser.add_argument(
-        "--init-builder-docker-quota-image-gb",
-        type=int,
-        default=DEFAULT_DOCKER_QUOTA_IMAGE_GB,
-        help="Sparse XFS image size in GB for autoscaled builder Docker quotas.",
-    )
-    parser.add_argument(
-        "--init-swap-gb",
-        type=int,
-        default=0,
-        help="Host swap file size in GB for autoscaled sandbox VMs.",
-    )
-    parser.add_argument(
-        "--init-docker-insecure-registry",
-        action="append",
-        default=[],
-        help=(
-            "Docker registry host[:port] trusted as HTTP/insecure on autoscaled "
-            "VMs. Repeat for multiple private registries."
-        ),
-    )
-    parser.add_argument(
-        "--init-host-alias",
-        action="append",
-        default=[],
-        metavar="HOST=ADDRESS",
-        help=(
-            "Add an /etc/hosts entry during autoscaled VM init. Use this for "
-            "stable private service names such as ucloud-sandbox-registry."
-        ),
-    )
-    parser.add_argument(
-        "--init-cpu-overcommit",
-        type=float,
-        default=None,
-        help="CPU overcommit multiplier advertised by autoscaled VM node agents.",
-    )
-    parser.add_argument(
-        "--init-memory-overcommit",
-        type=float,
-        default=None,
-        help="Memory overcommit multiplier advertised by autoscaled VM node agents.",
-    )
-    parser.add_argument(
-        "--init-disk-overcommit",
-        type=float,
-        default=None,
-        help="Disk overcommit multiplier advertised by autoscaled VM node agents.",
-    )
-    parser.add_argument(
-        "--init-direct-runsc-commit",
-        default="",
-        help="Exact patched gVisor commit required by direct-runtime node bundles.",
-    )
-    parser.add_argument(
-        "--init-storage-native-registry-url",
-        default="",
-        help="Private Registry origin used for durable storage-native snapshots.",
-    )
-    parser.add_argument(
-        "--init-storage-native-repository",
-        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
-        help="Registry repository used for durable storage-native snapshots.",
-    )
-    parser.add_argument(
-        "--init-storage-native-cache-gb",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
-        help="Maximum disposable block cache per storage-native node.",
-    )
-    parser.add_argument(
-        "--init-storage-native-pool-low-watermark",
-        type=int,
-        default=int(
-            os.environ.get(
-                "UCLOUD_INIT_STORAGE_NATIVE_POOL_LOW_WATERMARK",
-                str(DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK),
-            )
-        ),
-        help="Minimum idle warm ublk devices on autoscaled direct nodes.",
-    )
-    parser.add_argument(
-        "--init-storage-native-pool-high-watermark",
-        type=int,
-        default=int(
-            os.environ.get(
-                "UCLOUD_INIT_STORAGE_NATIVE_POOL_HIGH_WATERMARK",
-                str(DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK),
-            )
-        ),
-        help="Maximum idle warm ublk devices on autoscaled direct nodes.",
-    )
-    parser.add_argument(
-        "--init-direct-network",
-        choices=("none", "sandbox"),
-        default="none",
-        help="Node-wide gVisor network mode for autoscaled direct-runtime nodes.",
-    )
-    parser.add_argument(
-        "--init-direct-network-allow-tcp",
-        action="append",
-        default=(
-            [os.environ["UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP"]]
-            if os.environ.get("UCLOUD_INIT_DIRECT_NETWORK_ALLOW_TCP")
-            else []
-        ),
-        metavar="IPV4:PORT",
-        help=(
-            "Exact private TCP service made reachable from autoscaled direct "
-            "sandboxes. Repeat for multiple services."
-        ),
-    )
-    parser.add_argument(
-        "--init-direct-disk-headroom-mb",
-        type=int,
-        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
-        help="Physical XFS capacity withheld from direct sandbox admission.",
-    )
-    parser.add_argument(
-        "--init-direct-max-concurrent-restores",
-        type=int,
-        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-        help="Maximum simultaneous direct-runtime restores per node.",
-    )
-    parser.add_argument(
-        "--init-max-concurrent-image-pulls",
-        type=int,
-        default=int(
-            os.environ.get(
-                "UCLOUD_INIT_MAX_CONCURRENT_IMAGE_PULLS",
-                str(DEFAULT_MAX_CONCURRENT_IMAGE_PULLS),
-            )
-        ),
-        help="Maximum distinct cold Docker pulls per autoscaled node.",
-    )
-    parser.add_argument(
-        "--init-buildx-direct-push",
-        action="store_true",
-        help="Configure autoscaled builder VMs to push directly with Docker Buildx.",
-    )
-    parser.add_argument(
-        "--init-buildx-cache-ref",
-        default="",
-        help="Optional external registry cache reference for autoscaled builders.",
-    )
-    parser.add_argument(
-        "--init-ssh-private-key-file",
-        help="Private key file passed to ssh for autoscaled VM init.",
-    )
-
-
-def add_vm_init_args(
-    parser: argparse.ArgumentParser,
-    *,
-    include_job_id: bool,
-) -> None:
-    if include_job_id:
-        parser.add_argument("--job-id", required=True, help="UCloud VM job id.")
-    parser.add_argument(
-        "--heartbeat-url",
-        required=True,
-        help="Control-plane heartbeat URL, e.g. https://.../v1/nodes/heartbeat.",
-    )
-    parser.add_argument(
-        "--heartbeat-bearer-token-file",
-        default="",
-        help="Token file on the VM used to authenticate heartbeat posts.",
-    )
-    parser.add_argument(
-        "--heartbeat-bearer-token-source-file",
-        type=Path,
-        help=(
-            "Local token file whose contents are installed on the VM at "
-            "--heartbeat-bearer-token-file."
-        ),
-    )
-    parser.add_argument(
-        "--node-control-bearer-token-file",
-        default="",
-        help="Token file on the VM used to authenticate node-agent calls.",
-    )
-    parser.add_argument(
-        "--node-control-bearer-token-source-file",
-        type=Path,
-        help=(
-            "Local token file whose contents are installed on the VM at "
-            "--node-control-bearer-token-file."
-        ),
-    )
-    parser.add_argument(
-        "--service-user",
-        default="ucloud",
-        help="Linux user that owns the venv/state and runs node services.",
-    )
-    parser.add_argument(
-        "--init-authorized-key",
-        action="append",
-        default=[],
-        help="SSH public key installed for the service user during VM init. Repeatable.",
-    )
-    parser.add_argument(
-        "--init-authorized-key-file",
-        action="append",
-        default=[],
-        type=Path,
-        help="Read SSH public keys to install during VM init, one key per line.",
-    )
-    parser.add_argument(
-        "--node-id",
-        help="Stable node id. Defaults to ucloud-vm-<job-id>.",
-    )
-    parser.add_argument(
-        "--work-dir",
-        default="/work/ucloud-sandboxes",
-        help="VM work directory for node state and caches.",
-    )
-    parser.add_argument(
-        "--package-spec",
-        required=True,
-        help="Role-specific verified node bundle staged before bootstrap.",
-    )
-    parser.add_argument(
-        "--node-agent-host",
-        default="0.0.0.0",
-        help="Bind address for the VM-side node agent.",
-    )
-    parser.add_argument(
-        "--node-agent-port",
-        type=int,
-        default=8090,
-        help="Local node-agent HTTP port on the VM.",
-    )
-    parser.add_argument(
-        "--node-url",
-        help=(
-            "Node-agent URL advertised in heartbeats. Defaults to "
-            "http://<node-id>:<node-agent-port>."
-        ),
-    )
-    parser.add_argument(
-        "--ssh-port-start",
-        type=int,
-        default=22000,
-        help="First localhost port for per-sandbox SSH.",
-    )
-    parser.add_argument(
-        "--ssh-port-end",
-        type=int,
-        default=22999,
-        help="Last localhost port for per-sandbox SSH.",
-    )
-    parser.add_argument(
-        "--heartbeat-interval-seconds",
-        type=int,
-        default=20,
-        help="systemd timer interval for node heartbeats.",
-    )
-    parser.add_argument(
-        "--docker-quota-image-gb",
-        type=int,
-        default=DEFAULT_DOCKER_QUOTA_IMAGE_GB,
-        help=("Sparse XFS image size in GB for bounded Docker image storage."),
-    )
-    parser.add_argument(
-        "--swap-gb",
-        type=int,
-        default=0,
-        help="Host swap file size in GB. Use 0 to disable managed swap.",
-    )
-    parser.add_argument(
-        "--docker-insecure-registry",
-        action="append",
-        default=[],
-        help=(
-            "Docker registry host[:port] trusted as HTTP/insecure on this VM. "
-            "Repeat for multiple private registries."
-        ),
-    )
-    parser.add_argument(
-        "--host-alias",
-        action="append",
-        default=[],
-        metavar="HOST=ADDRESS",
-        help=(
-            "Add an /etc/hosts entry during VM init. Use this for stable "
-            "private service names such as ucloud-sandbox-registry."
-        ),
-    )
-    add_node_version_args(parser)
-    add_resource_args(parser)
-    parser.add_argument(
-        "--enable-image-builds",
-        action="store_true",
-        help=(
-            "Configure this VM as a builder-only node-agent. Production builds "
-            "should run on the control plane."
-        ),
-    )
-    parser.add_argument(
-        "--direct-runsc-commit",
-        default="",
-        help="Exact patched gVisor commit required by a direct-runtime bundle.",
-    )
-    parser.add_argument(
-        "--storage-native-registry-url",
-        default="",
-        help="Private Registry origin used for durable storage-native snapshots.",
-    )
-    parser.add_argument(
-        "--storage-native-repository",
-        default=DEFAULT_STORAGE_NATIVE_REPOSITORY,
-        help="Registry repository used for durable storage-native snapshots.",
-    )
-    parser.add_argument(
-        "--storage-native-cache-gb",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_CACHE_GB,
-        help="Maximum disposable block cache on this storage-native node.",
-    )
-    parser.add_argument(
-        "--storage-native-pool-low-watermark",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-        help="Minimum idle warm ublk devices on this direct node.",
-    )
-    parser.add_argument(
-        "--storage-native-pool-high-watermark",
-        type=int,
-        default=DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-        help="Maximum idle warm ublk devices on this direct node.",
-    )
-    parser.add_argument(
-        "--direct-network",
-        choices=("none", "sandbox"),
-        default="none",
-        help="Node-wide gVisor network mode for this initialized direct-runtime node.",
-    )
-    parser.add_argument(
-        "--direct-network-allow-tcp",
-        action="append",
-        default=[],
-        metavar="IPV4:PORT",
-        help=(
-            "Exact private TCP service made reachable from direct sandboxes. "
-            "Repeat for multiple services."
-        ),
-    )
-    parser.add_argument(
-        "--direct-disk-headroom-mb",
-        type=int,
-        default=DEFAULT_DIRECT_DISK_HEADROOM_MB,
-        help="Physical XFS capacity withheld from direct sandbox admission.",
-    )
-    parser.add_argument(
-        "--direct-max-concurrent-restores",
-        type=int,
-        default=DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-        help="Maximum simultaneous direct-runtime restores per node.",
-    )
-    parser.add_argument(
-        "--max-concurrent-image-pulls",
-        type=int,
-        default=DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-        help="Maximum distinct cold Docker pulls per initialized node.",
-    )
-    parser.add_argument(
-        "--buildx-direct-push",
-        action="store_true",
-        help="Configure this builder VM to push directly with Docker Buildx.",
-    )
-    parser.add_argument(
-        "--buildx-cache-ref",
-        default="",
-        help="Optional external registry cache reference for this builder VM.",
-    )
-    parser.add_argument(
-        "--label",
-        action="append",
-        default=[],
-        help="Node heartbeat label as key=value. Repeat for multiple labels.",
-    )
-
-
-def load_config(args: argparse.Namespace) -> AutoscalerConfig:
-    config = (
-        AutoscalerConfig.from_file(args.config)
-        if getattr(args, "config", None)
-        else AutoscalerConfig.default()
-    )
-    if getattr(args, "session_file", None):
-        config = replace(
-            config,
-            provider=config.provider.with_setting(
-                "session_file",
-                str(args.session_file),
-            ),
-        )
-    if getattr(args, "deployment_id", None):
-        config = replace(config, deployment_id=str(args.deployment_id))
-    if getattr(args, "state_dir", None):
-        config = config.with_state_dir(str(args.state_dir))
-    return config
 
 
 def cmd_sample_config(_args: argparse.Namespace) -> int:
-    print(json.dumps(AutoscalerConfig.default().to_dict(), indent=2, sort_keys=True))
+    print(json.dumps(DeploymentConfig.default().to_dict(), indent=2, sort_keys=True))
     return 0
 
 
 def cmd_inspect_job(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
+    config = load_config(args)
     if not ucloud_settings(config).project_id:
-        raise ValueError(
-            "project id is required via --project or provider.scope_id."
-        )
+        raise ValueError("provider.scope_id is required")
     client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
     payload = client.retrieve_job(ucloud_settings(config).project_id, args.job_id)
     job = instance_from_payload(payload)
@@ -2314,7 +851,6 @@ def cmd_inspect_job(args: argparse.Namespace) -> int:
 
 
 def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
-    config = load_config(args)
     labels = parse_labels(getattr(args, "label", []))
     if args.from_node_agent_url:
         node_control_token = read_required_token_file(
@@ -2338,22 +874,19 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
             draining=args.draining,
             node_url=args.node_url,
             agent_version=args.agent_version,
-            deployment_id=config.deployment_id,
+            deployment_id=args.deployment_id,
             init_version=args.init_version,
             capabilities=merge_capabilities(tuple(args.capability)),
             total_resources=resource_quantity_from_args(args),
             used_resources=ResourceQuantity(),
-            cpu_overcommit=args.cpu_overcommit,
-            memory_overcommit=args.memory_overcommit,
-            disk_overcommit=args.disk_overcommit,
             labels=labels,
         )
 
     result: dict[str, Any] = {"heartbeat": heartbeat_to_dict(heartbeat)}
-    if args.heartbeat_file:
-        store = HeartbeatStore(args.heartbeat_file)
-        store.upsert(heartbeat)
-        result["heartbeatFile"] = str(args.heartbeat_file)
+    if args.control_state_file:
+        store = ControlStateStore(args.control_state_file)
+        store.upsert_heartbeat(heartbeat)
+        result["controlStateFile"] = str(args.control_state_file)
     if args.post_url:
         if args.bearer_token_file:
             token = args.bearer_token_file.read_text(encoding="utf-8").strip()
@@ -2374,101 +907,54 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
             raise ValueError(f"heartbeat POST failed with HTTP {post_result.status}")
 
     if args.output == "json":
-        printable = dict(result)
-        for key in ("rawNodes", "rawDecision", "rawCreateIntents"):
-            printable.pop(key, None)
-        print_json(printable)
+        print_json(result)
     else:
         print(f"Heartbeat: node={heartbeat.node_id} job={heartbeat.job_id}")
         if heartbeat.node_url:
             print(f"Node URL: {heartbeat.node_url}")
         print(f"Active: {heartbeat.active_sandboxes}, draining: {heartbeat.draining}")
-        if args.heartbeat_file:
-            print(f"Wrote: {args.heartbeat_file}")
+        if args.control_state_file:
+            print(f"Wrote: {args.control_state_file}")
         if args.post_url:
             print(f"Posted: {args.post_url}")
-        if not args.heartbeat_file and not args.post_url:
+        if not args.control_state_file and not args.post_url:
             print_json(heartbeat_to_dict(heartbeat))
-    del config
     return 0
 
 
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     config = load_config(args)
-    heartbeat_file = args.heartbeat_file or config.heartbeat_file()
-    route_file = args.route_file or config.routing_file()
-    metrics_file = metrics_path_from_args(args, config, sibling_file=route_file)
-    gateway_bearer_token = read_required_token_file(
-        args.gateway_bearer_token_file,
-        "gateway bearer token",
-    )
-    heartbeat_bearer_token = read_required_token_file(
-        args.heartbeat_bearer_token_file,
-        "heartbeat bearer token",
-    )
-    node_control_bearer_token = read_required_token_file(
-        getattr(args, "node_control_bearer_token_file", None),
-        "node control bearer token",
-    )
-    registry_url = args.registry_url or os.environ.get("UCLOUD_REGISTRY_URL")
-    registry_worker_url = getattr(args, "registry_worker_url", None) or os.environ.get(
-        "UCLOUD_REGISTRY_WORKER_URL"
-    )
     server = build_server(
         args.host,
-        args.port,
-        heartbeat_file,
-        routing_file=route_file,
-        upstream_node_url=args.gateway_upstream_node_url,
-        gateway_bearer_token=gateway_bearer_token,
-        heartbeat_bearer_token=heartbeat_bearer_token,
-        node_control_bearer_token=node_control_bearer_token,
-        deployment_id=config.deployment_id,
-        heartbeat_ttl_seconds=(
-            args.heartbeat_ttl_seconds
-            if args.heartbeat_ttl_seconds is not None
-            else config.policy.heartbeat_ttl_seconds
+        config.gateway_port,
+        config.control_state_file(),
+        routing_file=config.routing_file(),
+        gateway_bearer_token=read_required_token_file(
+            config.gateway_token_file(), "gateway bearer token"
         ),
-        image_file=args.image_file or config.image_file(),
-        metrics_file=metrics_file,
-        registry_url=registry_url,
-        registry_worker_url=registry_worker_url,
-        registry_usage_file=args.registry_usage_file or config.registry_usage_file(),
-        max_concurrent_sandbox_creates=args.max_concurrent_sandbox_creates,
-        max_http_request_threads=args.max_http_request_threads,
-        max_sandbox_resources=config.policy.schedulable_node_resources,
+        heartbeat_bearer_token=read_required_token_file(
+            config.heartbeat_token_file(), "heartbeat bearer token"
+        ),
+        node_control_bearer_token=read_required_token_file(
+            config.node_control_token_file(), "node control bearer token"
+        ),
+        deployment_id=config.deployment_id,
+        heartbeat_ttl_seconds=config.gateway_heartbeat_ttl_seconds,
+        image_file=config.image_file(),
+        metrics_file=config.metrics_path(),
+        registry_url=config.registry_url,
+        registry_worker_url=config.registry_worker_url,
+        registry_usage_file=config.registry_usage_file(),
+        max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
+        max_http_request_threads=config.gateway_max_http_request_threads,
+        max_sandbox_resources=config.sandbox.resources,
     )
     host, port = server.server_address
-    print(f"Serving heartbeat receiver on http://{host}:{port}")
-    print(f"Heartbeat file: {heartbeat_file}")
-    print(f"Route file: {route_file}")
-    print(f"Metrics file: {metrics_file}")
-    if args.gateway_upstream_node_url:
-        print(f"Gateway upstream node: {args.gateway_upstream_node_url}")
-    print("Gateway auth: bearer token required")
-    print("Heartbeat auth: distinct bearer token required")
-    print("Node control auth: distinct bearer token required")
-    if registry_url:
-        print(f"Registry metrics: {registry_url}")
-    if registry_worker_url:
-        print(f"Worker registry transport: {registry_worker_url}")
-    print(
-        f"Registry usage file: {args.registry_usage_file or config.registry_usage_file()}"
-    )
-    print(
-        "Image builds: "
-        + (
-            "execute"
-            if args.enable_image_builds and args.execute_image_builds
-            else "dry-run"
-        )
-        if args.enable_image_builds
-        else "Image builds: disabled"
-    )
+    print(f"Serving gateway on http://{host}:{port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("Stopping heartbeat receiver.")
+        print("Stopping gateway.")
     finally:
         server.server_close()
     return 0
@@ -2477,7 +963,6 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
 def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
     from .node_agent import build_builder_node_agent_server
 
-    config = load_config(args)
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
@@ -2490,7 +975,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
         node_id=args.node_id or default_node_id(job_id),
         node_url=args.node_url,
         agent_version=args.agent_version,
-        deployment_id=config.deployment_id,
+        deployment_id=args.deployment_id,
         init_version=args.init_version,
         total_resources=resource_quantity_from_args(args),
         image_runtime=DockerImageRuntime(
@@ -2521,18 +1006,11 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     from .direct_runtime import build_direct_runtime_service
     from .node_agent import build_direct_node_agent_server
 
-    config = load_config(args)
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
-    if args.disk_overcommit != 1.0:
-        raise ValueError("direct runtime disk_overcommit must be exactly 1.0")
-    if args.cpu_overcommit != 1.0 or args.memory_overcommit != 1.0:
-        raise ValueError("direct runtime CPU and memory overcommit must be exactly 1.0")
-    state_root = args.state_root or (
-        Path(config.state_dir).expanduser() / "direct-runtime"
-    )
-    image_file = args.image_file or config.image_file()
+    state_root = args.state_root
+    image_file = args.image_file
     service = build_direct_runtime_service(
         state_root=state_root.absolute(),
         image_cache_root=(
@@ -2549,12 +1027,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         network=args.network,
         network_allow_tcp=tuple(args.direct_network_allow_tcp or ()),
         max_concurrent_restores=args.max_concurrent_restores,
-        idle_park_seconds=float(
-            os.environ.get(
-                "UCLOUD_DIRECT_IDLE_PARK_SECONDS",
-                str(args.idle_park_seconds),
-            )
-        ),
+        idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
     )
     server = build_direct_node_agent_server(
@@ -2566,11 +1039,9 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         node_id=args.node_id or default_node_id(job_id),
         node_url=args.node_url,
         agent_version=args.agent_version,
-        deployment_id=config.deployment_id,
+        deployment_id=args.deployment_id,
         init_version=args.init_version,
         total_resources=resource_quantity_from_args(args),
-        cpu_overcommit=args.cpu_overcommit,
-        memory_overcommit=args.memory_overcommit,
         image_runtime=DockerImageRuntime(
             docker_binary=args.docker_binary,
             dry_run=False,
@@ -2590,7 +1061,9 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     )
     print(f"Storage-native mount root: {args.volume_mount_root}")
     print(f"Storage-native service: {args.storage_native_socket}")
-    print(f"Runtime identity: {service.provisioner.identity.digest}")
+    print(
+        "Runtime compatibility: " f"{service.provisioner.runtime_compatibility_sha256}"
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -2604,35 +1077,17 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
 def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     from aiohttp import web
 
-    sandbox_bearer_token = read_required_token_file(
-        args.sandbox_bearer_token_file,
-        "sandbox bearer token",
+    config = load_config(args)
+    gateway_url = f"http://127.0.0.1:{config.gateway_port}"
+    gateway_token = read_required_token_file(
+        config.gateway_token_file(), "gateway bearer token"
     )
-    worker_bearer_token = read_required_token_file(
-        args.worker_bearer_token_file,
-        "worker bearer token",
-    )
-    gateway_bearer_token = read_required_token_file(
-        args.gateway_bearer_token_file,
-        "gateway bearer token",
-    )
-    gateway_url = str(args.gateway_url or "").strip().rstrip("/")
-    if bool(gateway_url) != bool(gateway_bearer_token):
-        raise ValueError(
-            "gateway-url and gateway-bearer-token-file must be configured together"
-        )
-    if gateway_url:
-        parsed_gateway = urlparse(gateway_url)
-        if parsed_gateway.scheme not in {"http", "https"} or not parsed_gateway.netloc:
-            raise ValueError("gateway URL is invalid")
-    if args.state_path is not None and not args.state_path.is_absolute():
-        raise ValueError("relay state path must be absolute")
 
     async def accepted_notifier(relay_request: RelayRequest) -> str | None:
         return await asyncio.to_thread(
             _post_gateway_sandbox_lifecycle,
             gateway_url,
-            gateway_bearer_token,
+            gateway_token,
             relay_request,
             action="park",
         )
@@ -2641,46 +1096,80 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         return await asyncio.to_thread(
             _post_gateway_sandbox_lifecycle,
             gateway_url,
-            gateway_bearer_token,
+            gateway_token,
             relay_request,
             action="wake",
         )
 
-    for name in (
-        "max_inflight_requests",
-        "max_inflight_requests_per_rollout",
-        "max_inflight_bytes",
-        "max_completed_bytes",
-    ):
-        if int(getattr(args, name)) < 1:
-            raise ValueError(f"{name.replace('_', '-')} must be positive")
     app = create_model_relay_app(
-        sandbox_bearer_token=sandbox_bearer_token,
-        worker_bearer_token=worker_bearer_token,
-        request_timeout_seconds=max(0.1, args.request_timeout_seconds),
-        worker_poll_timeout_seconds=max(0.0, args.worker_poll_timeout_seconds),
-        worker_lease_seconds=max(0.001, args.worker_lease_seconds),
-        completed_request_retention_seconds=max(
-            1.0,
-            args.completed_request_retention_seconds,
+        sandbox_bearer_token=read_required_token_file(
+            config.relay_sandbox_token_file(), "sandbox bearer token"
         ),
-        max_inflight_requests=args.max_inflight_requests,
-        max_inflight_requests_per_rollout=(args.max_inflight_requests_per_rollout),
-        max_inflight_bytes=args.max_inflight_bytes,
-        max_completed_bytes=args.max_completed_bytes,
-        state_path=args.state_path,
-        accepted_notifier=accepted_notifier if gateway_url else None,
-        result_notifier=result_notifier if gateway_url else None,
+        worker_bearer_token=read_required_token_file(
+            config.relay_worker_token_file(), "worker bearer token"
+        ),
+        request_timeout_seconds=config.relay_request_timeout_seconds,
+        worker_poll_timeout_seconds=30.0,
+        worker_lease_seconds=config.relay_worker_lease_seconds,
+        completed_request_retention_seconds=(
+            config.relay_completed_request_retention_seconds
+        ),
+        max_inflight_requests=DEFAULT_MAX_INFLIGHT_REQUESTS,
+        max_inflight_requests_per_rollout=(DEFAULT_MAX_INFLIGHT_REQUESTS_PER_ROLLOUT),
+        max_inflight_bytes=DEFAULT_MAX_INFLIGHT_BYTES,
+        max_completed_bytes=DEFAULT_MAX_COMPLETED_BYTES,
+        state_path=config.relay_state_file(),
+        accepted_notifier=accepted_notifier,
+        result_notifier=result_notifier,
     )
-    print(f"Serving model relay on http://{args.host}:{args.port}")
-    print(f"Sandbox auth: {'required' if sandbox_bearer_token else 'disabled'}")
-    print(f"Worker auth: {'required' if worker_bearer_token else 'disabled'}")
-    print(f"Request timeout: {max(0.1, args.request_timeout_seconds):g}s")
-    print(f"Worker lease: {max(0.001, args.worker_lease_seconds):g}s")
-    print(f"Durable state: {args.state_path or 'disabled'}")
-    print(f"Sandbox lifecycle notifications: {gateway_url or 'disabled'}")
-    web.run_app(app, host=args.host, port=args.port, print=None)
+    print(f"Serving model relay on http://{args.host}:{config.relay_port}")
+    web.run_app(app, host=args.host, port=config.relay_port, print=None)
     return 0
+
+
+class _RejectControlRedirects(HTTPRedirectHandler):
+    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
+        return None
+
+
+def _post_bounded_json(
+    base_url: str,
+    path: str,
+    payload: dict[str, Any],
+    *,
+    bearer_token: str | None,
+    invalid_url_error: str,
+    empty_token_error: str,
+    timeout_seconds: float,
+    response_name: str,
+) -> tuple[dict[str, Any], Any]:
+    base_url = str(base_url).strip().rstrip("/")
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(invalid_url_error)
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if bearer_token is not None:
+        bearer_token = bearer_token.strip()
+        if not bearer_token:
+            raise ValueError(empty_token_error)
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = Request(
+        f"{base_url}{path}",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with build_opener(_RejectControlRedirects()).open(
+        req,
+        timeout=timeout_seconds,
+    ) as response:
+        body = response.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+        if len(body) > _MAX_CONTROL_RESPONSE_BYTES:
+            raise ValueError(f"{response_name} response exceeds 1 MiB")
+        decoded = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(decoded, dict):
+            raise ValueError(f"{response_name} response must be a JSON object")
+        return decoded, response.headers
 
 
 def _post_gateway_sandbox_lifecycle(
@@ -2696,11 +1185,9 @@ def _post_gateway_sandbox_lifecycle(
         return
     if relay_request.sandbox_generation is None:
         raise ValueError("relay sandbox lifecycle binding has no generation")
-    url = (
-        f"{gateway_url}/v1/sandboxes/"
-        f"{quote(relay_request.sandbox_id, safe='')}/{action}"
-    )
-    payload = json.dumps(
+    _payload, headers = _post_bounded_json(
+        gateway_url,
+        f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
         {
             "generation": relay_request.sandbox_generation,
             "operation_id": f"relay-{action}:{relay_request.request_id}",
@@ -2708,50 +1195,35 @@ def _post_gateway_sandbox_lifecycle(
             "request_id": relay_request.request_id,
             "request_created_at": relay_request.created_at,
         },
-        separators=(",", ":"),
-    ).encode("utf-8")
-    headers = {"Accept": "application/json", "Content-Type": "application/json"}
-    if bearer_token:
-        headers["Authorization"] = f"Bearer {bearer_token}"
-    lifecycle_request = Request(
-        url,
-        data=payload,
-        headers=headers,
-        method="POST",
+        bearer_token=bearer_token,
+        invalid_url_error="gateway URL is invalid",
+        empty_token_error="gateway bearer token cannot be empty",
+        timeout_seconds=600.0,
+        response_name="gateway lifecycle",
     )
-
-    class RejectLifecycleRedirects(HTTPRedirectHandler):
-        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
-            return None
-
-    with build_opener(RejectLifecycleRedirects()).open(
-        lifecycle_request,
-        timeout=600.0,
-    ) as response:
-        response.read(1024 * 1024 + 1)
-        transport_epoch = response.headers.get(
-            "X-UCloud-Sandbox-Transport-Epoch",
-            "",
-        ).strip()
-        return transport_epoch or None
+    transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
+    return transport_epoch or None
 
 
 def cmd_init_vm(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
-    if not ucloud_settings(config).project_id:
-        raise ValueError(
-            "project id is required via --project or provider.scope_id."
-        )
-
-    client = UCloudClient(SessionStore(Path(ucloud_settings(config).session_file)))
+    config = load_config(args)
+    settings = ucloud_settings(config, args.session_file)
+    if not settings.project_id:
+        raise ValueError("provider.scope_id is required")
+    client = UCloudClient(SessionStore(Path(settings.session_file)))
     payload = client.retrieve_job(
-        ucloud_settings(config).project_id, args.job_id, include_updates=True
+        settings.project_id, args.job_id, include_updates=True
     )
     plan = bootstrap_access_from_payload(payload)
-    options = vm_init_options_from_args(args, args.job_id)
+    options = vm_init_options_for_job(
+        config,
+        plan.instance,
+        args.role,
+        package_spec=str(args.package_spec.expanduser().resolve()),
+    )
 
     result: dict[str, Any] = {
-        "projectId": ucloud_settings(config).project_id,
+        "projectId": settings.project_id,
         "job": vm_job_to_dict(plan.instance),
         "sshCommand": plan.command,
         "runnable": plan.runnable,
@@ -2806,14 +1278,12 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {ucloud_settings(config).project_id}")
+        print(f"Project: {settings.project_id}")
         print(f"Job: {plan.instance.id}")
         print(f"State: {plan.instance.state}")
         print(f"SSH enabled: {plan.instance.ssh_enabled}")
         print(f"SSH command: {plan.command or ''}")
         print(f"Deployment: {options.deployment_id}")
-        print(f"Agent version: {options.agent_version}")
-        print(f"Init version: {options.init_version}")
         print(f"Runnable: {plan.runnable}")
         print(f"Reason: {plan.reason}")
         print(f"Mode: {'execute' if args.execute else 'dry-run'}")
@@ -2881,7 +1351,7 @@ def cmd_vm_network_attachment(args: argparse.Namespace) -> int:
         raise ValueError(
             "private network id is required via --private-network-id or config."
         )
-    hostname_prefix = args.hostname_prefix or config.node_hostname_prefix
+    hostname_prefix = args.hostname_prefix or "sandbox-node"
     hostname = args.hostname
     if not hostname:
         seed = args.hostname_seed or private_network_id
@@ -2943,35 +1413,28 @@ def cmd_vm_public_link_attachment(args: argparse.Namespace) -> int:
 
 
 def cmd_registry_prune(args: argparse.Namespace) -> int:
-    if args.keep_per_repository < 0:
-        raise ValueError("keep-per-repository cannot be negative.")
-    if args.max_age_days is not None and args.max_age_days <= 0:
-        raise ValueError("max-age-days must be positive.")
-    client = RegistryClient(args.registry_url)
-    usage_store = RegistryUsageStore(args.usage_file) if args.usage_file else None
-    usage_snapshot = usage_store.snapshot() if usage_store is not None else None
-    usage_records = usage_snapshot.records if usage_snapshot is not None else None
+    config = load_config(args)
+    client = RegistryClient(config.registry_url)
+    usage_store = RegistryUsageStore(config.registry_usage_file())
+    usage_snapshot = usage_store.snapshot()
+    usage_records = usage_snapshot.records
     plan = registry_prune_plan(
         client,
-        keep_per_repository=args.keep_per_repository,
+        keep_per_repository=config.registry_keep_per_repository,
         repository_prefix=args.repository_prefix,
-        max_age_days=args.max_age_days,
+        max_age_days=config.registry_retention_days,
         usage_records=usage_records,
-        active_leases=(usage_snapshot.leases if usage_snapshot is not None else None),
-        usage_generation=(
-            usage_snapshot.generation if usage_snapshot is not None else None
-        ),
+        active_leases=usage_snapshot.leases,
+        usage_generation=usage_snapshot.generation,
     )
     plan["execute"] = bool(args.execute)
-    plan["usage_file"] = str(args.usage_file) if args.usage_file else ""
-    plan["image_file"] = str(args.image_file) if args.image_file else ""
+    plan["usage_file"] = str(config.registry_usage_file())
+    plan["image_file"] = str(config.image_file())
     if args.execute:
         deleted = []
         for attempt in range(3):
-            usage_snapshot = usage_store.snapshot() if usage_store is not None else None
-            usage_records = (
-                usage_snapshot.records if usage_snapshot is not None else None
-            )
+            usage_snapshot = usage_store.snapshot()
+            usage_records = usage_snapshot.records
             records = list_registry_tags(
                 client,
                 repository_prefix=args.repository_prefix,
@@ -2979,24 +1442,18 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
             records = apply_registry_usage(records, usage_records)
             candidates = select_prune_candidates(
                 records,
-                keep_per_repository=args.keep_per_repository,
-                max_age_days=args.max_age_days,
-                use_last_used_at=usage_records is not None,
-                active_leases=(
-                    usage_snapshot.leases if usage_snapshot is not None else None
-                ),
+                keep_per_repository=config.registry_keep_per_repository,
+                max_age_days=config.registry_retention_days,
+                use_last_used_at=True,
+                active_leases=usage_snapshot.leases,
             )
             try:
                 deleted = execute_registry_prune(
                     client,
                     candidates,
                     usage_store=usage_store,
-                    expected_usage_generation=(
-                        usage_snapshot.generation
-                        if usage_snapshot is not None
-                        else None
-                    ),
-                    all_records=records if usage_store is not None else None,
+                    expected_usage_generation=usage_snapshot.generation,
+                    all_records=records,
                 )
                 break
             except RegistryUsageGenerationChanged:
@@ -3004,24 +1461,21 @@ def cmd_registry_prune(args: argparse.Namespace) -> int:
                     raise
                 continue
         plan["deleted"] = [item.to_dict() for item in deleted]
-        if usage_snapshot is not None:
-            plan["usage_generation"] = usage_snapshot.generation
-            plan["active_lease_count"] = len(usage_snapshot.leases)
-        if args.image_file:
-            removed = _remove_image_records_for_registry_tags(
-                args.image_file,
-                {(record.repository, record.tag) for record in deleted},
+        plan["usage_generation"] = usage_snapshot.generation
+        plan["active_lease_count"] = len(usage_snapshot.leases)
+        removed = _remove_image_records_for_registry_tags(
+            config.image_file(),
+            {(record.repository, record.tag) for record in deleted},
+        )
+        removed.extend(
+            _remove_stale_private_build_image_records(
+                config.image_file(),
+                client,
             )
-            if args.prune_stale_image_records:
-                removed.extend(
-                    _remove_stale_private_build_image_records(
-                        args.image_file,
-                        client,
-                    )
-                )
-            plan["removed_image_records"] = [
-                item.to_dict() for item in _dedupe_image_records(removed)
-            ]
+        )
+        plan["removed_image_records"] = [
+            item.to_dict() for item in _dedupe_image_records(removed)
+        ]
     print_json(plan)
     return 0
 
@@ -3098,11 +1552,9 @@ def _dedupe_image_records(records: list[ImageRecord]) -> list[ImageRecord]:
 
 
 def cmd_submit_vm(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
+    config = load_config(args)
     if not ucloud_settings(config).project_id:
-        raise ValueError(
-            "project id is required via --project or provider.scope_id."
-        )
+        raise ValueError("provider.scope_id is required")
 
     options, seed = vm_submission_options_from_args(args, config)
     payload = options.bulk_payload()
@@ -3164,12 +1616,12 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
             )
             if job_ids:
                 if options.ssh_enabled:
+                    init_role = "builder" if args.role == "builder" else "sandbox"
                     print(
                         "Next: "
-                        f"ucloud-sandboxes init-vm {job_ids[0]} "
-                        f"--project {ucloud_settings(config).project_id} "
-                        f"--node-id {options.hostname} "
-                        "--heartbeat-url <control-plane-url>/v1/nodes/heartbeat"
+                        "ucloud-sandboxes init-vm "
+                        f"--config {args.config} {job_ids[0]} "
+                        f"--role {init_role} --package-spec <node-bundle>"
                     )
                 else:
                     print(
@@ -3183,11 +1635,9 @@ def cmd_submit_vm(args: argparse.Namespace) -> int:
 
 
 def cmd_open_vm_web(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
+    config = load_config(args)
     if not ucloud_settings(config).project_id:
-        raise ValueError(
-            "project id is required via --project or provider.scope_id."
-        )
+        raise ValueError("provider.scope_id is required")
     if args.port < 1 or args.port > 65535:
         raise ValueError("port must be in [1, 65535].")
     if args.rank < 0:
@@ -3215,29 +1665,19 @@ def cmd_open_vm_web(args: argparse.Namespace) -> int:
 
 
 def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
-    if not ucloud_settings(config).project_id:
-        raise ValueError(
-            "project id is required via --project or provider.scope_id."
-        )
-    if not config.deployment_id:
-        raise ValueError("deployment id is required via --deployment-id or config.")
-    private_network_id = (
-        args.private_network_id or ucloud_settings(config).private_network_id
-    )
-    if not private_network_id:
-        raise ValueError(
-            "private network id is required via --private-network-id or config."
-        )
+    config = load_config(args)
+    settings = ucloud_settings(config)
+    if not settings.project_id:
+        raise ValueError("provider.scope_id is required")
+    if not settings.private_network_id:
+        raise ValueError("provider.private_network_id is required")
 
     client: UCloudClient | None = None
 
     def get_client() -> UCloudClient:
         nonlocal client
         if client is None:
-            client = UCloudClient(
-                SessionStore(Path(ucloud_settings(config).session_file))
-            )
+            client = UCloudClient(SessionStore(Path(settings.session_file)))
         return client
 
     payload: dict[str, Any] | None = None
@@ -3246,7 +1686,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         nonlocal payload
         if payload is None:
             payload = get_client().retrieve_job(
-                ucloud_settings(config).project_id,
+                settings.project_id,
                 args.job_id,
                 include_updates=True,
             )
@@ -3259,68 +1699,15 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
             raise ValueError(init_plan.reason)
         ssh_command = init_plan.command
 
-    inferred_job: ProviderInstance | None = None
-    if not args.gateway_private_host:
-        inferred_job = instance_from_payload(get_payload())
-    gateway_private_host = args.gateway_private_host or (
-        inferred_job.hostname if inferred_job is not None else ""
-    )
-    registry_private_ip = args.registry_private_ip or ""
-
     plan = AllInOneDeployPlan(
         job_id=args.job_id,
-        project_id=ucloud_settings(config).project_id,
-        deployment_id=config.deployment_id,
+        config=config,
         local_wheel=args.wheel.expanduser().resolve(),
-        local_direct_runsc=(
-            args.direct_runsc.expanduser().resolve()
-            if args.direct_runsc is not None
-            else None
-        ),
-        direct_runsc_commit=args.direct_runsc_commit,
-        local_managed_init=(
-            args.managed_init.expanduser().resolve()
-            if args.managed_init is not None
-            else None
-        ),
+        local_direct_runsc=args.direct_runsc.expanduser().resolve(),
+        local_managed_init=args.managed_init.expanduser().resolve(),
         local_storage_native_manifest=(
             args.storage_native_manifest.expanduser().resolve()
-            if args.storage_native_manifest is not None
-            else None
         ),
-        storage_native_cache_gb=args.storage_native_cache_gb,
-        storage_native_pool_low_watermark=(args.storage_native_pool_low_watermark),
-        storage_native_pool_high_watermark=(args.storage_native_pool_high_watermark),
-        storage_native_repository=args.storage_native_repository,
-        direct_disk_headroom_mb=args.direct_disk_headroom_mb,
-        direct_max_concurrent_restores=args.direct_max_concurrent_restores,
-        max_concurrent_image_pulls=args.max_concurrent_image_pulls,
-        install_root=args.install_root,
-        project_mount_dir=args.project_mount_dir,
-        service_user=args.service_user,
-        gateway_port=args.gateway_port,
-        relay_port=args.relay_port,
-        registry_port=args.registry_port,
-        registry_retention_days=args.registry_retention_days,
-        registry_keep_per_repository=args.registry_keep_per_repository,
-        registry_alias=args.registry_alias,
-        registry_private_ip=registry_private_ip,
-        gateway_private_host=gateway_private_host,
-        private_network_id=private_network_id,
-        sandbox_product_id=args.sandbox_product_id,
-        sandbox_disk_gb=args.sandbox_disk_gb,
-        sandbox_idle_seconds=args.sandbox_idle_seconds,
-        builder_product_id=args.builder_product_id,
-        builder_disk_gb=args.builder_disk_gb,
-        builder_idle_seconds=args.builder_idle_seconds,
-        max_builder_nodes=args.max_builder_nodes,
-        autoscaler_interval_seconds=args.autoscaler_interval_seconds,
-        cpu_overcommit=args.cpu_overcommit,
-        memory_overcommit=args.memory_overcommit,
-        disk_overcommit=args.disk_overcommit,
-        docker_quota_image_gb=args.docker_quota_image_gb,
-        builder_docker_quota_image_gb=args.builder_docker_quota_image_gb,
-        swap_gb=args.swap_gb,
     )
     script = render_remote_deploy_script(plan)
 
@@ -3430,7 +1817,7 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
                     }
                 )
         if not args.no_copy_session:
-            local_session = Path(ucloud_settings(config).session_file).expanduser()
+            local_session = Path(settings.session_file).expanduser()
             staged_session = stage_file_over_ssh(
                 ssh_command,
                 local_session,
@@ -3493,9 +1880,9 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
         }
 
         if not args.no_open_public_links:
-            for port in (plan.gateway_port, plan.relay_port):
+            for port in (config.gateway_port, config.relay_port):
                 response = get_client().open_interactive_session(
-                    ucloud_settings(config).project_id,
+                    settings.project_id,
                     args.job_id,
                     session_type="WEB",
                     rank=0,
@@ -3506,14 +1893,14 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {ucloud_settings(config).project_id}")
+        print(f"Project: {settings.project_id}")
         print(f"Job: {args.job_id}")
         print(f"Deployment: {config.deployment_id}")
         print(f"Version: {plan.package_version}")
         print(f"Wheel: {plan.local_wheel}")
         print(f"Remote wheel: {plan.remote_wheel_path}")
-        print(f"Private gateway host: {plan.gateway_private_host}")
-        print(f"Registry alias: {plan.docker_host_alias}")
+        print(f"Private gateway host: {config.gateway_private_host}")
+        print(f"Worker registry: {config.registry_worker_url}")
         print(f"Mode: {'execute' if args.execute else 'dry-run'}")
         if args.execute:
             print(
@@ -3535,13 +1922,13 @@ def cmd_deploy_all_in_one(args: argparse.Namespace) -> int:
 
 def cmd_heartbeats(args: argparse.Namespace) -> int:
     config = load_config(args)
-    heartbeat_file = args.heartbeat_file or config.heartbeat_file()
-    heartbeats = load_heartbeats(heartbeat_file)
+    control_state_file = config.control_state_file()
+    heartbeats = ControlStateStore(control_state_file).load_heartbeats()
     nodes = [heartbeat_to_dict(heartbeats[job_id]) for job_id in sorted(heartbeats)]
     if args.output == "json":
-        print_json({"heartbeatFile": str(heartbeat_file), "nodes": nodes})
+        print_json({"controlStateFile": str(control_state_file), "nodes": nodes})
     else:
-        print(f"Heartbeat file: {heartbeat_file}")
+        print(f"Control state: {control_state_file}")
         if not nodes:
             print("No heartbeats found.")
         for node in nodes:
@@ -3559,46 +1946,6 @@ def cmd_heartbeats(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_plan(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
-    provider = compute_provider_from_args(args, config)
-    if not provider.scope_id:
-        raise ValueError("provider scope id is required via --project or config.")
-    jobs = load_instances_for_plan(config, provider, args)
-    heartbeat_file = args.heartbeats or config.heartbeat_file()
-    heartbeats = load_heartbeats(heartbeat_file)
-    nodes = merge_jobs_and_heartbeats(jobs, heartbeats, config.policy)
-    decision = evaluate_scale(
-        nodes,
-        sandbox_demand_from_args(args),
-        config.policy,
-    )
-
-    if args.output == "json":
-        print_json(
-            {
-                "provider": {
-                    "kind": provider.kind,
-                    "scopeId": provider.scope_id,
-                },
-                "jobNamePrefix": config.job_name_prefix,
-                "heartbeatFile": str(heartbeat_file),
-                "nodes": [node_to_dict(node) for node in nodes],
-                "decision": scale_decision_to_dict(decision),
-            }
-        )
-    else:
-        print_plan(
-            config,
-            nodes,
-            decision,
-            heartbeat_file,
-            provider_kind=provider.kind,
-            provider_scope_id=provider.scope_id,
-        )
-    return 0
-
-
 def reject_mutating_jobs_fixture(
     args: argparse.Namespace,
     *,
@@ -3606,77 +1953,25 @@ def reject_mutating_jobs_fixture(
 ) -> None:
     if execution_requested and getattr(args, "jobs_file", None) is not None:
         raise ValueError(
-            "--jobs-file is dry-run only and cannot be combined with "
-            "--execute, --execute-stops, or --execute-init"
+            "--jobs-file is dry-run only and cannot be combined with --execute"
         )
 
 
-def cmd_reconcile(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
+def cmd_autoscaler(args: argparse.Namespace) -> int:
+    config = load_config(args)
     provider = compute_provider_from_args(args, config)
     if not provider.scope_id:
-        raise ValueError("provider scope id is required via --project or config.")
-    execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
-    )
-    if execution_requested:
-        raise ValueError(
-            "reconcile is read-only; use autoscaler-loop --once for a single "
-            "mutating controller cycle"
-        )
-    result = run_reconcile_cycle(
-        config,
-        args,
-        provider=provider,
-        demand=sandbox_demand_from_args(args),
-        provider_mutations_allowed=False,
-    )
-
-    if args.output == "json":
-        printable = dict(result)
-        for key in (
-            "rawNodes",
-            "rawSandboxNodes",
-            "rawBuilderNodes",
-            "rawDecision",
-            "rawBuilderDecision",
-            "rawCreateIntents",
-            "rawSandboxCreateIntents",
-            "rawBuilderCreateIntents",
-            "rawBootstrapIntents",
-        ):
-            printable.pop(key, None)
-        print_json(printable)
-    else:
-        print_reconcile(
-            config,
-            result["rawSandboxNodes"],
-            result["rawDecision"],
-            Path(result["heartbeatFile"]),
-            result["rawCreateIntents"],
-            tuple(result["stopJobIds"]),
-            result,
-        )
-    return 0
-
-
-def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
-    config = load_config(args).with_provider_scope(args.project)
-    provider = compute_provider_from_args(args, config)
-    if not provider.scope_id:
-        raise ValueError("provider scope id is required via --project or config.")
-    route_file = args.route_file or config.routing_file()
-    metrics_file = metrics_path_from_args(args, config, sibling_file=route_file)
+        raise ValueError("provider.scope_id is required")
+    route_file = config.routing_file()
+    metrics_file = config.metrics_path()
     metrics_store = MetricsStore(metrics_file)
-    interval = max(1.0, float(args.interval_seconds))
+    interval = config.autoscaler_interval_seconds
     cycle = 0
     observed_vm_keys: dict[str, tuple[object, ...]] = {}
-    execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
-    )
+    execution_requested = bool(args.execute)
     reject_mutating_jobs_fixture(args, execution_requested=execution_requested)
     provider_state = (
-        AutoscalerStateStore(_autoscaler_state_path(config))
+        AutoscalerStateStore(config.autoscaler_state_file())
         if execution_requested
         else None
     )
@@ -3685,14 +1980,10 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
     )
     bootstrap_coordinator = (
         _VmBootstrapCoordinator(
-            max(1, int(getattr(args, "max_init_per_cycle", 1))),
+            max(1, config.autoscaler_max_init_per_cycle),
             metrics_store,
         )
-        if (
-            getattr(args, "execute_init", False)
-            and not args.once
-            and int(getattr(args, "max_init_per_cycle", 1)) > 0
-        )
+        if (args.execute and not args.once and config.autoscaler_max_init_per_cycle > 0)
         else None
     )
 
@@ -3728,10 +2019,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             route_reservations = sandbox_route_reservations(
                 routing_state.sandboxes.values()
             )
-            pending_image_builds = max(
-                int(getattr(args, "pending_image_builds", 0) or 0),
-                len(pending_image_build_snapshot),
-            )
+            pending_image_builds = len(pending_image_build_snapshot)
             prepared_builder_count = sum(
                 item.count for item in prepared_builder_snapshot
             )
@@ -3758,11 +2046,10 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             )
             removed_routes = []
             consumed_pending_demand = []
-            consumed_prepared_capacity = []
             consumed_pending_image_builds = []
             consumed_prepared_builders = []
             persisted_node_loss_demand = []
-            if controller_active or not execution_requested:
+            if controller_active:
                 destructive_job_ids = {
                     str(job_id)
                     for job_id in result.get("destructive_power_cycle_job_ids", [])
@@ -3782,7 +2069,7 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                     )
                 )
                 if args.execute:
-                    effective_policy = policy_with_cli_overrides(config.policy, args)
+                    effective_policy = config.policy
                     stale_route_grace_seconds = max(
                         effective_policy.heartbeat_ttl_seconds * 3,
                         effective_policy.heartbeat_ttl_seconds + 60,
@@ -3863,9 +2150,6 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
             result["consumedPendingDemand"] = [
                 item.to_dict() for item in consumed_pending_demand
             ]
-            result["consumedPreparedCapacity"] = [
-                item.to_dict() for item in consumed_prepared_capacity
-            ]
             result["consumedPendingImageBuilds"] = [
                 item.to_dict() for item in consumed_pending_image_builds
             ]
@@ -3888,8 +2172,6 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                     "rawDecision",
                     "rawBuilderDecision",
                     "rawCreateIntents",
-                    "rawSandboxCreateIntents",
-                    "rawBuilderCreateIntents",
                     "rawBootstrapIntents",
                 ):
                     printable.pop(key, None)
@@ -3902,10 +2184,9 @@ def cmd_autoscaler_loop(args: argparse.Namespace) -> int:
                     f"prepared_builders={prepared_builder_count}"
                 )
                 print_reconcile(
-                    config,
                     result["rawSandboxNodes"],
                     result["rawDecision"],
-                    Path(result["heartbeatFile"]),
+                    Path(result["controlStateFile"]),
                     result["rawCreateIntents"],
                     tuple(result["stopJobIds"]),
                     result,
@@ -3935,62 +2216,16 @@ def _post_node_drain(
     bearer_token: str | None = None,
     timeout_seconds: float = 10.0,
 ) -> dict[str, Any]:
-    parsed = urlparse(str(node_url).strip())
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("node heartbeat has an invalid node URL")
-    url = f"{str(node_url).rstrip('/')}/v1/drain"
-    if bearer_token is not None and not bearer_token.strip():
-        raise ValueError("node control bearer token cannot be empty")
-    request_headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-    if bearer_token is not None:
-        request_headers["Authorization"] = f"Bearer {bearer_token}"
-    request = Request(
-        url,
-        data=json.dumps({"token": token, "draining": draining}).encode("utf-8"),
-        headers=request_headers,
-        method="POST",
-    )
-
-    class RejectNodeRedirects(HTTPRedirectHandler):
-        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
-            return None
-
-    with build_opener(RejectNodeRedirects()).open(
-        request,
-        timeout=timeout_seconds,
-    ) as response:
-        body = response.read(1024 * 1024 + 1)
-        if len(body) > 1024 * 1024:
-            raise ValueError("node drain response exceeds 1 MiB")
-        if not body:
-            return {}
-        decoded = json.loads(body.decode("utf-8"))
-        if not isinstance(decoded, dict):
-            raise ValueError("node drain response must be a JSON object")
-        return decoded
-
-
-def _gateway_base_url(explicit_url: str, heartbeat_url: str) -> str:
-    explicit_url = str(explicit_url or "").strip().rstrip("/")
-    if explicit_url:
-        parsed = urlparse(explicit_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("gateway control URL is invalid")
-        return explicit_url
-    parsed = urlparse(str(heartbeat_url or "").strip())
-    suffix = "/v1/nodes/heartbeat"
-    path = parsed.path.rstrip("/")
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.netloc
-        or not path.endswith(suffix)
-    ):
-        return ""
-    prefix = path[: -len(suffix)].rstrip("/")
-    return f"{parsed.scheme}://{parsed.netloc}{prefix}"
+    return _post_bounded_json(
+        node_url,
+        "/v1/drain",
+        {"token": token, "draining": draining},
+        bearer_token=bearer_token,
+        invalid_url_error="node heartbeat has an invalid node URL",
+        empty_token_error="node control bearer token cannot be empty",
+        timeout_seconds=timeout_seconds,
+        response_name="node drain",
+    )[0]
 
 
 def _post_gateway_sandbox_migration(
@@ -4000,36 +2235,16 @@ def _post_gateway_sandbox_migration(
     bearer_token: str | None = None,
     timeout_seconds: float = 3600.0,
 ) -> dict[str, Any]:
-    parsed = urlparse(str(gateway_url).strip())
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("gateway control URL is invalid")
-    url = (
-        f"{str(gateway_url).rstrip('/')}/v1/sandboxes/"
-        f"{quote(sandbox_id, safe='')}/migration"
-    )
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if bearer_token is not None:
-        bearer_token = bearer_token.strip()
-        if not bearer_token:
-            raise ValueError("gateway control bearer token cannot be empty")
-        headers["Authorization"] = f"Bearer {bearer_token}"
-    request = Request(url, data=b"{}", headers=headers, method="POST")
-
-    class RejectGatewayRedirects(HTTPRedirectHandler):
-        def redirect_request(self, *_args: object, **_kwargs: object) -> None:
-            return None
-
-    with build_opener(RejectGatewayRedirects()).open(
-        request,
-        timeout=timeout_seconds,
-    ) as response:
-        body = response.read(1024 * 1024 + 1)
-        if len(body) > 1024 * 1024:
-            raise ValueError("gateway migration response exceeds 1 MiB")
-        decoded = json.loads(body.decode("utf-8")) if body else {}
-        if not isinstance(decoded, dict):
-            raise ValueError("gateway migration response must be a JSON object")
-        return decoded
+    return _post_bounded_json(
+        gateway_url,
+        f"/v1/sandboxes/{quote(sandbox_id, safe='')}/migration",
+        {},
+        bearer_token=bearer_token,
+        invalid_url_error="gateway control URL is invalid",
+        empty_token_error="gateway control bearer token cannot be empty",
+        timeout_seconds=timeout_seconds,
+        response_name="gateway migration",
+    )[0]
 
 
 def _drain_response_acknowledges(
@@ -4124,9 +2339,9 @@ def apply_prepared_provider_operations(
     source: str,
     allowed_kinds: set[str],
     allowed_stop_operation_ids: set[str] | None = None,
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    prepared_operations = provider_state.submittable_operations()
+) -> list[ProviderOperationOutcome]:
+    results: list[ProviderOperationOutcome] = []
+    prepared_operations = provider_state.list_operations(states={"prepared"})
     # Release a destructively power-cycled VM before submitting its replacement
     # so a provider-side VM/core quota does not reject otherwise valid recovery.
     # Python's stable sort retains journal order within both classes.
@@ -4183,39 +2398,25 @@ def apply_prepared_provider_operations(
                     error=outcome.error
                     or "provider response did not prove whether the operation applied",
                 )
-        results.append(_provider_operation_result(operation, source=source))
+        results.append(
+            ProviderOperationOutcome.from_operation(operation, source=source)
+        )
     return results
 
 
-def _provider_operation_result(
-    operation: ProviderOperation,
-    *,
-    source: str,
-) -> dict[str, Any]:
-    return {
-        "operationId": operation.operation_id,
-        "kind": operation.kind,
-        "role": operation.role,
-        "state": operation.state,
-        "jobIds": list(operation.target_job_ids),
-        "source": source,
-        "error": operation.last_error,
-    }
-
-
 def _successful_create_operation_count(
-    operation_results: list[dict[str, Any]],
+    operation_results: list[ProviderOperationOutcome],
     role: str,
 ) -> int:
     relevant = [
         item
         for item in operation_results
-        if item.get("kind") == "create" and item.get("role") in {"", role}
+        if item.kind == "create" and item.role == role
     ]
-    job_ids = [str(job_id) for item in relevant for job_id in item.get("jobIds", [])]
+    job_ids = [job_id for item in relevant for job_id in item.job_ids]
     if (
         not relevant
-        or not all(item.get("state") in {"accepted", "recovered"} for item in relevant)
+        or not all(item.state in {"accepted", "recovered"} for item in relevant)
         or len(job_ids) != len(relevant)
         or len(set(job_ids)) != len(job_ids)
     ):
@@ -4224,7 +2425,7 @@ def _successful_create_operation_count(
 
 
 def _sandbox_capacity_operation_succeeded(
-    operation_results: list[dict[str, Any]],
+    operation_results: list[ProviderOperationOutcome],
     resource_deficit: ResourceQuantity,
     default_node_resources: ResourceQuantity,
 ) -> bool:
@@ -4240,7 +2441,7 @@ def _sandbox_capacity_operation_succeeded(
 
 
 def _builder_capacity_operation_succeeded(
-    operation_results: list[dict[str, Any]],
+    operation_results: list[ProviderOperationOutcome],
     *,
     existing_builders: int,
     desired_builders: int,
@@ -4250,7 +2451,7 @@ def _builder_capacity_operation_succeeded(
 
 
 def run_reconcile_cycle(
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
     args: argparse.Namespace,
     *,
     provider: ComputeProvider | None = None,
@@ -4267,9 +2468,7 @@ def run_reconcile_cycle(
     bootstrap_coordinator: _VmBootstrapCoordinator | None = None,
     provider_fence: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
-    execution_requested = bool(
-        args.execute or args.execute_stops or getattr(args, "execute_init", False)
-    )
+    execution_requested = bool(args.execute)
     if (
         execution_requested
         and not provider_mutations_allowed
@@ -4293,48 +2492,14 @@ def run_reconcile_cycle(
     provider = provider or compute_provider_from_args(args, config)
     jobs = load_instances_for_plan(config, provider, args)
     operation_deployment_id = config.deployment_id or provider.scope_id
-    provider_operation_results: list[dict[str, Any]] = []
-    create_recovery_results: list[dict[str, Any]] = []
-    stop_recovery_results: list[dict[str, Any]] = []
+    provider_operation_results: list[ProviderOperationOutcome] = []
     create_visibility_guards: list[dict[str, Any]] = []
     blocked_create_roles: set[str] = set()
     if execution_authorized and provider_state is not None:
-        recoveries = provider_state.recover_uncertain_creates(jobs)
-        for recovery in recoveries:
-            operation = provider_state.get_operation(recovery.operation_id)
-            role = operation.role if operation is not None else ""
-            item = {
-                "operationId": recovery.operation_id,
-                "kind": "create",
-                "role": role,
-                "state": recovery.status,
-                "jobIds": list(recovery.job_ids),
-                "source": "inventory-recovery",
-                "error": "",
-            }
-            create_recovery_results.append(item)
-            provider_operation_results.append(item)
-        observed_job_ids = {job.id for job in jobs if job.id}
-        provider_state.confirm_visible_creates(observed_job_ids)
-        final_provider_job_ids = tuple(
-            job.id for job in jobs if job.id and job.is_final
+        provider_operation_results.extend(
+            provider_state.reconcile_provider_inventory(jobs)
         )
-        for recovery in provider_state.recover_uncertain_stops(
-            final_provider_job_ids,
-        ):
-            operation = provider_state.get_operation(recovery.operation_id)
-            item = {
-                "operationId": recovery.operation_id,
-                "kind": "stop",
-                "role": operation.role if operation is not None else "",
-                "state": recovery.status,
-                "jobIds": list(recovery.job_ids),
-                "source": "inventory-recovery",
-                "error": "",
-            }
-            stop_recovery_results.append(item)
-            provider_operation_results.append(item)
-        provider_state.confirm_final_stops(final_provider_job_ids)
+        observed_job_ids = {job.id for job in jobs if job.id}
         allowed_kinds: set[str] = set()
         if args.execute:
             allowed_kinds.add("create")
@@ -4350,16 +2515,14 @@ def run_reconcile_cycle(
         provider_operation_results.extend(replay_results)
         for operation in provider_state.list_operations(
             kind="create",
-            states=RECOVERABLE_CREATE_STATES,
+            states={"uncertain", "accepted"},
         ):
-            blocked_create_roles.add(operation.role or "sandbox")
-            if not operation.role:
-                blocked_create_roles.add("builder")
+            blocked_create_roles.add(operation.role)
         # A replayed create is absent from the inventory used for this plan.
         # Suppress another create for that role until the next exhaustive browse.
         for item in replay_results:
-            if item["kind"] == "create" and item["state"] == "accepted":
-                blocked_create_roles.add(str(item.get("role") or "sandbox"))
+            if item.kind == "create" and item.state == "accepted":
+                blocked_create_roles.add(item.role)
         for operation in provider_state.list_operations(
             kind="create",
             states={"accepted"},
@@ -4367,10 +2530,7 @@ def run_reconcile_cycle(
             missing_job_ids = sorted(set(operation.target_job_ids) - observed_job_ids)
             if not missing_job_ids:
                 continue
-            role = operation.role or "sandbox"
-            blocked_create_roles.add(role)
-            if not operation.role:
-                blocked_create_roles.add("builder")
+            blocked_create_roles.add(operation.role)
             create_visibility_guards.append(
                 {
                     "operationId": operation.operation_id,
@@ -4380,10 +2540,10 @@ def run_reconcile_cycle(
                 }
             )
 
-    heartbeat_file = args.heartbeats or config.heartbeat_file()
-    heartbeat_store = HeartbeatStore(Path(heartbeat_file))
-    heartbeats = load_heartbeats(heartbeat_file)
-    effective_policy = policy_with_cli_overrides(config.policy, args)
+    control_state_file = config.control_state_file()
+    control_state = ControlStateStore(control_state_file)
+    heartbeats = control_state.load_heartbeats()
+    effective_policy = config.policy
 
     # Provider inventory may omit update history. A powered-off instance may
     # therefore appear running again after its ephemeral guest is replaced.
@@ -4449,7 +2609,7 @@ def run_reconcile_cycle(
         )
     )
     if fenced_heartbeat_job_ids and execution_authorized:
-        heartbeat_store.remove(fenced_heartbeat_job_ids)
+        control_state.remove_heartbeats(fenced_heartbeat_job_ids)
         heartbeats = {
             job_id: heartbeat
             for job_id, heartbeat in heartbeats.items()
@@ -4471,7 +2631,7 @@ def run_reconcile_cycle(
         nodes,
         route_reservations or {},
     )
-    sandbox_nodes = sandbox_pool_nodes(nodes, config)
+    sandbox_nodes = sandbox_pool_nodes(nodes)
     builder_nodes = builder_pool_nodes(nodes)
     builder_pending = max(
         0,
@@ -4555,7 +2715,7 @@ def run_reconcile_cycle(
                 node_id=node.heartbeat.node_id,
                 job_id=node.job_id,
                 available=node.heartbeat.free_resources,
-                total=node.heartbeat.effective_resources,
+                total=node.heartbeat.total_resources,
                 pressure=node_pressure_score(node.heartbeat),
             )
             for node in sandbox_nodes
@@ -4574,10 +2734,10 @@ def run_reconcile_cycle(
         pending_builds=builder_pending,
         prepared_builders=builder_prepared,
         policy=effective_policy,
-        max_builder_nodes=getattr(args, "max_builder_nodes", 1),
+        max_builder_nodes=config.builder.max_nodes,
     )
     drain_workflow_enabled = bool(
-        args.execute_stops and execution_authorized and provider_state is not None
+        args.execute and execution_authorized and provider_state is not None
     )
     pending_drain_intents: list[DrainIntent] = []
     irreversible_stop_job_ids: set[str] = set()
@@ -4595,7 +2755,6 @@ def run_reconcile_cycle(
                 provider_state.retire_drain_intent(
                     deployment_id=intent.deployment_id,
                     job_id=intent.job_id,
-                    reason="job-final",
                 )
         pending_drain_intents = provider_state.pending_drain_intents(
             deployment_id=operation_deployment_id,
@@ -4648,31 +2807,27 @@ def run_reconcile_cycle(
                 pending_builds=builder_pending,
                 prepared_builders=builder_prepared,
                 policy=effective_policy,
-                max_builder_nodes=getattr(args, "max_builder_nodes", 1),
+                max_builder_nodes=config.builder.max_nodes,
             )
-    sandbox_create_intents: list[InstanceCreateIntent] = []
-    if decision.creates > 0:
-        sandbox_create_intents = build_sandbox_create_intents(
-            config,
-            decision,
-            node_create_defaults_from_args(args, config),
-            seed_prefix=args.seed_prefix,
-        )
-    builder_create_intents: list[InstanceCreateIntent] = []
-    if builder_decision.creates > 0:
-        builder_create_intents = build_builder_create_intents(
-            config,
-            builder_decision,
-            builder_create_defaults_from_args(args, config),
-            seed_prefix=args.seed_prefix,
-        )
+    sandbox_create_intents = build_create_intents(
+        config,
+        decision,
+        role="sandbox",
+        seed_prefix=args.seed_prefix,
+    )
+    builder_create_intents = build_create_intents(
+        config,
+        builder_decision,
+        role="builder",
+        seed_prefix=args.seed_prefix,
+    )
     if "sandbox" in blocked_create_roles:
         sandbox_create_intents = []
     if "builder" in blocked_create_roles:
         builder_create_intents = []
     create_intents = [*sandbox_create_intents, *builder_create_intents]
-    requested_sandbox_stop_job_ids = stop_job_ids_from_decision(decision)
-    requested_builder_stop_job_ids = stop_job_ids_from_decision(builder_decision)
+    requested_sandbox_stop_job_ids = decision.stops
+    requested_builder_stop_job_ids = builder_decision.stops
     (
         sandbox_stop_job_ids_with_migration_capacity,
         blocked_storage_native_migration_stop_job_ids,
@@ -4685,14 +2840,12 @@ def run_reconcile_cycle(
         sandbox_nodes,
         sandbox_stop_job_ids_with_migration_capacity,
         deployment_id=config.deployment_id,
-        allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=NODE_LABEL,
     )
     builder_stop_job_ids, blocked_builder_stop_job_ids = partition_safe_stop_job_ids(
         builder_nodes,
         requested_builder_stop_job_ids,
         deployment_id=config.deployment_id,
-        allow_unlabeled=args.allow_unlabeled_stops,
         ownership_label=BUILDER_LABEL,
     )
     requested_lost_sandbox_job_ids = tuple(
@@ -4710,7 +2863,6 @@ def run_reconcile_cycle(
             sandbox_nodes,
             requested_lost_sandbox_job_ids,
             deployment_id=config.deployment_id,
-            allow_unlabeled=args.allow_unlabeled_stops,
             ownership_label=NODE_LABEL,
         )
     )
@@ -4719,7 +2871,6 @@ def run_reconcile_cycle(
             builder_nodes,
             requested_lost_builder_job_ids,
             deployment_id=config.deployment_id,
-            allow_unlabeled=args.allow_unlabeled_stops,
             ownership_label=BUILDER_LABEL,
         )
     )
@@ -4796,23 +2947,16 @@ def run_reconcile_cycle(
     canceled_drain_job_ids: list[str] = []
     remaining_migration_budget = max(
         0,
-        int(getattr(args, "max_storage_native_migrations_per_cycle", 2)),
+        config.autoscaler_max_storage_native_migrations_per_cycle,
     )
-    migration_gateway_url = ""
+    migration_gateway_url = f"http://127.0.0.1:{config.gateway_port}"
     migration_gateway_error = ""
-    try:
-        migration_gateway_url = _gateway_base_url(
-            getattr(args, "gateway_control_url", ""),
-            getattr(args, "init_heartbeat_url", ""),
-        )
-    except ValueError as exc:
-        migration_gateway_error = str(exc)
     node_control_bearer_token = read_required_token_file(
-        getattr(args, "node_control_bearer_token_file", None),
+        config.node_control_token_file(),
         "node control bearer token",
     )
     gateway_control_bearer_token = read_required_token_file(
-        getattr(args, "gateway_control_bearer_token_file", None),
+        config.gateway_token_file(),
         "gateway control bearer token",
     )
     if drain_workflow_enabled:
@@ -4821,7 +2965,6 @@ def run_reconcile_cycle(
             provider_state.retire_drain_intent(
                 deployment_id=operation_deployment_id,
                 job_id=job_id,
-                reason="destructive-power-cycle",
             )
         pending_drain_intents = provider_state.pending_drain_intents(
             deployment_id=operation_deployment_id,
@@ -4964,7 +3107,6 @@ def run_reconcile_cycle(
                     provider_state.retire_drain_intent(
                         deployment_id=intent.deployment_id,
                         job_id=intent.job_id,
-                        reason="canceled",
                     )
                     canceled_drain_job_ids.append(intent.job_id)
             else:
@@ -4998,17 +3140,13 @@ def run_reconcile_cycle(
         intent.job_id for intent in pending_drain_intents if intent.state == "canceling"
     }
     pending_drain_job_ids = active_drain_job_ids | canceling_drain_job_ids
-    bootstrap_state_file = (
-        getattr(args, "init_state_file", None) or config.bootstrap_file()
-    )
-    bootstrap_store = VmBootstrapStore(Path(bootstrap_state_file))
     active_bootstrap_job_ids = {
         node.job_id
         for node in (*sandbox_nodes, *builder_nodes)
         if not node.job.is_final
     }
     bootstrap_records = prune_bootstrap_records(
-        bootstrap_store.load(),
+        control_state.load_bootstrap_records(),
         active_bootstrap_job_ids,
     )
     completed_bootstrap_results: list[dict[str, Any]] = []
@@ -5016,7 +3154,7 @@ def run_reconcile_cycle(
         bootstrap_records, completed_bootstrap_results = (
             bootstrap_coordinator.collect_completed(
                 bootstrap_records,
-                bootstrap_store,
+                control_state,
                 active_job_ids=active_bootstrap_job_ids,
             )
         )
@@ -5036,7 +3174,7 @@ def run_reconcile_cycle(
         return provider.bootstrap_access(refreshed)
 
     bootstrap_nodes = [*sandbox_nodes, *builder_nodes]
-    max_bootstraps = max(0, int(getattr(args, "max_init_per_cycle", 1)))
+    max_bootstraps = config.autoscaler_max_init_per_cycle
     if bootstrap_coordinator is not None:
         in_flight_job_ids = bootstrap_coordinator.in_flight_job_ids
         bootstrap_nodes = [
@@ -5049,7 +3187,7 @@ def run_reconcile_cycle(
     bootstrap_intents = build_vm_bootstrap_intents(
         bootstrap_nodes,
         bootstrap_records,
-        retry_seconds=max(0, int(getattr(args, "init_retry_seconds", 30))),
+        retry_seconds=config.autoscaler_init_retry_seconds,
         max_per_cycle=max_bootstraps,
         options_for_node=lambda node, role: vm_init_options_for_autoscaled_node(
             node,
@@ -5060,8 +3198,7 @@ def run_reconcile_cycle(
         access_for_instance=provider.bootstrap_access,
         refresh_access_for_instance=(
             refresh_access_for_instance
-            if getattr(args, "execute_init", False)
-            and not getattr(args, "jobs_file", None)
+            if args.execute and not getattr(args, "jobs_file", None)
             else None
         ),
         max_access_refreshes=max_bootstraps,
@@ -5076,9 +3213,9 @@ def run_reconcile_cycle(
                 intent,
             )
     if refreshed_access:
-        bootstrap_store.save(bootstrap_records)
+        control_state.save_bootstrap_records(bootstrap_records)
     bootstrap_intents = [
-        apply_bootstrap_cli_requirements(intent) for intent in bootstrap_intents
+        apply_bootstrap_requirements(intent) for intent in bootstrap_intents
     ]
     journaled_create_operations: list[ProviderOperation] = []
     journaled_stop_operations: list[ProviderOperation] = []
@@ -5118,7 +3255,7 @@ def run_reconcile_cycle(
             sandbox_create_intents = labeled_sandbox_intents
             builder_create_intents = labeled_builder_intents
             create_intents = [*sandbox_create_intents, *builder_create_intents]
-        if args.execute_stops:
+        if args.execute:
             stop_ids_to_journal = tuple(
                 dict.fromkeys(
                     [
@@ -5211,12 +3348,8 @@ def run_reconcile_cycle(
             "kind": provider.kind,
             "scopeId": provider.scope_id,
         },
-        "jobNamePrefix": config.job_name_prefix,
-        "heartbeatFile": str(heartbeat_file),
-        "bootstrapStateFile": str(bootstrap_state_file),
+        "controlStateFile": str(control_state_file),
         "nodes": [node_to_dict(node) for node in nodes],
-        "sandboxNodes": [node_to_dict(node) for node in sandbox_nodes],
-        "builderNodes": [node_to_dict(node) for node in builder_nodes],
         "decision": scale_decision_to_dict(decision),
         "effectivePolicy": dashboard_scale_policy_to_dict(effective_policy),
         "programWakePlan": program_wake_plan,
@@ -5231,13 +3364,6 @@ def run_reconcile_cycle(
         "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
-        "sandboxCreateIntents": [intent.to_dict() for intent in sandbox_create_intents],
-        "builderCreateIntents": [intent.to_dict() for intent in builder_create_intents],
-        "createPayload": (
-            provider.render_create_request(create_intents)
-            if create_intents
-            else {"type": "bulk", "items": []}
-        ),
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
@@ -5264,30 +3390,20 @@ def run_reconcile_cycle(
             vm_bootstrap_intent_to_dict(intent) for intent in bootstrap_intents
         ],
         "bootstrapResults": list(completed_bootstrap_results),
-        "executeCreates": bool(args.execute and execution_authorized),
-        "executeStops": bool(args.execute_stops and execution_authorized),
-        "executeInit": bool(
-            getattr(args, "execute_init", False) and execution_authorized
-        ),
-        "executionRequested": execution_requested,
+        "execute": bool(args.execute and execution_authorized),
         "controllerLockHeld": provider_mutations_allowed,
         "blockedCreateRoles": sorted(blocked_create_roles),
-        "createRecoveryResults": create_recovery_results,
-        "stopRecoveryResults": stop_recovery_results,
         "createVisibilityGuards": create_visibility_guards,
-        "providerOperationResults": provider_operation_results,
+        "providerOperationResults": [],
         "sandboxCapacityOperationSucceeded": False,
         "builderCapacityOperationSucceeded": False,
         "definitelyTerminatedJobIds": [],
-        "allowUnlabeledStops": args.allow_unlabeled_stops,
         "rawNodes": nodes,
         "rawSandboxNodes": sandbox_nodes,
         "rawBuilderNodes": builder_nodes,
         "rawDecision": decision,
         "rawBuilderDecision": builder_decision,
         "rawCreateIntents": create_intents,
-        "rawSandboxCreateIntents": sandbox_create_intents,
-        "rawBuilderCreateIntents": builder_create_intents,
         "rawBootstrapIntents": bootstrap_intents,
     }
 
@@ -5299,15 +3415,13 @@ def run_reconcile_cycle(
             or journaled_stop_operations
             or any(
                 operation.kind == "stop"
-                for operation in provider_state.submittable_operations()
+                for operation in provider_state.list_operations(states={"prepared"})
             )
         )
     ):
         planned_allowed_kinds: set[str] = set()
         if args.execute:
-            planned_allowed_kinds.add("create")
-        if args.execute_stops:
-            planned_allowed_kinds.add("stop")
+            planned_allowed_kinds.update(("create", "stop"))
         planned_results = apply_prepared_provider_operations(
             provider_state,
             provider,
@@ -5326,55 +3440,43 @@ def run_reconcile_cycle(
                 current is not None
                 and current.state == "accepted"
                 and not any(
-                    item.get("operationId") == current.operation_id
+                    item.operation_id == current.operation_id
                     for item in provider_operation_results
                 )
             ):
                 provider_operation_results.append(
-                    _provider_operation_result(current, source="journal")
+                    ProviderOperationOutcome.from_operation(
+                        current,
+                        source="journal",
+                    )
                 )
-        result["providerOperationResults"] = provider_operation_results
         result["createdJobIds"] = [
-            str(job_id)
+            job_id
             for item in planned_results
-            if item.get("kind") == "create" and item.get("state") == "accepted"
-            for job_id in item.get("jobIds", [])
+            if item.kind == "create" and item.state == "accepted"
+            for job_id in item.job_ids
         ]
-        result["createResponse"] = {
-            "operations": [
-                item for item in planned_results if item.get("kind") == "create"
-            ]
+    definitely_terminated = sorted(
+        {
+            job_id
+            for item in provider_operation_results
+            if item.kind == "stop" and item.state in {"accepted", "recovered"}
+            for job_id in item.job_ids
         }
-        result["stopResponse"] = {
-            "operations": [
-                item
-                for item in provider_operation_results
-                if item.get("kind") == "stop"
-            ]
-        }
-        definitely_terminated = sorted(
-            {
-                str(job_id)
-                for item in provider_operation_results
-                if item.get("kind") == "stop"
-                and (
-                    item.get("state") == "accepted" or item.get("state") == "recovered"
-                )
-                for job_id in item.get("jobIds", [])
-            }
+    )
+    result["definitelyTerminatedJobIds"] = definitely_terminated
+    if definitely_terminated:
+        result["removedStoppedHeartbeats"] = sorted(
+            control_state.remove_heartbeats(definitely_terminated)
         )
-        result["definitelyTerminatedJobIds"] = definitely_terminated
-        if definitely_terminated:
-            removed_stop_heartbeats = heartbeat_store.remove(definitely_terminated)
-            result["removedStoppedHeartbeats"] = sorted(removed_stop_heartbeats)
     result["sandboxCapacityOperationSucceeded"] = _sandbox_capacity_operation_succeeded(
         provider_operation_results,
         decision.resource_deficit,
-        effective_policy.schedulable_node_resources,
+        effective_policy.default_node_resources,
     )
     desired_builders = min(
         max(1 if builder_pending > 0 else 0, builder_prepared),
-        max(0, int(getattr(args, "max_builder_nodes", 1))),
+        config.builder.max_nodes,
     )
     result["builderCapacityOperationSucceeded"] = _builder_capacity_operation_succeeded(
         provider_operation_results,
@@ -5382,11 +3484,7 @@ def run_reconcile_cycle(
         desired_builders=desired_builders,
     )
 
-    if (
-        bootstrap_coordinator is not None
-        and getattr(args, "execute_init", False)
-        and execution_authorized
-    ):
+    if bootstrap_coordinator is not None and args.execute and execution_authorized:
         bootstrap_results = list(completed_bootstrap_results)
         for intent in bootstrap_intents:
             if not intent.runnable or not intent.access.command:
@@ -5402,19 +3500,15 @@ def run_reconcile_cycle(
                 continue
             bootstrap_records, scheduled = bootstrap_coordinator.submit(
                 intent,
-                args,
+                config,
                 bootstrap_records,
-                bootstrap_store,
+                control_state,
                 assert_provider_fence=assert_provider_fence,
             )
             bootstrap_results.append(scheduled)
         result["bootstrapResults"] = bootstrap_results
-        bootstrap_store.save(bootstrap_records)
-    elif (
-        getattr(args, "execute_init", False)
-        and execution_authorized
-        and bootstrap_intents
-    ):
+        control_state.save_bootstrap_records(bootstrap_records)
+    elif args.execute and execution_authorized and bootstrap_intents:
         ordered_bootstrap_results: list[dict[str, Any] | None] = [None] * len(
             bootstrap_intents
         )
@@ -5435,7 +3529,7 @@ def run_reconcile_cycle(
             attempt_started_at = utc_now()
             attempt_started_perf = time.perf_counter()
             bootstrap_records = mark_bootstrap_attempt(bootstrap_records, intent)
-            bootstrap_store.save(bootstrap_records)
+            control_state.save_bootstrap_records(bootstrap_records)
             attempt_record = bootstrap_records.get(intent.job_id)
             attempt_count = (
                 attempt_record.attempts
@@ -5455,7 +3549,7 @@ def run_reconcile_cycle(
         if runnable_bootstraps:
             max_workers = min(
                 len(runnable_bootstraps),
-                max(1, int(getattr(args, "max_init_per_cycle", 1))),
+                max(1, config.autoscaler_max_init_per_cycle),
             )
             futures: dict[
                 Future[_VmBootstrapAttemptResult],
@@ -5472,7 +3566,7 @@ def run_reconcile_cycle(
                         future = executor.submit(
                             _execute_vm_bootstrap_attempt,
                             intent,
-                            args,
+                            config,
                             attempt_count=attempt_count,
                             assert_provider_fence=assert_provider_fence,
                             attempt_started_perf=started_perf,
@@ -5515,7 +3609,7 @@ def run_reconcile_cycle(
                         )
                     # Only the controller thread mutates and persists the aggregate
                     # state, once for each independently completed remote attempt.
-                    bootstrap_store.save(bootstrap_records)
+                    control_state.save_bootstrap_records(bootstrap_records)
                     ordered_bootstrap_results[index] = attempt_result.result
                     record_vm_init_attempt_result(
                         metrics_store,
@@ -5543,7 +3637,7 @@ def run_reconcile_cycle(
                     intent,
                     error,
                 )
-                bootstrap_store.save(bootstrap_records)
+                control_state.save_bootstrap_records(bootstrap_records)
                 item = {
                     "jobId": intent.job_id,
                     "nodeId": intent.node_id,
@@ -5555,39 +3649,16 @@ def run_reconcile_cycle(
                 }
             bootstrap_results.append(item)
         result["bootstrapResults"] = bootstrap_results
-    elif getattr(args, "execute_init", False) and execution_authorized:
-        bootstrap_store.save(bootstrap_records)
+    elif args.execute and execution_authorized:
+        control_state.save_bootstrap_records(bootstrap_records)
     if execution_authorized and provider_state is not None:
         result["compactedProviderOperations"] = provider_state.compact_terminal_history(
             keep=1000
         )
+    result["providerOperationResults"] = [
+        item.to_dict() for item in provider_operation_results
+    ]
     return result
-
-
-def metrics_path_from_args(
-    args: argparse.Namespace,
-    config: AutoscalerConfig,
-    *,
-    sibling_file: Path | None = None,
-) -> Path:
-    explicit = getattr(args, "metrics_file", None)
-    if explicit:
-        return Path(explicit)
-    if config.metrics_file:
-        return config.metrics_path()
-    if sibling_file is not None:
-        return Path(sibling_file).expanduser().parent / "metrics.sqlite"
-    return config.metrics_path()
-
-
-def _autoscaler_state_path(config: AutoscalerConfig) -> Path:
-    """Return the deployment-wide local controller journal location.
-
-    This must not follow an optional route-file override: all local mutating
-    controller processes must contend on the same process lock.
-    """
-
-    return Path(config.state_dir).expanduser() / "autoscaler-state.sqlite"
 
 
 def record_submitted_vm_metrics(
@@ -5683,9 +3754,9 @@ class _VmBootstrapCoordinator:
     def submit(
         self,
         intent: VmBootstrapIntent,
-        args: argparse.Namespace,
+        config: DeploymentConfig,
         records: dict[str, VmBootstrapRecord],
-        store: VmBootstrapStore,
+        store: ControlStateStore,
         *,
         assert_provider_fence: Callable[[], None],
     ) -> tuple[dict[str, VmBootstrapRecord], dict[str, Any]]:
@@ -5699,7 +3770,7 @@ class _VmBootstrapCoordinator:
         started_at = utc_now()
         started_perf = time.perf_counter()
         records = mark_bootstrap_attempt(records, intent, now=started_at)
-        store.save(records)
+        store.save_bootstrap_records(records)
         record = records.get(intent.job_id)
         attempt_count = (
             record.attempts if record is not None else intent.previous_attempts + 1
@@ -5708,7 +3779,7 @@ class _VmBootstrapCoordinator:
             future = self._executor.submit(
                 _execute_vm_bootstrap_attempt,
                 intent,
-                args,
+                config,
                 attempt_count=attempt_count,
                 assert_provider_fence=assert_provider_fence,
                 attempt_started_perf=started_perf,
@@ -5737,7 +3808,7 @@ class _VmBootstrapCoordinator:
     def collect_completed(
         self,
         records: dict[str, VmBootstrapRecord],
-        store: VmBootstrapStore,
+        store: ControlStateStore,
         *,
         active_job_ids: set[str],
     ) -> tuple[dict[str, VmBootstrapRecord], list[dict[str, Any]]]:
@@ -5774,7 +3845,7 @@ class _VmBootstrapCoordinator:
                             if self._next_retry_deadline is None
                             else min(self._next_retry_deadline, retry_deadline)
                         )
-                store.save(records)
+                store.save_bootstrap_records(records)
             duration_ms = _bootstrap_result_duration_ms(attempt_result)
             record_vm_init_attempt_result(
                 self.metrics_store,
@@ -5823,7 +3894,7 @@ class _VmBootstrapCoordinator:
 
 def _execute_vm_bootstrap_attempt(
     intent: VmBootstrapIntent,
-    args: argparse.Namespace,
+    config: DeploymentConfig,
     *,
     attempt_count: int,
     assert_provider_fence: Callable[[], None],
@@ -5835,13 +3906,13 @@ def _execute_vm_bootstrap_attempt(
     try:
         assert_provider_fence()
         effective_options = intent.options
-        known_hosts_file = _bootstrap_known_hosts_file(intent, args)
+        known_hosts_file = _bootstrap_known_hosts_file(intent, config)
         stage_started_perf = time.perf_counter()
         stage_result = stage_vm_init_package_over_ssh(
             intent.access.command,
             intent.options,
-            timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
-            private_key_file=getattr(args, "init_ssh_private_key_file", None),
+            timeout_seconds=config.autoscaler_init_timeout_seconds,
+            private_key_file=str(config.init_ssh_private_key_file()),
             known_hosts_file=known_hosts_file,
         )
         stage_elapsed_ms = int((time.perf_counter() - stage_started_perf) * 1000)
@@ -5859,7 +3930,7 @@ def _execute_vm_bootstrap_attempt(
             retry_delay_seconds = _bootstrap_retry_delay_seconds(
                 stage_result.returncode,
                 attempt_count=attempt_count,
-                configured_retry_seconds=int(getattr(args, "init_retry_seconds", 30)),
+                configured_retry_seconds=config.autoscaler_init_retry_seconds,
             )
             return _VmBootstrapAttemptResult(
                 result={
@@ -5890,8 +3961,8 @@ def _execute_vm_bootstrap_attempt(
         run_result = run_init_over_ssh(
             intent.access.command,
             render_vm_init_script(effective_options),
-            timeout_seconds=max(1, int(getattr(args, "init_timeout_seconds", 1800))),
-            private_key_file=getattr(args, "init_ssh_private_key_file", None),
+            timeout_seconds=config.autoscaler_init_timeout_seconds,
+            private_key_file=str(config.init_ssh_private_key_file()),
             known_hosts_file=known_hosts_file,
         )
         run_duration_ms = int((time.perf_counter() - run_started_perf) * 1000)
@@ -5923,7 +3994,7 @@ def _execute_vm_bootstrap_attempt(
         retry_delay_seconds = _bootstrap_retry_delay_seconds(
             run_result.returncode,
             attempt_count=attempt_count,
-            configured_retry_seconds=int(getattr(args, "init_retry_seconds", 30)),
+            configured_retry_seconds=config.autoscaler_init_retry_seconds,
         )
         return _VmBootstrapAttemptResult(
             result={
@@ -5961,16 +4032,9 @@ def _execute_vm_bootstrap_attempt(
 
 def _bootstrap_known_hosts_file(
     intent: VmBootstrapIntent,
-    args: argparse.Namespace,
+    config: DeploymentConfig,
 ) -> str | None:
-    private_key_file = str(getattr(args, "init_ssh_private_key_file", "") or "").strip()
-    state_file = str(getattr(args, "init_state_file", "") or "").strip()
-    if state_file:
-        directory = Path(state_file).expanduser().parent / "ssh-known-hosts"
-    elif private_key_file:
-        directory = Path(private_key_file).expanduser().parent / "known_hosts"
-    else:
-        return None
+    directory = config.control_state_file().parent / "ssh-known-hosts"
     safe_job_id = "".join(
         character if character.isalnum() or character in {"-", "_"} else "_"
         for character in intent.job_id
@@ -6079,7 +4143,7 @@ def _bootstrap_result_duration_ms(result: _VmBootstrapAttemptResult) -> int:
 
 
 def load_instances_for_plan(
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
     provider: ComputeProvider,
     args: argparse.Namespace,
 ) -> list[ProviderInstance]:
@@ -6106,145 +4170,9 @@ def load_instances_for_plan(
             config,
             provider,
             include_ids,
-            args.all_vm_jobs,
         ):
             jobs.append(job)
     return jobs
-
-
-def policy_with_cli_overrides(
-    policy: ScalePolicy,
-    args: argparse.Namespace,
-) -> ScalePolicy:
-    effective = policy
-    scale_down_seconds = getattr(args, "scale_down_idle_seconds", None)
-    if scale_down_seconds is not None:
-        effective = replace(
-            effective,
-            scale_down_idle_seconds=max(0, int(scale_down_seconds)),
-        )
-    capacity_factors = {
-        "cpu_overcommit": 1.0,
-        "memory_overcommit": 1.0,
-        "disk_overcommit": 1.0,
-    }
-    effective = replace(effective, dynamic_active_admission_enabled=True)
-    factor_updates: dict[str, float] = {}
-    for field_name, raw_value in capacity_factors.items():
-        if raw_value is None:
-            continue
-        factor_updates[field_name] = _node_capacity_factor(raw_value, 1.0)
-    if factor_updates:
-        effective = replace(effective, **factor_updates)
-    live_updates: dict[str, Any] = {}
-    for field_name in (
-        "live_pressure_enabled",
-        "live_pressure_window_seconds",
-        "live_pressure_min_samples",
-        "live_pressure_fresh_seconds",
-        "create_pressure_enabled",
-        "create_pressure_window_seconds",
-        "create_pressure_min_samples",
-        "create_pressure_fresh_seconds",
-        "create_target_concurrency_per_node",
-        "create_pressure_max_headroom_nodes",
-        "target_cpu_utilization",
-        "target_memory_utilization",
-        "max_memory_psi_full_avg10",
-        "target_storage_queue_utilization",
-        "pressure_scale_down_cooldown_seconds",
-        "provisioning_latency_lookback_seconds",
-        "provisioning_scale_down_multiplier",
-        "program_aware_autoscaling_enabled",
-        "model_wait_capacity_weight",
-        "model_wait_max_headroom_nodes",
-    ):
-        raw_value = getattr(args, field_name, None)
-        if raw_value is not None:
-            live_updates[field_name] = raw_value
-    if live_updates:
-        _validate_live_policy_overrides(live_updates)
-        effective = replace(effective, **live_updates)
-    builder_idle_seconds = getattr(args, "builder_scale_down_idle_seconds", None)
-    if builder_idle_seconds is None:
-        return effective
-    return replace(
-        effective,
-        builder_scale_down_idle_seconds=max(0, int(builder_idle_seconds)),
-    )
-
-
-def _node_capacity_factor(raw_value: object, default: float) -> float:
-    value = float(default if raw_value is None else raw_value)
-    if not math.isfinite(value) or value <= 0:
-        raise ValueError("node capacity factors must be positive finite numbers")
-    return value
-
-
-def _parse_cli_bool(raw: str) -> bool:
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true or false")
-
-
-def _validate_live_policy_overrides(values: dict[str, Any]) -> None:
-    for field_name in (
-        "live_pressure_window_seconds",
-        "live_pressure_min_samples",
-        "live_pressure_fresh_seconds",
-        "create_pressure_window_seconds",
-        "create_pressure_min_samples",
-        "create_pressure_fresh_seconds",
-        "create_target_concurrency_per_node",
-    ):
-        if field_name in values and int(values[field_name]) < 1:
-            raise ValueError(f"{field_name} must be positive")
-    if (
-        "provisioning_latency_lookback_seconds" in values
-        and int(values["provisioning_latency_lookback_seconds"]) < 60
-    ):
-        raise ValueError("provisioning_latency_lookback_seconds must be at least 60")
-    if (
-        "create_pressure_max_headroom_nodes" in values
-        and int(values["create_pressure_max_headroom_nodes"]) < 0
-    ):
-        raise ValueError("create_pressure_max_headroom_nodes cannot be negative")
-    if (
-        "pressure_scale_down_cooldown_seconds" in values
-        and int(values["pressure_scale_down_cooldown_seconds"]) < 0
-    ):
-        raise ValueError("pressure_scale_down_cooldown_seconds cannot be negative")
-    for field_name in (
-        "target_cpu_utilization",
-        "target_memory_utilization",
-        "target_storage_queue_utilization",
-    ):
-        if field_name not in values:
-            continue
-        value = float(values[field_name])
-        if not math.isfinite(value) or not 0 < value <= 1:
-            raise ValueError(f"{field_name} must be in (0, 1]")
-    for field_name in (
-        "max_memory_psi_full_avg10",
-        "provisioning_scale_down_multiplier",
-    ):
-        if field_name not in values:
-            continue
-        value = float(values[field_name])
-        if not math.isfinite(value) or value < 0:
-            raise ValueError(f"{field_name} must be finite and non-negative")
-    if "model_wait_capacity_weight" in values:
-        weight = float(values["model_wait_capacity_weight"])
-        if not math.isfinite(weight) or not 0 <= weight <= 1:
-            raise ValueError("model_wait_capacity_weight must be in [0, 1]")
-    if (
-        "model_wait_max_headroom_nodes" in values
-        and int(values["model_wait_max_headroom_nodes"]) < 0
-    ):
-        raise ValueError("model_wait_max_headroom_nodes cannot be negative")
 
 
 def sandbox_route_reservations(
@@ -6358,12 +4286,9 @@ def apply_route_reservations_to_heartbeats(
             if not _heartbeat_inventory_contains_route(inventory, route)
         ]
         missing_resources = ResourceQuantity()
-        dynamic_active = DYNAMIC_ACTIVE_ADMISSION_CAPABILITY in heartbeat.capabilities
         for route in missing_routes:
-            missing_resources = missing_resources + (
-                ResourceQuantity(disk_mb=route.resources.disk_mb)
-                if dynamic_active
-                else route.resources
+            missing_resources = missing_resources + ResourceQuantity(
+                disk_mb=route.resources.disk_mb
             )
         used = heartbeat.used_resources + missing_resources
         active_sandboxes = heartbeat.active_sandboxes + len(missing_routes)
@@ -6448,7 +4373,7 @@ def build_activity_sandbox_warm_resources(
     # probe to keep one node warm. Reserving the entire schedulable node shape
     # (especially all hard disk) demanded a pristine empty node and created a
     # second VM as soon as the first node stored even one image or sandbox.
-    capacity = policy.schedulable_node_resources
+    capacity = policy.default_node_resources
     return ResourceQuantity(
         vcpu=min(1.0, capacity.vcpu),
         memory_mb=min(512, capacity.memory_mb),
@@ -6513,281 +4438,69 @@ def demand_with_lost_sandbox_replacement(
 
 def should_include_job(
     job: ProviderInstance,
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
     provider: ComputeProvider,
     include_ids: set[str],
-    all_vm_jobs: bool,
 ) -> bool:
     if job.id in include_ids:
         return True
     if (
-        config.deployment_id
-        and job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
+        not config.deployment_id
+        or job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
     ):
         return False
     if not provider.instance_is_eligible(job):
         return False
-    if all_vm_jobs and job.is_vm:
-        return True
-    if job.labels.get(NODE_LABEL) == "true" or job.labels.get(BUILDER_LABEL) == "true":
-        return True
-    if job.name.startswith("ucloud-sandbox-builder"):
-        return True
-    return bool(config.job_name_prefix and job.name.startswith(config.job_name_prefix))
+    return (
+        job.labels.get(NODE_LABEL) == "true" or job.labels.get(BUILDER_LABEL) == "true"
+    )
 
 
-def sandbox_pool_nodes(nodes: list[Any], config: AutoscalerConfig) -> list[Any]:
-    return [
-        node
-        for node in nodes
-        if node.job.labels.get(NODE_LABEL) == "true"
-        or (
-            config.job_name_prefix
-            and node.job.name.startswith(config.job_name_prefix)
-            and node.job.labels.get(BUILDER_LABEL) != "true"
-            and node.job.labels.get(GATEWAY_LABEL) != "true"
-        )
-    ]
+def sandbox_pool_nodes(nodes: list[Any]) -> list[Any]:
+    return [node for node in nodes if node.job.labels.get(NODE_LABEL) == "true"]
 
 
 def builder_pool_nodes(nodes: list[Any]) -> list[Any]:
-    return [
-        node
-        for node in nodes
-        if node.job.labels.get(BUILDER_LABEL) == "true"
-        or node.job.name.startswith("ucloud-sandbox-builder")
-    ]
+    return [node for node in nodes if node.job.labels.get(BUILDER_LABEL) == "true"]
 
 
 def vm_init_options_for_autoscaled_node(
     node: SandboxNode,
     role: str,
     args: argparse.Namespace,
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
 ) -> VmInitOptions:
-    node_agent_port = int(getattr(args, "init_node_agent_port", 8090))
-    node_id = node.job.hostname or (node.heartbeat.node_id if node.heartbeat else "")
-    if not node_id:
-        node_id = f"ucloud-vm-{node.job.id}"
+    del args
     labels = dict(node.job.labels)
     if role == "builder":
         labels.pop(NODE_LABEL, None)
         labels.setdefault(BUILDER_LABEL, "true")
+        package_spec = str(config.builder_node_package_bundle())
     else:
         labels.setdefault(NODE_LABEL, "true")
-    if config.deployment_id:
-        labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
-    token_file = str(getattr(args, "init_heartbeat_bearer_token_file", "") or "")
-    docker_quota_image_gb = max(
-        0,
-        int(
-            getattr(
-                args,
-                (
-                    "init_builder_docker_quota_image_gb"
-                    if role == "builder"
-                    else "init_docker_quota_image_gb"
-                ),
-                200,
-            )
-        ),
-    )
-    swap_gb = 0 if role == "builder" else max(0, int(getattr(args, "init_swap_gb", 0)))
-    total_resources = resources_from_vm_job(
-        node.job, config.policy.default_node_resources
-    )
-    if docker_quota_image_gb > 0 and total_resources.disk_mb > 0 and role == "builder":
-        total_resources = replace(
-            total_resources,
-            disk_mb=min(total_resources.disk_mb, docker_quota_image_gb * 1024),
-        )
-    cpu_overcommit = _node_capacity_factor(
-        getattr(args, "init_cpu_overcommit", None),
-        config.policy.cpu_overcommit,
-    )
-    memory_overcommit = _node_capacity_factor(
-        getattr(args, "init_memory_overcommit", None),
-        config.policy.memory_overcommit,
-    )
-    disk_overcommit = _node_capacity_factor(
-        getattr(args, "init_disk_overcommit", None),
-        config.policy.disk_overcommit,
-    )
-    cpu_overcommit = 1.0
-    memory_overcommit = 1.0
-    disk_overcommit = 1.0
-    return VmInitOptions(
-        job_id=node.job.id,
-        heartbeat_url=str(getattr(args, "init_heartbeat_url", "") or ""),
-        heartbeat_bearer_token_file=token_file,
-        heartbeat_bearer_token=read_bearer_token_source(
-            token_file=token_file,
-            source_file=getattr(args, "init_heartbeat_bearer_token_source_file", None),
-        ),
-        node_control_bearer_token_file=str(
-            getattr(args, "init_node_control_bearer_token_file", "") or ""
-        ),
-        node_control_bearer_token=read_bearer_token_source(
-            token_file=str(
-                getattr(args, "init_node_control_bearer_token_file", "") or ""
-            ),
-            source_file=getattr(
-                args,
-                "init_node_control_bearer_token_source_file",
-                None,
-            ),
-        ),
-        service_user=str(getattr(args, "init_service_user", "ucloud")),
-        init_authorized_keys=read_prefixed_init_authorized_keys(args),
-        node_id=node_id,
-        work_dir=str(getattr(args, "init_work_dir", "/work/ucloud-sandboxes")),
-        package_spec=str(
-            (
-                getattr(args, "init_builder_package_spec", "")
-                if role == "builder"
-                else ""
-            )
-            or getattr(args, "init_package_spec", "ucloud-sandboxes")
-        ),
-        node_agent_host=str(getattr(args, "init_node_agent_host", "0.0.0.0")),
-        node_agent_port=node_agent_port,
-        node_url=f"http://{node_id}:{node_agent_port}",
-        agent_version=node.job.labels.get(AGENT_VERSION_LABEL, package_version()),
-        deployment_id=config.deployment_id or node.job.labels.get(DEPLOYMENT_LABEL, ""),
-        init_version=node.job.labels.get(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION),
-        ssh_port_start=int(getattr(args, "init_ssh_port_start", 22000)),
-        ssh_port_end=int(getattr(args, "init_ssh_port_end", 22999)),
-        total_resources=total_resources,
-        cpu_overcommit=cpu_overcommit,
-        memory_overcommit=memory_overcommit,
-        disk_overcommit=disk_overcommit,
-        docker_quota_image_gb=docker_quota_image_gb,
-        swap_gb=swap_gb,
-        docker_insecure_registries=tuple(
-            getattr(args, "init_docker_insecure_registry", []) or []
-        ),
-        host_aliases=tuple(
-            alias for alias in (getattr(args, "init_host_alias", []) or []) if alias
-        ),
-        enable_image_builds=role == "builder",
-        buildx_direct_push=(
-            role == "builder" and bool(getattr(args, "init_buildx_direct_push", False))
-        ),
-        buildx_cache_ref=(
-            str(getattr(args, "init_buildx_cache_ref", "") or "")
-            if role == "builder"
-            else ""
-        ),
-        direct_runsc_commit=(
-            ""
-            if role == "builder"
-            else str(getattr(args, "init_direct_runsc_commit", "") or "")
-        ),
-        direct_network=(
-            "none"
-            if role == "builder"
-            else str(getattr(args, "init_direct_network", "none"))
-        ),
-        direct_network_allow_tcp=(
-            ()
-            if role == "builder"
-            else tuple(
-                endpoint
-                for endpoint in (
-                    getattr(args, "init_direct_network_allow_tcp", ()) or ()
-                )
-                if endpoint
-            )
-        ),
-        storage_native_registry_url=(
-            ""
-            if role == "builder"
-            else str(getattr(args, "init_storage_native_registry_url", "") or "")
-        ),
-        storage_native_repository=str(
-            getattr(
-                args,
-                "init_storage_native_repository",
-                DEFAULT_STORAGE_NATIVE_REPOSITORY,
-            )
-            or DEFAULT_STORAGE_NATIVE_REPOSITORY
-        ),
-        storage_native_cache_gb=max(
-            1,
-            int(
-                getattr(
-                    args,
-                    "init_storage_native_cache_gb",
-                    DEFAULT_STORAGE_NATIVE_CACHE_GB,
-                )
-            ),
-        ),
-        storage_native_pool_low_watermark=max(
-            0,
-            int(
-                getattr(
-                    args,
-                    "init_storage_native_pool_low_watermark",
-                    DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-                )
-            ),
-        ),
-        storage_native_pool_high_watermark=max(
-            1,
-            int(
-                getattr(
-                    args,
-                    "init_storage_native_pool_high_watermark",
-                    DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-                )
-            ),
-        ),
-        direct_disk_headroom_mb=max(
-            1,
-            int(
-                getattr(
-                    args,
-                    "init_direct_disk_headroom_mb",
-                    DEFAULT_DIRECT_DISK_HEADROOM_MB,
-                )
-            ),
-        ),
-        direct_max_concurrent_restores=max(
-            1,
-            int(
-                getattr(
-                    args,
-                    "init_direct_max_concurrent_restores",
-                    DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-                )
-            ),
-        ),
-        max_concurrent_image_pulls=max(
-            1,
-            int(
-                getattr(
-                    args,
-                    "init_max_concurrent_image_pulls",
-                    DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-                )
-            ),
-        ),
-        heartbeat_interval_seconds=max(
-            1,
-            int(getattr(args, "init_heartbeat_interval_seconds", 20)),
+        package_spec = str(config.sandbox_node_package_bundle())
+    labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
+    return vm_init_options_for_job(
+        config,
+        node.job,
+        role,
+        package_spec=package_spec,
+        node_id=(
+            node.job.hostname
+            or (node.heartbeat.node_id if node.heartbeat is not None else "")
         ),
         labels=labels,
     )
 
 
-def apply_bootstrap_cli_requirements(intent: VmBootstrapIntent) -> VmBootstrapIntent:
+def apply_bootstrap_requirements(intent: VmBootstrapIntent) -> VmBootstrapIntent:
     if not intent.runnable:
         return intent
     if not intent.options.heartbeat_url:
         return replace(
             intent,
             runnable=False,
-            reason="init heartbeat url is required via --init-heartbeat-url",
+            reason="deployment gateway_private_host is required",
         )
     if (
         intent.options.heartbeat_bearer_token_file
@@ -6796,10 +4509,7 @@ def apply_bootstrap_cli_requirements(intent: VmBootstrapIntent) -> VmBootstrapIn
         return replace(
             intent,
             runnable=False,
-            reason=(
-                "heartbeat bearer token source is required via "
-                "--init-heartbeat-bearer-token-source-file"
-            ),
+            reason="deployment heartbeat token is required",
         )
     if (
         intent.options.node_control_bearer_token_file
@@ -6808,10 +4518,7 @@ def apply_bootstrap_cli_requirements(intent: VmBootstrapIntent) -> VmBootstrapIn
         return replace(
             intent,
             runnable=False,
-            reason=(
-                "node control bearer token source is required via "
-                "--init-node-control-bearer-token-source-file"
-            ),
+            reason="deployment node-control token is required",
         )
     return intent
 
@@ -6857,10 +4564,9 @@ def print_vm_job(job: ProviderInstance) -> None:
 
 
 def print_plan(
-    config: AutoscalerConfig,
     nodes: list[Any],
     decision: Any,
-    heartbeat_file: Path,
+    control_state_file: Path,
     *,
     provider_kind: str,
     provider_scope_id: str,
@@ -6869,7 +4575,7 @@ def print_plan(
     unreachable = getattr(decision, "unreachable_nodes", 0)
     unreachable_suffix = f", {unreachable} unreachable" if unreachable else ""
     print(f"Provider: {provider_kind} ({provider_scope_id})")
-    print(f"Heartbeat file: {heartbeat_file}")
+    print(f"Control state: {control_state_file}")
     print(
         "Nodes: "
         f"{decision.ready_nodes} ready, "
@@ -6895,7 +4601,7 @@ def print_plan(
             resource_suffix = (
                 f" used={resource_summary(node.heartbeat.used_resources.to_dict())}"
                 f" free={resource_summary(node.heartbeat.free_resources.to_dict())}"
-                f" effective={resource_summary(node.heartbeat.effective_resources.to_dict())}"
+                f" total={resource_summary(node.heartbeat.total_resources.to_dict())}"
             )
         print(
             f"- job={node.job_id} state={node.state} "
@@ -6917,20 +4623,18 @@ def print_plan(
 
 
 def print_reconcile(
-    config: AutoscalerConfig,
     nodes: list[Any],
     decision: Any,
-    heartbeat_file: Path,
+    control_state_file: Path,
     create_intents: list[InstanceCreateIntent],
     stop_job_ids: tuple[str, ...],
     result: dict[str, Any],
 ) -> None:
     provider = result["provider"]
     print_plan(
-        config,
         nodes,
         decision,
-        heartbeat_file,
+        control_state_file,
         provider_kind=str(provider["kind"]),
         provider_scope_id=str(provider["scopeId"]),
         footer=None,
@@ -6951,10 +4655,8 @@ def print_reconcile(
     if not create_intents:
         print("- none")
     for intent in create_intents:
-        labels = intent.options.labels or {}
-        role = "builder" if labels.get(BUILDER_LABEL) == "true" else "sandbox"
         print(
-            f"- {intent.options.name} ({role}): host={intent.options.hostname} "
+            f"- {intent.name} ({intent.role}): host={intent.node_id} "
             f"url={intent.node_url}"
         )
     print("Stop intents:")
@@ -6997,19 +4699,24 @@ def print_reconcile(
                 f"Init {item.get('status')} for {item.get('jobId')}: "
                 f"returncode={item.get('returncode')}"
             )
-    if result.get("createResponse") is not None:
+    submitted_operations = [
+        item
+        for item in result.get("providerOperationResults", [])
+        if item.get("source") == "planned"
+    ]
+    if any(item.get("kind") == "create" for item in submitted_operations):
         created = result.get("createdJobIds", [])
         created_label = ", ".join(created) if created else "(none returned)"
         print(f"Submitted create jobs: {created_label}")
     elif create_intents:
         print("Create dry-run only. Re-run with --execute to submit planned VMs.")
-    if result.get("stopResponse") is not None:
+    if any(item.get("kind") == "stop" for item in submitted_operations):
         print(f"Executed stop requests: {', '.join(stop_job_ids)}")
         if blocked_stop_job_ids:
             print(f"Skipped blocked stop requests: {', '.join(blocked_stop_job_ids)}")
     elif requested_stop_job_ids:
         if blocked_stop_job_ids:
-            if result.get("executeStops"):
+            if result.get("execute"):
                 if set(blocked_stop_job_ids) == blocked_migration_job_ids:
                     print(
                         "No stop requests executed. Parked storage-native state "
@@ -7022,18 +4729,18 @@ def print_reconcile(
                     )
             else:
                 print(
-                    "Stop dry-run only. Blocked jobs require matching --deployment-id "
-                    "or --allow-unlabeled-stops."
+                    "Stop blocked: jobs require matching deployment and ownership "
+                    "labels."
                 )
         else:
-            if result.get("executeStops"):
+            if result.get("execute"):
                 print(
                     "Stop request is waiting for drain proof; no provider stop "
                     "was submitted this cycle."
                 )
             else:
                 print(
-                    "Stop dry-run only. Re-run with --execute-stops to terminate "
+                    "Stop dry-run only. Re-run with --execute to terminate "
                     "planned jobs."
                 )
 
@@ -7125,7 +4832,6 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
         "model_wait_max_headroom_nodes": policy.model_wait_max_headroom_nodes,
-        "dynamic_active_admission_enabled": (policy.dynamic_active_admission_enabled),
         "default_node_resources": policy.default_node_resources.to_dict(),
     }
 
@@ -7147,49 +4853,9 @@ def parse_labels(raw_labels: list[str]) -> dict[str, str]:
     return labels
 
 
-def sandbox_demand_from_args(args: argparse.Namespace) -> SandboxDemand:
-    return SandboxDemand(
-        pending_resources=ResourceQuantity(
-            vcpu=max(0.0, args.pending_vcpu),
-            memory_mb=max(0, args.pending_memory_mb),
-            disk_mb=max(0, args.pending_disk_mb),
-        ),
-        oldest_pending_seconds=max(0, args.oldest_pending_seconds),
-    )
-
-
-def node_create_defaults_from_args(
-    args: argparse.Namespace,
-    config: AutoscalerConfig,
-) -> NodeCreateDefaults:
-    labels = parse_labels(getattr(args, "label", []))
-    labels.setdefault(NODE_LABEL, "true")
-    if config.deployment_id:
-        labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
-    labels.setdefault(AGENT_VERSION_LABEL, package_version())
-    labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
-
-    return NodeCreateDefaults(labels=labels)
-
-
-def builder_create_defaults_from_args(
-    args: argparse.Namespace,
-    config: AutoscalerConfig,
-) -> NodeCreateDefaults:
-    labels = parse_labels(getattr(args, "label", []))
-    labels.pop(NODE_LABEL, None)
-    labels.setdefault(BUILDER_LABEL, "true")
-    if config.deployment_id:
-        labels.setdefault(DEPLOYMENT_LABEL, config.deployment_id)
-    labels.setdefault(AGENT_VERSION_LABEL, package_version())
-    labels.setdefault(INIT_VERSION_LABEL, DEFAULT_INIT_VERSION)
-
-    return NodeCreateDefaults(labels=labels)
-
-
 def compute_provider_from_args(
     args: argparse.Namespace,
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
 ) -> ComputeProvider:
     """Compose the selected adapter at the CLI boundary.
 
@@ -7201,14 +4867,18 @@ def compute_provider_from_args(
         return load_external_provider(config.provider, args)
     return provider_from_configuration(
         config.provider,
-        args,
+        session_file=ucloud_settings(config).session_file,
+        sandbox_product_id=config.sandbox.product_id,
+        sandbox_disk_gb=config.sandbox.disk_gb,
+        builder_product_id=config.builder.product_id,
+        builder_disk_gb=config.builder.disk_gb,
         client_factory=UCloudClient,
     )
 
 
 def vm_submission_options_from_args(
     args: argparse.Namespace,
-    config: AutoscalerConfig,
+    config: DeploymentConfig,
 ) -> tuple[VmSubmissionOptions, str]:
     role = getattr(args, "role", "node")
     private_network_id: str | None
@@ -7246,7 +4916,7 @@ def vm_submission_options_from_args(
         if role == "gateway"
         else "sandbox-builder"
         if role == "builder"
-        else config.node_hostname_prefix
+        else "sandbox-node"
     )
     hostname = args.hostname or stable_hostname(seed, prefix=hostname_prefix)
     if role == "gateway":
@@ -7254,7 +4924,7 @@ def vm_submission_options_from_args(
     elif role == "builder":
         default_name_prefix = "ucloud-sandbox-builder"
     else:
-        default_name_prefix = config.job_name_prefix.rstrip("-")
+        default_name_prefix = "ucloud-sandbox-node"
     name = args.name or stable_hostname(seed, prefix=default_name_prefix)
     labels = parse_labels(args.label)
     if role == "gateway":
@@ -7333,17 +5003,6 @@ def submitted_job_ids(response: dict[str, Any]) -> list[str]:
     return ids
 
 
-def read_init_authorized_keys(args: argparse.Namespace) -> tuple[str, ...]:
-    keys: list[str] = []
-    keys.extend(getattr(args, "init_authorized_key", []) or [])
-    for path in getattr(args, "init_authorized_key_file", []) or []:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            key = line.strip()
-            if key and not key.startswith("#"):
-                keys.append(key)
-    return tuple(keys)
-
-
 def read_bearer_token_source(
     *,
     token_file: str,
@@ -7366,17 +5025,6 @@ def read_required_token_file(path: Path | None, label: str) -> str | None:
     if not token:
         raise ValueError(f"{label} file is empty: {path}")
     return token
-
-
-def read_prefixed_init_authorized_keys(args: argparse.Namespace) -> tuple[str, ...]:
-    keys: list[str] = []
-    keys.extend(getattr(args, "init_authorized_key", []) or [])
-    for path in getattr(args, "init_authorized_key_file", []) or []:
-        for line in Path(path).read_text(encoding="utf-8").splitlines():
-            key = line.strip()
-            if key and not key.startswith("#"):
-                keys.append(key)
-    return tuple(keys)
 
 
 PUBLIC_SSH_KEY_PREFIXES = (
@@ -7413,113 +5061,101 @@ def find_ucloud_ssh_key(
     return None
 
 
-def vm_init_options_from_args(args: argparse.Namespace, job_id: str) -> VmInitOptions:
-    cpu_overcommit = args.cpu_overcommit
-    memory_overcommit = args.memory_overcommit
-    disk_overcommit = args.disk_overcommit
-    if args.enable_image_builds:
-        cpu_overcommit = 1.0
-        memory_overcommit = 1.0
-        disk_overcommit = 1.0
+def vm_init_options_for_job(
+    config: DeploymentConfig,
+    job: ProviderInstance,
+    role: str,
+    *,
+    package_spec: str,
+    package_sha256: str = "",
+    node_id: str = "",
+    labels: dict[str, str] | None = None,
+) -> VmInitOptions:
+    if role not in {"sandbox", "builder"}:
+        raise ValueError("VM init role must be sandbox or builder")
+    heartbeat_token_file = config.heartbeat_token_file()
+    node_control_token_file = config.node_control_token_file()
+    resolved_node_id = node_id or job.hostname or f"ucloud-vm-{job.id}"
+    resources = resources_from_vm_job(job, config.sandbox.resources)
+    if role == "builder" and resources.disk_mb > 0:
+        resources = replace(
+            resources,
+            disk_mb=min(
+                resources.disk_mb,
+                config.builder.docker_quota_image_gb * 1024,
+            ),
+        )
+    authorized_key_file = config.init_authorized_key_file()
+    authorized_keys = (
+        (read_public_ssh_key_file(authorized_key_file),)
+        if authorized_key_file.is_file()
+        else ()
+    )
+    host_alias = config.registry_host_alias
     return VmInitOptions(
-        job_id=job_id,
-        heartbeat_url=args.heartbeat_url,
-        heartbeat_bearer_token_file=args.heartbeat_bearer_token_file,
+        job_id=job.id,
+        heartbeat_url=config.heartbeat_url,
+        role=role,
+        heartbeat_bearer_token_file=str(heartbeat_token_file),
         heartbeat_bearer_token=read_bearer_token_source(
-            token_file=args.heartbeat_bearer_token_file,
-            source_file=getattr(args, "heartbeat_bearer_token_source_file", None),
+            token_file=str(heartbeat_token_file),
+            source_file=heartbeat_token_file,
         ),
-        node_control_bearer_token_file=str(
-            getattr(args, "node_control_bearer_token_file", "") or ""
-        ),
+        node_control_bearer_token_file=str(node_control_token_file),
         node_control_bearer_token=read_bearer_token_source(
-            token_file=str(getattr(args, "node_control_bearer_token_file", "") or ""),
-            source_file=getattr(args, "node_control_bearer_token_source_file", None),
+            token_file=str(node_control_token_file),
+            source_file=node_control_token_file,
         ),
-        service_user=args.service_user,
-        init_authorized_keys=read_init_authorized_keys(args),
-        node_id=args.node_id or "",
-        work_dir=args.work_dir,
-        package_spec=args.package_spec,
-        node_agent_host=args.node_agent_host,
-        node_agent_port=args.node_agent_port,
-        node_url=args.node_url or "",
-        agent_version=args.agent_version,
-        deployment_id=getattr(args, "deployment_id", "") or "",
-        init_version=args.init_version,
-        ssh_port_start=args.ssh_port_start,
-        ssh_port_end=args.ssh_port_end,
-        total_resources=resource_quantity_from_args(args),
-        cpu_overcommit=cpu_overcommit,
-        memory_overcommit=memory_overcommit,
-        disk_overcommit=disk_overcommit,
-        docker_quota_image_gb=args.docker_quota_image_gb,
-        swap_gb=0 if args.enable_image_builds else args.swap_gb,
-        docker_insecure_registries=tuple(args.docker_insecure_registry or []),
-        host_aliases=tuple(args.host_alias or []),
-        enable_image_builds=args.enable_image_builds,
-        buildx_direct_push=bool(getattr(args, "buildx_direct_push", False)),
-        buildx_cache_ref=str(getattr(args, "buildx_cache_ref", "") or ""),
-        direct_runsc_commit=str(getattr(args, "direct_runsc_commit", "") or ""),
-        direct_network=str(getattr(args, "direct_network", "none") or "none"),
-        direct_network_allow_tcp=tuple(
-            getattr(args, "direct_network_allow_tcp", ()) or ()
+        service_user="ucloud",
+        init_authorized_keys=authorized_keys,
+        node_id=resolved_node_id,
+        work_dir=DEFAULT_INSTALL_ROOT,
+        package_spec=package_spec,
+        package_sha256=package_sha256,
+        node_agent_host="0.0.0.0",
+        node_agent_port=8090,
+        deployment_id=config.deployment_id,
+        ssh_port_start=22000,
+        ssh_port_end=22999,
+        total_resources=resources,
+        docker_quota_image_gb=(
+            config.builder.docker_quota_image_gb
+            if role == "builder"
+            else config.sandbox.docker_quota_image_gb
         ),
-        storage_native_registry_url=str(
-            getattr(args, "storage_native_registry_url", "") or ""
+        swap_gb=0 if role == "builder" else config.sandbox.swap_gb,
+        docker_insecure_registries=(
+            f"{config.registry_endpoint_host}:{config.registry_port}",
         ),
-        storage_native_repository=str(
-            getattr(
-                args,
-                "storage_native_repository",
-                DEFAULT_STORAGE_NATIVE_REPOSITORY,
-            )
-            or DEFAULT_STORAGE_NATIVE_REPOSITORY
+        host_aliases=(host_alias,) if host_alias else (),
+        buildx_cache_ref=(config.builder.buildx_cache_ref if role == "builder" else ""),
+        direct_runsc_commit=(
+            config.sandbox.direct_runsc_commit if role == "sandbox" else ""
         ),
-        storage_native_cache_gb=int(
-            getattr(
-                args,
-                "storage_native_cache_gb",
-                DEFAULT_STORAGE_NATIVE_CACHE_GB,
-            )
+        direct_network="sandbox" if role == "sandbox" else "none",
+        direct_network_allow_tcp=(
+            config.sandbox.direct_network_allow_tcp if role == "sandbox" else ()
         ),
-        storage_native_pool_low_watermark=int(
-            getattr(
-                args,
-                "storage_native_pool_low_watermark",
-                DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK,
-            )
+        storage_native_registry_url=(
+            config.registry_worker_url if role == "sandbox" else ""
         ),
-        storage_native_pool_high_watermark=int(
-            getattr(
-                args,
-                "storage_native_pool_high_watermark",
-                DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK,
-            )
+        storage_native_repository=config.sandbox.storage_native_repository,
+        storage_native_cache_gb=config.sandbox.storage_native_cache_gb,
+        storage_native_pool_low_watermark=(
+            config.sandbox.storage_native_pool_low_watermark
         ),
-        direct_disk_headroom_mb=int(
-            getattr(
-                args,
-                "direct_disk_headroom_mb",
-                DEFAULT_DIRECT_DISK_HEADROOM_MB,
-            )
+        storage_native_pool_high_watermark=(
+            config.sandbox.storage_native_pool_high_watermark
         ),
-        direct_max_concurrent_restores=int(
-            getattr(
-                args,
-                "direct_max_concurrent_restores",
-                DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES,
-            )
+        direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
+        direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
+        max_concurrent_image_pulls=(
+            config.builder.max_concurrent_image_pulls
+            if role == "builder"
+            else config.sandbox.max_concurrent_image_pulls
         ),
-        max_concurrent_image_pulls=int(
-            getattr(
-                args,
-                "max_concurrent_image_pulls",
-                DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
-            )
-        ),
-        heartbeat_interval_seconds=args.heartbeat_interval_seconds,
-        labels=parse_labels(args.label),
+        heartbeat_interval_seconds=config.heartbeat_interval_seconds,
+        labels=dict(labels if labels is not None else job.labels),
     )
 
 
@@ -7538,21 +5174,15 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "nodeAgentHost": options.node_agent_host,
         "nodeAgentPort": options.node_agent_port,
         "nodeUrl": options.advertised_node_url(),
-        "agentVersion": options.agent_version,
         "deploymentId": options.deployment_id,
-        "initVersion": options.init_version,
         "sshPortStart": options.ssh_port_start,
         "sshPortEnd": options.ssh_port_end,
         "totalResources": options.total_resources.to_dict(),
-        "cpuOvercommit": options.cpu_overcommit,
-        "memoryOvercommit": options.memory_overcommit,
-        "diskOvercommit": options.disk_overcommit,
         "dockerQuotaImageGb": options.docker_quota_image_gb,
         "swapGb": options.swap_gb,
         "dockerInsecureRegistries": list(options.docker_insecure_registries),
         "hostAliases": list(options.host_aliases),
-        "enableImageBuilds": options.enable_image_builds,
-        "role": "builder" if options.enable_image_builds else "sandbox",
+        "role": options.role,
         "directRunscCommit": options.direct_runsc_commit,
         "directNetwork": options.direct_network,
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),

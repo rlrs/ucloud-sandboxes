@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 from typing import Callable, Sequence
 
+from .config import DeploymentConfig
 from .managed_registry import registry_maintenance_lock
 
 
@@ -64,21 +66,43 @@ def build_parser() -> argparse.ArgumentParser:
         "registry-gc",
         help="run fenced offline Docker Distribution garbage collection",
     )
-    registry_gc.add_argument("--data-dir", type=Path, required=True)
-    registry_gc.add_argument("--registry-image", required=True)
-    registry_gc.add_argument("--lock-file", type=Path, required=True)
+    registry_gc.add_argument("--config", type=Path, required=True)
+    registry = subparsers.add_parser(
+        "registry",
+        help="run the deployment Docker Distribution service",
+    )
+    registry.add_argument("--config", type=Path, required=True)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    config = DeploymentConfig.from_file(args.config)
     if args.command == "registry-gc":
         run_registry_gc(
-            data_dir=args.data_dir,
-            registry_image=args.registry_image,
-            lock_file=args.lock_file,
+            data_dir=config.registry_data_dir(),
+            registry_image="registry:2",
+            lock_file=Path("/run/lock/ucloud-sandbox-registry-maintenance"),
         )
         return 0
+    if args.command == "registry":
+        data_dir = config.registry_data_dir()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        command = [
+            "docker",
+            "run",
+            "--rm",
+            "--name",
+            "ucloud-sandbox-registry",
+            "-p",
+            f"0.0.0.0:{config.registry_port}:5000",
+            "-v",
+            f"{data_dir}:/var/lib/registry",
+            "-e",
+            "REGISTRY_STORAGE_DELETE_ENABLED=true",
+            "registry:2",
+        ]
+        os.execvp(command[0], command)
     raise ValueError(f"unsupported systemd helper: {args.command}")
 
 

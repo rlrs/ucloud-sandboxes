@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import asyncio
-import base64
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
 import subprocess
 from threading import Condition, Lock, RLock, Thread
 import time
@@ -13,87 +10,10 @@ from typing import Any
 from uuid import uuid4
 
 from .models import utc_now
-from .sandbox import SANDBOX_ID_RE
 
 
-ROUTABLE_EXEC_SESSION_ID_PREFIX = "exec-v1."
-MAX_ROUTABLE_EXEC_SESSION_ID_LENGTH = 1024
-
-
-@dataclass(frozen=True)
-class ExecSessionRoute:
-    sandbox_id: str
-    node_id: str
-    job_id: str
-
-
-def new_exec_session_id(
-    sandbox_id: str,
-    *,
-    node_id: str = "",
-    job_id: str = "",
-) -> str:
-    if SANDBOX_ID_RE.fullmatch(sandbox_id) is None:
-        raise ValueError("sandbox id is invalid")
-    if not node_id or len(node_id) > 128:
-        raise ValueError("node id is invalid")
-    if not job_id or len(job_id) > 128:
-        raise ValueError("job id is invalid")
-    encoded = _exec_session_route_payload(sandbox_id, node_id, job_id)
-    return f"{ROUTABLE_EXEC_SESSION_ID_PREFIX}{encoded}.{uuid4().hex}"
-
-
-def exec_session_sandbox_id(session_id: str) -> str | None:
-    route = exec_session_route(session_id)
-    return route.sandbox_id if route is not None else None
-
-
-def exec_session_route(session_id: str) -> ExecSessionRoute | None:
-    if len(session_id) > MAX_ROUTABLE_EXEC_SESSION_ID_LENGTH:
-        return None
-    if not session_id.startswith(ROUTABLE_EXEC_SESSION_ID_PREFIX):
-        return None
-    parts = session_id.split(".")
-    if len(parts) != 3 or parts[0] != "exec-v1" or len(parts[2]) != 32:
-        return None
-    try:
-        int(parts[2], 16)
-        padded = parts[1] + "=" * (-len(parts[1]) % 4)
-        decoded = base64.b64decode(
-            padded,
-            altchars=b"-_",
-            validate=True,
-        )
-        raw = json.loads(decoded.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    sandbox_id = raw.get("s")
-    node_id = raw.get("n")
-    job_id = raw.get("j")
-    if (
-        not isinstance(sandbox_id, str)
-        or SANDBOX_ID_RE.fullmatch(sandbox_id) is None
-        or not isinstance(node_id, str)
-        or not node_id
-        or len(node_id) > 128
-        or not isinstance(job_id, str)
-        or not job_id
-        or len(job_id) > 128
-        or _exec_session_route_payload(sandbox_id, node_id, job_id) != parts[1]
-    ):
-        return None
-    return ExecSessionRoute(sandbox_id, node_id, job_id)
-
-
-def _exec_session_route_payload(sandbox_id: str, node_id: str, job_id: str) -> str:
-    raw = json.dumps(
-        {"j": job_id, "n": node_id, "s": sandbox_id},
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+def new_exec_session_id() -> str:
+    return f"exec-{uuid4().hex}"
 
 
 @dataclass(frozen=True)
@@ -225,18 +145,10 @@ class ExecSessionManager:
         *,
         max_sessions: int = 128,
         max_events_per_session: int = 512,
-        route_node_id: str = "",
-        route_job_id: str = "",
     ) -> None:
-        if not route_node_id or len(route_node_id) > 128:
-            raise ValueError("exec route node id is invalid")
-        if not route_job_id or len(route_job_id) > 128:
-            raise ValueError("exec route job id is invalid")
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
-        self.route_node_id = route_node_id
-        self.route_job_id = route_job_id
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
 
@@ -259,11 +171,7 @@ class ExecSessionManager:
             raise
         now = utc_now()
         session = ExecSession(
-            id=new_exec_session_id(
-                spec.sandbox_id,
-                node_id=self.route_node_id,
-                job_id=self.route_job_id,
-            ),
+            id=new_exec_session_id(),
             spec=spec,
             argv=argv,
             status="running",
@@ -286,27 +194,9 @@ class ExecSessionManager:
         self._start_process(session)
         return session
 
-    async def astart(self, spec: SandboxExecSpec) -> ExecSession:
-        return await asyncio.to_thread(self.start, spec)
-
     def get(self, session_id: str) -> ExecSession | None:
         with self._lock:
             return self._sessions.get(session_id)
-
-    async def aget(self, session_id: str) -> ExecSession | None:
-        return await asyncio.to_thread(self.get, session_id)
-
-    def drain_events(
-        self,
-        session_id: str,
-        *,
-        after: int = 0,
-        limit: int = 100,
-    ) -> list[ExecEvent]:
-        with self._lock:
-            session = self._require_session_locked(session_id)
-            events = [event for event in session.events if event.sequence > after]
-            return events[: max(0, limit)]
 
     def events_after(
         self,
@@ -332,20 +222,6 @@ class ExecSessionManager:
                 if remaining <= 0:
                     return []
                 session.condition.wait(timeout=remaining)
-
-    async def adrain_events(
-        self,
-        session_id: str,
-        *,
-        after: int = 0,
-        limit: int = 100,
-    ) -> list[ExecEvent]:
-        return await asyncio.to_thread(
-            self.drain_events,
-            session_id,
-            after=after,
-            limit=limit,
-        )
 
     def write_stdin(self, session_id: str, data: str) -> ExecSession:
         with self._lock:
@@ -378,9 +254,6 @@ class ExecSessionManager:
                     session.updated_at = utc_now()
             return session
 
-    async def awrite_stdin(self, session_id: str, data: str) -> ExecSession:
-        return await asyncio.to_thread(self.write_stdin, session_id, data)
-
     def close_stdin(self, session_id: str) -> ExecSession:
         with self._lock:
             session = self._require_session_locked(session_id)
@@ -405,9 +278,6 @@ class ExecSessionManager:
                         "stdin pipe is closed for this exec session."
                     ) from exc
             return session
-
-    async def aclose_stdin(self, session_id: str) -> ExecSession:
-        return await asyncio.to_thread(self.close_stdin, session_id)
 
     def _start_process(self, session: ExecSession) -> None:
         try:

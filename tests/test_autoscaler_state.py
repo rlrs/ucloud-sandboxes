@@ -33,6 +33,8 @@ def provider_job(
     operation_id: str,
     job_id: str,
     deployment_id: str = "prod-a",
+    *,
+    final: bool = False,
 ) -> ProviderInstance:
     return ProviderInstance(
         id=job_id,
@@ -41,8 +43,8 @@ def provider_job(
         application_version="1",
         product_id="cpu",
         product_category="cpu",
-        state="RUNNING",
-        phase=InstancePhase.RUNNING,
+        state="SUCCESS" if final else "RUNNING",
+        phase=InstancePhase.TERMINAL if final else InstancePhase.RUNNING,
         labels={
             PROVIDER_OPERATION_LABEL: operation_id,
             DEPLOYMENT_LABEL: deployment_id,
@@ -94,9 +96,7 @@ class AutoscalerStateTests(unittest.TestCase):
             )
             self.assertEqual(canceling.state, "canceling")
             self.assertEqual(canceling.token, intent.token)
-            store.retire_drain_intent(
-                deployment_id="prod-a", job_id="job-1", reason="canceled"
-            )
+            store.retire_drain_intent(deployment_id="prod-a", job_id="job-1")
             self.assertEqual(store.pending_drain_intents(deployment_id="prod-a"), [])
 
             reincarnated = store.prepare_drain_intent(
@@ -150,17 +150,12 @@ class AutoscalerStateTests(unittest.TestCase):
             store.mark_operation_uncertain(
                 operation.operation_id, error="connection dropped", now=NOW
             )
-            self.assertEqual(store.submittable_operations(), [])
+            self.assertEqual(store.list_operations(states={"prepared"}), [])
 
-            recovery = AutoscalerStateStore(store.path).recover_uncertain_creates(
+            recovery = AutoscalerStateStore(store.path).reconcile_provider_inventory(
                 [provider_job(operation.operation_id, "job-1")], now=NOW
             )
-            self.assertEqual(recovery[0].status, "recovered")
-            accepted = store.get_operation(operation.operation_id)
-            self.assertEqual(accepted.state, "accepted")
-            self.assertEqual(accepted.target_job_ids, ("job-1",))
-
-            store.confirm_visible_creates(["job-1"], now=NOW)
+            self.assertEqual(recovery[0].state, "recovered")
             self.assertEqual(
                 store.get_operation(operation.operation_id).state, "settled"
             )
@@ -172,18 +167,19 @@ class AutoscalerStateTests(unittest.TestCase):
                 intent_key="sandbox:seed",
                 kind="create",
                 deployment_id="prod-a",
+                role="sandbox",
                 request=create_request("sandbox:seed"),
             )
             store.begin_provider_call(operation.operation_id)
 
-            result = store.recover_uncertain_creates(
+            result = store.reconcile_provider_inventory(
                 [
                     provider_job(operation.operation_id, "job-1"),
                     provider_job(operation.operation_id, "job-2"),
                 ]
             )
 
-            self.assertEqual(result[0].status, "conflict")
+            self.assertEqual(result[0].state, "conflict")
             self.assertEqual(
                 store.get_operation(operation.operation_id).state, "uncertain"
             )
@@ -200,17 +196,19 @@ class AutoscalerStateTests(unittest.TestCase):
                 target_job_ids=("job-1",),
             )
             store.begin_provider_call(operation.operation_id)
-            retry = store.recover_uncertain_stops([])
-            self.assertEqual(retry[0].status, "retry")
+            retry = store.reconcile_provider_inventory([])
+            self.assertEqual(retry[0].state, "retry")
             self.assertEqual(
                 store.get_operation(operation.operation_id).state, "prepared"
             )
 
             store.begin_provider_call(operation.operation_id)
-            recovered = store.recover_uncertain_stops(["job-1"])
-            self.assertEqual(recovered[0].status, "recovered")
+            recovered = store.reconcile_provider_inventory(
+                [provider_job(operation.operation_id, "job-1", final=True)]
+            )
+            self.assertEqual(recovered[0].state, "recovered")
             self.assertEqual(
-                store.get_operation(operation.operation_id).state, "accepted"
+                store.get_operation(operation.operation_id).state, "settled"
             )
 
     def test_slot_incarnation_does_not_scan_or_reuse_terminal_operation(self) -> None:
@@ -223,6 +221,7 @@ class AutoscalerStateTests(unittest.TestCase):
                 intent_key=first_key,
                 kind="create",
                 deployment_id="prod-a",
+                role="sandbox",
                 request=create_request(first_key),
             )
             store.begin_provider_call(operation.operation_id)
@@ -231,7 +230,9 @@ class AutoscalerStateTests(unittest.TestCase):
                 response={"responses": [{"id": "job-1"}]},
                 target_job_ids=("job-1",),
             )
-            store.confirm_visible_creates(["job-1"])
+            store.reconcile_provider_inventory(
+                [provider_job(operation.operation_id, "job-1")]
+            )
 
             second_key = store.allocate_operation_intent_key(
                 deployment_id="prod-a", kind="create", base_key="sandbox:seed"

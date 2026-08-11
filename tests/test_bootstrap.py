@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime, timedelta, timezone
-import json
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 from threading import Event, Lock
 from time import monotonic
@@ -11,11 +11,11 @@ from ucloud_sandboxes import cli
 from ucloud_sandboxes.bootstrap import (
     VmBootstrapIntent,
     VmBootstrapRecord,
-    VmBootstrapStore,
     build_vm_bootstrap_intents,
     mark_bootstrap_access_refresh,
 )
 from ucloud_sandboxes.cli import _bootstrap_retry_delay_seconds
+from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.metrics import MetricsStore
 from ucloud_sandboxes.models import InstancePhase, SandboxNode, ProviderInstance
 from ucloud_sandboxes.providers.base import InstanceBootstrapAccess
@@ -63,6 +63,7 @@ class BootstrapRetryTests(unittest.TestCase):
                 job_id=current.job_id,
                 heartbeat_url="http://gateway/v1/nodes/heartbeat",
             )
+
         intents = build_vm_bootstrap_intents(
             nodes,
             {},
@@ -119,6 +120,7 @@ class BootstrapRetryTests(unittest.TestCase):
                 job_id=current.job_id,
                 heartbeat_url="http://gateway/v1/nodes/heartbeat",
             )
+
         first_now = datetime(2026, 7, 10, tzinfo=timezone.utc)
         first = build_vm_bootstrap_intents(
             nodes,
@@ -150,7 +152,9 @@ class BootstrapRetryTests(unittest.TestCase):
             now=first_now + timedelta(seconds=1),
         )
         self.assertEqual(refreshed, ["job-2", "job-3"])
-        self.assertEqual(sum(item.access_refreshed_at is not None for item in second), 2)
+        self.assertEqual(
+            sum(item.access_refreshed_at is not None for item in second), 2
+        )
 
     def test_successful_init_is_not_replayed_for_a_stale_heartbeat(self) -> None:
         job = ProviderInstance(
@@ -290,7 +294,7 @@ class BootstrapRetryTests(unittest.TestCase):
         coordinator = None
         try:
             with TemporaryDirectory() as raw_dir:
-                store = VmBootstrapStore(Path(raw_dir) / "bootstrap.json")
+                store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
                 metrics = MetricsStore(Path(raw_dir) / "metrics.sqlite")
                 coordinator = cli._VmBootstrapCoordinator(2, metrics)
                 records: dict[str, VmBootstrapRecord] = {}
@@ -325,7 +329,10 @@ class BootstrapRetryTests(unittest.TestCase):
                 self.assertEqual([item["jobId"] for item in completed], ["fast"])
                 self.assertEqual(coordinator.available_slots, 1)
                 self.assertIn("slow", coordinator.in_flight_job_ids)
-                self.assertEqual(store.load()["fast"].status, "failed")
+                self.assertEqual(
+                    store.load_bootstrap_records()["fast"].status,
+                    "failed",
+                )
                 events = metrics.load_events()
                 self.assertEqual(len(events), 1)
                 self.assertEqual(events[0].data["job_id"], "fast")
@@ -343,7 +350,10 @@ class BootstrapRetryTests(unittest.TestCase):
                     assert_provider_fence=assert_fence,
                 )
                 self.assertEqual(scheduled["attempts"], 2)
-                self.assertEqual(store.load()["fast"].status, "attempting")
+                self.assertEqual(
+                    store.load_bootstrap_records()["fast"].status,
+                    "attempting",
+                )
                 self.assertTrue(retry_started.wait(timeout=1))
                 self.assertFalse(slow_release.is_set())
                 self.assertGreaterEqual(fence_checks, 6)
@@ -384,10 +394,10 @@ class BootstrapRetryTests(unittest.TestCase):
                 }
             )
 
-    def test_store_roundtrip_uses_versioned_schema(self) -> None:
+    def test_store_roundtrips_exact_bootstrap_records(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "bootstrap.json"
-            store = VmBootstrapStore(path)
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
             record = VmBootstrapRecord(
                 job_id="job-1",
                 node_id="node-1",
@@ -399,85 +409,33 @@ class BootstrapRetryTests(unittest.TestCase):
                 retry_delay_seconds=4,
             )
 
-            store.save({"job-1": record})
-            raw = json.loads(path.read_text(encoding="utf-8"))
-            loaded = store.load()
+            store.save_bootstrap_records({"job-1": record})
+            loaded = store.load_bootstrap_records()
 
-            self.assertEqual(set(raw), {"version", "jobs"})
-            self.assertEqual(raw["version"], 1)
             self.assertEqual(loaded, {"job-1": record})
-            with self.assertRaisesRegex(ValueError, "embedded job_id"):
-                store.save({"different-job": record})
+            with self.assertRaisesRegex(ValueError, "key does not match"):
+                store.save_bootstrap_records({"different-job": record})
 
-    def test_store_rejects_invalid_envelopes_and_records(self) -> None:
-        valid_record = VmBootstrapRecord(
-            job_id="job-1",
-            node_id="node-1",
-            role="sandbox",
-            status="failed",
-            attempts=2,
-            last_attempt_at=datetime(2026, 7, 10, tzinfo=timezone.utc),
-            last_error="not ready",
-            retry_delay_seconds=4,
-        ).to_dict()
-        invalid_payloads: tuple[object, ...] = (
-            [],
-            {"jobs": {}},
-            {"version": 1, "jobs": {}, "extra": True},
-            {"version": True, "jobs": {}},
-            {"version": 2, "jobs": {}},
-            {"version": 1, "jobs": []},
-            {
-                "version": 1,
-                "jobs": {"different-job": valid_record},
-            },
-            {
-                "version": 1,
-                "jobs": {"job-1": {**valid_record, "attempts": True}},
-            },
-            {
-                "version": 1,
-                "jobs": {"job-1": {**valid_record, "attempts": "2"}},
-            },
-            {
-                "version": 1,
-                "jobs": {"job-1": {**valid_record, "attempts": -1}},
-            },
-            {
-                "version": 1,
-                "jobs": {
-                    "job-1": {**valid_record, "last_attempt_at": "not-a-time"}
-                },
-            },
-            {
-                "version": 1,
-                "jobs": {
-                    "job-1": {
-                        **valid_record,
-                        "last_attempt_at": "2026-07-10T00:00:00",
-                    }
-                },
-            },
-            {
-                "version": 1,
-                "jobs": {
-                    "job-1": {**valid_record, "retry_delay_seconds": True}
-                },
-            },
-            {
-                "version": 1,
-                "jobs": {"job-1": {**valid_record, "node_id": 1}},
-            },
-        )
-
+    def test_store_rejects_legacy_json_and_corrupt_bootstrap_rows(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "bootstrap.json"
-            store = VmBootstrapStore(path)
-            for payload in invalid_payloads:
-                with self.subTest(payload=payload):
-                    path.write_text(json.dumps(payload), encoding="utf-8")
-                    with self.assertRaises(ValueError):
-                        store.load()
+            root = Path(raw_dir)
+            legacy = root / "legacy.json"
+            legacy.write_text('{"version":1,"jobs":{}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unreadable"):
+                ControlStateStore(legacy)
+
+            path = root / "control-state.sqlite"
+            store = ControlStateStore(path)
+            record = VmBootstrapRecord(job_id="job-1", attempts=1)
+            store.save_bootstrap_records({"job-1": record})
+            with sqlite3.connect(path) as connection:
+                connection.execute(
+                    "UPDATE control_records SET payload = ' ' || payload "
+                    "WHERE namespace = 'bootstrap' AND record_id = ?",
+                    ("job-1",),
+                )
+            with self.assertRaisesRegex(ValueError, "invalid bootstrap control-state"):
+                store.load_bootstrap_records()
 
     def test_ssh_failures_use_bounded_exponential_retry(self) -> None:
         delays = [

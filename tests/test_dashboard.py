@@ -147,3 +147,17 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("function actionKind(action)", DASHBOARD_JS)
         self.assertIn("actionSummary(actions.concat(builderActions))", DASHBOARD_JS)
         self.assertNotIn('actions.concat(builderActions).join(", ")', DASHBOARD_JS)
+
+    def test_sandbox_list_uses_the_gateway_canonical_fields(self) -> None:
+        aliases = (
+            "raw.sandbox_id raw.sandbox_generation raw.status raw.cached_state "
+            "raw.createdAt raw.updatedAt raw.operationId raw.checkpoint_id "
+            "raw.checkpointId raw.creation_kind raw.creationKind raw.node_id "
+            "raw.job_id raw.profile spec.id spec.generation resources.cpu, "
+            "resources.cpus, resources.memory, resources.disk,"
+        )
+        for alias in aliases.split():
+            self.assertNotIn(alias, DASHBOARD_JS)
+        self.assertIn("resources.vcpu, spec.cpus", DASHBOARD_JS)
+        self.assertNotIn('["running", "acting", "ready"]', DASHBOARD_JS)
+        self.assertIn('"recovery-required", "unavailable"', DASHBOARD_JS)

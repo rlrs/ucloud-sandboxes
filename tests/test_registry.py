@@ -2,24 +2,24 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 from threading import Barrier
 import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
+from ucloud_sandboxes.bootstrap import VmBootstrapRecord
+from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.deployment import AGENT_VERSION_LABEL, package_version
 from ucloud_sandboxes.models import (
     InstancePhase,
-    NodeRuntimeMetrics,
     ResourceQuantity,
-    SandboxInventoryEntry,
     ScalePolicy,
     ProviderInstance,
     utc_now,
 )
 from ucloud_sandboxes.registry import (
     HeartbeatIdentityError,
-    HeartbeatStore,
     heartbeat_from_dict,
     heartbeat_to_dict,
     merge_jobs_and_heartbeats,
@@ -32,22 +32,88 @@ def build_heartbeat(**kwargs):
 
 
 class RegistryTests(unittest.TestCase):
+    def test_control_state_first_open_is_fenced_and_schema_is_exact(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "control-state.sqlite"
+            barrier = Barrier(5)
+
+            def open_store() -> None:
+                barrier.wait()
+                ControlStateStore(path)
+
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(open_store) for _ in range(4)]
+                barrier.wait()
+                for future in futures:
+                    future.result()
+
+            store = ControlStateStore(path)
+            with store._transaction(write=True):
+                for candidate in (
+                    path,
+                    path.with_name(f"{path.name}-wal"),
+                    path.with_name(f"{path.name}-shm"),
+                ):
+                    self.assertEqual(candidate.stat().st_mode & 0o777, 0o600)
+
+            with sqlite3.connect(path) as connection:
+                self.assertNotEqual(
+                    connection.execute("PRAGMA application_id").fetchone(),
+                    (0,),
+                )
+                self.assertEqual(
+                    connection.execute("PRAGMA user_version").fetchone(),
+                    (1,),
+                )
+                self.assertEqual(
+                    {
+                        row[0]
+                        for row in connection.execute(
+                            "SELECT name FROM sqlite_schema "
+                            "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                        )
+                    },
+                    {"control_records"},
+                )
+                self.assertEqual(
+                    {
+                        row[0]
+                        for row in connection.execute(
+                            "SELECT strict FROM pragma_table_list "
+                            "WHERE name = 'control_records'"
+                        )
+                    },
+                    {1},
+                )
+                connection.execute(
+                    "CREATE INDEX unexpected_control_state_index "
+                    "ON control_records(record_id)"
+                )
+
+            with self.assertRaisesRegex(ValueError, "unsupported control state"):
+                ControlStateStore(path)
+
+            with sqlite3.connect(path) as connection:
+                connection.execute("DROP INDEX unexpected_control_state_index")
+                connection.execute("PRAGMA user_version = 2")
+            with self.assertRaisesRegex(ValueError, "unsupported control state"):
+                ControlStateStore(path)
+
     def test_heartbeat_state_is_durable_and_owner_only(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            HeartbeatStore(path).upsert(
+            path = Path(raw_dir) / "control-state.sqlite"
+            ControlStateStore(path).upsert_heartbeat(
                 build_heartbeat(job_id="job-1", node_id="node-1")
             )
 
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-            self.assertIn("job-1", HeartbeatStore(path).load())
+            self.assertIn("job-1", ControlStateStore(path).load_heartbeats())
 
     def test_rejects_malformed_heartbeat_accounting_fields(self) -> None:
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         invalid_payloads = (
             {**raw, "active_sandboxes": "not-an-integer"},
             {**raw, "active_image_builds": -1},
-            {**raw, "cpu_overcommit": "nan"},
             {**raw, "used_resources": {"memory_mb": -1}},
             {**raw, "labels": ["not", "an", "object"]},
         )
@@ -181,116 +247,14 @@ class RegistryTests(unittest.TestCase):
         self.assertFalse(nodes[0].agent_version_compatible)
         self.assertTrue(nodes[0].is_provisioning)
 
-    def test_heartbeat_store_roundtrip(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            heartbeat = build_heartbeat(
-                job_id="job-1",
-                node_id="node-1",
-                node_url="http://node-1:8090",
-                active_sandboxes=2,
-                active_image_builds=1,
-                agent_version="0.1.0-test",
-                deployment_id="prod-a",
-                init_version="init-1",
-                capabilities=("sandbox", "image-build"),
-                labels={"role": "worker"},
-                runtime_metrics=NodeRuntimeMetrics(
-                    collected_at=utc_now(),
-                    cpu_percent=10.0,
-                    cpu_vcpu=0.2,
-                    cpu_count=2,
-                    memory_total_mb=6144,
-                    memory_used_mb=1024,
-                    memory_available_mb=5120,
-                    memory_percent=16.6666666667,
-                ),
-            )
-
-            store = HeartbeatStore(path)
-            store.upsert(heartbeat)
-            loaded = store.load()
-
-            self.assertIn("job-1", loaded)
-            self.assertEqual(loaded["job-1"].node_id, "node-1")
-            self.assertEqual(loaded["job-1"].node_url, "http://node-1:8090")
-            self.assertEqual(loaded["job-1"].agent_version, "0.1.0-test")
-            self.assertEqual(loaded["job-1"].deployment_id, "prod-a")
-            self.assertEqual(loaded["job-1"].init_version, "init-1")
-            self.assertEqual(loaded["job-1"].active_sandboxes, 2)
-            self.assertEqual(loaded["job-1"].active_image_builds, 1)
-            self.assertEqual(loaded["job-1"].capabilities, ("sandbox", "image-build"))
-            self.assertEqual(loaded["job-1"].labels, {"role": "worker"})
-            self.assertIsNotNone(loaded["job-1"].runtime_metrics)
-            assert loaded["job-1"].runtime_metrics is not None
-            self.assertEqual(loaded["job-1"].runtime_metrics.cpu_percent, 10.0)
-            self.assertEqual(loaded["job-1"].runtime_metrics.memory_used_mb, 1024)
-
-    def test_heartbeat_store_roundtrips_distributed_state_fields(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            reported_at = utc_now()
-            received_at = reported_at + timedelta(seconds=3)
-            heartbeat = replace(
-                build_heartbeat(job_id="job-1", node_id="node-1", now=reported_at),
-                reported_at=reported_at,
-                received_at=received_at,
-                node_epoch="boot-123",
-                activity_epoch=7,
-                inventory=(
-                    SandboxInventoryEntry(
-                        sandbox_id="sandbox-1",
-                        generation=4,
-                        operation_id="operation-1",
-                        spec_hash="a" * 64,
-                        state="running",
-                        resources=ResourceQuantity(
-                            vcpu=2, memory_mb=1024, disk_mb=2048
-                        ),
-                    ),
-                ),
-                inventory_complete=True,
-                reserved_resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=64),
-                build_reserved_resources=ResourceQuantity(
-                    vcpu=2,
-                    memory_mb=2048,
-                    disk_mb=4096,
-                ),
-                physical_disk_total_mb=100_000,
-                physical_disk_free_mb=40_000,
-                drain_token="drain-1",
-                drain_activity_epoch=7,
-                admission_open=False,
-            )
-
-            HeartbeatStore(path).upsert(heartbeat)
-            loaded = HeartbeatStore(path).load()["job-1"]
-
-            self.assertEqual(loaded.reported_at, reported_at)
-            self.assertEqual(loaded.received_at, received_at)
-            self.assertEqual(loaded.node_epoch, "boot-123")
-            self.assertEqual(loaded.activity_epoch, 7)
-            self.assertTrue(loaded.inventory_complete)
-            self.assertEqual(loaded.inventory, heartbeat.inventory)
-            self.assertEqual(loaded.reserved_resources, heartbeat.reserved_resources)
-            self.assertEqual(
-                loaded.build_reserved_resources,
-                heartbeat.build_reserved_resources,
-            )
-            self.assertEqual(loaded.physical_disk_total_mb, 100_000)
-            self.assertEqual(loaded.physical_disk_free_mb, 40_000)
-            self.assertEqual(loaded.drain_token, "drain-1")
-            self.assertEqual(loaded.drain_activity_epoch, 7)
-            self.assertFalse(loaded.admission_open)
-
     def test_idle_transition_uses_gateway_receipt_time(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            store = HeartbeatStore(path)
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
             node_reported_at = utc_now() - timedelta(hours=1)
             received_at = utc_now()
 
-            store.upsert(
+            store.upsert_heartbeat(
                 replace(
                     build_heartbeat(
                         job_id="job-1",
@@ -303,12 +267,12 @@ class RegistryTests(unittest.TestCase):
                 )
             )
 
-            self.assertEqual(store.load()["job-1"].idle_since, received_at)
+            self.assertEqual(store.load_heartbeats()["job-1"].idle_since, received_at)
 
     def test_older_gateway_receipt_cannot_overwrite_newer_node_state(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            store = HeartbeatStore(path)
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
             older_at = utc_now()
             newer_at = older_at + timedelta(seconds=1)
             older = replace(
@@ -336,9 +300,9 @@ class RegistryTests(unittest.TestCase):
                 idle_since=None,
             )
 
-            newer_result = store.upsert_received(newer)
-            older_result = store.upsert_received(older)
-            stored = store.load()["job-1"]
+            newer_result = store.receive_heartbeat(newer)
+            older_result = store.receive_heartbeat(older)
+            stored = store.load_heartbeats()["job-1"]
 
             self.assertTrue(newer_result.accepted)
             self.assertFalse(older_result.accepted)
@@ -350,7 +314,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_retired_boot_epoch_cannot_return_with_a_later_receipt(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
             first = replace(
                 build_heartbeat(
                     job_id="job-1",
@@ -375,17 +339,17 @@ class RegistryTests(unittest.TestCase):
                 activity_epoch=150,
             )
 
-            self.assertTrue(store.upsert_received(first).accepted)
-            self.assertTrue(store.upsert_received(second).accepted)
-            self.assertFalse(store.upsert_received(delayed_first).accepted)
-            stored = store.load()["job-1"]
+            self.assertTrue(store.receive_heartbeat(first).accepted)
+            self.assertTrue(store.receive_heartbeat(second).accepted)
+            self.assertFalse(store.receive_heartbeat(delayed_first).accepted)
+            stored = store.load_heartbeats()["job-1"]
 
         self.assertEqual(stored.node_epoch, "boot-b")
         self.assertEqual(stored.retired_node_epochs, ("boot-a",))
 
     def test_heartbeat_identity_is_immutable_for_a_job(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
             original = replace(
                 build_heartbeat(
                     job_id="job-1",
@@ -405,16 +369,16 @@ class RegistryTests(unittest.TestCase):
                 activity_epoch=101,
             )
 
-            self.assertTrue(store.upsert_received(original).accepted)
+            self.assertTrue(store.receive_heartbeat(original).accepted)
             with self.assertRaises(HeartbeatIdentityError):
-                store.upsert_received(spoofed)
-            stored = store.load()["job-1"]
+                store.receive_heartbeat(spoofed)
+            stored = store.load_heartbeats()["job-1"]
 
         self.assertEqual(stored.node_url, original.node_url)
 
     def test_cross_job_node_binding_is_atomic(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
             barrier = Barrier(3)
             received_at = utc_now()
 
@@ -430,7 +394,7 @@ class RegistryTests(unittest.TestCase):
                 )
                 barrier.wait()
                 try:
-                    result = store.upsert_received(heartbeat)
+                    result = store.receive_heartbeat(heartbeat)
                 except HeartbeatIdentityError:
                     return "conflict"
                 return "accepted" if result.accepted else "stale"
@@ -440,7 +404,7 @@ class RegistryTests(unittest.TestCase):
                 barrier.wait()
                 outcomes = sorted(future.result() for future in futures)
 
-            stored = store.load()
+            stored = store.load_heartbeats()
 
         self.assertEqual(outcomes, ["accepted", "conflict"])
         self.assertEqual(len(stored), 1)
@@ -448,7 +412,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_canonical_node_url_binding_is_atomic(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            store = HeartbeatStore(Path(raw_dir) / "heartbeats.json")
+            store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
             barrier = Barrier(3)
             received_at = utc_now()
 
@@ -464,7 +428,7 @@ class RegistryTests(unittest.TestCase):
                 )
                 barrier.wait()
                 try:
-                    result = store.upsert_received(heartbeat)
+                    result = store.receive_heartbeat(heartbeat)
                 except HeartbeatIdentityError:
                     return "conflict"
                 return "accepted" if result.accepted else "stale"
@@ -477,12 +441,12 @@ class RegistryTests(unittest.TestCase):
                 barrier.wait()
                 outcomes = sorted(future.result() for future in futures)
 
-            stored = store.load()
+            stored = store.load_heartbeats()
 
         self.assertEqual(outcomes, ["accepted", "conflict"])
         self.assertEqual(len(stored), 1)
 
-    def test_heartbeat_schema_requires_deployment_and_resource_knowledge(self) -> None:
+    def test_heartbeat_schema_requires_every_canonical_field(self) -> None:
         raw = heartbeat_to_dict(
             build_heartbeat(
                 job_id="job-1",
@@ -495,35 +459,29 @@ class RegistryTests(unittest.TestCase):
         empty_deployment = {**raw, "deployment_id": "  "}
         missing_resource_knowledge = dict(raw)
         missing_resource_knowledge.pop("resources_known")
+        missing_admission_state = dict(raw)
+        missing_admission_state.pop("admission_open")
+        null_admission_state = {**raw, "admission_open": None}
+        null_inventory = {**raw, "inventory": None}
 
         self.assertIsNone(heartbeat_from_dict(missing_deployment))
         self.assertIsNone(heartbeat_from_dict(empty_deployment))
         self.assertIsNone(heartbeat_from_dict(missing_resource_knowledge))
+        self.assertIsNone(heartbeat_from_dict(missing_admission_state))
+        self.assertIsNone(heartbeat_from_dict(null_admission_state))
+        self.assertIsNone(heartbeat_from_dict(null_inventory))
         parsed = heartbeat_from_dict(raw)
         self.assertIsNotNone(parsed)
         assert parsed is not None
         self.assertTrue(parsed.resources_known)
 
     def test_malformed_heartbeat_numbers_are_rejected(self) -> None:
+        raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         malformed = (
-            {
-                "node_id": "node-1",
-                "job_id": "job-1",
-                "updated_at": utc_now().isoformat(),
-                "activity_epoch": "not-an-integer",
-            },
-            {
-                "node_id": "node-1",
-                "job_id": "job-1",
-                "updated_at": utc_now().isoformat(),
-                "physical_disk_total_mb": "unknown",
-            },
-            {
-                "node_id": "node-1",
-                "job_id": "job-1",
-                "updated_at": utc_now().isoformat(),
-                "physical_disk_free_mb": [],
-            },
+            {**raw, "activity_epoch": "1"},
+            {**raw, "physical_disk_total_mb": 1.0},
+            {**raw, "physical_disk_free_mb": None},
+            {**raw, "active_sandboxes": "1"},
         )
 
         for payload in malformed:
@@ -534,7 +492,10 @@ class RegistryTests(unittest.TestCase):
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))
         malformed = (
             {**raw, "future_field": True},
+            {**raw, "cpu_overcommit": 1.0},
             {**raw, "capabilities": "sandbox,image-cache"},
+            {**raw, "capabilities": [" sandbox"]},
+            {**raw, "capabilities": ["sandbox", "sandbox"]},
             {**raw, "cached_images": "image-1"},
             {**raw, "retired_node_epochs": [1]},
         )
@@ -571,46 +532,66 @@ class RegistryTests(unittest.TestCase):
 
     def test_heartbeat_store_removes_jobs(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            store = HeartbeatStore(path)
-            store.save(
-                {
-                    "job-1": build_heartbeat(job_id="job-1", node_id="node-1"),
-                    "job-2": build_heartbeat(job_id="job-2", node_id="node-2"),
-                }
-            )
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
+            for job_id, node_id in (("job-1", "node-1"), ("job-2", "node-2")):
+                store.upsert_heartbeat(build_heartbeat(job_id=job_id, node_id=node_id))
 
-            removed = store.remove(("job-1", "missing"))
-            loaded = store.load()
+            removed = store.remove_heartbeats(("job-1", "missing"))
+            loaded = store.load_heartbeats()
 
             self.assertEqual(tuple(removed), ("job-1",))
             self.assertNotIn("job-1", loaded)
             self.assertIn("job-2", loaded)
 
-    def test_heartbeat_store_quarantines_corrupt_json(self) -> None:
+    def test_control_state_fails_closed_on_legacy_json_and_corrupt_rows(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            path.write_text('{"nodes": []}\n{"nodes": []}\n', encoding="utf-8")
-            store = HeartbeatStore(path)
+            root = Path(raw_dir)
+            legacy = root / "heartbeats.json"
+            legacy.write_text('{"nodes": []}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unreadable"):
+                ControlStateStore(legacy)
 
-            loaded = store.load()
+            path = root / "control-state.sqlite"
+            store = ControlStateStore(path)
+            store.upsert_heartbeat(build_heartbeat(job_id="job-1", node_id="node-1"))
+            with sqlite3.connect(path) as connection:
+                connection.execute(
+                    "UPDATE control_records SET payload = ' ' || payload "
+                    "WHERE namespace = 'heartbeat'"
+                )
 
-            self.assertEqual(loaded, {})
-            self.assertFalse(path.exists())
+            with self.assertRaisesRegex(ValueError, "invalid heartbeat control-state"):
+                store.load_heartbeats()
+
+    def test_control_state_namespaces_do_not_overwrite_each_other(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
+            heartbeat = build_heartbeat(job_id="job-1", node_id="node-1")
+            bootstrap = VmBootstrapRecord(job_id="job-1", attempts=1)
+
+            store.save_bootstrap_records({"job-1": bootstrap})
+            store.upsert_heartbeat(heartbeat)
             self.assertEqual(
-                len(list(Path(raw_dir).glob("heartbeats.json.corrupt-*"))),
-                1,
+                store.load_bootstrap_records(),
+                {"job-1": bootstrap},
+            )
+
+            store.save_bootstrap_records({})
+            self.assertEqual(
+                store.load_heartbeats()["job-1"].node_id,
+                heartbeat.node_id,
             )
 
     def test_heartbeat_store_tracks_idle_since_transition(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            store = HeartbeatStore(path)
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
             busy_at = utc_now()
             idle_at = busy_at + timedelta(seconds=30)
             later_at = idle_at + timedelta(seconds=30)
 
-            store.upsert(
+            store.upsert_heartbeat(
                 build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -618,9 +599,9 @@ class RegistryTests(unittest.TestCase):
                     now=busy_at,
                 )
             )
-            self.assertIsNone(store.load()["job-1"].idle_since)
+            self.assertIsNone(store.load_heartbeats()["job-1"].idle_since)
 
-            store.upsert(
+            store.upsert_heartbeat(
                 build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -628,9 +609,9 @@ class RegistryTests(unittest.TestCase):
                     now=idle_at,
                 )
             )
-            self.assertEqual(store.load()["job-1"].idle_since, idle_at)
+            self.assertEqual(store.load_heartbeats()["job-1"].idle_since, idle_at)
 
-            store.upsert(
+            store.upsert_heartbeat(
                 build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -638,16 +619,16 @@ class RegistryTests(unittest.TestCase):
                     now=later_at,
                 )
             )
-            self.assertEqual(store.load()["job-1"].idle_since, idle_at)
+            self.assertEqual(store.load_heartbeats()["job-1"].idle_since, idle_at)
 
     def test_heartbeat_store_treats_image_build_as_active_work(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "heartbeats.json"
-            store = HeartbeatStore(path)
+            path = Path(raw_dir) / "control-state.sqlite"
+            store = ControlStateStore(path)
             busy_at = utc_now()
             idle_at = busy_at + timedelta(seconds=30)
 
-            store.upsert(
+            store.upsert_heartbeat(
                 build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -655,9 +636,9 @@ class RegistryTests(unittest.TestCase):
                     now=busy_at,
                 )
             )
-            self.assertIsNone(store.load()["job-1"].idle_since)
+            self.assertIsNone(store.load_heartbeats()["job-1"].idle_since)
 
-            store.upsert(
+            store.upsert_heartbeat(
                 build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -665,7 +646,7 @@ class RegistryTests(unittest.TestCase):
                     now=idle_at,
                 )
             )
-            self.assertEqual(store.load()["job-1"].idle_since, idle_at)
+            self.assertEqual(store.load_heartbeats()["job-1"].idle_since, idle_at)
 
 
 if __name__ == "__main__":

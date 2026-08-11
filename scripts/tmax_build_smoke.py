@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
+import shlex
 import sys
 import time
 from typing import Any
@@ -19,10 +22,6 @@ if SDK_SRC.exists():
     sys.path.insert(0, str(SDK_SRC))
 sys.path.insert(0, str(REPO_ROOT))
 
-from ucloud_sandboxes.tmax import (  # noqa: E402
-    TMaxBuildContext,
-    materialize_tmax_context,
-)
 from ucloud_sandboxes_sdk import (  # noqa: E402
     Image,
     SandboxApiError,
@@ -31,6 +30,102 @@ from ucloud_sandboxes_sdk import (  # noqa: E402
 
 
 DATASET_ROWS_URL = "https://datasets-server.huggingface.co/rows"
+_SECTION = re.compile(r"^%([A-Za-z][A-Za-z0-9_-]*)(?:\s+.*)?$")
+_UNSAFE_IMAGE_COMPONENT = re.compile(r"[^a-z0-9_.-]+")
+_METADATA_FIELDS = "task_id domain skill_type task_complexity command_complexity scenario language".split()
+_DOCKERFILE = """FROM {base_image}
+
+SHELL [\"/bin/bash\", \"-o\", \"pipefail\", \"-c\"]
+ENV PIP_DEFAULT_TIMEOUT=120
+ENV PIP_RETRIES=10
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+LABEL org.opencontainers.image.source=\"https://huggingface.co/datasets/allenai/TMax-15K\"
+LABEL org.opencontainers.image.title={title}
+LABEL ucloud-sandboxes.tmax.task-id={title}
+
+COPY post.sh /tmp/ucloud-tmax-post.sh
+RUN chmod +x /tmp/ucloud-tmax-post.sh && /tmp/ucloud-tmax-post.sh && rm /tmp/ucloud-tmax-post.sh
+
+RUN mkdir -p /opt/tmax
+COPY test_initial_state.py /opt/tmax/test_initial_state.py
+COPY tmax_task.json /opt/tmax/task.json
+
+WORKDIR /home/user
+"""
+
+
+@dataclass(frozen=True)
+class _TMaxBuildContext:
+    row_idx: int
+    task_id: str
+    image_id: str
+    context_path: Path
+    skipped_reason: str = ""
+
+
+def _materialize_tmax_context(
+    row: dict[str, Any], *, row_idx: int, output_root: Path
+) -> _TMaxBuildContext:
+    task_id = str(row.get("task_id") or f"row-{row_idx}")
+    component = task_id.strip().lower().replace("/", "-")
+    component = _UNSAFE_IMAGE_COMPONENT.sub("-", component).strip(".-_") or "unnamed"
+    image_id = f"tmax-{component}"[:64].rstrip(".-_")
+    context = _TMaxBuildContext(row_idx, task_id, image_id, output_root / component)
+    container_def = str(row.get("container_def") or "")
+    if not container_def.strip():
+        return replace(context, skipped_reason="missing container_def")
+    header: dict[str, str] = {}
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for raw_line in container_def.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        match = _SECTION.match(raw_line.strip())
+        if match is not None:
+            current = match.group(1).lower()
+            sections.setdefault(current, [])
+        elif current is None and ":" in raw_line:
+            key, value = raw_line.split(":", 1)
+            header[key.strip().lower()] = value.strip()
+        elif current is not None:
+            sections[current].append(raw_line)
+    bootstrap = header.get("bootstrap", "")
+    base_image = header.get("from", "")
+    files = sections.get("files", [])
+    has_files = any(
+        len(shlex.split(line)) >= 2
+        for raw_line in files
+        if (line := raw_line.strip()) and not line.startswith("#")
+    )
+    if bootstrap.lower() != "docker":
+        reason = f"unsupported bootstrap: {bootstrap or '(missing)'}"
+        return replace(context, skipped_reason=reason)
+    if not base_image:
+        return replace(context, skipped_reason="missing base image")
+    if has_files:
+        return replace(context, skipped_reason="requires external %files fixtures")
+    context.context_path.mkdir(parents=True, exist_ok=True)
+    post_lines = sections.get("post", [])
+    for index, line in enumerate(post_lines):
+        if line.strip() in {"pip3 install pytest", "python3 -m pip install pytest"}:
+            indent = line[: len(line) - len(line.lstrip())]
+            post_lines[index] = indent + "apt-get install -y python3-pytest"
+    post = "\n".join(post_lines).strip("\n") or "true"
+    metadata = {"row_idx": row_idx}
+    for key in _METADATA_FIELDS:
+        if key in row:
+            metadata[key] = row[key]
+    artifacts = {
+        "Dockerfile": _DOCKERFILE.format(
+            base_image=base_image, title=json.dumps(task_id)
+        ),
+        "post.sh": "\n".join(
+            ("#!/usr/bin/env bash", "set -eo pipefail", "cd /", post, "")
+        ),
+        "test_initial_state.py": str(row.get("test_initial_state") or ""),
+        "tmax_task.json": json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+    }
+    for name, payload in artifacts.items():
+        (context.context_path / name).write_text(payload, encoding="utf-8")
+    return context
 
 
 def main() -> int:
@@ -38,7 +133,7 @@ def main() -> int:
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     context_root = Path(args.context_root).expanduser() / run_id
     rows = fetch_candidate_rows(args)
-    contexts = select_contexts(rows, args=args, context_root=context_root, run_id=run_id)
+    contexts = select_contexts(rows, args=args, context_root=context_root)
     if not contexts:
         raise SystemExit("no buildable TMax rows found in scanned range")
 
@@ -95,7 +190,9 @@ def main() -> int:
         }
         if not args.skip_sandbox:
             print(f"creating sandbox for {context.task_id}", flush=True)
-            result["sandbox"] = run_sandbox_smoke(client, context, args=args, run_id=run_id)
+            result["sandbox"] = run_sandbox_smoke(
+                client, context, args=args, run_id=run_id
+            )
         results.append(result)
 
     print(json.dumps({"run_id": run_id, "results": results}, indent=2, sort_keys=True))
@@ -108,7 +205,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build selected allenai/TMax-15K images through UCloud and smoke-test them as sandboxes.",
     )
-    parser.add_argument("--gateway-url", default=os.getenv("UCLOUD_SANDBOX_API_URL", ""))
+    parser.add_argument(
+        "--gateway-url", default=os.getenv("UCLOUD_SANDBOX_API_URL", "")
+    )
     parser.add_argument("--token", default=os.getenv("UCLOUD_SANDBOX_API_TOKEN", ""))
     parser.add_argument("--dataset", default="allenai/TMax-15K")
     parser.add_argument("--config", default="default")
@@ -123,9 +222,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-sandbox", action="store_true")
     parser.add_argument("--keep-contexts", action="store_true")
     parser.add_argument("--keep-sandboxes", action="store_true")
-    parser.add_argument("--prepare-builder", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--prepare-builder", action=argparse.BooleanOptionalAction, default=True
+    )
     parser.add_argument("--builder-count", type=int, default=1)
-    parser.add_argument("--prepare-sandboxes", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--prepare-sandboxes", action=argparse.BooleanOptionalAction, default=True
+    )
     parser.add_argument("--prepare-ttl-seconds", type=int, default=1800)
     parser.add_argument("--build-timeout-seconds", type=float, default=3600)
     parser.add_argument("--sandbox-timeout-seconds", type=float, default=1800)
@@ -184,18 +287,16 @@ def select_contexts(
     *,
     args: argparse.Namespace,
     context_root: Path,
-    run_id: str,
-) -> list[TMaxBuildContext]:
-    contexts: list[TMaxBuildContext] = []
+) -> list[_TMaxBuildContext]:
+    contexts: list[_TMaxBuildContext] = []
     skipped: list[dict[str, Any]] = []
     for row_idx, row in rows:
-        context = materialize_tmax_context(
+        context = _materialize_tmax_context(
             row,
             row_idx=row_idx,
             output_root=context_root,
-            tag_suffix=run_id,
         )
-        if context.buildable:
+        if not context.skipped_reason:
             contexts.append(context)
             if len(contexts) >= args.count:
                 break
@@ -208,13 +309,17 @@ def select_contexts(
                 }
             )
     if skipped:
-        print(json.dumps({"skipped": skipped[:20], "skipped_count": len(skipped)}, indent=2))
+        print(
+            json.dumps(
+                {"skipped": skipped[:20], "skipped_count": len(skipped)}, indent=2
+            )
+        )
     return contexts
 
 
 def build_with_retry(
     client: SandboxClient,
-    context: TMaxBuildContext,
+    context: _TMaxBuildContext,
     *,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
@@ -236,7 +341,9 @@ def build_with_retry(
                 raise
             print(f"builder not ready for {context.task_id}; retrying", flush=True)
             time.sleep(args.retry_interval_seconds)
-    build_id = str(submitted.get("build_id") or submitted.get("image_id") or context.image_id)
+    build_id = str(
+        submitted.get("build_id") or submitted.get("image_id") or context.image_id
+    )
     build = client.wait_for_image_build(
         build_id,
         timeout_seconds=max(1.0, deadline - time.monotonic()),
@@ -251,7 +358,7 @@ def build_with_retry(
     return {"build": build}
 
 
-def print_build_status(context: TMaxBuildContext, build: dict[str, Any]) -> None:
+def print_build_status(context: _TMaxBuildContext, build: dict[str, Any]) -> None:
     tail = str(build.get("log_tail") or "")
     last_line = next((line for line in reversed(tail.splitlines()) if line.strip()), "")
     print(
@@ -271,7 +378,7 @@ def print_build_status(context: TMaxBuildContext, build: dict[str, Any]) -> None
 
 def run_sandbox_smoke(
     client: SandboxClient,
-    context: TMaxBuildContext,
+    context: _TMaxBuildContext,
     *,
     args: argparse.Namespace,
     run_id: str,

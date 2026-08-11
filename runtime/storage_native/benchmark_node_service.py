@@ -26,6 +26,8 @@ from ucloud_sandboxes.storage_native_daemon import (  # noqa: E402
     StorageNativeNodeConfig,
     StorageNativeNodeServer,
     StorageNativeNodeService,
+    StorageVolumeOwner,
+    StorageVolumeState,
 )
 from ucloud_sandboxes.storage_native_registry import (  # noqa: E402
     RegistrySnapshotPublisher,
@@ -174,9 +176,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             RegistrySnapshotPublisher(
                 RegistryClient(args.registry_url, timeout_seconds=120),
                 repository=args.repository,
-                stream_socket_root=Path(
-                    "/run/ucloud-storage-native-publication"
-                ),
+                stream_socket_root=Path("/run/ucloud-storage-native-publication"),
             )
             if args.registry_url
             else None
@@ -190,17 +190,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         service_socket = root / "service" / "storage.sock"
         server, thread = _start_server(service_socket, service)
         client = StorageNativeNodeClient(service_socket)
+        owner = StorageVolumeOwner("benchmark-1", "benchmark", 1)
 
         started = time.monotonic()
-        created = client.create_volume(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        created = client.prepare_volume(
+            owner,
             operation_id="create:1",
             virtual_size=GIB,
         )
         create_seconds = time.monotonic() - started
-        mount_path = Path(created["record"]["mount_path"])
+        mount_path = Path(created.mount_path)
         payload = mount_path / "payload.bin"
         with payload.open("w+b") as handle:
             os.posix_fallocate(handle.fileno(), 0, 256 * 1024 * 1024)
@@ -227,57 +226,48 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         client = StorageNativeNodeClient(service_socket)
 
         started = time.monotonic()
-        sealed = client.freeze_and_seal(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        sealed = restarted_service.freeze_and_seal(
+            **owner.request_fields(),
             operation_id="seal:1",
-            expected_revision=1,
+            expected_revision=created.revision,
         )
         seal_seconds = time.monotonic() - started
-        sealed_path = Path(sealed["record"]["sealed_layer_path"])
+        sealed_path = Path(sealed.sealed_layer_paths[-1])
         sealed_stat = sealed_path.stat()
         started = time.monotonic()
-        released = client.release_runtime(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        released = restarted_service.release_runtime(
+            **owner.request_fields(),
             operation_id="release:1",
-            expected_revision=2,
+            expected_revision=sealed.revision,
         )
         release_seconds = time.monotonic() - started
-        if released["record"]["state"] != "released":
+        if released.state != StorageVolumeState.RELEASED:
             raise RuntimeError("volume did not reach released")
-        if Path(released["record"]["mount_path"]).is_mount():
+        if Path(released.mount_path).is_mount():
             raise RuntimeError("released volume remained mounted")
 
         publication_seconds = 0.0
-        acquire_revision = 3
         destination_service: StorageNativeNodeService | None = None
         if publisher is not None:
             started = time.monotonic()
-            published = client.publish_snapshot(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
+            published = restarted_service.publish_snapshot(
+                **owner.request_fields(),
                 operation_id="publish:1",
-                expected_revision=3,
+                expected_revision=released.revision,
             )
             publication_seconds = time.monotonic() - started
-            if published["record"]["state"] != "published":
+            if published.state != StorageVolumeState.PUBLISHED:
                 raise RuntimeError("volume did not become durably published")
             if sealed_path.exists():
                 raise RuntimeError("published local layer was not reclaimed")
-            publication = published.get("publication")
-            if not isinstance(publication, dict):
-                raise RuntimeError("publication result is missing its manifest")
+            publication = published.publication()
             client.delete_volume(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
+                owner,
                 operation_id="delete-source:1",
-                expected_revision=4,
             )
+            _stop_server(server, thread)
+            server = None
+            thread = None
             destination_config = StorageNativeNodeConfig(
                 journal_path=root / "destination-journal" / "storage.sqlite",
                 runtime_root=root / "destination-volumes",
@@ -293,206 +283,133 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 global_config_path=global_config,
                 publisher=publisher,
             )
-            acquired = destination_service.acquire_snapshot(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
-                operation_id="import-destination:1",
-                publication_raw=publication,
-            )
-            if acquired["record"]["state"] != "published":
-                raise RuntimeError("destination did not acquire parked authority")
+            server, thread = _start_server(service_socket, destination_service)
+            client = StorageNativeNodeClient(service_socket)
 
         started = time.monotonic()
         if destination_service is not None:
-            resumed = destination_service.mount_snapshot_cow(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
-                operation_id="acquire:destination",
-                expected_revision=1,
+            resumed = client.prepare_import(
+                owner,
+                operation_id="import-destination:1",
+                publication=publication,
             )
         else:
-            resumed = client.mount_snapshot_cow(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
+            resumed = client.ensure_mounted(
+                owner,
                 operation_id="acquire:1",
-                expected_revision=acquire_revision,
             )
         acquire_seconds = time.monotonic() - started
-        resumed_payload = Path(resumed["record"]["mount_path"]) / "payload.bin"
+        if resumed.state != StorageVolumeState.MOUNTED:
+            raise RuntimeError("volume did not become mounted")
+        resumed_payload = Path(resumed.mount_path) / "payload.bin"
         with resumed_payload.open("rb") as handle:
             if handle.read(len(b"storage-native-start")) != b"storage-native-start":
                 raise RuntimeError("snapshot start sentinel did not survive")
             handle.seek(128 * 1024 * 1024)
             if handle.read(len(b"storage-native-middle")) != b"storage-native-middle":
                 raise RuntimeError("snapshot middle sentinel did not survive")
-        active_storage: Any = destination_service or client
-        second_seal = active_storage.freeze_and_seal(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        active_service = destination_service or restarted_service
+        second_seal = active_service.freeze_and_seal(
+            **owner.request_fields(),
             operation_id="seal:2",
-            expected_revision=(
-                2 if destination_service is not None else acquire_revision + 1
-            ),
+            expected_revision=resumed.revision,
         )
         expected_local_layers = 1 if publisher is not None else 2
-        if (
-            len(second_seal["record"]["sealed_layer_paths"])
-            != expected_local_layers
-        ):
+        if len(second_seal.sealed_layer_paths) != expected_local_layers:
             raise RuntimeError("resumed snapshot did not preserve its lower chain")
-        if publisher is not None and len(
-            second_seal["record"]["published_layers"]
-        ) != 1:
+        if publisher is not None and len(second_seal.published_layers) != 1:
             raise RuntimeError("resumed snapshot lost its published lower")
-        final_release = active_storage.release_runtime(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        active_service.release_runtime(
+            **owner.request_fields(),
             operation_id="release:2",
-            expected_revision=(
-                3 if destination_service is not None else acquire_revision + 2
-            ),
+            expected_revision=second_seal.revision,
         )
 
         churn_acquire_seconds: list[float] = []
         churn_release_seconds: list[float] = []
-        current_revision = int(final_release["record"]["revision"])
         for index in range(args.churn_iterations):
             started = time.monotonic()
-            churn_mounted = active_storage.mount_snapshot_cow(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
+            client.ensure_mounted(
+                owner,
                 operation_id=f"churn-acquire:{index}",
-                expected_revision=current_revision,
             )
             churn_acquire_seconds.append(time.monotonic() - started)
             started = time.monotonic()
-            churn_released = active_storage.discard_mounted_cow(
-                sandbox_id="benchmark",
-                sandbox_generation=1,
-                volume_id="benchmark-1",
+            client.discard_resume(
+                owner,
                 operation_id=f"churn-release:{index}",
-                expected_revision=int(churn_mounted["record"]["revision"]),
             )
             churn_release_seconds.append(time.monotonic() - started)
-            current_revision = int(churn_released["record"]["revision"])
 
-        parallel_revisions: dict[int, int] = {}
+        parallel_indices = tuple(range(args.parallel_volumes))
         parallel_acquire_seconds: list[float] = []
         parallel_release_seconds: list[float] = []
 
-        def seed_parallel_volume(index: int) -> tuple[int, int]:
+        def parallel_owner(index: int) -> StorageVolumeOwner:
             sandbox_id = f"parallel-{index}"
-            volume_id = f"parallel-{index}"
-            created_parallel = active_storage.create_volume(
-                sandbox_id=sandbox_id,
-                sandbox_generation=1,
-                volume_id=volume_id,
+            return StorageVolumeOwner(sandbox_id, sandbox_id, 1)
+
+        def seed_parallel_volume(index: int) -> None:
+            parallel = parallel_owner(index)
+            client.prepare_volume(
+                parallel,
                 operation_id=f"parallel-{index}:create",
                 virtual_size=GIB,
             )
-            sealed_parallel = active_storage.freeze_and_seal(
-                sandbox_id=sandbox_id,
-                sandbox_generation=1,
-                volume_id=volume_id,
-                operation_id=f"parallel-{index}:seal",
-                expected_revision=int(created_parallel["record"]["revision"]),
-            )
-            released_parallel = active_storage.release_runtime(
-                sandbox_id=sandbox_id,
-                sandbox_generation=1,
-                volume_id=volume_id,
+            client.ensure_released(
+                parallel,
                 operation_id=f"parallel-{index}:release",
-                expected_revision=int(sealed_parallel["record"]["revision"]),
             )
-            return index, int(released_parallel["record"]["revision"])
 
         parallel_seed_started = time.monotonic()
         with ThreadPoolExecutor(max_workers=args.parallel_volumes or 1) as pool:
-            for index, revision in pool.map(
-                seed_parallel_volume,
-                range(args.parallel_volumes),
-            ):
-                parallel_revisions[index] = revision
+            tuple(pool.map(seed_parallel_volume, parallel_indices))
         parallel_seed_seconds = time.monotonic() - parallel_seed_started
 
         def churn_parallel_volume(
-            item: tuple[int, int],
+            index: int,
             round_index: int,
-        ) -> tuple[int, int, float, float]:
-            index, revision = item
-            sandbox_id = f"parallel-{index}"
-            volume_id = f"parallel-{index}"
+        ) -> tuple[float, float]:
+            parallel = parallel_owner(index)
             started = time.monotonic()
-            mounted_parallel = active_storage.mount_snapshot_cow(
-                sandbox_id=sandbox_id,
-                sandbox_generation=1,
-                volume_id=volume_id,
+            client.ensure_mounted(
+                parallel,
                 operation_id=f"parallel-{index}:acquire:{round_index}",
-                expected_revision=revision,
             )
             acquire_latency = time.monotonic() - started
             started = time.monotonic()
-            released_parallel = active_storage.discard_mounted_cow(
-                sandbox_id=sandbox_id,
-                sandbox_generation=1,
-                volume_id=volume_id,
+            client.discard_resume(
+                parallel,
                 operation_id=f"parallel-{index}:release:{round_index}",
-                expected_revision=int(mounted_parallel["record"]["revision"]),
             )
             release_latency = time.monotonic() - started
-            return (
-                index,
-                int(released_parallel["record"]["revision"]),
-                acquire_latency,
-                release_latency,
-            )
+            return acquire_latency, release_latency
 
         parallel_churn_started = time.monotonic()
         with ThreadPoolExecutor(max_workers=args.parallel_volumes or 1) as pool:
             for round_index in range(args.parallel_rounds):
                 futures = [
-                    pool.submit(churn_parallel_volume, item, round_index)
-                    for item in sorted(parallel_revisions.items())
+                    pool.submit(churn_parallel_volume, index, round_index)
+                    for index in parallel_indices
                 ]
                 for future in futures:
-                    index, revision, acquire_latency, release_latency = future.result()
-                    parallel_revisions[index] = revision
+                    acquire_latency, release_latency = future.result()
                     parallel_acquire_seconds.append(acquire_latency)
                     parallel_release_seconds.append(release_latency)
         parallel_churn_seconds = time.monotonic() - parallel_churn_started
 
-        final_metrics = (
-            destination_service.metrics()
-            if destination_service is not None
-            else client.get_metrics()
-        )
+        final_metrics = client.get_metrics()
 
-        for index, revision in sorted(parallel_revisions.items()):
-            active_storage.delete_volume(
-                sandbox_id=f"parallel-{index}",
-                sandbox_generation=1,
-                volume_id=f"parallel-{index}",
+        for index in parallel_indices:
+            client.delete_volume(
+                parallel_owner(index),
                 operation_id=f"parallel-{index}:delete",
-                expected_revision=revision,
             )
-        active_storage.delete_volume(
-            sandbox_id="benchmark",
-            sandbox_generation=1,
-            volume_id="benchmark-1",
+        client.delete_volume(
+            owner,
             operation_id="delete:benchmark",
-            expected_revision=current_revision,
         )
-        post_cleanup_metrics = (
-            destination_service.metrics()
-            if destination_service is not None
-            else client.get_metrics()
-        )
+        post_cleanup_metrics = client.get_metrics()
         if post_cleanup_metrics["hard_reserved_bytes"] != 0:
             raise RuntimeError("benchmark leaked a hard storage reservation")
 

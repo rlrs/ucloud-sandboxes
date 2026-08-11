@@ -11,7 +11,6 @@ import tempfile
 import time
 
 from ucloud_sandboxes.hibernation import (
-    HibernationArtifactFile,
     HibernationArtifactStore,
     HibernationAuthority,
     HibernationFileRole,
@@ -21,6 +20,7 @@ from ucloud_sandboxes.hibernation import (
     HibernationRecoveryAction,
     HibernationRuntimeFingerprint,
     HibernationState,
+    LocalHibernationArtifactFile,
 )
 
 
@@ -94,9 +94,10 @@ def make_manifest(
         created_ns=1,
         runtime=runtime_fingerprint(),
         files=tuple(
-            HibernationArtifactFile.from_path(path, role=role)
+            LocalHibernationArtifactFile.from_path(path, role=role)
             for role, path in paths.items()
         ),
+        managed_process_sha256="",
     )
 
 
@@ -222,13 +223,9 @@ def run_case(
                 sandbox_generation=7,
                 hibernation_generation=hibernating.hibernation_generation,
             )
-            artifacts.publish_complete(
-                make_manifest(generation, sandbox_id=sandbox_id)
-            )
+            artifacts.publish_complete(make_manifest(generation, sandbox_id=sandbox_id))
             proc_root = alive_proc
-            expected_action = (
-                HibernationRecoveryAction.FINISH_PUBLISHED_GENERATION
-            )
+            expected_action = HibernationRecoveryAction.FINISH_PUBLISHED_GENERATION
             expected_state = HibernationState.HIBERNATING
             expected_authority = HibernationAuthority.LIVE
         elif name == "hibernate-pending-no-complete":

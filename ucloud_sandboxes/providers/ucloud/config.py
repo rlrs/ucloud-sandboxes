@@ -64,7 +64,6 @@ class UCloudSettings:
             kind="ucloud",
             scope_id=self.project_id,
             settings={
-                "session_file": self.session_file,
                 "template_job_id": self.template_job_id,
                 "private_network_id": self.private_network_id,
                 "gateway_public_link_id": self.gateway_public_link_id,

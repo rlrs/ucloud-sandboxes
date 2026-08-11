@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import tarfile
+import unittest
+from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
-import unittest
 from urllib import error, request
 
 from ucloud_sandboxes.images import DockerImageRuntime
@@ -16,8 +19,19 @@ from ucloud_sandboxes.sandbox import (
     sandbox_spec_fingerprint,
 )
 
-
 TOKEN = "node-control-secret"
+
+
+def _tar_gz_context(files: dict[str, bytes]) -> bytes:
+    output = BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for name, payload in sorted(files.items()):
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            info.mode = 0o644
+            info.mtime = 0
+            archive.addfile(info, BytesIO(payload))
+    return output.getvalue()
 
 
 class BuilderNodeAgentTests(unittest.TestCase):
@@ -61,6 +75,22 @@ class BuilderNodeAgentTests(unittest.TestCase):
         with request.urlopen(req, timeout=5) as response:
             return response.status, json.load(response)
 
+    def _upload_context(self, files: dict[str, bytes]) -> tuple[bytes, str]:
+        archive = _tar_gz_context(files)
+        digest = f"sha256:{hashlib.sha256(archive).hexdigest()}"
+        upload = request.Request(
+            f"{self.base_url}/v1/image-contexts/{digest}",
+            data=archive,
+            method="PUT",
+            headers={
+                "Authorization": f"Bearer {TOKEN}",
+                "Content-Type": "application/gzip",
+            },
+        )
+        with request.urlopen(upload, timeout=5) as response:
+            self.assertEqual(response.status, 201)
+        return archive, digest
+
     def test_heartbeat_has_exact_builder_surface(self) -> None:
         status, payload = self._json("/v1/heartbeat")
         heartbeat = payload["heartbeat"]
@@ -73,6 +103,7 @@ class BuilderNodeAgentTests(unittest.TestCase):
         self.assertEqual(rejected.exception.code, 404)
 
     def test_drain_fences_image_build_admission(self) -> None:
+        archive, digest = self._upload_context({"Dockerfile": b"FROM scratch\n"})
         status, payload = self._json(
             "/v1/drain",
             method="POST",
@@ -84,9 +115,48 @@ class BuilderNodeAgentTests(unittest.TestCase):
             self._json(
                 "/v1/images/build",
                 method="POST",
-                payload={"id": "image", "tag": "example/image:latest"},
+                payload={
+                    "id": "image",
+                    "tag": "example/image:latest",
+                    "context_path": ".",
+                    "context_archive_digest": digest,
+                    "context_archive_format": "tar.gz",
+                    "context_archive_size": len(archive),
+                },
             )
         self.assertEqual(rejected.exception.code, 503)
+
+    def test_image_build_requires_uploaded_content_addressed_context(self) -> None:
+        with self.assertRaises(error.HTTPError) as rejected:
+            self._json(
+                "/v1/images/build",
+                method="POST",
+                payload={"id": "image", "tag": "example/image:latest"},
+            )
+
+        self.assertEqual(rejected.exception.code, 400)
+        payload = json.loads(rejected.exception.read())
+        self.assertIn("context_archive_digest is required", payload["error"])
+
+    def test_image_build_materializes_uploaded_archive_and_cleans_it(self) -> None:
+        archive, digest = self._upload_context({"Dockerfile": b"FROM scratch\n"})
+
+        status, payload = self._json(
+            "/v1/images/build",
+            method="POST",
+            payload={
+                "id": "image",
+                "tag": "example/image:latest",
+                "context_path": ".",
+                "context_archive_digest": digest,
+                "context_archive_format": "tar.gz",
+                "context_archive_size": len(archive),
+            },
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["build"]["status"], "succeeded")
+        self.assertFalse(Path(payload["build"]["context_path"]).exists())
 
 
 class SandboxWireContractTests(unittest.TestCase):

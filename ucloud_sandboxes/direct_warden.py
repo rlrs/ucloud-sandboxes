@@ -18,7 +18,6 @@ import time
 from typing import Iterator, Protocol, Sequence
 
 from .hibernation import (
-    HibernationArtifactFile,
     HibernationArtifactStore,
     HibernationAuthority,
     HibernationFileRole,
@@ -30,10 +29,16 @@ from .hibernation import (
     HibernationRecoveryAction,
     HibernationRuntimeFingerprint,
     HibernationState,
+    LocalHibernationArtifactFile,
     hibernation_process_identity_matches,
     linux_process_start_time_ticks,
 )
-from .storage_native_daemon import StorageNativeNodeClient
+from .storage_native_daemon import (
+    StorageNativeNodeClient,
+    StorageVolumeOwner,
+    StorageVolumeRecord,
+    StorageVolumeState,
+)
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -45,9 +50,6 @@ _ACTIVE_APPLICATION_MEMORY = "application_memory.active"
 _CHECKPOINT_STATE = "checkpoint.img"
 _PAGES_METADATA = "pages_meta.img"
 _PRIVATE_PAGES = "pages.img"
-_RESTORE_IMAGE = ".restore-image"
-_RESTORE_SOURCE = ".source.json"
-_FICLONE = 0x40049409
 
 
 class DirectWardenError(RuntimeError):
@@ -224,26 +226,12 @@ class DirectRunscWardenConfig:
     memory_root: Path
     bundle_root: Path
     journal_root: Path
-    artifact_root: Path
     runtime_fingerprint: HibernationRuntimeFingerprint
     proc_root: Path = Path("/proc")
-    platform: str = "systrap"
     network: str = "none"
     command_timeout_seconds: float = 60.0
     stop_timeout_seconds: float = 30.0
-    restore_background: bool = True
-    restore_cpu_startup_burst: bool = False
-    # A reflink restore is only quota-safe when the restored guest cannot dirty
-    # shared extents until the authoritative checkpoint generation is gone.
-    restore_reflink: bool = False
-    # A reflink has a distinct inode and therefore a cold page-cache identity.
-    # Ask the kernel to begin reading the candidate's main-memory image while
-    # runsc restores allocator metadata.
-    restore_prefetch_memory: bool = False
-    restore_start_paused: bool = False
-    allow_connected_on_save: bool = True
     readiness_command: tuple[str, ...] = ("/bin/true",)
-    remove_memory_directory_on_delete: bool = True
 
     def __post_init__(self) -> None:
         for label, path in (
@@ -252,7 +240,6 @@ class DirectRunscWardenConfig:
             ("memory_root", self.memory_root),
             ("bundle_root", self.bundle_root),
             ("journal_root", self.journal_root),
-            ("artifact_root", self.artifact_root),
             ("proc_root", self.proc_root),
         ):
             if not path.is_absolute():
@@ -261,12 +248,6 @@ class DirectRunscWardenConfig:
             raise ValueError("Warden timeouts must be positive")
         if not self.readiness_command:
             raise ValueError("readiness_command cannot be empty")
-        if self.restore_reflink and not self.restore_start_paused:
-            raise ValueError(
-                "restore_reflink requires restore_start_paused for hard-quota safety"
-            )
-        if self.restore_prefetch_memory and not self.restore_reflink:
-            raise ValueError("restore_prefetch_memory requires restore_reflink")
 
 
 @dataclass(frozen=True)
@@ -309,25 +290,19 @@ class DirectRunscWarden:
         *,
         runner: CommandRunner | None = None,
         fencer: ProcessFencer | None = None,
-        storage: StorageNativeNodeClient | None = None,
-        rootfs_lifecycle: RootfsMountLifecycle | None = None,
+        storage: StorageNativeNodeClient,
+        rootfs_lifecycle: RootfsMountLifecycle,
     ) -> None:
         self.config = config
         self.runner = runner or SubprocessCommandRunner()
         self.fencer = fencer or LinuxPidfdFencer(proc_root=config.proc_root)
         self.storage = storage
         self.rootfs_lifecycle = rootfs_lifecycle
-        if (storage is None) != (rootfs_lifecycle is None):
-            raise ValueError("storage-native Warden requires a rootfs mount lifecycle")
         self.journals = HibernationJournalStore(config.journal_root)
         self.artifacts = HibernationArtifactStore(
-            config.artifact_root,
-            preserve_incarnation_roots=(
-                storage is not None and config.artifact_root == config.memory_root
-            ),
-            require_stable_device=not (
-                storage is not None and config.artifact_root == config.memory_root
-            ),
+            config.memory_root,
+            preserve_incarnation_roots=True,
+            require_stable_device=False,
         )
         self._ensure_roots()
 
@@ -489,9 +464,7 @@ class DirectRunscWarden:
         sandbox: DirectSandbox,
         *,
         operation_id: str,
-    ) -> dict[str, object]:
-        if self.storage is None:
-            raise DirectWardenError("storage-native service is not configured")
+    ) -> StorageVolumeRecord:
         with self._locked(sandbox):
             lifecycle = self._require_state(sandbox, HibernationState.PARKED)
             if lifecycle.state != HibernationState.PARKED:
@@ -499,38 +472,19 @@ class DirectRunscWarden:
                     "only a parked sandbox can publish storage authority"
                 )
             record = self._storage_record(sandbox)
-            if record.get("state") == "published":
+            if record.state == StorageVolumeState.PUBLISHED:
                 return record
-            if record.get("state") == "mounted":
-                assert self.rootfs_lifecycle is not None
+            if record.state == StorageVolumeState.MOUNTED:
                 self.rootfs_lifecycle.park_sandbox(sandbox)
-                record = self._seal_storage(
-                    sandbox,
-                    operation_id=f"{operation_id}:seal",
-                )
-            if record.get("state") == "sealed":
-                record = self._release_storage(
-                    sandbox,
-                    operation_id=f"{operation_id}:release",
-                )
-            if record.get("state") != "released":
-                raise DirectWardenError(
-                    f"storage-native volume is {record.get('state')}, "
-                    "not publishable"
-                )
-            result = self.storage.publish_snapshot(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                volume_id=sandbox.memory_directory,
-                operation_id=self._storage_operation_id(sandbox, operation_id),
-                expected_revision=int(record["revision"]),
+            record = self.storage.ensure_published(
+                self._storage_owner(sandbox),
+                operation_id=operation_id,
             )
-            raw = result.get("record")
-            if not isinstance(raw, dict) or raw.get("state") != "published":
+            if record.state != StorageVolumeState.PUBLISHED:
                 raise DirectWardenError(
                     "storage-native publication returned an invalid record"
                 )
-            return raw
+            return record
 
     def running_process_alive(self, sandbox: DirectSandbox) -> bool:
         """Prove that a RUNNING journal still owns the recorded sentry."""
@@ -641,20 +595,14 @@ class DirectRunscWarden:
                     "--force",
                     sandbox.container_id,
                 )
-                if self.storage is not None:
-                    # runsc delete removes its filestore from the merged rootfs.
-                    # Do this before detaching the overlay so that the sealed
-                    # layer contains the final, cleaned-up filesystem state.
-                    assert self.rootfs_lifecycle is not None
-                    self.rootfs_lifecycle.park_sandbox(sandbox)
-                    self._seal_storage(
-                        sandbox,
-                        operation_id=f"{operation_id}:storage-seal",
-                    )
-                    self._release_storage(
-                        sandbox,
-                        operation_id=f"{operation_id}:storage-release",
-                    )
+                # runsc delete removes its filestore from the merged rootfs.
+                # Do this before detaching the overlay so that the sealed
+                # layer contains the final, cleaned-up filesystem state.
+                self.rootfs_lifecycle.park_sandbox(sandbox)
+                self.storage.ensure_released(
+                    self._storage_owner(sandbox),
+                    operation_id=f"{operation_id}:storage-release",
+                )
                 return journal.commit_parked(
                     manifest,
                     operation_id=operation_id,
@@ -677,13 +625,11 @@ class DirectRunscWarden:
             journal = self._journal(sandbox)
             parked = self._require_state(sandbox, HibernationState.PARKED)
             try:
-                if self.storage is not None:
-                    self._mount_storage(
-                        sandbox,
-                        operation_id=f"{operation_id}:storage-mount",
-                    )
-                    assert self.rootfs_lifecycle is not None
-                    self.rootfs_lifecycle.resume_sandbox(sandbox)
+                self._mount_storage(
+                    sandbox,
+                    operation_id=f"{operation_id}:storage-mount",
+                )
+                self.rootfs_lifecycle.resume_sandbox(sandbox)
                 manifest = self.artifacts.load_complete(
                     sandbox_id=sandbox.sandbox_id,
                     sandbox_generation=sandbox.sandbox_generation,
@@ -712,40 +658,31 @@ class DirectRunscWarden:
                 expected_revision=parked.revision,
             )
             timings["begin_restore_journal"] = (time.monotonic() - phase) * 1000
-            phase = time.monotonic()
-            restore_image, restore_reflinked = self._prepare_restore_image(
-                sandbox,
-                manifest,
+            generation = self.artifacts.generation_path(
+                sandbox_id=sandbox.sandbox_id,
+                sandbox_generation=sandbox.sandbox_generation,
+                hibernation_generation=manifest.hibernation_generation,
             )
-            timings["restore_image_stage"] = (time.monotonic() - phase) * 1000
-            timings["restore_image_reflinked"] = float(restore_reflinked)
             candidate: ProcessHandle | None = None
-            restore_started = False
-            source_dropped = False
             candidate_record: HibernationRecord | None = None
             try:
-                restore_flags = ["--detach"]
-                if self.config.restore_background:
-                    restore_flags.append("--background")
-                if self.config.restore_cpu_startup_burst:
-                    restore_flags.append("--cpu-startup-burst")
-                if self.config.restore_start_paused:
-                    restore_flags.append("--start-paused")
                 phase = time.monotonic()
                 self._checked(
                     *self._common(),
                     "restore",
-                    *restore_flags,
-                    f"--image-path={restore_image}",
+                    "--detach",
+                    "--background",
+                    "--cpu-startup-burst",
+                    "--start-paused",
+                    f"--image-path={generation}",
                     f"--bundle={sandbox.bundle}",
                     sandbox.container_id,
                 )
                 timings["runsc_restore"] = (time.monotonic() - phase) * 1000
-                restore_started = True
                 phase = time.monotonic()
                 pid, ticks, status = self._state_identity_status(sandbox)
                 timings["runsc_state"] = (time.monotonic() - phase) * 1000
-                if self.config.restore_start_paused and status != "paused":
+                if status != "paused":
                     raise DirectWardenError("runsc restore candidate was not paused")
                 phase = time.monotonic()
                 candidate = self.fencer.open(pid, ticks)
@@ -758,20 +695,14 @@ class DirectRunscWarden:
                     candidate_start_time_ticks=ticks,
                 )
                 timings["candidate_journal"] = (time.monotonic() - phase) * 1000
-                if restore_reflinked:
-                    phase = time.monotonic()
-                    self._drop_restore_source(sandbox, manifest)
-                    source_dropped = True
-                    timings["restore_source_drop"] = (time.monotonic() - phase) * 1000
-                if self.config.restore_start_paused:
-                    phase = time.monotonic()
-                    self._ensure_candidate_running(
-                        sandbox,
-                        expected_pid=pid,
-                        expected_start_time_ticks=ticks,
-                        known_status=status,
-                    )
-                    timings["candidate_resume"] = (time.monotonic() - phase) * 1000
+                phase = time.monotonic()
+                self._ensure_candidate_running(
+                    sandbox,
+                    expected_pid=pid,
+                    expected_start_time_ticks=ticks,
+                    known_status=status,
+                )
+                timings["candidate_resume"] = (time.monotonic() - phase) * 1000
                 phase = time.monotonic()
                 self._checked(
                     *self._state_prefix(),
@@ -781,28 +712,13 @@ class DirectRunscWarden:
                 )
                 timings["readiness_exec"] = (time.monotonic() - phase) * 1000
             except Exception:
-                if not source_dropped and self._restore_source_is_complete(
-                    sandbox, restoring
-                ):
-                    self._rollback_restore(
-                        sandbox,
-                        journal=journal,
-                        restoring=restoring,
-                        manifest=manifest,
-                        candidate=candidate,
-                        restore_started=restore_started,
-                        restore_reflinked=restore_reflinked,
-                    )
-                    self._rollback_parked_storage_mount(
-                        sandbox,
-                        operation_seed=f"{operation_id}:restore-rollback",
-                    )
-                else:
-                    _LOG.exception(
-                        "restore source was dropped for %s; preserving the "
-                        "fenced candidate for reconciliation",
-                        sandbox.sandbox_id,
-                    )
+                self._rollback_restore(
+                    sandbox,
+                    journal=journal,
+                    restoring=restoring,
+                    candidate=candidate,
+                    operation_seed=f"{operation_id}:restore-rollback",
+                )
                 raise
             finally:
                 if candidate is not None:
@@ -816,16 +732,12 @@ class DirectRunscWarden:
                 sentry_start_time_ticks=ticks,
             )
             timings["commit_running_journal"] = (time.monotonic() - phase) * 1000
-            # Cleanup is ancillary after RUNNING commits. The quota-relevant
-            # source generation was already durably dropped while a reflinked
-            # candidate was paused.
+            # Cleanup is ancillary after RUNNING commits. The paused handoff
+            # fenced the candidate before it was allowed to run after consuming
+            # the single-owner source.
             phase = time.monotonic()
             try:
-                self._finalize_restore_artifacts(
-                    sandbox,
-                    manifest,
-                    restore_reflinked=restore_reflinked,
-                )
+                self._finalize_restore_artifacts(manifest)
             except Exception:
                 _LOG.exception(
                     "could not remove consumed hibernation generation for %s",
@@ -840,17 +752,14 @@ class DirectRunscWarden:
         with self._locked(sandbox):
             journal = self._journal(sandbox)
             durable = journal.load()
-            if (
-                self.storage is not None
-                and durable is not None
-                and durable.state != HibernationState.RUNNING
-            ):
+            if durable is not None and durable.state != HibernationState.RUNNING:
                 self._mount_storage(
                     sandbox,
                     operation_id=f"reconcile:{durable.revision}:storage-mount",
                 )
-                assert self.rootfs_lifecycle is not None
                 self.rootfs_lifecycle.resume_sandbox(sandbox)
+            if durable is not None and durable.state == HibernationState.RESTORING:
+                return self._reconcile_restoring(sandbox, journal, durable)
             result = HibernationReconciler(
                 journal,
                 self.artifacts,
@@ -902,11 +811,10 @@ class DirectRunscWarden:
                     expected_revision=pending.revision,
                 )
                 self._persist_parked_manifest(sandbox, manifest)
-                if self.storage is not None:
-                    self._release_parked_storage(
-                        sandbox,
-                        operation_seed=f"reconcile:{parked.revision}",
-                    )
+                self._release_parked_storage(
+                    sandbox,
+                    operation_seed=f"reconcile:{parked.revision}",
+                )
                 return parked
 
             if result.action == HibernationRecoveryAction.RESUME_OR_RETRY_HIBERNATE:
@@ -952,138 +860,123 @@ class DirectRunscWarden:
                     expected_revision=record.revision,
                 )
 
-            if result.action == HibernationRecoveryAction.RETRY_RESTORE:
-                self._best_effort_delete(sandbox)
-                self._discard_restore_image(
-                    sandbox,
-                    allow_consumed_main_memory=True,
-                )
-                parked = journal.rollback_restore(
-                    operation_id=record.operation_id,
-                    expected_revision=record.revision,
-                )
-                if self.storage is not None:
-                    self._rollback_parked_storage_mount(
-                        sandbox,
-                        operation_seed=f"reconcile:{parked.revision}",
-                    )
-                return parked
-
-            if result.action == HibernationRecoveryAction.VERIFY_CANDIDATE:
-                if (
-                    record.candidate_pid is None
-                    or record.candidate_start_time_ticks is None
-                ):
-                    raise DirectWardenError("restore candidate has no process identity")
-                manifest: HibernationManifest | None = None
-                if self._restore_source_is_complete(sandbox, record):
-                    manifest = self.artifacts.load_published_metadata(
-                        sandbox_id=sandbox.sandbox_id,
-                        sandbox_generation=sandbox.sandbox_generation,
-                        hibernation_generation=record.hibernation_generation,
-                    )
-                restore_reflinked = (
-                    self._restore_image_source_digest(sandbox) == record.manifest_sha256
-                )
-                candidate = self.fencer.open(
-                    record.candidate_pid,
-                    record.candidate_start_time_ticks,
-                )
-                try:
-                    if restore_reflinked:
-                        if manifest is not None:
-                            self._drop_restore_source(sandbox, manifest)
-                        else:
-                            self._finish_dropped_restore_source(sandbox, record)
-                    self._ensure_candidate_running(
-                        sandbox,
-                        expected_pid=record.candidate_pid,
-                        expected_start_time_ticks=(record.candidate_start_time_ticks),
-                    )
-                    self._checked(
-                        *self._state_prefix(),
-                        "exec",
-                        sandbox.container_id,
-                        *self.config.readiness_command,
-                    )
-                    running = journal.commit_running(
-                        operation_id=record.operation_id,
-                        expected_revision=record.revision,
-                        sentry_pid=record.candidate_pid,
-                        sentry_start_time_ticks=record.candidate_start_time_ticks,
-                    )
-                    try:
-                        if manifest is None:
-                            self._discard_restore_image(
-                                sandbox,
-                                allow_consumed_main_memory=True,
-                            )
-                        else:
-                            self._finalize_restore_artifacts(
-                                sandbox,
-                                manifest,
-                                restore_reflinked=restore_reflinked,
-                            )
-                    except Exception:
-                        _LOG.exception(
-                            "could not finalize reconciled restore for %s",
-                            sandbox.sandbox_id,
-                        )
-                    return running
-                except Exception:
-                    if manifest is not None and self._restore_source_is_complete(
-                        sandbox, record
-                    ):
-                        self._rollback_restore(
-                            sandbox,
-                            journal=journal,
-                            restoring=record,
-                            manifest=manifest,
-                            candidate=candidate,
-                            restore_started=True,
-                            restore_reflinked=restore_reflinked,
-                        )
-                    else:
-                        _LOG.exception(
-                            "restore source was dropped for %s; preserving the "
-                            "candidate for the next reconciliation",
-                            sandbox.sandbox_id,
-                        )
-                    raise
-                finally:
-                    candidate.close()
-
-            if self.storage is not None and record.state == HibernationState.PARKED:
+            if record.state == HibernationState.PARKED:
                 self._release_parked_storage(
                     sandbox,
                     operation_seed=f"reconcile:{record.revision}",
                 )
             return record
 
+    def _reconcile_restoring(
+        self,
+        sandbox: DirectSandbox,
+        journal: HibernationJournal,
+        restoring: HibernationRecord,
+    ) -> HibernationRecord:
+        """Resolve a restore without settling PARKED ahead of COW discard."""
+        manifest = self.artifacts.load_published_metadata(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            hibernation_generation=restoring.hibernation_generation,
+        )
+        manifest.validate_identity(
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+            spec_sha256=sandbox.spec_sha256,
+            runtime_sha256=self._runtime_fingerprint(sandbox).digest,
+        )
+        if manifest.metadata_sha256 != restoring.manifest_sha256:
+            raise DirectWardenError(
+                "restore generation does not match the lifecycle journal"
+            )
+
+        candidate_identity: tuple[int, int] | None = None
+        if (
+            restoring.candidate_pid is not None
+            and restoring.candidate_start_time_ticks is not None
+            and hibernation_process_identity_matches(
+                restoring.candidate_pid,
+                restoring.candidate_start_time_ticks,
+                proc_root=self.config.proc_root,
+            )
+        ):
+            candidate_identity = (
+                restoring.candidate_pid,
+                restoring.candidate_start_time_ticks,
+            )
+        elif restoring.authority == HibernationAuthority.PARKED:
+            candidate_identity = self._candidate_identity_or_none(sandbox)
+            if candidate_identity is not None:
+                restoring = journal.mark_candidate_started(
+                    operation_id=restoring.operation_id,
+                    expected_revision=restoring.revision,
+                    candidate_pid=candidate_identity[0],
+                    candidate_start_time_ticks=candidate_identity[1],
+                )
+
+        if candidate_identity is None:
+            return self._rollback_restore(
+                sandbox,
+                journal=journal,
+                restoring=restoring,
+                candidate=None,
+                operation_seed=f"reconcile:{restoring.revision}:restore-rollback",
+                candidate_confirmed_dead=True,
+            )
+
+        candidate = self.fencer.open(*candidate_identity)
+        try:
+            self._ensure_candidate_running(
+                sandbox,
+                expected_pid=candidate_identity[0],
+                expected_start_time_ticks=candidate_identity[1],
+            )
+            self._checked(
+                *self._state_prefix(),
+                "exec",
+                sandbox.container_id,
+                *self.config.readiness_command,
+            )
+            running = journal.commit_running(
+                operation_id=restoring.operation_id,
+                expected_revision=restoring.revision,
+                sentry_pid=candidate_identity[0],
+                sentry_start_time_ticks=candidate_identity[1],
+            )
+            try:
+                self._finalize_restore_artifacts(manifest)
+            except Exception:
+                _LOG.exception(
+                    "could not finalize reconciled restore for %s",
+                    sandbox.sandbox_id,
+                )
+            return running
+        except Exception:
+            self._rollback_restore(
+                sandbox,
+                journal=journal,
+                restoring=restoring,
+                candidate=candidate,
+                operation_seed=f"reconcile:{restoring.revision}:restore-rollback",
+            )
+            raise
+        finally:
+            candidate.close()
+
     def delete(self, sandbox: DirectSandbox) -> None:
-        """Delete one settled backend and all of its owned local generations."""
+        """Fence one backend; the storage authority removes its opaque volume."""
+        snapshot = self.inspect(sandbox)
+        if snapshot is not None and snapshot.state in {
+            HibernationState.HIBERNATING,
+            HibernationState.RESTORING,
+        }:
+            self.reconcile(sandbox)
         with self._locked(sandbox):
             journal = self._journal(sandbox)
             record = journal.load()
             if record is None:
+                self._parked_manifest_path(sandbox).unlink(missing_ok=True)
                 return
-            # Deletion can be replayed after a crash that already reaped the
-            # sentry but did not remove the journal. Reconcile the durable
-            # authority first so a dead exact PID becomes recovery-owned
-            # cleanup rather than an unrecoverable fencing error.
-            record = (
-                HibernationReconciler(
-                    journal,
-                    self.artifacts,
-                    runtime_sha256=self._runtime_fingerprint(sandbox).digest,
-                    proc_root=self.config.proc_root,
-                    candidate_identity_resolver=lambda _record: (
-                        self._candidate_identity_or_none(sandbox)
-                    ),
-                )
-                .reconcile()
-                .record
-            )
             if record.state not in {
                 HibernationState.RUNNING,
                 HibernationState.PARKED,
@@ -1110,74 +1003,27 @@ class DirectRunscWarden:
                     raise DirectWardenError(
                         "live delete authority lacks a process identity"
                     )
-                handle = self.fencer.open(pid, ticks)
-                try:
-                    handle.terminate(timeout=self.config.stop_timeout_seconds)
-                finally:
-                    handle.close()
-                self._checked(
-                    *self._state_prefix(),
-                    "delete",
-                    "--force",
-                    sandbox.container_id,
-                )
+                if hibernation_process_identity_matches(
+                    pid,
+                    ticks,
+                    proc_root=self.config.proc_root,
+                ):
+                    handle = self.fencer.open(pid, ticks)
+                    try:
+                        handle.terminate(timeout=self.config.stop_timeout_seconds)
+                    finally:
+                        handle.close()
+                    self._checked(
+                        *self._state_prefix(),
+                        "delete",
+                        "--force",
+                        sandbox.container_id,
+                    )
 
             # The storage-native quota owner deletes the opaque volume after
             # this lifecycle fence is removed. Do not remount or traverse it:
             # a backend restart can leave an old ublk mount returning EIO, and
             # deletion must remain possible precisely in that recovery case.
-            if self.storage is None:
-                unified_storage = self.config.memory_root == self.config.artifact_root
-                for item in self.artifacts.inventory_incarnation(
-                    sandbox_id=sandbox.sandbox_id,
-                    sandbox_generation=sandbox.sandbox_generation,
-                    ignored_entries=(
-                        (
-                            "upper",
-                            "work",
-                            _APPLICATION_MEMORY,
-                            _ACTIVE_APPLICATION_MEMORY,
-                            _RESTORE_IMAGE,
-                        )
-                        if unified_storage
-                        else ()
-                    ),
-                ):
-                    if item.state == "pending":
-                        self.artifacts.discard_pending(
-                            sandbox_id=sandbox.sandbox_id,
-                            sandbox_generation=sandbox.sandbox_generation,
-                            hibernation_generation=item.hibernation_generation,
-                        )
-                        continue
-                    manifest = self.artifacts.load_published_metadata(
-                        sandbox_id=sandbox.sandbox_id,
-                        sandbox_generation=sandbox.sandbox_generation,
-                        hibernation_generation=item.hibernation_generation,
-                    )
-                    self.artifacts.delete_published(
-                        manifest,
-                        allow_consumed_main_memory=(
-                            record.state == HibernationState.RUNNING
-                            or item.hibernation_generation
-                            != record.hibernation_generation
-                        ),
-                    )
-
-                self._discard_restore_image(
-                    sandbox,
-                    allow_consumed_main_memory=True,
-                )
-                if self.config.remove_memory_directory_on_delete:
-                    active_memory = self._active_memory_root(sandbox)
-                    if active_memory.exists():
-                        try:
-                            active_memory.rmdir()
-                        except OSError as exc:
-                            raise DirectWardenError(
-                                "active memory directory is not empty after "
-                                "runtime delete"
-                            ) from exc
             self.journals.remove(
                 sandbox_id=sandbox.sandbox_id,
                 sandbox_generation=sandbox.sandbox_generation,
@@ -1237,31 +1083,17 @@ class DirectRunscWarden:
         *,
         journal: HibernationJournal,
         restoring: HibernationRecord,
-        manifest: HibernationManifest,
         candidate: ProcessHandle | None,
-        restore_started: bool,
-        restore_reflinked: bool,
-    ) -> None:
-        generation = self.artifacts.generation_path(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            hibernation_generation=restoring.hibernation_generation,
-        )
-        active_memory = self._active_memory_root(sandbox) / _ACTIVE_APPLICATION_MEMORY
-        if not restore_started:
-            if restore_reflinked:
-                self._discard_restore_image(sandbox)
-            journal.rollback_restore(
-                operation_id=restoring.operation_id,
-                expected_revision=restoring.revision,
-            )
-            return
+        operation_seed: str,
+        candidate_confirmed_dead: bool = False,
+    ) -> HibernationRecord:
         opened_candidate = False
-        if candidate is None:
+        if candidate is None and not candidate_confirmed_dead:
             try:
-                pid, ticks = self._state_identity(sandbox)
-                candidate = self.fencer.open(pid, ticks)
-                opened_candidate = True
+                identity = self._candidate_identity_or_none(sandbox)
+                if identity is not None:
+                    candidate = self.fencer.open(*identity)
+                    opened_candidate = True
             except Exception as exc:
                 raise DirectWardenError(
                     "cannot prove the restore candidate is fenced"
@@ -1269,26 +1101,15 @@ class DirectRunscWarden:
         try:
             if candidate is not None and candidate.alive():
                 candidate.terminate(timeout=self.config.stop_timeout_seconds)
-            if not restore_reflinked and (
-                active_memory.exists()
-                and not (generation / _APPLICATION_MEMORY).exists()
-            ):
-                self.artifacts.return_consumed_file(
-                    manifest,
-                    active_root=active_memory.parent,
-                    file_name=active_memory.name,
-                    artifact_name=_APPLICATION_MEMORY,
-                )
             self._best_effort_delete(sandbox)
-            if restore_reflinked:
-                self._discard_restore_image(
-                    sandbox,
-                    allow_consumed_main_memory=True,
-                )
+            self._rollback_parked_storage_mount(
+                sandbox,
+                operation_seed=operation_seed,
+            )
             current = journal.load()
             if current is None:
                 raise DirectWardenError("restore journal disappeared")
-            journal.rollback_restore(
+            return journal.rollback_restore(
                 operation_id=restoring.operation_id,
                 expected_revision=current.revision,
                 candidate_reaped=True,
@@ -1296,63 +1117,6 @@ class DirectRunscWarden:
         finally:
             if opened_candidate and candidate is not None:
                 candidate.close()
-
-    def _restore_source_is_complete(
-        self,
-        sandbox: DirectSandbox,
-        record: HibernationRecord,
-    ) -> bool:
-        generation = self.artifacts.generation_path(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            hibernation_generation=record.hibernation_generation,
-        )
-        return os.path.lexists(generation / self.artifacts.COMPLETE_NAME)
-
-    def _drop_restore_source(
-        self,
-        sandbox: DirectSandbox,
-        manifest: HibernationManifest,
-    ) -> None:
-        """Durably remove checkpoint authority before a CoW guest can run."""
-        generation = self.artifacts.generation_path(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            hibernation_generation=manifest.hibernation_generation,
-        )
-        if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
-            self.artifacts.delete_published(manifest)
-            return
-        if os.path.lexists(generation):
-            # delete_published removes COMPLETE first. A crash after that point
-            # leaves a pending generation which can only be finished, never
-            # treated as a restorable checkpoint again.
-            self.artifacts.discard_pending(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                hibernation_generation=manifest.hibernation_generation,
-            )
-
-    def _finish_dropped_restore_source(
-        self,
-        sandbox: DirectSandbox,
-        record: HibernationRecord,
-    ) -> None:
-        generation = self.artifacts.generation_path(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            hibernation_generation=record.hibernation_generation,
-        )
-        if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
-            raise DirectWardenError(
-                "restore source is still complete but its manifest was not loaded"
-            )
-        if os.path.lexists(generation):
-            self.artifacts.discard_pending(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                hibernation_generation=record.hibernation_generation,
-            )
 
     def _ensure_candidate_running(
         self,
@@ -1385,184 +1149,10 @@ class DirectRunscWarden:
                 f"restore candidate did not become running: {status}"
             )
 
-    def _restore_image_path(self, sandbox: DirectSandbox) -> Path:
-        return self._active_memory_root(sandbox) / _RESTORE_IMAGE
-
-    def _prepare_restore_image(
-        self,
-        sandbox: DirectSandbox,
-        manifest: HibernationManifest,
-    ) -> tuple[Path, bool]:
-        generation = self.artifacts.generation_path(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            hibernation_generation=manifest.hibernation_generation,
-        )
-        if not self.config.restore_reflink:
-            return generation, False
-        restore_image = self._restore_image_path(sandbox)
-        self._discard_restore_image(
-            sandbox,
-            allow_consumed_main_memory=True,
-        )
-        restore_image.mkdir(mode=0o700)
-        self._fsync_directory(restore_image.parent)
-        try:
-            for item in manifest.files:
-                self._reflink_file(
-                    generation / item.name,
-                    restore_image / item.name,
-                )
-            if self.config.restore_prefetch_memory:
-                self._prefetch_file(restore_image / _APPLICATION_MEMORY)
-            marker = {
-                "files": [item.name for item in manifest.files],
-                "metadata_sha256": manifest.metadata_sha256,
-                "version": 1,
-            }
-            self._atomic_private_json(
-                restore_image / _RESTORE_SOURCE,
-                marker,
-            )
-            self._fsync_directory(restore_image)
-        except Exception:
-            self._discard_restore_image(
-                sandbox,
-                allow_consumed_main_memory=True,
-            )
-            _LOG.warning(
-                "reflink restore staging unavailable for %s; consuming the "
-                "single-owner generation",
-                sandbox.sandbox_id,
-                exc_info=True,
-            )
-            return generation, False
-        return restore_image, True
-
-    def _restore_image_matches(
-        self,
-        sandbox: DirectSandbox,
-        manifest: HibernationManifest,
-    ) -> bool:
-        marker_path = self._restore_image_path(sandbox) / _RESTORE_SOURCE
-        try:
-            raw = marker_path.read_bytes()
-            if len(raw) > 1024 * 1024:
-                return False
-            marker = json.loads(raw)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return False
-        return marker == {
-            "files": [item.name for item in manifest.files],
-            "metadata_sha256": manifest.metadata_sha256,
-            "version": 1,
-        }
-
-    def _restore_image_source_digest(
-        self,
-        sandbox: DirectSandbox,
-    ) -> str | None:
-        marker_path = self._restore_image_path(sandbox) / _RESTORE_SOURCE
-        if not os.path.lexists(marker_path):
-            return None
-        try:
-            raw = marker_path.read_bytes()
-            if len(raw) > 1024 * 1024:
-                raise DirectWardenError("restore source marker is too large")
-            marker = json.loads(raw)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise DirectWardenError("restore source marker is invalid") from exc
-        if (
-            not isinstance(marker, dict)
-            or set(marker) != {"files", "metadata_sha256", "version"}
-            or marker.get("version") != 1
-            or not isinstance(marker.get("files"), list)
-            or not all(
-                isinstance(name, str)
-                and name
-                in {
-                    _APPLICATION_MEMORY,
-                    _CHECKPOINT_STATE,
-                    _PAGES_METADATA,
-                    _PRIVATE_PAGES,
-                }
-                for name in marker["files"]
-            )
-            or len(set(marker["files"])) != len(marker["files"])
-            or not isinstance(marker.get("metadata_sha256"), str)
-            or not _DIGEST.fullmatch(marker["metadata_sha256"])
-        ):
-            raise DirectWardenError("restore source marker is invalid")
-        return marker["metadata_sha256"]
-
-    def _discard_restore_image(
-        self,
-        sandbox: DirectSandbox,
-        *,
-        allow_consumed_main_memory: bool = False,
-    ) -> None:
-        restore_image = self._restore_image_path(sandbox)
-        if not os.path.lexists(restore_image):
-            return
-        if not restore_image.is_dir() or restore_image.is_symlink():
-            raise DirectWardenError("restore image must be a real directory")
-        allowed = {
-            _APPLICATION_MEMORY,
-            _CHECKPOINT_STATE,
-            _PAGES_METADATA,
-            _PRIVATE_PAGES,
-            _RESTORE_SOURCE,
-        }
-        actual = set(os.listdir(restore_image))
-        unexpected = actual - allowed
-        if unexpected:
-            raise DirectWardenError(
-                f"restore image contains unexpected entries: {sorted(unexpected)}"
-            )
-        if (
-            not allow_consumed_main_memory
-            and _RESTORE_SOURCE in actual
-            and _APPLICATION_MEMORY not in actual
-        ):
-            raise DirectWardenError(
-                "restore image memory was consumed before candidate fencing"
-            )
-        directory_fd = os.open(
-            restore_image,
-            os.O_RDONLY
-            | getattr(os, "O_DIRECTORY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-        )
-        try:
-            for name in actual:
-                entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-                if not stat.S_ISREG(entry.st_mode):
-                    raise DirectWardenError(
-                        "restore image contains a non-regular entry"
-                    )
-            for name in sorted(actual):
-                os.unlink(name, dir_fd=directory_fd)
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        restore_image.rmdir()
-        self._fsync_directory(restore_image.parent)
-
     def _finalize_restore_artifacts(
         self,
-        sandbox: DirectSandbox,
         manifest: HibernationManifest,
-        *,
-        restore_reflinked: bool,
     ) -> None:
-        if restore_reflinked:
-            self._drop_restore_source(sandbox, manifest)
-            self._discard_restore_image(
-                sandbox,
-                allow_consumed_main_memory=True,
-            )
-            return
         self.artifacts.delete_published(
             manifest,
             allow_consumed_main_memory=True,
@@ -1574,24 +1164,14 @@ class DirectRunscWarden:
         record: HibernationRecord,
     ) -> None:
         """Finish ancillary cleanup after a crash past RUNNING commit."""
-        self._discard_restore_image(
-            sandbox,
-            allow_consumed_main_memory=True,
-        )
-        unified_storage = self.config.memory_root == self.config.artifact_root
         for item in self.artifacts.inventory_incarnation(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
             ignored_entries=(
-                (
-                    "upper",
-                    "work",
-                    _APPLICATION_MEMORY,
-                    _ACTIVE_APPLICATION_MEMORY,
-                    _RESTORE_IMAGE,
-                )
-                if unified_storage
-                else ()
+                "upper",
+                "work",
+                _APPLICATION_MEMORY,
+                _ACTIVE_APPLICATION_MEMORY,
             ),
         ):
             if item.hibernation_generation > record.hibernation_generation:
@@ -1612,86 +1192,6 @@ class DirectRunscWarden:
                 allow_consumed_main_memory=True,
             )
 
-    @staticmethod
-    def _reflink_file(source: Path, target: Path) -> None:
-        source_fd = os.open(
-            source,
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        )
-        target_fd = -1
-        try:
-            source_info = os.fstat(source_fd)
-            if not stat.S_ISREG(source_info.st_mode):
-                raise DirectWardenError("reflink source must be a regular file")
-            target_fd = os.open(
-                target,
-                os.O_RDWR
-                | os.O_CREAT
-                | os.O_EXCL
-                | getattr(os, "O_CLOEXEC", 0)
-                | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
-            )
-            fcntl.ioctl(target_fd, _FICLONE, source_fd)
-            os.fsync(target_fd)
-        finally:
-            if target_fd >= 0:
-                os.close(target_fd)
-            os.close(source_fd)
-
-    @staticmethod
-    def _prefetch_file(path: Path) -> None:
-        descriptor = os.open(
-            path,
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        )
-        try:
-            os.posix_fadvise(descriptor, 0, 0, os.POSIX_FADV_WILLNEED)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _atomic_private_json(path: Path, payload: object) -> None:
-        descriptor, raw_path = tempfile.mkstemp(
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            dir=path.parent,
-        )
-        temporary = Path(raw_path)
-        try:
-            os.fchmod(descriptor, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(
-                    json.dumps(
-                        payload,
-                        ensure_ascii=True,
-                        separators=(",", ":"),
-                        sort_keys=True,
-                    ).encode("ascii")
-                )
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        finally:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
-
-    @staticmethod
-    def _fsync_directory(path: Path) -> None:
-        descriptor = os.open(
-            path,
-            os.O_RDONLY
-            | getattr(os, "O_DIRECTORY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
-        )
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
     def _manifest(
         self,
         sandbox: DirectSandbox,
@@ -1704,7 +1204,7 @@ class DirectRunscWarden:
             _PAGES_METADATA: HibernationFileRole.ALLOCATOR_METADATA,
             _PRIVATE_PAGES: HibernationFileRole.PRIVATE_PAGES,
         }
-        files: list[HibernationArtifactFile] = []
+        files: list[LocalHibernationArtifactFile] = []
         names = {
             path.name
             for path in generation.iterdir()
@@ -1718,7 +1218,7 @@ class DirectRunscWarden:
         for name, role in roles.items():
             path = generation / name
             if path.exists():
-                files.append(HibernationArtifactFile.from_path(path, role=role))
+                files.append(LocalHibernationArtifactFile.from_path(path, role=role))
         return HibernationManifest(
             sandbox_id=sandbox.sandbox_id,
             sandbox_generation=sandbox.sandbox_generation,
@@ -1839,22 +1339,63 @@ class DirectRunscWarden:
         self,
         sandbox: DirectSandbox,
     ) -> tuple[int, int] | None:
+        state_command = (
+            *self._state_prefix(),
+            "state",
+            sandbox.container_id,
+        )
+        result = self.runner.run(
+            state_command,
+            timeout=self.config.command_timeout_seconds,
+        )
+        if result.returncode != 0:
+            listed = self._checked(
+                *self._state_prefix(),
+                "list",
+                "--format=json",
+            )
+            try:
+                inventory = json.loads(listed.stdout)
+            except json.JSONDecodeError as exc:
+                raise DirectWardenError("runsc list returned invalid JSON") from exc
+            if not isinstance(inventory, list) or any(
+                not isinstance(item, dict) or not isinstance(item.get("id"), str)
+                for item in inventory
+            ):
+                raise DirectWardenError("runsc list returned invalid JSON")
+            if not any(item["id"] == sandbox.container_id for item in inventory):
+                return None
+            raise DirectWardenError("runsc state failed for a listed restore candidate")
         try:
-            return self._state_identity(sandbox)
-        except DirectWardenError:
+            payload = json.loads(result.stdout)
+            pid = int(payload["pid"])
+            status = str(payload["status"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise DirectWardenError("runsc state returned invalid JSON") from exc
+        if status in {"absent", "stopped"}:
             return None
+        if status not in {"running", "paused"}:
+            raise DirectWardenError(f"runsc state is not recognized: {status}")
+        try:
+            ticks = linux_process_start_time_ticks(
+                pid,
+                proc_root=self.config.proc_root,
+            )
+        except ProcessLookupError:
+            return None
+        except ValueError as exc:
+            raise DirectWardenError("cannot read sentry process identity") from exc
+        return pid, ticks
 
     def _common(self) -> tuple[str, ...]:
-        command = [
+        return (
             str(self.config.runsc),
             f"--root={self.config.runtime_root}",
-            f"--platform={self.config.platform}",
+            "--platform=systrap",
             f"--network={self.config.network}",
             f"--application-memory-file-dir={self.config.memory_root}",
-        ]
-        if self.config.allow_connected_on_save:
-            command.append("--allow-connected-on-save=true")
-        return tuple(command)
+            "--allow-connected-on-save=true",
+        )
 
     def _state_prefix(self) -> tuple[str, ...]:
         return (
@@ -1885,26 +1426,17 @@ class DirectRunscWarden:
             timeout=self.config.command_timeout_seconds,
         )
 
-    def _storage_record(self, sandbox: DirectSandbox) -> dict[str, object]:
-        if self.storage is None:
-            raise DirectWardenError("storage-native service is not configured")
-        result = self.storage.get_volume(sandbox.memory_directory)
-        raw = result.get("record")
-        if not isinstance(raw, dict):
-            raise DirectWardenError(
-                "storage-native service returned an invalid volume record"
-            )
-        self._validate_storage_record(sandbox, raw)
-        return raw
+    def _storage_record(self, sandbox: DirectSandbox) -> StorageVolumeRecord:
+        record = self.storage.get_volume(sandbox.memory_directory)
+        self._validate_storage_record(sandbox, record)
+        return record
 
     def storage_records_snapshot(
         self,
         sandboxes: Sequence[DirectSandbox],
-    ) -> dict[str, dict[str, object]]:
+    ) -> dict[str, StorageVolumeRecord]:
         """Resolve sandbox storage ownership with at most one daemon RPC."""
 
-        if self.storage is None:
-            raise DirectWardenError("storage-native service is not configured")
         expected: dict[str, DirectSandbox] = {}
         for sandbox in sandboxes:
             if sandbox.memory_directory in expected:
@@ -1914,171 +1446,54 @@ class DirectRunscWarden:
             expected[sandbox.memory_directory] = sandbox
         if not expected:
             return {}
-        result = self.storage.list_volumes()
-        records = result.get("records")
-        if not isinstance(records, list):
-            raise DirectWardenError(
-                "storage-native service returned an invalid volume inventory"
-            )
-        by_volume: dict[str, dict[str, object]] = {}
-        for raw in records:
-            if not isinstance(raw, dict):
-                raise DirectWardenError(
-                    "storage-native service returned an invalid volume inventory"
-                )
-            volume_id = raw.get("volume_id")
-            if not isinstance(volume_id, str) or not volume_id:
-                raise DirectWardenError(
-                    "storage-native service returned an invalid volume inventory"
-                )
-            if volume_id in by_volume:
+        by_volume: dict[str, StorageVolumeRecord] = {}
+        for record in self.storage.list_volumes():
+            if record.volume_id in by_volume:
                 raise DirectWardenError(
                     "storage-native service returned duplicate volume ownership"
                 )
-            by_volume[volume_id] = raw
-        snapshot: dict[str, dict[str, object]] = {}
+            by_volume[record.volume_id] = record
+        snapshot: dict[str, StorageVolumeRecord] = {}
         for volume_id, sandbox in expected.items():
-            raw = by_volume.get(volume_id)
-            if raw is None:
+            record = by_volume.get(volume_id)
+            if record is None:
                 raise DirectWardenError(
                     "storage-native volume does not own this sandbox incarnation"
                 )
-            self._validate_storage_record(sandbox, raw)
-            snapshot[volume_id] = raw
+            self._validate_storage_record(sandbox, record)
+            snapshot[volume_id] = record
         return snapshot
 
     def _validate_storage_record(
         self,
         sandbox: DirectSandbox,
-        raw: dict[str, object],
+        record: StorageVolumeRecord,
     ) -> None:
-        if (
-            raw.get("sandbox_id") != sandbox.sandbox_id
-            or raw.get("sandbox_generation") != sandbox.sandbox_generation
-            or raw.get("volume_id") != sandbox.memory_directory
-            or Path(str(raw.get("mount_path") or ""))
-            != self._active_memory_root(sandbox)
-        ):
+        if record.owner != self._storage_owner(sandbox) or Path(
+            record.mount_path
+        ) != self._active_memory_root(sandbox):
             raise DirectWardenError(
                 "storage-native volume does not own this sandbox incarnation"
             )
 
     @staticmethod
-    def _storage_operation_id(
-        sandbox: DirectSandbox,
-        operation_id: str,
-    ) -> str:
-        """Scope storage-daemon idempotency to one sandbox incarnation.
-
-        The storage operation journal is node-global.  Lifecycle revisions and
-        caller request IDs are not necessarily global, so using them directly
-        lets unrelated sandboxes collide (for example, both reaching
-        ``delete:3:storage-mount``).  A fixed digest remains replay-stable while
-        also fitting the daemon's bounded safe-ID grammar.
-        """
-
-        identity = f"{sandbox.sandbox_id}\0{sandbox.sandbox_generation}\0{operation_id}"
-        return "warden-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    def _storage_owner(sandbox: DirectSandbox) -> StorageVolumeOwner:
+        return StorageVolumeOwner(
+            volume_id=sandbox.memory_directory,
+            sandbox_id=sandbox.sandbox_id,
+            sandbox_generation=sandbox.sandbox_generation,
+        )
 
     def _mount_storage(
         self,
         sandbox: DirectSandbox,
         *,
         operation_id: str,
-    ) -> dict[str, object]:
-        assert self.storage is not None
-        record = self._storage_record(sandbox)
-        state = record.get("state")
-        if state == "mounted":
-            return record
-        if state == "sealed":
-            released = self.storage.release_runtime(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                volume_id=sandbox.memory_directory,
-                operation_id=self._storage_operation_id(
-                    sandbox,
-                    f"{operation_id}:release-sealed",
-                ),
-                expected_revision=int(record["revision"]),
-            )
-            raw_released = released.get("record")
-            if not isinstance(raw_released, dict):
-                raise DirectWardenError(
-                    "storage-native release returned an invalid record"
-                )
-            record = raw_released
-            state = record.get("state")
-        if state in {"released", "published"}:
-            mounted = self.storage.mount_snapshot_cow(
-                sandbox_id=sandbox.sandbox_id,
-                sandbox_generation=sandbox.sandbox_generation,
-                volume_id=sandbox.memory_directory,
-                operation_id=self._storage_operation_id(
-                    sandbox,
-                    f"{operation_id}:acquire",
-                ),
-                expected_revision=int(record["revision"]),
-            )
-            raw_mounted = mounted.get("record")
-            if not isinstance(raw_mounted, dict):
-                raise DirectWardenError(
-                    "storage-native acquire returned an invalid record"
-                )
-            return raw_mounted
-        raise DirectWardenError(f"storage-native volume is {state}, not resumable")
-
-    def _seal_storage(
-        self,
-        sandbox: DirectSandbox,
-        *,
-        operation_id: str,
-    ) -> dict[str, object]:
-        assert self.storage is not None
-        record = self._storage_record(sandbox)
-        if record.get("state") == "sealed":
-            return record
-        if record.get("state") != "mounted":
-            raise DirectWardenError(
-                f"storage-native volume is {record.get('state')}, not sealable"
-            )
-        sealed = self.storage.freeze_and_seal(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            volume_id=sandbox.memory_directory,
-            operation_id=self._storage_operation_id(sandbox, operation_id),
-            expected_revision=int(record["revision"]),
+    ) -> StorageVolumeRecord:
+        return self.storage.ensure_mounted(
+            self._storage_owner(sandbox),
+            operation_id=operation_id,
         )
-        raw = sealed.get("record")
-        if not isinstance(raw, dict):
-            raise DirectWardenError("storage-native seal returned an invalid record")
-        return raw
-
-    def _release_storage(
-        self,
-        sandbox: DirectSandbox,
-        *,
-        operation_id: str,
-    ) -> dict[str, object]:
-        assert self.storage is not None
-        record = self._storage_record(sandbox)
-        if record.get("state") in {"released", "published"}:
-            return record
-        if record.get("state") != "sealed":
-            raise DirectWardenError(
-                f"storage-native volume is {record.get('state')}, not releasable"
-            )
-        released = self.storage.release_runtime(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            volume_id=sandbox.memory_directory,
-            operation_id=self._storage_operation_id(sandbox, operation_id),
-            expected_revision=int(record["revision"]),
-        )
-        raw = released.get("record")
-        if not isinstance(raw, dict):
-            raise DirectWardenError("storage-native release returned an invalid record")
-        return raw
 
     def _release_parked_storage(
         self,
@@ -2087,15 +1502,10 @@ class DirectRunscWarden:
         operation_seed: str,
     ) -> None:
         record = self._storage_record(sandbox)
-        if record.get("state") == "mounted":
-            assert self.rootfs_lifecycle is not None
+        if record.state == StorageVolumeState.MOUNTED:
             self.rootfs_lifecycle.park_sandbox(sandbox)
-            self._seal_storage(
-                sandbox,
-                operation_id=f"{operation_seed}:storage-seal",
-            )
-        self._release_storage(
-            sandbox,
+        self.storage.ensure_released(
+            self._storage_owner(sandbox),
             operation_id=f"{operation_seed}:storage-release",
         )
 
@@ -2112,30 +1522,16 @@ class DirectRunscWarden:
         authority and must not survive a failed validation or restore attempt.
         """
 
-        if self.storage is None:
-            return
         record = self._storage_record(sandbox)
-        if record.get("state") != "mounted":
-            return
-        assert self.rootfs_lifecycle is not None
-        self.rootfs_lifecycle.park_sandbox(sandbox)
-        record = self._storage_record(sandbox)
-        if record.get("state") != "mounted":
-            return
-        result = self.storage.discard_mounted_cow(
-            sandbox_id=sandbox.sandbox_id,
-            sandbox_generation=sandbox.sandbox_generation,
-            volume_id=sandbox.memory_directory,
-            operation_id=self._storage_operation_id(
-                sandbox,
-                f"{operation_seed}:storage-discard",
-            ),
-            expected_revision=int(record["revision"]),
+        if record.state == StorageVolumeState.MOUNTED:
+            self.rootfs_lifecycle.park_sandbox(sandbox)
+        record = self.storage.discard_resume(
+            self._storage_owner(sandbox),
+            operation_id=f"{operation_seed}:storage-discard",
         )
-        raw = result.get("record")
-        if not isinstance(raw, dict) or raw.get("state") not in {
-            "released",
-            "published",
+        if record.state not in {
+            StorageVolumeState.RELEASED,
+            StorageVolumeState.PUBLISHED,
         }:
             raise DirectWardenError(
                 "storage-native restore rollback returned invalid authority"
@@ -2259,7 +1655,6 @@ class DirectRunscWarden:
             self.config.memory_root,
             self.config.bundle_root,
             self.config.journal_root,
-            self.config.artifact_root,
         ):
             path.mkdir(mode=0o700, parents=True, exist_ok=True)
             self._require_private_directory(path, "Warden root")

@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime
 import gzip
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
-import shutil
-import stat
+import sqlite3
 import subprocess
 import tarfile
 import tempfile
-from threading import BoundedSemaphore, Condition, RLock, Thread
 import time
-from typing import Any, Callable, Iterable
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
+from threading import BoundedSemaphore, Condition, RLock, Thread
+from typing import Any, Callable, Generic, Iterable, Iterator, TypeVar
 from uuid import uuid4
 
 from .build_context_store import BuildContextBlobStore
@@ -26,16 +25,10 @@ from .managed_registry import (
     normalize_manifest_digest,
 )
 from .models import parse_iso_datetime, utc_now
-from .sandbox import (
-    CommandExecutor,
-    CommandResult,
-    SubprocessExecutor,
-    _AdvisoryFileLock,
-    _atomic_write_json,
-)
-
+from .sandbox import CommandExecutor, CommandResult, SubprocessExecutor
 
 IMAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+_UPLOADED_CONTEXT_IDENTITY_RE = re.compile(r"archive:sha256:[0-9a-f]{64}")
 BUILD_TERMINAL_STATES = {"succeeded", "failed"}
 BUILD_LOG_TAIL_CHARS = 64 * 1024
 COMMAND_OUTPUT_TAIL_CHARS = 64 * 1024
@@ -48,8 +41,9 @@ MAX_BUILD_CONTEXT_EXTRACTED_BYTES = 2 * 1024**3
 MAX_BUILD_CONTEXT_MEMBER_BYTES = 512 * 1024**2
 MAX_BUILD_CONTEXT_MEMBERS = 100_000
 MAX_BUILD_CONTEXT_DECOMPRESSED_ARCHIVE_BYTES = 2 * 1024**3
-_IMAGE_LOCKS_GUARD = RLock()
-_IMAGE_LOCKS: dict[Path, _AdvisoryFileLock] = {}
+
+_IMAGE_STATE_ERROR = "image state database is invalid or unavailable"
+_IMAGE_STATE_APPLICATION_ID = 0x55435349
 
 
 class ImageBuildCapacityError(RuntimeError):
@@ -104,20 +98,17 @@ class ImageBuildSpec:
 def image_build_fingerprint(
     spec: ImageBuildSpec,
     *,
+    context_identity: str,
     push: bool = False,
-    context_identity: str | None = None,
 ) -> str:
     """Return the exact immutable identity used for build single-flight."""
 
     spec.validate()
-    immutable_context_identity = context_identity
-    if immutable_context_identity is None:
-        immutable_context_identity = (
-            f"tree:{image_build_context_digest(Path(spec.context_path))}"
-        )
+    if _UPLOADED_CONTEXT_IDENTITY_RE.fullmatch(context_identity) is None:
+        raise ValueError("image builds require an uploaded content-addressed context")
     payload = {
         "build_args": dict(spec.build_args),
-        "context_identity": immutable_context_identity,
+        "context_identity": context_identity,
         "dockerfile": _normalize_dockerfile_path(spec.dockerfile),
         "image_id": spec.id,
         "labels": dict(spec.labels),
@@ -132,117 +123,6 @@ def image_build_fingerprint(
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
-
-
-def image_build_context_digest(context_path: Path) -> str:
-    """Hash a deterministic, mutation-checked snapshot of a local context."""
-
-    try:
-        root = context_path.resolve(strict=True)
-    except OSError as exc:
-        raise ValueError(f"image build context is unavailable: {context_path}") from exc
-    if not root.is_dir():
-        raise ValueError(f"image build context must be a directory: {context_path}")
-    digest = hashlib.sha256()
-    digest.update(b"ucloud-image-context-v2\0")
-
-    def visit(directory: Path, relative: Path) -> None:
-        before = directory.stat(follow_symlinks=False)
-        _hash_context_metadata(digest, relative, before, kind="directory")
-        try:
-            entries = sorted(os.scandir(directory), key=lambda item: item.name)
-        except OSError as exc:
-            raise ValueError(f"cannot read image build context: {directory}") from exc
-        for entry in entries:
-            entry_path = Path(entry.path)
-            entry_relative = relative / entry.name
-            try:
-                entry_stat = entry.stat(follow_symlinks=False)
-                if entry.is_symlink():
-                    target = os.readlink(entry_path)
-                    _hash_context_metadata(
-                        digest,
-                        entry_relative,
-                        entry_stat,
-                        kind="symlink",
-                        value=target.encode("utf-8", errors="surrogateescape"),
-                    )
-                elif entry.is_dir(follow_symlinks=False):
-                    visit(entry_path, entry_relative)
-                elif entry.is_file(follow_symlinks=False):
-                    content_digest = hashlib.sha256()
-                    with entry_path.open("rb") as handle:
-                        while chunk := handle.read(1024 * 1024):
-                            content_digest.update(chunk)
-                    after = entry.stat(follow_symlinks=False)
-                    if _context_stat_identity(entry_stat) != _context_stat_identity(
-                        after
-                    ):
-                        raise ValueError(
-                            f"image build context changed while hashing: {entry_path}"
-                        )
-                    _hash_context_metadata(
-                        digest,
-                        entry_relative,
-                        entry_stat,
-                        kind="file",
-                        value=content_digest.digest(),
-                    )
-                else:
-                    raise ValueError(
-                        f"unsupported file type in image build context: {entry_path}"
-                    )
-            except OSError as exc:
-                raise ValueError(
-                    f"cannot read image build context entry: {entry_path}"
-                ) from exc
-        after = directory.stat(follow_symlinks=False)
-        if _context_stat_identity(before) != _context_stat_identity(after):
-            raise ValueError(
-                f"image build context changed while hashing: {directory}"
-            )
-
-    visit(root, Path("."))
-    return digest.hexdigest()
-
-
-def _context_stat_identity(value: os.stat_result) -> tuple[int, ...]:
-    return (
-        value.st_dev,
-        value.st_ino,
-        value.st_mode,
-        value.st_uid,
-        value.st_gid,
-        value.st_size,
-        value.st_mtime_ns,
-        value.st_ctime_ns,
-    )
-
-
-def _hash_context_metadata(
-    digest: Any,
-    path: Path,
-    metadata: os.stat_result,
-    *,
-    kind: str,
-    value: bytes = b"",
-) -> None:
-    record = json.dumps(
-        {
-            "kind": kind,
-            "mode": stat.S_IMODE(metadata.st_mode),
-            "mtime_ns": metadata.st_mtime_ns,
-            "path": path.as_posix(),
-            "size": metadata.st_size if kind == "file" else 0,
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8", errors="surrogateescape")
-    digest.update(len(record).to_bytes(8, "big"))
-    digest.update(record)
-    digest.update(len(value).to_bytes(8, "big"))
-    digest.update(value)
 
 
 @dataclass(frozen=True)
@@ -260,19 +140,7 @@ class ImageRecord:
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageRecord":
         unsupported = sorted(
-            set(raw)
-            - {
-                "available_to_sandboxes",
-                "created_at",
-                "id",
-                "labels",
-                "manifest_digest",
-                "pushed",
-                "source",
-                "state",
-                "tag",
-                "updated_at",
-            }
+            set(raw) - set(cls.__dataclass_fields__) - {"available_to_sandboxes"}
         )
         if unsupported:
             raise ValueError(
@@ -317,22 +185,13 @@ class ImageRecord:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "tag": self.tag,
-            "source": self.source,
-            "state": self.state,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-            "labels": dict(self.labels),
-            "pushed": self.pushed,
-            "manifest_digest": self.manifest_digest,
-            "available_to_sandboxes": self.available_to_sandboxes,
-        }
-
-    @property
-    def available_to_sandboxes(self) -> bool:
-        return self.pushed or self.source == "registry"
+        raw = asdict(self)
+        raw.update(
+            created_at=self.created_at.isoformat(),
+            updated_at=self.updated_at.isoformat(),
+            available_to_sandboxes=self.pushed or self.source == "registry",
+        )
+        return raw
 
     @property
     def digest_ref(self) -> str:
@@ -365,98 +224,48 @@ class ImageBuildRecord:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "ImageBuildRecord | None":
-        if set(raw) - {
-            "build_id",
-            "command",
-            "context_path",
-            "created_at",
-            "dockerfile",
-            "error",
-            "exit_code",
-            "finished_at",
-            "image",
-            "image_id",
-            "log_tail",
-            "owner_pid",
-            "push",
-            "push_command",
-            "push_exit_code",
-            "request_fingerprint",
-            "started_at",
-            "status",
-            "tag",
-            "timings",
-            "updated_at",
-        }:
-            return None
-        build_id = str(raw.get("build_id") or "")
-        image_id = str(raw.get("image_id") or "")
-        tag = str(raw.get("tag") or "")
-        status = str(raw.get("status") or "")
-        created_at = str(raw.get("created_at") or "")
-        updated_at = str(raw.get("updated_at") or "")
-        if (
-            not build_id
-            or not image_id
-            or not status
-            or not created_at
-            or not updated_at
+        fields = set(cls.__dataclass_fields__)
+        structured = set(
+            "command exit_code image owner_pid push push_command push_exit_code timings".split()
+        )
+        if set(raw) != fields or any(
+            type(raw[name]) is not str for name in fields - structured
         ):
             return None
-        command = raw.get("command") or ()
-        push_command = raw.get("push_command") or ()
-        image = raw.get("image") if isinstance(raw.get("image"), dict) else {}
-        timings = raw.get("timings") if isinstance(raw.get("timings"), dict) else {}
-        exit_code = raw.get("exit_code")
-        push_exit_code = raw.get("push_exit_code")
-        return cls(
-            build_id=build_id,
-            image_id=image_id,
-            tag=tag,
-            status=status,
-            created_at=created_at,
-            updated_at=updated_at,
-            context_path=str(raw.get("context_path") or ""),
-            dockerfile=str(raw.get("dockerfile") or "Dockerfile"),
-            push=bool(raw.get("push", False)),
-            command=tuple(str(item) for item in command),
-            push_command=tuple(str(item) for item in push_command),
-            exit_code=_optional_int(exit_code),
-            push_exit_code=_optional_int(push_exit_code),
-            error=str(raw.get("error") or ""),
-            log_tail=str(raw.get("log_tail") or ""),
-            started_at=str(raw.get("started_at") or ""),
-            finished_at=str(raw.get("finished_at") or ""),
-            image={str(key): value for key, value in image.items()},
-            timings={str(key): value for key, value in timings.items()},
-            owner_pid=max(0, _optional_int(raw.get("owner_pid")) or 0),
-            request_fingerprint=str(raw.get("request_fingerprint") or ""),
-        )
+        required = "build_id image_id status created_at updated_at".split()
+        if not all(raw[name] for name in required):
+            return None
+        if any(
+            type(raw[name]) is not list
+            or any(type(item) is not str for item in raw[name])
+            for name in ("command", "push_command")
+        ):
+            return None
+        if (
+            type(raw["push"]) is not bool
+            or type(raw["owner_pid"]) is not int
+            or raw["owner_pid"] < 0
+            or any(
+                value is not None and type(value) is not int
+                for value in (raw["exit_code"], raw["push_exit_code"])
+            )
+            or any(
+                type(raw[name]) is not dict
+                or any(type(key) is not str for key in raw[name])
+                for name in ("image", "timings")
+            )
+        ):
+            return None
+        values = raw | {
+            "command": tuple(raw["command"]),
+            "push_command": tuple(raw["push_command"]),
+        }
+        return cls(**values)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "build_id": self.build_id,
-            "image_id": self.image_id,
-            "tag": self.tag,
-            "status": self.status,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-            "context_path": self.context_path,
-            "dockerfile": self.dockerfile,
-            "push": self.push,
-            "command": list(self.command),
-            "push_command": list(self.push_command),
-            "exit_code": self.exit_code,
-            "push_exit_code": self.push_exit_code,
-            "error": self.error,
-            "log_tail": self.log_tail,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
-            "image": dict(self.image),
-            "timings": dict(self.timings),
-            "owner_pid": self.owner_pid,
-            "request_fingerprint": self.request_fingerprint,
-        }
+        raw = asdict(self)
+        raw.update(command=list(self.command), push_command=list(self.push_command))
+        return raw
 
     @property
     def terminal(self) -> bool:
@@ -549,10 +358,6 @@ class DockerImageRuntime:
         argv.append(spec.context_path)
         return tuple(argv)
 
-    def uses_direct_push(self, *, push: bool) -> bool:
-        """Return whether the requested push is part of the Buildx command."""
-        return push and self.buildx_direct_push
-
     def push_command(self, image: str) -> tuple[str, ...]:
         if not image.strip():
             raise ValueError("image is required.")
@@ -638,98 +443,155 @@ class DockerImageRuntime:
         return result
 
 
-class ImageStore:
+_ImageStateRecordT = TypeVar("_ImageStateRecordT", ImageRecord, ImageBuildRecord)
+
+
+class _ImageStateStore(Generic[_ImageStateRecordT]):
+    _TABLES = ("image_state_v1_images", "image_state_v1_builds")
+    _COLUMNS = "record_id:TEXT:1:1 record_json:TEXT:1:0"
+    _table: str
+    _id_field: str
+    _decode: Callable[[dict[str, Any]], _ImageStateRecordT | None]
+
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._lock = _image_lock(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            application_id = int(conn.execute("PRAGMA application_id").fetchone()[0])
+            version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            if not tables and application_id == 0 and version == 0:
+                for table in self._TABLES:
+                    conn.execute(
+                        f"CREATE TABLE {table} "
+                        "(record_id TEXT PRIMARY KEY, record_json TEXT NOT NULL) STRICT"
+                    )
+                conn.execute(f"PRAGMA application_id = {_IMAGE_STATE_APPLICATION_ID}")
+                conn.execute("PRAGMA user_version = 1")
+                tables = set(self._TABLES)
+                application_id, version = _IMAGE_STATE_APPLICATION_ID, 1
+            if (application_id, version, tables) != (
+                _IMAGE_STATE_APPLICATION_ID,
+                1,
+                set(self._TABLES),
+            ):
+                raise sqlite3.DatabaseError("unsupported image state schema")
+            for table in self._TABLES:
+                columns = " ".join(
+                    f"{row[1]}:{row[2]}:{row[3]}:{row[5]}"
+                    for row in conn.execute(f"PRAGMA table_info({table})")
+                )
+                strict = conn.execute(
+                    "SELECT strict FROM pragma_table_list WHERE name = ?", (table,)
+                ).fetchone()
+                if columns != self._COLUMNS or strict != (1,):
+                    raise sqlite3.DatabaseError(f"invalid image state table: {table}")
+            conn.commit()
+            journal = conn.execute("PRAGMA journal_mode = DELETE").fetchone()
+            if str(journal[0]).lower() != "delete":
+                raise sqlite3.DatabaseError("image state requires DELETE journal mode")
+        except sqlite3.Error as exc:
+            raise ValueError(_IMAGE_STATE_ERROR) from exc
+        finally:
+            conn.close()
+        os.chmod(path, 0o600)
 
-    def load(self) -> dict[str, ImageRecord]:
-        with self._lock.hold(exclusive=False):
-            return self._load_unlocked()
+    def _connect(self) -> sqlite3.Connection:
+        try:
+            return sqlite3.connect(self.path, timeout=60, isolation_level=None)
+        except sqlite3.Error as exc:
+            raise ValueError(_IMAGE_STATE_ERROR) from exc
 
-    def save(self, records: dict[str, ImageRecord]) -> None:
-        with self._lock.hold(exclusive=True):
-            self._save_unlocked(records)
+    @contextmanager
+    def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            yield conn
+            conn.commit()
+        except BaseException as exc:
+            if conn.in_transaction:
+                conn.rollback()
+            if isinstance(exc, sqlite3.Error):
+                raise ValueError(_IMAGE_STATE_ERROR) from exc
+            raise
+        finally:
+            conn.close()
 
-    def upsert(self, record: ImageRecord) -> dict[str, ImageRecord]:
-        with self._lock.hold(exclusive=True):
-            records = self._load_unlocked()
-            records[record.id] = record
-            self._save_unlocked(records)
-            return records
+    def _load(self, conn: sqlite3.Connection) -> dict[str, _ImageStateRecordT]:
+        records = {}
+        for record_id, payload in conn.execute(
+            f"SELECT record_id, record_json FROM {self._table} ORDER BY record_id"
+        ):
+            raw = json.loads(payload)
+            record = self._decode(raw) if isinstance(raw, dict) else None
+            if record is None or getattr(record, self._id_field) != record_id:
+                raise ValueError("image state contains an invalid record")
+            records[record_id] = record
+        return records
+
+    def load(self) -> dict[str, _ImageStateRecordT]:
+        with self._transaction(write=False) as conn:
+            return self._load(conn)
+
+    def upsert(self, record: _ImageStateRecordT) -> None:
+        with self._transaction(write=True) as conn:
+            self._put(conn, record)
+            self._compact(conn)
+
+    def _put(self, conn: sqlite3.Connection, record: _ImageStateRecordT) -> None:
+        conn.execute(
+            f"INSERT OR REPLACE INTO {self._table} VALUES (?, ?)",
+            (
+                getattr(record, self._id_field),
+                json.dumps(record.to_dict(), separators=(",", ":"), sort_keys=True),
+            ),
+        )
+
+    def _compact(self, conn: sqlite3.Connection) -> None:
+        del conn
+
+
+class ImageStore(_ImageStateStore[ImageRecord]):
+    _table = "image_state_v1_images"
+    _id_field = "id"
+    _decode = staticmethod(ImageRecord.from_dict)
 
     def delete_by_tags(self, tags: Iterable[str]) -> list[ImageRecord]:
         tag_set = {tag for tag in tags if tag}
         if not tag_set:
             return []
-        with self._lock.hold(exclusive=True):
-            records = self._load_unlocked()
-            removed = [record for record in records.values() if record.tag in tag_set]
-            if removed:
-                self._save_unlocked(
-                    {
-                        image_id: record
-                        for image_id, record in records.items()
-                        if record.tag not in tag_set
-                    }
-                )
+        with self._transaction(write=True) as conn:
+            removed = [
+                record for record in self._load(conn).values() if record.tag in tag_set
+            ]
+            conn.executemany(
+                f"DELETE FROM {self._table} WHERE record_id = ?",
+                ((record.id,) for record in removed),
+            )
             return removed
 
-    def _load_unlocked(self) -> dict[str, ImageRecord]:
-        if not self.path.exists():
-            return {}
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("image store must contain a JSON object.")
-        items = raw.get("images", [])
-        if not isinstance(items, list):
-            raise ValueError("image store must contain an images list.")
-        records: dict[str, ImageRecord] = {}
-        for index, item in enumerate(items):
-            if not isinstance(item, dict):
-                raise ValueError(
-                    f"image store contains an invalid record at index {index}."
-                )
-            record = ImageRecord.from_dict(item)
-            if record.id in records:
-                raise ValueError(
-                    f"image store contains duplicate image id {record.id!r}."
-                )
-            records[record.id] = record
-        return records
 
-    def _save_unlocked(self, records: dict[str, ImageRecord]) -> None:
-        _atomic_write_json(
-            self.path,
-            {"images": [records[image_id].to_dict() for image_id in sorted(records)]},
-        )
+class ImageBuildStore(_ImageStateStore[ImageBuildRecord]):
+    _table = "image_state_v1_builds"
+    _id_field = "build_id"
+    _decode = staticmethod(ImageBuildRecord.from_dict)
 
-
-class ImageBuildStore:
     def __init__(
         self,
         path: Path,
         *,
         max_terminal_builds: int = DEFAULT_TERMINAL_BUILD_HISTORY,
     ) -> None:
-        self.path = path
+        super().__init__(path)
         self.max_terminal_builds = max(0, max_terminal_builds)
-        self._lock = _image_lock(path)
-
-    def load(self) -> dict[str, ImageBuildRecord]:
-        with self._lock.hold(exclusive=False):
-            return self._load_unlocked()
-
-    def save(self, records: dict[str, ImageBuildRecord]) -> None:
-        with self._lock.hold(exclusive=True):
-            self._save_unlocked(records)
-
-    def upsert(self, record: ImageBuildRecord) -> dict[str, ImageBuildRecord]:
-        with self._lock.hold(exclusive=True):
-            records = self._load_unlocked()
-            records[record.build_id] = record
-            self._save_unlocked(records)
-            return records
 
     def reserve_build(
         self,
@@ -737,30 +599,27 @@ class ImageBuildStore:
         *,
         max_active_builds: int,
     ) -> tuple[ImageBuildRecord, bool]:
-        """Atomically deduplicate, capacity-check, and persist a new build."""
-        with self._lock.hold(exclusive=True):
-            records = self._load_unlocked()
+        with self._transaction(write=True) as conn:
+            records = self._load(conn)
             matching = sorted(
                 (
                     existing
                     for existing in records.values()
-                    if (
+                    if not existing.terminal
+                    and (
                         existing.image_id == record.image_id
                         or existing.tag == record.tag
                     )
-                    and not existing.terminal
                 ),
                 key=lambda item: (item.created_at, item.build_id),
             )
             if matching:
-                exact = [
-                    existing
-                    for existing in matching
-                    if existing.request_fingerprint
-                    and existing.request_fingerprint == record.request_fingerprint
-                ]
-                if exact:
-                    return exact[-1], False
+                for existing in reversed(matching):
+                    if (
+                        existing.request_fingerprint
+                        and existing.request_fingerprint == record.request_fingerprint
+                    ):
+                        return existing, False
                 raise ImageBuildConflictError(
                     "an active build already owns this image id or tag with "
                     "a different build specification"
@@ -772,16 +631,15 @@ class ImageBuildStore:
                 raise ImageBuildCapacityError(
                     f"image build capacity reached ({max_active_builds})"
                 )
-            records[record.build_id] = record
-            self._save_unlocked(records)
+            self._put(conn, record)
+            self._compact(conn)
             return record, True
 
     def reconcile_interrupted(self) -> tuple[ImageBuildRecord, ...]:
-        with self._lock.hold(exclusive=True):
-            records = self._load_unlocked()
+        with self._transaction(write=True) as conn:
             now = utc_now().isoformat()
             interrupted: list[ImageBuildRecord] = []
-            for build_id, record in records.items():
+            for record in self._load(conn).values():
                 if record.terminal or _pid_is_running(record.owner_pid):
                     continue
                 error = "image build interrupted by node-agent restart"
@@ -794,111 +652,37 @@ class ImageBuildStore:
                     updated_at=now,
                     finished_at=now,
                 )
-                records[build_id] = updated
+                self._put(conn, updated)
                 interrupted.append(updated)
-            compacted = self._bounded_records(records)
-            if interrupted or len(compacted) != len(records):
-                self._save_unlocked(compacted)
+            self._compact(conn)
             return tuple(interrupted)
 
     def get(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         records = self.load()
-        exact = records.get(build_id_or_image_id)
-        if exact is not None:
+        if exact := records.get(build_id_or_image_id):
             return exact
         matches = [
             record
             for record in records.values()
             if record.image_id == build_id_or_image_id
         ]
-        if not matches:
-            return None
-        return sorted(matches, key=lambda item: (item.created_at, item.build_id))[-1]
-
-    def active_for_image(
-        self,
-        image_id: str,
-        *,
-        tag: str | None = None,
-    ) -> ImageBuildRecord | None:
-        matches = [
-            record
-            for record in self.load().values()
-            if record.image_id == image_id
-            and not record.terminal
-            and (tag is None or record.tag == tag)
-        ]
-        if not matches:
-            return None
-        return sorted(matches, key=lambda item: (item.created_at, item.build_id))[-1]
-
-    def _load_unlocked(self) -> dict[str, ImageBuildRecord]:
-        if not self.path.exists():
-            return {}
-        raw = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise ValueError("image build store must contain a JSON object.")
-        items = raw.get("builds", [])
-        if not isinstance(items, list):
-            raise ValueError("image build store must contain a builds list.")
-        records: dict[str, ImageBuildRecord] = {}
-        for index, item in enumerate(items):
-            if not isinstance(item, dict):
-                raise ValueError(
-                    f"image build store contains an invalid record at index {index}."
-                )
-            record = ImageBuildRecord.from_dict(item)
-            if record is None:
-                raise ValueError(
-                    f"image build store contains an invalid record at index {index}."
-                )
-            if record.build_id in records:
-                raise ValueError(
-                    f"image build store contains duplicate build id {record.build_id!r}."
-                )
-            records[record.build_id] = record
-        return records
-
-    def _save_unlocked(self, records: dict[str, ImageBuildRecord]) -> None:
-        records = self._bounded_records(records)
-        _atomic_write_json(
-            self.path,
-            {
-                "builds": [
-                    records[build_id].to_dict()
-                    for build_id in sorted(
-                        records,
-                        key=lambda item: (
-                            records[item].created_at,
-                            records[item].build_id,
-                        ),
-                    )
-                ]
-            },
+        return max(
+            matches, key=lambda item: (item.created_at, item.build_id), default=None
         )
 
-    def _bounded_records(
-        self,
-        records: dict[str, ImageBuildRecord],
-    ) -> dict[str, ImageBuildRecord]:
-        """Retain every active build plus the newest bounded terminal history."""
-        active = {
-            build_id: record
-            for build_id, record in records.items()
-            if not record.terminal
-        }
+    def _compact(self, conn: sqlite3.Connection) -> None:
         terminal = sorted(
-            (record for record in records.values() if record.terminal),
+            (record for record in self._load(conn).values() if record.terminal),
             key=lambda record: (
                 record.finished_at or record.updated_at or record.created_at,
                 record.build_id,
             ),
             reverse=True,
-        )[: self.max_terminal_builds]
-        return {
-            **active,
-            **{record.build_id: record for record in terminal},
-        }
+        )
+        conn.executemany(
+            f"DELETE FROM {self._table} WHERE record_id = ?",
+            ((record.build_id,) for record in terminal[self.max_terminal_builds :]),
+        )
 
 
 class ImageManager:
@@ -910,19 +694,12 @@ class ImageManager:
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = 4,
         max_concurrent_pulls: int = 8,
-        max_concurrent_context_preparations: int = 2,
     ) -> None:
         self.store = store
         self.runtime = runtime
-        self.build_store = build_store or ImageBuildStore(
-            default_image_build_file(store.path)
-        )
+        self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
-        self.max_concurrent_context_preparations = max(
-            1,
-            max_concurrent_context_preparations,
-        )
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
@@ -930,17 +707,10 @@ class ImageManager:
         self._active_pulls = 0
         self._waiting_pulls = 0
         self._pull_slots = BoundedSemaphore(self.max_concurrent_pulls)
-        self._context_preparation_slots = BoundedSemaphore(
-            self.max_concurrent_context_preparations
-        )
-        self._context_preparation_condition = Condition(self._build_lock)
-        self._preparing_image_ids: set[str] = set()
-        self._preparing_tags: set[str] = set()
-        self._active_context_preparations = 0
-        self._waiting_context_preparations = 0
         self._pending_build_logs: dict[str, str] = {}
         self._build_log_last_flush: dict[str, float] = {}
-        self.reconcile_interrupted_builds()
+        with self._build_lock:
+            self.build_store.reconcile_interrupted()
 
     def list(self) -> list[ImageRecord]:
         return list(self.store.load().values())
@@ -997,48 +767,6 @@ class ImageManager:
                 "max_concurrent_operations": self.max_concurrent_pulls,
             }
 
-    def context_preparation_snapshot(self) -> dict[str, int]:
-        with self._build_lock:
-            return {
-                "active_operations": self._active_context_preparations,
-                "waiting_operations": self._waiting_context_preparations,
-                "max_concurrent_operations": (
-                    self.max_concurrent_context_preparations
-                ),
-            }
-
-    @contextmanager
-    def _local_context_preparation(self, image_id: str, tag: str):
-        acquired_slot = False
-        with self._context_preparation_condition:
-            self._waiting_context_preparations += 1
-            while (
-                image_id in self._preparing_image_ids
-                or tag in self._preparing_tags
-            ):
-                self._context_preparation_condition.wait()
-            self._preparing_image_ids.add(image_id)
-            self._preparing_tags.add(tag)
-        try:
-            self._context_preparation_slots.acquire()
-            acquired_slot = True
-            with self._build_lock:
-                self._waiting_context_preparations -= 1
-                self._active_context_preparations += 1
-            yield
-        finally:
-            if acquired_slot:
-                with self._build_lock:
-                    self._active_context_preparations -= 1
-                self._context_preparation_slots.release()
-            else:
-                with self._build_lock:
-                    self._waiting_context_preparations -= 1
-            with self._context_preparation_condition:
-                self._preparing_image_ids.discard(image_id)
-                self._preparing_tags.discard(tag)
-                self._context_preparation_condition.notify_all()
-
     def get_build(self, build_id_or_image_id: str) -> ImageBuildRecord | None:
         with self._build_lock:
             record = self.build_store.get(build_id_or_image_id)
@@ -1047,62 +775,14 @@ class ImageManager:
                 record = self.build_store.get(build_id_or_image_id)
             return record
 
-    def reconcile_interrupted_builds(self) -> tuple[ImageBuildRecord, ...]:
-        """Fail persisted non-terminal builds that have no worker after restart."""
-        with self._build_lock:
-            return self.build_store.reconcile_interrupted()
-
-    def build(self, spec: ImageBuildSpec) -> tuple[ImageRecord, CommandResult]:
-        spec.validate()
-        result = self.runtime.build(spec)
-        now = utc_now()
-        record = ImageRecord(
-            id=spec.id,
-            tag=spec.tag,
-            source=f"build:{spec.context_path}",
-            state="planned" if self.runtime.dry_run else "available",
-            created_at=now,
-            updated_at=now,
-            labels=spec.labels,
-        )
-        self.store.upsert(record)
-        return record, result
-
     def start_build(
         self,
         spec: ImageBuildSpec,
         *,
+        context_identity: str,
+        materialize_context: Callable[[], MaterializedBuildContext],
         push: bool = False,
         cleanup: Callable[[], None] | None = None,
-        context_identity: str | None = None,
-        materialize_context: Callable[[], MaterializedBuildContext] | None = None,
-    ) -> tuple[ImageBuildRecord, bool]:
-        spec.validate()
-        if context_identity is None:
-            with self._local_context_preparation(spec.id, spec.tag):
-                return self._start_build_prepared(
-                    spec,
-                    push=push,
-                    cleanup=cleanup,
-                    context_identity=None,
-                    materialize_context=materialize_context,
-                )
-        return self._start_build_prepared(
-            spec,
-            push=push,
-            cleanup=cleanup,
-            context_identity=context_identity,
-            materialize_context=materialize_context,
-        )
-
-    def _start_build_prepared(
-        self,
-        spec: ImageBuildSpec,
-        *,
-        push: bool,
-        cleanup: Callable[[], None] | None,
-        context_identity: str | None,
-        materialize_context: Callable[[], MaterializedBuildContext] | None,
     ) -> tuple[ImageBuildRecord, bool]:
         spec.validate()
         spec = replace(
@@ -1110,26 +790,12 @@ class ImageManager:
             dockerfile=_normalize_dockerfile_path(spec.dockerfile),
         )
         try:
-            if context_identity is None:
-                local_context_path = Path(spec.context_path)
-                context_identity = (
-                    f"tree:{image_build_context_digest(local_context_path)}"
-                )
-
-                def materialize_local_context() -> MaterializedBuildContext:
-                    return snapshot_local_build_context(local_context_path)
-
-                materialize_context = materialize_local_context
-            elif materialize_context is None:
-                raise ValueError(
-                    "an immutable context identity requires a context materializer"
-                )
             request_fingerprint = image_build_fingerprint(
                 spec,
-                push=push,
                 context_identity=context_identity,
+                push=push,
             )
-            direct_push = self.runtime.uses_direct_push(push=push)
+            direct_push = push and self.runtime.buildx_direct_push
             logical_command = (
                 self.runtime.build_command(spec, push=True)
                 if direct_push
@@ -1176,7 +842,6 @@ class ImageManager:
         materialized: MaterializedBuildContext | None = None
         effective_cleanup = cleanup
         try:
-            assert materialize_context is not None
             materialized = materialize_context()
             effective_cleanup = _combine_cleanup(materialized.cleanup, cleanup)
             if materialized.context_identity != context_identity:
@@ -1294,26 +959,6 @@ class ImageManager:
                     wait_seconds = min(wait_seconds, remaining)
                 condition.wait(wait_seconds)
 
-    def mark_pushed(
-        self,
-        image_id: str,
-        *,
-        manifest_digest: str = "",
-    ) -> ImageRecord:
-        records = self.store.load()
-        record = records.get(image_id)
-        if record is None:
-            raise ValueError(f"image record not found: {image_id}")
-        normalized_digest = normalize_manifest_digest(manifest_digest)
-        updated = replace(
-            record,
-            pushed=True,
-            manifest_digest=normalized_digest or record.manifest_digest,
-            updated_at=utc_now(),
-        )
-        self.store.upsert(updated)
-        return updated
-
     def pull(
         self, image: str, image_id: str | None = None
     ) -> tuple[ImageRecord, CommandResult]:
@@ -1331,27 +976,6 @@ class ImageManager:
         )
         self.store.upsert(record)
         return record, result
-
-    def record_snapshot(
-        self,
-        *,
-        image_id: str,
-        image: str,
-        sandbox_id: str,
-        dry_run: bool,
-    ) -> ImageRecord:
-        now = utc_now()
-        record = ImageRecord(
-            id=image_id,
-            tag=image,
-            source=f"snapshot:{sandbox_id}",
-            state="planned" if dry_run else "available",
-            created_at=now,
-            updated_at=now,
-            manifest_digest=manifest_digest_from_image_ref(image),
-        )
-        self.store.upsert(record)
-        return record
 
     def _run_tracked_build(
         self,
@@ -1531,29 +1155,6 @@ def _elapsed_ms(started: float) -> int:
     return max(0, int((time.monotonic() - started) * 1000))
 
 
-def _image_lock(path: Path) -> _AdvisoryFileLock:
-    key = path.resolve()
-    with _IMAGE_LOCKS_GUARD:
-        lock = _IMAGE_LOCKS.get(key)
-        if lock is None:
-            lock = _AdvisoryFileLock(key)
-            _IMAGE_LOCKS[key] = lock
-        return lock
-
-
-def default_image_build_file(image_file: Path) -> Path:
-    return image_file.with_name(f"{image_file.stem}-builds{image_file.suffix}")
-
-
-def _optional_int(raw: object) -> int | None:
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
-
-
 def _pid_is_running(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -1607,21 +1208,6 @@ def _validate_materialized_dockerfile(
         raise ValueError("dockerfile must name a regular file")
 
 
-@contextmanager
-def uploaded_build_context(
-    raw: dict[str, Any],
-    context_store: BuildContextBlobStore | None = None,
-):
-    context = materialize_uploaded_build_context(raw, context_store)
-    if context is None:
-        yield None
-        return
-    try:
-        yield context.path
-    finally:
-        context.cleanup()
-
-
 @dataclass
 class MaterializedBuildContext:
     path: Path
@@ -1634,11 +1220,11 @@ class MaterializedBuildContext:
 
 def uploaded_build_context_reference(
     raw: dict[str, Any],
-    context_store: BuildContextBlobStore | None,
-) -> tuple[str, int] | None:
+    context_store: BuildContextBlobStore,
+) -> tuple[str, int]:
     digest = raw.get("context_archive_digest")
     if digest is None:
-        return None
+        raise ValueError("context_archive_digest is required.")
     if not isinstance(digest, str):
         raise ValueError("context_archive_digest must be a string.")
     if raw.get("context_archive_format") != "tar.gz":
@@ -1650,8 +1236,6 @@ def uploaded_build_context_reference(
         raise ValueError("context_archive_size must be a non-negative integer.")
     if archive_size < 0:
         raise ValueError("context_archive_size must be a non-negative integer.")
-    if context_store is None:
-        raise ValueError("content-addressed build contexts are not configured.")
     try:
         stored_size = context_store.size(digest)
     except (FileNotFoundError, ValueError) as exc:
@@ -1664,83 +1248,27 @@ def uploaded_build_context_reference(
 
 
 def materialize_uploaded_build_context(
-    raw: dict[str, Any],
-    context_store: BuildContextBlobStore | None = None,
-) -> MaterializedBuildContext | None:
-    reference = uploaded_build_context_reference(raw, context_store)
-    if reference is not None:
-        digest, _ = reference
-        temporary_directory: tempfile.TemporaryDirectory[str] = (
-            tempfile.TemporaryDirectory(prefix="ucloud-image-context-")
-        )
-        context_dir = Path(temporary_directory.name)
-        try:
-            with context_store.open(digest) as archive_file:
-                _extract_safe_tar_gz_file(archive_file, context_dir)
-            context_store.touch(digest)
-        except FileNotFoundError as exc:
-            temporary_directory.cleanup()
-            raise ValueError(
-                f"build context {digest!r} has not been uploaded."
-            ) from exc
-        except Exception:
-            temporary_directory.cleanup()
-            raise
-        return MaterializedBuildContext(
-            context_dir,
-            temporary_directory,
-            f"archive:{digest}",
-        )
-
-    return None
-
-
-def snapshot_local_build_context(context_path: Path) -> MaterializedBuildContext:
-    try:
-        source = context_path.resolve(strict=True)
-    except OSError as exc:
-        raise ValueError(f"image build context is unavailable: {context_path}") from exc
-    if not source.is_dir():
-        raise ValueError(f"image build context must be a directory: {context_path}")
-    temporary_directory: tempfile.TemporaryDirectory[str] = (
-        tempfile.TemporaryDirectory(prefix="ucloud-image-context-")
+    digest: str,
+    context_store: BuildContextBlobStore,
+) -> MaterializedBuildContext:
+    temporary_directory: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory(
+        prefix="ucloud-image-context-"
     )
-    destination = Path(temporary_directory.name)
+    context_dir = Path(temporary_directory.name)
     try:
-        ignore = None
-        try:
-            nested_destination = destination.relative_to(source)
-        except ValueError:
-            pass
-        else:
-            nested_parent = Path(*nested_destination.parts[:-1])
-            nested_name = nested_destination.parts[-1]
-
-            def ignore_nested_destination(
-                current: str,
-                names: list[str],
-            ) -> set[str]:
-                relative = Path(current).relative_to(source)
-                if relative == nested_parent and nested_name in names:
-                    return {nested_name}
-                return set()
-
-            ignore = ignore_nested_destination
-        shutil.copytree(
-            source,
-            destination,
-            dirs_exist_ok=True,
-            symlinks=True,
-            ignore=ignore,
-        )
-        digest = image_build_context_digest(destination)
+        with context_store.open(digest) as archive_file:
+            _extract_safe_tar_gz_file(archive_file, context_dir)
+        context_store.touch(digest)
+    except FileNotFoundError as exc:
+        temporary_directory.cleanup()
+        raise ValueError(f"build context {digest!r} has not been uploaded.") from exc
     except Exception:
         temporary_directory.cleanup()
         raise
     return MaterializedBuildContext(
-        destination,
+        context_dir,
         temporary_directory,
-        f"tree:{digest}",
+        f"archive:{digest}",
     )
 
 
@@ -1787,8 +1315,7 @@ def _extract_safe_tar_gz_file(
                     if member.isfile():
                         if member.size < 0:
                             raise ValueError(
-                                "invalid file size in context archive: "
-                                f"{member.name!r}"
+                                f"invalid file size in context archive: {member.name!r}"
                             )
                         if member.size > max_member_bytes:
                             raise ValueError(
@@ -1819,8 +1346,7 @@ class _ByteLimitedReader:
         chunk = self._stream.read(requested)
         if len(chunk) > self._remaining:
             raise ValueError(
-                "context archive exceeds the "
-                f"{self._limit} decompressed-byte limit."
+                f"context archive exceeds the {self._limit} decompressed-byte limit."
             )
         self._remaining -= len(chunk)
         return chunk

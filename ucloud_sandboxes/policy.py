@@ -6,7 +6,6 @@ import math
 
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
-    DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
     has_capability,
 )
 from .models import (
@@ -41,7 +40,7 @@ def evaluate_scale(
         now=now,
     )[:stop_budget]
     unreachable_job_ids = {node.job_id for node in unreachable_stop_candidates}
-    incompatible_stop_candidates = _incompatible_stop_candidates(
+    incompatible_candidates = incompatible_stop_candidates(
         [node for node in nodes if node.job_id not in unreachable_job_ids],
         now=now,
     )[: max(0, stop_budget - len(unreachable_stop_candidates))]
@@ -108,7 +107,7 @@ def evaluate_scale(
         live_signals,
     )
 
-    maximum_request = policy.schedulable_node_resources
+    maximum_request = policy.default_node_resources
     all_demand_placement_requests = (
         *demand.placement_requests,
         *demand.prepared_placement_requests,
@@ -130,7 +129,6 @@ def evaluate_scale(
                 for request in demand.placement_requests
                 if request.resources.fits_within(maximum_request)
             ),
-            dynamic=policy.dynamic_active_admission_enabled,
             include_disk=True,
         )
         if demand.placement_requests
@@ -142,7 +140,6 @@ def evaluate_scale(
             for request in demand.prepared_placement_requests
             if request.resources.fits_within(maximum_request)
         ),
-        dynamic=policy.dynamic_active_admission_enabled,
         include_disk=True,
     )
     demand_resources = _add_resources(pending_resources, prepared_resources)
@@ -162,17 +159,12 @@ def evaluate_scale(
             program_resources = _add_resources(
                 _placement_request_resources(
                     program_placement_requests,
-                    dynamic=policy.dynamic_active_admission_enabled,
                     include_disk=False,
                 ),
                 program_signals.weighted_model_wait_resources,
             )
         else:
-            program_resources = (
-                _dynamic_program_resources(program_signals)
-                if policy.dynamic_active_admission_enabled
-                else program_signals.effective_resources
-            )
+            program_resources = _dynamic_program_resources(program_signals)
         demand_resources = _add_resources(
             demand_resources,
             program_resources,
@@ -184,7 +176,7 @@ def evaluate_scale(
         now,
         oldest_pending_seconds,
     )
-    resource_deficit = _resource_deficit(
+    resource_deficit = _subtract_resources(
         desired_resources,
         projected_free_resources,
     )
@@ -227,8 +219,8 @@ def evaluate_scale(
         )
         reasons.append(reason)
 
-    if incompatible_stop_candidates:
-        job_ids = tuple(node.job_id for node in incompatible_stop_candidates)
+    if incompatible_candidates:
+        job_ids = tuple(node.job_id for node in incompatible_candidates)
         reason = "idle sandbox node(s) have incompatible agent version"
         actions.append(
             ScaleAction(
@@ -263,12 +255,11 @@ def evaluate_scale(
                 reasons.append(f"cannot satisfy min_nodes={policy.min_nodes}: {reason}")
 
     if placement_nodes > 0 or (
-        _has_resource_demand(desired_resources)
-        and _has_resource_deficit(resource_deficit)
+        _has_resources(desired_resources) and _has_resources(resource_deficit)
     ):
         deficit_nodes = (
             _nodes_for_resource_deficit(resource_deficit, policy)
-            if _has_resource_deficit(resource_deficit)
+            if _has_resources(resource_deficit)
             else 0
         )
         # A node already planned to restore ``min_nodes`` contributes the same
@@ -337,7 +328,7 @@ def evaluate_scale(
     if create_pressure_scale_up:
         assert live_signals is not None
         baseline_nodes = max(0, policy.min_nodes)
-        if _has_resource_demand(desired_resources):
+        if _has_resources(desired_resources):
             baseline_nodes = max(
                 baseline_nodes,
                 _nodes_for_resource_deficit(desired_resources, policy),
@@ -392,7 +383,7 @@ def evaluate_scale(
     planned_creates = _planned_creates(actions)
     if (
         planned_creates == 0
-        and not _has_resource_deficit(resource_deficit)
+        and not _has_resources(resource_deficit)
         and placement_nodes == 0
     ):
         excess_nodes = total_nodes - policy.min_nodes
@@ -656,7 +647,7 @@ def _nodes_for_unplaced_requests(
 
     if not requests:
         return 0
-    bins: list[tuple[str, ResourceQuantity, bool]] = []
+    bins: list[tuple[str, ResourceQuantity]] = []
     for node in nodes:
         if node.job.is_final:
             continue
@@ -665,10 +656,6 @@ def _nodes_for_unplaced_requests(
                 (
                     node.job_id,
                     _security_adjusted_resources(node, node.heartbeat.free_resources),
-                    has_capability(
-                        node.heartbeat.capabilities,
-                        DYNAMIC_ACTIVE_ADMISSION_CAPABILITY,
-                    ),
                 )
             )
         elif node.is_provisioning:
@@ -678,16 +665,15 @@ def _nodes_for_unplaced_requests(
                 now,
                 oldest_pending_seconds,
             )
-            if not _has_resource_demand(available):
+            if not _has_resources(available):
                 continue
             bins.append(
                 (
                     node.job_id,
                     available,
-                    policy.dynamic_active_admission_enabled,
                 )
             )
-    default_bin = policy.schedulable_node_resources
+    default_bin = policy.default_node_resources
 
     def pressure(
         placement: SandboxPlacementRequest,
@@ -707,8 +693,8 @@ def _nodes_for_unplaced_requests(
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
         for _ in range(placement.count):
-            fitting: list[tuple[int, str, ResourceQuantity, bool]] = []
-            for index, (job_id, available, dynamic_active) in enumerate(bins):
+            fitting: list[tuple[int, str, ResourceQuantity]] = []
+            for index, (job_id, available) in enumerate(bins):
                 if job_id in excluded:
                     continue
                 available_for_request = available
@@ -718,11 +704,9 @@ def _nodes_for_unplaced_requests(
                         disk_mb=available.disk_mb + placement.owned_disk_mb,
                     )
                 if requested.fits_within(available_for_request):
-                    fitting.append(
-                        (index, job_id, available_for_request, dynamic_active)
-                    )
+                    fitting.append((index, job_id, available_for_request))
             if fitting:
-                index, job_id, available, dynamic_active = min(
+                index, job_id, available = min(
                     fitting,
                     key=lambda item: (
                         item[2].disk_mb - requested.disk_mb,
@@ -732,24 +716,16 @@ def _nodes_for_unplaced_requests(
                 )
                 bins[index] = (
                     job_id,
-                    _subtract_dynamic_resources(available, requested)
-                    if dynamic_active
-                    else _subtract_resources(available, requested),
-                    dynamic_active,
+                    _subtract_dynamic_resources(available, requested),
                 )
                 continue
             missing += 1
             bins.append(
                 (
                     "",
-                    (
-                        _subtract_dynamic_resources(default_bin, requested)
-                        if policy.dynamic_active_admission_enabled
-                        else _subtract_resources(default_bin, requested)
-                    )
+                    _subtract_dynamic_resources(default_bin, requested)
                     if requested.fits_within(default_bin)
                     else ResourceQuantity(),
-                    policy.dynamic_active_admission_enabled,
                 )
             )
     return missing
@@ -758,23 +734,10 @@ def _nodes_for_unplaced_requests(
 def _placement_request_resources(
     requests: tuple[SandboxPlacementRequest, ...],
     *,
-    dynamic: bool,
     include_disk: bool,
 ) -> ResourceQuantity:
     """Aggregate exact schedulable shapes without weakening hard disk ownership."""
 
-    if not dynamic:
-        total = ResourceQuantity()
-        for request in requests:
-            resources = request.resources
-            total = total + ResourceQuantity(
-                vcpu=resources.vcpu * request.count,
-                memory_mb=resources.memory_mb * request.count,
-                disk_mb=(
-                    resources.disk_mb * request.count if include_disk else 0
-                ),
-            )
-        return total
     return ResourceQuantity(
         vcpu=max(
             (item.resources.vcpu for item in requests),
@@ -851,16 +814,11 @@ def _estimated_node_resources(
         memory_mb=memory_mb,
         disk_mb=disk_mb,
     )
-    estimated = physical.scaled(
-        cpu=max(0.0, policy.cpu_overcommit),
-        memory=max(0.0, policy.memory_overcommit),
-        disk=min(1.0, max(0.0, policy.disk_overcommit)),
-    )
-    maximum = policy.schedulable_node_resources
+    maximum = policy.default_node_resources
     return ResourceQuantity(
-        vcpu=min(estimated.vcpu, maximum.vcpu),
-        memory_mb=min(estimated.memory_mb, maximum.memory_mb),
-        disk_mb=min(estimated.disk_mb, maximum.disk_mb),
+        vcpu=min(physical.vcpu, maximum.vcpu),
+        memory_mb=min(physical.memory_mb, maximum.memory_mb),
+        disk_mb=min(physical.disk_mb, maximum.disk_mb),
     )
 
 
@@ -954,11 +912,7 @@ def _clamp_ratio(value: float) -> float:
 
 def _scale_resources(value: ResourceQuantity, weight: float) -> ResourceQuantity:
     weight = _clamp_ratio(weight)
-    return ResourceQuantity(
-        vcpu=value.vcpu * weight,
-        memory_mb=int(value.memory_mb * weight),
-        disk_mb=int(value.disk_mb * weight),
-    )
+    return value.scaled(cpu=weight, memory=weight, disk=weight)
 
 
 def _add_resources(
@@ -1063,7 +1017,7 @@ def _stop_candidates(
     return candidates
 
 
-def _incompatible_stop_candidates(
+def incompatible_stop_candidates(
     nodes: list[SandboxNode],
     *,
     now: datetime,
@@ -1156,7 +1110,7 @@ def _stop_reason(
     required_resources: ResourceQuantity,
     job_ids: tuple[str, ...],
 ) -> str:
-    if _has_resource_demand(required_resources):
+    if _has_resources(required_resources):
         remaining = _ready_free_resources(
             [node for node in ready_nodes if node.job_id not in set(job_ids)],
             policy,
@@ -1237,27 +1191,12 @@ def _past_idle_grace(
     return (now - reference).total_seconds() >= idle_seconds
 
 
-def _resource_deficit(
-    demand: ResourceQuantity,
-    projected_free: ResourceQuantity,
-) -> ResourceQuantity:
-    return ResourceQuantity(
-        vcpu=max(0.0, demand.vcpu - projected_free.vcpu),
-        memory_mb=max(0, demand.memory_mb - projected_free.memory_mb),
-        disk_mb=max(0, demand.disk_mb - projected_free.disk_mb),
-    )
-
-
-def _has_resource_demand(value: ResourceQuantity) -> bool:
-    return value.vcpu > 0 or value.memory_mb > 0 or value.disk_mb > 0
-
-
-def _has_resource_deficit(value: ResourceQuantity) -> bool:
+def _has_resources(value: ResourceQuantity) -> bool:
     return value.vcpu > 0 or value.memory_mb > 0 or value.disk_mb > 0
 
 
 def _nodes_for_resource_deficit(deficit: ResourceQuantity, policy: ScalePolicy) -> int:
-    defaults = policy.schedulable_node_resources
+    defaults = policy.default_node_resources
     counts = [1]
     if deficit.vcpu > 0 and defaults.vcpu > 0:
         counts.append(_ceil_div_float(deficit.vcpu, defaults.vcpu))

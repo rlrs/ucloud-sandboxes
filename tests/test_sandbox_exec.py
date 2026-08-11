@@ -10,28 +10,17 @@ from ucloud_sandboxes.sandbox_exec import (
     ExecSession,
     ExecSessionManager,
     SandboxExecSpec,
-    exec_session_route,
     new_exec_session_id,
 )
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
-    def test_session_ids_always_carry_validated_route_identity(self) -> None:
-        session_id = new_exec_session_id(
-            "sandbox-one",
-            node_id="node-one",
-            job_id="job-one",
-        )
+    def test_session_ids_are_opaque_and_unique(self) -> None:
+        first = new_exec_session_id()
+        second = new_exec_session_id()
 
-        route = exec_session_route(session_id)
-        self.assertIsNotNone(route)
-        assert route is not None
-        self.assertEqual(route.sandbox_id, "sandbox-one")
-        self.assertEqual(route.node_id, "node-one")
-        self.assertEqual(route.job_id, "job-one")
-        with self.assertRaises(ValueError):
-            new_exec_session_id("sandbox-one")
-        self.assertIsNone(exec_session_route("exec-deadbeef"))
+        self.assertRegex(first, r"^exec-[0-9a-f]{32}$")
+        self.assertNotEqual(first, second)
 
     def test_exec_payload_requires_the_canonical_schema(self) -> None:
         payload = {
@@ -56,11 +45,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
                 SandboxExecSpec.from_dict(invalid, sandbox_id="sandbox-one")
 
     def test_blocked_stdin_write_does_not_hold_the_manager_lock(self) -> None:
-        manager = ExecSessionManager(
-            FakeSandboxManager(),
-            route_node_id="node-one",
-            route_job_id="job-one",
-        )
+        manager = ExecSessionManager(FakeSandboxManager())
         pipe = BlockingStdin()
         session = _install_session(manager, pipe)
         failures: list[BaseException] = []
@@ -110,11 +95,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
 
     def test_popen_validation_failure_unwinds_fence_and_activity_lease(self) -> None:
         sandbox_manager = FakeSandboxManager()
-        manager = ExecSessionManager(
-            sandbox_manager,
-            route_node_id="node-one",
-            route_job_id="job-one",
-        )
+        manager = ExecSessionManager(sandbox_manager)
         spec = SandboxExecSpec(
             sandbox_id="sandbox-one",
             command=("/bin/echo", "ok"),
@@ -141,11 +122,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
 
     def test_output_thread_start_failure_kills_process_and_unwinds_state(self) -> None:
         sandbox_manager = FakeSandboxManager()
-        manager = ExecSessionManager(
-            sandbox_manager,
-            route_node_id="node-one",
-            route_job_id="job-one",
-        )
+        manager = ExecSessionManager(sandbox_manager)
         process = FakeProcess()
         original_start = Thread.start
         starts = 0
@@ -188,11 +165,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
 
     def test_normal_completion_closes_stdin_and_releases_process(self) -> None:
         sandbox_manager = FakeSandboxManager()
-        manager = ExecSessionManager(
-            sandbox_manager,
-            route_node_id="node-one",
-            route_job_id="job-one",
-        )
+        manager = ExecSessionManager(sandbox_manager)
         process = FakeProcess()
         spec = SandboxExecSpec(
             sandbox_id="sandbox-one",
@@ -201,11 +174,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
         )
         now = utc_now()
         session = ExecSession(
-            id=new_exec_session_id(
-                "sandbox-one",
-                node_id="node-one",
-                job_id="job-one",
-            ),
+            id=new_exec_session_id(),
             spec=spec,
             argv=spec.command,
             status="running",
@@ -322,11 +291,7 @@ def _install_session(
     )
     now = utc_now()
     session = ExecSession(
-        id=new_exec_session_id(
-            "sandbox-one",
-            node_id="node-one",
-            job_id="job-one",
-        ),
+        id=new_exec_session_id(),
         spec=spec,
         argv=spec.command,
         status="running",

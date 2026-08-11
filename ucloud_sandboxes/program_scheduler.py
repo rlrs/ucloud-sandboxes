@@ -105,12 +105,13 @@ def plan_shadow_wake_queue(
                 }
             )
             continue
-        ranked: list[tuple[tuple[object, ...], WakeNodeCandidate, ResourceQuantity]] = []
+        ranked: list[
+            tuple[tuple[object, ...], WakeNodeCandidate, ResourceQuantity]
+        ] = []
         for candidate in candidates:
             current_available = available[candidate.node_id]
             local = (
-                candidate.node_id == route.node_id
-                and candidate.job_id == route.job_id
+                candidate.node_id == route.node_id and candidate.job_id == route.job_id
             )
             required = ResourceQuantity(
                 vcpu=route.resources.vcpu,
@@ -207,9 +208,10 @@ def build_program_scale_signals(
             # the same sandbox.
             continue
         selected = selected_by_sandbox.get(request.sandbox_id)
-        if selected is None or _STATE_PRIORITY[request.state] > _STATE_PRIORITY[
-            selected.state
-        ]:
+        if (
+            selected is None
+            or _STATE_PRIORITY[request.state] > _STATE_PRIORITY[selected.state]
+        ):
             selected_by_sandbox[request.sandbox_id] = request
 
     model_wait: list[ProgramRequestState] = []
@@ -248,7 +250,9 @@ def build_program_scale_signals(
         disk_mb=0,
     )
     shadow = ready_resources + weighted
-    effective = shadow if policy.program_aware_autoscaling_enabled else ResourceQuantity()
+    effective = (
+        shadow if policy.program_aware_autoscaling_enabled else ResourceQuantity()
+    )
     return ProgramScaleSignals(
         model_wait_requests=counts["model_wait"],
         ready_to_wake_requests=counts["ready_to_wake"],

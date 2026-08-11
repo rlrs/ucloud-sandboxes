@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+import json
+import time
 from contextlib import contextmanager
 from dataclasses import replace
-import json
-import os
 from pathlib import Path
-import tempfile
-from threading import local, Lock, RLock
-import time
+from threading import Lock, RLock, local
 from typing import Iterator
 
 from .direct_service import DirectSandboxService
@@ -18,10 +16,9 @@ from .managed_process import (
 )
 from .models import ResourceQuantity
 from .sandbox import (
-    CommandResult,
+    OPERATION_ID_RE,
     NodeDrainSnapshot,
     NodeDrainState,
-    OPERATION_ID_RE,
     SandboxActivitySnapshot,
     SandboxAdmissionClosedError,
     SandboxConflictError,
@@ -29,6 +26,7 @@ from .sandbox import (
     SandboxOperation,
     SandboxRecord,
     SandboxSpec,
+    _atomic_write_json,
 )
 
 
@@ -55,36 +53,12 @@ class NodeStateStore:
             return NodeDrainState.from_dict(raw["drain"])
 
     def save_drain(self, drain: NodeDrainState) -> None:
-        payload = {
-            "drain": drain.to_dict(),
-            "version": self.VERSION,
-        }
-        encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
         with self._lock:
             self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            descriptor, raw_temporary = tempfile.mkstemp(
-                prefix=f".{self.path.name}.",
-                suffix=".tmp",
-                dir=self.path.parent,
+            _atomic_write_json(
+                self.path,
+                {"drain": drain.to_dict(), "version": self.VERSION},
             )
-            temporary = Path(raw_temporary)
-            try:
-                os.fchmod(descriptor, 0o600)
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(encoded)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temporary, self.path)
-                directory = os.open(self.path.parent, os.O_RDONLY)
-                try:
-                    os.fsync(directory)
-                finally:
-                    os.close(directory)
-            finally:
-                try:
-                    temporary.unlink()
-                except FileNotFoundError:
-                    pass
 
 
 class BuilderNodeRuntime:
@@ -279,8 +253,6 @@ class DirectNodeRuntime:
     def __init__(
         self,
         service: DirectSandboxService,
-        *,
-        state_store: NodeStateStore | None = None,
     ) -> None:
         self.service = service
         self.lifecycle = DirectLifecycle(self)
@@ -291,10 +263,8 @@ class DirectNodeRuntime:
         self._activity_guard = Lock()
         self._exec_start_state = local()
         self._drain_guard = RLock()
-        self._state_store = state_store or NodeStateStore(
-            service.provisioner.registry.path.parent / "direct-node-state.json"
-        )
-        self._drain = self._state_store.load_drain()
+        self._registry = service.provisioner.registry
+        self._drain = self._registry.load_drain()
         if self._drain.draining:
             self.service.close_admission()
         else:
@@ -305,13 +275,12 @@ class DirectNodeRuntime:
         spec: SandboxSpec,
         *,
         operation: SandboxOperation,
-    ) -> tuple[SandboxRecord, CommandResult, dict[str, object]]:
+    ) -> tuple[SandboxRecord, dict[str, object]]:
         existing = self.service.get(spec.id)
         started = time.monotonic()
         record = self.service.create(spec, operation=operation)
         return (
             record,
-            CommandResult(("direct-warden", "create", spec.id), 0),
             {
                 "idempotent": existing is not None and existing == record,
                 "total_ms": max(0, int((time.monotonic() - started) * 1000)),
@@ -324,7 +293,7 @@ class DirectNodeRuntime:
         *,
         generation: int,
         operation_id: str,
-    ) -> tuple[SandboxRecord | None, CommandResult]:
+    ) -> SandboxRecord | None:
         if generation <= 0:
             raise ValueError("delete generation must be positive")
         if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(
@@ -341,7 +310,7 @@ class DirectNodeRuntime:
                 sandbox_id,
                 generation=generation,
             )
-        return record, CommandResult(("direct-warden", "delete", sandbox_id), 0)
+        return record
 
     def get(self, sandbox_id: str) -> SandboxRecord | None:
         return self.service.get(sandbox_id)
@@ -460,9 +429,8 @@ class DirectNodeRuntime:
         sandbox_id: str,
         path: str,
         content: bytes,
-    ) -> CommandResult:
+    ) -> None:
         self.service.write_file(sandbox_id, path, content)
-        return CommandResult(("direct-warden", "write", sandbox_id, path), 0)
 
     def download_file(
         self,
@@ -470,13 +438,8 @@ class DirectNodeRuntime:
         path: str,
         *,
         max_bytes: int,
-    ) -> tuple[bytes, CommandResult]:
-        content = self.service.read_file(sandbox_id, path, max_bytes=max_bytes)
-        return content, CommandResult(
-            ("direct-warden", "read", sandbox_id, path),
-            0,
-            stdout_bytes=content,
-        )
+    ) -> bytes:
+        return self.service.read_file(sandbox_id, path, max_bytes=max_bytes)
 
     def cleanup_expired(self, *, blocking: bool = True) -> list[SandboxRecord]:
         records = self.service.list() if blocking else self.service.list_snapshot()
@@ -522,7 +485,7 @@ class DirectNodeRuntime:
                         drain_activity_epoch=0,
                         admission_open=False,
                     )
-                    self._state_store.save_drain(self._drain)
+                    self._registry.save_drain(self._drain)
             else:
                 if current.draining and current.token != token:
                     raise SandboxConflictError("node is not draining with this token")
@@ -535,7 +498,7 @@ class DirectNodeRuntime:
                         token=token,
                         admission_open=True,
                     )
-                    self._state_store.save_drain(self._drain)
+                    self._registry.save_drain(self._drain)
         return self.heartbeat_snapshot(active_build_count=active_build_count)
 
     @contextmanager
@@ -578,16 +541,12 @@ class DirectNodeRuntime:
         inventory = self.service.inventory_snapshot()
         records = inventory.records
         registered_keys = {(record.spec.id, record.generation) for record in records}
-        if self.service.warden.storage is None:
-            raise RuntimeError("direct node storage-native ownership is unavailable")
         direct_sandboxes = tuple(
             item.registration.to_direct_sandbox()
             for item in inventory.items
             if item.registration.has_direct_sandbox
         )
-        storage_records = self.service.warden.storage_records_snapshot(
-            direct_sandboxes
-        )
+        storage_records = self.service.warden.storage_records_snapshot(direct_sandboxes)
         used = ResourceQuantity()
         reserved = ResourceQuantity()
         for item in inventory.items:
@@ -605,7 +564,7 @@ class DirectNodeRuntime:
             # materialized.
             if registration.has_direct_sandbox:
                 storage = storage_records[registration.memory_directory]
-                disk_charged = storage.get("state") != "published"
+                disk_charged = storage.state.value != "published"
             resources = ResourceQuantity(disk_mb=quota_disk if disk_charged else 0)
             if record.state == "running":
                 # Direct-runtime CPU and memory limits bound an individual
@@ -651,7 +610,7 @@ class DirectNodeRuntime:
         ):
             drain = replace(drain, drain_activity_epoch=revision)
             self._drain = drain
-            self._state_store.save_drain(drain)
+            self._registry.save_drain(drain)
         return NodeDrainSnapshot(activity, drain, build_count)
 
     def _attach_exec_lease(self, sandbox_id: str, lease: object) -> None:

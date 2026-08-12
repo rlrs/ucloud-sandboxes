@@ -13,6 +13,7 @@ from ucloud_sandboxes.cli import build_parser
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.deploy import (
     AllInOneDeployPlan,
+    BUNDLED_SYSTEMD_RUNTIME_PACKAGES,
     packaged_systemd_units,
     render_remote_deploy_script,
     run_remote_script_over_ssh,
@@ -131,6 +132,8 @@ class DeployTests(unittest.TestCase):
         self.assertIn("SANDBOX_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("BUILDER_NODE_PACKAGE_BUNDLE=", script)
         self.assertIn("package-bundle.json", script)
+        for package in BUNDLED_SYSTEMD_RUNTIME_PACKAGES:
+            self.assertIn(package, script)
         self.assertIn("gzip.GzipFile", script)
         self.assertIn("RequiresMountsFor=/work/data", script)
         self.assertIn(

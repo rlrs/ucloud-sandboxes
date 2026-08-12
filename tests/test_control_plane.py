@@ -260,6 +260,22 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_health_accepts_sqlite_registry_usage_store(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                root / "control-state.sqlite",
+                registry_usage_file=root / "registry-usage.sqlite",
+            )
+            with _running_server(gateway):
+                host, port = gateway.server_address
+                health = self._json_request(f"http://{host}:{port}/healthz")
+
+        self.assertTrue(health["ok"])
+        self.assertEqual(health["service"], "control-plane")
+
     def test_parked_managed_job_status_is_gateway_state_and_does_not_wake(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -456,7 +472,10 @@ class ControlPlaneTests(unittest.TestCase):
                 metrics_file=metrics_file,
             )
 
-            def fake_proxy_request(_handler, *_args, **_kwargs):
+            proxied_bodies = []
+
+            def fake_proxy_request(_handler, *_args, **kwargs):
+                proxied_bodies.append(json.loads(kwargs["body"]))
                 return control_plane.ProxiedResponse(
                     200,
                     {"Content-Type": "application/json"},
@@ -471,6 +490,7 @@ class ControlPlaneTests(unittest.TestCase):
                 base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
                 identity = {
                     "generation": route.generation,
+                    "operation_id": "relay-lifecycle:request-1",
                     "request_id": "request-1",
                     "rollout_id": "rollout-1",
                     "request_created_at": 1_785_489_600.0,
@@ -504,6 +524,20 @@ class ControlPlaneTests(unittest.TestCase):
                 gateway_thread.join(timeout=1)
 
         self.assertEqual(len(records), 1)
+        self.assertEqual(
+            proxied_bodies,
+            [
+                {"operation_id": "relay-lifecycle:request-1"},
+                {
+                    "generation": route.generation,
+                    "operation_id": "relay-lifecycle:request-1",
+                },
+                {
+                    "generation": route.generation,
+                    "operation_id": "relay-lifecycle:request-1",
+                },
+            ],
+        )
         self.assertEqual(records[0].state, "acting")
         self.assertEqual(records[0].rollout_id, "rollout-1")
         self.assertTrue(records[0].parked_at)
@@ -578,6 +612,7 @@ class ControlPlaneTests(unittest.TestCase):
                 base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
                 identity = {
                     "generation": route.generation,
+                    "operation_id": "relay-wake:request-1",
                     "request_id": "request-1",
                     "rollout_id": "rollout-1",
                 }

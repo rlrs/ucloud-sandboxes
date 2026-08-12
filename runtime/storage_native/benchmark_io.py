@@ -216,6 +216,7 @@ class IoBenchmark:
             global_config=self.root / "global.json",
             runtime_dir=self.root / "runtime",
             virtual_size=self.virtual_size,
+            owner_id="io-benchmark",
             upper_mode=self.upper_mode,
         )
         self._format_xfs(self.device.device_path)

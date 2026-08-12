@@ -18,8 +18,11 @@ from aiohttp import ClientSession, web
 
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.model_relay import (
+    ACCEPTED_NOTIFIER_KEY,
     ModelRelayState,
     RelayWorkerResponse,
+    STATE_KEY,
+    _notify_accepted,
     create_model_relay_app,
 )
 
@@ -228,6 +231,48 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_accepted_notification_survives_caller_cancellation(self) -> None:
+        state = ModelRelayState()
+        await state.register_rollout(
+            "park-cancellation",
+            metadata={"sandbox_id": "sandbox-1", "sandbox_generation": 1},
+        )
+        relay_request = await state.enqueue(
+            rollout_id="park-cancellation",
+            endpoint="/v1/chat/completions",
+            body={"model": "m"},
+            headers={},
+            idempotency_key="request-1",
+        )
+        notification_started = asyncio.Event()
+        release_notification = asyncio.Event()
+
+        async def notify_accepted(_request) -> str:
+            notification_started.set()
+            await release_notification.wait()
+            return "transport-before-park"
+
+        class FakeRequest:
+            app = {
+                STATE_KEY: state,
+                ACCEPTED_NOTIFIER_KEY: notify_accepted,
+            }
+
+        task = asyncio.create_task(_notify_accepted(FakeRequest(), relay_request))  # type: ignore[arg-type]
+        await notification_started.wait()
+        task.cancel()
+        release_notification.set()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        self.assertIsNotNone(relay_request.accepted_notified_at)
+        self.assertEqual(
+            relay_request.parked_transport_epoch,
+            "transport-before-park",
+        )
+        self.assertEqual((await state.stats())["counters"]["accepted_notifications"], 1)
+        await state.aclose()
+
     async def test_registration_metadata_rejects_aliases_and_coercion(self) -> None:
         state = ModelRelayState()
         for metadata in (

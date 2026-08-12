@@ -149,6 +149,25 @@ class VmInitTests(unittest.TestCase):
             self.assertNotIn(
                 obsolete, script if obsolete != "package repository" else script.lower()
             )
+        self.assertIn("Dir::Etc::sourcelist", script)
+        self.assertNotIn("apt-get install --no-download", script)
+        self.assertIn("--keep-directory-symlink", script)
+        self.assertIn("-ef /usr/lib/systemd/system/containerd.service", script)
+        self.assertIn("date +%s%N", script)
+        self.assertNotIn("date +%s%3N", script)
+        self.assertIn("Using snapshot-baked runtime", script)
+        self.assertIn("UCLOUD_STATIC_RUNTIME_READY", script)
+        self.assertIn("Recorded snapshot-ready runtime", script)
+        self.assertIn("runtime-ready-v3-sandbox", script)
+        self.assertNotIn("$UCLOUD_STATE_DIR/package-bundles", script)
+
+    def test_docker_mtu_uses_smallest_routed_interface(self) -> None:
+        script = render_vm_init_script(self._options())
+
+        self.assertIn("detect_routed_mtu()", script)
+        self.assertIn("ip -o route show table main", script)
+        self.assertIn('[ "$iface_mtu" -lt "$mtu" ]', script)
+        self.assertIn('UCLOUD_DOCKER_MTU="$(detect_routed_mtu)"', script)
 
     def test_builder_keeps_image_build_runtime(self) -> None:
         script = render_vm_init_script(
@@ -314,5 +333,35 @@ class VmInitTests(unittest.TestCase):
         assert result is not None
         expected_digest = hashlib.sha256(b"verified-bundle").hexdigest()
         self.assertEqual(result.package_sha256, expected_digest)
+        self.assertEqual(
+            result.remote_path,
+            "/var/cache/ucloud-sandboxes/init-packages/"
+            f"{expected_digest}/node-package.tar.gz",
+        )
         self.assertEqual(len(calls), 2)
+        self.assertIn("runtime-ready-v3-sandbox", " ".join(calls[0][0]))
         self.assertEqual(calls[1][1], b"verified-bundle")
+
+    def test_snapshot_ready_receipt_skips_bundle_transfer(self) -> None:
+        calls: list[tuple[str, ...]] = []
+
+        def fake_run(command, *, stdin=None, check=None, timeout=None):
+            del check, timeout
+            self.assertIsNone(stdin)
+            calls.append(tuple(command))
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(
+            vm_init.subprocess, "run", side_effect=fake_run
+        ), TemporaryDirectory() as raw_dir:
+            package = Path(raw_dir) / "node-package.tar.gz"
+            package.write_bytes(b"snapshot-baked-bundle")
+            result = stage_vm_init_package_over_ssh(
+                "ssh root@10.42.0.2",
+                self._options(package_spec=str(package)),
+            )
+
+        self.assertTrue(result.reused)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("runtime-ready-v3-sandbox", " ".join(calls[0]))

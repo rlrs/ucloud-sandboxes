@@ -284,6 +284,7 @@ class Qualifier:
             global_config=self.test_root / "global.json",
             runtime_dir=runtime,
             virtual_size=self.virtual_size,
+            owner_id="qualification-initial",
             upper_mode=self.upper_mode,
         )
         self._register_device(device)
@@ -398,6 +399,7 @@ class Qualifier:
             global_config=self.test_root / "global.json",
             runtime_dir=self.test_root / "runtime-resumed",
             virtual_size=self.virtual_size,
+            owner_id="qualification-resumed",
             upper_mode=self.upper_mode,
         )
         self._register_device(device)

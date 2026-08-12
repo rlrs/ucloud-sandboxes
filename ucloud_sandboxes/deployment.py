@@ -4,7 +4,7 @@ from importlib import metadata
 
 
 PACKAGE_NAME = "ucloud-sandboxes"
-DEFAULT_INIT_VERSION = "2"
+DEFAULT_INIT_VERSION = "3"
 
 NODE_LABEL = "ucloud-sandboxes/node"
 GATEWAY_LABEL = "ucloud-sandboxes/gateway"

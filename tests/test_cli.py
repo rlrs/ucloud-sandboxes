@@ -12,6 +12,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import MagicMock, patch
 
 from ucloud_sandboxes import cli
@@ -271,6 +272,34 @@ class CliTests(unittest.TestCase):
                 relay_request,
                 action="park",
             )
+
+        conflict = HTTPError(
+            "https://gateway.example",
+            409,
+            "lifecycle transition is in progress",
+            {},
+            io.BytesIO(b'{"error":"lifecycle transition is in progress"}'),
+        )
+        with (
+            patch.object(
+                cli,
+                "_post_bounded_json",
+                side_effect=[
+                    conflict,
+                    ({"sandbox": {"state": "parked"}}, {"X-UCloud-Sandbox-Transport-Epoch": "epoch-1"}),
+                ],
+            ) as post,
+            patch.object(cli.time, "sleep") as sleep,
+        ):
+            epoch = cli._post_gateway_sandbox_lifecycle(
+                "https://gateway.example",
+                "secret",
+                relay_request,
+                action="park",
+            )
+        self.assertEqual(epoch, "epoch-1")
+        self.assertEqual(post.call_count, 2)
+        sleep.assert_called_once_with(0.05)
 
     def test_executing_stop_waiting_for_drain_is_not_reported_as_dry_run(
         self,

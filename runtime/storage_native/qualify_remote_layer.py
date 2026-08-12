@@ -70,6 +70,7 @@ def main() -> int:
             global_config=args.global_config.resolve(),
             runtime_dir=runtime.resolve(),
             virtual_size=args.virtual_size,
+            owner_id="remote-layer-qualification",
             upper_mode="hybridLogStructured",
         )
         create_seconds = time.monotonic() - started

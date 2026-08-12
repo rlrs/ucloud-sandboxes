@@ -56,6 +56,7 @@ from .managed_registry import (
     RegistryManifestLayers,
     RegistryRequestError,
     RegistryUsageStore,
+    RegistryUsageStateError,
     canonical_image_digest_ref,
     digest_protection_tag,
     image_ref_with_manifest_digest,
@@ -1472,21 +1473,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         store = self.registry_usage_store
         if store is None:
             return ""
-        path = store.path
         try:
-            if not path.exists():
-                if not path.parent.is_dir() or not os.access(path.parent, os.W_OK):
-                    return "state directory is not writable"
-                return ""
-            with path.open("r+", encoding="utf-8") as file:
-                payload = json.load(file)
-            if not isinstance(payload, dict):
-                return "state file is invalid"
-            if not isinstance(payload.get("images", []), list) or not isinstance(
-                payload.get("leases", []), list
-            ):
-                return "state file is invalid"
-        except (OSError, ValueError, json.JSONDecodeError):
+            # RegistryUsageStore is SQLite-backed. Opening it as the JSON file
+            # used by the retired implementation made healthy gateways report
+            # 503 whenever managed-registry accounting was configured.
+            store.snapshot()
+        except (OSError, sqlite3.DatabaseError, RegistryUsageStateError, ValueError):
             return "state file is unavailable"
         return ""
 
@@ -3316,6 +3308,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         "program lifecycle requires both request_id and rollout_id"
                     )
                 raw_generation = lifecycle_payload.get("generation")
+                operation_id = str(
+                    lifecycle_payload.get("operation_id") or ""
+                ).strip()
+                if not operation_id:
+                    raise ValueError("sandbox lifecycle operation_id is required")
                 if lifecycle_action == "wake" and raw_generation is None:
                     raise ValueError("wake generation is required")
                 if (
@@ -3431,11 +3428,30 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 extra_headers=extra_headers,
             )
             return
+        proxy_body = body
+        if lifecycle_action:
+            node_lifecycle_payload: dict[str, Any] = {
+                "operation_id": str(lifecycle_payload["operation_id"]).strip(),
+            }
+            if lifecycle_action == "wake":
+                node_lifecycle_payload["generation"] = route.generation
+            elif "background" in lifecycle_payload:
+                if not isinstance(lifecycle_payload["background"], bool):
+                    self._write_json(
+                        {"error": "park background must be a boolean"},
+                        status=HTTPStatus.BAD_REQUEST,
+                    )
+                    return
+                node_lifecycle_payload["background"] = lifecycle_payload["background"]
+            proxy_body = json.dumps(
+                node_lifecycle_payload,
+                separators=(",", ":"),
+            ).encode("utf-8")
         response = self._proxy_request(
             route.node_url,
             self.path,
             method=self.command,
-            body=body,
+            body=proxy_body,
             extra_headers=extra_headers,
         )
         if (

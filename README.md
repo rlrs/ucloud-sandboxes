@@ -1,14 +1,14 @@
 # ucloud-sandboxes
 
 Autoscaler and runtime for secure CPU sandboxes on Linux compute nodes, with an
-SDU UCloud provider included.
+SDU UCloud provider and a Hetzner Cloud provider included.
 
 The service manages provider instances as pool nodes. Sandbox nodes run one direct
 gVisor Warden backed by storage-native volumes. Builder nodes build and push
 custom images to a private registry. The public gateway owns placement,
 routing, operation fencing and demand; the autoscaler reconciles that demand
-through a small compute-provider boundary. UCloud lifecycle, networking,
-payloads, credentials, and API calls live in the built-in adapter.
+through a small compute-provider boundary. Provider lifecycle, networking,
+payloads, credentials, and API calls live in the built-in adapters.
 
 The project currently has a live development deployment with a public gateway,
 private registry, model relay, autoscaler loop, sandbox nodes, and builder
@@ -29,6 +29,8 @@ under `docs/`, not in this overview.
   routing, resource placement, disk quota, and networking design notes.
 - [Compute provider portability](docs/provider-portability.md): provider
   contract, configuration, extension entry point, and host requirements.
+- [Hetzner Cloud](docs/hetzner.md): qualified host shape, provider setup,
+  snapshots, and local-hot/network-volume storage placement.
 
 ## Focused Docs
 

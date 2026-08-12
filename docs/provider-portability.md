@@ -2,8 +2,8 @@
 
 The sandbox runtime is not a UCloud runtime. It is a Linux node stack built
 around the repository's pinned, patched gVisor `runsc`, the direct Warden, and
-storage-native volumes. UCloud is the built-in way to provision and bootstrap
-the Linux machines that host that stack.
+storage-native volumes. UCloud and Hetzner are built-in ways to provision and
+bootstrap the Linux machines that host that stack.
 
 The provider boundary is intentionally small. It is not a general cloud SDK or
 a second orchestration framework.
@@ -15,8 +15,10 @@ flowchart LR
     P --> R["Provider-neutral reconciliation"]
     R --> C["ComputeProvider"]
     C --> U["Built-in UCloud adapter"]
+    C --> H["Built-in Hetzner adapter"]
     C --> O["External cloud adapter"]
     U --> N["Linux worker node"]
+    H --> N
     O --> N
     N --> W["Direct gVisor Warden"]
     W --> S["Storage-native volumes"]
@@ -65,10 +67,11 @@ The UCloud session file is an operational credential override, supplied with
 `--session-file` to local operator commands when needed. It is deliberately
 not persisted in `deployment.json`.
 
-UCloud rejects unknown keys. An external provider owns and validates the keys
-inside its tagged object; provider-specific credentials, image references,
-network identifiers, and machine profiles belong there rather than in core
-models.
+Each built-in provider rejects unknown keys and validates its exact tagged
+object. An external provider owns and validates its own keys. Provider-specific
+credential references, image references, network identifiers, and machine
+profiles belong there rather than in core models. See
+[`hetzner.md`](hetzner.md) for the built-in Hetzner schema.
 
 ## Adding another provider
 

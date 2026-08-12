@@ -30,6 +30,10 @@ def validate_provider_configuration(
         from .ucloud.config import UCloudSettings
 
         UCloudSettings.from_provider(configuration)
+    elif configuration.kind == "hetzner":
+        from .hetzner.config import HetznerSettings
+
+        HetznerSettings.from_provider(configuration)
 
 
 __all__ = [

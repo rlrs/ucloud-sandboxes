@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "status": "passed",
+  "date": "2026-08-12",
+  "location": "hel1",
+  "foundation": {
+    "network_id": 12539764,
+    "network_cidr": "10.42.0.0/16",
+    "subnet_cidr": "10.42.0.0/24",
+    "ssh_key_id": 116985947,
+    "worker_firewall_id": 11454113,
+    "egress_route": {
+      "destination": "0.0.0.0/0",
+      "gateway": "10.42.0.2"
+    }
+  },
+  "gateway": {
+    "server_type": "cpx12",
+    "private_ip": "10.42.0.2",
+    "nat_egress": "passed",
+    "worker_observed_public_ip": "65.109.164.0",
+    "deleted_after_validation": true
+  },
+  "snapshot": {
+    "id": 419224276,
+    "description": "ucloud sandbox Ubuntu 26.04 fast v3 private boot",
+    "logical_disk_gb": 40,
+    "stored_gb": 2.390127078125,
+    "bundle_sha256": "761c0b7483882a84e40fd2322915809f2e720dd3c97609d8899fd3cc63d4dd2d",
+    "private_wait_online_fix": "passed"
+  },
+  "provider": {
+    "server_type": "cpx62",
+    "public_network_disabled": true,
+    "private_inventory": "passed",
+    "private_ssh_bootstrap": "passed",
+    "create": "passed",
+    "retrieve": "passed",
+    "list": "passed",
+    "terminate": "passed",
+    "automatic_private_egress": "passed",
+    "api_to_provider_runnable_seconds_samples": [32.763, 37.811, 47.378],
+    "guest_ssh_service_start_seconds": 12.474,
+    "guest_cloud_init_done_seconds_range": [10, 19]
+  },
+  "vm_init": {
+    "bundle_reused": true,
+    "bundle_transfer_bytes": 0,
+    "receipt_probe_seconds": 0.692,
+    "internal_ms": 5503,
+    "ssh_wall_seconds": 5.831
+  },
+  "sandbox_lifecycle": {
+    "image": "alpine:3.22",
+    "image_pull_and_materialize_seconds": 2.383,
+    "gvisor_create_seconds": 0.884,
+    "gvisor_exec_seconds": 0.119,
+    "gvisor_exec_exit_code": 0,
+    "gvisor_exec_stdout": "hetzner-gvisor-okLinux\n",
+    "fenced_delete_seconds": 0.293,
+    "capability": "direct-runsc-v1"
+  },
+  "cleanup": {
+    "remaining_servers": 0,
+    "remaining_primary_ips": 0,
+    "remaining_temporary_firewalls": 0,
+    "superseded_billable_snapshot_id": 419216526
+  }
+}

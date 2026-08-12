@@ -3,8 +3,9 @@
 VM initialization turns a running provider instance into either a sandbox node
 or an image-builder node. It is an authenticated bootstrap step owned by the
 autoscaler, not a general host installer. The built-in UCloud adapter discovers
-the SSH command from job updates; another provider supplies the same bootstrap
-access through `ComputeProvider`.
+the SSH command from job updates; the Hetzner adapter derives it from the
+configured private-network address. Any other provider supplies the same
+bootstrap access through `ComputeProvider`.
 
 ## Inputs
 
@@ -30,9 +31,14 @@ contains:
 - on sandbox nodes, patched direct `runsc`, managed PID 1, and the pinned
   storage-native backend plus provenance and license.
 
-The autoscaler stages the bundle over SSH and passes its digest to VM init. VM
-init re-hashes the archive, extracts it into a digest-keyed directory, validates
-every declared file, and aborts on any mismatch. It never enables package
+The autoscaler addresses the bundle by digest and passes that digest to VM init.
+On a fresh system image, VM init re-hashes the archive, extracts it into a
+digest-keyed directory, validates every declared file, and aborts on any
+mismatch. After successful static installation it records a root-owned receipt.
+A golden-image clone with the matching role, init version, kernel, digest,
+receipt, and installed artifacts trusts that immutable snapshot state and skips
+archive transfer, extraction, package installation, kernel installation, direct
+runtime installation, and Python unpacking. It never enables package
 repositories or installs a substitute artifact from the network.
 
 ## Bootstrap sequence
@@ -65,11 +71,15 @@ health, and drain behavior. Buildx remains available for direct registry push.
 
 ## Package staging
 
-The gateway copies bundles to
-`/tmp/ucloud-sandboxes-init-packages/<job-id>/`. A sidecar digest marker avoids
-retransmitting the same immutable archive. VM init still verifies the staged
-bytes and every extracted artifact before activation; the marker is only a
-transfer optimization.
+The gateway probes
+`/var/cache/ucloud-sandboxes/init-packages/<sha256>/` over SSH. A matching
+root-owned runtime receipt avoids transferring the archive at all. If the
+receipt is absent or stale, a root-owned bundle and sidecar marker at that same
+content-addressed path can be reused; otherwise the gateway streams the bundle
+there once. VM init fully verifies a newly staged bundle before activation and
+invalidates older receipts for the same role. This keeps system-image fallback
+and release upgrades fail-closed while making matching golden-image launches
+the normal fast path.
 
 ## Diagnostics
 

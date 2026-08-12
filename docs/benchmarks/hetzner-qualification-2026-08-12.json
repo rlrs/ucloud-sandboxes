@@ -1,0 +1,195 @@
+{
+  "account": {
+    "ccx53_create": "rejected_resource_limit_exceeded_dedicated_core_limit",
+    "cx43_create": "accepted",
+    "cx53_create": "resource_unavailable",
+    "resources_after_cleanup": {
+      "firewalls": 0,
+      "floating_ips": 0,
+      "load_balancers": 0,
+      "networks": 0,
+      "primary_ips": 0,
+      "servers": 0,
+      "ssh_keys": 0,
+      "volumes": 0
+    }
+  },
+  "date": "2026-08-12",
+  "golden_image_source": {
+    "architecture": "x86_64",
+    "cpu_count": 16,
+    "host_qualification": {
+      "docker_buildx": "passed",
+      "docker_in_docker": "passed",
+      "docker_overlay2": "passed",
+      "failures": 0,
+      "gvisor_systrap": "passed",
+      "kernel_modules": "passed",
+      "namespaces_and_cgroup_v2": "passed",
+      "nftables_and_veth": "passed",
+      "ublk": "passed",
+      "xfs_project_quota": "passed",
+      "xfs_reflink": "passed"
+    },
+    "kernel": "7.0.0-22-generic",
+    "location": "hel1",
+    "memory_mib": 31326,
+    "os": "Ubuntu 26.04 LTS",
+    "root_disk_gb_api": 640,
+    "server_type": "cpx62",
+    "virtualization": "kvm"
+  },
+  "golden_snapshot": {
+    "canary": {
+      "cloud_init": "passed_without_errors",
+      "docker_host_port_publish": "unsupported_missing_xt_tcpudp",
+      "fresh_hostname": "passed",
+      "fresh_machine_id": "passed",
+      "fresh_ssh_host_keys": "passed",
+      "gvisor_create_exec": "passed",
+      "https_egress": "passed",
+      "oci_snapshot_publication": "passed",
+      "post_init_reboot": "passed",
+      "post_reboot_gvisor_create_exec_delete": "passed",
+      "ublk_park_wake": "passed"
+    },
+    "cleanup": {
+      "managed_servers": 0,
+      "worker_firewall_inbound_rules": 0
+    },
+    "image_size_gb": 4.430223775390625,
+    "init": {
+      "bundle_transfer_seconds": 7.1,
+      "phase_ms": {
+        "direct-runtime": 504,
+        "docker-daemon": 1103,
+        "docker-storage": 16,
+        "host-aliases": 5,
+        "kernel-modules": 48,
+        "package-bundle": 1990,
+        "python-package": 51,
+        "runtime-bundle": 1465,
+        "swap": 53,
+        "systemd-services": 2446,
+        "users-and-secrets": 55
+      },
+      "total_ms": 7736
+    },
+    "logical_disk_gb": 640,
+    "provision_to_ssh_seconds_approx": 58,
+    "snapshot_id": 419177904,
+    "source_and_canary_deleted": true,
+    "status": "passed"
+  },
+  "environment": {
+    "architecture": "x86_64",
+    "cpu_count": 8,
+    "kernel": "6.8.0-117-generic",
+    "location": "hel1",
+    "memory_mib": 15613,
+    "os": "Ubuntu 24.04",
+    "root_disk_gb": 160,
+    "server_type": "cx43",
+    "virtualization": "kvm"
+  },
+  "gvisor": {
+    "artifact_sha256": "bded832358a2d8a5000027cc3cc3c3568004ca08e2e0bac1ea3d7e5288361894",
+    "bazel_version": "8.3.1",
+    "build_config": "opt",
+    "commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+    "focused_tests": {
+      "boot": "passed",
+      "container": "passed",
+      "pgalloc": "passed",
+      "runsc_cmd": "passed"
+    },
+    "patch_series_sha256": "8fb36e2f8679db5d79d1ecd6c80ee236c32424c2a8ae2b93ffa9120efd436748",
+    "patched_files_sha256": "d6c13f78e38dbf2b9e5427340bc5bb39791499e5913c98506dca3257f851072f"
+  },
+  "host_qualification": {
+    "docker_buildx": "passed",
+    "docker_in_docker": "passed",
+    "docker_overlay2": "passed",
+    "failures": 0,
+    "gvisor_systrap": "passed",
+    "kernel_modules": "passed",
+    "namespaces_and_cgroup_v2": "passed",
+    "nftables_and_veth": "passed",
+    "ublk": "passed",
+    "xfs_project_quota": "passed",
+    "xfs_reflink": "passed"
+  },
+  "network": {
+    "private_mtu": 1450,
+    "private_ssh": "passed",
+    "public_mtu": 1500
+  },
+  "schema": 1,
+  "status": "qualified_with_performance_caveat",
+  "storage_native_on_volume": {
+    "benchmark": {
+      "gates": {
+        "metadata_within_15_percent": true,
+        "random_mixed_within_15_percent": false,
+        "seal_did_not_materialize_virtual_device": true,
+        "sequential_write_within_15_percent": true
+      },
+      "native_random_mixed_iops_median": 246455.318085,
+      "random_mixed_iops_ratio": 0.5716041825902642,
+      "status": "failed",
+      "ublk_random_mixed_iops_median": 140874.890639
+    },
+    "gvisor_hibernate": {
+      "application_memory_allocated_bytes": 17145856,
+      "foreground_restore_and_noop_read_bytes": 622592,
+      "park_seconds": 0.051559711999971114,
+      "restore_seconds": 0.3179669979999744,
+      "status": "passed",
+      "stateful_response_after_restore": "ok 8590456832"
+    },
+    "qualifier": {
+      "enospc_errno": 28,
+      "logical_device_bytes": 4294967296,
+      "snapshot_allocated_bytes": 133758976,
+      "snapshot_allocated_to_logical_ratio": 0.0311431884765625,
+      "status": "passed"
+    }
+  },
+  "volume": {
+    "direct_fio_30_seconds": {
+      "root": {
+        "random_mixed_iops": 44294.980334,
+        "random_read_p99_latency_ns": 1449984,
+        "random_write_p99_latency_ns": 1318912,
+        "sequential_read_bytes_per_second": 2704432023,
+        "sequential_write_bytes_per_second": 2717100239
+      },
+      "volume": {
+        "random_mixed_iops": 9880.682576,
+        "random_read_p99_latency_ns": 4947968,
+        "random_write_p99_latency_ns": 4292608,
+        "sequential_read_bytes_per_second": 315579338,
+        "sequential_write_bytes_per_second": 315478245
+      }
+    },
+    "lifecycle": {
+      "detach_reattach_checksum": "passed",
+      "discard": "passed",
+      "online_resize_from_gb": 20,
+      "online_resize_to_gb": 25,
+      "reboot_automount_checksum": "passed",
+      "stable_by_id_path": "passed",
+      "xfs_growfs": "passed",
+      "xfs_project_quota": "passed",
+      "xfs_reflink": "passed"
+    },
+    "sustained_write_120_seconds": {
+      "average_bytes_per_second": 313700609,
+      "first_30_seconds_kib_per_second": 303845.0,
+      "io_bytes": 37676384256,
+      "last_30_seconds_kib_per_second": 307332.0,
+      "p99_completion_latency_ns": 123207680,
+      "runtime_ms": 120103
+    }
+  }
+}

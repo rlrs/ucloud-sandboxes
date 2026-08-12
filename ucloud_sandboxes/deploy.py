@@ -42,6 +42,21 @@ PERSISTENT_STORAGE_SYSTEMD_UNITS = (
     "ucloud-sandbox-registry-gc.service",
     "ucloud-sandbox-autoscaler.service",
 )
+# The bundle is resolved against an empty dpkg status so it remains usable on a
+# freshly booted image.  APT still treats several Essential/systemd packages as
+# ambient and can otherwise download a newer libsystemd0 without the matching
+# service packages.  Include that version-locked closure explicitly.
+BUNDLED_SYSTEMD_RUNTIME_PACKAGES = (
+    "apparmor",
+    "libnss-systemd",
+    "libpam-systemd",
+    "libsystemd-shared",
+    "systemd",
+    "systemd-cryptsetup",
+    "systemd-resolved",
+    "systemd-sysv",
+    "udev",
+)
 
 
 @dataclass(frozen=True)
@@ -321,6 +336,9 @@ def render_remote_deploy_script(
     node_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
+    bundled_systemd_runtime_packages = " ".join(
+        BUNDLED_SYSTEMD_RUNTIME_PACKAGES
+    )
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -364,9 +382,14 @@ def render_remote_deploy_script(
         '  test -s "$STORAGE_NATIVE_LICENSE"',
         "fi",
         "sudo apt-get update",
+        "DEPLOY_SUPPORT_PACKAGES=(ca-certificates curl docker.io openssh-client "
+        "openssl python3-venv)",
+        'DEPLOY_MODULES_EXTRA="linux-modules-extra-$(uname -r)"',
+        'if apt-cache show "$DEPLOY_MODULES_EXTRA" >/dev/null 2>&1; then',
+        '  DEPLOY_SUPPORT_PACKAGES+=("$DEPLOY_MODULES_EXTRA")',
+        "fi",
         "sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "
-        "ca-certificates curl docker.io openssh-client openssl "
-        'python3-venv "linux-modules-extra-$(uname -r)"',
+        '"${DEPLOY_SUPPORT_PACKAGES[@]}"',
         "",
         'if [ ! -x "$VENV_DIR/bin/python" ]; then',
         '  python3 -m venv "$VENV_DIR"',
@@ -441,7 +464,7 @@ def render_remote_deploy_script(
         "  [ -s /etc/apt/sources.list.d/docker.sources ] || return 1",
         "  sudo apt-get update || return 1",
         "  collect_runtime_kernel_modules || return 1",
-        f"  download_runtime_packages runtime {node_runtime_packages} || return 1",
+        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_systemd_runtime_packages} || return 1",
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
         "build_runtime_bundle",

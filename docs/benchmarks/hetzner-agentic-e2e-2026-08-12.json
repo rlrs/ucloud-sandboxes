@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "status": "passed",
+  "date": "2026-08-12",
+  "location": "hel1",
+  "topology": {
+    "gateway": {
+      "server_type": "cpx12",
+      "private_ip": "10.42.0.2"
+    },
+    "workers": [
+      {
+        "server_type": "cpx62",
+        "private_ip": "10.42.0.3"
+      },
+      {
+        "server_type": "cpx62",
+        "private_ip": "10.42.0.4"
+      }
+    ],
+    "snapshot_id": 419224276,
+    "ubuntu": "26.04",
+    "registry": "private gateway registry"
+  },
+  "second_worker_init": {
+    "bundle_reused": true,
+    "bundle_transfer_bytes": 0,
+    "init_total_ms": 4148,
+    "runtime_bundle_ms": 6,
+    "package_bundle_ms": 44,
+    "docker_daemon_ms": 1636,
+    "systemd_services_ms": 2171
+  },
+  "agentic_same_node": {
+    "status": "passed",
+    "model": "qwen3.5-397b",
+    "image": "python:3.13-slim-bookworm",
+    "sandbox_create_seconds": 0.978,
+    "elapsed_seconds": 16.451,
+    "model_calls": 6,
+    "park_seconds": [0.6278, 0.3159, 0.3145, 0.3185, 0.0024, 0.4207],
+    "park_median_seconds": 0.3172,
+    "response_commit_median_seconds": 0.5219,
+    "park_notifications": 6,
+    "wake_notifications": 6,
+    "duplicate_responses": 0,
+    "worker_errors": 0,
+    "visible_tests": "passed",
+    "hidden_tests": "passed",
+    "managed_process_identity": "preserved",
+    "parked_resources": {
+      "memory_mb": 0,
+      "vcpu": 0.0,
+      "active_ublk_devices": 0,
+      "local_disk_reservation_retained": true
+    }
+  },
+  "explicit_park_resume_soak": {
+    "status": "passed",
+    "cycles": 20,
+    "elapsed_seconds": 18.043,
+    "lifecycle_retries": 0,
+    "park_seconds": {
+      "min": 0.2191,
+      "median": 0.2354,
+      "max": 0.4211
+    },
+    "wake_seconds": {
+      "min": 0.0128,
+      "median": 0.4659,
+      "max": 0.5212
+    },
+    "counter_advanced_after_every_wake": true,
+    "counter_checksum_valid_after_every_wake": true,
+    "process_identity_preserved": true
+  },
+  "agentic_cross_node_migration": {
+    "status": "passed",
+    "source_private_ip": "10.42.0.3",
+    "destination_private_ip": "10.42.0.4",
+    "migration_cycle": 3,
+    "migration_wall_seconds": 6.7592,
+    "protocol_total_ms": 2240.285,
+    "protocol_phases_ms": {
+      "prepare_export": 1623.419,
+      "transfer_and_stage": 403.661,
+      "activate_destination": 10.301,
+      "route_commit": 4.702,
+      "finalize_source": 186.204
+    },
+    "storage_schema": "storage-native-v1",
+    "virtual_size_bytes": 9730785280,
+    "published_layer_bytes": 156962816,
+    "registry_physical_bytes_after_run": 156967523,
+    "managed_process_pid_before": 29,
+    "managed_process_pid_after": 29,
+    "managed_process_spec_digest_preserved": true,
+    "relay_reattachments": 1,
+    "transport_resets": 1,
+    "duplicate_responses": 0,
+    "visible_tests": "passed",
+    "hidden_tests": "passed"
+  },
+  "post_test_runtime_cleanup": {
+    "sandbox_routes": 0,
+    "active_sandboxes_per_worker": [0, 0],
+    "used_memory_mb_per_worker": [0, 0],
+    "used_vcpu_per_worker": [0.0, 0.0],
+    "used_disk_mb_per_worker": [0, 0],
+    "active_ublk_devices_per_worker": [0, 0],
+    "storage_error_volumes_per_worker": [0, 0]
+  },
+  "provider_cleanup": {
+    "remaining_servers": 0,
+    "remaining_primary_ips": 0,
+    "remaining_volumes": 0,
+    "remaining_temporary_firewalls": 0,
+    "retained_foundation_network_id": 12539764,
+    "retained_foundation_firewall_id": 11454113,
+    "retained_snapshot_ids": [419216526, 419224276]
+  },
+  "repository_tests": {
+    "tests_run": 778,
+    "status": "passed",
+    "skipped": 1
+  }
+}

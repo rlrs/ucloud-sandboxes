@@ -12,5 +12,6 @@ ucloud-sandboxes-sdk/
 
 # Local secrets and run output
 .env
+.hetzner/
 logs/
 inspect-logs/

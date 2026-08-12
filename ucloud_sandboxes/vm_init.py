@@ -30,7 +30,9 @@ DEFAULT_DOCKER_STORAGE_DIR = "/var/lib/ucloud-sandboxes"
 DEFAULT_DOCKER_MTU = 0
 DEFAULT_DOCKER_MAX_CONCURRENT_DOWNLOADS = 3
 DEFAULT_MAX_CONCURRENT_IMAGE_PULLS = 8
-DEFAULT_REMOTE_PACKAGE_DIR = "/tmp/ucloud-sandboxes-init-packages"
+DEFAULT_REMOTE_PACKAGE_DIR = "/var/cache/ucloud-sandboxes/init-packages"
+DEFAULT_REMOTE_PACKAGE_FILENAME = "node-package.tar.gz"
+STATIC_RUNTIME_RECEIPT_SCHEMA = 1
 DEFAULT_DIRECT_RUNSC = "/usr/local/libexec/ucloud-direct-runsc"
 DEFAULT_MANAGED_INIT = "/usr/local/libexec/ucloud-sandbox-init"
 DEFAULT_STORAGE_NATIVE_BACKEND = "/usr/local/libexec/ucloud-storage-native-backend"
@@ -173,6 +175,14 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     swap_file = str(PurePosixPath(docker_storage_dir) / "swapfile")
     state_dir = str(PurePosixPath(work_dir) / "state")
+    package_cache_dir = str(PurePosixPath(options.package_spec).parent)
+    static_runtime_receipt = static_runtime_receipt_for_remote_package(
+        options.package_spec,
+        role=options.role,
+    )
+    cached_agent_runtime_dir = str(
+        PurePosixPath(package_cache_dir) / "agent-runtime"
+    )
     direct_runsc = DEFAULT_DIRECT_RUNSC
     storage_native_backend = DEFAULT_STORAGE_NATIVE_BACKEND
     storage_native_backend_socket = DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET
@@ -324,6 +334,10 @@ UCLOUD_STATE_DIR={shlex.quote(state_dir)}
 UCLOUD_DOCKER_DATA_ROOT={shlex.quote(docker_data_root)}
 UCLOUD_PACKAGE_SPEC={shlex.quote(options.package_spec)}
 UCLOUD_PACKAGE_EXPECTED_SHA256={shlex.quote(options.package_sha256)}
+UCLOUD_PACKAGE_CACHE_DIR={shlex.quote(package_cache_dir)}
+UCLOUD_PACKAGE_CACHE_ROOT="$(dirname "$UCLOUD_PACKAGE_CACHE_DIR")"
+UCLOUD_STATIC_RUNTIME_RECEIPT={shlex.quote(static_runtime_receipt)}
+UCLOUD_CACHED_AGENT_RUNTIME_DIR={shlex.quote(cached_agent_runtime_dir)}
 UCLOUD_NODE_AGENT_HOST={shlex.quote(options.node_agent_host)}
 UCLOUD_NODE_AGENT_PORT={options.node_agent_port}
 UCLOUD_NODE_URL={shlex.quote(options.advertised_node_url())}
@@ -373,13 +387,15 @@ UCLOUD_AUTHORIZED_KEYS
 )
 
 echo "Initializing UCloud sandbox node $UCLOUD_NODE_ID for job $UCLOUD_JOB_ID"
-UCLOUD_INIT_STARTED_MS="$(date +%s%3N)"
+UCLOUD_INIT_STARTED_NS="$(date +%s%N)"
+UCLOUD_INIT_STARTED_MS=$((10#$UCLOUD_INIT_STARTED_NS / 1000000))
 UCLOUD_INIT_PHASE_MS="$UCLOUD_INIT_STARTED_MS"
 
 log_init_phase() {{
   local phase="$1"
-  local now duration total
-  now="$(date +%s%3N)"
+  local now_ns now duration total
+  now_ns="$(date +%s%N)"
+  now=$((10#$now_ns / 1000000))
   duration=$((now - UCLOUD_INIT_PHASE_MS))
   total=$((now - UCLOUD_INIT_STARTED_MS))
   echo "Init phase complete: $phase duration_ms=${{duration}} total_ms=${{total}}"
@@ -433,31 +449,74 @@ UCLOUD_OS_ID="$(. /etc/os-release && printf '%s' "$ID")"
 UCLOUD_OS_VERSION_ID="$(. /etc/os-release && printf '%s' "$VERSION_ID")"
 UCLOUD_OS_CODENAME="$(. /etc/os-release && printf '%s' "${{UBUNTU_CODENAME:-${{VERSION_CODENAME:-}}}}")"
 UCLOUD_ARCHITECTURE="$(dpkg --print-architecture)"
-if [ ! -f "$UCLOUD_PACKAGE_SPEC" ]; then
-  echo "A staged node package bundle is required" >&2
-  exit 1
+UCLOUD_PACKAGE_BUNDLE_SHA256="$UCLOUD_PACKAGE_EXPECTED_SHA256"
+UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_PACKAGE_CACHE_DIR/extracted"
+UCLOUD_STATIC_RUNTIME_READY=0
+
+receipt_value() {{
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key {{ print substr($0, length(key) + 2); exit }}' \
+    "$UCLOUD_STATIC_RUNTIME_RECEIPT"
+}}
+
+# The receipt and every referenced artifact are root-owned immutable snapshot
+# inputs. A matching receipt lets a clone skip the large artifact verification
+# and all static installation work. Any inconsistency falls back to the staged,
+# digest-verified bundle below.
+if [ -f "$UCLOUD_STATIC_RUNTIME_RECEIPT" ] \
+  && [ "$(stat -c '%u:%a' "$UCLOUD_STATIC_RUNTIME_RECEIPT")" = "0:444" ] \
+  && [ "$(receipt_value schema)" = {STATIC_RUNTIME_RECEIPT_SCHEMA} ] \
+  && [ "$(receipt_value bundle_sha256)" = "$UCLOUD_PACKAGE_EXPECTED_SHA256" ] \
+  && [ "$(receipt_value init_version)" = "$UCLOUD_INIT_VERSION" ] \
+  && [ "$(receipt_value role)" = "$UCLOUD_NODE_ROLE" ] \
+  && [ "$(receipt_value kernel_release)" = "$(uname -r)" ] \
+  && [ -d "$UCLOUD_CACHED_AGENT_RUNTIME_DIR/site-packages/ucloud_sandboxes" ] \
+  && command -v docker >/dev/null 2>&1 \
+  && [ -f "/lib/modules/$(uname -r)/updates/ucloud-sandboxes/.bundle-sha256" ] \
+  && [ "$(cat "/lib/modules/$(uname -r)/updates/ucloud-sandboxes/.bundle-sha256")" = "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+  UCLOUD_PREBUILT_AGENT_SHA256="$(receipt_value agent_sha256)"
+  if [[ "$UCLOUD_PREBUILT_AGENT_SHA256" =~ ^[0-9a-f]{{64}}$ ]]; then
+    if [ "$UCLOUD_NODE_ROLE" != sandbox ] \
+      || {{ [ -x "$UCLOUD_DIRECT_RUNSC" ] \
+        && [ -x "$UCLOUD_MANAGED_INIT" ] \
+        && [ -x "$UCLOUD_STORAGE_NATIVE_BACKEND" ]; }}; then
+      UCLOUD_STATIC_RUNTIME_READY=1
+      echo "Using snapshot-baked runtime $UCLOUD_PACKAGE_BUNDLE_SHA256"
+    fi
+  fi
 fi
-if [ -z "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
-  echo "The staged node package bundle requires an expected SHA-256 digest" >&2
-  exit 1
-fi
-UCLOUD_PACKAGE_BUNDLE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
-if [ "$UCLOUD_PACKAGE_BUNDLE_SHA256" != "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
-  echo "Node package bundle checksum does not match the staged artifact" >&2
-  exit 1
-fi
-if ! tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
-  echo "The staged node package bundle is invalid" >&2
-  exit 1
-fi
-UCLOUD_PACKAGE_BUNDLE_DIR="$UCLOUD_STATE_DIR/package-bundles/$UCLOUD_PACKAGE_BUNDLE_SHA256"
-UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
-rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
-mkdir -p "$UCLOUD_PACKAGE_BUNDLE_TMP"
-tar --no-same-owner --no-same-permissions -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
-rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
-mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
-echo "Using verified node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
+
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+  if [ ! -f "$UCLOUD_PACKAGE_SPEC" ]; then
+    echo "A staged node package bundle is required" >&2
+    exit 1
+  fi
+  if [ -z "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+    echo "The staged node package bundle requires an expected SHA-256 digest" >&2
+    exit 1
+  fi
+  UCLOUD_ACTUAL_PACKAGE_SHA256="$(sha256sum "$UCLOUD_PACKAGE_SPEC" | awk '{{print $1}}')"
+  if [ "$UCLOUD_ACTUAL_PACKAGE_SHA256" != "$UCLOUD_PACKAGE_EXPECTED_SHA256" ]; then
+    echo "Node package bundle checksum does not match the staged artifact" >&2
+    exit 1
+  fi
+  if ! tar -tzf "$UCLOUD_PACKAGE_SPEC" package-bundle.json >/dev/null 2>&1; then
+    echo "The staged node package bundle is invalid" >&2
+    exit 1
+  fi
+  # Static binaries are shared host paths. Once a different bundle is
+  # installed, no older receipt may advertise those paths as ready.
+  $SUDO find "$UCLOUD_PACKAGE_CACHE_ROOT" -mindepth 2 -maxdepth 2 \
+    -type f -name "runtime-ready-v*-$UCLOUD_NODE_ROLE" -delete 2>/dev/null || true
+  UCLOUD_PACKAGE_BUNDLE_TMP="$UCLOUD_PACKAGE_BUNDLE_DIR.tmp.$$"
+  $SUDO rm -rf "$UCLOUD_PACKAGE_BUNDLE_TMP"
+  $SUDO install -d -m 0755 -o root -g root "$UCLOUD_PACKAGE_CACHE_DIR"
+  $SUDO install -d -m 0755 -o root -g root "$UCLOUD_PACKAGE_BUNDLE_TMP"
+  $SUDO tar --no-same-owner --no-same-permissions \
+    -xzf "$UCLOUD_PACKAGE_SPEC" -C "$UCLOUD_PACKAGE_BUNDLE_TMP"
+  $SUDO rm -rf "$UCLOUD_PACKAGE_BUNDLE_DIR"
+  $SUDO mv "$UCLOUD_PACKAGE_BUNDLE_TMP" "$UCLOUD_PACKAGE_BUNDLE_DIR"
+  echo "Using verified node package bundle $UCLOUD_PACKAGE_BUNDLE_SHA256"
 UCLOUD_PACKAGE_METADATA="$(python3 - \
       "$UCLOUD_PACKAGE_BUNDLE_DIR" \
       "$UCLOUD_OS_ID" "$UCLOUD_OS_VERSION_ID" "$UCLOUD_OS_CODENAME" \
@@ -677,11 +736,12 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/storage-native/LICENSE"
 fi
 echo "Verified pinned Docker/gVisor bundle for $UCLOUD_OS_ID $UCLOUD_OS_VERSION_ID $UCLOUD_ARCHITECTURE"
+fi
 log_init_phase "package-bundle"
 
 install_bundled_runtime() {{
   local package_dir="$UCLOUD_PACKAGE_BUNDLE_DIR/runtime/debs"
-  local package_file package_name install_status
+  local package_file package_name install_status offline_apt_root
   local policy_rc_d_created=0
   local -a local_packages=()
   local -a portable_packages=()
@@ -701,6 +761,13 @@ install_bundled_runtime() {{
   done
   install_status=0
   if [ "${{#local_packages[@]}}" -gt 0 ]; then
+    # APT 3 on Ubuntu 26.04 rejects even explicitly supplied local .deb files
+    # when --no-download is set. Give APT an empty source configuration
+    # instead: dependencies may be satisfied only by the verified bundle or
+    # packages already installed on the image, with no network fallback.
+    offline_apt_root="$(mktemp -d)"
+    : > "$offline_apt_root/sources.list"
+    mkdir -p "$offline_apt_root/sources.list.d"
     # Docker and containerd are configured and started once below. Prevent
     # support-package scripts from starting services with vendor defaults.
     if [ ! -e /usr/sbin/policy-rc.d ]; then
@@ -708,12 +775,16 @@ install_bundled_runtime() {{
       $SUDO chmod 0755 /usr/sbin/policy-rc.d
       policy_rc_d_created=1
     fi
-    if $SUDO apt-get install --no-download --no-install-recommends -y \
-      -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 "${{local_packages[@]}}"; then
+    if $SUDO apt-get install --no-install-recommends -y \
+      -o DPkg::Lock::Timeout=60 -o Dpkg::Use-Pty=0 \
+      -o Dir::Etc::sourcelist="$offline_apt_root/sources.list" \
+      -o Dir::Etc::sourceparts="$offline_apt_root/sources.list.d" \
+      -o APT::Get::List-Cleanup=0 "${{local_packages[@]}}"; then
       install_status=0
     else
       install_status=$?
     fi
+    rm -rf "$offline_apt_root"
   fi
   if [ "$policy_rc_d_created" -eq 1 ]; then
     $SUDO rm -f /usr/sbin/policy-rc.d
@@ -723,16 +794,21 @@ install_bundled_runtime() {{
   fi
   # Runtime packages contain self-contained binaries and systemd units. Install
   # their verified payloads exactly; the host package database is not runtime
-  # authority.
+  # authority. Ubuntu uses merged-/usr directory symlinks such as
+  # /lib -> usr/lib. GNU tar otherwise replaces those symlinks when a package
+  # contains a compatibility ./lib directory header, leaving kernel modules
+  # and boot services split across two trees after the next reboot.
   for package_file in "${{portable_packages[@]}}"; do
     if ! dpkg-deb --fsys-tarfile "$package_file" \
-      | $SUDO tar --extract --file=- --directory=/; then
+      | $SUDO tar --extract --keep-directory-symlink --file=- --directory=/; then
       return 1
     fi
   done
-  # containerd.io still ships this unit under /lib. The UCloud stock VM is
-  # not merged-/usr and systemd searches /usr/lib/systemd/system instead.
-  if [ -f /lib/systemd/system/containerd.service ]; then
+  # Keep a canonical /usr copy even when containerd.io ships this unit through
+  # the compatibility /lib path.
+  if [ -f /lib/systemd/system/containerd.service ] \
+    && [ ! /lib/systemd/system/containerd.service \
+      -ef /usr/lib/systemd/system/containerd.service ]; then
     $SUDO install -m 0644 /lib/systemd/system/containerd.service \
       /usr/lib/systemd/system/containerd.service
   fi
@@ -742,10 +818,13 @@ install_bundled_runtime() {{
   return 0
 }}
 
-echo "Installing Docker, gVisor, and host support from the verified bundle"
-install_bundled_runtime
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+  echo "Installing Docker, gVisor, and host support from the verified bundle"
+  install_bundled_runtime
+else
+  echo "Docker, gVisor, and host support are already snapshot-baked"
+fi
 command -v docker >/dev/null 2>&1
-command -v runsc >/dev/null 2>&1
 log_init_phase "runtime-bundle"
 
 if [ "$UCLOUD_HOST_ALIASES_JSON" != "[]" ]; then
@@ -869,29 +948,31 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
   # lifecycle journals.
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_STATE_DIR/direct-runtime"
   $SUDO install -d -m 0700 -o root -g root "$UCLOUD_DIRECT_IMAGE_CACHE_ROOT"
-  echo "Installing bundle-verified direct runsc runtime"
-  $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
-  $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
-  printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
-  "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
-  echo "Installing bundle-verified managed-process init"
-  $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
-  printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_MANAGED_INIT" | sha256sum --check --status -
-  test "$("$UCLOUD_MANAGED_INIT" version)" = managed-primary-v1
-  echo "Installing bundle-verified storage-native backend"
-  $SUDO install -m 0755 -o root -g root \
-    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" "$UCLOUD_STORAGE_NATIVE_BACKEND"
-  printf '%s  %s\n' \
-    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256" \
-    "$UCLOUD_STORAGE_NATIVE_BACKEND" | sha256sum --check --status -
-  $SUDO install -d -m 0755 -o root -g root \
-    /usr/share/doc/ucloud-sandboxes/storage-native
-  $SUDO install -m 0644 -o root -g root \
-    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST" \
-    /usr/share/doc/ucloud-sandboxes/storage-native/build-manifest.json
-  $SUDO install -m 0644 -o root -g root \
-    "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE" \
-    /usr/share/doc/ucloud-sandboxes/storage-native/LICENSE
+  if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+    echo "Installing bundle-verified direct runsc runtime"
+    $SUDO install -d -m 0755 -o root -g root "$(dirname "$UCLOUD_DIRECT_RUNSC")"
+    $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_DIRECT_RUNSC" "$UCLOUD_DIRECT_RUNSC"
+    printf '%s  %s\n' "$UCLOUD_BUNDLED_DIRECT_RUNSC_SHA256" "$UCLOUD_DIRECT_RUNSC" | sha256sum --check --status -
+    "$UCLOUD_DIRECT_RUNSC" --version >/dev/null
+    echo "Installing bundle-verified managed-process init"
+    $SUDO install -m 0755 -o root -g root "$UCLOUD_BUNDLED_MANAGED_INIT" "$UCLOUD_MANAGED_INIT"
+    printf '%s  %s\n' "$UCLOUD_BUNDLED_MANAGED_INIT_SHA256" "$UCLOUD_MANAGED_INIT" | sha256sum --check --status -
+    test "$("$UCLOUD_MANAGED_INIT" version)" = managed-primary-v1
+    echo "Installing bundle-verified storage-native backend"
+    $SUDO install -m 0755 -o root -g root \
+      "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND" "$UCLOUD_STORAGE_NATIVE_BACKEND"
+    printf '%s  %s\n' \
+      "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_SHA256" \
+      "$UCLOUD_STORAGE_NATIVE_BACKEND" | sha256sum --check --status -
+    $SUDO install -d -m 0755 -o root -g root \
+      /usr/share/doc/ucloud-sandboxes/storage-native
+    $SUDO install -m 0644 -o root -g root \
+      "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_MANIFEST" \
+      /usr/share/doc/ucloud-sandboxes/storage-native/build-manifest.json
+    $SUDO install -m 0644 -o root -g root \
+      "$UCLOUD_BUNDLED_STORAGE_NATIVE_BACKEND_LICENSE" \
+      /usr/share/doc/ucloud-sandboxes/storage-native/LICENSE
+  fi
   $SUDO install -d -m 0700 -o root -g root \
     "$UCLOUD_STORAGE_NATIVE_ROOT" \
     "$UCLOUD_STORAGE_NATIVE_ROOT/runtime" \
@@ -935,15 +1016,23 @@ PY
   fi
 fi
 log_init_phase "direct-runtime"
-detect_default_route_mtu() {{
-  local iface mtu
-  iface="$(ip -o route get 1.1.1.1 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
-  if [ -z "$iface" ]; then
-    iface="$(ip -o route show default 2>/dev/null | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") {{print $(i+1); exit}}}}')"
-  fi
-  if [ -n "$iface" ] && [ -r "/sys/class/net/$iface/mtu" ]; then
-    mtu="$(cat "/sys/class/net/$iface/mtu")"
-  fi
+detect_routed_mtu() {{
+  local iface iface_mtu mtu=""
+  while IFS= read -r iface; do
+    [ -n "$iface" ] || continue
+    [ "$iface" != lo ] || continue
+    [ -r "/sys/class/net/$iface/mtu" ] || continue
+    iface_mtu="$(cat "/sys/class/net/$iface/mtu")"
+    if [[ "$iface_mtu" =~ ^[0-9]+$ ]] \
+      && [ "$iface_mtu" -ge 576 ] \
+      && {{ [ -z "$mtu" ] || [ "$iface_mtu" -lt "$mtu" ]; }}; then
+      mtu="$iface_mtu"
+    fi
+  done < <(
+    ip -o route show table main 2>/dev/null \
+      | awk '{{for (i=1; i<=NF; i++) if ($i=="dev") print $(i+1)}}' \
+      | sort -u
+  )
   if ! [[ "${{mtu:-}}" =~ ^[0-9]+$ ]] || [ "$mtu" -lt 576 ]; then
     mtu=1420
   fi
@@ -951,7 +1040,7 @@ detect_default_route_mtu() {{
 }}
 
 if [ "$UCLOUD_DOCKER_MTU" -eq 0 ]; then
-  UCLOUD_DOCKER_MTU="$(detect_default_route_mtu)"
+  UCLOUD_DOCKER_MTU="$(detect_routed_mtu)"
 fi
 export UCLOUD_DOCKER_DATA_ROOT UCLOUD_DOCKER_QUOTA_IMAGE_GB UCLOUD_DOCKER_MTU UCLOUD_DOCKER_MAX_CONCURRENT_DOWNLOADS UCLOUD_DOCKER_INSECURE_REGISTRIES_JSON
 echo "Configuring Docker daemon with bridge MTU $UCLOUD_DOCKER_MTU"
@@ -985,7 +1074,9 @@ else
   UCLOUD_DOCKER_RESTART_NEEDED=0
 fi
 rm -f "$DOCKER_DAEMON_JSON"
-$SUDO systemctl daemon-reload
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+  $SUDO systemctl daemon-reload
+fi
 $SUDO systemctl enable containerd.service
 if ! systemctl is-active --quiet containerd.service; then
   if ! $SUDO systemctl restart containerd.service; then
@@ -993,7 +1084,10 @@ if ! systemctl is-active --quiet containerd.service; then
     exit 1
   fi
 fi
-$SUDO dockerd --validate --config-file /etc/docker/daemon.json
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ] \
+  || [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ]; then
+  $SUDO dockerd --validate --config-file /etc/docker/daemon.json
+fi
 $SUDO systemctl enable docker
 if [ "$UCLOUD_DOCKER_RESTART_NEEDED" -eq 1 ] || ! systemctl is-active --quiet docker; then
   if ! $SUDO systemctl restart docker; then
@@ -1011,14 +1105,18 @@ log_init_phase "docker-daemon"
 
 
 echo "Activating bundled ucloud-sandboxes runtime"
-UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_STATE_DIR/agent-runtimes/$UCLOUD_PREBUILT_AGENT_SHA256"
+UCLOUD_AGENT_RUNTIME_DIR="$UCLOUD_CACHED_AGENT_RUNTIME_DIR"
 UCLOUD_AGENT_RUNTIME_TMP="$UCLOUD_AGENT_RUNTIME_DIR.tmp.$$"
-rm -rf "$UCLOUD_AGENT_RUNTIME_TMP"
-mkdir -p "$UCLOUD_AGENT_RUNTIME_TMP"
-tar --no-same-owner --no-same-permissions -xf "$UCLOUD_PREBUILT_AGENT_ARCHIVE" -C "$UCLOUD_AGENT_RUNTIME_TMP"
-test -d "$UCLOUD_AGENT_RUNTIME_TMP/site-packages/ucloud_sandboxes"
-rm -rf "$UCLOUD_AGENT_RUNTIME_DIR"
-mv "$UCLOUD_AGENT_RUNTIME_TMP" "$UCLOUD_AGENT_RUNTIME_DIR"
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+  $SUDO rm -rf "$UCLOUD_AGENT_RUNTIME_TMP"
+  $SUDO install -d -m 0755 -o root -g root "$UCLOUD_AGENT_RUNTIME_TMP"
+  $SUDO tar --no-same-owner --no-same-permissions \
+    -xf "$UCLOUD_PREBUILT_AGENT_ARCHIVE" -C "$UCLOUD_AGENT_RUNTIME_TMP"
+  test -d "$UCLOUD_AGENT_RUNTIME_TMP/site-packages/ucloud_sandboxes"
+  $SUDO rm -rf "$UCLOUD_AGENT_RUNTIME_DIR"
+  $SUDO mv "$UCLOUD_AGENT_RUNTIME_TMP" "$UCLOUD_AGENT_RUNTIME_DIR"
+fi
+test -d "$UCLOUD_AGENT_RUNTIME_DIR/site-packages/ucloud_sandboxes"
 $SUDO install -d -m 0755 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$(dirname "$UCLOUD_AGENT_BIN")"
 UCLOUD_AGENT_LAUNCHER="$(mktemp)"
 printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.cli "$@"\n' \
@@ -1030,6 +1128,21 @@ printf '#!/bin/sh\nexec env PYTHONPATH=%q /usr/bin/python3 -m ucloud_sandboxes.s
   "$UCLOUD_AGENT_RUNTIME_DIR/site-packages" > "$UCLOUD_STORAGE_AGENT_LAUNCHER"
 $SUDO install -m 0755 -o root -g root "$UCLOUD_STORAGE_AGENT_LAUNCHER" "$UCLOUD_STORAGE_AGENT_BIN"
 rm -f "$UCLOUD_STORAGE_AGENT_LAUNCHER"
+if [ "$UCLOUD_STATIC_RUNTIME_READY" -eq 0 ]; then
+  UCLOUD_STATIC_RUNTIME_RECEIPT_TMP="$($SUDO mktemp "$UCLOUD_PACKAGE_CACHE_DIR/.runtime-ready.XXXXXX")"
+  printf '%s\n' \
+    'schema={STATIC_RUNTIME_RECEIPT_SCHEMA}' \
+    "bundle_sha256=$UCLOUD_PACKAGE_BUNDLE_SHA256" \
+    "init_version=$UCLOUD_INIT_VERSION" \
+    "role=$UCLOUD_NODE_ROLE" \
+    "kernel_release=$(uname -r)" \
+    "agent_sha256=$UCLOUD_PREBUILT_AGENT_SHA256" \
+    | $SUDO tee "$UCLOUD_STATIC_RUNTIME_RECEIPT_TMP" >/dev/null
+  $SUDO chown root:root "$UCLOUD_STATIC_RUNTIME_RECEIPT_TMP"
+  $SUDO chmod 0444 "$UCLOUD_STATIC_RUNTIME_RECEIPT_TMP"
+  $SUDO mv -f "$UCLOUD_STATIC_RUNTIME_RECEIPT_TMP" "$UCLOUD_STATIC_RUNTIME_RECEIPT"
+  echo "Recorded snapshot-ready runtime $UCLOUD_PACKAGE_BUNDLE_SHA256"
+fi
 log_init_phase "python-package"
 
 echo "Writing node environment"
@@ -1516,17 +1629,35 @@ def remote_package_spec_for_local_path(
     options: VmInitOptions,
     local_path: Path,
     *,
+    package_sha256: str = "",
     remote_package_dir: str = DEFAULT_REMOTE_PACKAGE_DIR,
 ) -> str:
+    del options
     _reject_newline("remote package dir", remote_package_dir)
     remote_dir = _clean_posix_path(remote_package_dir)
-    filename = local_path.name
-    if not filename or filename in {".", ".."} or "/" in filename:
-        raise ValueError("local package path must have a valid filename.")
-    _reject_newline("local package filename", filename)
-    job_component = options.job_id.replace("/", "_").replace(":", "_")
-    _reject_newline("job id", job_component)
-    return str(PurePosixPath(remote_dir) / job_component / filename)
+    digest = package_sha256 or local_package_sha256(local_path)
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("package sha256 must be a lowercase SHA-256 digest.")
+    return str(
+        PurePosixPath(remote_dir) / digest / DEFAULT_REMOTE_PACKAGE_FILENAME
+    )
+
+
+def static_runtime_receipt_for_remote_package(
+    remote_package: str,
+    *,
+    role: str,
+    init_version: str = DEFAULT_INIT_VERSION,
+) -> str:
+    remote_path = _clean_posix_path(remote_package)
+    if role not in {"sandbox", "builder"}:
+        raise ValueError("node role must be sandbox or builder")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", init_version):
+        raise ValueError("init version is unsafe for a runtime receipt path")
+    return str(
+        PurePosixPath(remote_path).parent
+        / f"runtime-ready-v{init_version}-{role}"
+    )
 
 
 def stage_vm_init_package_over_ssh(
@@ -1539,24 +1670,48 @@ def stage_vm_init_package_over_ssh(
     remote_package_dir: str = DEFAULT_REMOTE_PACKAGE_DIR,
 ) -> VmInitPackageStageResult:
     local_path = local_package_spec_path(options.package_spec)
+    package_size = local_path.stat().st_size
+    package_sha256 = local_package_sha256(local_path)
     remote_path = remote_package_spec_for_local_path(
         options,
         local_path,
+        package_sha256=package_sha256,
         remote_package_dir=remote_package_dir,
     )
     remote_parent = str(PurePosixPath(remote_path).parent)
     remote_marker = f"{remote_path}.sha256"
     remote_temporary = f"{remote_path}.tmp"
+    remote_marker_temporary = f"{remote_marker}.tmp"
+    runtime_receipt = static_runtime_receipt_for_remote_package(
+        remote_path,
+        role=options.role,
+    )
     quoted_parent = shlex.quote(remote_parent)
     quoted_path = shlex.quote(remote_path)
     quoted_marker = shlex.quote(remote_marker)
     quoted_temporary = shlex.quote(remote_temporary)
-    package_size = local_path.stat().st_size
-    package_sha256 = local_package_sha256(local_path)
+    quoted_marker_temporary = shlex.quote(remote_marker_temporary)
+    quoted_receipt = shlex.quote(runtime_receipt)
+    receipt_lines = (
+        f"schema={STATIC_RUNTIME_RECEIPT_SCHEMA}",
+        f"bundle_sha256={package_sha256}",
+        f"init_version={DEFAULT_INIT_VERSION}",
+        f"role={options.role}",
+    )
+    receipt_probe = " && ".join(
+        f"grep -Fx -- {shlex.quote(line)} {quoted_receipt} >/dev/null"
+        for line in receipt_lines
+    )
     probe_command = (
-        f"test -f {quoted_path} && "
+        f"(test -f {quoted_receipt} && "
+        f'test "$(stat -c %u:%a {quoted_receipt})" = 0:444 && '
+        f"{receipt_probe} && "
+        f'test "$(awk -F= \'$1 == "kernel_release" {{print substr($0, 16); exit}}\' '
+        f'{quoted_receipt})" = "$(uname -r)") || '
+        f"(test -f {quoted_path} && "
+        f'test "$(stat -c %u:%a {quoted_path})" = 0:444 && '
         f'test "$(stat -c %s {quoted_path})" = {package_size} && '
-        f'test "$(cat {quoted_marker} 2>/dev/null)" = {package_sha256}'
+        f'test "$(cat {quoted_marker} 2>/dev/null)" = {package_sha256})'
     )
     probe = subprocess.run(
         ssh_remote_command(
@@ -1596,14 +1751,20 @@ def stage_vm_init_package_over_ssh(
             package_sha256=package_sha256,
         )
     remote_command = (
-        f"mkdir -p {quoted_parent} && "
-        f"chmod 755 {quoted_parent} && "
-        f"rm -f {quoted_temporary} && "
-        f"cat > {quoted_temporary} && "
-        f'test "$(stat -c %s {quoted_temporary})" = {package_size} && '
-        f"chmod 644 {quoted_temporary} && "
-        f"mv {quoted_temporary} {quoted_path} && "
-        f"printf '%s\\n' {package_sha256} > {quoted_marker}"
+        'if [ "$(id -u)" -eq 0 ]; then STAGE_SUDO=""; '
+        'else STAGE_SUDO=sudo; fi; '
+        f"$STAGE_SUDO install -d -m 0755 -o root -g root {quoted_parent} && "
+        f"$STAGE_SUDO rm -f {quoted_temporary} {quoted_marker_temporary} && "
+        f"$STAGE_SUDO tee {quoted_temporary} >/dev/null && "
+        f'test "$($STAGE_SUDO stat -c %s {quoted_temporary})" = {package_size} && '
+        f"$STAGE_SUDO chown root:root {quoted_temporary} && "
+        f"$STAGE_SUDO chmod 0444 {quoted_temporary} && "
+        f"$STAGE_SUDO mv {quoted_temporary} {quoted_path} && "
+        f"printf '%s\\n' {package_sha256} | "
+        f"$STAGE_SUDO tee {quoted_marker_temporary} >/dev/null && "
+        f"$STAGE_SUDO chown root:root {quoted_marker_temporary} && "
+        f"$STAGE_SUDO chmod 0444 {quoted_marker_temporary} && "
+        f"$STAGE_SUDO mv {quoted_marker_temporary} {quoted_marker}"
     )
     command = ssh_remote_command(
         ssh_command,

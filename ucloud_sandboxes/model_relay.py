@@ -9,6 +9,7 @@ import heapq
 import hashlib
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -24,6 +25,7 @@ from .deployment import service_health
 
 
 JsonObject = dict[str, Any]
+LOGGER = logging.getLogger(__name__)
 ROLLOUT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
 REGISTRATION_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -2473,16 +2475,29 @@ async def _notify_accepted(
         return
     if relay_request.accepted_notified_at is not None:
         return
-    try:
-        transport_epoch = await notifier(relay_request)
-    except Exception:
-        # Parking is an optimization. Once the request has been durably
-        # accepted, failure to park must not turn it into a model-call failure.
-        return
-    await _state(request).mark_accepted_notified(
-        relay_request.request_id,
-        transport_epoch=transport_epoch,
-    )
+    async def notify_and_persist() -> None:
+        try:
+            transport_epoch = await notifier(relay_request)
+        except Exception:
+            # Parking is an optimization. Once the request has been durably
+            # accepted, failure to park must not turn it into a model-call
+            # failure, but it must remain observable to operators.
+            LOGGER.warning(
+                "model relay failed to park sandbox %s for request %s",
+                relay_request.sandbox_id,
+                relay_request.request_id,
+                exc_info=True,
+            )
+            return
+        await _state(request).mark_accepted_notified(
+            relay_request.request_id,
+            transport_epoch=transport_epoch,
+        )
+
+    # Checkpointing the caller can destroy this HTTP connection. Do not let
+    # that cancellation interrupt the durable lifecycle transition or leave a
+    # successfully parked request looking unacknowledged after restart.
+    await _finish_before_cancellation(notify_and_persist())
 
 
 async def _notify_result(

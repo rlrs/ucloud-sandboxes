@@ -12,6 +12,7 @@ import sys
 from threading import Event
 import time
 from typing import Any, Callable, Iterable
+from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
@@ -121,7 +122,9 @@ from .providers.ucloud import (
     bootstrap_access_from_payload,
     instance_from_payload,
 )
-from .providers.ucloud.composition import provider_from_configuration
+from .providers.ucloud.composition import (
+    provider_from_configuration as ucloud_provider_from_configuration,
+)
 from .networking import (
     stable_hostname,
 )
@@ -1185,36 +1188,45 @@ def _post_gateway_sandbox_lifecycle(
         return
     if relay_request.sandbox_generation is None:
         raise ValueError("relay sandbox lifecycle binding has no generation")
-    _payload, headers = _post_bounded_json(
-        gateway_url,
-        f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
-        {
-            "generation": relay_request.sandbox_generation,
-            "operation_id": f"relay-{action}:{relay_request.request_id}",
-            "rollout_id": relay_request.rollout_id,
-            "request_id": relay_request.request_id,
-            "request_created_at": relay_request.created_at,
-        },
-        bearer_token=bearer_token,
-        invalid_url_error="gateway URL is invalid",
-        empty_token_error="gateway bearer token cannot be empty",
-        timeout_seconds=600.0,
-        response_name="gateway lifecycle",
-    )
+    for attempt in range(101):
+        try:
+            _payload, headers = _post_bounded_json(
+                gateway_url,
+                f"/v1/sandboxes/{quote(relay_request.sandbox_id, safe='')}/{action}",
+                {
+                    "generation": relay_request.sandbox_generation,
+                    "operation_id": f"relay-{action}:{relay_request.request_id}",
+                    "rollout_id": relay_request.rollout_id,
+                    "request_id": relay_request.request_id,
+                    "request_created_at": relay_request.created_at,
+                },
+                bearer_token=bearer_token,
+                invalid_url_error="gateway URL is invalid",
+                empty_token_error="gateway bearer token cannot be empty",
+                timeout_seconds=600.0,
+                response_name="gateway lifecycle",
+            )
+            break
+        except HTTPError as exc:
+            # The node's independent idle parker can win the lifecycle fence
+            # between enqueue and this explicit park. Once it finishes, this
+            # idempotent retry observes the parked state and lets the gateway
+            # durably record the request transition.
+            if exc.code != 409 or attempt >= 100:
+                raise
+            exc.close()
+            time.sleep(0.05)
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
     return transport_epoch or None
 
 
 def cmd_init_vm(args: argparse.Namespace) -> int:
     config = load_config(args)
-    settings = ucloud_settings(config, args.session_file)
-    if not settings.project_id:
+    provider = compute_provider_from_args(args, config)
+    if not provider.scope_id:
         raise ValueError("provider.scope_id is required")
-    client = UCloudClient(SessionStore(Path(settings.session_file)))
-    payload = client.retrieve_job(
-        settings.project_id, args.job_id, include_updates=True
-    )
-    plan = bootstrap_access_from_payload(payload)
+    instance = provider.retrieve_instance(args.job_id, include_updates=True)
+    plan = provider.bootstrap_access(instance)
     options = vm_init_options_for_job(
         config,
         plan.instance,
@@ -1223,7 +1235,8 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     )
 
     result: dict[str, Any] = {
-        "projectId": settings.project_id,
+        "projectId": provider.scope_id,
+        "provider": {"kind": provider.kind, "scopeId": provider.scope_id},
         "job": vm_job_to_dict(plan.instance),
         "sshCommand": plan.command,
         "runnable": plan.runnable,
@@ -1278,7 +1291,7 @@ def cmd_init_vm(args: argparse.Namespace) -> int:
     if args.output == "json":
         print_json(result)
     else:
-        print(f"Project: {settings.project_id}")
+        print(f"Provider: {provider.kind} ({provider.scope_id})")
         print(f"Job: {plan.instance.id}")
         print(f"State: {plan.instance.state}")
         print(f"SSH enabled: {plan.instance.ssh_enabled}")
@@ -4859,13 +4872,19 @@ def compute_provider_from_args(
 ) -> ComputeProvider:
     """Compose the selected adapter at the CLI boundary.
 
-    The in-tree UCloud adapter keeps the existing CLI surface. Other providers
-    are discovered by their tagged configuration kind through an entry point.
+    Built-in adapters are composed directly. Other providers are discovered by
+    their tagged configuration kind through an entry point.
     """
 
+    if config.provider.kind == "hetzner":
+        from .providers.hetzner.composition import (
+            provider_from_configuration as hetzner_provider_from_configuration,
+        )
+
+        return hetzner_provider_from_configuration(config.provider)
     if config.provider.kind != "ucloud":
         return load_external_provider(config.provider, args)
-    return provider_from_configuration(
+    return ucloud_provider_from_configuration(
         config.provider,
         session_file=ucloud_settings(config).session_file,
         sandbox_product_id=config.sandbox.product_id,

@@ -36,7 +36,7 @@ from .autoscaler_state import (
 )
 from .capabilities import (
     STORAGE_NATIVE_CAPABILITY,
-    STORAGE_NATIVE_MIGRATION_CAPABILITY,
+    STORAGE_NATIVE_DETACH_CAPABILITY,
     merge_capabilities,
 )
 from .bootstrap import (
@@ -155,6 +155,7 @@ from .routing import (
     RoutingStore,
     SandboxRoute,
     is_portable_parked_route,
+    is_worker_detachable_parked_route,
     sandbox_demand_from_routing_state,
 )
 from .providers.ucloud.api import (
@@ -2260,6 +2261,25 @@ def _post_gateway_sandbox_migration(
     )[0]
 
 
+def _post_gateway_sandbox_detach(
+    gateway_url: str,
+    sandbox_id: str,
+    *,
+    bearer_token: str | None = None,
+    timeout_seconds: float = 3600.0,
+) -> dict[str, Any]:
+    return _post_bounded_json(
+        gateway_url,
+        f"/v1/sandboxes/{quote(sandbox_id, safe='')}/detach",
+        {},
+        bearer_token=bearer_token,
+        invalid_url_error="gateway control URL is invalid",
+        empty_token_error="gateway control bearer token cannot be empty",
+        timeout_seconds=timeout_seconds,
+        response_name="gateway worker detach",
+    )[0]
+
+
 def _drain_response_acknowledges(
     response: dict[str, Any],
     *,
@@ -2842,16 +2862,16 @@ def run_reconcile_cycle(
     requested_sandbox_stop_job_ids = decision.stops
     requested_builder_stop_job_ids = builder_decision.stops
     (
-        sandbox_stop_job_ids_with_migration_capacity,
-        blocked_storage_native_migration_stop_job_ids,
-    ) = partition_storage_native_migratable_stop_job_ids(
+        sandbox_stop_job_ids_with_detachable_storage,
+        blocked_storage_native_detach_stop_job_ids,
+    ) = partition_storage_native_detachable_stop_job_ids(
         sandbox_nodes,
         requested_sandbox_stop_job_ids,
         route_reservations or {},
     )
     sandbox_stop_job_ids, blocked_sandbox_stop_job_ids = partition_safe_stop_job_ids(
         sandbox_nodes,
-        sandbox_stop_job_ids_with_migration_capacity,
+        sandbox_stop_job_ids_with_detachable_storage,
         deployment_id=config.deployment_id,
         ownership_label=NODE_LABEL,
     )
@@ -2911,7 +2931,7 @@ def run_reconcile_cycle(
         dict.fromkeys(
             [
                 *blocked_sandbox_stop_job_ids,
-                *blocked_storage_native_migration_stop_job_ids,
+                *blocked_storage_native_detach_stop_job_ids,
                 *blocked_builder_stop_job_ids,
                 *blocked_lost_sandbox_job_ids,
                 *blocked_lost_builder_job_ids,
@@ -2956,14 +2976,15 @@ def run_reconcile_cycle(
     active_drain_intents: list[DrainIntent] = []
     drain_results: list[dict[str, Any]] = []
     storage_native_migration_results: list[dict[str, Any]] = []
+    storage_native_detach_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
     canceled_drain_job_ids: list[str] = []
-    remaining_migration_budget = max(
+    remaining_detach_budget = max(
         0,
-        config.autoscaler_max_storage_native_migrations_per_cycle,
+        config.autoscaler_max_storage_native_detaches_per_cycle,
     )
-    migration_gateway_url = f"http://127.0.0.1:{config.gateway_port}"
-    migration_gateway_error = ""
+    detach_gateway_url = f"http://127.0.0.1:{config.gateway_port}"
+    detach_gateway_error = ""
     node_control_bearer_token = read_required_token_file(
         config.node_control_token_file(),
         "node control bearer token",
@@ -3063,47 +3084,45 @@ def run_reconcile_cycle(
                 and intent.role == "sandbox"
                 and heartbeat is not None
                 and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
-                and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
-                and remaining_migration_budget > 0
+                and STORAGE_NATIVE_DETACH_CAPABILITY in heartbeat.capabilities
+                and remaining_detach_budget > 0
             ):
                 parked_routes = [
                     route
                     for route in (route_reservations or {}).get(intent.job_id, ())
-                    if (route.state or "unknown").lower() == "parked"
-                    and route.storage_schema == STORAGE_NATIVE_CAPABILITY
-                    and bool(route.snapshot_manifest_digest)
+                    if is_worker_detachable_parked_route(route)
                 ]
-                for route in parked_routes[:remaining_migration_budget]:
-                    migration_error = migration_gateway_error
-                    migration_payload: dict[str, Any] = {}
-                    if not migration_error and not migration_gateway_url:
-                        migration_error = (
+                for route in parked_routes[:remaining_detach_budget]:
+                    detach_error = detach_gateway_error
+                    detach_payload: dict[str, Any] = {}
+                    if not detach_error and not detach_gateway_url:
+                        detach_error = (
                             "gateway control URL is required for storage-native "
-                            "drain migration"
+                            "worker detach"
                         )
-                    if not migration_error:
+                    if not detach_error:
                         try:
-                            migration_payload = _post_gateway_sandbox_migration(
-                                migration_gateway_url,
+                            detach_payload = _post_gateway_sandbox_detach(
+                                detach_gateway_url,
                                 route.sandbox_id,
                                 bearer_token=gateway_control_bearer_token,
                             )
                         except Exception as exc:
-                            # Migration is journaled by the gateway. An ambiguous
-                            # request is safe to retry in a later autoscaler cycle.
-                            migration_error = str(exc)
-                    storage_native_migration_results.append(
+                            # The route and node deletion journals make an ambiguous
+                            # request safe to retry in a later autoscaler cycle.
+                            detach_error = str(exc)
+                    storage_native_detach_results.append(
                         {
                             "job_id": intent.job_id,
                             "sandbox_id": route.sandbox_id,
-                            "gateway_url": migration_gateway_url,
-                            "request_succeeded": not migration_error,
-                            "migration": migration_payload.get("migration", {}),
-                            "error": migration_error,
+                            "gateway_url": detach_gateway_url,
+                            "request_succeeded": not detach_error,
+                            "sandbox": detach_payload.get("sandbox", {}),
+                            "error": detach_error,
                         }
                     )
-                    remaining_migration_budget -= 1
-                    if remaining_migration_budget <= 0:
+                    remaining_detach_budget -= 1
+                    if remaining_detach_budget <= 0:
                         break
             cancellation_acknowledged = False
             ready = False
@@ -3380,8 +3399,8 @@ def run_reconcile_cycle(
         "requestedStopJobIds": list(requested_stop_job_ids),
         "stopJobIds": list(stop_job_ids),
         "blockedStopJobIds": list(blocked_stop_job_ids),
-        "blocked_storage_native_migration_stop_job_ids": list(
-            blocked_storage_native_migration_stop_job_ids
+        "blocked_storage_native_detach_stop_job_ids": list(
+            blocked_storage_native_detach_stop_job_ids
         ),
         "drainingJobIds": sorted(active_drain_job_ids),
         "cancelingDrainJobIds": sorted(canceling_drain_job_ids),
@@ -3394,6 +3413,7 @@ def run_reconcile_cycle(
         ],
         "drainResults": drain_results,
         "storage_native_migration_results": storage_native_migration_results,
+        "storage_native_detach_results": storage_native_detach_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "fencedPowerCycleHeartbeats": sorted(
             set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
@@ -4193,6 +4213,8 @@ def sandbox_route_reservations(
 ) -> dict[str, tuple[SandboxRoute, ...]]:
     routes_by_job: dict[str, list[SandboxRoute]] = {}
     for route in routes:
+        if route.worker_state == "detached" and is_portable_parked_route(route):
+            continue
         job_id = route.job_id.strip()
         if not job_id:
             continue
@@ -4203,45 +4225,43 @@ def sandbox_route_reservations(
     }
 
 
-def partition_storage_native_migratable_stop_job_ids(
+def partition_storage_native_detachable_stop_job_ids(
     nodes: list[SandboxNode],
     requested_job_ids: tuple[str, ...],
     routes_by_job: dict[str, tuple[SandboxRoute, ...]],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Block stops whose storage-native routes have no surviving destination.
-
-    Parked routes migrate only between nodes advertising the storage-native
-    migration contract. At least one surviving destination must fit each
-    route's lifetime disk reservation.
-    """
+    """Allow stops whose remaining routes can release worker-local storage."""
     if not requested_job_ids:
         return (), ()
     nodes_by_job_id = {node.job_id: node for node in nodes}
-    remaining = list(dict.fromkeys(requested_job_ids))
+    allowed: list[str] = []
     blocked: list[str] = []
-    while remaining and not _storage_native_stop_set_has_migration_capacity(
-        nodes,
-        nodes_by_job_id,
-        tuple(remaining),
-        routes_by_job,
-    ):
-        # Preserve the policy's highest-priority stop and progressively keep
-        # later candidates as possible migration destinations.
-        blocked.append(remaining.pop())
-    blocked.reverse()
-    return tuple(remaining), tuple(blocked)
+    for job_id in dict.fromkeys(requested_job_ids):
+        if _storage_native_stop_set_has_detachable_storage(
+            nodes,
+            nodes_by_job_id,
+            (job_id,),
+            routes_by_job,
+        ):
+            allowed.append(job_id)
+        else:
+            blocked.append(job_id)
+    return tuple(allowed), tuple(blocked)
 
 
-def _storage_native_stop_set_has_migration_capacity(
+def _storage_native_stop_set_has_detachable_storage(
     nodes: list[SandboxNode],
     nodes_by_job_id: dict[str, SandboxNode],
     stop_job_ids: tuple[str, ...],
     routes_by_job: dict[str, tuple[SandboxRoute, ...]],
 ) -> bool:
-    stop_set = set(stop_job_ids)
-    parked_shapes: list[int] = []
+    del nodes
     for job_id in stop_job_ids:
-        routes = routes_by_job.get(job_id, ())
+        routes = tuple(
+            route
+            for route in routes_by_job.get(job_id, ())
+            if route.worker_state != "detached"
+        )
         if not routes:
             continue
         node = nodes_by_job_id.get(job_id)
@@ -4252,36 +4272,21 @@ def _storage_native_stop_set_has_migration_capacity(
             and heartbeat is not None
             and heartbeat.inventory_complete
             and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
-            and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
-            and all(
-                (route.state or "unknown").lower() == "parked"
-                and route.storage_schema == STORAGE_NATIVE_CAPABILITY
-                and bool(route.snapshot_manifest_digest)
-                for route in routes
-            )
+            and STORAGE_NATIVE_DETACH_CAPABILITY in heartbeat.capabilities
+            and all(is_worker_detachable_parked_route(route) for route in routes)
         ):
             return False
         for route in routes:
-            if route.resources.disk_mb <= 0:
+            inventory = {item.sandbox_id: item for item in heartbeat.inventory}
+            if (
+                route.worker_state == "attached"
+                and not _heartbeat_inventory_contains_route(
+                    inventory,
+                    route,
+                )
+            ):
                 return False
-            parked_shapes.append(route.resources.disk_mb)
-    if not parked_shapes:
-        return True
-
-    destination_free_disk = [
-        heartbeat.free_resources.disk_mb
-        for node in nodes
-        if node.job_id not in stop_set
-        and node.is_ready
-        and (heartbeat := node.heartbeat) is not None
-        and heartbeat.admission_open
-        and not heartbeat.draining
-        and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
-        and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
-    ]
-    return bool(
-        destination_free_disk and max(parked_shapes) <= max(destination_free_disk)
-    )
+    return True
 
 
 def apply_route_reservations_to_heartbeats(
@@ -4296,6 +4301,7 @@ def apply_route_reservations_to_heartbeats(
         missing_routes = [
             route
             for route in routes_by_job.get(job_id, ())
+            if route.worker_state != "detached"
             if not _heartbeat_inventory_contains_route(inventory, route)
         ]
         missing_resources = ResourceQuantity()
@@ -4322,17 +4328,16 @@ def apply_route_reservations_to_nodes(
     reconciled: list[SandboxNode] = []
     for node in nodes:
         heartbeat = node.heartbeat
-        owns_movable_inventory = bool(
+        owns_releasable_inventory = bool(
             node.heartbeat_fresh
             and heartbeat is not None
             and heartbeat.inventory_complete
             and STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
-            and STORAGE_NATIVE_MIGRATION_CAPABILITY in heartbeat.capabilities
+            and STORAGE_NATIVE_DETACH_CAPABILITY in heartbeat.capabilities
             and all(
-                (route.state or "unknown").lower() == "parked"
-                and route.storage_schema == STORAGE_NATIVE_CAPABILITY
-                and bool(route.snapshot_manifest_digest)
+                is_worker_detachable_parked_route(route)
                 for route in routes_by_job.get(node.job_id, ())
+                if route.worker_state != "detached"
             )
         )
         reconciled.append(
@@ -4340,11 +4345,11 @@ def apply_route_reservations_to_nodes(
                 node,
                 # Parked ownership is disk inventory, not active
                 # compute. A fresh complete inventory can therefore enter the
-                # storage-native migration workflow. Missing or stale observations
+                # storage-native detach workflow. Missing or stale observations
                 # retain the conservative route-count fence.
                 active_sandboxes=(
                     node.active_sandboxes
-                    if owns_movable_inventory
+                    if owns_releasable_inventory
                     else max(
                         node.active_sandboxes,
                         len(routes_by_job.get(node.job_id, ())),
@@ -4675,16 +4680,16 @@ def print_reconcile(
     print("Stop intents:")
     requested_stop_job_ids = tuple(result.get("requestedStopJobIds", []))
     blocked_stop_job_ids = tuple(result.get("blockedStopJobIds", []))
-    blocked_migration_job_ids = set(
-        result.get("blocked_storage_native_migration_stop_job_ids", [])
+    blocked_detach_job_ids = set(
+        result.get("blocked_storage_native_detach_stop_job_ids", [])
     )
     if not requested_stop_job_ids:
         print("- none")
     for job_id in stop_job_ids:
         print(f"- {job_id}")
     for job_id in blocked_stop_job_ids:
-        if job_id in blocked_migration_job_ids:
-            print(f"- {job_id} (blocked: no storage-native migration destination)")
+        if job_id in blocked_detach_job_ids:
+            print(f"- {job_id} (blocked: worker storage cannot detach safely)")
         else:
             print(f"- {job_id} (blocked: missing matching deployment label)")
     lost_job_ids = tuple(result.get("destructive_power_cycle_job_ids", []))
@@ -4730,15 +4735,15 @@ def print_reconcile(
     elif requested_stop_job_ids:
         if blocked_stop_job_ids:
             if result.get("execute"):
-                if set(blocked_stop_job_ids) == blocked_migration_job_ids:
+                if set(blocked_stop_job_ids) == blocked_detach_job_ids:
                     print(
                         "No stop requests executed. Parked storage-native state "
-                        "has no migration destination."
+                        "cannot detach from its worker safely."
                     )
                 else:
                     print(
                         "No stop requests executed. Some jobs lack a matching "
-                        "deployment label or storage-native migration destination."
+                        "deployment label or detachable published storage."
                     )
             else:
                 print(

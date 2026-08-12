@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import json
 import math
-import os
 from pathlib import Path
 import sqlite3
 import socket
@@ -105,6 +104,8 @@ from .routing import (
     SandboxRoute,
     SandboxRouteAllocation,
     SandboxRouteConflictError,
+    is_portable_parked_route,
+    is_worker_detachable_parked_route,
 )
 from .sandbox import SandboxSpec, sandbox_spec_fingerprint, sandbox_specs_match
 
@@ -786,6 +787,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if migration_sandbox_id is not None and self.command == "DELETE":
             self._cancel_sandbox_migration(migration_sandbox_id)
             return True
+        detach_sandbox_id = _sandbox_detach_id_from_path(path)
+        if detach_sandbox_id is not None and self.command == "POST":
+            self._detach_sandbox_from_worker(detach_sandbox_id)
+            return True
         sandbox_id = _sandbox_id_from_path(path)
         if sandbox_id is not None:
             self._route_sandbox_request(sandbox_id, path)
@@ -795,6 +800,191 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._route_exec_request(session_id)
             return True
         return False
+
+    def _detach_sandbox_from_worker(self, sandbox_id: str) -> None:
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict) or raw:
+                raise ValueError("sandbox detach payload must be an empty object")
+            route = self.routing_store.get_sandbox_readonly(sandbox_id)
+            if route is None:
+                self._write_json(
+                    {"error": "sandbox route not found"},
+                    status=HTTPStatus.NOT_FOUND,
+                )
+                return
+            if route.worker_state == "detached":
+                self._write_json({"ok": True, "sandbox": route.to_dict()})
+                return
+            if route.worker_state == "attached" and not is_portable_parked_route(route):
+                if not is_worker_detachable_parked_route(route):
+                    raise SandboxRouteConflictError(
+                        "only a parked sandbox can detach from a worker"
+                    )
+                route, publication_error = self._publish_route_for_detach(route)
+                if route is None:
+                    self._write_json(
+                        {
+                            "error": publication_error
+                            or "parked snapshot publication is incomplete",
+                            "retryable": True,
+                        },
+                        status=HTTPStatus.SERVICE_UNAVAILABLE,
+                        headers={
+                            "Retry-After": str(
+                                SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                            ),
+                            "X-UCloud-Sandbox-Retryable": "true",
+                        },
+                    )
+                    return
+            if not is_portable_parked_route(route):
+                raise SandboxRouteConflictError(
+                    "only a fully published parked sandbox can detach from a worker"
+                )
+            _portable_snapshot_for_route(route)
+            self._ensure_registry_route_reference(route, touch=True)
+            fenced = self.routing_store.begin_sandbox_detach(route)
+            if fenced is None:
+                raise SandboxRouteConflictError(
+                    "sandbox route changed before worker detach began"
+                )
+            detached, error_message = self._finish_sandbox_detach(fenced)
+            if detached is None:
+                self._write_json(
+                    {
+                        "error": error_message or "worker detach is incomplete",
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(
+                            SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                        ),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return
+            self._write_json({"ok": True, "sandbox": detached.to_dict()})
+        except RegistryImageReferenceUnavailable as exc:
+            self._write_registry_lease_unavailable(exc)
+        except (SandboxRouteConflictError, ValueError) as exc:
+            self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
+
+    def _publish_route_for_detach(
+        self,
+        route: SandboxRoute,
+    ) -> tuple[SandboxRoute | None, str]:
+        response = self._proxy_request(
+            route.node_url,
+            (f"/v1/sandboxes/{quote(route.sandbox_id, safe='')}" "/publish-parked"),
+            method="POST",
+            body=json.dumps(
+                {
+                    "generation": route.generation,
+                    "create_operation_id": route.create_operation_id,
+                    "spec_hash": route.spec_hash,
+                },
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            extra_headers={"Content-Type": "application/json"},
+            timeout_seconds=3600,
+        )
+        if response.status >= 400:
+            error_message = str(response.json().get("error") or "").strip()
+            return (
+                None,
+                error_message
+                or f"worker parked publication returned HTTP {response.status}",
+            )
+        try:
+            payload = response.json()
+            snapshot = StorageNativeMigration.from_dict(payload.get("storage_snapshot"))
+            snapshot_sha256 = str(payload.get("snapshot_sha256") or "")
+            candidate = replace(
+                route,
+                storage_schema=str(payload.get("storage_schema") or ""),
+                snapshot_manifest_digest=str(
+                    payload.get("snapshot_manifest_digest") or ""
+                ),
+                snapshot_repository=str(payload.get("snapshot_repository") or ""),
+                snapshot_tag=str(payload.get("snapshot_tag") or ""),
+                storage_snapshot=snapshot.to_dict(),
+            )
+            if snapshot.sha256 != snapshot_sha256:
+                raise ValueError("worker snapshot digest does not match its descriptor")
+            _portable_snapshot_for_route(candidate)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            return None, f"worker returned invalid parked publication: {exc}"
+        self._ensure_registry_snapshot_reference(
+            route,
+            repository=candidate.snapshot_repository,
+            tag=candidate.snapshot_tag,
+            digest=candidate.snapshot_manifest_digest,
+        )
+        stored = self.routing_store.set_sandbox_state_if_current(
+            route,
+            expected_states={"parked"},
+            state="parked",
+            storage_schema=candidate.storage_schema,
+            snapshot_manifest_digest=candidate.snapshot_manifest_digest,
+            snapshot_repository=candidate.snapshot_repository,
+            snapshot_tag=candidate.snapshot_tag,
+            storage_snapshot=candidate.storage_snapshot,
+        )
+        if stored is None:
+            return None, "sandbox route changed while its parked snapshot published"
+        return stored, ""
+
+    def _finish_sandbox_detach(
+        self,
+        route: SandboxRoute,
+    ) -> tuple[SandboxRoute | None, str]:
+        current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+        if current is None:
+            return None, "sandbox route disappeared during worker detach"
+        if current.worker_state == "detached":
+            return current, ""
+        if current.worker_state != "detaching" or not is_portable_parked_route(current):
+            return None, "sandbox route changed during worker detach"
+        heartbeat = self._heartbeat_for_route(
+            node_id=current.node_id,
+            job_id=current.job_id,
+            node_url=current.node_url,
+        )
+        if _heartbeat_proves_route_absent(
+            heartbeat,
+            sandbox_id=current.sandbox_id,
+            route_created_at=current.created_at,
+            route_updated_at=current.updated_at,
+            heartbeat_ttl_seconds=self.heartbeat_ttl_seconds,
+        ):
+            completed = self.routing_store.complete_sandbox_detach(current)
+            return completed, "" if completed is not None else "detach fence changed"
+        response = self._proxy_request(
+            current.node_url,
+            (f"/v1/sandboxes/{quote(current.sandbox_id, safe='')}" "/evict-published"),
+            method="POST",
+            body=json.dumps(
+                {
+                    "generation": current.generation,
+                    "snapshot_manifest_digest": current.snapshot_manifest_digest,
+                },
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            extra_headers={"Content-Type": "application/json"},
+        )
+        if response.status >= 400:
+            error_message = str(response.json().get("error") or "").strip()
+            return (
+                None,
+                error_message
+                or f"worker published eviction returned HTTP {response.status}",
+            )
+        completed = self.routing_store.complete_sandbox_detach(current)
+        if completed is None:
+            return None, "sandbox route changed before worker detach committed"
+        return completed, ""
 
     def _migrate_sandbox_on_node(self, sandbox_id: str) -> None:
         try:
@@ -928,7 +1118,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             and STORAGE_NATIVE_CAPABILITY in source_heartbeat.capabilities
             and STORAGE_NATIVE_MIGRATION_CAPABILITY in source_heartbeat.capabilities
         )
-        if not source_storage_native:
+        source_is_attached = source.worker_state == "attached"
+        if source_is_attached:
+            if not source_storage_native:
+                return None
+        elif source.worker_state != "detached" or not is_portable_parked_route(source):
             return None
         reservations: dict[str, int] = {}
         routes_by_id = {route.sandbox_id: route for route in routes}
@@ -945,7 +1139,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         candidates: list[NodeHeartbeat] = []
         for heartbeat in ready_heartbeats:
             if (
-                heartbeat.node_id == source.node_id
+                (source_is_attached and heartbeat.node_id == source.node_id)
                 or STORAGE_NATIVE_CAPABILITY not in heartbeat.capabilities
                 or STORAGE_NATIVE_MIGRATION_CAPABILITY not in heartbeat.capabilities
                 or (requested_node_id and heartbeat.node_id != requested_node_id)
@@ -1091,51 +1285,25 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         advance_started = time.monotonic()
         measured = timings_ms if timings_ms is not None else {}
         if migration.phase == "planned":
-            route_snapshot: StorageNativeMigration | None = None
             source_route = self.routing_store.get_sandbox_readonly(migration.sandbox_id)
-            if (
-                source_route is not None
-                and source_route.state.lower() == "parked"
-                and source_route.storage_schema == STORAGE_NATIVE_MIGRATION_SCHEMA
-                and source_route.storage_snapshot
-            ):
+            route_snapshot: StorageNativeMigration | None = None
+            if source_route is not None and is_portable_parked_route(source_route):
                 try:
-                    candidate = StorageNativeMigration.from_dict(
-                        source_route.storage_snapshot
-                    )
-                    if (
-                        candidate.manifest.sandbox_id != migration.sandbox_id
-                        or candidate.manifest.sandbox_generation != migration.generation
-                        or candidate.publication.manifest_digest
-                        != source_route.snapshot_manifest_digest
-                    ):
-                        raise ValueError(
-                            "routed snapshot does not match the migration source"
-                        )
-                    route_snapshot = candidate
+                    route_snapshot = _portable_snapshot_for_route(source_route)
                 except ValueError:
                     route_snapshot = None
             phase_started = time.monotonic()
-            response = self._proxy_request(
-                migration.source_node_url,
-                (
-                    f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
-                    "/migration/prepare"
-                ),
-                method="POST",
-                body=json.dumps(
-                    {
-                        "migration_id": migration.migration_id,
-                        "format": STORAGE_NATIVE_MIGRATION_SCHEMA,
-                    }
-                ).encode("utf-8"),
-                extra_headers={"Content-Type": "application/json"},
-                timeout_seconds=3600,
-            )
-            measured["prepare_export"] = _precise_elapsed_ms(phase_started)
-            if response.status >= 400:
-                if response.status < 500 or route_snapshot is None:
-                    return self._record_migration_error(migration, response)
+            if source_route is None:
+                return self._record_migration_error(
+                    migration,
+                    error_message="migration source route disappeared",
+                )
+            if source_route.worker_state == "detached":
+                if route_snapshot is None:
+                    return self._record_migration_error(
+                        migration,
+                        error_message="detached route has no valid published snapshot",
+                    )
                 migration = (
                     self.routing_store.advance_sandbox_migration(
                         migration.migration_id,
@@ -1149,7 +1317,25 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     )
                     or migration
                 )
-            else:
+            elif source_route.worker_state == "attached":
+                response = self._proxy_request(
+                    migration.source_node_url,
+                    (
+                        f"/v1/sandboxes/{quote(migration.sandbox_id, safe='')}"
+                        "/migration/prepare"
+                    ),
+                    method="POST",
+                    body=json.dumps(
+                        {
+                            "migration_id": migration.migration_id,
+                            "format": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                        }
+                    ).encode("utf-8"),
+                    extra_headers={"Content-Type": "application/json"},
+                    timeout_seconds=3600,
+                )
+                if response.status >= 400:
+                    return self._record_migration_error(migration, response)
                 prepared = response.json().get("migration")
                 if not isinstance(prepared, dict):
                     return self._record_migration_error(
@@ -1186,6 +1372,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     )
                     or migration
                 )
+            else:
+                return self._record_migration_error(
+                    migration,
+                    error_message="migration source is still detaching",
+                )
+            measured["prepare_export"] = _precise_elapsed_ms(phase_started)
         if migration.phase == "prepared":
             phase_started = time.monotonic()
             if migration.storage_schema != STORAGE_NATIVE_MIGRATION_SCHEMA:
@@ -2722,27 +2914,26 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         touch: bool,
     ) -> None:
         image_ref = str(route.spec.get("image") or "")
-        if not image_ref:
-            return
         store = self.registry_usage_store
         if store is None:
             return
-        try:
-            _persist_registry_image_protection(
-                store,
-                image_ref,
-                _registry_route_reference_owner(
-                    route,
-                    deployment_id=self.deployment_id,
-                    route_generation=route.generation,
-                ),
-                touch=touch,
-                persistent=True,
-            )
-        except (OSError, TypeError, ValueError) as exc:
-            raise RegistryImageReferenceUnavailable(
-                "registry route image reference could not be persisted"
-            ) from exc
+        if image_ref:
+            try:
+                _persist_registry_image_protection(
+                    store,
+                    image_ref,
+                    _registry_route_reference_owner(
+                        route,
+                        deployment_id=self.deployment_id,
+                        route_generation=route.generation,
+                    ),
+                    touch=touch,
+                    persistent=True,
+                )
+            except (OSError, TypeError, ValueError) as exc:
+                raise RegistryImageReferenceUnavailable(
+                    "registry route image reference could not be persisted"
+                ) from exc
         if (
             route.snapshot_repository
             and route.snapshot_tag
@@ -3254,7 +3445,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         # tool traffic into a registration that is still planned, quota-ready,
         # or preparing its rootfs. Reconcile a completed node record first;
         # otherwise keep the caller on the retryable create boundary.
-        if self.command != "DELETE" and route.state.lower() in {"creating", "unknown"}:
+        if self.command != "DELETE" and route.state.lower() in {
+            "creating",
+            "unknown",
+            "planned",
+            "quota_ready",
+            "rootfs_ready",
+        }:
             try:
                 routed_spec = SandboxSpec.from_dict(route.spec)
             except (TypeError, ValueError):
@@ -3308,9 +3505,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         "program lifecycle requires both request_id and rollout_id"
                     )
                 raw_generation = lifecycle_payload.get("generation")
-                operation_id = str(
-                    lifecycle_payload.get("operation_id") or ""
-                ).strip()
+                operation_id = str(lifecycle_payload.get("operation_id") or "").strip()
                 if not operation_id:
                     raise ValueError("sandbox lifecycle operation_id is required")
                 if lifecycle_action == "wake" and raw_generation is None:
@@ -3412,6 +3607,33 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 lifecycle_payload,
                 state="waking",
             )
+
+        if self.command == "DELETE" and route.worker_state == "detaching":
+            detached, error_message = self._finish_sandbox_detach(route)
+            if detached is None:
+                self._write_json(
+                    {
+                        "error": error_message or "worker detach is incomplete",
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={"X-UCloud-Sandbox-Retryable": "true"},
+                )
+                return
+            route = detached
+        if self.command == "DELETE" and route.worker_state == "detached":
+            route = self.routing_store.prepare_sandbox_delete(sandbox_id) or route
+            removed = self.routing_store.delete_sandbox_if_current(
+                sandbox_id,
+                generation=route.generation,
+                delete_operation_id=route.delete_operation_id,
+            )
+            if removed is not None:
+                self._release_registry_route_reference(removed)
+            self._write_json(
+                {"deleted": removed.to_dict() if removed is not None else None}
+            )
+            return
 
         extra_headers: dict[str, str] | None = None
         if self.command == "DELETE":
@@ -3823,6 +4045,25 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     ) -> SandboxRoute | None:
         """Reserve wake placement briefly, then relocate without global locks."""
 
+        if route.worker_state == "detaching":
+            detached, error_message = self._finish_sandbox_detach(route)
+            if detached is None:
+                self._write_json(
+                    {
+                        "error": error_message or "worker detach is incomplete",
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": str(
+                            SANDBOX_CREATE_IN_PROGRESS_RETRY_AFTER_SECONDS
+                        ),
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return None
+            route = detached
+
         with _GATEWAY_SCHEDULING_LOCK, _gateway_placement_lock(self.routing_store.path):
             current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
             if current is None:
@@ -3863,7 +4104,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 heartbeat.node_id for heartbeat in self._ready_sandbox_heartbeats()
             }
             if (
-                source_heartbeat is not None
+                route.worker_state == "attached"
+                and source_heartbeat is not None
                 and source_heartbeat.node_id in ready_source_ids
                 and _node_can_fit_available(
                     source_heartbeat,
@@ -5179,6 +5421,18 @@ def _sandbox_migration_id_from_path(path: str) -> str | None:
     return sandbox_id
 
 
+def _sandbox_detach_id_from_path(path: str) -> str | None:
+    prefix = "/v1/sandboxes/"
+    suffix = "/detach"
+    if not path.startswith(prefix) or not path.endswith(suffix):
+        return None
+    encoded = path[len(prefix) : -len(suffix)]
+    sandbox_id = unquote(encoded)
+    if not sandbox_id or "/" in sandbox_id:
+        return None
+    return sandbox_id
+
+
 def _image_build_key_from_path(path: str) -> str | None:
     return _collection_id_from_path(path, "/v1/images/builds/")
 
@@ -5302,6 +5556,25 @@ def _sandbox_inventory_from_record(record: dict[str, Any]) -> SandboxInventoryEn
         state=state.strip(),
         resources=parsed_spec.requested_resources(),
     )
+
+
+def _portable_snapshot_for_route(route: SandboxRoute) -> StorageNativeMigration:
+    if not is_portable_parked_route(route):
+        raise ValueError("sandbox route is not a fully published park")
+    snapshot = StorageNativeMigration.from_dict(route.storage_snapshot)
+    manifest = snapshot.manifest
+    publication = snapshot.publication
+    if (
+        manifest.sandbox_id != route.sandbox_id
+        or manifest.sandbox_generation != route.generation
+        or manifest.create_operation_id != route.create_operation_id
+        or sandbox_spec_fingerprint(manifest.spec) != route.spec_hash
+        or publication.manifest_digest != route.snapshot_manifest_digest
+        or publication.repository != route.snapshot_repository
+        or publication.tag != route.snapshot_tag
+    ):
+        raise ValueError("published snapshot does not match its sandbox route")
+    return snapshot
 
 
 def _route_with_sandbox_record(
@@ -5461,7 +5734,9 @@ def _route_only_sandbox_record(
         heartbeat_ttl_seconds=heartbeat_ttl_seconds,
     )
     visible_state = (
-        cached_state
+        "parked"
+        if route.worker_state == "detached" and is_portable_parked_route(route)
+        else cached_state
         if cached_state == "creating" or (node_fresh and not route_absent)
         else "unknown"
     )
@@ -5479,6 +5754,7 @@ def _route_only_sandbox_record(
             "job_id": route.job_id,
             "node_url": route.node_url,
             "fresh": node_fresh,
+            "attached": route.worker_state == "attached",
         },
         "created_at": route.created_at,
         "updated_at": route.updated_at,
@@ -5488,6 +5764,7 @@ def _route_only_sandbox_record(
     if heartbeat is not None:
         node = _node_metadata(heartbeat)
         node["fresh"] = node_fresh
+        node["attached"] = route.worker_state == "attached"
         record["node"] = node
     return record
 
@@ -5702,6 +5979,8 @@ def _node_reserved_route_resources(
         seen_routes.add(identity)
         if isinstance(route, PlacementReservation):
             resources = resources + route.resources
+            continue
+        if route.worker_state == "detached" and is_portable_parked_route(route):
             continue
         matching_inventory = inventory_by_identity.get(
             (

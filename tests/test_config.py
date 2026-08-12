@@ -98,6 +98,8 @@ class ConfigTests(unittest.TestCase):
             ("string number", ("registry_retention_days",), "30"),
             ("nan", ("autoscaler_interval_seconds",), float("nan")),
             ("relative root", ("data_root",), "state"),
+            ("relative registry root", ("registry_data_root",), "registry"),
+            ("relative registry mount", ("registry_mount_point",), "registry"),
             ("colliding port", ("relay_port",), 8090),
             ("wrong tuple", ("sandbox", "direct_network_allow_tcp"), "10.0.0.1:1"),
             ("low disk", ("sandbox", "disk_gb"), 1),
@@ -116,9 +118,11 @@ class ConfigTests(unittest.TestCase):
             with self.subTest(label=label), self.assertRaises(ValueError):
                 DeploymentConfig.from_dict(raw)
 
-    def test_derived_paths_reuse_the_configured_sqlite_root(self) -> None:
+    def test_sqlite_and_registry_roots_are_independent(self) -> None:
         raw = self._raw()
         raw["data_root"] = "/srv/ucloud/state"
+        raw["registry_mount_point"] = "/mnt/registry"
+        raw["registry_data_root"] = "/mnt/registry/docker-registry"
 
         config = DeploymentConfig.from_dict(raw)
 
@@ -136,8 +140,37 @@ class ConfigTests(unittest.TestCase):
         )
         self.assertEqual(
             config.registry_data_dir(),
+            Path("/mnt/registry/docker-registry"),
+        )
+
+    def test_schema_one_migrates_the_legacy_derived_registry_root(self) -> None:
+        raw = self._raw()
+        raw["schema"] = 1
+        raw["data_root"] = "/srv/ucloud/state"
+        raw.pop("registry_data_root")
+        raw.pop("registry_mount_point")
+        raw["autoscaler_max_storage_native_migrations_per_cycle"] = raw.pop(
+            "autoscaler_max_storage_native_detaches_per_cycle"
+        )
+
+        config = DeploymentConfig.from_dict(raw)
+
+        self.assertEqual(config.schema, 2)
+        self.assertEqual(config.autoscaler_max_storage_native_detaches_per_cycle, 2)
+        self.assertEqual(
+            config.registry_data_dir(),
             Path("/srv/ucloud-sandbox-registry/docker-registry"),
         )
+        self.assertEqual(config.registry_mount_point, "/srv")
+        self.assertEqual(config.to_dict()["schema"], 2)
+
+    def test_registry_data_must_be_inside_its_fail_closed_mount(self) -> None:
+        raw = self._raw()
+        raw["registry_mount_point"] = "/mnt/registry"
+        raw["registry_data_root"] = "/var/lib/registry"
+
+        with self.assertRaisesRegex(ValueError, "inside registry_mount_point"):
+            DeploymentConfig.from_dict(raw)
 
 
 if __name__ == "__main__":

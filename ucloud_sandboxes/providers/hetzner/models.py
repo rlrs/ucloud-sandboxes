@@ -27,9 +27,9 @@ def instance_from_payload(payload: dict[str, Any]) -> ProviderInstance:
         or (str(image_id) if image_id is not None else "")
     )
 
-    primary_disk_size = _positive_number(payload.get("primary_disk_size"))
-    if primary_disk_size is None:
-        primary_disk_size = _positive_number(server_type.get("disk"))
+    primary_disk_size_gb = _positive_number(payload.get("primary_disk_size"))
+    if primary_disk_size_gb is None:
+        primary_disk_size_gb = _positive_number(server_type.get("disk"))
 
     return ProviderInstance(
         id=_identifier(payload.get("id")),
@@ -44,7 +44,10 @@ def instance_from_payload(payload: dict[str, Any]) -> ProviderInstance:
         created_at=_parse_datetime(payload.get("created")),
         cpu=_positive_number(server_type.get("cores")),
         memory_gb=_positive_number(server_type.get("memory")),
-        disk_gb=primary_disk_size,
+        # Hetzner reports disk sizes in decimal GB. Core resource accounting
+        # uses binary GiB (and later converts it to MiB), so retaining the raw
+        # number would over-advertise a CPX62's local disk by roughly 44 GiB.
+        disk_gb=_decimal_gb_to_binary_gib(primary_disk_size_gb),
         private_network_ids=private_network_ids,
         labels={str(key): str(value) for key, value in labels.items()},
         raw=payload,
@@ -82,6 +85,12 @@ def _positive_number(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         return None
     return int(value)
+
+
+def _decimal_gb_to_binary_gib(value: int | None) -> int | None:
+    if value is None:
+        return None
+    return max(1, value * 1_000_000_000 // (1024**3))
 
 
 def _optional_string(value: object) -> str | None:

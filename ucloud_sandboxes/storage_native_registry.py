@@ -7,7 +7,8 @@ from pathlib import Path
 import socket
 import tempfile
 import threading
-from typing import Any, Protocol
+import time
+from typing import Any, Callable, Protocol
 from urllib.parse import quote
 
 from .managed_registry import RegistryClient
@@ -20,6 +21,8 @@ OCI_OVERLAYBD_LAYER_MEDIA_TYPE = (
     "application/vnd.ucloud.overlaybd.layer.v1+lsmt"
 )
 SNAPSHOT_SCHEMA = "ucloud-storage-native-snapshot-v1"
+DEFAULT_COMPACT_AFTER_LAYERS = 8
+DEFAULT_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
 
 
 class DenseLayerExporter(Protocol):
@@ -27,6 +30,14 @@ class DenseLayerExporter(Protocol):
         self,
         *,
         source_layer_path: Path,
+        stream_socket_path: Path,
+    ) -> StorageNativeLayer: ...
+
+    def export_compacted_image(
+        self,
+        *,
+        source_image_config: Path,
+        global_config: Path,
         stream_socket_path: Path,
     ) -> StorageNativeLayer: ...
 
@@ -123,6 +134,8 @@ class RegistrySnapshotPublisher:
         upload_chunk_bytes: int = 8 * 1024 * 1024,
         stream_timeout_seconds: float = 120.0,
         max_concurrent_publications: int = 2,
+        compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
+        compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
     ) -> None:
         if not repository or repository.startswith("/") or ".." in repository.split("/"):
             raise ValueError("snapshot repository is invalid")
@@ -134,14 +147,26 @@ class RegistrySnapshotPublisher:
             raise ValueError("stream timeout must be positive")
         if max_concurrent_publications <= 0:
             raise ValueError("publication concurrency must be positive")
+        if compact_after_layers < 1:
+            raise ValueError("compaction layer threshold must be positive")
+        if compact_after_bytes < 1:
+            raise ValueError("compaction byte threshold must be positive")
         self.registry = registry
         self.repository = repository
         self.stream_socket_root = stream_socket_root
         self.upload_chunk_bytes = upload_chunk_bytes
         self.stream_timeout_seconds = stream_timeout_seconds
+        self.compact_after_layers = compact_after_layers
+        self.compact_after_bytes = compact_after_bytes
         self._publication_slots = threading.BoundedSemaphore(
             max_concurrent_publications
         )
+        self._metrics_lock = threading.Lock()
+        self._publications = 0
+        self._compactions = 0
+        self._compaction_input_layers = 0
+        self._compaction_input_bytes = 0
+        self._compaction_output_bytes = 0
 
     @property
     def repo_blob_url(self) -> str:
@@ -155,6 +180,7 @@ class RegistrySnapshotPublisher:
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
+        global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
         with self._publication_slots:
             return self._publish_locked(
@@ -162,7 +188,20 @@ class RegistrySnapshotPublisher:
                 source_layer_paths=source_layer_paths,
                 virtual_size=virtual_size,
                 existing_layers=existing_layers,
+                global_config_path=global_config_path,
             )
+
+    def metrics(self) -> dict[str, int]:
+        with self._metrics_lock:
+            return {
+                "snapshot_publications": self._publications,
+                "snapshot_compactions": self._compactions,
+                "snapshot_compaction_input_layers": self._compaction_input_layers,
+                "snapshot_compaction_input_bytes": self._compaction_input_bytes,
+                "snapshot_compaction_output_bytes": self._compaction_output_bytes,
+                "snapshot_compact_after_layers": self.compact_after_layers,
+                "snapshot_compact_after_bytes": self.compact_after_bytes,
+            }
 
     def verify(
         self,
@@ -229,16 +268,42 @@ class RegistrySnapshotPublisher:
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...],
+        global_config_path: Path | None,
     ) -> StorageSnapshotPublication:
         if virtual_size <= 0:
             raise ValueError("snapshot virtual size must be positive")
         if not source_layer_paths and not existing_layers:
             raise ValueError("snapshot requires at least one sealed layer")
-        new_layers = tuple(
-            self._publish_dense_layer(exporter, source)
-            for source in source_layer_paths
+        for path in source_layer_paths:
+            if not path.is_absolute():
+                raise ValueError("sealed layer path must be absolute")
+        input_layers = len(existing_layers) + len(source_layer_paths)
+        input_bytes = sum(layer.size for layer in existing_layers) + sum(
+            path.stat().st_size for path in source_layer_paths
         )
-        layers = (*existing_layers, *new_layers)
+        should_compact = (
+            input_layers > self.compact_after_layers
+            or input_bytes > self.compact_after_bytes
+        )
+        if should_compact:
+            if global_config_path is None or not global_config_path.is_absolute():
+                raise ValueError(
+                    "compacted publication requires an absolute global config path"
+                )
+            layers = (
+                self._publish_compacted_layer(
+                    exporter,
+                    existing_layers=existing_layers,
+                    source_layer_paths=source_layer_paths,
+                    global_config_path=global_config_path,
+                ),
+            )
+        else:
+            new_layers = tuple(
+                self._publish_dense_layer(exporter, source)
+                for source in source_layer_paths
+            )
+            layers = (*existing_layers, *new_layers)
         config = self._snapshot_config(virtual_size=virtual_size, layers=layers)
         config_digest = self._upload_bytes(config)
         tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
@@ -253,7 +318,7 @@ class RegistrySnapshotPublisher:
             manifest,
             media_type=OCI_MANIFEST_MEDIA_TYPE,
         )
-        return StorageSnapshotPublication(
+        publication = StorageSnapshotPublication(
             manifest_digest=manifest_digest,
             tag=tag,
             repository=self.repository,
@@ -261,6 +326,14 @@ class RegistrySnapshotPublisher:
             virtual_size=virtual_size,
             layers=layers,
         )
+        with self._metrics_lock:
+            self._publications += 1
+            if should_compact:
+                self._compactions += 1
+                self._compaction_input_layers += input_layers
+                self._compaction_input_bytes += input_bytes
+                self._compaction_output_bytes += layers[0].size
+        return publication
 
     def _publish_dense_layer(
         self,
@@ -269,6 +342,57 @@ class RegistrySnapshotPublisher:
     ) -> PublishedStorageLayer:
         if not source_layer_path.is_absolute():
             raise ValueError("sealed layer path must be absolute")
+        return self._publish_stream(
+            lambda stream_socket_path: exporter.export_dense_layer(
+                source_layer_path=source_layer_path,
+                stream_socket_path=stream_socket_path,
+            )
+        )
+
+    def _publish_compacted_layer(
+        self,
+        exporter: DenseLayerExporter,
+        *,
+        existing_layers: tuple[PublishedStorageLayer, ...],
+        source_layer_paths: tuple[Path, ...],
+        global_config_path: Path,
+    ) -> PublishedStorageLayer:
+        self.stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix="compact-config-",
+            dir=self.stream_socket_root,
+        ) as raw_dir:
+            source_config = Path(raw_dir) / "source.json"
+            source_config.write_text(
+                json.dumps(
+                    {
+                        "lowers": [
+                            *(layer.to_dict() for layer in existing_layers),
+                            *({"file": str(path)} for path in source_layer_paths),
+                        ],
+                        "repoBlobUrl": self.repo_blob_url if existing_layers else "",
+                        "resultFile": "",
+                        "upper": {},
+                    },
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="ascii",
+            )
+            return self._publish_stream(
+                lambda stream_socket_path: exporter.export_compacted_image(
+                    source_image_config=source_config,
+                    global_config=global_config_path,
+                    stream_socket_path=stream_socket_path,
+                )
+            )
+
+    def _publish_stream(
+        self,
+        export_layer: Callable[[Path], StorageNativeLayer],
+    ) -> PublishedStorageLayer:
         upload_location = self.registry.start_blob_upload(self.repository)
         self.stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
@@ -280,18 +404,13 @@ class RegistrySnapshotPublisher:
                 listener.bind(str(socket_path))
                 socket_path.chmod(0o600)
                 listener.listen(1)
-                listener.settimeout(self.stream_timeout_seconds)
+                listener.settimeout(min(0.1, self.stream_timeout_seconds))
                 result: list[StorageNativeLayer] = []
                 failure: list[BaseException] = []
 
                 def export() -> None:
                     try:
-                        result.append(
-                            exporter.export_dense_layer(
-                                source_layer_path=source_layer_path,
-                                stream_socket_path=socket_path,
-                            )
-                        )
+                        result.append(export_layer(socket_path))
                     except BaseException as exc:
                         failure.append(exc)
 
@@ -301,7 +420,23 @@ class RegistrySnapshotPublisher:
                 byte_count = 0
                 pending = bytearray()
                 try:
-                    connection, _ = listener.accept()
+                    accept_deadline = time.monotonic() + self.stream_timeout_seconds
+                    while True:
+                        try:
+                            connection, _ = listener.accept()
+                            break
+                        except socket.timeout:
+                            if not thread.is_alive():
+                                thread.join()
+                                if failure:
+                                    raise failure[0]
+                                raise RuntimeError(
+                                    "dense layer exporter exited before connecting"
+                                )
+                            if time.monotonic() >= accept_deadline:
+                                raise TimeoutError(
+                                    "dense layer exporter did not connect"
+                                )
                     with connection:
                         connection.settimeout(self.stream_timeout_seconds)
                         while True:

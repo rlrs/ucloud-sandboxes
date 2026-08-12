@@ -272,6 +272,44 @@ class AgentEnvUblkClient:
                 "ublk daemon returned an invalid dense layer descriptor"
             ) from exc
 
+    def export_compacted_image(
+        self,
+        *,
+        source_image_config: Path,
+        global_config: Path,
+        stream_socket_path: Path,
+    ) -> StorageNativeLayer:
+        """Flatten a complete local/remote image stack to a sequential stream."""
+
+        for label, path in {
+            "source image config": source_image_config,
+            "global config": global_config,
+            "compacted image stream socket": stream_socket_path,
+        }.items():
+            if not path.is_absolute():
+                raise ValueError(f"{label} path must be absolute")
+        response = self._call(
+            {
+                "kind": "export_compacted_image",
+                "source_image_config": str(source_image_config),
+                "global_config": str(global_config),
+                "stream_socket_path": str(stream_socket_path),
+            }
+        )
+        if response.get("status") != "dense_layer_exported":
+            raise StorageNativeError(
+                "ublk daemon returned an invalid compacted export response"
+            )
+        try:
+            return StorageNativeLayer(
+                digest=str(response["digest"]),
+                size=int(response["size"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise StorageNativeError(
+                "ublk daemon returned an invalid compacted layer descriptor"
+            ) from exc
+
     def delete(self, device_id: int) -> None:
         if device_id < 0:
             raise ValueError("storage-native device id must be non-negative")

@@ -12,6 +12,7 @@ from threading import RLock
 from typing import Any, Iterable, Iterator
 from uuid import uuid4
 
+from .capabilities import STORAGE_NATIVE_CAPABILITY
 from .models import (
     ResourceQuantity,
     SandboxDemand,
@@ -36,7 +37,21 @@ PENDING_DEMAND_TTL_SECONDS = 300
 MAX_PREPARED_CAPACITY_COUNT = 100
 EXEC_ROUTE_CACHE_MAX_ENTRIES = 65_536
 PROGRAM_TERMINAL_RETENTION_SECONDS = 7 * 24 * 60 * 60
-ROUTING_SCHEMA_VERSION = 2
+ROUTING_SCHEMA_VERSION = 3
+SANDBOX_WORKER_STATES = ("attached", "detaching", "detached")
+_SANDBOX_TRANSITIONAL_INVENTORY_STATES = {
+    "creating",
+    "planned",
+    "import_planned",
+    "quota_ready",
+    "importing",
+    "rootfs_ready",
+    "import_ready",
+    "moving_out",
+    "deleting",
+    "hibernating",
+    "restoring",
+}
 PROGRAM_REQUEST_STATES = (
     "model_wait",
     "ready_to_wake",
@@ -81,6 +96,13 @@ def _validate_sandbox_route_identity(route: "SandboxRoute") -> None:
         raise ValueError("sandbox route spec_hash must be a lowercase SHA-256 digest")
     if route.activity_epoch < 0:
         raise ValueError("sandbox route activity_epoch must be non-negative")
+    if route.worker_state not in SANDBOX_WORKER_STATES:
+        raise ValueError(
+            "sandbox route worker_state must be one of: "
+            + ", ".join(SANDBOX_WORKER_STATES)
+        )
+    if route.worker_state != "attached" and not is_portable_parked_route(route):
+        raise ValueError("a detaching or detached route must be a fully published park")
 
 
 @dataclass(frozen=True)
@@ -98,6 +120,7 @@ class SandboxRoute:
     delete_operation_id: str = ""
     node_epoch: str = ""
     activity_epoch: int = 0
+    worker_state: str = "attached"
     storage_schema: str = ""
     snapshot_manifest_digest: str = ""
     snapshot_repository: str = ""
@@ -124,6 +147,7 @@ class SandboxRoute:
             "delete_operation_id": self.delete_operation_id,
             "node_epoch": self.node_epoch,
             "activity_epoch": self.activity_epoch,
+            "worker_state": self.worker_state,
             "snapshot_manifest_digest": self.snapshot_manifest_digest,
             "snapshot_repository": self.snapshot_repository,
             "snapshot_tag": self.snapshot_tag,
@@ -165,11 +189,21 @@ def is_portable_parked_route(route: SandboxRoute) -> bool:
 
     return bool(
         (route.state or "unknown").lower() == "parked"
-        and route.storage_schema
+        and route.storage_schema == STORAGE_NATIVE_CAPABILITY
         and route.storage_snapshot
         and route.snapshot_manifest_digest
         and route.snapshot_repository
         and route.snapshot_tag
+    )
+
+
+def is_worker_detachable_parked_route(route: SandboxRoute) -> bool:
+    """Return whether drain can publish and remove this worker incarnation."""
+
+    return bool(
+        route.worker_state in {"attached", "detaching"}
+        and (route.state or "unknown").lower() == "parked"
+        and not route.delete_operation_id
     )
 
 
@@ -645,7 +679,8 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, storage_schema,
+                               node_epoch, activity_epoch, worker_state,
+                               storage_schema,
                                snapshot_manifest_digest, snapshot_repository,
                                snapshot_tag, storage_snapshot_json,
                                created_at, updated_at
@@ -676,7 +711,8 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, storage_schema,
+                               node_epoch, activity_epoch, worker_state,
+                               storage_schema,
                                snapshot_manifest_digest, snapshot_repository,
                                snapshot_tag, storage_snapshot_json,
                                created_at, updated_at
@@ -914,6 +950,7 @@ class RoutingStore:
                     or current.node_id != route.node_id
                     or current.job_id != route.job_id
                     or current.node_url.rstrip("/") != route.node_url.rstrip("/")
+                    or current.worker_state != route.worker_state
                     or bool(current.delete_operation_id)
                 ):
                     return None
@@ -943,6 +980,71 @@ class RoutingStore:
                         if storage_snapshot is None
                         else dict(storage_snapshot)
                     ),
+                    updated_at=utc_now().isoformat(),
+                )
+                self._write_sandbox(conn, stored)
+            return stored
+
+    def begin_sandbox_detach(
+        self,
+        route: SandboxRoute,
+    ) -> SandboxRoute | None:
+        """Fence a portable park before removing its worker-local incarnation."""
+
+        with self._lock:
+            with self._transaction() as conn:
+                current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if current is None or not _same_sandbox_route_incarnation(
+                    current, route
+                ):
+                    return None
+                if current.worker_state in {"detaching", "detached"}:
+                    return current
+                if (
+                    current.worker_state != "attached"
+                    or not is_portable_parked_route(current)
+                    or bool(current.delete_operation_id)
+                ):
+                    return None
+                stored = replace(
+                    current,
+                    worker_state="detaching",
+                    updated_at=utc_now().isoformat(),
+                )
+                self._write_sandbox(conn, stored)
+                conn.execute(
+                    "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                    (stored.sandbox_id,),
+                )
+            self._drop_cached_exec_routes_for_sandbox_unlocked(route.sandbox_id)
+            return stored
+
+    def complete_sandbox_detach(
+        self,
+        route: SandboxRoute,
+    ) -> SandboxRoute | None:
+        """Commit that a published park no longer occupies its last worker."""
+
+        with self._lock:
+            with self._transaction() as conn:
+                current = self._get_sandbox_unlocked(conn, route.sandbox_id)
+                if current is None or not _same_sandbox_route_incarnation(
+                    current, route
+                ):
+                    return None
+                if current.worker_state == "detached":
+                    return current
+                if (
+                    current.worker_state != "detaching"
+                    or not is_portable_parked_route(current)
+                    or bool(current.delete_operation_id)
+                ):
+                    return None
+                stored = replace(
+                    current,
+                    worker_state="detached",
+                    node_epoch="",
+                    activity_epoch=0,
                     updated_at=utc_now().isoformat(),
                 )
                 self._write_sandbox(conn, stored)
@@ -1157,6 +1259,7 @@ class RoutingStore:
                     or current.node_id != source.node_id
                     or current.job_id != source.job_id
                     or current.node_url.rstrip("/") != source.node_url.rstrip("/")
+                    or current.worker_state != source.worker_state
                     or bool(current.delete_operation_id)
                 ):
                     raise SandboxRouteConflictError(
@@ -1395,6 +1498,7 @@ class RoutingStore:
                     state="parked",
                     node_epoch="",
                     activity_epoch=0,
+                    worker_state="attached",
                     storage_schema=migration.storage_schema,
                     snapshot_manifest_digest=snapshot_manifest_digest,
                     snapshot_repository=snapshot_repository,
@@ -1484,7 +1588,17 @@ class RoutingStore:
                     existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
                     if existing is None:
                         continue
-                    parked = item.state.lower() == "parked"
+                    observed_state = item.state.lower()
+                    # Heartbeats are sampled independently of synchronous
+                    # lifecycle requests. A transient sample can therefore
+                    # arrive after the gateway has committed the stable result
+                    # (for example RESTORING after wake returned RUNNING).
+                    # It still proves presence through ``reported_ids``, but it
+                    # must not regress durable routing state. The next stable
+                    # RUNNING/PARKED observation remains authoritative.
+                    if observed_state in _SANDBOX_TRANSITIONAL_INVENTORY_STATES:
+                        continue
+                    parked = observed_state == "parked"
                     candidate = replace(
                         existing,
                         node_id=node_id,
@@ -1557,6 +1671,21 @@ class RoutingStore:
                         or route_updated_at <= observed_at_dt
                     ):
                         continue
+                    if is_portable_parked_route(route):
+                        detached = replace(
+                            route,
+                            worker_state="detached",
+                            node_epoch="",
+                            activity_epoch=0,
+                            updated_at=observed_at,
+                        )
+                        self._write_sandbox(conn, detached)
+                        conn.execute(
+                            "DELETE FROM exec_sessions WHERE sandbox_id = ?",
+                            (sandbox_id,),
+                        )
+                        removed_sandbox_ids.append(sandbox_id)
+                        continue
                     if not self._delete_sandbox_unlocked(conn, route):
                         continue
                     removed_sandbox_ids.append(sandbox_id)
@@ -1599,7 +1728,8 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, storage_schema,
+                               node_epoch, activity_epoch, worker_state,
+                               storage_schema,
                                snapshot_manifest_digest, snapshot_repository,
                                snapshot_tag, storage_snapshot_json,
                                created_at, updated_at
@@ -1617,6 +1747,16 @@ class RoutingStore:
                             else:
                                 removed.append(route)
                 for route in preserved:
+                    self._write_sandbox(
+                        conn,
+                        replace(
+                            route,
+                            worker_state="detached",
+                            node_epoch="",
+                            activity_epoch=0,
+                            updated_at=utc_now().isoformat(),
+                        ),
+                    )
                     conn.execute(
                         "DELETE FROM exec_sessions WHERE sandbox_id = ?",
                         (route.sandbox_id,),
@@ -1650,7 +1790,8 @@ class RoutingStore:
                     SELECT sandbox_id, node_id, job_id, node_url,
                            resources_json, spec_json, state, generation,
                            create_operation_id, spec_hash, delete_operation_id,
-                           node_epoch, activity_epoch, storage_schema,
+                           node_epoch, activity_epoch, worker_state,
+                           storage_schema,
                            snapshot_manifest_digest, snapshot_repository,
                            snapshot_tag, storage_snapshot_json,
                            created_at, updated_at
@@ -2520,10 +2661,19 @@ class RoutingStore:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA busy_timeout=30000")
             schema_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
-            if has_state and schema_version != ROUTING_SCHEMA_VERSION:
+            if has_state and schema_version not in {2, ROUTING_SCHEMA_VERSION}:
                 raise sqlite3.DatabaseError(
                     "unsupported routing schema version "
                     f"{schema_version}; expected {ROUTING_SCHEMA_VERSION}"
+                )
+            if has_state and schema_version == 2:
+                conn.execute(
+                    """
+                    ALTER TABLE sandboxes ADD COLUMN worker_state TEXT NOT NULL
+                    DEFAULT 'attached' CHECK (
+                        worker_state IN ('attached', 'detaching', 'detached')
+                    )
+                    """
                 )
             conn.execute(
                 """
@@ -2546,6 +2696,9 @@ class RoutingStore:
                     node_epoch TEXT NOT NULL DEFAULT '',
                     activity_epoch INTEGER NOT NULL DEFAULT 0
                         CHECK (activity_epoch >= 0),
+                    worker_state TEXT NOT NULL DEFAULT 'attached' CHECK (
+                        worker_state IN ('attached', 'detaching', 'detached')
+                    ),
                     storage_schema TEXT NOT NULL DEFAULT '',
                     snapshot_manifest_digest TEXT NOT NULL DEFAULT '',
                     snapshot_repository TEXT NOT NULL DEFAULT '',
@@ -2802,7 +2955,8 @@ class RoutingStore:
                         SELECT sandbox_id, node_id, job_id, node_url,
                                resources_json, spec_json, state, generation,
                                create_operation_id, spec_hash, delete_operation_id,
-                               node_epoch, activity_epoch, storage_schema,
+                               node_epoch, activity_epoch, worker_state,
+                               storage_schema,
                                snapshot_manifest_digest, snapshot_repository,
                                snapshot_tag, storage_snapshot_json,
                                created_at, updated_at
@@ -2924,7 +3078,8 @@ class RoutingStore:
                     SELECT sandbox_id, node_id, job_id, node_url,
                            resources_json, spec_json, state, generation,
                            create_operation_id, spec_hash, delete_operation_id,
-                           node_epoch, activity_epoch, storage_schema,
+                           node_epoch, activity_epoch, worker_state,
+                           storage_schema,
                            snapshot_manifest_digest, snapshot_repository,
                            snapshot_tag, storage_snapshot_json,
                            created_at, updated_at
@@ -2947,7 +3102,7 @@ class RoutingStore:
             """
             SELECT sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                    generation, create_operation_id, spec_hash, delete_operation_id,
-                   node_epoch, activity_epoch, storage_schema,
+                   node_epoch, activity_epoch, worker_state, storage_schema,
                    snapshot_manifest_digest, snapshot_repository,
                    snapshot_tag, storage_snapshot_json, created_at, updated_at
             FROM sandboxes
@@ -3116,11 +3271,11 @@ class RoutingStore:
             INSERT INTO sandboxes (
                 sandbox_id, node_id, job_id, node_url, resources_json, spec_json, state,
                 generation, create_operation_id, spec_hash, delete_operation_id,
-                node_epoch, activity_epoch, storage_schema,
+                node_epoch, activity_epoch, worker_state, storage_schema,
                 snapshot_manifest_digest, snapshot_repository, snapshot_tag,
                 storage_snapshot_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(sandbox_id) DO UPDATE SET
                 node_id = excluded.node_id,
                 job_id = excluded.job_id,
@@ -3134,6 +3289,7 @@ class RoutingStore:
                 delete_operation_id = excluded.delete_operation_id,
                 node_epoch = excluded.node_epoch,
                 activity_epoch = excluded.activity_epoch,
+                worker_state = excluded.worker_state,
                 storage_schema = excluded.storage_schema,
                 snapshot_manifest_digest = excluded.snapshot_manifest_digest,
                 snapshot_repository = excluded.snapshot_repository,
@@ -3156,6 +3312,7 @@ class RoutingStore:
                 route.delete_operation_id,
                 route.node_epoch,
                 max(0, route.activity_epoch),
+                route.worker_state,
                 route.storage_schema,
                 route.snapshot_manifest_digest,
                 route.snapshot_repository,
@@ -3455,6 +3612,14 @@ def _route_update_is_current(existing: SandboxRoute, candidate: SandboxRoute) ->
         or candidate.node_url != existing.node_url
     ):
         return False
+    if (
+        existing.state.lower() not in _SANDBOX_TRANSITIONAL_INVENTORY_STATES
+        and candidate.state.lower() in _SANDBOX_TRANSITIONAL_INVENTORY_STATES
+    ):
+        # A synchronous lifecycle response is the stable commit point. A
+        # separately sampled list/heartbeat from the same worker may arrive
+        # later even though it observed an earlier transition.
+        return False
     # Exact incarnation identity on the same assigned node proves that the
     # sandbox survived a node-agent restart. Epoch counters cannot be compared
     # across that boundary, so permit adoption of the new epoch.
@@ -3466,6 +3631,20 @@ def _route_update_is_current(existing: SandboxRoute, candidate: SandboxRoute) ->
     ):
         return False
     return True
+
+
+def _same_sandbox_route_incarnation(
+    existing: SandboxRoute,
+    candidate: SandboxRoute,
+) -> bool:
+    return bool(
+        existing.generation == candidate.generation
+        and existing.create_operation_id == candidate.create_operation_id
+        and existing.spec_hash == candidate.spec_hash
+        and existing.node_id == candidate.node_id
+        and existing.job_id == candidate.job_id
+        and existing.node_url.rstrip("/") == candidate.node_url.rstrip("/")
+    )
 
 
 def _object(value: object) -> dict[str, Any]:

@@ -110,13 +110,34 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     }
     try:
         cache = root / "cache"
+        resize_cache = root / "resize-cache"
         cache.mkdir()
+        resize_cache.mkdir()
         global_config = root / "global.json"
         global_config.write_text(
             json.dumps(
                 {
                     "cacheConfig": {
                         "cacheDir": str(cache),
+                        "cacheSizeGB": 1,
+                        "cacheType": "file",
+                        "refillSize": 262144,
+                    },
+                    "download": {"enable": False},
+                    "nrIoRings": 1,
+                    "registryFsVersion": "v2",
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="ascii",
+        )
+        resize_global_config = root / "resize-global.json"
+        resize_global_config.write_text(
+            json.dumps(
+                {
+                    "cacheConfig": {
+                        "cacheDir": str(resize_cache),
                         "cacheSizeGB": 1,
                         "cacheType": "file",
                         "refillSize": 262144,
@@ -139,6 +160,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 str(backend_socket),
                 "--global-config",
                 str(global_config),
+                "--resize-global-config",
+                str(resize_global_config),
                 "--metrics-listen-addr",
                 "",
             ]
@@ -177,6 +200,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 RegistryClient(args.registry_url, timeout_seconds=120),
                 repository=args.repository,
                 stream_socket_root=Path("/run/ucloud-storage-native-publication"),
+                compact_after_layers=args.compact_after_layers,
+                compact_after_bytes=args.compact_after_bytes,
             )
             if args.registry_url
             else None
@@ -308,6 +333,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             handle.seek(128 * 1024 * 1024)
             if handle.read(len(b"storage-native-middle")) != b"storage-native-middle":
                 raise RuntimeError("snapshot middle sentinel did not survive")
+        with resumed_payload.open("r+b") as handle:
+            handle.seek(256 * 1024 * 1024)
+            handle.write(b"storage-native-after-remote-wake")
+            handle.flush()
+            os.fsync(handle.fileno())
         active_service = destination_service or restarted_service
         second_seal = active_service.freeze_and_seal(
             **owner.request_fields(),
@@ -319,11 +349,57 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise RuntimeError("resumed snapshot did not preserve its lower chain")
         if publisher is not None and len(second_seal.published_layers) != 1:
             raise RuntimeError("resumed snapshot lost its published lower")
-        active_service.release_runtime(
+        second_release = active_service.release_runtime(
             **owner.request_fields(),
             operation_id="release:2",
             expected_revision=second_seal.revision,
         )
+        second_publication_seconds = 0.0
+        compacted_resume_seconds = 0.0
+        if publisher is not None:
+            prospective_layers = len(second_release.published_layers) + len(
+                second_release.sealed_layer_paths
+            )
+            prospective_bytes = sum(
+                int(layer["size"])
+                for layer in second_release.published_layers
+            ) + sum(
+                Path(path).stat().st_size
+                for path in second_release.sealed_layer_paths
+            )
+            started = time.monotonic()
+            second_publication = active_service.publish_snapshot(
+                **owner.request_fields(),
+                operation_id="publish:2",
+                expected_revision=second_release.revision,
+            )
+            second_publication_seconds = time.monotonic() - started
+            compaction_expected = (
+                prospective_layers > args.compact_after_layers
+                or prospective_bytes > args.compact_after_bytes
+            )
+            expected_layers = 1 if compaction_expected else 2
+            if len(second_publication.published_layers) != expected_layers:
+                raise RuntimeError("snapshot chain compaction policy was not enforced")
+            started = time.monotonic()
+            compacted_resume = client.ensure_mounted(
+                owner,
+                operation_id="acquire:after-second-publication",
+            )
+            compacted_resume_seconds = time.monotonic() - started
+            with (Path(compacted_resume.mount_path) / "payload.bin").open("rb") as handle:
+                if handle.read(len(b"storage-native-start")) != b"storage-native-start":
+                    raise RuntimeError("compacted snapshot lost its base sentinel")
+                handle.seek(256 * 1024 * 1024)
+                if (
+                    handle.read(len(b"storage-native-after-remote-wake"))
+                    != b"storage-native-after-remote-wake"
+                ):
+                    raise RuntimeError("compacted snapshot lost its newest delta")
+            client.discard_resume(
+                owner,
+                operation_id="release:after-second-publication",
+            )
 
         churn_acquire_seconds: list[float] = []
         churn_release_seconds: list[float] = []
@@ -420,6 +496,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "reconciliation": reconciliation,
                 "release_seconds": release_seconds,
                 "publication_seconds": publication_seconds,
+                "second_publication_seconds": second_publication_seconds,
+                "compacted_resume_seconds": compacted_resume_seconds,
                 "source_deleted_before_destination_resume": (
                     destination_service is not None
                 ),
@@ -475,6 +553,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--registry-url")
     parser.add_argument("--repository", default="snapshots")
+    parser.add_argument("--compact-after-layers", type=int, default=8)
+    parser.add_argument("--compact-after-bytes", type=int, default=4 * GIB)
     parser.add_argument("--enable-pool", action="store_true")
     parser.add_argument("--pool-low-watermark", type=int, default=2)
     parser.add_argument("--pool-high-watermark", type=int, default=16)
@@ -491,6 +571,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--pool-high-watermark must be positive")
     if args.pool_low_watermark > args.pool_high_watermark:
         parser.error("pool low watermark cannot exceed high watermark")
+    if args.compact_after_layers < 1:
+        parser.error("--compact-after-layers must be positive")
+    if args.compact_after_bytes < 1:
+        parser.error("--compact-after-bytes must be positive")
     if args.churn_iterations < 0:
         parser.error("--churn-iterations cannot be negative")
     if args.parallel_volumes < 0:

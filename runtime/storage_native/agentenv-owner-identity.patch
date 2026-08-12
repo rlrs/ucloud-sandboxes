@@ -1,5 +1,5 @@
 diff --git a/storage/ublk-daemon/src/client.rs b/storage/ublk-daemon/src/client.rs
-index d8a289b..6d53e06 100644
+index 9c0cb84..ff5474b 100644
 --- a/storage/ublk-daemon/src/client.rs
 +++ b/storage/ublk-daemon/src/client.rs
 @@ -54,6 +54,7 @@ pub struct OverlaybdRuntimeDevice {
@@ -10,7 +10,7 @@ index d8a289b..6d53e06 100644
      pub source_image_config: &'a Path,
      pub global_config: &'a Path,
      pub runtime_dir: &'a Path,
-@@ -390,6 +391,7 @@ impl UblkDaemonClient {
+@@ -394,6 +395,7 @@ impl UblkDaemonClient {
          request: CreateOverlaybdRuntimeDeviceRequest<'_>,
      ) -> Result<OverlaybdRuntimeDevice> {
          let request = DaemonRequest::CreateOverlaybdRuntimeDevice {
@@ -19,7 +19,7 @@ index d8a289b..6d53e06 100644
              global_config: request.global_config.to_path_buf(),
              runtime_dir: request.runtime_dir.to_path_buf(),
 diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
-index fb8d469..e4c5615 100644
+index caa85c4..41812f0 100644
 --- a/storage/ublk-daemon/src/protocol.rs
 +++ b/storage/ublk-daemon/src/protocol.rs
 @@ -28,6 +28,7 @@ pub enum DaemonRequest {
@@ -30,7 +30,7 @@ index fb8d469..e4c5615 100644
          source_image_config: PathBuf,
          global_config: PathBuf,
          runtime_dir: PathBuf,
-@@ -77,6 +78,8 @@ pub enum DaemonRequest {
+@@ -71,6 +72,8 @@ pub enum DaemonRequest {
      ReleaseOverlaybd {
          dev_id: u32,
      },
@@ -39,7 +39,7 @@ index fb8d469..e4c5615 100644
      /// Update the virtual size of a ublk device (requires UBLK_F_UPDATE_SIZE).
      UpdateSize {
          dev_id: u32,
-@@ -111,6 +114,14 @@ pub enum AccessMode {
+@@ -105,6 +108,14 @@ pub enum AccessMode {
      Shared,
  }
  
@@ -54,7 +54,7 @@ index fb8d469..e4c5615 100644
  #[derive(Debug, Clone, Serialize, Deserialize)]
  #[serde(tag = "status", rename_all = "snake_case")]
  pub enum DaemonResponse {
-@@ -129,6 +140,9 @@ pub enum DaemonResponse {
+@@ -123,6 +134,9 @@ pub enum DaemonResponse {
          device_path: PathBuf,
      },
      Released,
@@ -64,7 +64,7 @@ index fb8d469..e4c5615 100644
      SizeUpdated,
      Features {
          flags: u64,
-@@ -302,6 +316,7 @@ mod tests {
+@@ -296,6 +310,7 @@ mod tests {
      #[test]
      fn request_create_overlaybd_runtime_device_round_trip() {
          let req = DaemonRequest::CreateOverlaybdRuntimeDevice {
@@ -72,7 +72,7 @@ index fb8d469..e4c5615 100644
              source_image_config: PathBuf::from("/src/image.json"),
              global_config: PathBuf::from("/global.json"),
              runtime_dir: PathBuf::from("/work/overlaybd"),
-@@ -316,6 +331,7 @@ mod tests {
+@@ -310,6 +325,7 @@ mod tests {
          match decoded {
              DaemonRequest::CreateOverlaybdRuntimeDevice {
                  source_image_config,
@@ -80,7 +80,7 @@ index fb8d469..e4c5615 100644
                  global_config,
                  runtime_dir,
                  read_only,
-@@ -324,6 +340,7 @@ mod tests {
+@@ -318,6 +334,7 @@ mod tests {
                  known_source_virtual_size,
                  allow_shrink,
              } => {
@@ -88,8 +88,16 @@ index fb8d469..e4c5615 100644
                  assert_eq!(source_image_config, PathBuf::from("/src/image.json"));
                  assert_eq!(global_config, PathBuf::from("/global.json"));
                  assert_eq!(runtime_dir, PathBuf::from("/work/overlaybd"));
+@@ -335,6 +352,7 @@ mod tests {
+     fn runtime_resize_fields_default_for_old_requests() {
+         let json = r#"{
+             "kind":"create_overlaybd_runtime_device",
++            "owner_id":"device:legacy-fields",
+             "source_image_config":"/src/image.json",
+             "global_config":"/global.json",
+             "runtime_dir":"/work/overlaybd",
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
-index f36e1a4..8401815 100644
+index 5bd845e..6dbe7da 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
 @@ -28,7 +28,8 @@ use uvm_ublk::{
@@ -102,7 +110,7 @@ index f36e1a4..8401815 100644
  };
  use crate::runtime;
  
-@@ -126,6 +127,14 @@ type SharedKey = (PathBuf, PathBuf);
+@@ -125,6 +126,14 @@ type SharedKey = (PathBuf, PathBuf);
  /// Canonical key used to coordinate image opens with restack mutation.
  type ImageLockKey = PathBuf;
  
@@ -117,7 +125,7 @@ index f36e1a4..8401815 100644
  // ── Lazy ImageService cache ─────────────────────────────────────────────────
  
  /// Cache of `ImageService` instances keyed by canonical global config path.
-@@ -315,6 +324,8 @@ pub struct UblkDaemonServer {
+@@ -314,6 +323,8 @@ pub struct UblkDaemonServer {
      image_service_cache: Arc<ImageServiceCache>,
      default_image_service: ImageService,
      devices: Arc<DashMap<u32, ManagedDevice>>,
@@ -125,8 +133,8 @@ index f36e1a4..8401815 100644
 +    owner_by_dev_id: Arc<DashMap<u32, String>>,
      pool_state: Option<Arc<PoolState>>,
      resize_tool: Option<ResizeToolSpec>,
-     shutdown: Arc<Notify>,
-@@ -353,6 +364,8 @@ impl UblkDaemonServer {
+     resize_global_config: PathBuf,
+@@ -365,6 +376,8 @@ impl UblkDaemonServer {
              image_service_cache: Arc::new(cache),
              default_image_service,
              devices: Arc::new(DashMap::new()),
@@ -134,8 +142,8 @@ index f36e1a4..8401815 100644
 +            owner_by_dev_id: Arc::new(DashMap::new()),
              pool_state: None,
              resize_tool: None,
-             shutdown: Arc::new(Notify::new()),
-@@ -434,6 +447,8 @@ impl UblkDaemonServer {
+             resize_global_config,
+@@ -452,6 +465,8 @@ impl UblkDaemonServer {
                  accept = listener.accept() => {
                      let (stream, _) = accept.context("accept daemon connection")?;
                      let devices = Arc::clone(&self.devices);
@@ -144,7 +152,7 @@ index f36e1a4..8401815 100644
                      let ctrl_ring = self.ctrl_ring.clone();
                      let image_service_cache = Arc::clone(&self.image_service_cache);
                      let pool_state = self.pool_state.as_ref().map(Arc::clone);
-@@ -443,6 +458,8 @@ impl UblkDaemonServer {
+@@ -463,6 +478,8 @@ impl UblkDaemonServer {
                          if let Err(err) = handle_connection(
                              stream,
                              devices,
@@ -153,7 +161,7 @@ index f36e1a4..8401815 100644
                              ctrl_ring,
                              image_service_cache,
                              pool_state,
-@@ -518,6 +535,8 @@ impl UblkDaemonServer {
+@@ -540,6 +557,8 @@ impl UblkDaemonServer {
                  stop_overlaybd_device(self.ctrl_ring.clone(), pooled.dev).await;
              }
          }
@@ -162,7 +170,7 @@ index f36e1a4..8401815 100644
      }
  }
  
-@@ -526,6 +545,8 @@ impl UblkDaemonServer {
+@@ -549,6 +568,8 @@ impl UblkDaemonServer {
  async fn handle_connection(
      mut stream: tokio::net::UnixStream,
      devices: Arc<DashMap<u32, ManagedDevice>>,
@@ -171,7 +179,7 @@ index f36e1a4..8401815 100644
      ctrl_ring: IoRingHandle<io_uring::squeue::Entry128>,
      image_service_cache: Arc<ImageServiceCache>,
      pool_state: Option<Arc<PoolState>>,
-@@ -551,6 +572,7 @@ async fn handle_connection(
+@@ -576,6 +597,7 @@ async fn handle_connection(
              .await
          }
          DaemonRequest::CreateOverlaybdRuntimeDevice {
@@ -179,7 +187,7 @@ index f36e1a4..8401815 100644
              source_image_config,
              global_config,
              runtime_dir,
-@@ -560,31 +582,72 @@ async fn handle_connection(
+@@ -585,30 +607,70 @@ async fn handle_connection(
              known_source_virtual_size,
              allow_shrink,
          } => {
@@ -192,6 +200,8 @@ index f36e1a4..8401815 100644
 -                requested_virtual_size,
 -                known_source_virtual_size,
 -                resize_tool: resize_tool.as_ref(),
+-                resize_global_config: &resize_global_config,
+-                resize_permit: Arc::clone(&resize_permit),
 -                allow_shrink,
 -            };
 -            handle_create_overlaybd_runtime_device(
@@ -225,6 +235,8 @@ index f36e1a4..8401815 100644
 +                    requested_virtual_size,
 +                    known_source_virtual_size,
 +                    resize_tool: resize_tool.as_ref(),
++                    resize_global_config: &resize_global_config,
++                    resize_permit: Arc::clone(&resize_permit),
 +                    allow_shrink,
 +                };
 +                handle_create_overlaybd_runtime_device(
@@ -241,7 +253,6 @@ index f36e1a4..8401815 100644
 +                        device_path,
 +                        actual_virtual_size,
 +                        runtime_image_config_path,
-+                        ..
 +                    } = &response
 +                    {
 +                        runtime_owners.insert(
@@ -259,9 +270,6 @@ index f36e1a4..8401815 100644
 +                })
 +            }
          }
-         DaemonRequest::CreateCow { origin, cow } => {
-             handle_create_cow(&devices, ctrl_ring, &origin, &cow).await
-         }
          DaemonRequest::Delete { dev_id } => {
 -            handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await
 +            let response = handle_delete(&devices, &pool_state, ctrl_ring, dev_id).await;
@@ -272,7 +280,7 @@ index f36e1a4..8401815 100644
          }
          DaemonRequest::RestackSnapshot {
              dev_id,
-@@ -621,8 +684,23 @@ async fn handle_connection(
+@@ -645,8 +707,23 @@ async fn handle_connection(
              .await
          }
          DaemonRequest::ReleaseOverlaybd { dev_id } => {
@@ -297,7 +305,7 @@ index f36e1a4..8401815 100644
          DaemonRequest::UpdateSize {
              dev_id,
              new_sectors,
-@@ -661,6 +739,16 @@ async fn handle_connection(
+@@ -685,6 +762,16 @@ async fn handle_connection(
  
  // ── Request handlers ────────────────────────────────────────────────────────
  
@@ -314,79 +322,8 @@ index f36e1a4..8401815 100644
  struct OverlaybdRuntimeDeviceRequest<'a> {
      source_image_config: &'a Path,
      global_config: &'a Path,
-diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
-index e4c5615..8d821f4 100644
---- a/storage/ublk-daemon/src/protocol.rs
-+++ b/storage/ublk-daemon/src/protocol.rs
-@@ -33,11 +33,9 @@ pub enum DaemonRequest {
-         global_config: PathBuf,
-         runtime_dir: PathBuf,
-         read_only: bool,
--        #[serde(default = "default_runtime_upper_mode")]
-         runtime_upper_mode: UpperMode,
-         requested_virtual_size: Option<u64>,
-         known_source_virtual_size: Option<u64>,
--        #[serde(default)]
-         allow_shrink: bool,
-     },
-     /// Create a raw COW ublk device. This is separate from OverlayBD runtime
-@@ -88,20 +86,10 @@ pub enum DaemonRequest {
-     Shutdown,
- }
- 
--fn default_runtime_upper_mode() -> UpperMode {
--    UpperMode::LogStructured
--}
--
--const fn default_resize_timeout_secs() -> u64 {
--    120
--}
--
- #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
- pub struct ResizeToolSpec {
-     pub binary: PathBuf,
--    #[serde(default)]
-     pub lib_dir: Option<PathBuf>,
--    #[serde(default = "default_resize_timeout_secs")]
-     pub timeout_secs: u64,
- }
- 
-@@ -354,33 +342,6 @@ mod tests {
-         }
-     }
- 
--    #[test]
--    fn runtime_resize_fields_default_for_old_requests() {
--        let json = r#"{
--            "kind":"create_overlaybd_runtime_device",
--            "source_image_config":"/src/image.json",
--            "global_config":"/global.json",
--            "runtime_dir":"/work/overlaybd",
--            "read_only":false,
--            "requested_virtual_size":null,
--            "known_source_virtual_size":null
--        }"#;
--        let decoded: DaemonRequest = serde_json::from_str(json).unwrap();
--        match decoded {
--            DaemonRequest::CreateOverlaybdRuntimeDevice { allow_shrink, .. } => {
--                assert!(!allow_shrink);
--            }
--            other => panic!("unexpected request: {other:?}"),
--        }
--    }
--
--    #[test]
--    fn resize_tool_timeout_defaults_for_old_requests() {
--        let spec: ResizeToolSpec =
--            serde_json::from_str(r#"{"binary":"/opt/overlaybd-resize","lib_dir":null}"#).unwrap();
--        assert_eq!(spec.timeout_secs, 120);
--    }
--
-     #[test]
-     fn request_acquire_overlaybd_round_trip() {
-         let req = DaemonRequest::AcquireOverlaybd {
 diff --git a/storage/ublk-daemon/tests/ublk_daemon_test.rs b/storage/ublk-daemon/tests/ublk_daemon_test.rs
-index c8701c0..66c4cd7 100644
+index 2a1ae1f..4fae53c 100644
 --- a/storage/ublk-daemon/tests/ublk_daemon_test.rs
 +++ b/storage/ublk-daemon/tests/ublk_daemon_test.rs
 @@ -337,6 +337,7 @@ mod client_tests {

@@ -40,6 +40,11 @@ from ucloud_sandboxes.managed_registry import (
     RegistryUsageStore,
 )
 from ucloud_sandboxes.managed_process import ManagedProcessRecord
+from ucloud_sandboxes.hibernation import (
+    HibernationArtifactFile,
+    HibernationFileRole,
+    HibernationRuntimeFingerprint,
+)
 from ucloud_sandboxes.models import (
     NodeHeartbeat,
     NodeRuntimeMetrics,
@@ -63,6 +68,14 @@ from ucloud_sandboxes.sandbox import (
     sandbox_spec_fingerprint,
 )
 from ucloud_sandboxes.sandbox_exec import new_exec_session_id
+from ucloud_sandboxes.storage_native_migration import (
+    StorageNativeMigration,
+    StorageNativeSandboxManifest,
+)
+from ucloud_sandboxes.storage_native_registry import (
+    PublishedStorageLayer,
+    StorageSnapshotPublication,
+)
 
 
 def build_heartbeat(**kwargs):
@@ -141,6 +154,69 @@ def _sandbox_route(**kwargs) -> SandboxRoute:
         except ValueError:
             kwargs["spec_hash"] = "a" * 64
     return SandboxRoute(**kwargs)
+
+
+def _portable_snapshot(
+    sandbox_id: str,
+    *,
+    generation: int = 1,
+    create_operation_id: str = "00000000-0000-4000-8000-000000000001",
+) -> StorageNativeMigration:
+    spec = SandboxSpec.from_dict(
+        {
+            "id": sandbox_id,
+            "image": "registry.test/image@sha256:" + "1" * 64,
+            "parkable": True,
+            "memory_mb": 1024,
+            "disk_mb": 2048,
+        }
+    )
+    runtime = HibernationRuntimeFingerprint(
+        runsc_sha256="2" * 64,
+        runsc_commit="3" * 40,
+        platform="systrap",
+        architecture="x86_64",
+        page_size=4096,
+        cpu_features_sha256="4" * 64,
+        boot_config_sha256="5" * 64,
+        rootfs_sha256="6" * 64,
+    )
+    files = tuple(
+        HibernationArtifactFile(name, role, 1, 1)
+        for name, role in (
+            ("application_memory.img", HibernationFileRole.MAIN_MEMORY),
+            ("checkpoint.img", HibernationFileRole.KERNEL_STATE),
+            ("pages_meta.img", HibernationFileRole.ALLOCATOR_METADATA),
+        )
+    )
+    return StorageNativeMigration(
+        manifest=StorageNativeSandboxManifest(
+            spec=spec,
+            sandbox_generation=generation,
+            create_operation_id=create_operation_id,
+            hibernation_generation=1,
+            park_operation_id="park:test",
+            captured_ns=1,
+            runtime=runtime,
+            source_manifest_sha256="7" * 64,
+            source_guest_ip=None,
+            connection_policy="none",
+            files=files,
+        ),
+        publication=StorageSnapshotPublication(
+            manifest_digest="sha256:" + "8" * 64,
+            tag=f"{sandbox_id}-{generation}",
+            repository="snapshots",
+            repo_blob_url="https://registry.test/v2/snapshots/blobs",
+            virtual_size=4096,
+            layers=(
+                PublishedStorageLayer(
+                    digest="sha256:" + "9" * 64,
+                    size=4096,
+                ),
+            ),
+        ),
+    )
 
 
 def _seed_gateway_node(
@@ -657,6 +733,337 @@ class ControlPlaneTests(unittest.TestCase):
             sum(event.kind == "program_state_transition" for event in events),
             3,
         )
+
+    def test_worker_detach_retries_ambiguous_eviction_and_commits_once(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            snapshot = _portable_snapshot("sandbox-1")
+            route = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=(snapshot.publication.manifest_digest),
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.registry_usage_store = None
+            handler.heartbeat_ttl_seconds = 120
+            handler.store = ControlStateStore(root / "control.sqlite")
+            handler._read_json_body = lambda: {}
+            writes: list[tuple[dict, object]] = []
+            handler._write_json = lambda payload, *, status=200, **_kwargs: (
+                writes.append((payload, status))
+            )
+            responses = iter(
+                (
+                    control_plane.ProxiedResponse(
+                        503,
+                        {"Content-Type": "application/json"},
+                        b'{"error":"ambiguous local deletion"}',
+                    ),
+                    control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b'{"ok":true}',
+                    ),
+                )
+            )
+            calls: list[tuple[str, dict]] = []
+
+            def proxy(_node_url, path, **kwargs):
+                calls.append((path, json.loads(kwargs["body"])))
+                return next(responses)
+
+            handler._proxy_request = proxy
+
+            handler._detach_sandbox_from_worker(route.sandbox_id)
+            after_failure = routing.get_sandbox_readonly(route.sandbox_id)
+            handler._detach_sandbox_from_worker(route.sandbox_id)
+            after_success = routing.get_sandbox_readonly(route.sandbox_id)
+
+        assert after_failure is not None
+        assert after_success is not None
+        self.assertEqual(after_failure.worker_state, "detaching")
+        self.assertEqual(after_success.worker_state, "detached")
+        self.assertEqual([status for _payload, status in writes], [503, 200])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(
+            calls[0][1],
+            {
+                "generation": route.generation,
+                "snapshot_manifest_digest": route.snapshot_manifest_digest,
+            },
+        )
+
+    def test_worker_detach_publishes_park_before_eviction(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            snapshot = _portable_snapshot("sandbox-1")
+            route = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                )
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.registry_usage_store = None
+            handler.heartbeat_ttl_seconds = 120
+            handler.store = ControlStateStore(root / "control.sqlite")
+            handler._read_json_body = lambda: {}
+            writes: list[tuple[dict, object]] = []
+            handler._write_json = lambda payload, *, status=200, **_kwargs: (
+                writes.append((payload, status))
+            )
+            responses = iter(
+                (
+                    control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        json.dumps(
+                            {
+                                "storage_schema": "storage-native-v1",
+                                "snapshot_sha256": snapshot.sha256,
+                                "storage_snapshot": snapshot.to_dict(),
+                                "snapshot_manifest_digest": (
+                                    snapshot.publication.manifest_digest
+                                ),
+                                "snapshot_repository": (
+                                    snapshot.publication.repository
+                                ),
+                                "snapshot_tag": snapshot.publication.tag,
+                            }
+                        ).encode("utf-8"),
+                    ),
+                    control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b'{"ok":true}',
+                    ),
+                )
+            )
+            calls: list[tuple[str, dict]] = []
+
+            def proxy(_node_url, path, **kwargs):
+                calls.append((path, json.loads(kwargs["body"])))
+                return next(responses)
+
+            handler._proxy_request = proxy
+
+            handler._detach_sandbox_from_worker(route.sandbox_id)
+            stored = routing.get_sandbox_readonly(route.sandbox_id)
+
+        assert stored is not None
+        self.assertEqual(stored.worker_state, "detached")
+        self.assertEqual(stored.storage_snapshot, snapshot.to_dict())
+        self.assertEqual(
+            [path for path, _payload in calls],
+            [
+                "/v1/sandboxes/sandbox-1/publish-parked",
+                "/v1/sandboxes/sandbox-1/evict-published",
+            ],
+        )
+        self.assertEqual(
+            calls[0][1],
+            {
+                "generation": route.generation,
+                "create_operation_id": route.create_operation_id,
+                "spec_hash": route.spec_hash,
+            },
+        )
+        self.assertEqual(writes[0][1], 200)
+        self.assertEqual(
+            calls[1][1],
+            {
+                "generation": route.generation,
+                "snapshot_manifest_digest": snapshot.publication.manifest_digest,
+            },
+        )
+
+    def test_detached_park_wakes_without_contacting_former_worker(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            snapshot = _portable_snapshot("sandbox-1")
+            route = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://lost-node:8090",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                    worker_state="detached",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=(snapshot.publication.manifest_digest),
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+            )
+            heartbeats = ControlStateStore(root / "control.sqlite")
+            heartbeats.upsert_heartbeat(
+                NodeHeartbeat(
+                    node_id="destination-node",
+                    job_id="destination-job",
+                    deployment_id="test-deployment",
+                    updated_at=utc_now(),
+                    active_sandboxes=0,
+                    node_url="http://destination:8090",
+                    agent_version=package_version(),
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "storage-native-v1",
+                        "sandbox-migrate-storage-native-v1",
+                    ),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    resources_known=True,
+                    runtime_metrics=NodeRuntimeMetrics(
+                        collected_at=utc_now(),
+                        cpu_percent=0.0,
+                        cpu_count=8,
+                        memory_total_mb=16_384,
+                        memory_available_mb=16_384,
+                        storage_hard_capacity_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.store = heartbeats
+            handler.heartbeat_ttl_seconds = 120
+            handler.registry_usage_store = None
+            handler.registry_url = ""
+            handler.registry_worker_url = ""
+            handler.registry_layer_cache = None
+            handler._write_json = lambda *_args, **_kwargs: None
+            handler._prepare_migration_destination_image = lambda *_args: True
+            paths: list[str] = []
+
+            def proxy(_node_url, path, **_kwargs):
+                paths.append(path)
+                if path == "/v1/migrations/import":
+                    return control_plane.ProxiedResponse(
+                        201,
+                        {"Content-Type": "application/json"},
+                        json.dumps(
+                            {
+                                "storage_schema": "storage-native-v1",
+                                "storage_snapshot": snapshot.to_dict(),
+                            }
+                        ).encode("utf-8"),
+                    )
+                if path.endswith("/migration/activate"):
+                    return control_plane.ProxiedResponse(
+                        200,
+                        {"Content-Type": "application/json"},
+                        b'{"ok":true}',
+                    )
+                raise AssertionError(f"unexpected source request: {path}")
+
+            handler._proxy_request = proxy
+
+            selected = handler._ensure_parked_sandbox_wake_placement(route)
+            stored = routing.get_sandbox_readonly(route.sandbox_id)
+
+        assert selected is not None
+        assert stored is not None
+        self.assertEqual(stored.node_id, "destination-node")
+        self.assertEqual(stored.worker_state, "attached")
+        self.assertEqual(stored.state, "waking")
+        self.assertEqual(
+            paths,
+            [
+                "/v1/migrations/import",
+                "/v1/sandboxes/sandbox-1/migration/activate",
+            ],
+        )
+
+    def test_attached_park_never_uses_registry_failover_without_source_proof(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            routing = RoutingStore(root / "routes.sqlite")
+            snapshot = _portable_snapshot("sandbox-1")
+            route = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="temporarily-missing-node",
+                    job_id="temporarily-missing-job",
+                    node_url="http://temporarily-missing:8090",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                    worker_state="attached",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=snapshot.publication.manifest_digest,
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+            )
+            heartbeats = ControlStateStore(root / "control.sqlite")
+            heartbeats.upsert_heartbeat(
+                NodeHeartbeat(
+                    node_id="destination-node",
+                    job_id="destination-job",
+                    deployment_id="test-deployment",
+                    updated_at=utc_now(),
+                    active_sandboxes=0,
+                    node_url="http://destination:8090",
+                    agent_version=package_version(),
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "storage-native-v1",
+                        "sandbox-migrate-storage-native-v1",
+                    ),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    resources_known=True,
+                    inventory_complete=True,
+                )
+            )
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.store = heartbeats
+            handler.heartbeat_ttl_seconds = 120
+
+            selected = handler._select_migration_destination(
+                route,
+                requested_node_id="",
+                require_active_resources=True,
+            )
+
+        self.assertIsNone(selected)
 
     def test_transport_epoch_changes_only_after_committed_route_handoff(
         self,
@@ -3087,7 +3494,7 @@ class ControlPlaneTests(unittest.TestCase):
                         node_url=f"http://{node_host}:{node_port}",
                         resources=spec.requested_resources(),
                         spec=spec.to_dict(),
-                        state="creating",
+                        state="planned",
                         generation=1,
                         create_operation_id=operation_id,
                         spec_hash=spec_hash,

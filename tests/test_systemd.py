@@ -2,11 +2,21 @@ from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
-from ucloud_sandboxes.systemd import run_registry_gc
+from ucloud_sandboxes.config import DeploymentConfig
+from ucloud_sandboxes.systemd import require_registry_mount, run_registry_gc
 
 
 class SystemdHelperTests(unittest.TestCase):
+    def test_registry_mount_fails_closed(self) -> None:
+        config = DeploymentConfig.default()
+        with patch.object(Path, "is_mount", return_value=False), self.assertRaisesRegex(
+            RuntimeError,
+            "registry storage is not mounted",
+        ):
+            require_registry_mount(config)
+
     def test_registry_gc_is_a_noop_for_fresh_empty_registry(self) -> None:
         calls: list[list[str]] = []
 
@@ -50,9 +60,9 @@ class SystemdHelperTests(unittest.TestCase):
             subprocess.CalledProcessError
         ):
             data_dir = Path(raw_dir) / "registry"
-            (
-                data_dir / "docker" / "registry" / "v2" / "repositories"
-            ).mkdir(parents=True)
+            (data_dir / "docker" / "registry" / "v2" / "repositories").mkdir(
+                parents=True
+            )
             run_registry_gc(
                 data_dir=data_dir,
                 registry_image="registry:2",

@@ -1,8 +1,8 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 4778ad8..b605b3b 100644
+index 04075b6..0f0fdef 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -8282,6 +8282,7 @@ version = "0.1.0"
+@@ -8297,6 +8297,7 @@ version = "0.1.0"
  dependencies = [
   "agentenv-observability",
   "anyhow",
@@ -10,7 +10,7 @@ index 4778ad8..b605b3b 100644
   "clap",
   "dashmap",
   "io-uring",
-@@ -8292,6 +8293,7 @@ dependencies = [
+@@ -8307,6 +8308,7 @@ dependencies = [
   "reqwest 0.13.3",
   "serde",
   "serde_json",
@@ -18,6 +18,134 @@ index 4778ad8..b605b3b 100644
   "storage-util",
   "tempfile",
   "tokio",
+diff --git a/storage/overlaybd/src/image/image_file.rs b/storage/overlaybd/src/image/image_file.rs
+index 8cea1c9..a7ee207 100644
+--- a/storage/overlaybd/src/image/image_file.rs
++++ b/storage/overlaybd/src/image/image_file.rs
+@@ -163,10 +163,14 @@ impl ImageFile {
+     }
+ 
+     pub async fn compact(&self, as_file: Arc<dyn VirtualFile>) -> Result<()> {
++        self.compact_with_args(CommitArgs::new(as_file)).await
++    }
++
++    pub async fn compact_with_args(&self, args: CommitArgs) -> Result<()> {
+         let state = self.state.read().await;
+         match &state.base {
+-            ImageFileBase::ReadOnly(file) => file.flatten(as_file).await,
+-            ImageFileBase::ReadWrite(file) => file.flatten(as_file).await,
++            ImageFileBase::ReadOnly(file) => file.flatten_with_args(args).await,
++            ImageFileBase::ReadWrite(file) => file.flatten_with_args(args).await,
+         }
+     }
+ 
+@@ -693,8 +697,18 @@ impl ImageFile {
+                 None,
+             )
+         };
+-        let tar_file = new_tar_file_adaptor(remote_file).await?;
+-        let switch_file = new_switch_file(tar_file, false, Some(&url)).await?;
++        let layer_file = match new_tar_file_adaptor(remote_file.clone()).await {
++            Ok(tar_file) => tar_file,
++            Err(error) => {
++                warn!(
++                    layer_index = index,
++                    %error,
++                    "remote lower is not tar-wrapped; trying raw dense overlaybd"
++                );
++                remote_file
++            }
++        };
++        let switch_file = new_switch_file(layer_file, false, Some(&url)).await?;
+         Ok(OpenedLowerLayer {
+             file: switch_file,
+             download,
+diff --git a/storage/overlaybd/src/lsmt/file/readonly.rs b/storage/overlaybd/src/lsmt/file/readonly.rs
+index b1c1060..1c0a6ab 100644
+--- a/storage/overlaybd/src/lsmt/file/readonly.rs
++++ b/storage/overlaybd/src/lsmt/file/readonly.rs
+@@ -170,12 +170,14 @@ impl LSMTReadOnlyFile {
+     }
+ 
+     pub async fn flatten(&self, dest_file: Arc<dyn VirtualFile>) -> Result<()> {
++        self.flatten_with_args(CommitArgs::new(dest_file)).await
++    }
++
++    pub async fn flatten_with_args(&self, args: CommitArgs) -> Result<()> {
+         let query = Segment::new(0, (self.virtual_size.div_ceil(ALIGNMENT)) as u32);
+         let mut mappings = Vec::new();
+         self.index.lookup(query, &mut mappings);
+-        let writer: Arc<dyn CompactWriter> = Arc::new(VirtualFileWriter::new(dest_file));
+-        let commit_args = CommitArgs::from_writer(writer);
+-        compact_to(&self.layers, &mappings, self.virtual_size, commit_args).await
++        compact_to(&self.layers, &mappings, self.virtual_size, args).await
+     }
+ 
+     pub(super) fn from_merged_layers(
+diff --git a/storage/overlaybd/src/lsmt/file/tests.rs b/storage/overlaybd/src/lsmt/file/tests.rs
+index 907ccd0..a8f897e 100644
+--- a/storage/overlaybd/src/lsmt/file/tests.rs
++++ b/storage/overlaybd/src/lsmt/file/tests.rs
+@@ -2382,6 +2382,59 @@ async fn test_flatten_keeps_zero_written_blocks_as_data_segments() {
+     );
+ }
+ 
++#[tokio::test]
++async fn test_flatten_mixed_data_and_discard_keeps_index_sorted() {
++    let temp_dir = TempDir::new().unwrap();
++    let vsize = 3 * 4096;
++    let (data, _index, lsmt) = create_lsmt_env(&temp_dir, vsize).await;
++
++    let first = vec![0xA5; 4096];
++    let last = vec![0x5A; 4096];
++    lsmt.write_at(0, &first).await.unwrap();
++    <LSMTFile as VirtualFile>::discard(&lsmt, 4096, 4096)
++        .await
++        .unwrap();
++    lsmt.write_at(8192, &last).await.unwrap();
++    lsmt.close_seal().await.unwrap();
++    drop(lsmt);
++
++    let source = open_file_ro(data).await.unwrap();
++    let ring = test_io_ring();
++    let flat = Arc::new(
++        LocalFile::new(temp_dir.path().join("flat-mixed.lsmt"), ring)
++            .await
++            .unwrap(),
++    );
++    source.flatten(flat.clone()).await.unwrap();
++
++    let flattened = open_file_ro(flat).await.unwrap();
++    let mappings = flattened
++        .index_view
++        .as_ref()
++        .expect("flattened index view")
++        .mappings();
++    assert!(
++        mappings
++            .windows(2)
++            .all(|pair| pair[0].offset() <= pair[1].offset()),
++        "flattened data/discard index must remain sorted"
++    );
++    assert_eq!(
++        flattened.read_at(0, 4096).await.unwrap().as_ref(),
++        first.as_slice()
++    );
++    assert!(flattened
++        .read_at(4096, 4096)
++        .await
++        .unwrap()
++        .iter()
++        .all(|byte| *byte == 0));
++    assert_eq!(
++        flattened.read_at(8192, 4096).await.unwrap().as_ref(),
++        last.as_slice()
++    );
++}
++
+ #[tokio::test]
+ async fn test_compact_to_rejects_short_reads() {
+     let temp_dir = TempDir::new().unwrap();
 diff --git a/storage/ublk-daemon/Cargo.toml b/storage/ublk-daemon/Cargo.toml
 index 6973626..681dc8b 100644
 --- a/storage/ublk-daemon/Cargo.toml
@@ -38,36 +166,11 @@ index 6973626..681dc8b 100644
  toml = "0.9.11"
  tokio = { version = "1.44.2", features = ["full"] }
  tracing = "0.1.41"
-diff --git a/storage/overlaybd/src/image/image_file.rs b/storage/overlaybd/src/image/image_file.rs
-index 84b0ae3..b0e10a4 100644
---- a/storage/overlaybd/src/image/image_file.rs
-+++ b/storage/overlaybd/src/image/image_file.rs
-@@ -660,8 +660,18 @@ impl ImageFile {
-         let remote_file = image_service
-             .open_remote_blob_with_size(&url, (layer.size != 0).then_some(layer.size))
-             .await?;
--        let tar_file = new_tar_file_adaptor(remote_file).await?;
--        let switch_file = new_switch_file(tar_file, false, Some(&url)).await?;
-+        let layer_file = match new_tar_file_adaptor(remote_file.clone()).await {
-+            Ok(tar_file) => tar_file,
-+            Err(error) => {
-+                warn!(
-+                    layer_index = index,
-+                    %error,
-+                    "remote lower is not tar-wrapped; trying raw dense overlaybd"
-+                );
-+                remote_file
-+            }
-+        };
-+        let switch_file = new_switch_file(layer_file, false, Some(&url)).await?;
-         let download = Self::prepare_bk_download(
-             image_service,
-             download_cfg,
 diff --git a/storage/ublk-daemon/src/protocol.rs b/storage/ublk-daemon/src/protocol.rs
-index f44d235..1242b85 100644
+index 09daf5c..51eea0b 100644
 --- a/storage/ublk-daemon/src/protocol.rs
 +++ b/storage/ublk-daemon/src/protocol.rs
-@@ -52,6 +52,12 @@ pub enum DaemonRequest {
+@@ -46,6 +46,19 @@ pub enum DaemonRequest {
          dev_id: u32,
          output_layer_path: PathBuf,
      },
@@ -77,10 +180,17 @@ index f44d235..1242b85 100644
 +        source_layer_path: PathBuf,
 +        stream_socket_path: PathBuf,
 +    },
++    /// Flatten a complete local/remote image stack into one dense sealed layer
++    /// on a caller-owned Unix stream.
++    ExportCompactedImage {
++        source_image_config: PathBuf,
++        global_config: PathBuf,
++        stream_socket_path: PathBuf,
++    },
      /// Query daemon capabilities (e.g., dynamic resize support).
      GetFeatures,
      /// Report that the sandbox owning a memory-snapshot device finished
-@@ -131,6 +137,10 @@ pub enum DaemonResponse {
+@@ -125,6 +138,10 @@ pub enum DaemonResponse {
      RestackSnapshotCreated {
          descriptor: Option<LayerDescriptor>,
      },
@@ -91,7 +201,7 @@ index f44d235..1242b85 100644
      Ok,
      TerminalError {
          message: String,
-@@ -538,6 +548,26 @@ mod tests {
+@@ -515,6 +532,52 @@ mod tests {
          }
      }
  
@@ -115,10 +225,36 @@ index f44d235..1242b85 100644
 +        }
 +    }
 +
++    #[test]
++    fn request_export_compacted_image_round_trip() {
++        let req = DaemonRequest::ExportCompactedImage {
++            source_image_config: PathBuf::from("/snapshots/source.json"),
++            global_config: PathBuf::from("/etc/overlaybd/global.json"),
++            stream_socket_path: PathBuf::from("/run/ucloud/compact.sock"),
++        };
++        let json = serde_json::to_string(&req).unwrap();
++        let decoded: DaemonRequest = serde_json::from_str(&json).unwrap();
++        match decoded {
++            DaemonRequest::ExportCompactedImage {
++                source_image_config,
++                global_config,
++                stream_socket_path,
++            } => {
++                assert_eq!(source_image_config, PathBuf::from("/snapshots/source.json"));
++                assert_eq!(global_config, PathBuf::from("/etc/overlaybd/global.json"));
++                assert_eq!(
++                    stream_socket_path,
++                    PathBuf::from("/run/ucloud/compact.sock")
++                );
++            }
++            _ => panic!("unexpected variant"),
++        }
++    }
++
      #[test]
      fn request_shutdown_round_trip() {
          let req = DaemonRequest::Shutdown;
-@@ -597,6 +627,21 @@ mod tests {
+@@ -574,6 +637,21 @@ mod tests {
          ));
      }
  
@@ -141,11 +277,10 @@ index f44d235..1242b85 100644
  
      #[tokio::test]
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
-index 1707e90..88b6767 100644
+index 1803e15..5cca8b5 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
-@@ -5,15 +5,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
- use std::sync::Arc;
+@@ -6,14 +6,19 @@ use std::sync::Arc;
  use std::time::Duration;
  
  use anyhow::{bail, Context, Result};
@@ -157,6 +292,7 @@ index 1707e90..88b6767 100644
  use overlaybd::helper::prepare_runtime_upper;
  use overlaybd::image_file::ImageFile;
  use overlaybd::image_service::ImageService;
++use overlaybd::index_file::CommitArgs;
  use overlaybd::RestackSnapshotTerminalFailure;
 -use tokio::net::UnixListener;
 +use storage_util::{CompactBuffer, CompactWriter};
@@ -165,8 +301,8 @@ index 1707e90..88b6767 100644
  use tokio::sync::{Mutex, Notify, RwLock};
  use warm_pool::{PoolConfig, PoolMaintenanceAction, WarmPool};
  
-@@ -40,6 +44,56 @@ enum ManagedDevice {
-     },
+@@ -35,6 +40,60 @@ struct ManagedDevice {
+     image: Arc<ImageFile>,
  }
  
 +const DENSE_EXPORT_BUFFER_SIZE: usize = 8 * 1024 * 1024;
@@ -206,6 +342,10 @@ index 1707e90..88b6767 100644
 +        DENSE_EXPORT_BUFFER_SIZE
 +    }
 +
++    fn requires_ordered_writes(&self) -> bool {
++        true
++    }
++
 +    async fn write(&self, buf: Box<dyn CompactBuffer>, offset: u64, len: usize) -> Result<()> {
 +        let data = AsRef::<[u8]>::as_ref(buf.as_ref());
 +        if len > data.len() {
@@ -222,7 +362,7 @@ index 1707e90..88b6767 100644
  // ── Pooled device wrapper ───────────────────────────────────────────────────
  
  /// A warm ublk device ready for reuse.
-@@ -534,6 +588,10 @@ async fn handle_connection(
+@@ -554,6 +613,23 @@ async fn handle_connection(
              dev_id,
              output_layer_path,
          } => handle_restack_snapshot(&devices, &pool_state, dev_id, &output_layer_path).await,
@@ -230,10 +370,23 @@ index 1707e90..88b6767 100644
 +            source_layer_path,
 +            stream_socket_path,
 +        } => handle_export_dense_layer(&source_layer_path, &stream_socket_path).await,
++        DaemonRequest::ExportCompactedImage {
++            source_image_config,
++            global_config,
++            stream_socket_path,
++        } => {
++            handle_export_compacted_image(
++                &image_service_cache,
++                &source_image_config,
++                &global_config,
++                &stream_socket_path,
++            )
++            .await
++        }
          DaemonRequest::GetFeatures => handle_get_features(&pool_state),
          DaemonRequest::NotifySandboxReady { device_key } => {
              tracing::info!(
-@@ -1046,6 +1104,37 @@ async fn handle_restack_snapshot(
+@@ -1011,6 +1087,85 @@ async fn handle_restack_snapshot(
      Ok(DaemonResponse::RestackSnapshotCreated { descriptor })
  }
  
@@ -261,6 +414,54 @@ index 1707e90..88b6767 100644
 +                source_layer_path.display()
 +            )
 +        })?;
++    let descriptor = writer.finish().await?;
++    Ok(DaemonResponse::DenseLayerExported {
++        digest: descriptor.digest,
++        size: descriptor.size,
++    })
++}
++
++async fn handle_export_compacted_image(
++    image_service_cache: &ImageServiceCache,
++    source_image_config: &Path,
++    global_config: &Path,
++    stream_socket_path: &Path,
++) -> Result<DaemonResponse> {
++    if !source_image_config.is_absolute()
++        || !global_config.is_absolute()
++        || !stream_socket_path.is_absolute()
++    {
++        bail!("compacted image export paths must be absolute");
++    }
++    let stream = UnixStream::connect(stream_socket_path)
++        .await
++        .with_context(|| {
++            format!(
++                "connect compacted image stream socket {}",
++                stream_socket_path.display()
++            )
++        })?;
++    let writer = UnixStreamCompactWriter::new(stream);
++    let image_service = image_service_cache
++        .get_or_create(global_config)
++        .await
++        .context("resolve image service for compacted export")?;
++    let image = image_service
++        .create_image_file(source_image_config)
++        .await
++        .with_context(|| {
++            format!(
++                "open overlaybd image for compacted export {}",
++                source_image_config.display()
++            )
++        })?;
++    let mut args = CommitArgs::from_writer(writer.clone());
++    // Registry streams are content-addressed sequential byte streams.
++    args.concurrency = 1;
++    image
++        .compact_with_args(args)
++        .await
++        .with_context(|| format!("compact overlaybd image {}", source_image_config.display()))?;
 +    let descriptor = writer.finish().await?;
 +    Ok(DaemonResponse::DenseLayerExported {
 +        digest: descriptor.digest,

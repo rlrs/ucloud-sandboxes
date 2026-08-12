@@ -169,7 +169,9 @@ class IoBenchmark:
     def _start_daemon(self) -> None:
         assert self.root is not None
         cache = self.root / "cache"
+        resize_cache = self.root / "resize-cache"
         cache.mkdir()
+        resize_cache.mkdir()
         global_config = self.root / "global.json"
         self._write_json(
             global_config,
@@ -185,6 +187,21 @@ class IoBenchmark:
                 "download": {"enable": False},
             },
         )
+        resize_global_config = self.root / "resize-global.json"
+        self._write_json(
+            resize_global_config,
+            {
+                "registryFsVersion": "v2",
+                "nrIoRings": 1,
+                "cacheConfig": {
+                    "cacheType": "file",
+                    "cacheDir": str(resize_cache),
+                    "cacheSizeGB": 1,
+                    "refillSize": 262144,
+                },
+                "download": {"enable": False},
+            },
+        )
         socket_path = self.root / "ublk.sock"
         log_handle = (self.root / "ublk-daemon.log").open("w", encoding="utf-8")
         self.daemon = subprocess.Popen(
@@ -194,6 +211,8 @@ class IoBenchmark:
                 str(socket_path),
                 "--global-config",
                 str(global_config),
+                "--resize-global-config",
+                str(resize_global_config),
                 "--metrics-listen-addr",
                 "",
             ],

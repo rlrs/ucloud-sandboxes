@@ -15,7 +15,11 @@ from .storage_native_daemon import (
     StorageNativeNodeServer,
     StorageNativeNodeService,
 )
-from .storage_native_registry import RegistrySnapshotPublisher
+from .storage_native_registry import (
+    DEFAULT_COMPACT_AFTER_BYTES,
+    DEFAULT_COMPACT_AFTER_LAYERS,
+    RegistrySnapshotPublisher,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -37,6 +41,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--snapshot-repository")
     parser.add_argument("--publication-stream-root", type=Path)
     parser.add_argument("--max-concurrent-publications", default=2, type=int)
+    parser.add_argument(
+        "--snapshot-compact-after-layers",
+        default=DEFAULT_COMPACT_AFTER_LAYERS,
+        type=int,
+    )
+    parser.add_argument(
+        "--snapshot-compact-after-bytes",
+        default=DEFAULT_COMPACT_AFTER_BYTES,
+        type=int,
+    )
     parser.add_argument(
         "--publication-upload-chunk-bytes",
         default=8 * 1024 * 1024,
@@ -75,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
             stream_socket_root=stream_root,
             upload_chunk_bytes=args.publication_upload_chunk_bytes,
             max_concurrent_publications=args.max_concurrent_publications,
+            compact_after_layers=args.snapshot_compact_after_layers,
+            compact_after_bytes=args.snapshot_compact_after_bytes,
         )
     service = StorageNativeNodeService(
         StorageNativeNodeConfig(

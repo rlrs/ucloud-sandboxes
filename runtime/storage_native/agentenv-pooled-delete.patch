@@ -1,10 +1,10 @@
 diff --git a/storage/ublk-daemon/src/server.rs b/storage/ublk-daemon/src/server.rs
-index 2fbb9d4..8df880f 100644
+index 12067d2..5bd845e 100644
 --- a/storage/ublk-daemon/src/server.rs
 +++ b/storage/ublk-daemon/src/server.rs
-@@ -529,7 +529,9 @@ async fn handle_request(
-         DaemonRequest::CreateCow { origin, cow } => {
-             handle_create_cow(&devices, ctrl_ring, &origin, &cow).await
+@@ -607,7 +607,9 @@ async fn handle_connection(
+             )
+             .await
          }
 -        DaemonRequest::Delete { dev_id } => handle_delete(&devices, ctrl_ring, dev_id).await,
 +        DaemonRequest::Delete { dev_id } => {
@@ -13,7 +13,7 @@ index 2fbb9d4..8df880f 100644
          DaemonRequest::RestackSnapshot {
              dev_id,
              output_layer_path,
-@@ -845,18 +847,32 @@ async fn handle_create_cow(
+@@ -882,18 +884,32 @@ async fn create_overlaybd_device(
  
  async fn handle_delete(
      devices: &DashMap<u32, ManagedDevice>,

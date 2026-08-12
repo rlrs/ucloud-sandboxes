@@ -169,6 +169,25 @@ class VmInitTests(unittest.TestCase):
         self.assertIn('[ "$iface_mtu" -lt "$mtu" ]', script)
         self.assertIn('UCLOUD_DOCKER_MTU="$(detect_routed_mtu)"', script)
 
+    def test_storage_native_resize_cache_is_isolated_from_runtime_cache(self) -> None:
+        script = render_vm_init_script(self._options())
+
+        self.assertIn(
+            "UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG="
+            "/etc/ucloud-sandboxes/storage-native-resize-backend.json",
+            script,
+        )
+        self.assertIn('$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks', script)
+        self.assertIn('$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/resize-blocks', script)
+        self.assertIn(
+            "--resize-global-config "
+            "${UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG}",
+            script,
+        )
+        self.assertIn('"download": {"enable": False}', script)
+        self.assertIn("--snapshot-compact-after-layers 8", script)
+        self.assertIn("--snapshot-compact-after-bytes 4294967296", script)
+
     def test_builder_keeps_image_build_runtime(self) -> None:
         script = render_vm_init_script(
             self._options(

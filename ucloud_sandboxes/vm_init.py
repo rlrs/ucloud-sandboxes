@@ -44,11 +44,19 @@ DEFAULT_STORAGE_NATIVE_SERVICE_SOCKET = (
 )
 DEFAULT_STORAGE_NATIVE_ROOT = "/var/lib/ucloud-sandboxes/storage-native"
 DEFAULT_STORAGE_NATIVE_CACHE_ROOT = "/var/lib/ucloud-sandboxes/storage-native-cache"
+DEFAULT_STORAGE_NATIVE_BACKEND_CONFIG = (
+    "/etc/ucloud-sandboxes/storage-native-backend.json"
+)
+DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG = (
+    "/etc/ucloud-sandboxes/storage-native-resize-backend.json"
+)
 DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
 DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
 DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
-PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "f41abb21324f6b0520abf34b7720aa260ddd10eb"
+DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
+DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
+PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
 SANDBOX_RUNTIME_PACKAGES = (
@@ -189,7 +197,10 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     storage_native_service_socket = DEFAULT_STORAGE_NATIVE_SERVICE_SOCKET
     storage_native_root = DEFAULT_STORAGE_NATIVE_ROOT
     storage_native_cache_root = DEFAULT_STORAGE_NATIVE_CACHE_ROOT
-    storage_native_backend_config = "/etc/ucloud-sandboxes/storage-native-backend.json"
+    storage_native_backend_config = DEFAULT_STORAGE_NATIVE_BACKEND_CONFIG
+    storage_native_resize_backend_config = (
+        DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
+    )
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
     storage_backend_service = (
@@ -375,6 +386,7 @@ UCLOUD_STORAGE_NATIVE_ROOT={shlex.quote(storage_native_root)}
 UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT/mounts
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT={shlex.quote(storage_native_cache_root)}
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG={shlex.quote(storage_native_backend_config)}
+UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG={shlex.quote(storage_native_resize_backend_config)}
 UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
 UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_watermark}
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
@@ -977,9 +989,11 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     "$UCLOUD_STORAGE_NATIVE_ROOT" \
     "$UCLOUD_STORAGE_NATIVE_ROOT/runtime" \
     "$UCLOUD_STORAGE_NATIVE_ROOT/mounts" \
-    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT"
+    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT" \
+    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks" \
+    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/resize-blocks"
   UCLOUD_STORAGE_NATIVE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.storage-native-backend.XXXXXX")"
-  python3 - "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT" "$UCLOUD_STORAGE_NATIVE_CACHE_GB" <<'PY' \
+  python3 - "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks" "$UCLOUD_STORAGE_NATIVE_CACHE_GB" <<'PY' \
     | $SUDO tee "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP" >/dev/null
 import json
 import sys
@@ -1000,6 +1014,32 @@ PY
   $SUDO chmod 0600 "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP"
   $SUDO mv -f \
     "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP" "$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG"
+  # AgentEnv's offline resize helper uses the C++ file cache, whose eviction
+  # rules are not compatible with the daemon's shared Rust runtime cache.
+  # Keep it in an isolated directory even though background download is off.
+  UCLOUD_STORAGE_NATIVE_RESIZE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.storage-native-resize-backend.XXXXXX")"
+  python3 - "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/resize-blocks" <<'PY' \
+    | $SUDO tee "$UCLOUD_STORAGE_NATIVE_RESIZE_CONFIG_TMP" >/dev/null
+import json
+import sys
+
+print(json.dumps({{
+    "cacheConfig": {{
+        "cacheDir": sys.argv[1],
+        "cacheSizeGB": 1,
+        "cacheType": "file",
+        "refillSize": 262144,
+    }},
+    "download": {{"enable": False}},
+    "nrIoRings": 1,
+    "registryFsVersion": "v2",
+}}, sort_keys=True))
+PY
+  $SUDO chown root:root "$UCLOUD_STORAGE_NATIVE_RESIZE_CONFIG_TMP"
+  $SUDO chmod 0600 "$UCLOUD_STORAGE_NATIVE_RESIZE_CONFIG_TMP"
+  $SUDO mv -f \
+    "$UCLOUD_STORAGE_NATIVE_RESIZE_CONFIG_TMP" \
+    "$UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG"
   if [ ! -x "$UCLOUD_DIRECT_INIT_BINARY" ]; then
     for direct_init_candidate in \
       /usr/libexec/docker/docker-init \
@@ -1190,6 +1230,7 @@ UCLOUD_STORAGE_NATIVE_ROOT=$UCLOUD_STORAGE_NATIVE_ROOT
 UCLOUD_STORAGE_NATIVE_MOUNT_ROOT=$UCLOUD_STORAGE_NATIVE_MOUNT_ROOT
 UCLOUD_STORAGE_NATIVE_CACHE_ROOT=$UCLOUD_STORAGE_NATIVE_CACHE_ROOT
 UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG
+UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
 UCLOUD_STORAGE_NATIVE_CACHE_GB=$UCLOUD_STORAGE_NATIVE_CACHE_GB
 UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK
@@ -1213,7 +1254,7 @@ Group=root
 RuntimeDirectory=ucloud-sandboxes/storage-native
 RuntimeDirectoryMode=0700
 ExecStartPre=/usr/sbin/modprobe ublk_drv
-ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --metrics-listen-addr "" --enable-pool --pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --pool-startup-prewarm true
+ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --resize-global-config ${{UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG}} --metrics-listen-addr "" --enable-pool --pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --pool-startup-prewarm true
 Restart=always
 RestartSec=2
 
@@ -1234,7 +1275,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
 Restart=always
 RestartSec=2
 

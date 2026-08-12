@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
+import time
 import unittest
 
 from ucloud_sandboxes.storage_native import StorageNativeLayer
 from ucloud_sandboxes.storage_native_registry import (
+    PublishedStorageLayer,
     RegistrySnapshotPublisher,
     SNAPSHOT_SCHEMA,
 )
@@ -83,9 +85,17 @@ class FakeRegistry:
 
 
 class FakeExporter:
-    def __init__(self, payloads: dict[Path, bytes], *, wrong_digest: bool = False):
+    def __init__(
+        self,
+        payloads: dict[Path, bytes],
+        *,
+        compact_payload: bytes = b"compacted-layer",
+        wrong_digest: bool = False,
+    ):
         self.payloads = payloads
+        self.compact_payload = compact_payload
         self.wrong_digest = wrong_digest
+        self.compact_calls: list[tuple[dict, Path]] = []
 
     def export_dense_layer(
         self,
@@ -106,6 +116,30 @@ class FakeExporter:
             size=len(payload),
         )
 
+    def export_compacted_image(
+        self,
+        *,
+        source_image_config: Path,
+        global_config: Path,
+        stream_socket_path: Path,
+    ) -> StorageNativeLayer:
+        self.compact_calls.append(
+            (
+                json.loads(source_image_config.read_text(encoding="ascii")),
+                global_config,
+            )
+        )
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.connect(str(stream_socket_path))
+            connection.sendall(self.compact_payload)
+        digest = hashlib.sha256(self.compact_payload).hexdigest()
+        if self.wrong_digest:
+            digest = "0" * 64
+        return StorageNativeLayer(
+            digest=f"sha256:{digest}",
+            size=len(self.compact_payload),
+        )
+
 
 class StorageNativeRegistryTests(unittest.TestCase):
     def test_streams_layers_and_publishes_content_addressed_manifest(self) -> None:
@@ -117,6 +151,8 @@ class StorageNativeRegistryTests(unittest.TestCase):
                 first: b"first-dense-layer" * 17,
                 second: b"second-dense-layer" * 9,
             }
+            for path, payload in payloads.items():
+                path.write_bytes(payload)
             registry = FakeRegistry()
             publisher = RegistrySnapshotPublisher(
                 registry,  # type: ignore[arg-type]
@@ -159,6 +195,7 @@ class StorageNativeRegistryTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             source = (root / "layer.commit").resolve()
+            source.write_bytes(b"payload")
             publisher = RegistrySnapshotPublisher(
                 FakeRegistry(),  # type: ignore[arg-type]
                 repository="snapshots",
@@ -173,6 +210,85 @@ class StorageNativeRegistryTests(unittest.TestCase):
                     source_layer_paths=(source,),
                     virtual_size=4096,
                 )
+
+    def test_export_failure_before_connect_is_reported_without_full_timeout(self) -> None:
+        class FailingExporter(FakeExporter):
+            def export_dense_layer(self, **_kwargs) -> StorageNativeLayer:
+                raise RuntimeError("injected export failure")
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            source = (root / "layer.commit").resolve()
+            source.write_bytes(b"payload")
+            publisher = RegistrySnapshotPublisher(
+                FakeRegistry(),  # type: ignore[arg-type]
+                repository="snapshots",
+                stream_socket_root=root,
+                stream_timeout_seconds=5,
+            )
+
+            started = time.monotonic()
+            with self.assertRaisesRegex(RuntimeError, "injected export failure"):
+                publisher.publish(
+                    exporter=FailingExporter({}),
+                    source_layer_paths=(source,),
+                    virtual_size=4096,
+                )
+
+            self.assertLess(time.monotonic() - started, 1)
+
+    def test_compacts_mixed_remote_and_local_chain_at_layer_threshold(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            delta = (root / "delta.commit").resolve()
+            delta.write_bytes(b"local-delta")
+            global_config = (root / "global.json").resolve()
+            global_config.write_text("{}\n", encoding="ascii")
+            exporter = FakeExporter({}, compact_payload=b"flattened-chain")
+            registry = FakeRegistry()
+            publisher = RegistrySnapshotPublisher(
+                registry,  # type: ignore[arg-type]
+                repository="snapshots",
+                stream_socket_root=root,
+                compact_after_layers=2,
+                compact_after_bytes=1 << 30,
+            )
+            existing = (
+                PublishedStorageLayer("sha256:" + "1" * 64, 100),
+                PublishedStorageLayer("sha256:" + "2" * 64, 200),
+            )
+
+            publication = publisher.publish(
+                exporter=exporter,
+                source_layer_paths=(delta,),
+                virtual_size=1 << 30,
+                existing_layers=existing,
+                global_config_path=global_config,
+            )
+
+            self.assertEqual(len(publication.layers), 1)
+            self.assertEqual(
+                registry.blobs[publication.layers[0].digest],
+                b"flattened-chain",
+            )
+            self.assertEqual(len(exporter.compact_calls), 1)
+            source, observed_global = exporter.compact_calls[0]
+            self.assertEqual(observed_global, global_config)
+            self.assertEqual(source["repoBlobUrl"], publisher.repo_blob_url)
+            self.assertEqual(source["lowers"][:2], [layer.to_dict() for layer in existing])
+            self.assertEqual(source["lowers"][2], {"file": str(delta)})
+            self.assertEqual(
+                publisher.metrics(),
+                {
+                    "snapshot_publications": 1,
+                    "snapshot_compactions": 1,
+                    "snapshot_compaction_input_layers": 3,
+                    "snapshot_compaction_input_bytes": 311,
+                    "snapshot_compaction_output_bytes": len(b"flattened-chain"),
+                    "snapshot_compact_after_layers": 2,
+                    "snapshot_compact_after_bytes": 1 << 30,
+                },
+            )
 
 
 if __name__ == "__main__":

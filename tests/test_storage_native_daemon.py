@@ -154,7 +154,10 @@ class FakePublisher:
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
+        global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
+        if global_config_path is None:
+            raise AssertionError("service did not supply its global config")
         new_layers = tuple(
             PublishedStorageLayer(
                 digest="sha256:" + f"{index + 1:064x}",
@@ -174,6 +177,9 @@ class FakePublisher:
             virtual_size=virtual_size,
             layers=layers,
         )
+
+    def metrics(self) -> dict[str, int]:
+        return {"snapshot_publications": 0, "snapshot_compactions": 0}
 
 
 class FakeHost:

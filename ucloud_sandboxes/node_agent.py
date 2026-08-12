@@ -22,6 +22,7 @@ from .capabilities import (
     HIBERNATE_LOCAL_CAPABILITY,
     MANAGED_PRIMARY_CAPABILITY,
     STORAGE_NATIVE_CAPABILITY,
+    STORAGE_NATIVE_DETACH_CAPABILITY,
     STORAGE_NATIVE_MIGRATION_CAPABILITY,
 )
 from .deployment import service_health
@@ -302,6 +303,16 @@ class NodeAgentHandler(BuildContextHttpHandler):
             "/migration/abort-import"
         ):
             self._abort_import(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/evict-published"
+        ):
+            self._evict_published_sandbox(parsed.path)
+            return
+        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith(
+            "/publish-parked"
+        ):
+            self._publish_parked_sandbox(parsed.path)
             return
         if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/park"):
             self._park_sandbox(parsed.path)
@@ -760,6 +771,67 @@ class NodeAgentHandler(BuildContextHttpHandler):
 
     def _abort_import(self, path: str) -> None:
         self._complete_migration_action(path, action="abort-import")
+
+    def _evict_published_sandbox(self, path: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix="/evict-published")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("published eviction payload must be a JSON object")
+            if set(raw) != {"generation", "snapshot_manifest_digest"}:
+                raise ValueError("published eviction payload has an invalid schema")
+            generation = raw.get("generation")
+            if isinstance(generation, bool) or not isinstance(generation, int):
+                raise ValueError("generation must be an integer")
+            digest = raw.get("snapshot_manifest_digest")
+            if not isinstance(digest, str):
+                raise ValueError("snapshot_manifest_digest must be a string")
+            self._direct_service().evict_published(
+                sandbox_id,
+                generation=generation,
+                snapshot_manifest_digest=digest,
+            )
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json({"ok": True})
+
+    def _publish_parked_sandbox(self, path: str) -> None:
+        sandbox_id = _sandbox_id_from_path(path, suffix="/publish-parked")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict):
+                raise ValueError("parked publication payload must be a JSON object")
+            if set(raw) != {"generation", "create_operation_id", "spec_hash"}:
+                raise ValueError("parked publication payload has an invalid schema")
+            generation = raw.get("generation")
+            if isinstance(generation, bool) or not isinstance(generation, int):
+                raise ValueError("generation must be an integer")
+            create_operation_id = raw.get("create_operation_id")
+            if not isinstance(create_operation_id, str):
+                raise ValueError("create_operation_id must be a string")
+            spec_hash = raw.get("spec_hash")
+            if not isinstance(spec_hash, str):
+                raise ValueError("spec_hash must be a string")
+            snapshot = self._direct_service().publish_parked(
+                sandbox_id,
+                generation=generation,
+                create_operation_id=create_operation_id,
+                spec_hash=spec_hash,
+            )
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
+            return
+        self._write_json(
+            {
+                "storage_schema": STORAGE_NATIVE_MIGRATION_SCHEMA,
+                "snapshot_sha256": snapshot.sha256,
+                "storage_snapshot": snapshot.to_dict(),
+                "snapshot_manifest_digest": snapshot.publication.manifest_digest,
+                "snapshot_repository": snapshot.publication.repository,
+                "snapshot_tag": snapshot.publication.tag,
+            }
+        )
 
     def _complete_migration_action(self, path: str, *, action: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix=f"/migration/{action}")
@@ -1386,6 +1458,7 @@ def build_direct_node_agent_server(
     direct_capabilities.extend(
         (
             STORAGE_NATIVE_CAPABILITY,
+            STORAGE_NATIVE_DETACH_CAPABILITY,
             STORAGE_NATIVE_MIGRATION_CAPABILITY,
         )
     )

@@ -22,7 +22,7 @@ from ucloud_sandboxes_sdk import (
 )
 
 
-COUNTER_PROGRAM = r'''#!/usr/bin/env python3
+COUNTER_PROGRAM = r"""#!/usr/bin/env python3
 import hashlib
 import json
 import os
@@ -44,7 +44,7 @@ while True:
     temporary.write_text(json.dumps(record, sort_keys=True))
     os.replace(temporary, path)
     time.sleep(0.02)
-'''
+"""
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,6 +53,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gateway-token-file", type=Path, required=True)
     parser.add_argument("--image", default="python:3.13-slim-bookworm")
     parser.add_argument("--cycles", type=int, default=20)
+    parser.add_argument("--detach-before-wake", action="store_true")
+    parser.add_argument("--force-different-worker", action="store_true")
+    parser.add_argument("--node-control-token-file", type=Path)
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
 
@@ -99,9 +102,107 @@ async def gateway_json(
             if response.status not in {409, 503} or attempt + 1 >= attempts:
                 break
         await asyncio.sleep(0.05)
-    raise RuntimeError(
-        f"gateway {method} {path} failed ({last_status}): {last_body}"
+    raise RuntimeError(f"gateway {method} {path} failed ({last_status}): {last_body}")
+
+
+async def node_json(
+    session: aiohttp.ClientSession,
+    node_url: str,
+    token: str,
+    method: str,
+    path: str,
+    *,
+    payload: object,
+) -> dict[str, Any]:
+    async with session.request(
+        method,
+        node_url.rstrip("/") + path,
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+        timeout=aiohttp.ClientTimeout(total=30),
+    ) as response:
+        body = await response.read()
+        decoded = json.loads(body.decode()) if body else {}
+        if response.status >= 300:
+            raise RuntimeError(
+                f"node {method} {path} failed ({response.status}): {decoded}"
+            )
+        if not isinstance(decoded, dict):
+            raise RuntimeError("node returned non-object JSON")
+        return decoded
+
+
+async def cached_sandbox_route(
+    session: aiohttp.ClientSession,
+    gateway_url: str,
+    token: str,
+    sandbox_id: str,
+) -> dict[str, Any]:
+    payload, _ = await gateway_json(
+        session,
+        gateway_url,
+        token,
+        "GET",
+        "/v1/sandboxes",
     )
+    sandboxes = payload.get("sandboxes")
+    if not isinstance(sandboxes, list):
+        raise RuntimeError("cached sandbox inventory is missing")
+    for item in sandboxes:
+        if isinstance(item, dict) and item.get("id") == sandbox_id:
+            return item
+    raise RuntimeError("sandbox is absent from cached routing inventory")
+
+
+async def wait_for_gateway_drain_state(
+    session: aiohttp.ClientSession,
+    gateway_url: str,
+    token: str,
+    node_id: str,
+    drain_token: str,
+    *,
+    draining: bool,
+    timeout_seconds: float = 15,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        payload, _ = await gateway_json(
+            session,
+            gateway_url,
+            token,
+            "GET",
+            "/v1/nodes",
+        )
+        nodes = payload.get("nodes")
+        if isinstance(nodes, list):
+            node = next(
+                (
+                    item
+                    for item in nodes
+                    if isinstance(item, dict) and item.get("node_id") == node_id
+                ),
+                None,
+            )
+            if node is not None and (
+                (
+                    draining
+                    and node.get("draining") is True
+                    and node.get("admission_open") is False
+                    and node.get("drain_token") == drain_token
+                )
+                or (
+                    not draining
+                    and node.get("draining") is False
+                    and node.get("admission_open") is True
+                )
+            ):
+                return
+        await asyncio.sleep(0.1)
+    direction = "draining" if draining else "admission-open"
+    raise TimeoutError(f"gateway did not observe node {node_id} as {direction}")
 
 
 def generation(record: Mapping[str, Any]) -> int:
@@ -116,7 +217,16 @@ def generation(record: Mapping[str, Any]) -> int:
 async def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.cycles < 1:
         raise ValueError("cycles must be positive")
+    if args.force_different_worker and not args.detach_before_wake:
+        raise ValueError("--force-different-worker requires --detach-before-wake")
+    if args.force_different_worker and args.node_control_token_file is None:
+        raise ValueError("--force-different-worker requires --node-control-token-file")
     token = read_token(args.gateway_token_file)
+    node_control_token = (
+        read_token(args.node_control_token_file)
+        if args.node_control_token_file is not None
+        else ""
+    )
     suffix = uuid4().hex[:10]
     sandbox_id = f"park-bench-{suffix}"
     job_id = f"counter-{suffix}"
@@ -215,20 +325,93 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     f"/v1/sandboxes/{sandbox_id}/jobs/{job_id}",
                 )
 
-                wake_started = time.monotonic()
-                woke, wake_retries = await gateway_json(
+                parked_record = parked.get("sandbox", {})
+                parked_route = await cached_sandbox_route(
                     session,
                     args.gateway_url,
                     token,
-                    "POST",
-                    f"/v1/sandboxes/{sandbox_id}/wake",
-                    payload={
-                        "generation": sandbox_generation,
-                        "operation_id": f"wake-benchmark:{suffix}:{index}",
-                    },
-                    attempts=101,
+                    sandbox_id,
                 )
-                wake_seconds = time.monotonic() - wake_started
+                source_node = parked_route.get("node")
+                source_node = source_node if isinstance(source_node, dict) else {}
+                source_node_id = str(source_node.get("node_id") or "")
+                source_node_url = str(source_node.get("node_url") or "")
+                if parked_route.get("cached_state") != "parked":
+                    raise RuntimeError(
+                        "gateway did not persist the parked route: "
+                        + json.dumps(parked_route, sort_keys=True)
+                    )
+                drain_token = f"detach-benchmark:{suffix}:{index}"
+                drained = False
+                detached: dict[str, Any] = {}
+                detach_retries = 0
+                detach_seconds = 0.0
+                try:
+                    if args.force_different_worker:
+                        if not source_node_url:
+                            raise RuntimeError("park response omitted source node URL")
+                        await node_json(
+                            session,
+                            source_node_url,
+                            node_control_token,
+                            "POST",
+                            "/v1/drain",
+                            payload={"token": drain_token, "draining": True},
+                        )
+                        drained = True
+                        await wait_for_gateway_drain_state(
+                            session,
+                            args.gateway_url,
+                            token,
+                            source_node_id,
+                            drain_token,
+                            draining=True,
+                        )
+                    if args.detach_before_wake:
+                        detach_started = time.monotonic()
+                        detached, detach_retries = await gateway_json(
+                            session,
+                            args.gateway_url,
+                            token,
+                            "POST",
+                            f"/v1/sandboxes/{sandbox_id}/detach",
+                            payload={},
+                            attempts=101,
+                        )
+                        detach_seconds = time.monotonic() - detach_started
+
+                    wake_started = time.monotonic()
+                    woke, wake_retries = await gateway_json(
+                        session,
+                        args.gateway_url,
+                        token,
+                        "POST",
+                        f"/v1/sandboxes/{sandbox_id}/wake",
+                        payload={
+                            "generation": sandbox_generation,
+                            "operation_id": f"wake-benchmark:{suffix}:{index}",
+                        },
+                        attempts=101,
+                    )
+                    wake_seconds = time.monotonic() - wake_started
+                finally:
+                    if drained:
+                        await node_json(
+                            session,
+                            source_node_url,
+                            node_control_token,
+                            "POST",
+                            "/v1/drain",
+                            payload={"token": drain_token, "draining": False},
+                        )
+                        await wait_for_gateway_drain_state(
+                            session,
+                            args.gateway_url,
+                            token,
+                            source_node_id,
+                            drain_token,
+                            draining=False,
+                        )
                 next_counter = await read_counter(current_counter)
                 running_job, _ = await gateway_json(
                     session,
@@ -237,8 +420,18 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     "GET",
                     f"/v1/sandboxes/{sandbox_id}/jobs/{job_id}",
                 )
-                parked_record = parked.get("sandbox", {})
+                running_route = await cached_sandbox_route(
+                    session,
+                    args.gateway_url,
+                    token,
+                    sandbox_id,
+                )
+                destination_node = running_route.get("node")
+                destination_node = (
+                    destination_node if isinstance(destination_node, dict) else {}
+                )
                 woke_record = woke.get("sandbox", {})
+                detached_record = detached.get("sandbox", {})
                 parked_process = parked_job.get("job", {})
                 running_process = running_job.get("job", {})
                 cycles.append(
@@ -246,10 +439,18 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         "cycle": index,
                         "park_seconds": park_seconds,
                         "wake_seconds": wake_seconds,
+                        "detach_seconds": detach_seconds,
                         "park_retries": park_retries,
                         "wake_retries": wake_retries,
+                        "detach_retries": detach_retries,
                         "parked_state": parked_record.get("state"),
                         "woke_state": woke_record.get("state"),
+                        "detached_worker_state": detached_record.get("worker_state"),
+                        "snapshot_manifest_digest": detached_record.get(
+                            "snapshot_manifest_digest"
+                        ),
+                        "source_node_id": source_node_id,
+                        "destination_node_id": destination_node.get("node_id"),
                         "counter_before": current_counter,
                         "counter_after": next_counter,
                         "parked_pid": parked_process.get("pid"),
@@ -270,8 +471,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     item["woke_state"] == "running" for item in cycles
                 ),
                 "counter_advanced_after_every_wake": all(
-                    item["counter_after"] > item["counter_before"]
-                    for item in cycles
+                    item["counter_after"] > item["counter_before"] for item in cycles
                 ),
                 "process_identity_preserved": all(
                     item["parked_pid"] == baseline_pid
@@ -281,6 +481,20 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     for item in cycles
                 ),
             }
+            if args.detach_before_wake:
+                correctness["every_detach_reached_detached"] = all(
+                    item["detached_worker_state"] == "detached"
+                    and bool(item["snapshot_manifest_digest"])
+                    for item in cycles
+                )
+            if args.force_different_worker:
+                correctness["every_wake_used_another_worker"] = all(
+                    item["source_node_id"]
+                    and item["destination_node_id"]
+                    and item["source_node_id"] != item["destination_node_id"]
+                    for item in cycles
+                )
+            detach_values = [item["detach_seconds"] for item in cycles]
             return {
                 "ok": all(correctness.values()),
                 "sandbox_id": sandbox_id,
@@ -295,8 +509,13 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     "wake_min_seconds": min(wake_values),
                     "wake_median_seconds": statistics.median(wake_values),
                     "wake_max_seconds": max(wake_values),
+                    "detach_min_seconds": min(detach_values),
+                    "detach_median_seconds": statistics.median(detach_values),
+                    "detach_max_seconds": max(detach_values),
                     "total_lifecycle_retries": sum(
-                        item["park_retries"] + item["wake_retries"]
+                        item["park_retries"]
+                        + item["detach_retries"]
+                        + item["wake_retries"]
                         for item in cycles
                     ),
                 },

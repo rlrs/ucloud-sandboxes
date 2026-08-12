@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "date": "2026-08-12",
+  "provider": "hetzner",
+  "location": "hel1",
+  "snapshot": {
+    "id": 419293093,
+    "description": "ucloud sandbox Ubuntu 26.04 compaction v4 64GiB Docker",
+    "source_server_type": "cpx12",
+    "source_disk_gb": 40,
+    "stored_image_gb": 1.2963113603515626,
+    "os": "Ubuntu 26.04",
+    "kernel_release": "7.0.0-29-generic"
+  },
+  "runtime": {
+    "agent_version": "0.3.95",
+    "bundle_sha256": "b4bb9dccb6cf9bd7627ae4b7b86b4f2408029d8204d7ca2fa5cea64be23a63dd",
+    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "storage_native_sha256": "259ea3d41327311fbab384dacc72f0f2655fe9fae1169a61b3803a629bc4ff65",
+    "runsc_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1"
+  },
+  "worker_profile": {
+    "server_type": "cpx62",
+    "vcpu": 16,
+    "memory_mb": 32768,
+    "disk_gb": 640,
+    "docker_quota_image_gib": 64,
+    "swap_gib": 16,
+    "storage_native_cache_gib": 16,
+    "host_headroom_mib": 24576,
+    "storage_native_hard_capacity_mib": 532480
+  },
+  "snapshot_clone": {
+    "server_id": 161905764,
+    "api_create_seconds": 9,
+    "bundle_transfer_bytes": 0,
+    "bundle_reused": true,
+    "dynamic_init_seconds": 4.755,
+    "root_filesystem_total_mib": 614929,
+    "root_filesystem_free_mib_after_test": 571411
+  },
+  "sandbox_smoke": {
+    "image": "busybox:1.36",
+    "runtime": "gvisor",
+    "parkable": true,
+    "create_seconds": 1.0698672729999998,
+    "park_and_publish_seconds": 1.7418157360000066,
+    "wake_seconds": 0.5821777200000042,
+    "total_seconds": 3.8060401089999942,
+    "manifest_digest": "sha256:7628d30cf5ab004d7ef231c9f9f9554ffbac485e3838d162e6370dc266e9f55e",
+    "sentinel_preserved": true
+  },
+  "cleanup": {
+    "active_sandboxes": 0,
+    "storage_hard_reserved_mib": 0,
+    "storage_published_volumes": 0,
+    "storage_active_ublk_devices": 0,
+    "storage_error_volumes": 0,
+    "service_error_journal_entries": 0
+  }
+}

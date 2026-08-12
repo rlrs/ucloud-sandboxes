@@ -849,6 +849,76 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(stored.create_operation_id, "create-1")
         self.assertEqual(stored.state, "running")
 
+    def test_transient_inventory_cannot_regress_stable_lifecycle_state(self) -> None:
+        with routing_store() as store:
+            current = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-1",
+                    spec_hash="a" * 64,
+                    node_epoch="epoch-1",
+                    activity_epoch=1,
+                )
+            )
+
+            store.reconcile_sandboxes_for_node(
+                current.node_url,
+                [
+                    SandboxInventoryEntry(
+                        sandbox_id=current.sandbox_id,
+                        generation=current.generation,
+                        operation_id=current.create_operation_id,
+                        spec_hash=current.spec_hash,
+                        state="restoring",
+                    )
+                ],
+                node_id=current.node_id,
+                job_id=current.job_id,
+                reported_sandbox_ids={current.sandbox_id},
+                observed_at=utc_now().isoformat(),
+                node_epoch=current.node_epoch,
+                activity_epoch=current.activity_epoch + 1,
+                inventory_complete=True,
+            )
+            stored = store.get_sandbox_readonly(current.sandbox_id)
+
+        assert stored is not None
+        self.assertEqual(stored.state, "running")
+        self.assertEqual(stored.activity_epoch, current.activity_epoch)
+
+    def test_transient_list_result_cannot_regress_stable_lifecycle_state(self) -> None:
+        with routing_store() as store:
+            current = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="running",
+                    generation=1,
+                    create_operation_id="create-1",
+                    spec_hash="a" * 64,
+                    node_epoch="epoch-1",
+                    activity_epoch=1,
+                )
+            )
+
+            stored = store.upsert_sandbox(
+                replace(
+                    current,
+                    state="restoring",
+                    activity_epoch=current.activity_epoch + 1,
+                )
+            )
+
+        self.assertEqual(stored.state, "running")
+        self.assertEqual(stored.activity_epoch, current.activity_epoch)
+
     def test_delete_sandboxes_for_jobs_removes_routes_and_dependents(self) -> None:
         with routing_store() as store:
             now = utc_now().isoformat()
@@ -993,7 +1063,78 @@ class RoutingStoreTests(unittest.TestCase):
             ["live-lost", "local-parked"],
         )
         self.assertEqual(set(state.sandboxes), {"portable-parked"})
+        self.assertEqual(
+            state.sandboxes["portable-parked"].worker_state,
+            "detached",
+        )
         self.assertEqual(state.exec_sessions, {})
+
+    def test_worker_detach_is_generation_fenced_and_idempotent(self) -> None:
+        with routing_store() as store:
+            route = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="portable-parked",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest="sha256:" + "c" * 64,
+                    snapshot_repository="snapshots",
+                    snapshot_tag="sandbox-1",
+                    storage_snapshot={"schema": "storage-native-v1"},
+                )
+            )
+            fenced = store.begin_sandbox_detach(route)
+            replayed_fence = store.begin_sandbox_detach(route)
+            stale = replace(route, generation=route.generation + 1)
+            stale_completion = store.complete_sandbox_detach(stale)
+            assert fenced is not None
+            completed = store.complete_sandbox_detach(fenced)
+            replayed_completion = store.complete_sandbox_detach(fenced)
+
+        assert replayed_fence is not None
+        assert completed is not None
+        assert replayed_completion is not None
+        self.assertEqual(fenced.worker_state, "detaching")
+        self.assertEqual(replayed_fence.worker_state, "detaching")
+        self.assertIsNone(stale_completion)
+        self.assertEqual(completed.worker_state, "detached")
+        self.assertEqual(replayed_completion.worker_state, "detached")
+
+    def test_schema_two_routes_migrate_to_attached_worker_state(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "routes.sqlite"
+            RoutingStore(path)
+            with sqlite3.connect(path) as conn:
+                conn.execute("PRAGMA user_version=2")
+                conn.execute("ALTER TABLE sandboxes RENAME TO sandboxes_v3")
+                conn.execute(
+                    """
+                    CREATE TABLE sandboxes AS
+                    SELECT sandbox_id, node_id, job_id, node_url,
+                           resources_json, spec_json, state, generation,
+                           create_operation_id, spec_hash, delete_operation_id,
+                           node_epoch, activity_epoch, storage_schema,
+                           snapshot_manifest_digest, snapshot_repository,
+                           snapshot_tag, storage_snapshot_json, created_at, updated_at
+                    FROM sandboxes_v3
+                    """
+                )
+                conn.execute("DROP TABLE sandboxes_v3")
+                conn.commit()
+
+            migrated = RoutingStore(path)
+            with sqlite3.connect(path) as conn:
+                version = conn.execute("PRAGMA user_version").fetchone()[0]
+                columns = {
+                    row[1]: row[4]
+                    for row in conn.execute("PRAGMA table_info(sandboxes)")
+                }
+
+        self.assertIsInstance(migrated, RoutingStore)
+        self.assertEqual(version, 3)
+        self.assertEqual(columns["worker_state"], "'attached'")
 
     def test_readonly_sandbox_queries_return_current_routes(self) -> None:
         with routing_store() as store:

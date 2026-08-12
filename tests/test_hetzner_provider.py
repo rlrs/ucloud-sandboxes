@@ -304,7 +304,9 @@ class HetznerProviderTests(unittest.TestCase):
         self.assertEqual(instance.application_name, "sandbox-node-v2")
         self.assertEqual(instance.cpu, 8)
         self.assertEqual(instance.memory_gb, 16)
-        self.assertEqual(instance.disk_gb, 160)
+        # Hetzner's decimal GB is normalized to the binary GiB used by core
+        # resource accounting: floor(160e9 / 2^30) == 149.
+        self.assertEqual(instance.disk_gb, 149)
         self.assertTrue(compute.instance_is_eligible(instance))
         self.assertTrue(access.runnable)
         self.assertEqual(access.command, "ssh root@10.20.0.42")

@@ -710,9 +710,17 @@ class DirectSandboxProvisioner:
         )
         if record.state == StorageVolumeState.DELETED:
             return
+        delete_operation_id = f"quota-delete:{record.accounting_id}"
+        if registration.migration_id:
+            # A detached sandbox can later import the same generation and
+            # volume ID on this worker. The storage journal deliberately keeps
+            # the first deletion, so namespace a later imported incarnation by
+            # its stable migration fence instead of reusing that operation ID
+            # with a newer storage revision.
+            delete_operation_id += f":{registration.migration_id}"
         self.warden.storage.delete_volume(
             owner,
-            operation_id=f"quota-delete:{record.accounting_id}",
+            operation_id=delete_operation_id,
             expected_accounting_id=expected_project_id,
             expected_virtual_size=total_mb * _MIB,
         )

@@ -63,7 +63,7 @@ class DeployTests(unittest.TestCase):
         manifest.write_text(
             json.dumps(
                 {
-                    "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+                    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
                     "artifact": backend.name,
                     "artifact_sha256": backend_digest,
                     "cargo_package": "uvm-ublk-daemon",
@@ -121,7 +121,7 @@ class DeployTests(unittest.TestCase):
             script = render_remote_deploy_script(plan)
 
         self.assertIn("/etc/ucloud-sandboxes/deployment.json", script)
-        self.assertIn('"schema": 1', script)
+        self.assertIn('"schema": 2', script)
         self.assertIn('"deployment_id": "prod-a"', script)
         self.assertNotIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertNotIn("/etc/ucloud-sandboxes/autoscaler.env", script)
@@ -140,10 +140,39 @@ class DeployTests(unittest.TestCase):
             "create_secret /work/data/ucloud-sandboxes/state/gateway-token",
             script,
         )
+        self.assertIn(
+            "REGISTRY_MOUNT_POINT=/work/data",
+            script,
+        )
+        self.assertIn(
+            "REGISTRY_DATA_ROOT=/work/data/ucloud-sandbox-registry/docker-registry",
+            script,
+        )
         self.assertEqual(
             plan.to_dict()["deployment"],
             plan.config.to_dict(),
         )
+        syntax = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_registry_units_fence_the_configured_registry_mount(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            config = self._config(
+                registry_mount_point="/mnt/registry",
+                registry_data_root="/mnt/registry/docker-registry",
+            )
+            plan = self._plan(Path(raw_dir), config=config)
+            script = render_remote_deploy_script(plan)
+
+        self.assertIn("REGISTRY_MOUNT_POINT=/mnt/registry", script)
+        self.assertIn("RequiresMountsFor=/mnt/registry", script)
+        self.assertIn("ExecStartPre=/usr/bin/mountpoint -q /mnt/registry", script)
         syntax = subprocess.run(
             ["bash", "-n"],
             input=script,

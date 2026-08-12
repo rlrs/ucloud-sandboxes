@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "captured_at": "2026-08-12T16:36:59Z",
+  "environment": {
+    "provider": "Hetzner Cloud",
+    "server_type": "CPX62",
+    "location": "hel1",
+    "operating_system": "Ubuntu 26.04 LTS",
+    "kernel": "Linux 7.0.0-22-generic x86_64",
+    "storage": "server-local disk"
+  },
+  "build": {
+    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "artifact_sha256": "6d880beefea7a5c6e4f02b04a58132d460c816db8f701a460be28c6212dd273d",
+    "patches": {
+      "agentenv-streaming-dense-export.patch": "89e534dc98fdf4a42725c79300404228ba6587a1fec5ece15ae5b48bafc87ec7",
+      "agentenv-pooled-delete.patch": "d424c23f256debe498b8a958addba556a363fc9b70c286b02cd7f9651244666b",
+      "agentenv-owner-identity.patch": "269398f97b1ea1de13a68401e0498c16d158a665993d2358b4bb10e074a2dbfb"
+    }
+  },
+  "tests": {
+    "overlaybd_library": {
+      "passed": 308,
+      "failed": 0,
+      "ignored": 1
+    },
+    "ublk_daemon_library": {
+      "passed": 45,
+      "failed": 0,
+      "ignored": 0
+    },
+    "volume_lifecycle": {
+      "status": "passed",
+      "upper_mode": "hybridLogStructured",
+      "logical_device_bytes": 4294967296,
+      "sealed_layer_bytes": 71852032,
+      "create_and_format_seconds": 0.24939217500002542,
+      "freeze_and_seal_seconds": 0.04455272600000626,
+      "reconstruct_and_mount_seconds": 0.04856168200001321,
+      "enospc_errno": 28
+    },
+    "pooled_node_churn": {
+      "status": "passed",
+      "pool_low_watermark": 2,
+      "pool_high_watermark": 4,
+      "measured_acquisitions": 23,
+      "reused_acquisitions": 23,
+      "new_acquisitions": 0,
+      "churn_acquire_p50_seconds": 0.05120712099994762,
+      "parallel_acquire_p50_seconds": 0.05821396999999706,
+      "hard_reserved_bytes_after_cleanup": 0,
+      "ublk_devices_after_daemon_shutdown": 0
+    },
+    "remote_lower_layer": {
+      "status": "passed",
+      "background_download_enabled": false,
+      "layer_digest": "sha256:3b77c55669381f615212dde7813aecb5bd24c18a17135bfec88fc82ab3f9e024",
+      "layer_bytes": 71852032,
+      "cold": {
+        "create_seconds": 0.08653162100006284,
+        "mount_seconds": 0.03701083299995389,
+        "range_requests": 13,
+        "bytes_served": 3170304
+      },
+      "warm": {
+        "create_seconds": 0.01241716999993514,
+        "mount_seconds": 0.029517554999983986,
+        "additional_range_requests": 0,
+        "additional_bytes_served": 0
+      }
+    }
+  }
+}

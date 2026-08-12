@@ -472,6 +472,65 @@ class DirectSandboxService:
         with self._activity_guard:
             self._last_activity.pop(key, None)
 
+    def evict_published(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int,
+        snapshot_manifest_digest: str,
+    ) -> None:
+        """Remove only a parked incarnation already durable in the Registry."""
+
+        if generation <= 0:
+            raise ValueError("eviction generation must be positive")
+        digest = snapshot_manifest_digest.strip()
+        if (
+            not digest.startswith("sha256:")
+            or len(digest) != len("sha256:") + 64
+            or any(character not in "0123456789abcdef" for character in digest[7:])
+        ):
+            raise ValueError("eviction snapshot manifest digest is invalid")
+        registration = self.provisioner.registry.get(sandbox_id)
+        if registration is None:
+            return
+        if registration.sandbox_generation != generation:
+            raise DirectWardenError(
+                "eviction generation does not own the direct sandbox"
+            )
+        key = (sandbox_id, generation)
+        with self._lock(*key):
+            registration = self.provisioner.registry.get(sandbox_id)
+            if registration is None:
+                return
+            if registration.sandbox_generation != generation:
+                raise DirectWardenError(
+                    "eviction generation does not own the direct sandbox"
+                )
+            if registration.phase == "deleting":
+                self.provisioner.delete(sandbox_id)
+            else:
+                if registration.phase != "owned":
+                    raise DirectWardenError(
+                        "direct sandbox is busy with another ownership transition"
+                    )
+                sandbox = registration.to_direct_sandbox()
+                lifecycle = self.warden.inspect(sandbox)
+                if lifecycle is None or lifecycle.state != HibernationState.PARKED:
+                    raise DirectWardenError(
+                        "only a parked sandbox can be evicted from its worker"
+                    )
+                storage = self.warden._storage_record(sandbox)
+                if (
+                    storage.state.value != "published"
+                    or storage.published_manifest_digest != digest
+                ):
+                    raise DirectWardenError(
+                        "worker publication does not match the durable route"
+                    )
+                self.provisioner.delete(sandbox_id)
+        with self._activity_guard:
+            self._last_activity.pop(key, None)
+
     def park(
         self,
         sandbox_id: str,
@@ -638,6 +697,49 @@ class DirectSandboxService:
 
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
+            return self._storage_native_snapshot_locked(registration)
+
+    def publish_parked(
+        self,
+        sandbox_id: str,
+        *,
+        generation: int,
+        create_operation_id: str,
+        spec_hash: str,
+    ) -> StorageNativeMigration:
+        """Publish one exact parked incarnation without changing worker ownership."""
+
+        if generation <= 0:
+            raise ValueError("publication generation must be positive")
+        if not OPERATION_ID_RE.fullmatch(create_operation_id):
+            raise ValueError("publication create operation id is invalid")
+        if len(spec_hash) != 64 or any(
+            character not in "0123456789abcdef" for character in spec_hash
+        ):
+            raise ValueError("publication spec digest is invalid")
+        registration = self._require_registration(sandbox_id)
+        if (
+            registration.sandbox_generation != generation
+            or registration.operation_id != create_operation_id
+            or registration.spec_sha256 != spec_hash
+        ):
+            raise DirectWardenError(
+                "publication identity does not own the direct sandbox"
+            )
+        with self._lock(sandbox_id, generation):
+            registration = self._require_registration(sandbox_id)
+            if (
+                registration.sandbox_generation != generation
+                or registration.operation_id != create_operation_id
+                or registration.spec_sha256 != spec_hash
+            ):
+                raise DirectWardenError(
+                    "publication identity does not own the direct sandbox"
+                )
+            if registration.phase != "owned":
+                raise DirectWardenError(
+                    "direct sandbox is busy with another ownership transition"
+                )
             return self._storage_native_snapshot_locked(registration)
 
     def _storage_native_snapshot_locked(

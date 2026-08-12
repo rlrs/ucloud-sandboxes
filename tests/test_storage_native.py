@@ -117,6 +117,11 @@ class StorageNativeTests(unittest.TestCase):
                     "digest": "sha256:" + "b" * 64,
                     "size": 1222,
                 },
+                {
+                    "status": "dense_layer_exported",
+                    "digest": "sha256:" + "c" * 64,
+                    "size": 2444,
+                },
                 {"status": "released"},
                 {"status": "deleted"},
             ]
@@ -137,6 +142,11 @@ class StorageNativeTests(unittest.TestCase):
                     source_layer_path=(root / "snapshot.commit").resolve(),
                     stream_socket_path=(root / "export.sock").resolve(),
                 )
+                compacted = client.export_compacted_image(
+                    source_image_config=(root / "compact-source.json").resolve(),
+                    global_config=(root / "global.json").resolve(),
+                    stream_socket_path=(root / "compact.sock").resolve(),
+                )
                 client.release(device.device_id)
                 client.delete(device.device_id)
 
@@ -147,6 +157,8 @@ class StorageNativeTests(unittest.TestCase):
             self.assertEqual(layer.size, 1234)
             self.assertEqual(dense.digest, "sha256:" + "b" * 64)
             self.assertEqual(dense.size, 1222)
+            self.assertEqual(compacted.digest, "sha256:" + "c" * 64)
+            self.assertEqual(compacted.size, 2444)
             self.assertEqual(
                 daemon.requests[0],
                 {
@@ -175,6 +187,17 @@ class StorageNativeTests(unittest.TestCase):
             )
             self.assertEqual(
                 daemon.requests[3],
+                {
+                    "global_config": str((root / "global.json").resolve()),
+                    "kind": "export_compacted_image",
+                    "source_image_config": str(
+                        (root / "compact-source.json").resolve()
+                    ),
+                    "stream_socket_path": str((root / "compact.sock").resolve()),
+                },
+            )
+            self.assertEqual(
+                daemon.requests[4],
                 {"kind": "release_overlaybd", "dev_id": 7},
             )
 

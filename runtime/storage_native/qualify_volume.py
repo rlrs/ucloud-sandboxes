@@ -226,7 +226,9 @@ class Qualifier:
         assert self.test_root is not None
         socket_path = self.test_root / "ublk.sock"
         cache_dir = self.test_root / "cache"
+        resize_cache_dir = self.test_root / "resize-cache"
         cache_dir.mkdir()
+        resize_cache_dir.mkdir()
         global_config = self.test_root / "global.json"
         self._write_json(
             global_config,
@@ -242,6 +244,21 @@ class Qualifier:
                 "download": {"enable": False},
             },
         )
+        resize_global_config = self.test_root / "resize-global.json"
+        self._write_json(
+            resize_global_config,
+            {
+                "registryFsVersion": "v2",
+                "nrIoRings": 1,
+                "cacheConfig": {
+                    "cacheType": "file",
+                    "cacheDir": str(resize_cache_dir),
+                    "cacheSizeGB": 1,
+                    "refillSize": 262144,
+                },
+                "download": {"enable": False},
+            },
+        )
         log_path = self.test_root / "ublk-daemon.log"
         log_handle = log_path.open("w", encoding="utf-8")
         self.daemon = subprocess.Popen(
@@ -251,6 +268,8 @@ class Qualifier:
                 str(socket_path),
                 "--global-config",
                 str(global_config),
+                "--resize-global-config",
+                str(resize_global_config),
                 "--metrics-listen-addr",
                 "",
                 "--log-level",

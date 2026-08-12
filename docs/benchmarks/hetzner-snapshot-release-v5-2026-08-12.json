@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "date": "2026-08-12",
+  "provider": "hetzner",
+  "location": "hel1",
+  "snapshot": {
+    "id": 419357782,
+    "description": "ucloud sandboxes 0.4.0 Ubuntu 26.04 release v5",
+    "source_server_id": 161949916,
+    "source_server_type": "cpx12",
+    "source_disk_gb": 40,
+    "stored_image_gb": 1.7932828974609376,
+    "os": "Ubuntu 26.04",
+    "kernel_release": "7.0.0-29-generic"
+  },
+  "runtime": {
+    "agent_version": "0.4.0",
+    "bundle_sha256": "8f2c8d256bcab3e0db7ef8669ef3067e1c215055e90bfd6c5202712dae897656",
+    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "storage_native_sha256": "259ea3d41327311fbab384dacc72f0f2655fe9fae1169a61b3803a629bc4ff65",
+    "runsc_commit": "9f653e577965df2ddd13875b5530cd2588661f1c",
+    "runsc_sha256": "342c8141209d85d7456dee7bf319e7bfebf93b05cb5186ff3cf19f7a73048dd1"
+  },
+  "worker_profile": {
+    "server_type": "cpx62",
+    "vcpu": 16,
+    "memory_mb": 32768,
+    "provider_disk_decimal_gb": 640,
+    "normalized_disk_gib": 596,
+    "docker_quota_image_gib": 64,
+    "swap_gib": 0,
+    "storage_native_cache_gib": 16,
+    "host_headroom_mib": 24576,
+    "storage_native_hard_capacity_mib": 503808
+  },
+  "snapshot_clone": {
+    "server_id": 161952189,
+    "bundle_transfer_bytes": 0,
+    "bundle_reused": true,
+    "dynamic_init_seconds": 3.496
+  },
+  "attached_sandbox_smoke": {
+    "image": "busybox:1.36",
+    "runtime": "gvisor",
+    "parkable": true,
+    "create_seconds": 0.5700818660000095,
+    "park_and_publish_seconds": 0.9839313059999881,
+    "wake_seconds": 0.31690619000005427,
+    "total_seconds": 2.010827024999969,
+    "manifest_digest": "sha256:c05c40488d5d527d4132228f6c4653c28fae95ee53c7d26396cb7c5454cfe91a",
+    "sentinel_preserved": true
+  },
+  "detached_sandbox_smoke": {
+    "image": "busybox:1.36",
+    "runtime": "gvisor",
+    "parkable": true,
+    "create_seconds": 0.5210277740000038,
+    "park_and_publish_seconds": 0.9848331970000004,
+    "evict_local_seconds": 0.08872046800001954,
+    "registry_import_and_activate_seconds": 0.33406193799999073,
+    "wake_seconds": 0.2720262189999971,
+    "total_seconds": 2.3237945179999997,
+    "manifest_digest": "sha256:cdb56274d2617b7d893faf8ce13f55f4d22221f810f9e34a9a5240e7865ca1d7",
+    "sentinel_preserved": true
+  },
+  "cleanup": {
+    "active_sandboxes": 0,
+    "inventory_entries": 0,
+    "storage_hard_reserved_mib": 0,
+    "storage_published_volumes": 0,
+    "storage_active_ublk_devices": 0,
+    "storage_error_volumes": 0,
+    "service_error_journal_entries": 0,
+    "remaining_servers": 0,
+    "remaining_volumes": 0
+  }
+}

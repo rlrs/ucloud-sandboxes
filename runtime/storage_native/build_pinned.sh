@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly EXPECTED_COMMIT="f41abb21324f6b0520abf34b7720aa260ddd10eb"
+readonly EXPECTED_COMMIT="db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
 readonly PACKAGE="uvm-ublk-daemon"
 readonly BINARY="uvm-ublk-daemon"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -48,6 +48,10 @@ done
 
 (
   cd "${SOURCE_DIR}"
+  cargo test --locked --release -p overlaybd --lib \
+    lsmt::file::tests::test_flatten_mixed_data_and_discard_keeps_index_sorted
+  cargo test --locked --release -p overlaybd --lib \
+    lsmt::file::tests::test_create_mappings_from_sparse_large_region_split
   cargo test --locked --release -p "${PACKAGE}" --lib protocol::tests
   cargo build --locked --release -p "${PACKAGE}" --bin "${BINARY}"
 )

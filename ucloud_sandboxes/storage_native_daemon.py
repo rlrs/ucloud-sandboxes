@@ -355,6 +355,14 @@ class StorageBlockBackend(Protocol):
         stream_socket_path: Path,
     ) -> Any: ...
 
+    def export_compacted_image(
+        self,
+        *,
+        source_image_config: Path,
+        global_config: Path,
+        stream_socket_path: Path,
+    ) -> Any: ...
+
 
 class StorageSnapshotPublisher(Protocol):
     def publish(
@@ -364,12 +372,15 @@ class StorageSnapshotPublisher(Protocol):
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
+        global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication: ...
 
     def verify(
         self,
         publication: StorageSnapshotPublication,
     ) -> StorageSnapshotPublication: ...
+
+    def metrics(self) -> dict[str, int]: ...
 
 
 class StorageHostOperations(Protocol):
@@ -1155,6 +1166,7 @@ class StorageNativeNodeService:
                 record.state == StorageVolumeState.PUBLISHED for record in records
             ),
             "volume_count": len(records),
+            **(self.publisher.metrics() if self.publisher is not None else {}),
             **pool_metrics,
         }
 
@@ -1660,6 +1672,7 @@ class StorageNativeNodeService:
                 source_layer_paths=local_paths,
                 virtual_size=pending.virtual_size,
                 existing_layers=existing_layers,
+                global_config_path=self.global_config_path,
             )
             record = replace(
                 pending,

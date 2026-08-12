@@ -372,10 +372,19 @@ original status, `retryable`, upstream content type, and a short body preview.
 
 `POST /v1/sandboxes/<sandbox-id>/park` and
 `POST /v1/sandboxes/<sandbox-id>/wake` carry the sandbox generation and a stable
-operation id. Park publishes a verified `storage-native-v1` snapshot before the
-node releases compute. Wake uses the current route when that node has active
-capacity; otherwise the gateway migrates the parked snapshot and wakes it on the
-destination.
+operation id. The default foreground park releases compute and seals local
+storage without putting registry publication on its latency-critical path. Wake
+uses that attached route when the current node has active capacity.
+
+`POST /v1/sandboxes/<sandbox-id>/detach` accepts an empty JSON object. It is the
+durability boundary used by node scale-down: the gateway synchronously publishes
+an unpublished park, validates and persists its exact `storage-native-v1`
+descriptor and Registry reference, then evicts worker-local ownership. The
+operation is idempotent. Ambiguous eviction returns a retryable `503` and leaves
+the route `detaching`; it never reports freed storage without a successful retry
+or a fresh complete heartbeat proving the incarnation absent. Wake of a fully
+detached park selects a fitting worker, imports the durable descriptor, and
+activates it there.
 
 `POST /v1/sandboxes/<sandbox-id>/migration` moves a parked sandbox between
 nodes that both advertise `storage-native-v1` and

@@ -13,6 +13,12 @@ from .managed_registry import registry_maintenance_lock
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
 
 
+def require_registry_mount(config: DeploymentConfig) -> None:
+    mount_point = Path(config.registry_mount_point)
+    if not mount_point.is_mount():
+        raise RuntimeError(f"registry storage is not mounted at {mount_point}")
+
+
 def run_registry_gc(
     *,
     data_dir: Path,
@@ -79,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = DeploymentConfig.from_file(args.config)
     if args.command == "registry-gc":
+        require_registry_mount(config)
         run_registry_gc(
             data_dir=config.registry_data_dir(),
             registry_image="registry:2",
@@ -86,6 +93,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     if args.command == "registry":
+        require_registry_mount(config)
         data_dir = config.registry_data_dir()
         data_dir.mkdir(parents=True, exist_ok=True)
         command = [

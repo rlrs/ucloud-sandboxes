@@ -820,6 +820,31 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(results, ())
             self.assertIsNone(registry.get(deleting.sandbox_id))
 
+    def test_imported_incarnation_namespaces_storage_delete_operation(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, quota, _, _ = self.make(root)
+            created = provisioner.create(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+            )
+            imported = replace(
+                created,
+                migration_id="move:detached-wake",
+                migration_sha256="a" * 64,
+            )
+
+            provisioner._drop_storage(
+                imported,
+                expected_project_id=imported.quota_project_id,
+            )
+
+            self.assertEqual(
+                quota.delete_operation_ids,
+                [f"quota-delete:{imported.quota_project_id}:" "move:detached-wake"],
+            )
+
     def test_delete_fails_closed_when_storage_authority_is_absent(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1067,6 +1092,80 @@ class DirectProvisionerTests(unittest.TestCase):
 
             self.assertEqual(parked.state, HibernationState.PARKED.value)
             self.assertEqual(publications, [])
+
+    def test_evict_published_requires_exact_parked_registry_authority(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, _, warden = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            service.park(created.spec.id, operation_id="park:test")
+            digest = "sha256:" + "a" * 64
+            warden._storage_record = lambda _sandbox: SimpleNamespace(
+                state=StorageVolumeState.PUBLISHED,
+                published_manifest_digest=digest,
+            )
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "does not match the durable route",
+            ):
+                service.evict_published(
+                    created.spec.id,
+                    generation=created.generation,
+                    snapshot_manifest_digest="sha256:" + "b" * 64,
+                )
+
+            self.assertIsNotNone(registry.get(created.spec.id))
+            service.evict_published(
+                created.spec.id,
+                generation=created.generation,
+                snapshot_manifest_digest=digest,
+            )
+            service.evict_published(
+                created.spec.id,
+                generation=created.generation,
+                snapshot_manifest_digest=digest,
+            )
+
+            self.assertIsNone(registry.get(created.spec.id))
+            self.assertEqual(quota.active_records, {})
+
+    def test_publish_parked_requires_exact_owned_incarnation(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            sentinel = object()
+
+            with patch.object(
+                service,
+                "_storage_native_snapshot_locked",
+                return_value=sentinel,
+            ) as publish:
+                observed = service.publish_parked(
+                    created.spec.id,
+                    generation=created.generation,
+                    create_operation_id=created.operation_id,
+                    spec_hash=created.spec_hash,
+                )
+                with self.assertRaisesRegex(RuntimeError, "does not own"):
+                    service.publish_parked(
+                        created.spec.id,
+                        generation=created.generation + 1,
+                        create_operation_id=created.operation_id,
+                        spec_hash=created.spec_hash,
+                    )
+
+            self.assertIs(observed, sentinel)
+            publish.assert_called_once()
 
     def test_service_quarantines_dead_running_sentry_on_read(self) -> None:
         with TemporaryDirectory() as raw:
@@ -1657,9 +1756,89 @@ class DirectProvisionerTests(unittest.TestCase):
                     "direct-runsc-v1",
                     server.RequestHandlerClass.capabilities,
                 )
+                self.assertIn(
+                    "sandbox-detach-published-v1",
+                    server.RequestHandlerClass.capabilities,
+                )
                 self.assertIsNone(service._parking_thread)
             finally:
                 server.server_close()
+
+    def test_direct_node_publish_parked_endpoint_uses_exact_identity(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            publication = SimpleNamespace(
+                manifest_digest="sha256:" + "a" * 64,
+                repository="snapshots",
+                tag="sandbox-7",
+            )
+            snapshot = SimpleNamespace(
+                sha256="b" * 64,
+                publication=publication,
+                to_dict=lambda: {"schema": "storage-native-v1"},
+            )
+            server = build_direct_node_agent_server(
+                "127.0.0.1",
+                0,
+                service=service,
+                image_file=root / "images.json",
+                job_id="job",
+                node_id="node",
+            )
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                host, port = server.server_address
+                outbound = request.Request(
+                    (
+                        f"http://{host}:{port}/v1/sandboxes/{created.spec.id}"
+                        "/publish-parked"
+                    ),
+                    data=json.dumps(
+                        {
+                            "generation": created.generation,
+                            "create_operation_id": created.operation_id,
+                            "spec_hash": created.spec_hash,
+                        }
+                    ).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with patch.object(
+                    service,
+                    "publish_parked",
+                    return_value=snapshot,
+                ) as publish:
+                    with request.urlopen(outbound) as response:
+                        payload = json.load(response)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=1)
+
+            publish.assert_called_once_with(
+                created.spec.id,
+                generation=created.generation,
+                create_operation_id=created.operation_id,
+                spec_hash=created.spec_hash,
+            )
+            self.assertEqual(
+                payload,
+                {
+                    "storage_schema": "storage-native-v1",
+                    "snapshot_sha256": snapshot.sha256,
+                    "storage_snapshot": snapshot.to_dict(),
+                    "snapshot_manifest_digest": publication.manifest_digest,
+                    "snapshot_repository": publication.repository,
+                    "snapshot_tag": publication.tag,
+                },
+            )
 
     def test_direct_node_wire_uses_domain_results_without_docker_facades(self) -> None:
         with TemporaryDirectory() as raw:

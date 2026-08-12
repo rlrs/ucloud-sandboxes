@@ -374,21 +374,45 @@ route, restores the exact request shape as pending demand, and allows the SDK
 retry to select another node. Timeouts and generic 5xx responses remain
 identity-fenced because the original create may have reached provisioning.
 
-Scale-down requires a proven empty node or a completed storage-native migration:
+Scale-down requires a proven empty node or detached, durable parked storage:
 
 1. persist a drain incarnation and close node admission;
-2. wait for running ownership to be deleted and migrate each parked
-   `storage-native-v1` route to a surviving node that advertises both
-   `storage-native-v1` and `sandbox-migrate-storage-native-v1`;
-3. require a fresh complete empty inventory and zero resource ownership after
-   migration;
-4. journal and execute the provider stop.
+2. wait for running ownership to be deleted and require every remaining route
+   to be a `storage-native-v1` park;
+3. synchronously publish any park that does not yet have a durable registry
+   descriptor, validate that descriptor against the exact sandbox incarnation,
+   and persist both the descriptor and its registry reference in the gateway;
+4. evict each now-published park from the worker through the fenced
+   `sandbox-detach-published-v1` contract, while retaining its immutable
+   registry descriptor in the gateway route;
+5. require a fresh complete empty inventory and zero resource ownership after
+   detachment;
+6. journal and execute the provider stop.
+
+Detachment is different from migration: it does not need another running
+worker and does not immediately download the sandbox again. A later wake
+selects a node, imports the published descriptor, and activates it there. An
+attached parked sandbox still takes the fast same-worker wake path. An
+ambiguous eviction leaves the route in `detaching`; it cannot be counted as
+free until a successful retry or a fresh complete heartbeat proves the local
+incarnation absent.
+
+Publication also bounds the immutable snapshot chain. The prospective old
+remote layers plus new local sealed delta are compacted when they exceed eight
+layers or 4 GiB. Compaction streams one flattened layer directly to the
+Registry; it does not allocate another virtual-disk-sized worker file. The old
+publication and local delta retain authority until the replacement manifest is
+durable, so a compaction failure blocks detachment and scale-down rather than
+discarding recoverable state.
 
 The autoscaler derives the gateway address and credentials from
 `deployment.json`. It starts at most
-`autoscaler_max_storage_native_migrations_per_cycle` drain migrations. A node is not a
-stop candidate when any parked route lacks the canonical storage schema,
-manifest digest, or a fitting migration destination.
+`autoscaler_max_storage_native_detaches_per_cycle` detach operations. A node is
+not a stop candidate when any remaining route is running, has an incomplete
+identity, is absent from the worker's fresh complete inventory, or the worker
+lacks the publication/detach capability. A failed publication leaves the park
+attached and blocks the stop; only a descriptor durably stored by the gateway
+can authorize eviction.
 
 ## Initial operating stance
 

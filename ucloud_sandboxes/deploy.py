@@ -34,13 +34,15 @@ SYSTEMD_UNIT_NAMES = (
     "ucloud-sandbox-registry-gc.timer",
     "ucloud-sandbox-autoscaler.service",
 )
-PERSISTENT_STORAGE_SYSTEMD_UNITS = (
+PERSISTENT_STATE_SYSTEMD_UNITS = (
     "ucloud-sandbox-gateway.service",
     "ucloud-sandbox-relay.service",
-    "ucloud-sandbox-registry.service",
     "ucloud-sandbox-registry-prune.service",
-    "ucloud-sandbox-registry-gc.service",
     "ucloud-sandbox-autoscaler.service",
+)
+REGISTRY_STORAGE_SYSTEMD_UNITS = (
+    "ucloud-sandbox-registry.service",
+    "ucloud-sandbox-registry-gc.service",
 )
 # The bundle is resolved against an empty dpkg status so it remains usable on a
 # freshly booted image.  APT still treats several Essential/systemd packages as
@@ -322,29 +324,33 @@ def render_remote_deploy_script(
     unit_files = {
         f"/etc/systemd/system/{name}": unit_texts[name] for name in SYSTEMD_UNIT_NAMES
     }
-    persistent_mount = plan.project_mount_dir
-    persistent_storage_dropin = "\n".join(
-        (
-            "[Unit]",
-            f"RequiresMountsFor={persistent_mount}",
-            "",
-            "[Service]",
-            f"ExecStartPre=/usr/bin/mountpoint -q {persistent_mount}",
-            "",
+
+    def mount_dropin(mount_point: str) -> str:
+        return "\n".join(
+            (
+                "[Unit]",
+                f"RequiresMountsFor={mount_point}",
+                "",
+                "[Service]",
+                f"ExecStartPre=/usr/bin/mountpoint -q {mount_point}",
+                "",
+            )
         )
-    )
+
+    persistent_storage_dropin = mount_dropin(plan.project_mount_dir)
+    registry_storage_dropin = mount_dropin(plan.config.registry_mount_point)
     node_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
-    bundled_systemd_runtime_packages = " ".join(
-        BUNDLED_SYSTEMD_RUNTIME_PACKAGES
-    )
+    bundled_systemd_runtime_packages = " ".join(BUNDLED_SYSTEMD_RUNTIME_PACKAGES)
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
+        f"REGISTRY_MOUNT_POINT={shlex.quote(plan.config.registry_mount_point)}",
+        f"REGISTRY_DATA_ROOT={shlex.quote(plan.config.registry_data_root)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
         f"VENV_DIR={shlex.quote(plan.venv_dir)}",
         f"REMOTE_WHEEL={shlex.quote(plan.remote_wheel_path)}",
@@ -365,6 +371,10 @@ def render_remote_deploy_script(
         'SERVICE_GROUP="$(id -gn "$SERVICE_USER")"',
         'if ! mountpoint -q "$PROJECT_MOUNT_DIR"; then',
         '  echo "Persistent project drive is not mounted at $PROJECT_MOUNT_DIR" >&2',
+        "  exit 1",
+        "fi",
+        'if ! mountpoint -q "$REGISTRY_MOUNT_POINT"; then',
+        '  echo "Registry storage is not mounted at $REGISTRY_MOUNT_POINT" >&2',
         "  exit 1",
         "fi",
         'if [ ! -s "$STAGED_SESSION_FILE" ] && [ ! -s "$SESSION_FILE" ]; then',
@@ -672,6 +682,7 @@ def render_remote_deploy_script(
         'sudo chmod 0700 "$DATA_ROOT"',
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$DATA_ROOT"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DATA_ROOT/ssh"',
+        'sudo install -d -m 0750 "$REGISTRY_DATA_ROOT"',
         'if [ -s "$STAGED_SESSION_FILE" ]; then',
         '  sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STAGED_SESSION_FILE" "$SESSION_FILE"',
         '  rm -f "$STAGED_SESSION_FILE"',
@@ -715,13 +726,16 @@ def render_remote_deploy_script(
     )
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
-    for unit_name in PERSISTENT_STORAGE_SYSTEMD_UNITS:
+    for unit_name, storage_dropin in (
+        *((name, persistent_storage_dropin) for name in PERSISTENT_STATE_SYSTEMD_UNITS),
+        *((name, registry_storage_dropin) for name in REGISTRY_STORAGE_SYSTEMD_UNITS),
+    ):
         dropin_dir = f"/etc/systemd/system/{unit_name}.d"
         script_parts.append(f"sudo install -d -m 0755 {shlex.quote(dropin_dir)}")
         script_parts.append(
             _install_root_file_snippet(
                 f"{dropin_dir}/persistent-storage.conf",
-                persistent_storage_dropin,
+                storage_dropin,
                 mode="0644",
             )
         )

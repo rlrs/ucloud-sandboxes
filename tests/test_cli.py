@@ -178,7 +178,7 @@ def write_deploy_runtime_artifacts(root: Path) -> tuple[Path, Path, Path]:
     manifest.write_text(
         json.dumps(
             {
-                "agentenv_commit": "f41abb21324f6b0520abf34b7720aa260ddd10eb",
+                "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
                 "artifact": backend.name,
                 "artifact_sha256": backend_digest,
                 "cargo_package": "uvm-ublk-daemon",
@@ -286,7 +286,10 @@ class CliTests(unittest.TestCase):
                 "_post_bounded_json",
                 side_effect=[
                     conflict,
-                    ({"sandbox": {"state": "parked"}}, {"X-UCloud-Sandbox-Transport-Epoch": "epoch-1"}),
+                    (
+                        {"sandbox": {"state": "parked"}},
+                        {"X-UCloud-Sandbox-Transport-Epoch": "epoch-1"},
+                    ),
                 ],
             ) as post,
             patch.object(cli.time, "sleep") as sleep,
@@ -3025,7 +3028,7 @@ class CliTests(unittest.TestCase):
             heartbeat_fresh=True,
         )
 
-        allowed, blocked = cli.partition_storage_native_migratable_stop_job_ids(
+        allowed, blocked = cli.partition_storage_native_detachable_stop_job_ids(
             [owner],
             ("owned",),
             {"owned": (route,)},
@@ -3033,6 +3036,334 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(allowed, ())
         self.assertEqual(blocked, ("owned",))
+
+    def test_published_owner_can_scale_down_without_a_destination_worker(self) -> None:
+        route = sandbox_route(
+            sandbox_id="parked-one",
+            node_id="node-owned",
+            job_id="owned",
+            node_url="http://node-owned:8090",
+            resources=ResourceQuantity(disk_mb=8192),
+            state="parked",
+            storage_schema="storage-native-v1",
+            snapshot_manifest_digest="sha256:" + "b" * 64,
+            snapshot_repository="snapshots",
+            snapshot_tag="sandbox-1",
+            storage_snapshot={"schema": "storage-native-v1"},
+        )
+        heartbeat = NodeHeartbeat(
+            node_id="node-owned",
+            job_id="owned",
+            deployment_id="prod-a",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            capabilities=(
+                "disk-quota",
+                "storage-native-v1",
+                "sandbox-detach-published-v1",
+            ),
+            total_resources=ResourceQuantity(disk_mb=51200),
+            resources_known=True,
+            inventory_complete=True,
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    state="parked",
+                    resources=route.resources,
+                    generation=route.generation,
+                    operation_id=route.create_operation_id,
+                    spec_hash=route.spec_hash,
+                ),
+            ),
+        )
+        owner = SandboxNode(
+            job=ProviderInstance(
+                id="owned",
+                name="ucloud-sandbox-node-owned",
+                application_name="vm-ubuntu",
+                application_version="24.04",
+                product_id="cpu",
+                product_category="cpu",
+                state="RUNNING",
+                phase=InstancePhase.RUNNING,
+            ),
+            heartbeat=heartbeat,
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+        )
+
+        allowed, blocked = cli.partition_storage_native_detachable_stop_job_ids(
+            [owner],
+            ("owned",),
+            {"owned": (route,)},
+        )
+
+        self.assertEqual(allowed, ("owned",))
+        self.assertEqual(blocked, ())
+
+    def test_unpublished_park_can_publish_during_destination_free_scale_down(
+        self,
+    ) -> None:
+        route = sandbox_route(
+            sandbox_id="parked-one",
+            node_id="node-owned",
+            job_id="owned",
+            node_url="http://node-owned:8090",
+            resources=ResourceQuantity(disk_mb=8192),
+            state="parked",
+        )
+        heartbeat = NodeHeartbeat(
+            node_id="node-owned",
+            job_id="owned",
+            deployment_id="prod-a",
+            updated_at=utc_now(),
+            active_sandboxes=0,
+            capabilities=(
+                "disk-quota",
+                "storage-native-v1",
+                "sandbox-detach-published-v1",
+            ),
+            total_resources=ResourceQuantity(disk_mb=51200),
+            resources_known=True,
+            inventory_complete=True,
+            inventory=(
+                SandboxInventoryEntry(
+                    sandbox_id=route.sandbox_id,
+                    state="parked",
+                    resources=route.resources,
+                    generation=route.generation,
+                    operation_id=route.create_operation_id,
+                    spec_hash=route.spec_hash,
+                ),
+            ),
+        )
+        owner = SandboxNode(
+            job=ProviderInstance(
+                id="owned",
+                name="ucloud-sandbox-node-owned",
+                application_name="vm-ubuntu",
+                application_version="24.04",
+                product_id="cpu",
+                product_category="cpu",
+                state="RUNNING",
+                phase=InstancePhase.RUNNING,
+            ),
+            heartbeat=heartbeat,
+            active_sandboxes=0,
+            heartbeat_fresh=True,
+        )
+
+        allowed, blocked = cli.partition_storage_native_detachable_stop_job_ids(
+            [owner],
+            ("owned",),
+            {"owned": (route,)},
+        )
+
+        self.assertEqual(allowed, ("owned",))
+        self.assertEqual(blocked, ())
+
+    def test_detached_routes_do_not_reserve_their_last_worker(self) -> None:
+        route = sandbox_route(
+            sandbox_id="parked-one",
+            node_id="node-old",
+            job_id="old",
+            node_url="http://node-old:8090",
+            state="parked",
+            worker_state="detached",
+            storage_schema="storage-native-v1",
+            snapshot_manifest_digest="sha256:" + "b" * 64,
+            snapshot_repository="snapshots",
+            snapshot_tag="sandbox-1",
+            storage_snapshot={"schema": "storage-native-v1"},
+        )
+
+        reservations = cli.sandbox_route_reservations((route,))
+
+        self.assertEqual(reservations, {})
+
+    def test_reconcile_detaches_park_before_provider_stop(self) -> None:
+        terminate_calls: list[tuple[str, ...]] = []
+        detach_calls: list[str] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        route = sandbox_route(
+            sandbox_id="parked-one",
+            node_id="node-owned",
+            job_id="owned",
+            node_url="http://node-owned:8090",
+            resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=8192),
+            state="parked",
+        )
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": "owned",
+                                "owner": {"project": "project-1"},
+                                "specification": {
+                                    "name": "ucloud-sandbox-node-owned",
+                                    "application": {
+                                        "name": "vm-ubuntu",
+                                        "version": "24.04",
+                                    },
+                                    "product": {
+                                        "id": "cpu-amd-zen5-2-vcpu",
+                                        "category": "cpu-amd-zen5",
+                                    },
+                                    "labels": {
+                                        "ucloud-sandboxes/node": "true",
+                                        "ucloud-sandboxes/deployment": "prod-a",
+                                        "ucloud-sandboxes/agent-version": package_version(),
+                                    },
+                                },
+                                "status": {"state": "RUNNING"},
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            heartbeat_file = root / "control-state.sqlite"
+
+            def heartbeat(*, token: str = "", inventory=True) -> NodeHeartbeat:
+                entries = (
+                    (
+                        SandboxInventoryEntry(
+                            sandbox_id=route.sandbox_id,
+                            state="parked",
+                            resources=route.resources,
+                            generation=route.generation,
+                            operation_id=route.create_operation_id,
+                            spec_hash=route.spec_hash,
+                        ),
+                    )
+                    if inventory
+                    else ()
+                )
+                return NodeHeartbeat(
+                    node_id="node-owned",
+                    job_id="owned",
+                    deployment_id="prod-a",
+                    updated_at=utc_now(),
+                    active_sandboxes=0,
+                    idle_since=utc_now() - timedelta(minutes=10),
+                    node_url="http://node-owned:8090",
+                    agent_version=package_version(),
+                    capabilities=(
+                        "disk-quota",
+                        "storage-native-v1",
+                        "sandbox-detach-published-v1",
+                    ),
+                    total_resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=6144,
+                        disk_mb=51200,
+                    ),
+                    resources_known=True,
+                    draining=bool(token),
+                    admission_open=not bool(token),
+                    drain_token=token,
+                    activity_epoch=7,
+                    drain_activity_epoch=7 if token else 0,
+                    inventory_complete=True,
+                    inventory=entries,
+                )
+
+            save_heartbeats(heartbeat_file, {"owned": heartbeat()})
+            config = ucloud_config(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                data_root=raw_dir,
+                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+            )
+            args = argparse.Namespace(
+                jobs_file=jobs_file,
+                control_state_file=heartbeat_file,
+                include_job=[],
+                execute=True,
+                pending_image_builds=0,
+                max_builder_nodes=0,
+                seed_prefix="test",
+            )
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            def post_drain(
+                _url: str,
+                token: str,
+                *,
+                draining: bool = True,
+                bearer_token: str | None = None,
+            ) -> dict:
+                del bearer_token
+                return {
+                    "drain": {
+                        "draining": draining,
+                        "token": token,
+                        "admission_open": not draining,
+                    }
+                }
+
+            def post_detach(
+                _gateway_url: str,
+                sandbox_id: str,
+                **_kwargs,
+            ) -> dict:
+                detach_calls.append(sandbox_id)
+                return {"sandbox": {"id": sandbox_id, "worker_state": "detached"}}
+
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_post_node_drain", side_effect=post_drain),
+                patch.object(
+                    cli,
+                    "_post_gateway_sandbox_detach",
+                    side_effect=post_detach,
+                ),
+            ):
+                detached = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                    route_reservations={"owned": (route,)},
+                )
+                (intent,) = state.pending_drain_intents(deployment_id="prod-a")
+                save_heartbeats(
+                    heartbeat_file,
+                    {"owned": heartbeat(token=intent.token, inventory=False)},
+                )
+                stopped = cli.run_reconcile_cycle(
+                    config,
+                    args,
+                    demand=SandboxDemand(),
+                    provider_state=state,
+                    provider_mutations_allowed=True,
+                    route_reservations={},
+                )
+
+        self.assertEqual(detach_calls, [route.sandbox_id])
+        self.assertEqual(terminate_calls, [("owned",)])
+        self.assertEqual(detached["definitelyTerminatedJobIds"], [])
+        self.assertTrue(
+            detached["storage_native_detach_results"][0]["request_succeeded"]
+        )
+        self.assertEqual(stopped["drainReadyStopJobIds"], ["owned"])
+        self.assertEqual(stopped["definitelyTerminatedJobIds"], ["owned"])
 
     def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
         demand = SandboxDemand(

@@ -4,8 +4,10 @@ set -euo pipefail
 # Prepare a deliberately disposable Hetzner sandbox-node source VM for imaging.
 # The hostname guard prevents this cleanup from being run on an arbitrary node.
 expected_hostname="${1:-}"
-if [[ -z "$expected_hostname" || "$(hostname)" != "$expected_hostname" ]]; then
-  echo "usage: $0 \$(hostname)" >&2
+expected_docker_image_gib="${2:-}"
+if [[ -z "$expected_hostname" || "$(hostname)" != "$expected_hostname" \
+  || ! "$expected_docker_image_gib" =~ ^[1-9][0-9]*$ ]]; then
+  echo "usage: $0 \$(hostname) <expected-docker-image-gib>" >&2
   echo "refusing to sanitize unexpected host: $(hostname)" >&2
   exit 2
 fi
@@ -15,6 +17,12 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 if [[ ! -f /var/lib/ucloud-sandboxes/docker-xfs.img ]]; then
   echo "sandbox-node XFS image is missing" >&2
+  exit 2
+fi
+expected_docker_image_bytes=$((expected_docker_image_gib * 1024 * 1024 * 1024))
+actual_docker_image_bytes="$(stat -c '%s' /var/lib/ucloud-sandboxes/docker-xfs.img)"
+if [[ "$actual_docker_image_bytes" != "$expected_docker_image_bytes" ]]; then
+  echo "Docker XFS image has unexpected size: $actual_docker_image_bytes bytes" >&2
   exit 2
 fi
 if [[ ! -L /lib || "$(readlink /lib)" != "usr/lib" ]]; then
@@ -86,6 +94,7 @@ find "$runtime_cache_root" -mindepth 1 -maxdepth 1 -type d \
 rm -rf \
   /work/ucloud-sandboxes/state \
   /var/lib/ucloud-sandboxes/storage-native \
+  /var/lib/ucloud-sandboxes/storage-native-cache \
   /var/lib/docker \
   /var/lib/containerd \
   /root/.cache \
@@ -114,6 +123,7 @@ rm -f \
   /etc/ucloud-sandboxes/node-control-token \
   /etc/ucloud-sandboxes/node.env \
   /etc/ucloud-sandboxes/storage-native-backend.json \
+  /etc/ucloud-sandboxes/storage-native-resize-backend.json \
   /etc/systemd/system/ucloud-sandbox-heartbeat.service \
   /etc/systemd/system/ucloud-sandbox-heartbeat.timer \
   /etc/systemd/system/ucloud-sandbox-node.service \
@@ -121,10 +131,12 @@ rm -f \
   /etc/systemd/system/ucloud-storage-native-backend.service \
   /tmp/ucloud-hetzner-heartbeat.py \
   /tmp/ucloud-hetzner-heartbeat.pid \
+  /tmp/ucloud-snapshot-smoke.py \
   /root/qualify_hetzner_host.sh \
   /root/prepare_hetzner_snapshot.sh \
   /root/.bash_history
 rm -rf \
+  /tmp/ucloud-snapshot-test-registry \
   /etc/systemd/system/multi-user.target.wants/ucloud-* \
   /etc/systemd/system/timers.target.wants/ucloud-* \
   /run/ucloud-sandboxes
@@ -139,12 +151,13 @@ journalctl --vacuum-time=1s >/dev/null 2>&1 || true
 hostnamectl set-hostname localhost
 sed -i '/^127\.0\.1\.1[[:space:]]/d' /etc/hosts
 install -d -m 0755 /etc/systemd/system/systemd-networkd-wait-online.service.d
-install -m 0644 /dev/stdin \
-  /etc/systemd/system/systemd-networkd-wait-online.service.d/90-ucloud-private-network.conf <<'EOF'
-[Service]
-ExecStart=
-ExecStart=/lib/systemd/systemd-networkd-wait-online --any --operational-state=degraded --timeout=10
-EOF
+network_wait_override=/etc/systemd/system/systemd-networkd-wait-online.service.d/90-ucloud-private-network.conf
+install -m 0644 /dev/null "$network_wait_override"
+printf '%s\n' \
+  '[Service]' \
+  'ExecStart=' \
+  'ExecStart=/lib/systemd/systemd-networkd-wait-online --any --operational-state=degraded --timeout=10' \
+  >"$network_wait_override"
 # cloud-init rewrites this from clone metadata. Keeping the source VM's file
 # can leave a clone waiting for interfaces that do not exist on its shape.
 rm -f /etc/netplan/50-cloud-init.yaml

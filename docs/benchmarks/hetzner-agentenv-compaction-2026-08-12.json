@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "captured_at": "2026-08-12T17:05:21Z",
+  "environment": {
+    "provider": "Hetzner Cloud",
+    "server_type": "CPX62",
+    "location": "hel1",
+    "operating_system": "Ubuntu 26.04 LTS",
+    "kernel": "Linux 7.0.0-22-generic x86_64",
+    "storage": "server-local disk with loopback range Registry"
+  },
+  "build": {
+    "agentenv_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "artifact_sha256": "259ea3d41327311fbab384dacc72f0f2655fe9fae1169a61b3803a629bc4ff65",
+    "patches": {
+      "agentenv-streaming-dense-export.patch": "628cff8e4d4d50ba63a661896fabfc16d40dec6e3c8de764dca3828eda613104",
+      "agentenv-pooled-delete.patch": "d424c23f256debe498b8a958addba556a363fc9b70c286b02cd7f9651244666b",
+      "agentenv-owner-identity.patch": "269398f97b1ea1de13a68401e0498c16d158a665993d2358b4bb10e074a2dbfb"
+    }
+  },
+  "tests": {
+    "overlaybd_library": {
+      "passed": 308,
+      "failed": 0,
+      "ignored": 1
+    },
+    "ublk_daemon_library": {
+      "passed": 45,
+      "failed": 0,
+      "ignored": 0
+    },
+    "ublk_daemon_protocol": {
+      "passed": 31,
+      "failed": 0,
+      "ignored": 0
+    },
+    "snapshot_compaction": {
+      "status": "passed",
+      "background_download_enabled": false,
+      "virtual_size_bytes": 1073741824,
+      "upper_mode": "hybridLogStructured",
+      "forced_layer_threshold": 1,
+      "byte_threshold": 4294967296,
+      "input_layers": 2,
+      "input_layer_bytes": 100835328,
+      "output_layers": 1,
+      "output_layer_bytes": 98689024,
+      "first_publication_seconds": 0.6601042349999489,
+      "compacted_publication_seconds": 0.8680368159999716,
+      "compacted_resume_seconds": 0.0585393669999803,
+      "base_generation_verified": true,
+      "newest_generation_verified": true,
+      "source_deleted_before_remote_resume": true,
+      "range_requests_total": 782,
+      "range_bytes_served_total": 201810286,
+      "hard_reserved_bytes_after_cleanup": 0,
+      "published_volumes_after_cleanup": 0,
+      "error_volumes_after_cleanup": 0,
+      "ublk_devices_after_daemon_shutdown": 0
+    }
+  },
+  "qualification": "The forced threshold validates mixed remote/local streaming compaction, manifest publication, compacted wake correctness, and cleanup. It is not a cold multi-GiB or concurrent-publication performance SLO."
+}

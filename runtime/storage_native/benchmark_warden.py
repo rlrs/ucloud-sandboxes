@@ -302,13 +302,34 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     registry_metrics_before = _registry_metrics(args.registry_metrics)
     try:
         cache = root / "cache"
+        resize_cache = root / "resize-cache"
         cache.mkdir()
+        resize_cache.mkdir()
         global_config = root / "global.json"
         global_config.write_text(
             json.dumps(
                 {
                     "cacheConfig": {
                         "cacheDir": str(cache),
+                        "cacheSizeGB": 1,
+                        "cacheType": "file",
+                        "refillSize": 262144,
+                    },
+                    "download": {"enable": False},
+                    "nrIoRings": 1,
+                    "registryFsVersion": "v2",
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="ascii",
+        )
+        resize_global_config = root / "resize-global.json"
+        resize_global_config.write_text(
+            json.dumps(
+                {
+                    "cacheConfig": {
+                        "cacheDir": str(resize_cache),
                         "cacheSizeGB": 1,
                         "cacheType": "file",
                         "refillSize": 262144,
@@ -331,6 +352,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 str(backend_socket),
                 "--global-config",
                 str(global_config),
+                "--resize-global-config",
+                str(resize_global_config),
                 "--metrics-listen-addr",
                 "",
             ],
@@ -677,6 +700,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             owner,
             operation_id="delete-volume:1",
         )
+
         result.update(
             {
                 "create_runtime_seconds": create_runtime_seconds,

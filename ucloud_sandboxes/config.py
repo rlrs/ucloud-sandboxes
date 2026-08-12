@@ -14,8 +14,10 @@ from .providers import (
 )
 
 
-DEPLOYMENT_CONFIG_SCHEMA = 1
+DEPLOYMENT_CONFIG_SCHEMA = 2
 DEFAULT_DATA_ROOT = "/work/data/ucloud-sandboxes/state"
+DEFAULT_REGISTRY_MOUNT_POINT = "/work/data"
+DEFAULT_REGISTRY_DATA_ROOT = "/work/data/ucloud-sandbox-registry/docker-registry"
 DEFAULT_REGISTRY_ALIAS = "ucloud-sandbox-registry"
 DEFAULT_INSTALL_ROOT = "/work/ucloud-sandboxes"
 DEFAULT_DIRECT_RUNSC_COMMIT = "0" * 40
@@ -138,6 +140,8 @@ class DeploymentConfig:
     deployment_id: str
     provider: ProviderConfiguration
     data_root: str
+    registry_mount_point: str
+    registry_data_root: str
     gateway_private_host: str
     registry_private_ip: str
     gateway_port: int
@@ -155,7 +159,7 @@ class DeploymentConfig:
     autoscaler_max_init_per_cycle: int
     autoscaler_init_retry_seconds: int
     autoscaler_init_timeout_seconds: int
-    autoscaler_max_storage_native_migrations_per_cycle: int
+    autoscaler_max_storage_native_detaches_per_cycle: int
     heartbeat_interval_seconds: int
     policy: ScalePolicy
     sandbox: SandboxPoolConfig
@@ -170,6 +174,8 @@ class DeploymentConfig:
             deployment_id="production",
             provider=default_provider_configuration(scope_id),
             data_root=DEFAULT_DATA_ROOT,
+            registry_mount_point=DEFAULT_REGISTRY_MOUNT_POINT,
+            registry_data_root=DEFAULT_REGISTRY_DATA_ROOT,
             gateway_private_host="sandbox-gateway-production",
             registry_private_ip="",
             gateway_port=8090,
@@ -187,7 +193,7 @@ class DeploymentConfig:
             autoscaler_max_init_per_cycle=4,
             autoscaler_init_retry_seconds=30,
             autoscaler_init_timeout_seconds=1800,
-            autoscaler_max_storage_native_migrations_per_cycle=2,
+            autoscaler_max_storage_native_detaches_per_cycle=2,
             heartbeat_interval_seconds=20,
             policy=replace(
                 ScalePolicy(),
@@ -212,9 +218,32 @@ class DeploymentConfig:
         if not isinstance(raw, dict):
             raise ValueError("deployment config must be a JSON object")
         expected = {item.name for item in fields(cls)}
-        _require_exact_keys("deployment config", raw, expected)
-        schema = _require_int("schema", raw["schema"], minimum=1)
-        if schema != DEPLOYMENT_CONFIG_SCHEMA:
+        schema = _require_int("schema", raw.get("schema"), minimum=1)
+        if schema == 1:
+            legacy_expected = expected - {
+                "registry_data_root",
+                "registry_mount_point",
+                "autoscaler_max_storage_native_detaches_per_cycle",
+            } | {"autoscaler_max_storage_native_migrations_per_cycle"}
+            _require_exact_keys("deployment config", raw, legacy_expected)
+            legacy_data_root = _require_absolute_path("data_root", raw["data_root"])
+            raw = {
+                **raw,
+                "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "registry_data_root": str(
+                    Path(legacy_data_root).parent.parent
+                    / "ucloud-sandbox-registry/docker-registry"
+                ),
+                "registry_mount_point": str(Path(legacy_data_root).parent.parent),
+                "autoscaler_max_storage_native_detaches_per_cycle": raw[
+                    "autoscaler_max_storage_native_migrations_per_cycle"
+                ],
+            }
+            raw.pop("autoscaler_max_storage_native_migrations_per_cycle")
+            schema = DEPLOYMENT_CONFIG_SCHEMA
+        elif schema == DEPLOYMENT_CONFIG_SCHEMA:
+            _require_exact_keys("deployment config", raw, expected)
+        else:
             raise ValueError(f"unsupported deployment config schema: {schema}")
         provider = ProviderConfiguration.from_dict(raw["provider"])
         if provider.kind == "ucloud" and "session_file" in provider.settings:
@@ -238,6 +267,12 @@ class DeploymentConfig:
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
+            registry_mount_point=_require_absolute_path(
+                "registry_mount_point", raw["registry_mount_point"]
+            ),
+            registry_data_root=_require_absolute_path(
+                "registry_data_root", raw["registry_data_root"]
+            ),
             gateway_private_host=_require_string(
                 "gateway_private_host", raw["gateway_private_host"]
             ),
@@ -301,9 +336,9 @@ class DeploymentConfig:
                 raw["autoscaler_init_timeout_seconds"],
                 minimum=1,
             ),
-            autoscaler_max_storage_native_migrations_per_cycle=_require_int(
-                "autoscaler_max_storage_native_migrations_per_cycle",
-                raw["autoscaler_max_storage_native_migrations_per_cycle"],
+            autoscaler_max_storage_native_detaches_per_cycle=_require_int(
+                "autoscaler_max_storage_native_detaches_per_cycle",
+                raw["autoscaler_max_storage_native_detaches_per_cycle"],
                 minimum=0,
             ),
             heartbeat_interval_seconds=_require_int(
@@ -319,6 +354,10 @@ class DeploymentConfig:
             result.relay_port == result.registry_port
         ):
             raise ValueError("gateway, relay, and registry ports must be distinct")
+        if not Path(result.registry_data_root).is_relative_to(
+            Path(result.registry_mount_point)
+        ):
+            raise ValueError("registry_data_root must be inside registry_mount_point")
         return result
 
     def control_state_file(self) -> Path:
@@ -373,10 +412,7 @@ class DeploymentConfig:
         return Path(DEFAULT_INSTALL_ROOT) / "release/builder-node-package.tar.gz"
 
     def registry_data_dir(self) -> Path:
-        return (
-            Path(self.data_root).parent.parent
-            / "ucloud-sandbox-registry/docker-registry"
-        )
+        return Path(self.registry_data_root)
 
     @property
     def registry_endpoint_host(self) -> str:
@@ -423,6 +459,8 @@ class DeploymentConfig:
             "deployment_id": self.deployment_id,
             "provider": provider,
             "data_root": self.data_root,
+            "registry_mount_point": self.registry_mount_point,
+            "registry_data_root": self.registry_data_root,
             "gateway_private_host": self.gateway_private_host,
             "registry_private_ip": self.registry_private_ip,
             "gateway_port": self.gateway_port,
@@ -444,8 +482,8 @@ class DeploymentConfig:
             "autoscaler_max_init_per_cycle": self.autoscaler_max_init_per_cycle,
             "autoscaler_init_retry_seconds": self.autoscaler_init_retry_seconds,
             "autoscaler_init_timeout_seconds": self.autoscaler_init_timeout_seconds,
-            "autoscaler_max_storage_native_migrations_per_cycle": (
-                self.autoscaler_max_storage_native_migrations_per_cycle
+            "autoscaler_max_storage_native_detaches_per_cycle": (
+                self.autoscaler_max_storage_native_detaches_per_cycle
             ),
             "heartbeat_interval_seconds": self.heartbeat_interval_seconds,
             "policy": policy,

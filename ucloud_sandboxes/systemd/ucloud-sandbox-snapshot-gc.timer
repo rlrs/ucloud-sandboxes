@@ -1,0 +1,11 @@
+[Unit]
+Description=Run detached UCloud sandbox snapshot garbage collection daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=ucloud-sandbox-snapshot-gc.service
+
+[Install]
+WantedBy=timers.target

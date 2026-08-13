@@ -38,6 +38,8 @@ under `docs/`, not in this overview.
   verified node bundles, credentials, and cleanup safety.
 - [Managed registry](docs/managed-registry.md): private Docker registry setup,
   persistence, tagging, pruning, and GC.
+- [Object-storage snapshots](docs/object-storage-snapshots.md): local-hot park,
+  direct S3 detach, AgentEnv range-read wakes, rollout, and qualification.
 - [Model relay](docs/model-relay.md): outbound-only OpenAI-compatible relay for
   sandboxes that need to reach model workers behind outbound-only networking.
 - [Routing gateway](docs/routing-gateway.md): gateway and exec/SSH routing

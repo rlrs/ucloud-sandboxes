@@ -4,17 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ucloud-sandboxes"
-version = "0.4.0"
+version = "0.4.1"
 description = "Provider-aware gVisor sandbox control plane for Linux compute nodes"
 readme = "README.md"
 requires-python = ">=3.10.13"
 dependencies = [
     "aiohttp>=3.10,<4",
+    "boto3>=1.35,<2",
 ]
 
 [project.scripts]
 ucloud-sandboxes = "ucloud_sandboxes.cli:main"
 ucloud-sandboxes-storage = "ucloud_sandboxes.storage_native_service:main"
+ucloud-sandboxes-snapshot-gc = "ucloud_sandboxes.storage_native_s3_gc:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ucloud_sandboxes"]

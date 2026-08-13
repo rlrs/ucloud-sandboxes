@@ -208,6 +208,7 @@ class StorageVolumeRecord:
     published_tag: str = ""
     published_repository: str = ""
     published_repo_blob_url: str = ""
+    published_backend: str = ""
     published_layers: tuple[dict[str, Any], ...] = ()
     accounting_id: int = 0
     error: str = ""
@@ -259,6 +260,8 @@ class StorageVolumeRecord:
             self.published_manifest_digest
         ):
             raise ValueError("published manifest digest is invalid")
+        if self.published_backend not in {"", "registry", "s3"}:
+            raise ValueError("published backend is invalid")
         for layer in self.published_layers:
             if (
                 not isinstance(layer, dict)
@@ -298,11 +301,33 @@ class StorageVolumeRecord:
                 PublishedStorageLayer.from_dict(layer)
                 for layer in self.published_layers
             ),
+            backend=(
+                self.published_backend
+                or (
+                    "s3"
+                    if self.published_repo_blob_url.startswith("s3://")
+                    else "registry"
+                )
+            ),
         )
 
     @classmethod
     def from_json(cls, raw: dict[str, Any]) -> "StorageVolumeRecord":
-        if set(raw) != {field.name for field in fields(cls)}:
+        expected = {field.name for field in fields(cls)}
+        if set(raw) == expected - {"published_backend"}:
+            raw = {
+                **raw,
+                "published_backend": (
+                    "s3"
+                    if str(raw.get("published_repo_blob_url") or "").startswith(
+                        "s3://"
+                    )
+                    else (
+                        "registry" if raw.get("published_manifest_digest") else ""
+                    )
+                ),
+            }
+        if set(raw) != expected:
             raise ValueError("storage-native volume record has an invalid schema")
         payload = dict(raw)
         payload["state"] = StorageVolumeState(str(payload["state"]))
@@ -372,6 +397,7 @@ class StorageSnapshotPublisher(Protocol):
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
+        existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication: ...
 
@@ -1298,6 +1324,7 @@ class StorageNativeNodeService:
             published_tag=publication.tag,
             published_repository=publication.repository,
             published_repo_blob_url=publication.repo_blob_url,
+            published_backend=publication.backend,
             published_layers=tuple(layer.to_dict() for layer in publication.layers),
             updated_ns=time.time_ns(),
         )
@@ -1672,6 +1699,7 @@ class StorageNativeNodeService:
                 source_layer_paths=local_paths,
                 virtual_size=pending.virtual_size,
                 existing_layers=existing_layers,
+                existing_repo_blob_url=pending.published_repo_blob_url,
                 global_config_path=self.global_config_path,
             )
             record = replace(
@@ -1687,6 +1715,7 @@ class StorageNativeNodeService:
                 published_tag=publication.tag,
                 published_repository=publication.repository,
                 published_repo_blob_url=publication.repo_blob_url,
+                published_backend=publication.backend,
                 published_layers=tuple(layer.to_dict() for layer in publication.layers),
                 updated_ns=time.time_ns(),
             )
@@ -2058,6 +2087,7 @@ class StorageNativeNodeService:
             published_tag="",
             published_repository="",
             published_repo_blob_url="",
+            published_backend="",
             published_layers=(),
             updated_ns=time.time_ns(),
         )

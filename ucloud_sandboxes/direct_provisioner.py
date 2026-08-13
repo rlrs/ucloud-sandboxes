@@ -802,7 +802,9 @@ class DirectSandboxProvisioner:
         expected_network = "none" if spec.network == "none" else "sandbox"
         if expected_network != self.warden.config.network:
             raise ValueError(
-                "sandbox network does not match the node-wide direct runtime mode"
+                "sandbox network does not match the node-wide direct runtime mode: "
+                f"spec={spec.network!r} maps to {expected_network!r}, "
+                f"node={self.warden.config.network!r}"
             )
         if expected_network == "sandbox" and self.network_manager is None:
             raise ValueError("direct sandbox networking has no node network manager")

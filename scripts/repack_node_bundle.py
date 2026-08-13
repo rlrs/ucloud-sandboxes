@@ -164,6 +164,55 @@ def replace_agent_package(runtime_root: Path, wheel: Path) -> None:
             target.chmod(stat.S_IMODE(mode) if mode else 0o644)
 
 
+def install_agent_dependency(runtime_root: Path, wheel: Path) -> None:
+    """Install one explicit pure-Python dependency wheel into the agent."""
+
+    site_packages = runtime_root / "site-packages"
+    if not site_packages.is_dir():
+        raise ValueError("agent archive has no site-packages directory")
+    with zipfile.ZipFile(wheel) as archive:
+        names = archive.namelist()
+        wheel_metadata_names = [
+            name for name in names if name.endswith(".dist-info/WHEEL")
+        ]
+        if len(wheel_metadata_names) != 1:
+            raise ValueError(f"dependency wheel is invalid: {wheel}")
+        metadata = archive.read(wheel_metadata_names[0]).decode("utf-8")
+        if "Root-Is-Purelib: true" not in metadata:
+            raise ValueError(f"dependency wheel is not pure Python: {wheel}")
+        roots = {
+            PurePosixPath(name).parts[0]
+            for name in names
+            if name and not name.startswith("/")
+        }
+        for root in roots:
+            if root.endswith(".data"):
+                continue
+            target = site_packages / root
+            if target.exists():
+                if root.endswith(".dist-info"):
+                    shutil.rmtree(target)
+                else:
+                    raise ValueError(
+                        f"dependency wheel would overwrite existing path {root!r}"
+                    )
+        for member in archive.infolist():
+            relative = safe_relative_path(member.filename)
+            if relative.parts and relative.parts[0].endswith(".data"):
+                # The node runtime invokes package entry points through its
+                # own launchers and does not need dependency CLI scripts.
+                continue
+            target = site_packages / relative
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+            mode = member.external_attr >> 16
+            target.chmod(stat.S_IMODE(mode) if mode else 0o644)
+
+
 def normalized_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
     info.uid = 0
     info.gid = 0
@@ -300,6 +349,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--wheel", required=True, type=Path)
+    parser.add_argument(
+        "--agent-dependency-wheel",
+        action="append",
+        default=[],
+        type=Path,
+        help="explicit pure-Python dependency wheel to add to the agent runtime",
+    )
     parser.add_argument("--storage-backend", required=True, type=Path)
     parser.add_argument("--storage-manifest", required=True, type=Path)
     parser.add_argument("--storage-license", required=True, type=Path)
@@ -323,6 +379,7 @@ def main() -> None:
         args.storage_backend,
         args.storage_manifest,
         args.storage_license,
+        *args.agent_dependency_wheel,
     )
     for path in inputs:
         if not path.is_file():
@@ -353,6 +410,8 @@ def main() -> None:
 
         agent_archive = bundle_root / "runtime/agent/node-agent-runtime.tar"
         extract_tar(agent_archive, agent_root)
+        for dependency_wheel in args.agent_dependency_wheel:
+            install_agent_dependency(agent_root, dependency_wheel)
         replace_agent_package(agent_root, args.wheel)
         build_agent_archive(agent_root, agent_archive)
 

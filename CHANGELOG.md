@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.1 - 2026-08-13
+
+- Moved detached sandbox snapshot authority from the gateway Registry to
+  Hetzner Object Storage while retaining worker-local NVMe for active COW,
+  application memory, and attached parks.
+- Added direct bounded-parallel multipart publication, content-addressed
+  commits, lost-completion recovery, verification, backend-switch compaction,
+  and AgentEnv native S3 range-read configuration.
+- Added route-referenced mark-and-sweep snapshot GC, a daily systemd timer,
+  incomplete-multipart lifecycle guidance, and strict environment-only S3
+  credential propagation.
+- Qualified real CPX62 park, detach, compact, cold wake, lazy faulting, and
+  full-working-set correctness against the `hel1` Object Storage service,
+  including 107.93 MiB/s for a verified 1 GiB publication.
+- Added explicit pure-Python dependency injection when repacking a qualified
+  node bundle so the S3 runtime remains compatible with golden snapshots.
+- Recovered provider-accepted deletes after controller restart so Hetzner may
+  safely reuse a deleted worker's private IP without colliding with its stale
+  heartbeat binding.
+- Defaulted SDK sandbox networking to the production isolated bridge path.
+
 ## 0.4.0 - 2026-08-12
 
 - Added a production-shaped Hetzner provider and qualified CPX12 gateways,

@@ -1,0 +1,11 @@
+[Unit]
+Description=Garbage collect detached UCloud sandbox snapshots
+After=network-online.target ucloud-sandbox-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ucloud
+Group=ucloud
+EnvironmentFile=-/etc/ucloud-sandboxes/snapshot-store.env
+ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/ucloud-sandboxes-snapshot-gc --config /etc/ucloud-sandboxes/deployment.json --grace-days 7 --max-delete-objects 10000 --execute

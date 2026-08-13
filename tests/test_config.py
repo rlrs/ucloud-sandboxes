@@ -149,20 +149,21 @@ class ConfigTests(unittest.TestCase):
         raw["data_root"] = "/srv/ucloud/state"
         raw.pop("registry_data_root")
         raw.pop("registry_mount_point")
+        raw.pop("snapshot_store")
         raw["autoscaler_max_storage_native_migrations_per_cycle"] = raw.pop(
             "autoscaler_max_storage_native_detaches_per_cycle"
         )
 
         config = DeploymentConfig.from_dict(raw)
 
-        self.assertEqual(config.schema, 2)
+        self.assertEqual(config.schema, 3)
         self.assertEqual(config.autoscaler_max_storage_native_detaches_per_cycle, 2)
         self.assertEqual(
             config.registry_data_dir(),
             Path("/srv/ucloud-sandbox-registry/docker-registry"),
         )
         self.assertEqual(config.registry_mount_point, "/srv")
-        self.assertEqual(config.to_dict()["schema"], 2)
+        self.assertEqual(config.to_dict()["schema"], 3)
 
     def test_registry_data_must_be_inside_its_fail_closed_mount(self) -> None:
         raw = self._raw()
@@ -170,6 +171,63 @@ class ConfigTests(unittest.TestCase):
         raw["registry_data_root"] = "/var/lib/registry"
 
         with self.assertRaisesRegex(ValueError, "inside registry_mount_point"):
+            DeploymentConfig.from_dict(raw)
+
+    def test_s3_snapshot_store_keeps_only_environment_names_in_state(self) -> None:
+        raw = self._raw()
+        raw["snapshot_store"] = {
+            "kind": "s3",
+            "endpoint": "https://fsn1.your-objectstorage.com",
+            "bucket": "sandbox-snapshots",
+            "region": "fsn1",
+            "prefix": "/production/",
+            "access_key_id_env": "SNAPSHOT_ACCESS_KEY",
+            "secret_access_key_env": "SNAPSHOT_SECRET_KEY",
+            "security_token_env": "SNAPSHOT_SECURITY_TOKEN",
+        }
+
+        config = DeploymentConfig.from_dict(raw)
+
+        self.assertEqual(config.snapshot_store.kind, "s3")
+        self.assertEqual(config.snapshot_store.prefix, "production")
+        encoded = json.dumps(config.to_dict())
+        self.assertIn("SNAPSHOT_SECRET_KEY", encoded)
+        self.assertNotIn("secret-access-key-value", encoded)
+
+    def test_s3_snapshot_store_accepts_hetzner_bucket_url_as_endpoint(self) -> None:
+        raw = self._raw()
+        raw["snapshot_store"] = {
+            "kind": "s3",
+            "endpoint": "https://sandboxes.hel1.your-objectstorage.com/",
+            "bucket": "sandboxes",
+            "region": "hel1",
+            "prefix": "production",
+            "access_key_id_env": "SNAPSHOT_ACCESS_KEY",
+            "secret_access_key_env": "SNAPSHOT_SECRET_KEY",
+            "security_token_env": "SNAPSHOT_SECURITY_TOKEN",
+        }
+
+        config = DeploymentConfig.from_dict(raw)
+
+        self.assertEqual(
+            config.snapshot_store.endpoint,
+            "https://hel1.your-objectstorage.com",
+        )
+
+    def test_s3_snapshot_store_rejects_non_origin_endpoint(self) -> None:
+        raw = self._raw()
+        snapshot_store = raw["snapshot_store"]
+        assert isinstance(snapshot_store, dict)
+        snapshot_store.update(
+            {
+                "kind": "s3",
+                "endpoint": "https://hel1.your-objectstorage.com/path",
+                "bucket": "sandboxes",
+                "region": "hel1",
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "origin"):
             DeploymentConfig.from_dict(raw)
 
 

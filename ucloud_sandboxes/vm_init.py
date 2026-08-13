@@ -50,6 +50,12 @@ DEFAULT_STORAGE_NATIVE_BACKEND_CONFIG = (
 DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG = (
     "/etc/ucloud-sandboxes/storage-native-resize-backend.json"
 )
+DEFAULT_STORAGE_NATIVE_CREDENTIAL_FILE = (
+    "/etc/ucloud-sandboxes/storage-native-s3-credentials.json"
+)
+DEFAULT_STORAGE_NATIVE_CREDENTIAL_PROCESS = (
+    "/usr/local/libexec/ucloud-storage-native-s3-credentials"
+)
 DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
 DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
@@ -132,6 +138,14 @@ class VmInitOptions:
     direct_network_allow_tcp: tuple[str, ...] = ()
     storage_native_registry_url: str = ""
     storage_native_repository: str = DEFAULT_STORAGE_NATIVE_REPOSITORY
+    storage_native_snapshot_backend: Literal["registry", "s3"] = "registry"
+    storage_native_s3_endpoint: str = ""
+    storage_native_s3_bucket: str = ""
+    storage_native_s3_region: str = ""
+    storage_native_s3_prefix: str = ""
+    storage_native_s3_access_key_id: str = ""
+    storage_native_s3_secret_access_key: str = ""
+    storage_native_s3_security_token: str = ""
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
     storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
     storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
@@ -238,6 +252,20 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     version_flags = (
         " --agent-version ${UCLOUD_AGENT_VERSION} --init-version ${UCLOUD_INIT_VERSION}"
     )
+    storage_publication_args = (
+        " --snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}"
+        " --snapshot-registry-url ${UCLOUD_STORAGE_NATIVE_REGISTRY_URL}"
+        " --snapshot-repository ${UCLOUD_STORAGE_NATIVE_REPOSITORY}"
+    )
+    if options.storage_native_snapshot_backend == "s3":
+        storage_publication_args += (
+            " --snapshot-s3-endpoint ${UCLOUD_STORAGE_NATIVE_S3_ENDPOINT}"
+            " --snapshot-s3-bucket ${UCLOUD_STORAGE_NATIVE_S3_BUCKET}"
+            " --snapshot-s3-region ${UCLOUD_STORAGE_NATIVE_S3_REGION}"
+            " --snapshot-s3-prefix ${UCLOUD_STORAGE_NATIVE_S3_PREFIX}"
+            " --snapshot-s3-credential-process "
+            "${UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS}"
+        )
     if options.role == "sandbox":
         writable_disk_mb = (
             int(options.total_resources.disk_mb)
@@ -392,6 +420,16 @@ UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_waterm
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
 UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
+UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND={shlex.quote(options.storage_native_snapshot_backend)}
+UCLOUD_STORAGE_NATIVE_S3_ENDPOINT={shlex.quote(options.storage_native_s3_endpoint)}
+UCLOUD_STORAGE_NATIVE_S3_BUCKET={shlex.quote(options.storage_native_s3_bucket)}
+UCLOUD_STORAGE_NATIVE_S3_REGION={shlex.quote(options.storage_native_s3_region)}
+UCLOUD_STORAGE_NATIVE_S3_PREFIX={shlex.quote(options.storage_native_s3_prefix)}
+UCLOUD_STORAGE_NATIVE_S3_ACCESS_KEY_ID={shlex.quote(options.storage_native_s3_access_key_id)}
+UCLOUD_STORAGE_NATIVE_S3_SECRET_ACCESS_KEY={shlex.quote(options.storage_native_s3_secret_access_key)}
+UCLOUD_STORAGE_NATIVE_S3_SECURITY_TOKEN={shlex.quote(options.storage_native_s3_security_token)}
+UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_FILE={shlex.quote(DEFAULT_STORAGE_NATIVE_CREDENTIAL_FILE)}
+UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS={shlex.quote(DEFAULT_STORAGE_NATIVE_CREDENTIAL_PROCESS)}
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES={writable_disk_mb * 1024 * 1024}
 UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
 {authorized_keys_blob}
@@ -992,13 +1030,56 @@ if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
     "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT" \
     "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks" \
     "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/resize-blocks"
+  if [ "$UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND" = s3 ]; then
+    export \
+      UCLOUD_STORAGE_NATIVE_S3_ACCESS_KEY_ID \
+      UCLOUD_STORAGE_NATIVE_S3_SECRET_ACCESS_KEY \
+      UCLOUD_STORAGE_NATIVE_S3_SECURITY_TOKEN
+    UCLOUD_STORAGE_NATIVE_CREDENTIAL_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.storage-native-s3-credentials.XXXXXX")"
+    python3 - <<'PY' | $SUDO tee "$UCLOUD_STORAGE_NATIVE_CREDENTIAL_TMP" >/dev/null
+import json
+import os
+
+payload = {{
+    "AccessKeyId": os.environ["UCLOUD_STORAGE_NATIVE_S3_ACCESS_KEY_ID"],
+    "SecretAccessKey": os.environ["UCLOUD_STORAGE_NATIVE_S3_SECRET_ACCESS_KEY"],
+}}
+token = os.environ.get("UCLOUD_STORAGE_NATIVE_S3_SECURITY_TOKEN", "")
+if token:
+    payload["SecurityToken"] = token
+print(json.dumps(payload, ensure_ascii=True, separators=(",", ":")))
+PY
+    $SUDO chown root:root "$UCLOUD_STORAGE_NATIVE_CREDENTIAL_TMP"
+    $SUDO chmod 0600 "$UCLOUD_STORAGE_NATIVE_CREDENTIAL_TMP"
+    $SUDO mv -f \
+      "$UCLOUD_STORAGE_NATIVE_CREDENTIAL_TMP" \
+      "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_FILE"
+    $SUDO install -d -m 0755 -o root -g root \
+      "$(dirname "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS")"
+    printf '%s\n' \
+      '#!/bin/sh' \
+      "exec cat '$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_FILE'" \
+      | $SUDO tee "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS" >/dev/null
+    $SUDO chown root:root "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS"
+    $SUDO chmod 0700 "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS"
+    unset \
+      UCLOUD_STORAGE_NATIVE_S3_ACCESS_KEY_ID \
+      UCLOUD_STORAGE_NATIVE_S3_SECRET_ACCESS_KEY \
+      UCLOUD_STORAGE_NATIVE_S3_SECURITY_TOKEN
+  fi
   UCLOUD_STORAGE_NATIVE_CONFIG_TMP="$($SUDO mktemp "/etc/ucloud-sandboxes/.storage-native-backend.XXXXXX")"
-  python3 - "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks" "$UCLOUD_STORAGE_NATIVE_CACHE_GB" <<'PY' \
+  python3 - \
+    "$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks" \
+    "$UCLOUD_STORAGE_NATIVE_CACHE_GB" \
+    "$UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND" \
+    "$UCLOUD_STORAGE_NATIVE_S3_ENDPOINT" \
+    "$UCLOUD_STORAGE_NATIVE_S3_REGION" \
+    "$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS" <<'PY' \
     | $SUDO tee "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP" >/dev/null
 import json
 import sys
 
-print(json.dumps({{
+config = {{
     "cacheConfig": {{
         "cacheDir": sys.argv[1],
         "cacheSizeGB": int(sys.argv[2]),
@@ -1008,7 +1089,18 @@ print(json.dumps({{
     "download": {{"enable": False}},
     "nrIoRings": 4,
     "registryFsVersion": "v2",
-}}, sort_keys=True))
+}}
+if sys.argv[3] == "s3":
+    config["ossConfig"] = {{
+        "enable": True,
+        "accessKeyId": "",
+        "secretAccessKey": "",
+        "securityToken": "",
+        "credentialProcess": sys.argv[6],
+        "defaultEndpoint": sys.argv[4],
+        "defaultRegion": sys.argv[5],
+    }}
+print(json.dumps(config, sort_keys=True))
 PY
   $SUDO chown root:root "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP"
   $SUDO chmod 0600 "$UCLOUD_STORAGE_NATIVE_CONFIG_TMP"
@@ -1236,6 +1328,12 @@ UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMA
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL=$UCLOUD_STORAGE_NATIVE_REGISTRY_URL
 UCLOUD_STORAGE_NATIVE_REPOSITORY=$UCLOUD_STORAGE_NATIVE_REPOSITORY
+UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND=$UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND
+UCLOUD_STORAGE_NATIVE_S3_ENDPOINT=$UCLOUD_STORAGE_NATIVE_S3_ENDPOINT
+UCLOUD_STORAGE_NATIVE_S3_BUCKET=$UCLOUD_STORAGE_NATIVE_S3_BUCKET
+UCLOUD_STORAGE_NATIVE_S3_REGION=$UCLOUD_STORAGE_NATIVE_S3_REGION
+UCLOUD_STORAGE_NATIVE_S3_PREFIX=$UCLOUD_STORAGE_NATIVE_S3_PREFIX
+UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS=$UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES=$UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES
 NODE_ENV
 
@@ -1275,7 +1373,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}} --snapshot-registry-url ${{UCLOUD_STORAGE_NATIVE_REGISTRY_URL}} --snapshot-repository ${{UCLOUD_STORAGE_NATIVE_REPOSITORY}} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
 Restart=always
 RestartSec=2
 
@@ -1410,6 +1508,25 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "direct runtime requires an HTTP(S) storage-native Registry origin"
             )
+        if options.storage_native_snapshot_backend not in {"registry", "s3"}:
+            raise ValueError("storage-native snapshot backend must be registry or s3")
+        if options.storage_native_snapshot_backend == "s3":
+            if not re.fullmatch(
+                r"https?://[^\s]+", options.storage_native_s3_endpoint
+            ):
+                raise ValueError("storage-native S3 endpoint must be HTTP(S)")
+            if (
+                not options.storage_native_s3_bucket
+                or "/" in options.storage_native_s3_bucket
+                or not options.storage_native_s3_region
+                or not options.storage_native_s3_prefix.strip("/")
+            ):
+                raise ValueError("storage-native S3 bucket, region, and prefix are required")
+            if (
+                not options.storage_native_s3_access_key_id
+                or not options.storage_native_s3_secret_access_key
+            ):
+                raise ValueError("storage-native S3 credentials are required")
         if (
             not options.storage_native_repository
             or options.storage_native_repository.startswith("/")
@@ -1472,6 +1589,11 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "package sha256": options.package_sha256,
         "storage-native registry URL": options.storage_native_registry_url,
         "storage-native repository": options.storage_native_repository,
+        "storage-native snapshot backend": options.storage_native_snapshot_backend,
+        "storage-native S3 endpoint": options.storage_native_s3_endpoint,
+        "storage-native S3 bucket": options.storage_native_s3_bucket,
+        "storage-native S3 region": options.storage_native_s3_region,
+        "storage-native S3 prefix": options.storage_native_s3_prefix,
     }.items():
         _reject_newline(value_name, value)
     if not options.package_sha256:

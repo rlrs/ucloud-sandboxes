@@ -121,6 +121,7 @@ install -m 0644 "$node_bundle" "$release_dir/sandbox-node-package.tar.gz"
 install -m 0644 "$node_bundle" "$release_dir/builder-node-package.tar.gz"
 install -m 0644 "$deployment" /etc/ucloud-sandboxes/deployment.json
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/hetzner.env
+install -m 0600 "$provider_env" /etc/ucloud-sandboxes/snapshot-store.env
 install -m 0600 -o ucloud -g ucloud "$init_key" "$data_root/ssh/gateway-init"
 install -m 0644 -o ucloud -g ucloud \
   "$init_public_key" "$data_root/ssh/gateway-init.pub"
@@ -154,6 +155,8 @@ for unit in \
   ucloud-sandbox-gateway.service \
   ucloud-sandbox-registry-gc.service \
   ucloud-sandbox-registry-gc.timer \
+  ucloud-sandbox-snapshot-gc.service \
+  ucloud-sandbox-snapshot-gc.timer \
   ucloud-sandbox-registry-prune.service \
   ucloud-sandbox-registry-prune.timer \
   ucloud-sandbox-registry.service \
@@ -245,7 +248,8 @@ systemctl enable ucloud-sandbox-relay.service
 systemctl enable ucloud-sandbox-autoscaler.service
 systemctl enable --now \
   ucloud-sandbox-registry-prune.timer \
-  ucloud-sandbox-registry-gc.timer
+  ucloud-sandbox-registry-gc.timer \
+  ucloud-sandbox-snapshot-gc.timer
 systemctl restart ucloud-sandbox-registry.service
 
 for url in http://127.0.0.1:5000/v2/; do

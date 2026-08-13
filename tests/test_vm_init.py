@@ -125,6 +125,26 @@ class VmInitTests(unittest.TestCase):
         end = script.index('\nPY\n)"', start)
         return script, script[start:end]
 
+    def test_s3_snapshot_backend_configures_native_agentenv_reads(self) -> None:
+        script = render_vm_init_script(
+            self._options(
+                storage_native_snapshot_backend="s3",
+                storage_native_s3_endpoint="https://fsn1.your-objectstorage.com",
+                storage_native_s3_bucket="sandbox-snapshots",
+                storage_native_s3_region="fsn1",
+                storage_native_s3_prefix="production",
+                storage_native_s3_access_key_id="test-access",
+                storage_native_s3_secret_access_key="test-secret",
+            )
+        )
+
+        self.assertIn('config["ossConfig"]', script)
+        self.assertIn('"credentialProcess": sys.argv[6]', script)
+        self.assertIn("--snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}", script)
+        node_env = script.split("<<NODE_ENV\n", 1)[1].split("\nNODE_ENV", 1)[0]
+        self.assertNotIn("test-access", node_env)
+        self.assertNotIn("test-secret", node_env)
+
     @staticmethod
     def _run_bundle_validator(validator, root):
         return subprocess.run(

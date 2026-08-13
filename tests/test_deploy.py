@@ -121,7 +121,7 @@ class DeployTests(unittest.TestCase):
             script = render_remote_deploy_script(plan)
 
         self.assertIn("/etc/ucloud-sandboxes/deployment.json", script)
-        self.assertIn('"schema": 2', script)
+        self.assertIn('"schema": 3', script)
         self.assertIn('"deployment_id": "prod-a"', script)
         self.assertNotIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertNotIn("/etc/ucloud-sandboxes/autoscaler.env", script)

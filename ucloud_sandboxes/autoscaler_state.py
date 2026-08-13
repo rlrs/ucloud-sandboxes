@@ -600,14 +600,29 @@ class AutoscalerStateStore:
             kind="stop", states={"uncertain", "accepted"}
         ):
             if operation.state == "accepted":
-                if operation.target_job_ids and set(operation.target_job_ids).issubset(
-                    final_job_ids
-                ):
+                target_job_ids = set(operation.target_job_ids)
+                # A provider-accepted delete may remove an instance from an
+                # exhaustive inventory rather than retaining a terminal row
+                # (Hetzner does this). The controller can restart after the
+                # provider call but before it removes that node's heartbeat.
+                # Recover the accepted stop when every target is either final
+                # or absent, otherwise a quickly reused private IP remains
+                # bound to the deleted job and rejects the replacement node.
+                active_targets = target_job_ids & (observed_job_ids - final_job_ids)
+                if target_job_ids and not active_targets:
                     self._transition_operation(
                         operation.operation_id,
                         expected_states={"accepted"},
                         new_state="settled",
                         now=now,
+                    )
+                    results.append(
+                        ProviderOperationOutcome.from_operation(
+                            operation,
+                            source="inventory-recovery",
+                            state="recovered",
+                            error="",
+                        )
                     )
                 continue
             all_final = bool(operation.target_job_ids) and set(

@@ -5119,6 +5119,24 @@ def vm_init_options_for_job(
         else ()
     )
     host_alias = config.registry_host_alias
+    snapshot_store = config.snapshot_store
+    s3_access_key_id = ""
+    s3_secret_access_key = ""
+    s3_security_token = ""
+    if role == "sandbox" and snapshot_store.kind == "s3":
+        s3_access_key_id = os.environ.get(snapshot_store.access_key_id_env, "").strip()
+        s3_secret_access_key = os.environ.get(
+            snapshot_store.secret_access_key_env, ""
+        ).strip()
+        s3_security_token = os.environ.get(
+            snapshot_store.security_token_env, ""
+        ).strip()
+        if not s3_access_key_id or not s3_secret_access_key:
+            raise ValueError(
+                "S3 snapshot credentials are missing from "
+                f"{snapshot_store.access_key_id_env} and "
+                f"{snapshot_store.secret_access_key_env}"
+            )
     return VmInitOptions(
         job_id=job.id,
         heartbeat_url=config.heartbeat_url,
@@ -5167,6 +5185,24 @@ def vm_init_options_for_job(
             config.registry_worker_url if role == "sandbox" else ""
         ),
         storage_native_repository=config.sandbox.storage_native_repository,
+        storage_native_snapshot_backend=(
+            snapshot_store.kind if role == "sandbox" else "registry"
+        ),
+        storage_native_s3_endpoint=(
+            snapshot_store.endpoint if role == "sandbox" else ""
+        ),
+        storage_native_s3_bucket=(
+            snapshot_store.bucket if role == "sandbox" else ""
+        ),
+        storage_native_s3_region=(
+            snapshot_store.region if role == "sandbox" else ""
+        ),
+        storage_native_s3_prefix=(
+            snapshot_store.prefix if role == "sandbox" else ""
+        ),
+        storage_native_s3_access_key_id=s3_access_key_id,
+        storage_native_s3_secret_access_key=s3_secret_access_key,
+        storage_native_s3_security_token=s3_security_token,
         storage_native_cache_gb=config.sandbox.storage_native_cache_gb,
         storage_native_pool_low_watermark=(
             config.sandbox.storage_native_pool_low_watermark
@@ -5215,6 +5251,11 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "directNetworkAllowTcp": list(options.direct_network_allow_tcp),
         "storageNativeRegistryUrl": options.storage_native_registry_url,
         "storageNativeRepository": options.storage_native_repository,
+        "storageNativeSnapshotBackend": options.storage_native_snapshot_backend,
+        "storageNativeS3Endpoint": options.storage_native_s3_endpoint,
+        "storageNativeS3Bucket": options.storage_native_s3_bucket,
+        "storageNativeS3Region": options.storage_native_s3_region,
+        "storageNativeS3Prefix": options.storage_native_s3_prefix,
         "storageNativeCacheGb": options.storage_native_cache_gb,
         "storageNativePoolLowWatermark": (options.storage_native_pool_low_watermark),
         "storageNativePoolHighWatermark": (options.storage_native_pool_high_watermark),

@@ -154,6 +154,7 @@ class FakePublisher:
         source_layer_paths: tuple[Path, ...],
         virtual_size: int,
         existing_layers: tuple[PublishedStorageLayer, ...] = (),
+        existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
         if global_config_path is None:

@@ -300,30 +300,33 @@ and server architectures must match, so the qualified amd64 runtime needs an
 x86 snapshot and x86 server type. Snapshot storage remains billable after the
 source server is deleted.
 
-The current validated CPX62/Ubuntu 26.04 artifact is snapshot `419357782` in
-the tested Hetzner project. It was built on CPX12 so the snapshot has a 40 GB
-logical source disk rather than inheriting CPX62's 640 GB disk; Hetzner expands
-the root filesystem on the CPX62 clone, while the preformatted 64 GiB sparse
-XFS quota image remains valid. The snapshot stores about 1.793 GB. Its worker
-profile reserves no swap, 16 GiB for the bounded remote-layer cache, and 24 GiB
-of host headroom. After normalizing Hetzner's decimal 640 GB disk to 596 binary
-GiB, that leaves 492 GiB of hard storage-native capacity for active parkable
-sandboxes. The snapshot itself contains no swap, so this operational correction
-does not require rebuilding it.
+The current validated CPX62/Ubuntu 26.04 artifact is snapshot `419550929` in
+the tested Hetzner project. It was built on the production CPX62 worker shape:
+the retained 64 GiB sparse XFS quota image does not fit on a CPX12 source disk,
+and initializing such a source fails closed before modifying it. The snapshot
+stores about 1.931 GiB and requires a server whose disk is at least as large as
+its CPX62 source. Its worker profile reserves no swap, 16 GiB for the bounded
+remote-layer cache, and 24 GiB of host headroom. After normalizing Hetzner's
+decimal 640 GB disk to 596 binary GiB, that leaves 492 GiB of hard
+storage-native capacity for active parkable sandboxes.
 
 Its exact sandbox bundle SHA-256 is
-`8f2c8d256bcab3e0db7ef8669ef3067e1c215055e90bfd6c5202712dae897656`.
+`c0f343c27105dd9e97268693708ef5e9c9c9135258f14011da1c4402f8b97706`.
 The matching local artifact is
-`.hetzner/bundles/sandbox-node-package-ubuntu-26.04-amd64-v0.4.0.tar.gz`.
+`.hetzner/bundles/sandbox-node-package-ubuntu-26.04-amd64-v0.4.1.tar.gz`.
 Install that artifact as the gateway's configured sandbox-node bundle when
 using this snapshot. A differently built release deliberately misses the
 receipt and takes the safe full-transfer/full-install upgrade path; create a
 new golden snapshot after validating that release to restore the fast path.
 
-The `0.4.0` release bundle carries AgentEnv v0.1.2 plus the owner, pooled-delete, and
-streaming dense-export patches, and the current Ubuntu image's
-`7.0.0-29-generic` module closure. A fresh CPX62 clone reused the baked bundle
-without transferring it and completed dynamic initialization in 3.496 seconds.
+The `0.4.1` release bundle carries AgentEnv v0.1.2 plus the owner,
+pooled-delete, and streaming dense-export patches, the S3 publisher and its
+runtime dependencies, and the current Ubuntu image's `7.0.0-29-generic` module
+closure. The preceding `0.4.0` snapshot qualification remains useful as a
+historical local/Registry comparison: a fresh CPX62 clone reused its baked
+bundle without transferring it and completed dynamic initialization in 3.496
+seconds.
+
 An actual gVisor sandbox then created in 0.570 seconds, durably published while
 parking in 0.984 seconds, woke on the attached worker in 0.317 seconds, and
 preserved its sentinel. A stricter second run evicted the published local
@@ -332,6 +335,18 @@ woke it in 0.272 seconds with the sentinel intact. Cleanup returned hard
 reservations, published local volumes, and active ublk devices to zero with no
 storage errors. Evidence is in
 [`benchmarks/hetzner-snapshot-release-v5-2026-08-12.json`](benchmarks/hetzner-snapshot-release-v5-2026-08-12.json).
+
+A clean-pool `0.4.1` canary confirmed through the Hetzner API that its new
+CPX62 used snapshot `419550929`. The initializer selected the snapshot-baked
+digest, validated the package in 90 ms, and completed all dynamic phases in
+4.525 seconds. Hetzner took about 69 seconds from accepted create to SSH
+readiness, which remains the dominant cold-node provisioning cost. The canary
+then used the sandbox-scoped SDK credential to execute code and preserve one
+managed process across park, durable S3 detach, and wake. A following
+three-cycle run had median park, detach, and wake times of 247 ms, 897 ms, and
+2.703 seconds, with exact counter/process checks and zero retries. Evidence is
+in
+[`benchmarks/hetzner-object-storage-snapshots-2026-08-13.json`](benchmarks/hetzner-object-storage-snapshots-2026-08-13.json).
 
 In the original public-network validation canary, SSH plus cloud-init readiness
 arrived about 35 seconds after the API create request. A production-shaped
@@ -393,24 +408,43 @@ The initial safe placement is:
   active image layers, and journals;
 - gateway local root: routing, autoscaler, relay, metrics, registry-usage, and
   image-index SQLite state, plus their transactional backups;
-- gateway Hetzner Volume: Docker Distribution's blob tree, including published
-  sealed sandbox snapshots and other immutable capacity data that is not in
-  the synchronous sandbox write path.
+- gateway Hetzner Volume: Docker Distribution's OCI image/build blob tree;
+- Hetzner Object Storage: published sealed sandbox snapshots, written directly
+  by workers and range-read by AgentEnv through the bounded local cache.
 
-Deployment schema 2 expresses that boundary directly. For example:
+The S3 path, rollout, failure contract, retention rules, and performance gate
+are specified in
+[`object-storage-snapshots.md`](object-storage-snapshots.md). The production
+configuration now uses the `sandboxes` Object Storage bucket in `hel1`; the
+live park/detach/cold-wake and compaction evidence is recorded in
+[`benchmarks/hetzner-object-storage-snapshots-2026-08-13.json`](benchmarks/hetzner-object-storage-snapshots-2026-08-13.json).
+
+Deployment schema 3 expresses that boundary directly. For example:
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "data_root": "/var/lib/ucloud-sandboxes/state",
   "registry_mount_point": "/mnt/ucloud-registry",
-  "registry_data_root": "/mnt/ucloud-registry/docker-registry"
+  "registry_data_root": "/mnt/ucloud-registry/docker-registry",
+  "snapshot_store": {
+    "kind": "s3",
+    "endpoint": "https://hel1.your-objectstorage.com",
+    "bucket": "sandboxes",
+    "region": "hel1",
+    "prefix": "production",
+    "access_key_id_env": "HETZNER_S3_ACCESS_KEY",
+    "secret_access_key_env": "HETZNER_S3_SECRET_KEY"
+  }
 }
 ```
 
 The snippet shows only the relevant fields; deployment configuration remains
-an exact full object. Schema-1 files migrate in memory to their old derived
-registry path, so upgrading does not silently move data. Before changing the
+an exact full object. Schema-1 and schema-2 files migrate in memory while
+retaining Registry-backed snapshot authority; schema 1 also retains its old derived
+registry path, so merely upgrading does not silently move data. The explicit
+production switch to S3 forces a one-time compact publication, so a manifest
+never mixes Registry and S3 lower layers. Before changing the Registry blob
 path, mount the Volume, stop the registry, copy and verify its blob tree, and
 configure `registry_mount_point` so both deployment and registry startup fail
 closed if the Volume is absent. The generated registry and offline-GC systemd
@@ -428,13 +462,13 @@ The worker now has two materially different ownership states:
   registration and image/cache affinity for the fast same-worker wake path and
   still prevents the worker from reporting an empty inventory;
 - **detached**: the sandbox is parked, its immutable snapshot is protected in
-  the registry, and its worker-local storage and image pin have been removed.
-  It consumes registry capacity but no worker reservation.
+  the configured durable snapshot store, and its worker-local storage and image
+  pin have been removed. It consumes remote capacity but no worker reservation.
 
 Scale-down first drains a worker. For each remaining park, the gateway asks the
 worker to publish its sealed state if necessary, validates that the returned
 descriptor belongs to the exact sandbox generation, and durably records the
-registry reference before eviction. It does not copy those parks to another
+    durable publication reference before eviction. It does not copy those parks to another
 worker merely to turn the current worker off. Only after a fresh complete
 heartbeat reports no remaining inventory can the provider stop be submitted.
 Publication failure leaves the sandbox attached; ambiguous eviction leaves the
@@ -444,14 +478,15 @@ Wake latency therefore has two tiers. An attached park on a healthy worker
 keeps the existing sub-second local wake path. A detached park is a cold wake:
 the gateway chooses any fitting worker, imports the immutable snapshot through
 the bounded local layer cache, and activates it. That path is slower in
-proportion to the snapshot bytes missing from the destination cache, but it is
+proportion to the snapshot working set missing from the destination cache, but it is
 paid only after a sandbox has traded wake latency for released worker disk and
 node scale-down. In a ten-cycle forced cross-worker soak with the Registry on a
 gateway-attached Hetzner Volume, this small 1 GiB-memory/2 GiB-disk sandbox woke
 in 1.334-1.479 seconds (1.368-second median). Every cycle used the other worker,
 preserved the managed PID/spec identity, advanced checksum-protected filesystem
 state, and completed without lifecycle retries. This is evidence for the small
-warm-network case, not a general cold-wake SLO; multi-gigabyte snapshots, cold
+warm-network case against the former Registry/Volume backend, not a general
+cold-wake SLO or evidence for Hetzner Object Storage; multi-gigabyte snapshots, cold
 layer caches, and concurrent wake bursts still need measurement.
 
 Published layers also have a bounded-chain rule. An ordinary detach appends
@@ -459,8 +494,8 @@ the latest sealed delta, but a publication that would exceed eight layers or
 4 GiB of layer data is compacted into one sealed layer. The worker does not
 reserve enough local disk for a second flattened copy: AgentEnv reads the old
 remote layers through its bounded local cache, overlays the new local delta,
-and streams the compacted result directly to the Registry Volume. Until that
-new OCI manifest is durable, the old Registry descriptor plus local delta
+and streams the compacted result directly to the configured durable backend.
+Until that new manifest is durable, the old descriptor plus local delta
 remain the authoritative state, so a failed compaction cannot make a sandbox
 unwakeable or release its worker ownership.
 
@@ -533,25 +568,16 @@ machine-readable evidence is in
 
 ## Remaining deployment work
 
-1. Provision the persistent CPX12 gateway with a separately managed Primary
-   IPv4 (`auto_delete=false`), attach the generated gateway firewall, enable
-   its NAT/forwarding path, and configure IP-based HTTPS SDK ingress. The
-   non-billable network, both firewalls, and gateway SSH key are covered by the
-   foundation helper; Primary IP, server, and service convergence still need
-   one production command.
-2. Wrap the reviewed sanitization script, snapshot action, canary checks, and
-   snapshot promotion in one auditable release command.
-3. Store the chosen role snapshot IDs in deployment configuration and protect
-   released snapshots from accidental deletion.
-4. Mount the production gateway Volume for `registry_data_root`, migrate the
-   current blob tree, and add backups. Mount failure fencing and a small
-   Volume-backed detached-wake canary are now qualified; next benchmark cold
-   cache misses, multi-gigabyte snapshots, and concurrent wake bursts. Do not
-   attach per-node Volumes through the compute mutation path.
-5. Add fault-injection acceptance for ambiguous provider creates, snapshot
-   rollback, registry outage during publication, and worker loss at each
-   migration phase. The normal multi-node create/bootstrap/agent/park/wake/
-   migration path is now qualified.
+1. Add transactional off-node backups for gateway SQLite/journal state. Keep
+   that state on the gateway's low-latency local disk.
+2. Measure burst detach and cold wake at 2, 4, and 8 concurrent workers, plus a
+   multi-gigabyte changed layer. The single-worker correctness and throughput
+   gate has passed, but it is not a claim about shared-service tail latency.
+3. Add destructive fault injection for worker loss during every multipart and
+   detach phase. The publisher already keeps ownership/local state until the
+   durable manifest is verified and resolves lost completion responses.
+4. Revisit the broad project-level Hetzner S3 key when the account supports a
+   narrower bucket policy or dedicated restricted credential.
 
 The original storage qualification run used CX43, but the live API now marks
 the entire CX line unavailable in the EU locations. CPX62 is the selected
@@ -564,6 +590,7 @@ Volumes were deleted after testing. Snapshot validation also ended with zero
 managed servers. The released snapshots and non-billable
 network/firewall/SSH-key foundation are the retained Hetzner resources; older
 snapshots remain billable until deliberately removed after the rollback window.
-The later detached-wake qualification likewise deleted its CPX12 gateway, both
-CPX62 workers, and 10 GB Volume; the account again reported zero servers and
-zero Volumes afterward.
+The older detached-wake qualification likewise deleted its disposable CPX12
+gateway, both CPX62 workers, and 10 GB Volume. The current deployment retains
+one production CPX12 gateway; qualification workers are disposable and must be
+removed after each run.

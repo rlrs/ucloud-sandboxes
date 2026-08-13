@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "environment": {
+    "cloud": "hetzner",
+    "location": "hel1",
+    "worker_server_type": "cpx62",
+    "object_storage_bucket": "sandboxes",
+    "object_storage_endpoint": "https://hel1.your-objectstorage.com",
+    "golden_snapshot": {
+      "id": 419550929,
+      "source_server_type": "cpx62",
+      "image_size_gib": 1.9314098662109376,
+      "bundle_sha256": "c0f343c27105dd9e97268693708ef5e9c9c9135258f14011da1c4402f8b97706"
+    },
+    "sandbox": {
+      "vcpu": 1,
+      "memory_mib": 1024,
+      "writable_disk_mib": 2048,
+      "image": "alpine:3.20"
+    }
+  },
+  "publisher": {
+    "multipart_part_mib": 64,
+    "multipart_concurrency": 4,
+    "maximum_buffered_payload_mib_per_publication": 256
+  },
+  "measurements": {
+    "attached": {
+      "park_seconds": 0.227,
+      "wake_seconds": 0.544,
+      "sentinel_verified": true
+    },
+    "small_detached": {
+      "layer_bytes": 113213440,
+      "serial_publication_seconds_before_tuning": 14.621,
+      "cold_wake_seconds": [2.258, 2.690],
+      "sentinel_verified": true
+    },
+    "isolated_publication": [
+      {
+        "bytes": 268435456,
+        "seconds": 3.245,
+        "mib_per_second": 78.89,
+        "digest_verified": true
+      },
+      {
+        "bytes": 1073741824,
+        "seconds": 9.488,
+        "mib_per_second": 107.93,
+        "digest_verified": true
+      }
+    ],
+    "real_incremental_detach": {
+      "park_seconds": 0.591,
+      "detach_seconds": 7.076,
+      "new_layer_bytes": 539615232,
+      "chain_layers": 7,
+      "chain_bytes": 665473024
+    },
+    "seven_layer_forced_cold": {
+      "wake_seconds": 7.978,
+      "full_read_bytes": 268435456,
+      "full_read_seconds": 3.479,
+      "sha256": "0c9950f8bb4e18c6be2c402d70ea41fe66e1f70e82c8e9706344c1d3615031e8",
+      "digest_verified": true
+    },
+    "compacted": {
+      "publication_seconds": 13.268,
+      "layer_bytes": 650526720,
+      "forced_cold_wake_seconds": 11.223,
+      "full_read_bytes": 268435456,
+      "full_read_seconds": 1.060,
+      "sha256": "0c9950f8bb4e18c6be2c402d70ea41fe66e1f70e82c8e9706344c1d3615031e8",
+      "digest_verified": true,
+      "sentinel": "s3-sentinel-v3"
+    },
+    "release_0_4_1_fresh_worker_canary": {
+      "create_seconds": 0.974,
+      "park_seconds": 0.229,
+      "detach_seconds": 3.414,
+      "wake_seconds": 2.473,
+      "layer_bytes": 113471488,
+      "backend": "s3",
+      "sentinel": "release-0.4.1-s3-ok",
+      "sentinel_verified": true
+    },
+    "promoted_golden_snapshot_canary": {
+      "provider_create_to_ssh_ready_seconds_approx": 69,
+      "dynamic_init_seconds": 4.525,
+      "package_bundle_validation_seconds": 0.090,
+      "snapshot_baked_bundle_reused": true,
+      "first_cycle": {
+        "park_seconds": 0.2856856059988786,
+        "detach_seconds": 4.01680177200069,
+        "wake_seconds": 9.211768155000755,
+        "lifecycle_retries": 0,
+        "process_identity_preserved": true,
+        "counter_checksum_verified": true
+      },
+      "following_three_cycles": {
+        "park_seconds": [0.2607336269993539, 0.24745222099954844, 0.24278960700030439],
+        "detach_seconds": [3.5296940799998993, 0.8971171310004138, 0.74142981300065],
+        "wake_seconds": [2.8729895730011776, 1.9959204500009946, 2.7027618049996818],
+        "park_median_seconds": 0.24745222099954844,
+        "detach_median_seconds": 0.8971171310004138,
+        "wake_median_seconds": 2.7027618049996818,
+        "lifecycle_retries": 0,
+        "process_identity_preserved": true,
+        "counter_checksum_verified": true
+      }
+    },
+    "remote_cache_mib_after_full_read_du": 263
+  },
+  "caveats": [
+    "Each value is a qualification observation, not a percentile estimate.",
+    "Forced-cold runs stop storage and node services, delete only the recoverable remote-block cache, restart services, and then wake the sandbox.",
+    "The larger forced-cold wake values therefore include recovered-service and device-pool state as well as remote-layer access.",
+    "The first small publication used the original serial multipart uploader and is retained as the before-tuning comparison."
+  ],
+  "correctness": {
+    "park_detach_wake_completed": true,
+    "same_worker_attached_wake_completed": true,
+    "remote_cache_drop_wake_completed": true,
+    "backend_switch_compaction_completed": true,
+    "full_touched_working_set_verified": true,
+    "gateway_proxied_snapshot_bytes": false,
+    "fresh_worker_release_canary_completed": true,
+    "promoted_golden_snapshot_canary_completed": true,
+    "hetzner_reused_private_ip_heartbeat_rebound": true
+  }
+}

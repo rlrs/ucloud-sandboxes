@@ -211,6 +211,62 @@ class AutoscalerStateTests(unittest.TestCase):
                 store.get_operation(operation.operation_id).state, "settled"
             )
 
+    def test_accepted_stop_recovers_when_provider_no_longer_lists_target(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = AutoscalerStateStore(Path(raw_dir) / "autoscaler.sqlite")
+            operation = store.prepare_operation(
+                intent_key="sandbox:job-1:drain-1",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={"type": "bulk", "items": [{"id": "job-1"}]},
+                target_job_ids=("job-1",),
+            )
+            store.begin_provider_call(operation.operation_id)
+            store.mark_operation_accepted(
+                operation.operation_id,
+                response={"providerAcceptedDelete": True},
+                target_job_ids=("job-1",),
+            )
+
+            recovered = AutoscalerStateStore(
+                store.path
+            ).reconcile_provider_inventory([])
+
+            self.assertEqual(len(recovered), 1)
+            self.assertEqual(recovered[0].state, "recovered")
+            self.assertEqual(recovered[0].job_ids, ("job-1",))
+            self.assertEqual(
+                store.get_operation(operation.operation_id).state, "settled"
+            )
+
+    def test_accepted_stop_stays_pending_while_target_is_running(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = AutoscalerStateStore(Path(raw_dir) / "autoscaler.sqlite")
+            operation = store.prepare_operation(
+                intent_key="sandbox:job-1:drain-1",
+                kind="stop",
+                deployment_id="prod-a",
+                role="sandbox",
+                request={"type": "bulk", "items": [{"id": "job-1"}]},
+                target_job_ids=("job-1",),
+            )
+            store.begin_provider_call(operation.operation_id)
+            store.mark_operation_accepted(
+                operation.operation_id,
+                response={"providerAcceptedDelete": True},
+                target_job_ids=("job-1",),
+            )
+
+            recovered = store.reconcile_provider_inventory(
+                [provider_job(operation.operation_id, "job-1")]
+            )
+
+            self.assertEqual(recovered, [])
+            self.assertEqual(
+                store.get_operation(operation.operation_id).state, "accepted"
+            )
+
     def test_slot_incarnation_does_not_scan_or_reuse_terminal_operation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = AutoscalerStateStore(Path(raw_dir) / "autoscaler.sqlite")

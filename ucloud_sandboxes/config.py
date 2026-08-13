@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from .models import ResourceQuantity, ScalePolicy
 from .providers import (
@@ -14,7 +15,7 @@ from .providers import (
 )
 
 
-DEPLOYMENT_CONFIG_SCHEMA = 2
+DEPLOYMENT_CONFIG_SCHEMA = 3
 DEFAULT_DATA_ROOT = "/work/data/ucloud-sandboxes/state"
 DEFAULT_REGISTRY_MOUNT_POINT = "/work/data"
 DEFAULT_REGISTRY_DATA_ROOT = "/work/data/ucloud-sandbox-registry/docker-registry"
@@ -26,6 +27,110 @@ _RUNTIME_POLICY_FIELDS = {
     "heartbeat_ttl_seconds",
     "default_node_resources",
 }
+
+
+@dataclass(frozen=True)
+class SnapshotStoreConfig:
+    """Durable authority for detached storage-native snapshots.
+
+    Secrets are deliberately named by environment variable rather than stored
+    in deployment.json.  The autoscaler resolves them only while rendering a
+    worker's root-only credential file.
+    """
+
+    kind: str = "registry"
+    endpoint: str = ""
+    bucket: str = ""
+    region: str = ""
+    prefix: str = "ucloud-sandboxes"
+    access_key_id_env: str = "UCLOUD_SNAPSHOT_S3_ACCESS_KEY_ID"
+    secret_access_key_env: str = "UCLOUD_SNAPSHOT_S3_SECRET_ACCESS_KEY"
+    security_token_env: str = "UCLOUD_SNAPSHOT_S3_SECURITY_TOKEN"
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "SnapshotStoreConfig":
+        result = cls(**_exact_dataclass_values("snapshot_store", raw, cls()))
+        if result.kind not in {"registry", "s3"}:
+            raise ValueError("snapshot_store.kind must be registry or s3")
+        for name in (
+            "endpoint",
+            "bucket",
+            "region",
+            "prefix",
+            "access_key_id_env",
+            "secret_access_key_env",
+            "security_token_env",
+        ):
+            value = getattr(result, name)
+            if not isinstance(value, str) or any(
+                character in value for character in ("\x00", "\r", "\n")
+            ):
+                raise ValueError(f"snapshot_store.{name} must be a string")
+        for name in (
+            "access_key_id_env",
+            "secret_access_key_env",
+            "security_token_env",
+        ):
+            value = getattr(result, name)
+            if not value or not value.replace("_", "A").isalnum() or not (
+                value[0].isalpha() or value[0] == "_"
+            ):
+                raise ValueError(
+                    f"snapshot_store.{name} must be an environment variable name"
+                )
+        if result.kind == "registry":
+            if result.endpoint or result.bucket or result.region:
+                raise ValueError(
+                    "registry snapshot store cannot configure S3 endpoint, bucket, or region"
+                )
+            return result
+        if not result.endpoint.startswith(("http://", "https://")):
+            raise ValueError("snapshot_store.endpoint must be HTTP(S) for S3")
+        if "/" in result.bucket or not result.bucket.strip():
+            raise ValueError("snapshot_store.bucket is invalid")
+        if not result.region.strip():
+            raise ValueError("snapshot_store.region is required for S3")
+        normalized_prefix = result.prefix.strip("/")
+        if (
+            not normalized_prefix
+            or any(part in {"", ".", ".."} for part in normalized_prefix.split("/"))
+        ):
+            raise ValueError("snapshot_store.prefix is invalid")
+        endpoint = normalize_s3_endpoint(
+            result.endpoint,
+            bucket=result.bucket.strip(),
+            region=result.region.strip(),
+        )
+        return replace(
+            result,
+            endpoint=endpoint,
+            bucket=result.bucket.strip(),
+            region=result.region.strip(),
+            prefix=normalized_prefix,
+        )
+
+
+def normalize_s3_endpoint(endpoint: str, *, bucket: str, region: str) -> str:
+    """Return an SDK endpoint origin, accepting Hetzner's bucket URL too."""
+
+    parsed = urlsplit(endpoint)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("snapshot_store.endpoint must be an HTTP(S) origin")
+    hostname = parsed.hostname.rstrip(".").lower()
+    if hostname == f"{bucket}.{region}.your-objectstorage.com".lower():
+        hostname = f"{region}.your-objectstorage.com".lower()
+    netloc = hostname
+    if parsed.port is not None:
+        netloc += f":{parsed.port}"
+    return urlunsplit((parsed.scheme, netloc, "", "", ""))
 
 
 @dataclass(frozen=True)
@@ -161,6 +266,7 @@ class DeploymentConfig:
     autoscaler_init_timeout_seconds: int
     autoscaler_max_storage_native_detaches_per_cycle: int
     heartbeat_interval_seconds: int
+    snapshot_store: SnapshotStoreConfig
     policy: ScalePolicy
     sandbox: SandboxPoolConfig
     builder: BuilderPoolConfig
@@ -195,6 +301,7 @@ class DeploymentConfig:
             autoscaler_init_timeout_seconds=1800,
             autoscaler_max_storage_native_detaches_per_cycle=2,
             heartbeat_interval_seconds=20,
+            snapshot_store=SnapshotStoreConfig(),
             policy=replace(
                 ScalePolicy(),
                 heartbeat_ttl_seconds=120,
@@ -224,12 +331,13 @@ class DeploymentConfig:
                 "registry_data_root",
                 "registry_mount_point",
                 "autoscaler_max_storage_native_detaches_per_cycle",
+                "snapshot_store",
             } | {"autoscaler_max_storage_native_migrations_per_cycle"}
             _require_exact_keys("deployment config", raw, legacy_expected)
             legacy_data_root = _require_absolute_path("data_root", raw["data_root"])
             raw = {
                 **raw,
-                "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "schema": 2,
                 "registry_data_root": str(
                     Path(legacy_data_root).parent.parent
                     / "ucloud-sandbox-registry/docker-registry"
@@ -240,6 +348,15 @@ class DeploymentConfig:
                 ],
             }
             raw.pop("autoscaler_max_storage_native_migrations_per_cycle")
+            schema = 2
+        if schema == 2:
+            schema_two_expected = expected - {"snapshot_store"}
+            _require_exact_keys("deployment config", raw, schema_two_expected)
+            raw = {
+                **raw,
+                "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "snapshot_store": asdict(SnapshotStoreConfig()),
+            }
             schema = DEPLOYMENT_CONFIG_SCHEMA
         elif schema == DEPLOYMENT_CONFIG_SCHEMA:
             _require_exact_keys("deployment config", raw, expected)
@@ -251,6 +368,7 @@ class DeploymentConfig:
         validate_provider_configuration(provider)
         sandbox = SandboxPoolConfig.from_dict(raw["sandbox"])
         builder = BuilderPoolConfig.from_dict(raw["builder"])
+        snapshot_store = SnapshotStoreConfig.from_dict(raw["snapshot_store"])
         heartbeat_ttl = _require_int(
             "gateway_heartbeat_ttl_seconds",
             raw["gateway_heartbeat_ttl_seconds"],
@@ -346,6 +464,7 @@ class DeploymentConfig:
                 raw["heartbeat_interval_seconds"],
                 minimum=1,
             ),
+            snapshot_store=snapshot_store,
             policy=policy,
             sandbox=sandbox,
             builder=builder,
@@ -489,6 +608,7 @@ class DeploymentConfig:
                 self.autoscaler_max_storage_native_detaches_per_cycle
             ),
             "heartbeat_interval_seconds": self.heartbeat_interval_seconds,
+            "snapshot_store": asdict(self.snapshot_store),
             "policy": policy,
             "sandbox": sandbox,
             "builder": asdict(self.builder),

@@ -42,6 +42,29 @@ bucket as a filesystem. Telemetry retention is independent of sandbox snapshot
 retention and should use a separate bucket or at least separate credentials and
 prefix authority.
 
+The Hetzner installer cuts trace blocks every five minutes, completes them
+within ten minutes, and flushes on graceful shutdown. This bounds the period
+for which an acknowledged trace exists only in Tempo's volume-backed WAL while
+avoiding a new object per request.
+
+Install or converge the bounded gateway stack with the same credential file
+used by the snapshot store:
+
+```bash
+sudo scripts/install_hetzner_otlp_stack.sh \
+  --private-bind-ip 10.42.0.2 \
+  --s3-endpoint https://hel1.your-objectstorage.com \
+  --s3-bucket sandboxes \
+  --s3-region hel1 \
+  --s3-prefix production/telemetry/tempo \
+  --credentials-env-file /etc/ucloud-sandboxes/snapshot-store.env \
+  --data-root /mnt/ucloud-registry/telemetry
+```
+
+The data root holds Tempo's crash-recovery WAL and VictoriaMetrics' bounded
+14-day database. It must be a persistent local filesystem or attached Volume;
+trace blocks themselves are written through Tempo's native S3 client.
+
 ## What one trace contains
 
 W3C `traceparent` and `tracestate` propagate across every synchronous boundary:

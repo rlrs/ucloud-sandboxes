@@ -423,13 +423,6 @@ class ProxyResponseTooLargeError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class _RegistryImageBuildReference:
-    image_id: str
-    tag: str
-    owner: str
-
-
 class ProxiedResponse:
     def __init__(
         self,
@@ -2939,12 +2932,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 digest=route.snapshot_manifest_digest,
             )
 
-    def _begin_registry_image_build_reference(
+    def _protect_registry_image_build_target(
         self,
         spec: ImageBuildSpec,
         *,
         push: bool,
-    ) -> _RegistryImageBuildReference | None:
+    ) -> None:
         if (
             not push
             or self.registry_usage_store is None
@@ -2956,30 +2949,15 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             is None
         ):
-            return None
-        owner = _registry_operation_lease_owner(
-            "image-build",
-            {
-                "version": 1,
-                "deployment_id": self.deployment_id,
-                "operation_id": uuid4().hex,
-                "image_id": spec.id,
-                "tag": spec.tag,
-            },
-        )
+            return
         try:
-            _persist_registry_image_protection(
-                self.registry_usage_store,
-                spec.tag,
-                owner,
-                touch=True,
-                persistent=True,
-            )
+            touched = self.registry_usage_store.touch_image(spec.tag)
+            if touched is None:
+                raise ValueError("registry image-build target could not be recorded")
         except (OSError, TypeError, ValueError) as exc:
             raise RegistryImageReferenceUnavailable(
-                "registry image-build reference could not be persisted"
+                "registry image-build target could not be protected"
             ) from exc
-        return _RegistryImageBuildReference(spec.id, spec.tag, owner)
 
     def _release_registry_image_reference(
         self,
@@ -3061,13 +3039,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
         except (OSError, TypeError, ValueError):
             return
-
-    def _release_registry_image_build_reference(
-        self,
-        reference: _RegistryImageBuildReference | None,
-    ) -> None:
-        if reference is not None:
-            self._release_registry_image_reference(reference.tag, reference.owner)
 
     def _write_registry_lease_unavailable(
         self,
@@ -3212,7 +3183,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     root.set_attribute("status_code", int(context_response.status))
                     self._send_proxied_response(context_response)
                     return
-                build_reference = self._begin_registry_image_build_reference(
+                self._protect_registry_image_build_target(
                     spec,
                     push=push,
                 )
@@ -3252,8 +3223,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 if accepted_build_response or terminal_build_response:
                     self.routing_store.clear_pending_image_build(spec.id)
-                if terminal_build_response:
-                    self._release_registry_image_build_reference(build_reference)
                 if 200 <= response.status < 300:
                     raw_image = response_payload.get("image")
                     if isinstance(

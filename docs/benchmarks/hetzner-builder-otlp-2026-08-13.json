@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13T15:43:00Z",
+  "deployment_id": "hetzner-production",
+  "gateway": {
+    "server_type": "cpx12",
+    "private_ip": "10.42.0.2",
+    "otlp_http_endpoint": "http://10.42.0.2:4318"
+  },
+  "builder": {
+    "server_type": "cpx62",
+    "snapshot_id": 419672197,
+    "snapshot_image_size_gib": 2.02870705078125,
+    "snapshot_disk_size_gb": 640,
+    "bundle_sha256": "4e94f5c978318fd77ad768ac3dfeeaa058d4686abe55eb30e60c0c793974e795",
+    "server_id": 162146223,
+    "private_ip": "10.42.0.3",
+    "cold_provision": {
+      "demand_to_build_accepted_seconds": 73.37,
+      "provider_create_to_running_private_ip_seconds": 46.404,
+      "provider_create_to_init_success_seconds": 68.029,
+      "dynamic_init_total_ms": 3936,
+      "package_bundle_ms": 45,
+      "runtime_bundle_ms": 6,
+      "snapshot_baked_runtime_selected": true
+    },
+    "builds": [
+      {
+        "image_id": "hetzner-builder-smoke-20260813",
+        "status": "succeeded",
+        "worker_total_ms": 7888,
+        "manifest_digest": "sha256:16aacafd5bcfa594c378c3b97740606536d46a78ccf029b7e2790188ea78aa73"
+      },
+      {
+        "image_id": "hetzner-builder-snapshot-canary-20260813",
+        "status": "succeeded",
+        "worker_total_ms": 9349,
+        "manifest_digest": "sha256:232fd0ceb3271e890fdbbd80fb888e8859947a46f96ddcce75d803903376aa9c"
+      },
+      {
+        "image_id": "hetzner-otlp-builder-trace-20260813",
+        "status": "succeeded",
+        "client_total_seconds": 4.547,
+        "worker_total_ms": 2289,
+        "trace_id": "a8ae78bd16a4812415eb9a6a806df116"
+      }
+    ]
+  },
+  "built_image_launch": {
+    "sandbox_id": "hetzner-builder-launch-20260813",
+    "create_seconds": 2.69,
+    "exec_seconds": 0.5,
+    "stdout": "hetzner-builder-ok\n",
+    "cleanup_succeeded": true
+  },
+  "detached_wake_recheck": {
+    "trace_id": "5e6694131a3940e18714167e36cfbf13",
+    "span_count": 93,
+    "services": [
+      "ucloud-sandboxes-gateway",
+      "ucloud-sandboxes-storage",
+      "ucloud-sandboxes-worker"
+    ],
+    "park_seconds": 0.19630661900009727,
+    "detach_seconds": 10.79406750400085,
+    "wake_seconds": 1.4443432360058068,
+    "wake_internal_ms": 318,
+    "restore_warden_ms": 220.6634879999001,
+    "remote_import_ms": 852.775958,
+    "snapshot_export_upload_seconds": 10.180416557,
+    "snapshot_input_bytes": 128757760,
+    "snapshot_uploaded_bytes": 128425984,
+    "snapshot_export_thread_cpu_seconds": 0.34385308400000003,
+    "correctness_passed": true,
+    "lifecycle_retries": 0
+  },
+  "telemetry": {
+    "collector_image": "otel/opentelemetry-collector-contrib:0.153.0",
+    "tempo_image": "grafana/tempo:2.10.7",
+    "victoria_metrics_image": "victoriametrics/victoria-metrics:v1.148.0",
+    "trace_retention_days": 7,
+    "metrics_retention_days": 14,
+    "tempo_s3": {
+      "prefix": "production/telemetry/tempo",
+      "verified_block_id": "89d0ce5d-5282-4b7b-baf8-b30f39e0e6bb",
+      "verified_object_count": 4,
+      "verified_total_bytes": 175179,
+      "flush_queue_length": 0
+    },
+    "forced_build_trace": {
+      "trace_id": "a8ae78bd16a4812415eb9a6a806df116",
+      "span_count": 16,
+      "services": [
+        "ucloud-sandboxes-builder",
+        "ucloud-sandboxes-gateway"
+      ],
+      "worker_span": "image.build.worker",
+      "worker_span_duration_ms": 2291.387
+    },
+    "metric_operations_observed": [
+      "gateway.image_build",
+      "gateway.sandbox_create",
+      "image.build.worker",
+      "sandbox.exec.session",
+      "storage.client.PrepareVolume",
+      "storage.server.PrepareVolume",
+      "vm.bootstrap"
+    ]
+  }
+}

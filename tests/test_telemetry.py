@@ -1,6 +1,7 @@
-from threading import Event, Lock, current_thread
 import time
 import unittest
+from pathlib import Path
+from threading import Event, Lock, current_thread
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
@@ -38,6 +39,15 @@ class _BlockingExporter(SpanExporter):
 
 
 class TelemetryTests(unittest.TestCase):
+    def test_live_park_benchmark_forces_one_searchable_trace(self) -> None:
+        source = (
+            Path(__file__).parents[1] / "scripts" / "live_park_resume_benchmark.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('trace_headers = {"traceparent":', source)
+        self.assertIn("headers=trace_headers", source)
+        self.assertIn('"trace_id": trace_id', source)
+
     def test_settings_require_an_origin_and_bounded_queue(self) -> None:
         normalized = TelemetrySettings(
             endpoint="https://collector.example:4318/",

@@ -42,6 +42,18 @@ class HetznerFoundationTests(unittest.TestCase):
             installer,
         )
 
+    def test_gateway_installer_requires_distinct_role_checked_node_bundles(
+        self,
+    ) -> None:
+        installer = (
+            Path(__file__).parents[1] / "scripts" / "install_hetzner_gateway.sh"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/tmp/ucloud-sandboxes-sandbox-node-package.tar.gz", installer)
+        self.assertIn("/tmp/ucloud-sandboxes-builder-node-package.tar.gz", installer)
+        self.assertIn("actual_role != expected_role", installer)
+        self.assertNotIn('install -m 0644 "$node_bundle"', installer)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -249,6 +249,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         else ""
     )
     suffix = uuid4().hex[:10]
+    trace_id = uuid4().hex
+    trace_headers = {"traceparent": f"00-{trace_id}-{uuid4().hex[:16]}-01"}
     sandbox_id = f"park-bench-{suffix}"
     job_id = f"counter-{suffix}"
     cycles: list[dict[str, Any]] = []
@@ -258,7 +260,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         args.gateway_url,
         api_token=sandbox_api_token,
         timeout_seconds=30,
-    ) as client, aiohttp.ClientSession() as session:
+        headers=trace_headers,
+    ) as client, aiohttp.ClientSession(headers=trace_headers) as session:
         handle = await client.create_sandbox(
             SandboxSpec(
                 id=sandbox_id,
@@ -528,6 +531,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             detach_values = [item["detach_seconds"] for item in cycles]
             return {
                 "ok": all(correctness.values()),
+                "trace_id": trace_id,
                 "sandbox_id": sandbox_id,
                 "generation": sandbox_generation,
                 "cycles": cycles,

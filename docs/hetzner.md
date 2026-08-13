@@ -293,7 +293,7 @@ or boot/runtime kernel modules are missing:
 ```bash
 scp scripts/prepare_hetzner_snapshot.sh root@SOURCE:/root/
 ssh root@SOURCE \
-  'bash /root/prepare_hetzner_snapshot.sh "$(hostname)" 64'
+  'bash /root/prepare_hetzner_snapshot.sh "$(hostname)" 64 sandbox'
 ```
 
 Review the script and the source server before running it. It deletes workload
@@ -327,6 +327,19 @@ Install that artifact as the gateway's configured sandbox-node bundle when
 using this snapshot. A differently built release deliberately misses the
 receipt and takes the safe full-transfer/full-install upgrade path; create a
 new golden snapshot after validating that release to restore the fast path.
+
+Builders use the separate CPX62/Ubuntu 26.04 snapshot `419672197`. Its retained
+builder bundle SHA-256 is
+`4e94f5c978318fd77ad768ac3dfeeaa058d4686abe55eb30e60c0c793974e795`;
+the bundle contains Docker, containerd, and Buildx but deliberately omits the
+sandbox-only gVisor and storage-native artifacts. The canary selected that
+snapshot-baked bundle in 45 ms and completed all dynamic initialization in
+3.936 seconds. Hetzner took 46.404 seconds from accepted server creation until
+it reported a running VM with a private address, and SSH readiness remained
+the dominant remainder. The canary completed a real registry-pushed image
+build in 9.349 seconds from a cold Docker cache and a following warm build in
+2.289 seconds. Evidence is in
+[`benchmarks/hetzner-builder-otlp-2026-08-13.json`](benchmarks/hetzner-builder-otlp-2026-08-13.json).
 
 The promoted snapshot canary was confirmed through the Hetzner API to use
 image `419603017`. It completed two full SDK-driven park, S3 detach, and wake

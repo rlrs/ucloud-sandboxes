@@ -8,9 +8,10 @@ usage: install_hetzner_gateway.sh --public-ip <ipv4> [--volume-device <path>]
 --volume-device is required only when registry_store.kind=filesystem.
 
 The following release inputs must already be staged on the gateway:
-  /tmp/ucloud_sandboxes-0.4.1-py3-none-any.whl
+  /tmp/ucloud-sandboxes.whl
   /tmp/ucloud-sandboxes-deployment.json
-  /tmp/ucloud-sandboxes-node-package.tar.gz
+  /tmp/ucloud-sandboxes-sandbox-node-package.tar.gz
+  /tmp/ucloud-sandboxes-builder-node-package.tar.gz
   /tmp/ucloud-sandboxes-gateway-init
   /tmp/ucloud-sandboxes-gateway-init.pub
   /tmp/ucloud-sandboxes-hetzner.env
@@ -51,9 +52,10 @@ if [[ ! "$public_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "--public-ip must be an IPv4 address" >&2
   exit 2
 fi
-wheel=/tmp/ucloud_sandboxes-0.4.1-py3-none-any.whl
+wheel=/tmp/ucloud-sandboxes.whl
 deployment=/tmp/ucloud-sandboxes-deployment.json
-node_bundle=/tmp/ucloud-sandboxes-node-package.tar.gz
+sandbox_node_bundle=/tmp/ucloud-sandboxes-sandbox-node-package.tar.gz
+builder_node_bundle=/tmp/ucloud-sandboxes-builder-node-package.tar.gz
 init_key=/tmp/ucloud-sandboxes-gateway-init
 init_public_key=/tmp/ucloud-sandboxes-gateway-init.pub
 provider_env=/tmp/ucloud-sandboxes-hetzner.env
@@ -61,7 +63,8 @@ ingress=/tmp/configure_hetzner_sdk_ingress.sh
 for required in \
   "$wheel" \
   "$deployment" \
-  "$node_bundle" \
+  "$sandbox_node_bundle" \
+  "$builder_node_bundle" \
   "$init_key" \
   "$init_public_key" \
   "$provider_env" \
@@ -71,6 +74,32 @@ for required in \
     exit 2
   fi
 done
+
+python3 - "$sandbox_node_bundle" sandbox "$builder_node_bundle" builder <<'PY'
+import json
+import sys
+import tarfile
+
+for raw_path, expected_role in zip(sys.argv[1::2], sys.argv[2::2], strict=True):
+    with tarfile.open(raw_path, "r:*") as archive:
+        manifests = [
+            member
+            for member in archive.getmembers()
+            if member.name.lstrip("./") == "package-bundle.json" and member.isfile()
+        ]
+        if len(manifests) != 1:
+            raise SystemExit(f"{raw_path}: expected exactly one package-bundle.json")
+        source = archive.extractfile(manifests[0])
+        if source is None:
+            raise SystemExit(f"{raw_path}: cannot read package-bundle.json")
+        manifest = json.load(source)
+    runtime = manifest.get("runtime") if isinstance(manifest, dict) else None
+    actual_role = runtime.get("role") if isinstance(runtime, dict) else None
+    if manifest.get("version") != 1 or actual_role != expected_role:
+        raise SystemExit(
+            f"{raw_path}: expected role={expected_role}, found role={actual_role}"
+        )
+PY
 
 registry_store_kind="$(python3 - "$deployment" <<'PY'
 import json
@@ -140,8 +169,10 @@ venv_dir="$install_root/gateway-venv"
 data_root=/var/lib/ucloud-sandboxes/state
 install -d -m 0755 "$install_root" "$release_dir" /etc/ucloud-sandboxes
 install -d -m 0700 -o ucloud -g ucloud "$data_root" "$data_root/ssh"
-install -m 0644 "$node_bundle" "$release_dir/sandbox-node-package.tar.gz"
-install -m 0644 "$node_bundle" "$release_dir/builder-node-package.tar.gz"
+install -m 0644 \
+  "$sandbox_node_bundle" "$release_dir/sandbox-node-package.tar.gz"
+install -m 0644 \
+  "$builder_node_bundle" "$release_dir/builder-node-package.tar.gz"
 install -m 0644 "$deployment" /etc/ucloud-sandboxes/deployment.json
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/hetzner.env
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/snapshot-store.env
@@ -314,7 +345,8 @@ install -m 0755 "$ingress" /usr/local/sbin/configure-hetzner-sdk-ingress
 rm -f \
   "$wheel" \
   "$deployment" \
-  "$node_bundle" \
+  "$sandbox_node_bundle" \
+  "$builder_node_bundle" \
   "$init_key" \
   "$init_public_key" \
   "$provider_env" \

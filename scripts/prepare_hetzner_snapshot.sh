@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Prepare a deliberately disposable Hetzner sandbox-node source VM for imaging.
+# Prepare a deliberately disposable Hetzner node source VM for imaging.
 # The hostname guard prevents this cleanup from being run on an arbitrary node.
 expected_hostname="${1:-}"
 expected_docker_image_gib="${2:-}"
+expected_role="${3:-}"
 if [[ -z "$expected_hostname" || "$(hostname)" != "$expected_hostname" \
-  || ! "$expected_docker_image_gib" =~ ^[1-9][0-9]*$ ]]; then
-  echo "usage: $0 \$(hostname) <expected-docker-image-gib>" >&2
+  || ! "$expected_docker_image_gib" =~ ^[1-9][0-9]*$ \
+  || ! "$expected_role" =~ ^(sandbox|builder)$ ]]; then
+  echo "usage: $0 \$(hostname) <expected-docker-image-gib> <sandbox|builder>" >&2
   echo "refusing to sanitize unexpected host: $(hostname)" >&2
   exit 2
 fi
@@ -31,10 +33,10 @@ if [[ ! -L /lib || "$(readlink /lib)" != "usr/lib" ]]; then
 fi
 runtime_cache_root=/var/cache/ucloud-sandboxes/init-packages
 shopt -s nullglob
-runtime_receipts=("$runtime_cache_root"/*/runtime-ready-v*-*)
+runtime_receipts=("$runtime_cache_root"/*/runtime-ready-v*-"$expected_role")
 shopt -u nullglob
 if [[ "${#runtime_receipts[@]}" -ne 1 ]]; then
-  echo "exactly one snapshot-ready runtime receipt is required" >&2
+  echo "exactly one snapshot-ready $expected_role runtime receipt is required" >&2
   exit 2
 fi
 runtime_receipt="${runtime_receipts[0]}"
@@ -106,7 +108,9 @@ rm -rf \
   /root/node-bundle-output \
   /root/node-bundle-venv \
   /root/ucloud-repack-node-agent.py \
+  /root/ucloud-kernel-closure*.tar \
   /root/ucloud_sandboxes-*.whl \
+  /root/builder-node-package*.tar.gz \
   /root/sandbox-node-package*.tar.gz \
   /root/sandbox-node-package*.tar.gz.sha256 \
   /root/storage-artifacts \

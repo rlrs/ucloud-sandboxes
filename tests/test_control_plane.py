@@ -33,7 +33,12 @@ from ucloud_sandboxes.control_plane import (
 )
 from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.http_server import DEFAULT_HTTP_REQUEST_QUEUE_SIZE
-from ucloud_sandboxes.images import DockerImageRuntime, ImageRecord, ImageStore
+from ucloud_sandboxes.images import (
+    DockerImageRuntime,
+    ImageBuildSpec,
+    ImageRecord,
+    ImageStore,
+)
 from ucloud_sandboxes.managed_registry import (
     RegistryLayerDescriptor,
     RegistryManifestLayers,
@@ -5023,6 +5028,31 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(
                 RoutingStore(raw_path / "routes.json").pending_image_build_count(), 0
             )
+
+    def test_gateway_protects_digest_unknown_build_target_by_recent_use(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            usage_store = RegistryUsageStore(Path(raw_dir) / "registry-usage.sqlite")
+            handler = SimpleNamespace(
+                registry_usage_store=usage_store,
+                registry_url="http://registry.example.org:5000",
+                registry_worker_url="http://10.0.0.2:5000",
+            )
+            spec = ImageBuildSpec.from_dict(
+                {
+                    "id": "custom",
+                    "tag": "10.0.0.2:5000/ucloud-managed/custom:latest",
+                }
+            )
+
+            control_plane.ControlPlaneHandler._protect_registry_image_build_target(
+                handler,
+                spec,
+                push=True,
+            )
+
+            snapshot = usage_store.snapshot()
+            self.assertIn(("ucloud-managed/custom", "latest"), snapshot.records)
+            self.assertEqual(snapshot.leases, {})
 
     def test_gateway_clears_pending_signal_after_async_build_is_accepted(self) -> None:
         digest = "sha256:" + "8" * 64

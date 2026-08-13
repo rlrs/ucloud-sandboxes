@@ -141,6 +141,10 @@ class DeployTests(unittest.TestCase):
             script,
         )
         self.assertIn(
+            "create_secret /work/data/ucloud-sandboxes/state/sandbox-api-token",
+            script,
+        )
+        self.assertIn(
             "REGISTRY_MOUNT_POINT=/work/data",
             script,
         )

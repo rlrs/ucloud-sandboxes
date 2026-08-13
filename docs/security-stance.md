@@ -42,9 +42,11 @@ package repositories or download a substitute runtime during boot.
 
 ## Authentication boundaries
 
-Generated deployments use three distinct mandatory credentials:
+Generated deployments use four distinct mandatory gateway and node
+credentials:
 
-- gateway token: public sandbox API access;
+- sandbox API key: least-privileged public SDK access;
+- gateway control token: operator, autoscaler, and internal relay access;
 - heartbeat token: node heartbeat publication;
 - node-control token: privileged control-plane-to-node calls.
 
@@ -53,6 +55,14 @@ gateway strips caller authorization headers before forwarding and attaches only
 the private node credential. Heartbeat reads, image warmup, drain, and sandbox
 operations use the same protected channel. Empty token files are a
 startup error.
+
+The sandbox API key can create and operate SDK sandboxes, upload build
+contexts, build and pull images, and publish prepared-capacity demand. It
+cannot read operator telemetry or node inventory and cannot explicitly park,
+wake, detach, or migrate a sandbox. The gateway control token remains accepted
+through the UCloud-safe header for operator tooling, but must never be
+distributed as an SDK key. Public deployments terminate trusted TLS before the
+gateway so neither credential crosses the Internet in plaintext.
 
 The current node-control token is deployment-wide. Private networking and host
 firewalling remain part of the trust boundary; per-node identity would be the
@@ -82,4 +92,5 @@ storage-native snapshot manifests.
   both nodes; manifest and snapshot digests fence every ownership transition.
 - A node in drain mode closes admission before reporting drain progress.
 - `/healthz` reveals service health and version only.
-- Gateway, heartbeat, and node-control tokens must be rotated independently.
+- Sandbox API, gateway control, heartbeat, and node-control credentials must be
+  rotated independently.

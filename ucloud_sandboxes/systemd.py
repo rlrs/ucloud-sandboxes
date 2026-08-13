@@ -81,6 +81,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def registry_run_command(config: DeploymentConfig) -> list[str]:
+    """Build the registry command without Docker's kernel port-publish path."""
+
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        "ucloud-sandbox-registry",
+        "--network",
+        "host",
+        "-v",
+        f"{config.registry_data_dir()}:/var/lib/registry",
+        "-e",
+        "REGISTRY_STORAGE_DELETE_ENABLED=true",
+        "-e",
+        f"REGISTRY_HTTP_ADDR=0.0.0.0:{config.registry_port}",
+        "registry:2",
+    ]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     config = DeploymentConfig.from_file(args.config)
@@ -96,20 +117,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         require_registry_mount(config)
         data_dir = config.registry_data_dir()
         data_dir.mkdir(parents=True, exist_ok=True)
-        command = [
-            "docker",
-            "run",
-            "--rm",
-            "--name",
-            "ucloud-sandbox-registry",
-            "-p",
-            f"0.0.0.0:{config.registry_port}:5000",
-            "-v",
-            f"{data_dir}:/var/lib/registry",
-            "-e",
-            "REGISTRY_STORAGE_DELETE_ENABLED=true",
-            "registry:2",
-        ]
+        command = registry_run_command(config)
         os.execvp(command[0], command)
     raise ValueError(f"unsupported systemd helper: {args.command}")
 

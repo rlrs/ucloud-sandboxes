@@ -32,11 +32,17 @@ The gateway VM and worker VMs join one UCloud private network. A public link
 binds only the gateway port. Heartbeats advertise each node's private URL, and
 the gateway forwards to that URL without exposing it to clients.
 
-Three credentials define separate trust channels:
+Four credentials define separate trust channels:
 
-- the gateway token authenticates public API callers;
+- the sandbox API key authenticates least-privileged public SDK callers;
+- the gateway control token authenticates operators and internal controllers;
 - the heartbeat token authenticates node heartbeat publication;
 - the node-control token authenticates gateway and autoscaler calls to nodes.
+
+The SDK key reaches only the documented sandbox, exec, file, image, build, and
+prepared-capacity routes. Node inventory, metrics, registry state, and explicit
+park/wake/detach/migration routes require the gateway control token. This keeps
+an SDK credential from becoming an infrastructure-administration credential.
 
 Every node endpoint except `/healthz` requires the node-control token. The
 gateway strips external authorization headers before attaching its private node

@@ -936,6 +936,9 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         gateway_bearer_token=read_required_token_file(
             config.gateway_token_file(), "gateway bearer token"
         ),
+        sandbox_api_token=read_required_token_file(
+            config.sandbox_api_token_file(), "sandbox API token"
+        ),
         heartbeat_bearer_token=read_required_token_file(
             config.heartbeat_token_file(), "heartbeat bearer token"
         ),

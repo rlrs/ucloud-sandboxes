@@ -470,6 +470,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     store: ControlStateStore
     routing_store: RoutingStore
     gateway_bearer_token: str
+    sandbox_api_token: str
     heartbeat_bearer_token: str
     node_control_bearer_token: str
     deployment_id: str
@@ -5230,6 +5231,17 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             allow_ucloud_sandbox_header=True,
         ):
             return True
+        if self._token_matches(
+            self.sandbox_api_token,
+            allow_ucloud_sandbox_header=True,
+        ):
+            if _is_sdk_api_request(self.command, urlparse(self.path).path):
+                return True
+            self._write_json(
+                {"error": "sandbox API key is not authorized for this endpoint"},
+                status=HTTPStatus.FORBIDDEN,
+            )
+            return False
         return self._write_unauthorized()
 
     def _check_heartbeat_authorized(self) -> bool:
@@ -5274,6 +5286,7 @@ def build_server(
     control_state_file: Path,
     *,
     gateway_bearer_token: str,
+    sandbox_api_token: str,
     heartbeat_bearer_token: str,
     node_control_bearer_token: str,
     deployment_id: str,
@@ -5291,6 +5304,7 @@ def build_server(
 ) -> HighBacklogThreadingHTTPServer:
     credentials = {
         "gateway bearer token": gateway_bearer_token.strip(),
+        "sandbox API token": sandbox_api_token.strip(),
         "heartbeat bearer token": heartbeat_bearer_token.strip(),
         "node control bearer token": node_control_bearer_token.strip(),
     }
@@ -5298,8 +5312,11 @@ def build_server(
         if not credential.strip():
             raise ValueError(f"{label} cannot be empty")
     if len(set(credentials.values())) != len(credentials):
-        raise ValueError("gateway, heartbeat, and node control tokens must be distinct")
+        raise ValueError(
+            "gateway, sandbox API, heartbeat, and node control tokens must be distinct"
+        )
     gateway_bearer_token = credentials["gateway bearer token"]
+    sandbox_api_token = credentials["sandbox API token"]
     heartbeat_bearer_token = credentials["heartbeat bearer token"]
     node_control_bearer_token = credentials["node control bearer token"]
     deployment_id = deployment_id.strip()
@@ -5331,6 +5348,7 @@ def build_server(
     BoundHandler.store = store
     BoundHandler.routing_store = routing_store
     BoundHandler.gateway_bearer_token = gateway_bearer_token
+    BoundHandler.sandbox_api_token = sandbox_api_token
     BoundHandler.heartbeat_bearer_token = heartbeat_bearer_token
     BoundHandler.node_control_bearer_token = node_control_bearer_token
     BoundHandler.deployment_id = deployment_id
@@ -5403,6 +5421,88 @@ def _collection_id_from_path(path: str, prefix: str) -> str | None:
     if not rest:
         return None
     return unquote(rest.split("/", 1)[0])
+
+
+def _is_sdk_api_request(method: str, path: str) -> bool:
+    """Return whether the least-privileged public SDK key may use a route."""
+
+    method = method.upper()
+    exact_routes = {
+        ("GET", "/v1/sandboxes"),
+        ("POST", "/v1/sandboxes"),
+        ("GET", "/v1/capacity/prepare"),
+        ("POST", "/v1/capacity/prepare"),
+        ("GET", "/v1/builders/prepare"),
+        ("POST", "/v1/builders/prepare"),
+        ("GET", "/v1/images"),
+        ("GET", "/v1/images/builds"),
+        ("POST", "/v1/images/build"),
+        ("POST", "/v1/images/pull"),
+    }
+    if (method, path) in exact_routes:
+        return True
+    for prefix, methods in (
+        ("/v1/capacity/prepare/", {"DELETE"}),
+        ("/v1/builders/prepare/", {"DELETE"}),
+        ("/v1/images/builds/", {"GET"}),
+        ("/v1/image-contexts/", {"GET", "PUT"}),
+    ):
+        if method in methods and _single_encoded_path_segment(path, prefix):
+            return True
+
+    sandbox_parts = _encoded_path_parts(path, "/v1/sandboxes/")
+    if sandbox_parts is not None:
+        if len(sandbox_parts) == 1:
+            return method == "DELETE"
+        suffix = sandbox_parts[1:]
+        if suffix == ["files"]:
+            return method in {"GET", "PUT"}
+        if suffix == ["ssh"]:
+            return method == "GET"
+        if suffix in (["exec"], ["snapshot"], ["jobs"]):
+            return method == "POST"
+        if len(suffix) == 2 and suffix[0] == "jobs":
+            return method == "GET"
+        if len(suffix) == 3 and suffix[0] == "jobs" and suffix[2] == "signal":
+            return method == "POST"
+        if (
+            len(suffix) == 4
+            and suffix[0] == "jobs"
+            and suffix[2] == "logs"
+            and suffix[3] in {"stdout", "stderr"}
+        ):
+            return method == "GET"
+        return False
+
+    exec_parts = _encoded_path_parts(path, "/v1/exec/")
+    if exec_parts is None:
+        return False
+    if len(exec_parts) == 1:
+        return method == "GET"
+    if len(exec_parts) != 2:
+        return False
+    if exec_parts[1] == "events":
+        return method == "GET"
+    if exec_parts[1] in {"stdin", "close-stdin"}:
+        return method == "POST"
+    return False
+
+
+def _single_encoded_path_segment(path: str, prefix: str) -> bool:
+    parts = _encoded_path_parts(path, prefix)
+    return parts is not None and len(parts) == 1
+
+
+def _encoded_path_parts(path: str, prefix: str) -> list[str] | None:
+    if not path.startswith(prefix):
+        return None
+    raw = path[len(prefix) :]
+    if not raw:
+        return None
+    parts = raw.split("/")
+    if any(not part or "/" in unquote(part) for part in parts):
+        return None
+    return parts
 
 
 def _sandbox_id_from_path(path: str) -> str | None:

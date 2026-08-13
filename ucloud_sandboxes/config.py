@@ -384,6 +384,9 @@ class DeploymentConfig:
     def gateway_token_file(self) -> Path:
         return self._state_file("gateway-token")
 
+    def sandbox_api_token_file(self) -> Path:
+        return self._state_file("sandbox-api-token")
+
     def heartbeat_token_file(self) -> Path:
         return self._state_file("heartbeat-token")
 

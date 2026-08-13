@@ -107,6 +107,7 @@ def write_ucloud_config(root: Path, **values) -> Path:
 def write_test_tokens(root: Path) -> None:
     for name in (
         "gateway-token",
+        "sandbox-api-token",
         "heartbeat-token",
         "node-control-token",
         "relay-sandbox-token",

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Idempotently create the non-billable Hetzner worker foundation."""
+"""Idempotently create the non-billable Hetzner network and firewalls."""
 
 from __future__ import annotations
 
@@ -39,6 +39,15 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--state-file", type=Path, default=DEFAULT_STATE_FILE)
     result.add_argument("--api-token-env", default="HETZNER_API_KEY")
     result.add_argument(
+        "--gateway-ssh-source-cidr",
+        action="append",
+        default=[],
+        help=(
+            "CIDR allowed to SSH to the gateway; repeat for multiple operator "
+            "networks. With none, the gateway firewall exposes only HTTP(S)."
+        ),
+    )
+    result.add_argument(
         "--egress-gateway-ip",
         help=(
             "Private IP of the NAT gateway; adds or verifies the Network "
@@ -53,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     if not _NAME_RE.fullmatch(args.name):
         raise ValueError("foundation name must be a valid Hetzner resource name")
     public_key = _read_public_key(args.public_key_file)
+    gateway_ssh_sources = _ip_networks(args.gateway_ssh_source_cidr)
+    gateway_firewall_rules = _gateway_firewall_rules(gateway_ssh_sources)
     labels = {
         "ucloud-sandboxes/foundation": "production",
         "ucloud-sandboxes/managed": "true",
@@ -62,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     network = _existing(client, "/networks", "networks", args.name)
     ssh_key = _existing(client, "/ssh_keys", "ssh_keys", f"{args.name}-init")
     firewall = _existing(client, "/firewalls", "firewalls", f"{args.name}-workers")
+    gateway_firewall = _existing(
+        client, "/firewalls", "firewalls", f"{args.name}-gateway"
+    )
     if network is not None:
         _verify_network(
             network,
@@ -86,6 +100,10 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("existing Hetzner SSH key has different key material")
     if firewall is not None and firewall.get("rules") != []:
         raise ValueError("existing worker firewall is not deny-inbound/allow-outbound")
+    gateway_firewall_needs_update = (
+        gateway_firewall is not None
+        and gateway_firewall.get("rules") != gateway_firewall_rules
+    )
 
     plan = {
         "execute": bool(args.execute),
@@ -93,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
             "network": "existing" if network else "create",
             "ssh_key": "existing" if ssh_key else "create",
             "firewall": "existing" if firewall else "create",
+            "gateway_firewall": (
+                "create"
+                if gateway_firewall is None
+                else "update"
+                if gateway_firewall_needs_update
+                else "existing"
+            ),
             "egress_route": egress_route,
         },
     }
@@ -137,9 +162,10 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
             network = _existing(client, "/networks", "networks", args.name)
-            if network is None or _egress_route_state(
-                network, egress_gateway_ip
-            ) != "existing":
+            if (
+                network is None
+                or _egress_route_state(network, egress_gateway_ip) != "existing"
+            ):
                 raise ValueError("Hetzner Network did not retain the egress route")
     if ssh_key is None:
         response = client.request_json(
@@ -163,6 +189,35 @@ def main(argv: list[str] | None = None) -> int:
             },
         )
         firewall = _response_object(response, "firewall")
+    if gateway_firewall is None:
+        response = client.request_json(
+            "POST",
+            "/firewalls",
+            json_body={
+                "name": f"{args.name}-gateway",
+                "rules": gateway_firewall_rules,
+                "labels": labels,
+            },
+        )
+        gateway_firewall = _response_object(response, "firewall")
+    elif gateway_firewall_needs_update:
+        gateway_firewall_id = _positive_id(gateway_firewall, "gateway firewall")
+        client.request_json(
+            "POST",
+            f"/firewalls/{gateway_firewall_id}/actions/set_rules",
+            json_body={"rules": gateway_firewall_rules},
+        )
+        gateway_firewall = _existing(
+            client,
+            "/firewalls",
+            "firewalls",
+            f"{args.name}-gateway",
+        )
+        if (
+            gateway_firewall is None
+            or gateway_firewall.get("rules") != gateway_firewall_rules
+        ):
+            raise ValueError("Hetzner gateway firewall did not retain ingress rules")
 
     state = {
         "schema": 1,
@@ -173,6 +228,8 @@ def main(argv: list[str] | None = None) -> int:
         "network_id": _positive_id(network, "network"),
         "ssh_key_ids": [_positive_id(ssh_key, "ssh_key")],
         "firewall_ids": [_positive_id(firewall, "firewall")],
+        "gateway_firewall_ids": [_positive_id(gateway_firewall, "gateway firewall")],
+        "gateway_ssh_source_cidrs": gateway_ssh_sources,
         "private_key_file": str(args.public_key_file.with_suffix("")),
     }
     if egress_gateway_ip is not None:
@@ -274,6 +331,49 @@ def _read_public_key(path: Path) -> str:
     if "\n" in value or "\r" in value or not value.startswith("ssh-ed25519 "):
         raise ValueError("bootstrap public key must be one Ed25519 OpenSSH key")
     return value
+
+
+def _ip_networks(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        try:
+            network = ipaddress.ip_network(value, strict=False)
+        except ValueError as exc:
+            raise ValueError(f"invalid gateway SSH source CIDR: {value}") from exc
+        normalized = str(network)
+        if normalized not in result:
+            result.append(normalized)
+    return result
+
+
+def _gateway_firewall_rules(ssh_sources: list[str]) -> list[dict[str, Any]]:
+    rules: list[dict[str, Any]] = []
+    if ssh_sources:
+        rules.append(
+            {
+                "direction": "in",
+                "protocol": "tcp",
+                "port": "22",
+                "source_ips": ssh_sources,
+                "destination_ips": [],
+                "description": "Operator SSH",
+            }
+        )
+    for port, description in (
+        ("80", "ACME and HTTPS redirect"),
+        ("443", "Sandbox SDK HTTPS"),
+    ):
+        rules.append(
+            {
+                "direction": "in",
+                "protocol": "tcp",
+                "port": port,
+                "source_ips": ["0.0.0.0/0", "::/0"],
+                "destination_ips": [],
+                "description": description,
+            }
+        )
+    return rules
 
 
 def _write_state(path: Path, payload: dict[str, Any]) -> None:

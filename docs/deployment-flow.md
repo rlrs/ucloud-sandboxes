@@ -95,14 +95,16 @@ configured web ports.
 
 The deployment creates independent secrets for:
 
-- public gateway access;
+- least-privileged public SDK access;
+- privileged gateway control;
 - node heartbeats;
 - privileged node control;
 - sandbox-to-relay access;
 - relay workers.
 
-They are mandatory and authorize different routes. Do not copy the public
-gateway credential to nodes or reuse one token for multiple channels.
+They are mandatory and authorize different routes. Give SDK users only the
+`sandbox-api-token`; do not copy the gateway control credential to clients or
+nodes, and do not reuse one token for multiple channels.
 
 ## Autoscaled nodes
 
@@ -150,9 +152,12 @@ After deployment, verify:
 curl -fsS https://<gateway-domain>/healthz
 curl -fsS https://<relay-domain>/healthz
 curl -i https://<gateway-domain>/v1/sandboxes
+curl -fsS -H "X-UCloud-Sandbox-Token: $(cat <state>/sandbox-api-token)" \
+  https://<gateway-domain>/v1/sandboxes
 ```
 
 Both health endpoints must report the installed package version. The
-unauthenticated sandbox request must return `401`. Also verify the local registry
-`/v2/` endpoint, systemd service state, the autoscaler journal, and one complete
-builder-push plus sandbox-pull flow before accepting production traffic.
+unauthenticated sandbox request must return `401`, while the SDK-key request
+must return a sandbox list. Also verify the local registry `/v2/` endpoint,
+systemd service state, the autoscaler journal, and one complete builder-push
+plus sandbox-pull flow before accepting production traffic.

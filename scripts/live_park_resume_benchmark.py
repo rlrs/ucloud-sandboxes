@@ -51,6 +51,14 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gateway-url", default="http://127.0.0.1:8090")
     parser.add_argument("--gateway-token-file", type=Path, required=True)
+    parser.add_argument(
+        "--sandbox-api-token-file",
+        type=Path,
+        help=(
+            "sandbox-scoped SDK credential; defaults to the gateway token for "
+            "backward compatibility"
+        ),
+    )
     parser.add_argument("--image", default="python:3.13-slim-bookworm")
     parser.add_argument("--cycles", type=int, default=20)
     parser.add_argument("--detach-before-wake", action="store_true")
@@ -222,6 +230,11 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.force_different_worker and args.node_control_token_file is None:
         raise ValueError("--force-different-worker requires --node-control-token-file")
     token = read_token(args.gateway_token_file)
+    sandbox_api_token = (
+        read_token(args.sandbox_api_token_file)
+        if args.sandbox_api_token_file is not None
+        else token
+    )
     node_control_token = (
         read_token(args.node_control_token_file)
         if args.node_control_token_file is not None
@@ -235,7 +248,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
 
     async with AsyncSandboxClient(
         args.gateway_url,
-        api_token=token,
+        api_token=sandbox_api_token,
         timeout_seconds=30,
     ) as client, aiohttp.ClientSession() as session:
         handle = await client.create_sandbox(
@@ -266,23 +279,26 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     continue
             if sandbox_generation < 1:
                 raise RuntimeError("create response and inventory omitted generation")
-            await handle.upload_file("/workspace/counter.py", COUNTER_PROGRAM)
-            start, _ = await gateway_json(
-                session,
-                args.gateway_url,
-                token,
-                "POST",
-                f"/v1/sandboxes/{sandbox_id}/jobs",
-                payload={
-                    "job_id": job_id,
-                    "argv": ["python", "/workspace/counter.py"],
-                    "cwd": "/workspace",
-                    "env": {},
-                },
+            exec_probe = await handle.exec(
+                ["python", "-c", "print('sdk-exec-ok')"],
+                timeout_seconds=30,
             )
-            baseline_job = start["job"]
-            baseline_pid = int(baseline_job["pid"])
-            baseline_spec = str(baseline_job["spec_sha256"])
+            if not exec_probe.success or exec_probe.stdout.strip() != "sdk-exec-ok":
+                raise RuntimeError(
+                    "sandbox-scoped SDK exec failed: "
+                    f"status={exec_probe.status!r} "
+                    f"exit_code={exec_probe.exit_code!r} "
+                    f"stdout={exec_probe.stdout!r} stderr={exec_probe.stderr!r}"
+                )
+            await handle.upload_file("/workspace/counter.py", COUNTER_PROGRAM)
+            job_handle = await handle.start_job(
+                ["python", "/workspace/counter.py"],
+                job_id=job_id,
+                working_dir="/workspace",
+            )
+            baseline_job = job_handle.record
+            baseline_pid = baseline_job.pid
+            baseline_spec = baseline_job.spec_sha256
 
             async def read_counter(after: int, timeout: float = 10) -> int:
                 deadline = time.monotonic() + timeout
@@ -317,13 +333,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     attempts=101,
                 )
                 park_seconds = time.monotonic() - park_started
-                parked_job, _ = await gateway_json(
-                    session,
-                    args.gateway_url,
-                    token,
-                    "GET",
-                    f"/v1/sandboxes/{sandbox_id}/jobs/{job_id}",
-                )
+                parked_job = await client.get_job(sandbox_id, job_id)
 
                 parked_record = parked.get("sandbox", {})
                 parked_route = await cached_sandbox_route(
@@ -413,13 +423,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                             draining=False,
                         )
                 next_counter = await read_counter(current_counter)
-                running_job, _ = await gateway_json(
-                    session,
-                    args.gateway_url,
-                    token,
-                    "GET",
-                    f"/v1/sandboxes/{sandbox_id}/jobs/{job_id}",
-                )
+                running_job = await client.get_job(sandbox_id, job_id)
                 running_route = await cached_sandbox_route(
                     session,
                     args.gateway_url,
@@ -432,8 +436,6 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 woke_record = woke.get("sandbox", {})
                 detached_record = detached.get("sandbox", {})
-                parked_process = parked_job.get("job", {})
-                running_process = running_job.get("job", {})
                 cycles.append(
                     {
                         "cycle": index,
@@ -453,10 +455,10 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         "destination_node_id": destination_node.get("node_id"),
                         "counter_before": current_counter,
                         "counter_after": next_counter,
-                        "parked_pid": parked_process.get("pid"),
-                        "running_pid": running_process.get("pid"),
-                        "parked_spec_sha256": parked_process.get("spec_sha256"),
-                        "running_spec_sha256": running_process.get("spec_sha256"),
+                        "parked_pid": parked_job.pid,
+                        "running_pid": running_job.pid,
+                        "parked_spec_sha256": parked_job.spec_sha256,
+                        "running_spec_sha256": running_job.spec_sha256,
                     }
                 )
                 current_counter = next_counter
@@ -464,6 +466,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             park_values = [item["park_seconds"] for item in cycles]
             wake_values = [item["wake_seconds"] for item in cycles]
             correctness = {
+                "sandbox_scoped_sdk_exec_succeeded": exec_probe.success,
                 "every_park_reached_parked": all(
                     item["parked_state"] == "parked" for item in cycles
                 ),

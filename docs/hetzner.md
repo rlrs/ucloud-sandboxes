@@ -105,9 +105,10 @@ worker sandbox COW.
 ## Non-billable foundation
 
 The setup helper creates or reuses one private network, one registered
-bootstrap SSH key, and one worker firewall. It does not create servers,
-Volumes, public IPs, or snapshots. Generate the key once, review the dry run,
-then execute:
+bootstrap SSH key, a deny-inbound worker firewall, and a public gateway
+firewall. The gateway firewall exposes only ports 80 and 443 unless explicit
+operator SSH CIDRs are supplied. It does not create servers, Volumes, public
+IPs, or snapshots. Generate the key once, review the dry run, then execute:
 
 ```bash
 install -d -m 0700 .hetzner/ssh
@@ -118,25 +119,33 @@ ssh-keygen -t ed25519 -N '' \
 set -a
 source .env
 set +a
-.venv/bin/python scripts/setup_hetzner_foundation.py
-.venv/bin/python scripts/setup_hetzner_foundation.py --execute
+.venv/bin/python scripts/setup_hetzner_foundation.py \
+  --gateway-ssh-source-cidr 198.51.100.24/32
+.venv/bin/python scripts/setup_hetzner_foundation.py \
+  --gateway-ssh-source-cidr 198.51.100.24/32 \
+  --execute
 ```
 
 The default network is `10.42.0.0/16` with a `10.42.0.0/24` cloud subnet in
 the `eu-central` network zone. Override those values before the first execute
 if they conflict with deployment routing. The helper writes the resulting IDs
 to the git-ignored `.hetzner/foundation.json`; rerunning it is idempotent and
-fails on same-name resources with incompatible configuration. Back up the
-private key securely and later install it as the gateway's
-`ssh/gateway-init` key.
+fails on same-name immutable resources with incompatible configuration. It
+reconciles the gateway firewall to the requested SSH CIDRs, so repeat the same
+arguments on later runs. Omitting them deliberately removes public SSH access.
+Back up the private key securely and later install it as the gateway's
+`ssh/gateway-init` key. Attach `gateway_firewall_ids` to the public CPX12 and
+keep the worker `firewall_ids` in the compute-provider configuration.
 
 After the gateway has the reserved private address, add the Network route
 idempotently (the current deployment uses `10.42.0.2`):
 
 ```bash
 .venv/bin/python scripts/setup_hetzner_foundation.py \
+  --gateway-ssh-source-cidr 198.51.100.24/32 \
   --egress-gateway-ip 10.42.0.2
 .venv/bin/python scripts/setup_hetzner_foundation.py \
+  --gateway-ssh-source-cidr 198.51.100.24/32 \
   --egress-gateway-ip 10.42.0.2 \
   --execute
 ```
@@ -144,6 +153,75 @@ idempotently (the current deployment uses `10.42.0.2`):
 This route is non-billable. It is ineffective until the gateway's forwarding
 and NAT rules are active, so bring the gateway up before enabling private
 worker egress.
+
+## Public SDK access
+
+SDK callers need only two deployment-specific values:
+
+- an HTTPS URL using the gateway's public IPv4 address;
+- the contents of the generated `sandbox-api-token` file below `data_root`.
+
+The API key is intentionally different from `gateway-token`. The former can
+create and operate sandboxes, transfer files, run jobs, build images, and
+request prepared capacity. It cannot inspect nodes or metrics or invoke the
+operator-only park, wake, detach, and migration routes. Never distribute
+`gateway-token` to SDK users.
+
+The gateway itself continues to listen on port 8090 for private worker and
+controller traffic. Do not expose 8090, the registry port, or the model-relay
+control port publicly. On the CPX12, put Nginx in front of loopback port 8090
+and obtain a publicly trusted certificate:
+
+```bash
+sudo scripts/configure_hetzner_sdk_ingress.sh \
+  --public-host "$GATEWAY_PUBLIC_IPV4" \
+  --email ops@example.org
+```
+
+No DNS record or domain is required. Passing the public IPv4 address obtains a
+Let's Encrypt IP-address certificate, so SDK clients still perform normal
+certificate verification rather than disabling TLS checks. Those certificates
+use the short-lived profile, so the helper installs a twice-daily Certbot
+renewal timer. Ports 80 and 443 must remain reachable for ACME renewal and SDK
+traffic. The helper validates Nginx configuration and finishes only after the
+public `/healthz` request succeeds. Let's Encrypt documents the
+[general availability of IP address certificates](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability.html)
+and the corresponding
+[Certbot 5.4 command](https://letsencrypt.org/2026/03/11/shorter-certs-certbot.html).
+
+Create the gateway IPv4 as an independently managed Hetzner Primary IP in
+`hel1` and disable `auto_delete` instead of accepting an address tied to the
+lifetime of one CPX12. The address is billable even while unassigned. During a
+gateway replacement, power off the old server, unassign the Primary IP, and
+assign it to the new `hel1` server. This keeps the SDK URL stable without DNS;
+Hetzner requires the server to be off while changing a Primary IP and binds the
+address to one location. Do not use a Floating IP for this single-gateway case.
+
+An SDK user can then connect without any Hetzner or operator credentials:
+
+```python
+import os
+
+from ucloud_sandboxes_sdk import SandboxClient
+
+client = SandboxClient(
+    os.environ["UCLOUD_SANDBOX_URL"],
+    api_token=os.environ["UCLOUD_SANDBOX_API_TOKEN"],
+)
+print(client.list_sandboxes())
+```
+
+```bash
+export UCLOUD_SANDBOX_URL="https://$GATEWAY_PUBLIC_IPV4"
+export UCLOUD_SANDBOX_API_TOKEN='<contents of sandbox-api-token>'
+```
+
+Generated deployments create the key automatically. When upgrading a manually
+assembled Hetzner gateway, create one independent 32-byte secret owned by the
+gateway service at `<data_root>/sandbox-api-token` before restarting
+`serve-control-plane`; startup fails closed when the file is absent, empty, or
+duplicates another channel credential. Transfer the key to users through a
+secret manager, not shell history, chat, deployment JSON, or source control.
 
 ## Snapshot-based node provisioning
 
@@ -455,8 +533,12 @@ machine-readable evidence is in
 
 ## Remaining deployment work
 
-1. Create the private network, restrictive firewall, gateway SSH key, gateway,
-   and gateway NAT/forwarding path.
+1. Provision the persistent CPX12 gateway with a separately managed Primary
+   IPv4 (`auto_delete=false`), attach the generated gateway firewall, enable
+   its NAT/forwarding path, and configure IP-based HTTPS SDK ingress. The
+   non-billable network, both firewalls, and gateway SSH key are covered by the
+   foundation helper; Primary IP, server, and service convergence still need
+   one production command.
 2. Wrap the reviewed sanitization script, snapshot action, canary checks, and
    snapshot promotion in one auditable release command.
 3. Store the chosen role snapshot IDs in deployment configuration and protect

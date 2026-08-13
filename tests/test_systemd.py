@@ -5,10 +5,27 @@ import unittest
 from unittest.mock import patch
 
 from ucloud_sandboxes.config import DeploymentConfig
-from ucloud_sandboxes.systemd import require_registry_mount, run_registry_gc
+from ucloud_sandboxes.systemd import (
+    registry_run_command,
+    require_registry_mount,
+    run_registry_gc,
+)
 
 
 class SystemdHelperTests(unittest.TestCase):
+    def test_registry_uses_host_network_without_docker_port_publishing(self) -> None:
+        config = DeploymentConfig.default("project")
+
+        command = registry_run_command(config)
+
+        self.assertIn("--network", command)
+        self.assertIn("host", command)
+        self.assertIn(
+            f"REGISTRY_HTTP_ADDR=0.0.0.0:{config.registry_port}",
+            command,
+        )
+        self.assertNotIn("-p", command)
+
     def test_registry_mount_fails_closed(self) -> None:
         config = DeploymentConfig.default()
         with patch.object(Path, "is_mount", return_value=False), self.assertRaisesRegex(

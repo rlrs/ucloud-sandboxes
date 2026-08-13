@@ -65,4 +65,5 @@ uv run ucloud-sandboxes sample-config
 
 Control-plane and node processes intentionally have no unauthenticated local
 mode. Use the deployment/bootstrap flow to create their distinct gateway,
-heartbeat and node-control credentials and their pinned runtime artifacts.
+sandbox API, heartbeat, and node-control credentials and their pinned runtime
+artifacts.

@@ -210,6 +210,10 @@ class AllInOneDeployPlan:
         return str(self.config.gateway_token_file())
 
     @property
+    def sandbox_api_token_file(self) -> str:
+        return str(self.config.sandbox_api_token_file())
+
+    @property
     def heartbeat_token_file(self) -> str:
         return str(self.config.heartbeat_token_file())
 
@@ -703,6 +707,7 @@ def render_remote_deploy_script(
         '  sudo chown "$SERVICE_USER:$SERVICE_GROUP" "$path"',
         "}",
         f"create_secret {shlex.quote(plan.gateway_token_file)}",
+        f"create_secret {shlex.quote(plan.sandbox_api_token_file)}",
         f"create_secret {shlex.quote(plan.heartbeat_token_file)}",
         f"create_secret {shlex.quote(plan.node_control_token_file)}",
         f"create_secret {shlex.quote(plan.relay_sandbox_token_file)}",

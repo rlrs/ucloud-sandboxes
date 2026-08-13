@@ -1,5 +1,26 @@
 # API Reference
 
+## Authentication
+
+The public SDK API accepts a deployment-generated sandbox API key in either
+of these headers:
+
+```text
+X-UCloud-Sandbox-Token: <sandbox-api-key>
+Authorization: Bearer <sandbox-api-key>
+```
+
+The Python SDK uses `X-UCloud-Sandbox-Token`, which also works through UCloud
+public links. The sandbox API key authorizes sandbox create/list/delete, exec,
+jobs, file transfer, snapshots, image operations, and prepared-capacity
+operations. It cannot read nodes, demand, metrics, or registry status and
+cannot invoke explicit park, wake, detach, or migration operations.
+
+The gateway control token is a separate operator credential with access to the
+complete control-plane API. Heartbeat and node-control tokens are separate
+again and are never valid public SDK credentials. `/healthz` is intentionally
+unauthenticated and contains no deployment secrets.
+
 ## Heartbeat API
 
 `POST /v1/nodes/heartbeat` accepts:

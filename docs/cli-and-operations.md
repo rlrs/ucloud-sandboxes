@@ -113,14 +113,20 @@ URL or installer specification.
 
 Generated deployments use separate mandatory credentials:
 
-- the gateway token protects the public sandbox API;
+- the sandbox API key protects the least-privileged public SDK routes;
+- the gateway control token protects operator and controller routes;
 - the heartbeat token authorizes only heartbeat publication;
 - the node-control token protects every node route except `/healthz`.
 
 The control plane removes caller authorization headers before forwarding and
-adds the node-control token itself. Rotate the three credentials independently.
-Heartbeat rotation is coordinated because nodes and the control plane must
-switch to the same new value before heartbeat publication resumes.
+adds the node-control token itself. Heartbeat rotation is coordinated because
+nodes and the control plane must switch to the same new value before heartbeat
+publication resumes.
+
+Distribute the public HTTPS URL and the contents of `sandbox-api-token` to SDK
+users. Keep `gateway-token` on the control-plane host for operator tooling,
+autoscaling, and the model-relay lifecycle bridge. Rotate the four gateway/node
+credentials independently.
 
 The gateway SSH bootstrap key is also deployment state. Register its public key
 with UCloud and keep the private key on the control-plane VM:

@@ -98,9 +98,12 @@ def build_server(*args, **kwargs):
     """Build an auth-bypassed server for tests unrelated to channel security."""
 
     explicit_public_auth = (
-        "gateway_bearer_token" in kwargs or "heartbeat_bearer_token" in kwargs
+        "gateway_bearer_token" in kwargs
+        or "sandbox_api_token" in kwargs
+        or "heartbeat_bearer_token" in kwargs
     )
     kwargs.setdefault("gateway_bearer_token", "test-gateway-secret")
+    kwargs.setdefault("sandbox_api_token", "test-sandbox-api-secret")
     kwargs.setdefault("heartbeat_bearer_token", "test-heartbeat-secret")
     kwargs.setdefault("node_control_bearer_token", "test-node-secret")
     kwargs.setdefault("deployment_id", "test-deployment")
@@ -2750,7 +2753,7 @@ class ControlPlaneTests(unittest.TestCase):
                     registry_usage_file=usage_path,
                 )
 
-    def test_distinct_gateway_and_heartbeat_tokens_are_channel_scoped(self) -> None:
+    def test_gateway_sdk_and_heartbeat_tokens_are_channel_scoped(self) -> None:
         with TemporaryDirectory() as raw_dir:
             gateway = _build_server(
                 "127.0.0.1",
@@ -2760,6 +2763,7 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=Path(raw_dir) / "images.json",
                 metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
+                sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
@@ -2803,6 +2807,23 @@ class ControlPlaneTests(unittest.TestCase):
                     f"{base}/v1/nodes",
                     headers={"Authorization": "Bearer gateway-secret"},
                 )
+                sdk_token_on_sandbox_api = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    headers={"X-UCloud-Sandbox-Token": "sandbox-api-secret"},
+                )
+                sdk_bearer_on_sandbox_api = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    headers={"Authorization": "Bearer sandbox-api-secret"},
+                )
+                sdk_token_on_operator_api = self._json_request(
+                    f"{base}/v1/nodes",
+                    headers={"X-UCloud-Sandbox-Token": "sandbox-api-secret"},
+                    allow_error=True,
+                )
+                gateway_token_in_public_link_header = self._json_request(
+                    f"{base}/v1/sandboxes",
+                    headers={"X-UCloud-Sandbox-Token": "gateway-secret"},
+                )
 
         self.assertEqual(no_token.status, 401)
         self.assertEqual(gateway_token_on_heartbeat.status, 401)
@@ -2810,18 +2831,86 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(accepted_heartbeat.status, 200)
         self.assertEqual(heartbeat_token_on_gateway["status"], 401)
         self.assertEqual(len(gateway_token_on_gateway["nodes"]), 1)
+        self.assertEqual(sdk_token_on_sandbox_api["sandboxes"], [])
+        self.assertEqual(sdk_bearer_on_sandbox_api["sandboxes"], [])
+        self.assertEqual(sdk_token_on_operator_api["status"], 403)
+        self.assertEqual(gateway_token_in_public_link_header["sandboxes"], [])
+
+    def test_sdk_api_key_scope_matches_public_client_routes(self) -> None:
+        allowed = (
+            ("GET", "/v1/sandboxes"),
+            ("POST", "/v1/sandboxes"),
+            ("DELETE", "/v1/sandboxes/sandbox-1"),
+            ("GET", "/v1/sandboxes/sandbox-1/files"),
+            ("PUT", "/v1/sandboxes/sandbox-1/files"),
+            ("GET", "/v1/sandboxes/sandbox-1/ssh"),
+            ("POST", "/v1/sandboxes/sandbox-1/exec"),
+            ("POST", "/v1/sandboxes/sandbox-1/jobs"),
+            ("GET", "/v1/sandboxes/sandbox-1/jobs/job-1"),
+            ("GET", "/v1/sandboxes/sandbox-1/jobs/job-1/logs/stdout"),
+            ("POST", "/v1/sandboxes/sandbox-1/jobs/job-1/signal"),
+            ("POST", "/v1/sandboxes/sandbox-1/snapshot"),
+            ("GET", "/v1/exec/session-1"),
+            ("GET", "/v1/exec/session-1/events"),
+            ("POST", "/v1/exec/session-1/stdin"),
+            ("POST", "/v1/exec/session-1/close-stdin"),
+            ("GET", "/v1/capacity/prepare"),
+            ("POST", "/v1/capacity/prepare"),
+            ("DELETE", "/v1/capacity/prepare/prepare-1"),
+            ("GET", "/v1/builders/prepare"),
+            ("POST", "/v1/builders/prepare"),
+            ("DELETE", "/v1/builders/prepare/prepare-1"),
+            ("GET", "/v1/images"),
+            ("GET", "/v1/images/builds"),
+            ("GET", "/v1/images/builds/build-1"),
+            ("POST", "/v1/images/build"),
+            ("POST", "/v1/images/pull"),
+            ("GET", "/v1/image-contexts/sha256%3Aabc"),
+            ("PUT", "/v1/image-contexts/sha256%3Aabc"),
+        )
+        denied = (
+            ("GET", "/v1/nodes"),
+            ("GET", "/v1/demand"),
+            ("GET", "/v1/metrics"),
+            ("GET", "/v1/registry"),
+            ("GET", "/v1/heartbeat"),
+            ("POST", "/v1/nodes/heartbeat"),
+            ("POST", "/v1/sandboxes/sandbox-1/detach"),
+            ("POST", "/v1/sandboxes/sandbox-1/migration"),
+            ("POST", "/v1/sandboxes/sandbox-1/park"),
+            ("POST", "/v1/sandboxes/sandbox-1/wake"),
+            ("GET", "/v1/sandboxes/sandbox-1/jobs/job-1/logs/private"),
+            ("DELETE", "/v1/images/builds/build-1"),
+            ("GET", "/v1/image-contexts/a/b"),
+            ("DELETE", "/v1/sandboxes/a%2Fb"),
+        )
+
+        for method, path in allowed:
+            with self.subTest(method=method, path=path):
+                self.assertTrue(control_plane._is_sdk_api_request(method, path))
+        for method, path in denied:
+            with self.subTest(method=method, path=path):
+                self.assertFalse(control_plane._is_sdk_api_request(method, path))
 
     def test_build_server_requires_distinct_nonempty_credentials(self) -> None:
         with TemporaryDirectory() as raw_dir:
             for credentials in (
                 {
                     "gateway_bearer_token": "",
+                    "sandbox_api_token": "sandbox-api",
                     "heartbeat_bearer_token": "heartbeat",
                     "node_control_bearer_token": "node",
                 },
                 {
                     "gateway_bearer_token": "shared",
+                    "sandbox_api_token": "sandbox-api",
                     "heartbeat_bearer_token": "shared",
+                    "node_control_bearer_token": "node",
+                },
+                {
+                    "gateway_bearer_token": "shared",
+                    "sandbox_api_token": "shared",
+                    "heartbeat_bearer_token": "heartbeat",
                     "node_control_bearer_token": "node",
                 },
             ):
@@ -2852,6 +2941,7 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=Path(raw_dir) / "images.json",
                 metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway",
+                sandbox_api_token="sandbox-api",
                 heartbeat_bearer_token="heartbeat",
                 node_control_bearer_token="node",
                 deployment_id="",
@@ -2867,6 +2957,7 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=Path(raw_dir) / "images.json",
                 metrics_file=Path(raw_dir) / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
+                sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
@@ -2916,6 +3007,7 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=root / "images.json",
                 metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
+                sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="prod",
@@ -2968,6 +3060,7 @@ class ControlPlaneTests(unittest.TestCase):
                 image_file=root / "images.json",
                 metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
+                sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="prod",

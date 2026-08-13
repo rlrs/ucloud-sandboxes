@@ -12,12 +12,18 @@ client flows work.
 
 ## Gateway Contract
 
-The SDK expects a deployed gateway URL and, for protected deployments, a gateway
-token. Public UCloud links should send this as `X-UCloud-Sandbox-Token:
-<token>` because UCloud can consume standard `Authorization` headers before
-they reach the gateway. The live development URL is
+The SDK expects a deployed gateway URL and, for protected deployments, a
+sandbox API key. It sends this as `X-UCloud-Sandbox-Token: <key>` because
+UCloud can consume standard `Authorization` headers before they reach the
+gateway. The live UCloud development URL is
 `https://app-sandboxes.cloud.sdu.dk`; token files are deployment state and must
 not be committed.
+
+Hetzner callers use exactly the same client contract: give `SandboxClient` the
+gateway's publicly trusted HTTPS IPv4 URL and the contents of the deployment's
+`sandbox-api-token` file. No domain is required. Do not give SDK users the
+separate `gateway-token`; it is an operator credential that can access
+control-plane routes outside the SDK contract.
 
 The gateway is responsible for:
 
@@ -29,7 +35,7 @@ The gateway is responsible for:
 - image build/pull/snapshot endpoints, gateway-owned managed registry naming,
   and image-id to immutable worker pull-reference resolution
 - image prewarm controls for prepared capacity and multi-node image pulls
-- authenticated dashboard and metrics data at `/v1/metrics`
+- operator-authenticated dashboard and metrics data at `/v1/metrics`
 
 See [api-reference.md](api-reference.md) for endpoint details.
 

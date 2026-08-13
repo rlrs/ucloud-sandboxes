@@ -257,9 +257,13 @@ Python dependency, and emits a deterministic bundle plus SHA-256 sidecar. Pass
 the complete dependency wheel set with repeated `--agent-dependency-wheel`
 arguments; this includes the OpenTelemetry SDK and OTLP/HTTP exporter wheels.
 The repacker now fails instead of producing a partially importable runtime when
-a dependency is absent. Never retain an old kernel closure merely because the
-OS release name is unchanged; the v4 build found Ubuntu 26.04 had advanced from
-`7.0.0-22` to `7.0.0-29`.
+a dependency is absent. If the dependency closure contains a platform wheel,
+build a complete `site-packages` tree with the bundle's Python version on a
+matching Linux host and pass its parent as `--agent-runtime-root`; the repacker
+checks the Python version and dependency closure before replacing the agent
+archive. Never retain an old kernel closure merely because the OS release name
+is unchanged; the v4 build found Ubuntu 26.04 had advanced from `7.0.0-22` to
+`7.0.0-29`.
 
 Do not snapshot an active production worker. Build from a disposable source
 server and, before taking the snapshot:

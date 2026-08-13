@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+import sys
 import tarfile
 import tempfile
 import zipfile
@@ -402,6 +403,14 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="explicit pure-Python dependency wheel to add to the agent runtime",
     )
+    parser.add_argument(
+        "--agent-runtime-root",
+        type=Path,
+        help=(
+            "complete target-built agent runtime containing site-packages; "
+            "use this when new dependencies require platform wheels"
+        ),
+    )
     parser.add_argument("--storage-backend", required=True, type=Path)
     parser.add_argument("--storage-manifest", required=True, type=Path)
     parser.add_argument("--storage-license", required=True, type=Path)
@@ -438,6 +447,16 @@ def main() -> None:
         raise SystemExit(f"kernel module directory does not exist: {args.kernel_module_dir}")
     if args.output.resolve() == args.source.resolve():
         raise SystemExit("output must not replace the qualified source bundle")
+    if args.agent_runtime_root is not None:
+        if not (args.agent_runtime_root / "site-packages").is_dir():
+            raise SystemExit(
+                "--agent-runtime-root must contain a site-packages directory"
+            )
+        if args.agent_dependency_wheel:
+            raise SystemExit(
+                "--agent-dependency-wheel cannot be combined with "
+                "--agent-runtime-root"
+            )
 
     storage_build = validate_storage_build(
         args.storage_backend, args.storage_manifest, args.storage_license
@@ -455,9 +474,25 @@ def main() -> None:
         validate_source_bundle(bundle_root, manifest)
 
         agent_archive = bundle_root / "runtime/agent/node-agent-runtime.tar"
-        extract_tar(agent_archive, agent_root)
-        for dependency_wheel in args.agent_dependency_wheel:
-            install_agent_dependency(agent_root, dependency_wheel)
+        if args.agent_runtime_root is None:
+            extract_tar(agent_archive, agent_root)
+            for dependency_wheel in args.agent_dependency_wheel:
+                install_agent_dependency(agent_root, dependency_wheel)
+        else:
+            runtime = manifest.get("runtime")
+            agent = runtime.get("agent") if isinstance(runtime, dict) else None
+            expected_python = agent.get("python") if isinstance(agent, dict) else None
+            current_python = f"{sys.version_info.major}.{sys.version_info.minor}"
+            if expected_python != current_python:
+                raise ValueError(
+                    "target-built agent runtime Python does not match the bundle: "
+                    f"host={current_python}, bundle={expected_python!r}"
+                )
+            shutil.copytree(
+                args.agent_runtime_root,
+                agent_root,
+                dirs_exist_ok=True,
+            )
         replace_agent_package(agent_root, args.wheel)
         validate_agent_runtime_dependencies(agent_root)
         build_agent_archive(agent_root, agent_archive)

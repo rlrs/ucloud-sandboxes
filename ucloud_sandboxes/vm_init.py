@@ -1471,7 +1471,9 @@ WantedBy=timers.target
 HEARTBEAT_TIMER
 
 $SUDO systemctl daemon-reload
+$SUDO systemctl reset-failed ucloud-sandbox-node.service || true
 if [ "$UCLOUD_NODE_ROLE" = sandbox ]; then
+  $SUDO systemctl reset-failed ucloud-storage-native-backend.service ucloud-storage-native.service || true
   $SUDO systemctl enable ucloud-storage-native-backend.service
   $SUDO systemctl enable ucloud-storage-native.service
   $SUDO systemctl restart ucloud-storage-native-backend.service

@@ -1694,6 +1694,53 @@ class CliTests(unittest.TestCase):
         self.assertEqual(routes, {})
 
     @allow_fixture_mutations
+    def test_autoscaler_prunes_stale_heartbeat_for_absent_routeless_job(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            jobs_file = root / "jobs.json"
+            jobs_file.write_text('{"items": []}', encoding="utf-8")
+            heartbeat_file = root / "control-state.sqlite"
+            stale_at = utc_now() - timedelta(minutes=10)
+            save_heartbeats(
+                heartbeat_file,
+                {
+                    "deleted-node": NodeHeartbeat(
+                        node_id="10.42.0.3",
+                        job_id="deleted-node",
+                        deployment_id="prod-a",
+                        updated_at=stale_at,
+                        received_at=stale_at,
+                        active_sandboxes=0,
+                        node_url="http://10.42.0.3:8090",
+                    )
+                },
+            )
+            config_file = write_ucloud_config(root, deployment_id="prod-a")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(
+                    [
+                        "autoscaler",
+                        "--config",
+                        str(config_file),
+                        "--jobs-file",
+                        str(jobs_file),
+                        "--execute",
+                        "--once",
+                        "--output",
+                        "json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            heartbeats = ControlStateStore(heartbeat_file).load_heartbeats()
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            payload["prunedOrphanedStaleHeartbeats"], ["deleted-node"]
+        )
+        self.assertEqual(heartbeats, {})
+
+    @allow_fixture_mutations
     def test_autoscaler_prunes_orphaned_stale_routes(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

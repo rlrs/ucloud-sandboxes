@@ -154,6 +154,18 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertIn("UCLOUD_TELEMETRY_OTLP_ENDPOINT=''", script)
 
+    def test_service_activation_resets_failed_start_limits(self) -> None:
+        script = render_vm_init_script(self._options())
+
+        self.assertIn(
+            "systemctl reset-failed ucloud-sandbox-node.service", script
+        )
+        self.assertIn(
+            "systemctl reset-failed ucloud-storage-native-backend.service "
+            "ucloud-storage-native.service",
+            script,
+        )
+
     @staticmethod
     def _run_bundle_validator(validator, root):
         return subprocess.run(

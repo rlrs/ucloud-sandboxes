@@ -2765,6 +2765,26 @@ def run_reconcile_cycle(
             jobs_by_id[job.id] = retrieved
         jobs = [jobs_by_id[job.id] for job in jobs]
 
+    provider_job_ids = {job.id for job in jobs}
+    orphaned_stale_heartbeat_job_ids = tuple(
+        sorted(
+            job_id
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in provider_job_ids
+            and not (route_reservations or {}).get(job_id)
+            and not heartbeat.is_fresh(
+                utc_now(), effective_policy.heartbeat_ttl_seconds
+            )
+        )
+    )
+    if orphaned_stale_heartbeat_job_ids and execution_authorized:
+        control_state.remove_heartbeats(orphaned_stale_heartbeat_job_ids)
+        heartbeats = {
+            job_id: heartbeat
+            for job_id, heartbeat in heartbeats.items()
+            if job_id not in orphaned_stale_heartbeat_job_ids
+        }
+
     destructive_power_cycle_job_ids = tuple(
         sorted(job.id for job in jobs if job.id in loss_latched_job_ids or job.is_lost)
     )
@@ -3551,6 +3571,7 @@ def run_reconcile_cycle(
         "storage_native_migration_results": storage_native_migration_results,
         "storage_native_detach_results": storage_native_detach_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
+        "prunedOrphanedStaleHeartbeats": list(orphaned_stale_heartbeat_job_ids),
         "fencedPowerCycleHeartbeats": sorted(
             set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
         ),

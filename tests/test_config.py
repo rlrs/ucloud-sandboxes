@@ -153,7 +153,7 @@ class ConfigTests(unittest.TestCase):
             Path("/mnt/registry/docker-registry"),
         )
 
-    def test_schema_one_migrates_the_legacy_derived_registry_root(self) -> None:
+    def test_schema_one_is_rejected_without_legacy_migration(self) -> None:
         raw = self._raw()
         raw["schema"] = 1
         raw["data_root"] = "/srv/ucloud/state"
@@ -163,18 +163,10 @@ class ConfigTests(unittest.TestCase):
             "autoscaler_max_storage_native_detaches_per_cycle"
         )
 
-        config = DeploymentConfig.from_dict(raw)
+        with self.assertRaisesRegex(ValueError, "unsupported deployment config schema"):
+            DeploymentConfig.from_dict(raw)
 
-        self.assertEqual(config.schema, 4)
-        self.assertEqual(config.autoscaler_max_storage_native_detaches_per_cycle, 2)
-        self.assertEqual(
-            config.registry_data_dir(),
-            Path("/srv/ucloud-sandbox-registry/docker-registry"),
-        )
-        self.assertEqual(config.registry_mount_point, "/srv")
-        self.assertEqual(config.to_dict()["schema"], 4)
-
-    def test_schema_three_migrates_filesystem_registry_store(self) -> None:
+    def test_schema_three_is_rejected_without_legacy_migration(self) -> None:
         raw = self._raw()
         raw["schema"] = 3
         registry_store = raw.pop("registry_store")
@@ -182,11 +174,8 @@ class ConfigTests(unittest.TestCase):
         raw["registry_mount_point"] = registry_store["mount_point"]
         raw["registry_data_root"] = registry_store["data_root"]
 
-        config = DeploymentConfig.from_dict(raw)
-
-        self.assertEqual(config.schema, 4)
-        self.assertEqual(config.registry_store.kind, "filesystem")
-        self.assertEqual(config.registry_mount_point, "/work/data")
+        with self.assertRaisesRegex(ValueError, "unsupported deployment config schema"):
+            DeploymentConfig.from_dict(raw)
 
     def test_registry_data_must_be_inside_its_fail_closed_mount(self) -> None:
         raw = self._raw()

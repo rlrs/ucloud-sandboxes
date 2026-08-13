@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from .models import utc_now
+from .telemetry import Telemetry
 
 
 def new_exec_session_id() -> str:
@@ -145,10 +146,12 @@ class ExecSessionManager:
         *,
         max_sessions: int = 128,
         max_events_per_session: int = 512,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self.sandbox_manager = sandbox_manager
         self.max_sessions = max(1, max_sessions)
         self.max_events_per_session = max(1, max_events_per_session)
+        self.telemetry = telemetry or Telemetry.disabled("exec-session-manager")
         self._sessions: dict[str, ExecSession] = {}
         self._lock = RLock()
 
@@ -317,7 +320,12 @@ class ExecSessionManager:
             pump_threads.append(stderr_thread)
             wait_thread = Thread(
                 target=self._wait_process,
-                args=(session.id, process, (stdout_thread, stderr_thread)),
+                args=(
+                    session.id,
+                    process,
+                    (stdout_thread, stderr_thread),
+                    self.telemetry.current_trace_headers(),
+                ),
                 daemon=True,
             )
             wait_thread.start()
@@ -355,7 +363,33 @@ class ExecSessionManager:
         session_id: str,
         process: subprocess.Popen[str],
         pump_threads: tuple[Thread, Thread],
+        trace_context: dict[str, str],
     ) -> None:
+        with self._lock:
+            session = self._sessions.get(session_id)
+        with self.telemetry.span(
+            "sandbox.exec.session",
+            attributes={
+                "exec.session.id": session_id,
+                "sandbox.id": session.spec.sandbox_id if session is not None else "",
+            },
+            parent_context=self.telemetry.extracted_context(trace_context),
+        ) as span:
+            exit_code = self._wait_process_unobserved(
+                session_id,
+                process,
+                pump_threads,
+            )
+            span.set_attribute("process.exit.code", exit_code)
+            if exit_code != 0:
+                span.status = "error"
+
+    def _wait_process_unobserved(
+        self,
+        session_id: str,
+        process: subprocess.Popen[str],
+        pump_threads: tuple[Thread, Thread],
+    ) -> int:
         exit_code = process.wait()
         for thread in pump_threads:
             thread.join(timeout=2.0)
@@ -363,14 +397,15 @@ class ExecSessionManager:
             session = self._sessions.get(session_id)
         if session is None:
             self._close_pipe(process.stdin)
-            return
+            return exit_code
         with session.stdin_lock:
             self._close_pipe(process.stdin)
             with self._lock:
                 if self._sessions.get(session_id) is not session:
-                    return
+                    return exit_code
                 session.stdin_open = False
                 self._complete_locked(session, exit_code)
+        return exit_code
 
     @staticmethod
     def _close_pipe(pipe: Any) -> None:

@@ -252,9 +252,14 @@ When the qualified Ubuntu package set is unchanged, use
 content-addressed storage backend, and—when the Hetzner base image has advanced
 its kernel—the module closure collected from the new source VM. The command
 validates every retained source artifact, requires the pinned AgentEnv
-provenance, and emits a deterministic bundle plus SHA-256 sidecar. Never retain
-an old kernel closure merely because the OS release name is unchanged; the v4
-build found Ubuntu 26.04 had advanced from `7.0.0-22` to `7.0.0-29`.
+provenance, verifies that the repacked agent contains every unconditional
+Python dependency, and emits a deterministic bundle plus SHA-256 sidecar. Pass
+the complete dependency wheel set with repeated `--agent-dependency-wheel`
+arguments; this includes the OpenTelemetry SDK and OTLP/HTTP exporter wheels.
+The repacker now fails instead of producing a partially importable runtime when
+a dependency is absent. Never retain an old kernel closure merely because the
+OS release name is unchanged; the v4 build found Ubuntu 26.04 had advanced from
+`7.0.0-22` to `7.0.0-29`.
 
 Do not snapshot an active production worker. Build from a disposable source
 server and, before taking the snapshot:
@@ -435,11 +440,12 @@ route reference and requires that marker to remain continuously unreferenced
 for seven days. Object creation time is not the retention clock, and a route
 that references the object again clears the marker.
 
-Deployment schema 4 expresses that boundary directly. The Hetzner target is:
+Deployment schema 5 expresses that boundary and telemetry directly. The
+Hetzner target is:
 
 ```json
 {
-  "schema": 4,
+  "schema": 5,
   "data_root": "/var/lib/ucloud-sandboxes/state",
   "registry_store": {
     "kind": "s3",
@@ -461,18 +467,26 @@ Deployment schema 4 expresses that boundary directly. The Hetzner target is:
     "prefix": "production",
     "access_key_id_env": "HETZNER_S3_ACCESS_KEY",
     "secret_access_key_env": "HETZNER_S3_SECRET_KEY"
+  },
+  "telemetry": {
+    "endpoint": "http://10.42.0.2:4318",
+    "trace_sample_ratio": 0.1,
+    "export_interval_ms": 5000,
+    "export_timeout_ms": 3000,
+    "max_queue_size": 4096,
+    "max_export_batch_size": 512
   }
 }
 ```
 
 The snippet shows only the relevant fields; deployment configuration remains
-an exact full object. Schema-1 through schema-3 files migrate in memory while
-retaining their filesystem-backed registry and Registry-backed snapshot
-authority, so merely upgrading never moves data. The explicit
+an exact full object. Schema 5 deliberately rejects older deployment documents;
+generate and review a complete current configuration instead of relying on
+implicit migrations. The explicit
 production switch to S3 forces a one-time compact publication, so a manifest
 never mixes Registry and S3 lower layers. Before changing the Registry blob
 backend, stop the registry and run `ucloud-sandboxes-registry-migrate` against
-the proposed schema-4 configuration. It hashes every source object, refuses
+the proposed schema-5 configuration. It hashes every source object, refuses
 unexpected target objects unless overwrite is explicit, uploads through the
 native S3 API, and verifies size and digest before cutover. Filesystem mode
 retains the old mount fence; S3 mode removes that dependency. A Volume remains

@@ -13,13 +13,12 @@ from urllib.parse import quote
 
 from .managed_registry import RegistryClient
 from .storage_native import StorageNativeLayer
+from .telemetry import Telemetry
 
 
 OCI_MANIFEST_MEDIA_TYPE = "application/vnd.oci.image.manifest.v1+json"
 OCI_CONFIG_MEDIA_TYPE = "application/vnd.ucloud.sandbox.snapshot.v1+json"
-OCI_OVERLAYBD_LAYER_MEDIA_TYPE = (
-    "application/vnd.ucloud.overlaybd.layer.v1+lsmt"
-)
+OCI_OVERLAYBD_LAYER_MEDIA_TYPE = "application/vnd.ucloud.overlaybd.layer.v1+lsmt"
 SNAPSHOT_SCHEMA = "ucloud-storage-native-snapshot-v1"
 DEFAULT_COMPACT_AFTER_LAYERS = 8
 DEFAULT_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
@@ -145,8 +144,7 @@ class StorageSnapshotPublication:
             repo_blob_url=repo_blob_url,
             virtual_size=virtual_size,
             layers=tuple(
-                PublishedStorageLayer.from_dict(layer)
-                for layer in layers_raw
+                PublishedStorageLayer.from_dict(layer) for layer in layers_raw
             ),
             backend=backend,
         )
@@ -164,8 +162,13 @@ class RegistrySnapshotPublisher:
         max_concurrent_publications: int = 2,
         compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
         compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
+        telemetry: Telemetry | None = None,
     ) -> None:
-        if not repository or repository.startswith("/") or ".." in repository.split("/"):
+        if (
+            not repository
+            or repository.startswith("/")
+            or ".." in repository.split("/")
+        ):
             raise ValueError("snapshot repository is invalid")
         if not stream_socket_root.is_absolute():
             raise ValueError("stream socket root must be absolute")
@@ -186,6 +189,7 @@ class RegistrySnapshotPublisher:
         self.stream_timeout_seconds = stream_timeout_seconds
         self.compact_after_layers = compact_after_layers
         self.compact_after_bytes = compact_after_bytes
+        self.telemetry = telemetry or Telemetry.disabled("registry-snapshot-publisher")
         self._publication_slots = threading.BoundedSemaphore(
             max_concurrent_publications
         )
@@ -211,15 +215,33 @@ class RegistrySnapshotPublisher:
         existing_repo_blob_url: str = "",
         global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
-        with self._publication_slots:
-            return self._publish_locked(
-                exporter=exporter,
-                source_layer_paths=source_layer_paths,
-                virtual_size=virtual_size,
-                existing_layers=existing_layers,
-                existing_repo_blob_url=existing_repo_blob_url,
-                global_config_path=global_config_path,
-            )
+        with self.telemetry.span(
+            "snapshot.publish",
+            attributes={
+                "snapshot.backend": "registry",
+                "snapshot.source_layer_count": len(source_layer_paths),
+                "snapshot.existing_layer_count": len(existing_layers),
+                "snapshot.virtual_size": virtual_size,
+            },
+        ) as span:
+            waiting_started = time.monotonic()
+            with self._publication_slots:
+                span.add_event(
+                    "snapshot.publication_slot.acquired",
+                    {
+                        "snapshot.queue.wait_seconds": max(
+                            0.0, time.monotonic() - waiting_started
+                        )
+                    },
+                )
+                return self._publish_locked(
+                    exporter=exporter,
+                    source_layer_paths=source_layer_paths,
+                    virtual_size=virtual_size,
+                    existing_layers=existing_layers,
+                    existing_repo_blob_url=existing_repo_blob_url,
+                    global_config_path=global_config_path,
+                )
 
     def metrics(self) -> dict[str, int]:
         with self._metrics_lock:
@@ -234,6 +256,19 @@ class RegistrySnapshotPublisher:
             }
 
     def verify(
+        self,
+        publication: StorageSnapshotPublication,
+    ) -> StorageSnapshotPublication:
+        with self.telemetry.span(
+            "snapshot.verify",
+            attributes={
+                "snapshot.backend": "registry",
+                "snapshot.layer_count": len(publication.layers),
+            },
+        ):
+            return self._verify_unobserved(publication)
+
+    def _verify_unobserved(
         self,
         publication: StorageSnapshotPublication,
     ) -> StorageSnapshotPublication:
@@ -270,8 +305,7 @@ class RegistrySnapshotPublisher:
         )
         if (
             len(config_payload) != config_size
-            or f"sha256:{hashlib.sha256(config_payload).hexdigest()}"
-            != config_digest
+            or f"sha256:{hashlib.sha256(config_payload).hexdigest()}" != config_digest
         ):
             raise ValueError("snapshot config content does not match its descriptor")
         try:
@@ -286,8 +320,7 @@ class RegistrySnapshotPublisher:
         if snapshot_config != expected_config:
             raise ValueError("snapshot config does not match the requested publication")
         manifest_layers = tuple(
-            PublishedStorageLayer.from_dict(layer)
-            for layer in raw_layers
+            PublishedStorageLayer.from_dict(layer) for layer in raw_layers
         )
         if manifest_layers != publication.layers:
             raise ValueError("snapshot manifest layers do not match its config")
@@ -320,8 +353,7 @@ class RegistrySnapshotPublisher:
             or bool(
                 existing_layers
                 and existing_repo_blob_url
-                and existing_repo_blob_url.rstrip("/")
-                != self.repo_blob_url.rstrip("/")
+                and existing_repo_blob_url.rstrip("/") != self.repo_blob_url.rstrip("/")
             )
         )
         if should_compact:
@@ -514,7 +546,9 @@ class RegistrySnapshotPublisher:
                         "size": layer.size,
                         "annotations": {
                             "containerd.io/snapshot/overlaybd/blob-digest": layer.digest,
-                            "containerd.io/snapshot/overlaybd/blob-size": str(layer.size),
+                            "containerd.io/snapshot/overlaybd/blob-size": str(
+                                layer.size
+                            ),
                         },
                     }
                     for layer in layers
@@ -582,7 +616,9 @@ def consume_export_stream(
     """Validate an AgentEnv export while forwarding bounded chunks."""
 
     stream_socket_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="dense-", dir=stream_socket_root) as raw_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="dense-", dir=stream_socket_root
+    ) as raw_dir:
         socket_path = Path(raw_dir) / "stream.sock"
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
             listener.bind(str(socket_path))

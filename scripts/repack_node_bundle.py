@@ -10,12 +10,15 @@ agent or the content-addressed storage backend has changed.
 from __future__ import annotations
 
 import argparse
+from email.parser import BytesParser
+from email.policy import compat32
 import gzip
 import hashlib
 import io
 import json
 import os
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import stat
 import tarfile
@@ -30,6 +33,10 @@ EXPECTED_STORAGE_PATCHES = [
     "agentenv-pooled-delete.patch",
     "agentenv-owner-identity.patch",
 ]
+
+
+def canonical_distribution_name(value: str) -> str:
+    return re.sub(r"[-_.]+", "-", value).lower()
 
 
 def sha256_file(path: Path) -> str:
@@ -211,6 +218,45 @@ def install_agent_dependency(runtime_root: Path, wheel: Path) -> None:
                 shutil.copyfileobj(source, output)
             mode = member.external_attr >> 16
             target.chmod(stat.S_IMODE(mode) if mode else 0o644)
+
+
+def validate_agent_runtime_dependencies(runtime_root: Path) -> None:
+    """Reject a repack that omitted an unconditional wheel dependency."""
+
+    site_packages = runtime_root / "site-packages"
+    installed: set[str] = set()
+    requirements: list[tuple[str, str]] = []
+    for metadata_path in sorted(site_packages.glob("*.dist-info/METADATA")):
+        metadata = BytesParser(policy=compat32).parsebytes(metadata_path.read_bytes())
+        distribution_name = str(metadata.get("Name") or "").strip()
+        if not distribution_name:
+            raise ValueError(f"distribution metadata has no Name: {metadata_path}")
+        installed.add(canonical_distribution_name(distribution_name))
+        requirements.extend(
+            (distribution_name, str(requirement))
+            for requirement in metadata.get_all("Requires-Dist", [])
+            # Optional extras and environment-specific dependencies cannot be
+            # evaluated safely while repacking on a different host OS.
+            if ";" not in str(requirement)
+        )
+
+    missing: list[str] = []
+    for required_by, requirement in requirements:
+        match = re.match(r"[A-Za-z0-9][A-Za-z0-9._-]*", requirement)
+        if match is None:
+            raise ValueError(
+                f"invalid Requires-Dist in {required_by}: {requirement!r}"
+            )
+        dependency = canonical_distribution_name(match.group(0))
+        if dependency not in installed:
+            missing.append(f"{dependency} (required by {required_by})")
+    if missing:
+        details = ", ".join(sorted(set(missing)))
+        raise ValueError(
+            "agent runtime is missing unconditional dependencies: "
+            f"{details}; add the complete wheel set with repeated "
+            "--agent-dependency-wheel arguments"
+        )
 
 
 def normalized_tar_info(info: tarfile.TarInfo) -> tarfile.TarInfo:
@@ -413,6 +459,7 @@ def main() -> None:
         for dependency_wheel in args.agent_dependency_wheel:
             install_agent_dependency(agent_root, dependency_wheel)
         replace_agent_package(agent_root, args.wheel)
+        validate_agent_runtime_dependencies(agent_root)
         build_agent_archive(agent_root, agent_archive)
 
         shutil.copyfile(

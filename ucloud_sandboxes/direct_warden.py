@@ -39,6 +39,7 @@ from .storage_native_daemon import (
     StorageVolumeRecord,
     StorageVolumeState,
 )
+from .telemetry import Telemetry
 
 
 _SAFE_COMPONENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
@@ -292,12 +293,14 @@ class DirectRunscWarden:
         fencer: ProcessFencer | None = None,
         storage: StorageNativeNodeClient,
         rootfs_lifecycle: RootfsMountLifecycle,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self.config = config
         self.runner = runner or SubprocessCommandRunner()
         self.fencer = fencer or LinuxPidfdFencer(proc_root=config.proc_root)
         self.storage = storage
         self.rootfs_lifecycle = rootfs_lifecycle
+        self.telemetry = telemetry or Telemetry.disabled("direct-runsc-warden")
         self.journals = HibernationJournalStore(config.journal_root)
         self.artifacts = HibernationArtifactStore(
             config.memory_root,
@@ -547,30 +550,33 @@ class DirectRunscWarden:
                 running.sentry_start_time_ticks,
             )
             try:
-                hibernating = journal.begin_hibernate(
-                    operation_id=operation_id,
-                    expected_revision=running.revision,
-                )
-                generation = self.artifacts.prepare_generation(
-                    sandbox_id=sandbox.sandbox_id,
-                    sandbox_generation=sandbox.sandbox_generation,
-                    hibernation_generation=hibernating.hibernation_generation,
-                )
-                try:
-                    self._checked(
-                        *self._common(),
-                        "checkpoint",
-                        "--hibernate",
-                        f"--image-path={generation}",
-                        sandbox.container_id,
+                with self.telemetry.span("sandbox.park.prepare"):
+                    hibernating = journal.begin_hibernate(
+                        operation_id=operation_id,
+                        expected_revision=running.revision,
                     )
+                    generation = self.artifacts.prepare_generation(
+                        sandbox_id=sandbox.sandbox_id,
+                        sandbox_generation=sandbox.sandbox_generation,
+                        hibernation_generation=hibernating.hibernation_generation,
+                    )
+                try:
+                    with self.telemetry.span("sandbox.park.runsc_checkpoint"):
+                        self._checked(
+                            *self._common(),
+                            "checkpoint",
+                            "--hibernate",
+                            f"--image-path={generation}",
+                            sandbox.container_id,
+                        )
                     if not handle.alive():
                         raise DirectWardenError(
                             "sentry exited before its capture was durably published"
                         )
-                    manifest = self._manifest(sandbox, hibernating, generation)
-                    manifest = self.artifacts.publish_complete(manifest)
-                    self._persist_parked_manifest(sandbox, manifest)
+                    with self.telemetry.span("sandbox.park.commit_artifact"):
+                        manifest = self._manifest(sandbox, hibernating, generation)
+                        manifest = self.artifacts.publish_complete(manifest)
+                        self._persist_parked_manifest(sandbox, manifest)
                 except Exception:
                     if os.path.lexists(generation / self.artifacts.COMPLETE_NAME):
                         raise
@@ -584,30 +590,33 @@ class DirectRunscWarden:
                     raise
 
                 # COMPLETE is now authoritative. Never resume this backend.
-                handle.terminate(timeout=self.config.stop_timeout_seconds)
-                pending = journal.mark_sentry_reaped(
-                    operation_id=operation_id,
-                    expected_revision=hibernating.revision,
-                )
-                self._checked(
-                    *self._state_prefix(),
-                    "delete",
-                    "--force",
-                    sandbox.container_id,
-                )
+                with self.telemetry.span("sandbox.park.stop_runtime"):
+                    handle.terminate(timeout=self.config.stop_timeout_seconds)
+                    pending = journal.mark_sentry_reaped(
+                        operation_id=operation_id,
+                        expected_revision=hibernating.revision,
+                    )
+                    self._checked(
+                        *self._state_prefix(),
+                        "delete",
+                        "--force",
+                        sandbox.container_id,
+                    )
                 # runsc delete removes its filestore from the merged rootfs.
                 # Do this before detaching the overlay so that the sealed
                 # layer contains the final, cleaned-up filesystem state.
-                self.rootfs_lifecycle.park_sandbox(sandbox)
-                self.storage.ensure_released(
-                    self._storage_owner(sandbox),
-                    operation_id=f"{operation_id}:storage-release",
-                )
-                return journal.commit_parked(
-                    manifest,
-                    operation_id=operation_id,
-                    expected_revision=pending.revision,
-                )
+                with self.telemetry.span("sandbox.park.release_storage"):
+                    self.rootfs_lifecycle.park_sandbox(sandbox)
+                    self.storage.ensure_released(
+                        self._storage_owner(sandbox),
+                        operation_id=f"{operation_id}:storage-release",
+                    )
+                with self.telemetry.span("sandbox.park.commit_journal"):
+                    return journal.commit_parked(
+                        manifest,
+                        operation_id=operation_id,
+                        expected_revision=pending.revision,
+                    )
             finally:
                 handle.close()
 

@@ -9,6 +9,7 @@ import sys
 import threading
 
 from .storage_native import AgentEnvUblkClient
+from .deployment import package_version
 from .managed_registry import RegistryClient
 from .storage_native_daemon import (
     StorageNativeNodeConfig,
@@ -22,6 +23,7 @@ from .storage_native_registry import (
     SnapshotPublisherRouter,
 )
 from .storage_native_s3 import S3SnapshotPublisher
+from .telemetry import Telemetry, TelemetrySettings
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -29,6 +31,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Run the privileged UCloud storage-native node service"
     )
     parser.add_argument("--socket", required=True, type=Path)
+    parser.add_argument("--deployment-id", required=True)
+    parser.add_argument("--node-id", required=True)
     parser.add_argument("--backend-socket", required=True, type=Path)
     parser.add_argument("--backend-global-config", required=True, type=Path)
     parser.add_argument("--journal", required=True, type=Path)
@@ -81,6 +85,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("sparse", "logStructured", "hybridLogStructured"),
         default="hybridLogStructured",
     )
+    parser.add_argument("--telemetry-otlp-endpoint", default="")
+    parser.add_argument("--telemetry-cloud-provider", default="")
+    parser.add_argument("--telemetry-cloud-machine-type", default="")
+    parser.add_argument("--telemetry-trace-sample-ratio", type=float, default=0.1)
+    parser.add_argument("--telemetry-export-interval-ms", type=int, default=5_000)
+    parser.add_argument("--telemetry-export-timeout-ms", type=int, default=3_000)
+    parser.add_argument("--telemetry-max-queue-size", type=int, default=4_096)
+    parser.add_argument("--telemetry-max-export-batch-size", type=int, default=512)
     return parser.parse_args(argv)
 
 
@@ -88,6 +100,32 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if sys.platform != "linux" or os.geteuid() != 0:
         raise RuntimeError("storage-native node service requires Linux root")
+    telemetry = Telemetry.create(
+        TelemetrySettings(
+            endpoint=args.telemetry_otlp_endpoint,
+            trace_sample_ratio=args.telemetry_trace_sample_ratio,
+            export_interval_ms=args.telemetry_export_interval_ms,
+            export_timeout_ms=args.telemetry_export_timeout_ms,
+            max_queue_size=args.telemetry_max_queue_size,
+            max_export_batch_size=args.telemetry_max_export_batch_size,
+        ),
+        service_name="ucloud-sandboxes-storage",
+        service_version=package_version(),
+        deployment_id=args.deployment_id,
+        attributes={
+            "service.instance.id": args.node_id,
+            **(
+                {"cloud.provider": args.telemetry_cloud_provider}
+                if args.telemetry_cloud_provider
+                else {}
+            ),
+            **(
+                {"cloud.machine.type": args.telemetry_cloud_machine_type}
+                if args.telemetry_cloud_machine_type
+                else {}
+            ),
+        },
+    )
     backend_socket = args.backend_socket.resolve()
     backend = AgentEnvUblkClient(backend_socket)
     backend.wait_ready()
@@ -112,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             max_concurrent_publications=args.max_concurrent_publications,
             compact_after_layers=args.snapshot_compact_after_layers,
             compact_after_bytes=args.snapshot_compact_after_bytes,
+            telemetry=telemetry,
         )
     if args.snapshot_backend == "registry":
         publisher = registry_publisher
@@ -145,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             max_concurrent_publications=args.max_concurrent_publications,
             compact_after_layers=args.snapshot_compact_after_layers,
             compact_after_bytes=args.snapshot_compact_after_bytes,
+            telemetry=telemetry,
         )
         verifiers = {"s3": s3_publisher}
         if registry_publisher is not None:
@@ -175,14 +215,21 @@ def main(argv: list[str] | None = None) -> int:
         ),
         flush=True,
     )
-    server = StorageNativeNodeServer(args.socket.resolve(), service)
+    server = StorageNativeNodeServer(
+        args.socket.resolve(),
+        service,
+        telemetry=telemetry,
+    )
 
     def request_shutdown(_signum: int, _frame: object) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, request_shutdown)
     signal.signal(signal.SIGTERM, request_shutdown)
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        telemetry.shutdown()
     return 0
 
 

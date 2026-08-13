@@ -40,7 +40,11 @@ from .storage_native_migration import (
     StorageNativeMigration,
 )
 from .hibernation import hibernation_disk_reservation_mb
-from .http_server import DEFAULT_MAX_JSON_BODY_BYTES, HighBacklogThreadingHTTPServer
+from .http_server import (
+    DEFAULT_MAX_JSON_BODY_BYTES,
+    HighBacklogThreadingHTTPServer,
+    traced_http_request,
+)
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -67,14 +71,14 @@ from .managed_registry import (
 )
 from .managed_process import ManagedProcessRecord
 from .metrics import (
-    GatewayBusyTraceSampler,
+    GatewayBusySampler,
     MetricsStore,
     build_metrics_snapshot,
     record_node_heartbeat,
     record_sandbox_pending_deleted,
     record_sandbox_scheduled,
-    trace_span,
 )
+from .telemetry import Telemetry
 from .models import (
     NodeHeartbeat,
     ResourceQuantity,
@@ -489,11 +493,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_layer_cache: RegistryLayerMetadataCache | None
     registry_usage_store: RegistryUsageStore | None
     sandbox_create_limiter: BoundedSemaphore | None
-    sandbox_create_busy_traces: GatewayBusyTraceSampler
+    sandbox_create_busy_sampler: GatewayBusySampler
     max_concurrent_sandbox_creates: int
     max_sandbox_resources: ResourceQuantity
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
+    @traced_http_request
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if self.path == "/healthz":
@@ -581,6 +586,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
+    @traced_http_request
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/v1/nodes/heartbeat":
@@ -705,6 +711,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return "heartbeat identity conflicts with an assigned route"
         return None
 
+    @traced_http_request
     def do_PUT(self) -> None:
         parsed = urlparse(self.path)
         if not self._check_authorized():
@@ -717,6 +724,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
+    @traced_http_request
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         if not self._check_authorized():
@@ -1779,6 +1787,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 exec_session_count=exec_session_count,
                 program_requests=self.routing_store.program_requests_readonly(),
             )
+            snapshot["telemetry"] = (
+                self.telemetry.health()
+                if self.telemetry is not None
+                else {"enabled": False}
+            )
             builds = self._cached_image_build_records()
             active_builds = [
                 build
@@ -2326,9 +2339,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         parsed_ok = False
         try:
             if limiter is not None and not limiter.acquire(blocking=False):
-                trace_id = _request_trace_id(self, "sandbox-create", "admission")
-                self.sandbox_create_busy_traces.record(
-                    trace_id=trace_id,
+                self.sandbox_create_busy_sampler.record(
                     max_concurrent_sandbox_creates=(
                         self.max_concurrent_sandbox_creates
                     ),
@@ -2392,23 +2403,20 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self,
         spec: SandboxSpec,
     ) -> None:
-        trace_id = _request_trace_id(self, "sandbox-create", spec.id)
-        with trace_span(
-            self.metrics_store,
-            trace_id,
+        requested = spec.requested_resources()
+        with self.telemetry.span(
             "gateway.sandbox_create",
             attributes={
-                "sandbox_id": spec.id,
-                "image": spec.image,
-                "resources": spec.requested_resources().to_dict(),
+                "sandbox.id": spec.id,
+                "container.image.name": spec.image,
+                "sandbox.request.vcpu": requested.vcpu,
+                "sandbox.request.memory_mb": requested.memory_mb,
+                "sandbox.request.disk_mb": requested.disk_mb,
             },
         ) as root:
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.sandbox_resolve_image",
-                parent_span_id=root.span_id,
-                attributes={"image": spec.image},
+                attributes={"container.image.name": spec.image},
             ) as span:
                 resolved_image, image_error = self._resolve_sandbox_image_reference(
                     spec.image
@@ -2424,11 +2432,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     spec = replace(spec, image=resolved_image)
                     root.set_attribute("resolved_image", resolved_image)
 
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.sandbox_existing_route_check",
-                parent_span_id=root.span_id,
             ) as span:
                 existing = self.routing_store.get_sandbox_readonly(spec.id)
                 span.set_attribute("existing_route", existing is not None)
@@ -2488,12 +2493,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
 
             if self.registry_layer_cache is not None:
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
+                with self.telemetry.span(
                     "gateway.sandbox_resolve_layers",
-                    parent_span_id=root.span_id,
-                    attributes={"image": spec.image},
+                    attributes={"container.image.name": spec.image},
                 ) as span:
                     # Layer overlap only improves placement scoring; it is not
                     # part of image identity or admission correctness.  A cold
@@ -2509,12 +2511,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         span.set_attribute("layer_count", len(manifest.layers))
                         span.set_attribute("compressed_bytes", manifest.total_size)
 
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.sandbox_select_node",
-                parent_span_id=root.span_id,
-                attributes={"image": spec.image},
+                attributes={"container.image.name": spec.image},
             ) as span:
                 pending_before = None
                 try:
@@ -2612,14 +2611,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 raise
             root.set_attribute("reserved_route", True)
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.sandbox_ensure_image",
-                parent_span_id=root.span_id,
                 attributes={
-                    "node_id": heartbeat.node_id,
-                    "image": spec.image,
+                    "node.id": heartbeat.node_id,
+                    "container.image.name": spec.image,
                 },
             ) as span:
                 initial_cache_hit = self._node_has_image(heartbeat, spec.image)
@@ -2636,7 +2632,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     pull_payload = image_response.json()
                     pull_timings = pull_payload.get("timings")
                     if isinstance(pull_timings, dict):
-                        span.set_attribute("node_timings", pull_timings)
+                        span.add_event("node.timings", pull_timings)
                     if image_response.status >= 400:
                         span.status = "error"
                         span.set_attribute(
@@ -2670,12 +2666,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 return
 
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.sandbox_proxy_create",
-                parent_span_id=root.span_id,
-                attributes={"node_id": heartbeat.node_id},
+                attributes={"node.id": heartbeat.node_id},
             ) as span:
                 response = self._proxy_request(
                     heartbeat.node_url or "",
@@ -2688,8 +2681,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 response_payload = response.json()
                 node_timings = response_payload.get("timings")
                 if isinstance(node_timings, dict):
-                    span.set_attribute("node_timings", node_timings)
-                    root.set_attribute("node_timings", node_timings)
+                    span.add_event("node.timings", node_timings)
             if _is_duplicate_sandbox_response(response, spec.id):
                 if self._send_existing_sandbox_response(
                     route,
@@ -3163,22 +3155,16 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             raw["tag"] = spec.tag
             raw["push"] = push
             body = json.dumps(raw, separators=(",", ":")).encode("utf-8")
-            trace_id = _request_trace_id(self, "image-build", spec.id)
-            with trace_span(
-                self.metrics_store,
-                trace_id,
+            with self.telemetry.span(
                 "gateway.image_build",
                 attributes={
-                    "image_id": spec.id,
-                    "tag": spec.tag,
-                    "push": push,
+                    "image.id": spec.id,
+                    "container.image.name": spec.tag,
+                    "image.push": push,
                 },
             ) as root:
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
+                with self.telemetry.span(
                     "gateway.image_build_select_builder",
-                    parent_span_id=root.span_id,
                 ) as span:
                     heartbeat = self._select_builder_node()
                     span.set_attribute(
@@ -3201,20 +3187,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         status=HTTPStatus.SERVICE_UNAVAILABLE,
                     )
                     return
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
+                with self.telemetry.span(
                     "gateway.image_build_enqueue",
-                    parent_span_id=root.span_id,
-                    attributes={"node_id": heartbeat.node_id},
+                    attributes={"node.id": heartbeat.node_id},
                 ):
                     self.routing_store.upsert_pending_image_build(spec.id, spec.tag)
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
+                with self.telemetry.span(
                     "gateway.image_build_context_sync",
-                    parent_span_id=root.span_id,
-                    attributes={"node_id": heartbeat.node_id},
+                    attributes={"node.id": heartbeat.node_id},
                 ) as span:
                     context_response = self._ensure_node_build_context(
                         heartbeat.node_url or "", context_reference
@@ -3236,12 +3216,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     spec,
                     push=push,
                 )
-                with trace_span(
-                    self.metrics_store,
-                    trace_id,
+                with self.telemetry.span(
                     "gateway.image_build_proxy_builder",
-                    parent_span_id=root.span_id,
-                    attributes={"node_id": heartbeat.node_id},
+                    attributes={"node.id": heartbeat.node_id},
                 ) as span:
                     response = self._proxy_request(
                         heartbeat.node_url or "",
@@ -3264,8 +3241,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         response.body = json.dumps(response_payload).encode("utf-8")
                     node_timings = response_payload.get("timings")
                     if isinstance(node_timings, dict):
-                        span.set_attribute("node_timings", node_timings)
-                        root.set_attribute("node_timings", node_timings)
+                        span.add_event("node.timings", node_timings)
                 accepted_build_response = 200 <= response.status < 300
                 terminal_build_response = _image_build_response_terminal(
                     response_payload
@@ -3654,9 +3630,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 method=self.command,
                 extra_headers=extra_headers,
                 on_success=(
-                    lambda: self._commit_implicit_wake(route)
-                    if implicit_wake
-                    else None
+                    lambda: self._commit_implicit_wake(route) if implicit_wake else None
                 ),
             )
             return
@@ -5134,6 +5108,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             }:
                 del headers[key]
         headers["Authorization"] = f"Bearer {self.node_control_bearer_token}"
+        if self.telemetry is not None:
+            self.telemetry.inject(headers)
         return request.Request(
             node_url.rstrip("/") + path,
             data=body,
@@ -5353,6 +5329,7 @@ def build_server(
     max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     build_context_store_dir: Path | None = None,
     max_sandbox_resources: ResourceQuantity | None = None,
+    telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     credentials = {
         "gateway bearer token": gateway_bearer_token.strip(),
@@ -5374,6 +5351,7 @@ def build_server(
     deployment_id = deployment_id.strip()
     if not deployment_id:
         raise ValueError("deployment id cannot be empty")
+    resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-gateway")
     store = ControlStateStore(control_state_file)
     routing_store = RoutingStore(routing_file)
     metrics_store = MetricsStore(metrics_file)
@@ -5385,6 +5363,7 @@ def build_server(
     image_manager = ImageManager(
         ImageStore(image_file),
         DockerImageRuntime(dry_run=True),
+        telemetry=resolved_telemetry,
     )
     build_context_store = BuildContextBlobStore(
         build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
@@ -5438,32 +5417,13 @@ def build_server(
         if BoundHandler.max_concurrent_sandbox_creates > 0
         else None
     )
-    BoundHandler.sandbox_create_busy_traces = GatewayBusyTraceSampler(metrics_store)
+    BoundHandler.sandbox_create_busy_sampler = GatewayBusySampler(metrics_store)
+    BoundHandler.telemetry = resolved_telemetry
     return HighBacklogThreadingHTTPServer(
         (host, port),
         BoundHandler,
         max_request_threads=max_http_request_threads,
     )
-
-
-def _request_trace_id(
-    handler: ControlPlaneHandler,
-    operation: str,
-    object_id: str,
-) -> str:
-    header = str(handler.headers.get("X-Trace-Id") or "").strip()
-    if header and len(header) <= 128 and all(ch not in header for ch in "\r\n"):
-        return header
-    safe_operation = _safe_trace_component(operation)
-    safe_object = _safe_trace_component(object_id)[:48]
-    return f"{safe_operation}-{safe_object}-{uuid4().hex[:12]}"
-
-
-def _safe_trace_component(value: str) -> str:
-    cleaned = "".join(
-        ch if ch.isalnum() or ch in "._-" else "-" for ch in value.strip()
-    ).strip("-")
-    return cleaned or "trace"
 
 
 def _collection_id_from_path(path: str, prefix: str) -> str | None:

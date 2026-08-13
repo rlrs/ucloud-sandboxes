@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 import os
@@ -9,7 +8,6 @@ import sqlite3
 from threading import RLock
 import time
 from typing import Any
-from uuid import uuid4
 
 from .deployment import BUILDER_LABEL, agent_version_is_schedulable
 from .models import (
@@ -34,8 +32,6 @@ from .routing import (
 DEFAULT_RECENT_EVENT_LIMIT = 50
 DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
-DEFAULT_TRACE_SPAN_LIMIT = 250
-DEFAULT_TRACE_LIMIT = 50
 DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT = 100
 DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
@@ -460,27 +456,8 @@ def _sqlite_storage_bytes(path: Path) -> int:
     return total
 
 
-@dataclass
-class ActiveTraceSpan:
-    trace_id: str
-    span_id: str
-    parent_span_id: str
-    name: str
-    started_at: str
-    monotonic_started_at: float
-    attributes: dict[str, Any]
-    status: str = "ok"
-
-    def set_attribute(self, key: str, value: Any) -> None:
-        self.attributes[key] = value
-
-    def set_error(self, error: BaseException | str) -> None:
-        self.status = "error"
-        self.attributes["error"] = str(error)
-
-
-class GatewayBusyTraceSampler:
-    """Aggregate hot-path gateway admission failures into bounded telemetry."""
+class GatewayBusySampler:
+    """Aggregate admission failures for the autoscaler's local feedback loop."""
 
     def __init__(
         self,
@@ -494,7 +471,7 @@ class GatewayBusyTraceSampler:
         self._last_emit_monotonic: float | None = None
         self._pending_rejections = 0
 
-    def record(self, *, trace_id: str, max_concurrent_sandbox_creates: int) -> bool:
+    def record(self, *, max_concurrent_sandbox_creates: int) -> bool:
         if self.store is None:
             return False
         now_monotonic = time.monotonic()
@@ -511,17 +488,9 @@ class GatewayBusyTraceSampler:
             self._pending_rejections = 0
             self._last_emit_monotonic = now_monotonic
 
-        finished_at = utc_now().isoformat()
-        record_trace_span(
-            self.store,
-            trace_id=trace_id,
-            span_id=uuid4().hex[:16],
-            name="gateway.sandbox_create",
-            started_at=finished_at,
-            finished_at=finished_at,
-            duration_ms=0,
-            status="error",
-            attributes={
+        self.store.append(
+            "sandbox_create_busy",
+            {
                 "outcome": "gateway_busy",
                 "max_concurrent_sandbox_creates": max_concurrent_sandbox_creates,
                 "aggregated_rejections": rejected_requests,
@@ -529,78 +498,6 @@ class GatewayBusyTraceSampler:
             },
         )
         return True
-
-
-@contextmanager
-def trace_span(
-    store: MetricsStore | None,
-    trace_id: str,
-    name: str,
-    *,
-    parent_span_id: str = "",
-    attributes: dict[str, Any] | None = None,
-) -> Any:
-    span = ActiveTraceSpan(
-        trace_id=trace_id,
-        span_id=uuid4().hex[:16],
-        parent_span_id=parent_span_id,
-        name=name,
-        started_at=utc_now().isoformat(),
-        monotonic_started_at=time.monotonic(),
-        attributes=dict(attributes or {}),
-    )
-    try:
-        yield span
-    except Exception as exc:
-        span.set_error(exc)
-        raise
-    finally:
-        finished_at = utc_now().isoformat()
-        duration_ms = max(0, int((time.monotonic() - span.monotonic_started_at) * 1000))
-        record_trace_span(
-            store,
-            trace_id=span.trace_id,
-            span_id=span.span_id,
-            parent_span_id=span.parent_span_id,
-            name=span.name,
-            started_at=span.started_at,
-            finished_at=finished_at,
-            duration_ms=duration_ms,
-            status=span.status,
-            attributes=span.attributes,
-        )
-
-
-def record_trace_span(
-    store: MetricsStore | None,
-    *,
-    trace_id: str,
-    span_id: str,
-    parent_span_id: str = "",
-    name: str,
-    started_at: str,
-    finished_at: str,
-    duration_ms: int,
-    status: str = "ok",
-    attributes: dict[str, Any] | None = None,
-) -> None:
-    if store is None:
-        return
-    store.append(
-        "trace_span",
-        {
-            "trace_id": trace_id,
-            "span_id": span_id,
-            "parent_span_id": parent_span_id,
-            "name": name,
-            "started_at": started_at,
-            "finished_at": finished_at,
-            "duration_ms": duration_ms,
-            "status": status,
-            "attributes": attributes or {},
-        },
-        timestamp=finished_at,
-    )
 
 
 def record_sandbox_scheduled(
@@ -893,14 +790,9 @@ def build_live_scale_signals(
 
     for event in events:
         event_epoch = _timestamp_epoch(event.timestamp)
-        if event.kind == "trace_span" and event_epoch >= create_cutoff:
-            data = event.data
-            attributes = data.get("attributes")
-            if (
-                data.get("name") == "gateway.sandbox_create"
-                and isinstance(attributes, dict)
-                and attributes.get("outcome") == "gateway_busy"
-            ):
+        if event.kind == "sandbox_create_busy" and event_epoch >= create_cutoff:
+            attributes = event.data
+            if attributes.get("outcome") == "gateway_busy":
                 create_pressure_samples += 1
                 sandbox_create_rejections += max(
                     0,
@@ -1228,7 +1120,6 @@ def build_metrics_snapshot(
             else None
         ),
         "vm_lifecycle": _vm_lifecycle_summary(events),
-        "traces": _trace_snapshot(events),
         "events": {
             "recent": [
                 event.to_dict() for event in events[-DEFAULT_RECENT_EVENT_LIMIT:]
@@ -1493,85 +1384,6 @@ def _aggregate_actual_usage(heartbeats: list[NodeHeartbeat]) -> dict[str, Any]:
         "load_average_1m": _avg(load_1m_values),
         "load_average_5m": _avg(load_5m_values),
         "load_average_15m": _avg(load_15m_values),
-    }
-
-
-def _trace_snapshot(events: list[MetricEvent]) -> dict[str, Any]:
-    spans = [event for event in events if event.kind == "trace_span"]
-    recent_spans = spans[-DEFAULT_TRACE_SPAN_LIMIT:]
-    grouped: dict[str, list[MetricEvent]] = {}
-    ordered_trace_ids: list[str] = []
-    for event in recent_spans:
-        trace_id = str(event.data.get("trace_id") or "")
-        if not trace_id:
-            continue
-        if trace_id not in grouped:
-            ordered_trace_ids.append(trace_id)
-            grouped[trace_id] = []
-        grouped[trace_id].append(event)
-    recent_traces = [
-        _trace_summary(trace_id, grouped[trace_id])
-        for trace_id in ordered_trace_ids[-DEFAULT_TRACE_LIMIT:]
-    ]
-    return {
-        "span_count": len(spans),
-        "recent_spans": [event.to_dict() for event in recent_spans],
-        "recent": recent_traces,
-    }
-
-
-def _trace_summary(trace_id: str, spans: list[MetricEvent]) -> dict[str, Any]:
-    sorted_spans = sorted(
-        spans,
-        key=lambda event: (
-            str(event.data.get("started_at") or event.timestamp),
-            str(event.data.get("span_id") or ""),
-        ),
-    )
-    root = next(
-        (
-            event
-            for event in sorted_spans
-            if not str(event.data.get("parent_span_id") or "")
-        ),
-        sorted_spans[0] if sorted_spans else None,
-    )
-    statuses = {str(event.data.get("status") or "ok") for event in sorted_spans}
-    total_duration = (
-        _optional_int(root.data.get("duration_ms")) if root is not None else None
-    )
-    if total_duration is None:
-        durations = [
-            value
-            for value in (
-                _optional_int(event.data.get("duration_ms")) for event in sorted_spans
-            )
-            if value is not None
-        ]
-        total_duration = max(durations) if durations else 0
-    return {
-        "trace_id": trace_id,
-        "name": str(root.data.get("name") or "") if root is not None else "",
-        "status": "error" if "error" in statuses else "ok",
-        "started_at": str(root.data.get("started_at") or root.timestamp)
-        if root is not None
-        else "",
-        "finished_at": str(root.data.get("finished_at") or root.timestamp)
-        if root is not None
-        else "",
-        "duration_ms": total_duration,
-        "span_count": len(sorted_spans),
-        "spans": [
-            {
-                "span_id": str(event.data.get("span_id") or ""),
-                "parent_span_id": str(event.data.get("parent_span_id") or ""),
-                "name": str(event.data.get("name") or ""),
-                "status": str(event.data.get("status") or "ok"),
-                "duration_ms": _optional_int(event.data.get("duration_ms")),
-                "attributes": event.data.get("attributes") or {},
-            }
-            for event in sorted_spans
-        ],
     }
 
 

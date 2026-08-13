@@ -21,6 +21,8 @@ import threading
 import time
 from typing import Any, Literal, Protocol
 
+from opentelemetry.trace import SpanKind
+
 from .storage_native import (
     StorageNativeDevice,
     StorageNativeDeviceOwner,
@@ -29,10 +31,11 @@ from .storage_native_registry import (
     PublishedStorageLayer,
     StorageSnapshotPublication,
 )
+from .telemetry import Telemetry
 
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,239}\Z")
-_PROTOCOL_SCHEMA = 3
+_PROTOCOL_SCHEMA = 4
 _JOURNAL_APPLICATION_ID = 0x55435342
 _JOURNAL_SCHEMA_VERSION = 2
 _PROTOCOL_MAX_BYTES = 1024 * 1024
@@ -65,6 +68,10 @@ _PROTOCOL_EXTRA_FIELDS = {
         "expected_virtual_size",
         "operation_id",
     ),
+}
+_PROTOCOL_EXTRA_FIELDS = {
+    operation: (*extra_fields, "trace_context")
+    for operation, extra_fields in _PROTOCOL_EXTRA_FIELDS.items()
 }
 _ACTIVE_CAPACITY_STATES = {
     "creating",
@@ -319,12 +326,8 @@ class StorageVolumeRecord:
                 **raw,
                 "published_backend": (
                     "s3"
-                    if str(raw.get("published_repo_blob_url") or "").startswith(
-                        "s3://"
-                    )
-                    else (
-                        "registry" if raw.get("published_manifest_digest") else ""
-                    )
+                    if str(raw.get("published_repo_blob_url") or "").startswith("s3://")
+                    else ("registry" if raw.get("published_manifest_digest") else "")
                 ),
             }
         if set(raw) != expected:
@@ -2269,6 +2272,7 @@ class StorageNativeNodeClient:
         socket_path: Path,
         *,
         timeout_seconds: float = 120.0,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if not socket_path.is_absolute():
             raise ValueError("storage-native service socket must be absolute")
@@ -2276,6 +2280,7 @@ class StorageNativeNodeClient:
             raise ValueError("storage-native service timeout must be positive")
         self.socket_path = socket_path
         self.timeout_seconds = timeout_seconds
+        self.telemetry = telemetry or Telemetry.disabled("storage-native-client")
 
     def wait_ready(self, *, timeout_seconds: float = 30.0) -> dict[str, Any]:
         if timeout_seconds <= 0:
@@ -2437,9 +2442,25 @@ class StorageNativeNodeClient:
         return self._call({"operation": "Reconcile"})
 
     def _call(self, request: dict[str, Any]) -> dict[str, Any]:
-        payload = _canonical_json({"schema": _PROTOCOL_SCHEMA, **request}).encode(
-            "ascii"
-        )
+        operation = str(request.get("operation") or "unknown")
+        with self.telemetry.span(
+            f"storage.client.{operation}",
+            kind=SpanKind.CLIENT,
+            attributes={
+                "rpc.system": "ucloud-storage-native",
+                "rpc.method": operation,
+            },
+        ):
+            return self._call_unobserved(request)
+
+    def _call_unobserved(self, request: dict[str, Any]) -> dict[str, Any]:
+        payload = _canonical_json(
+            {
+                "schema": _PROTOCOL_SCHEMA,
+                **request,
+                "trace_context": self.telemetry.current_trace_headers(),
+            }
+        ).encode("ascii")
         if len(payload) > _PROTOCOL_MAX_BYTES:
             raise ValueError("storage-native service request is too large")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
@@ -2484,22 +2505,7 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             request = json.loads(_recv_exact(self.request, size).decode("utf-8"))
             if not isinstance(request, dict):
                 raise ValueError("storage-native request must be an object")
-            if request.get("operation") in {"GetFeatures", "GetMetrics"}:
-                response = {
-                    "status": "ok",
-                    "result": self.server.dispatch(request),
-                }
-            else:
-                self.server.operation_waiting()
-                with self.server.operation_slots:
-                    self.server.operation_started()
-                    try:
-                        response = {
-                            "status": "ok",
-                            "result": self.server.dispatch(request),
-                        }
-                    finally:
-                        self.server.operation_finished()
+            response = self._observed_dispatch(request)
         except StorageNativePendingOperation as exc:
             response = {"status": "pending", "message": str(exc)}
         except StorageNativeConflictError as exc:
@@ -2513,6 +2519,47 @@ class _StorageNativeRequestHandler(socketserver.BaseRequestHandler):
             }
         payload = _canonical_json(response).encode("ascii")
         self.request.sendall(struct.pack(">I", len(payload)) + payload)
+
+    def _observed_dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
+        operation = str(request.get("operation") or "unknown")
+        raw_context = request.get("trace_context")
+        trace_context = (
+            {str(key): str(value) for key, value in raw_context.items()}
+            if isinstance(raw_context, dict)
+            else {}
+        )
+        attributes: dict[str, Any] = {
+            "rpc.system": "ucloud-storage-native",
+            "rpc.method": operation,
+        }
+        for field, attribute in (
+            ("sandbox_id", "sandbox.id"),
+            ("volume_id", "storage.volume.id"),
+        ):
+            value = request.get(field)
+            if isinstance(value, str):
+                attributes[attribute] = value[:256]
+        with self.server.telemetry.span(
+            f"storage.server.{operation}",
+            kind=SpanKind.SERVER,
+            attributes=attributes,
+            parent_context=self.server.telemetry.extracted_context(trace_context),
+        ) as span:
+            if operation in {"GetFeatures", "GetMetrics"}:
+                return {"status": "ok", "result": self.server.dispatch(request)}
+            waiting_started = time.monotonic()
+            self.server.operation_waiting()
+            with self.server.operation_slots:
+                queue_wait = max(0.0, time.monotonic() - waiting_started)
+                span.add_event(
+                    "storage.queue.acquired",
+                    {"storage.queue.wait_seconds": queue_wait},
+                )
+                self.server.operation_started()
+                try:
+                    return {"status": "ok", "result": self.server.dispatch(request)}
+                finally:
+                    self.server.operation_finished()
 
 
 class _StorageNativeUnixServer(
@@ -2532,9 +2579,11 @@ class _StorageNativeUnixServer(
         service: StorageNativeNodeService,
         *,
         require_root_peer: bool,
+        telemetry: Telemetry,
     ) -> None:
         self.service = service
         self.require_root_peer_enabled = require_root_peer
+        self.telemetry = telemetry
         self.operation_slots = threading.BoundedSemaphore(
             service.config.max_concurrent_operations
         )
@@ -2675,12 +2724,14 @@ class StorageNativeNodeServer:
         service: StorageNativeNodeService,
         *,
         require_root_peer: bool = True,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if not socket_path.is_absolute():
             raise ValueError("storage-native service socket must be absolute")
         self.socket_path = socket_path
         self.service = service
         self.require_root_peer = require_root_peer
+        self.telemetry = telemetry or Telemetry.disabled("storage-native-server")
         self._server: _StorageNativeUnixServer | None = None
 
     def serve_forever(self) -> None:
@@ -2689,6 +2740,7 @@ class StorageNativeNodeServer:
             self.socket_path,
             self.service,
             require_root_peer=self.require_root_peer,
+            telemetry=self.telemetry,
         )
         self._server = server
         os.chmod(self.socket_path, 0o600)

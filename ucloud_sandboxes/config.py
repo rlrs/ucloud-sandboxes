@@ -13,9 +13,10 @@ from .providers import (
     default_provider_configuration,
     validate_provider_configuration,
 )
+from .telemetry import TelemetrySettings
 
 
-DEPLOYMENT_CONFIG_SCHEMA = 4
+DEPLOYMENT_CONFIG_SCHEMA = 5
 DEFAULT_DATA_ROOT = "/work/data/ucloud-sandboxes/state"
 DEFAULT_REGISTRY_MOUNT_POINT = "/work/data"
 DEFAULT_REGISTRY_DATA_ROOT = "/work/data/ucloud-sandbox-registry/docker-registry"
@@ -72,8 +73,10 @@ class SnapshotStoreConfig:
             "security_token_env",
         ):
             value = getattr(result, name)
-            if not value or not value.replace("_", "A").isalnum() or not (
-                value[0].isalpha() or value[0] == "_"
+            if (
+                not value
+                or not value.replace("_", "A").isalnum()
+                or not (value[0].isalpha() or value[0] == "_")
             ):
                 raise ValueError(
                     f"snapshot_store.{name} must be an environment variable name"
@@ -91,9 +94,8 @@ class SnapshotStoreConfig:
         if not result.region.strip():
             raise ValueError("snapshot_store.region is required for S3")
         normalized_prefix = result.prefix.strip("/")
-        if (
-            not normalized_prefix
-            or any(part in {"", ".", ".."} for part in normalized_prefix.split("/"))
+        if not normalized_prefix or any(
+            part in {"", ".", ".."} for part in normalized_prefix.split("/")
         ):
             raise ValueError("snapshot_store.prefix is invalid")
         endpoint = normalize_s3_endpoint(
@@ -154,8 +156,10 @@ class RegistryStoreConfig:
             raise ValueError("registry_store.force_path_style must be a boolean")
         for name in ("access_key_id_env", "secret_access_key_env"):
             value = getattr(result, name)
-            if not value or not value.replace("_", "A").isalnum() or not (
-                value[0].isalpha() or value[0] == "_"
+            if (
+                not value
+                or not value.replace("_", "A").isalnum()
+                or not (value[0].isalpha() or value[0] == "_")
             ):
                 raise ValueError(
                     f"registry_store.{name} must be an environment variable name"
@@ -197,9 +201,8 @@ class RegistryStoreConfig:
         if not result.region.strip():
             raise ValueError("registry_store.region is required for S3")
         normalized_prefix = result.prefix.strip("/")
-        if (
-            not normalized_prefix
-            or any(part in {"", ".", ".."} for part in normalized_prefix.split("/"))
+        if not normalized_prefix or any(
+            part in {"", ".", ".."} for part in normalized_prefix.split("/")
         ):
             raise ValueError("registry_store.prefix is invalid")
         endpoint = normalize_s3_endpoint(
@@ -378,6 +381,7 @@ class DeploymentConfig:
     autoscaler_init_timeout_seconds: int
     autoscaler_max_storage_native_detaches_per_cycle: int
     heartbeat_interval_seconds: int
+    telemetry: TelemetrySettings
     snapshot_store: SnapshotStoreConfig
     policy: ScalePolicy
     sandbox: SandboxPoolConfig
@@ -412,6 +416,7 @@ class DeploymentConfig:
             autoscaler_init_timeout_seconds=1800,
             autoscaler_max_storage_native_detaches_per_cycle=2,
             heartbeat_interval_seconds=20,
+            telemetry=TelemetrySettings(),
             snapshot_store=SnapshotStoreConfig(),
             policy=replace(
                 ScalePolicy(),
@@ -437,79 +442,9 @@ class DeploymentConfig:
             raise ValueError("deployment config must be a JSON object")
         expected = {item.name for item in fields(cls)}
         schema = _require_int("schema", raw.get("schema"), minimum=1)
-        if schema == 1:
-            legacy_expected = expected - {
-                "registry_store",
-                "autoscaler_max_storage_native_detaches_per_cycle",
-                "snapshot_store",
-            } | {"autoscaler_max_storage_native_migrations_per_cycle"}
-            _require_exact_keys("deployment config", raw, legacy_expected)
-            legacy_data_root = _require_absolute_path("data_root", raw["data_root"])
-            raw = {
-                **raw,
-                "schema": DEPLOYMENT_CONFIG_SCHEMA,
-                "registry_store": asdict(
-                    replace(
-                        RegistryStoreConfig(),
-                        data_root=str(
-                            Path(legacy_data_root).parent.parent
-                            / "ucloud-sandbox-registry/docker-registry"
-                        ),
-                        mount_point=str(Path(legacy_data_root).parent.parent),
-                    )
-                ),
-                "snapshot_store": asdict(SnapshotStoreConfig()),
-                "autoscaler_max_storage_native_detaches_per_cycle": raw[
-                    "autoscaler_max_storage_native_migrations_per_cycle"
-                ],
-            }
-            raw.pop("autoscaler_max_storage_native_migrations_per_cycle")
-            schema = DEPLOYMENT_CONFIG_SCHEMA
-        if schema == 2:
-            schema_two_expected = expected - {"registry_store", "snapshot_store"} | {
-                "registry_mount_point",
-                "registry_data_root",
-            }
-            _require_exact_keys("deployment config", raw, schema_two_expected)
-            raw = {
-                **raw,
-                "schema": DEPLOYMENT_CONFIG_SCHEMA,
-                "registry_store": asdict(
-                    replace(
-                        RegistryStoreConfig(),
-                        mount_point=raw["registry_mount_point"],
-                        data_root=raw["registry_data_root"],
-                    )
-                ),
-                "snapshot_store": asdict(SnapshotStoreConfig()),
-            }
-            raw.pop("registry_mount_point")
-            raw.pop("registry_data_root")
-            schema = DEPLOYMENT_CONFIG_SCHEMA
-        elif schema == 3:
-            schema_three_expected = expected - {"registry_store"} | {
-                "registry_mount_point",
-                "registry_data_root",
-            }
-            _require_exact_keys("deployment config", raw, schema_three_expected)
-            raw = {
-                **raw,
-                "schema": DEPLOYMENT_CONFIG_SCHEMA,
-                "registry_store": asdict(
-                    replace(
-                        RegistryStoreConfig(),
-                        mount_point=raw["registry_mount_point"],
-                        data_root=raw["registry_data_root"],
-                    )
-                ),
-            }
-            raw.pop("registry_mount_point")
-            raw.pop("registry_data_root")
-            schema = DEPLOYMENT_CONFIG_SCHEMA
-        elif schema == DEPLOYMENT_CONFIG_SCHEMA:
-            _require_exact_keys("deployment config", raw, expected)
-        else:
+        if schema != DEPLOYMENT_CONFIG_SCHEMA:
             raise ValueError(f"unsupported deployment config schema: {schema}")
+        _require_exact_keys("deployment config", raw, expected)
         provider = ProviderConfiguration.from_dict(raw["provider"])
         if provider.kind == "ucloud" and "session_file" in provider.settings:
             raise ValueError("provider ucloud contains unknown fields: session_file")
@@ -518,6 +453,13 @@ class DeploymentConfig:
         builder = BuilderPoolConfig.from_dict(raw["builder"])
         registry_store = RegistryStoreConfig.from_dict(raw["registry_store"])
         snapshot_store = SnapshotStoreConfig.from_dict(raw["snapshot_store"])
+        telemetry = TelemetrySettings(
+            **_exact_dataclass_values(
+                "telemetry",
+                raw["telemetry"],
+                TelemetrySettings(),
+            )
+        ).validated()
         heartbeat_ttl = _require_int(
             "gateway_heartbeat_ttl_seconds",
             raw["gateway_heartbeat_ttl_seconds"],
@@ -608,6 +550,7 @@ class DeploymentConfig:
                 raw["heartbeat_interval_seconds"],
                 minimum=1,
             ),
+            telemetry=telemetry,
             snapshot_store=snapshot_store,
             policy=policy,
             sandbox=sandbox,
@@ -761,6 +704,7 @@ class DeploymentConfig:
                 self.autoscaler_max_storage_native_detaches_per_cycle
             ),
             "heartbeat_interval_seconds": self.heartbeat_interval_seconds,
+            "telemetry": asdict(self.telemetry),
             "snapshot_store": asdict(self.snapshot_store),
             "policy": policy,
             "sandbox": sandbox,

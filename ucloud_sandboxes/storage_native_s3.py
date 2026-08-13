@@ -24,6 +24,7 @@ from .storage_native_registry import (
     StorageSnapshotPublication,
     consume_export_stream,
 )
+from .telemetry import Telemetry
 
 
 MINIMUM_MULTIPART_CHUNK_BYTES = 5 * 1024 * 1024
@@ -184,7 +185,9 @@ class Boto3S3ObjectClient:
         try:
             response = self._client.head_object(Bucket=self.bucket, Key=key)
         except self._client_error as exc:
-            status = int(exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0))
+            status = int(
+                exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+            )
             code = str(exc.response.get("Error", {}).get("Code", ""))
             if status == 404 or code in {"404", "NoSuchKey", "NotFound"}:
                 return None
@@ -239,7 +242,10 @@ class Boto3S3ObjectClient:
             self.bucket,
             destination_key,
             Config=self._transfer_config,
-            ExtraArgs={"Metadata": {"sha256": destination_key.rsplit("/", 1)[-1]}, "MetadataDirective": "REPLACE"},
+            ExtraArgs={
+                "Metadata": {"sha256": destination_key.rsplit("/", 1)[-1]},
+                "MetadataDirective": "REPLACE",
+            },
         )
 
     def delete(self, key: str) -> None:
@@ -285,6 +291,7 @@ class S3SnapshotPublisher:
         compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
         compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
         client_factory: Callable[[], S3ObjectClient] | None = None,
+        telemetry: Telemetry | None = None,
     ) -> None:
         normalized_prefix = prefix.strip("/")
         if not endpoint.startswith(("http://", "https://")):
@@ -311,9 +318,7 @@ class S3SnapshotPublisher:
             raise ValueError("verification concurrency must be positive")
         if compact_after_layers < 1 or compact_after_bytes < 1:
             raise ValueError("compaction thresholds must be positive")
-        self.endpoint = normalize_s3_endpoint(
-            endpoint, bucket=bucket, region=region
-        )
+        self.endpoint = normalize_s3_endpoint(endpoint, bucket=bucket, region=region)
         self.bucket = bucket
         self.region = region
         self.prefix = normalized_prefix
@@ -326,6 +331,7 @@ class S3SnapshotPublisher:
         self.compact_after_layers = compact_after_layers
         self.compact_after_bytes = compact_after_bytes
         self.repository = f"{bucket}/{normalized_prefix}"
+        self.telemetry = telemetry or Telemetry.disabled("s3-snapshot-publisher")
         self._client_factory = client_factory or (
             lambda: Boto3S3ObjectClient(
                 endpoint=self.endpoint,
@@ -334,7 +340,9 @@ class S3SnapshotPublisher:
                 credential_process=self.credential_process,
             )
         )
-        self._publication_slots = threading.BoundedSemaphore(max_concurrent_publications)
+        self._publication_slots = threading.BoundedSemaphore(
+            max_concurrent_publications
+        )
         self._metrics_lock = threading.Lock()
         self._publications = 0
         self._compactions = 0
@@ -357,15 +365,40 @@ class S3SnapshotPublisher:
         global_config_path: Path | None = None,
     ) -> StorageSnapshotPublication:
         started = time.monotonic()
-        with self._publication_slots:
-            publication, compacted, uploaded_bytes = self._publish_locked(
-                client=self._client_factory(),
-                exporter=exporter,
-                source_layer_paths=source_layer_paths,
-                virtual_size=virtual_size,
-                existing_layers=existing_layers,
-                existing_repo_blob_url=existing_repo_blob_url,
-                global_config_path=global_config_path,
+        with self.telemetry.span(
+            "snapshot.publish",
+            attributes={
+                "snapshot.backend": "s3",
+                "snapshot.source_layer_count": len(source_layer_paths),
+                "snapshot.existing_layer_count": len(existing_layers),
+                "snapshot.virtual_size": virtual_size,
+            },
+        ) as span:
+            waiting_started = time.monotonic()
+            with self._publication_slots:
+                span.add_event(
+                    "snapshot.publication_slot.acquired",
+                    {
+                        "snapshot.queue.wait_seconds": max(
+                            0.0, time.monotonic() - waiting_started
+                        )
+                    },
+                )
+                publication, compacted, uploaded_bytes = self._publish_locked(
+                    client=self._client_factory(),
+                    exporter=exporter,
+                    source_layer_paths=source_layer_paths,
+                    virtual_size=virtual_size,
+                    existing_layers=existing_layers,
+                    existing_repo_blob_url=existing_repo_blob_url,
+                    global_config_path=global_config_path,
+                )
+            span.set_attributes(
+                {
+                    "snapshot.compacted": compacted,
+                    "snapshot.uploaded_bytes": uploaded_bytes,
+                    "snapshot.result_layer_count": len(publication.layers),
+                }
             )
         elapsed_ms = int((time.monotonic() - started) * 1000)
         with self._metrics_lock:
@@ -379,6 +412,18 @@ class S3SnapshotPublisher:
         return publication
 
     def verify(
+        self, publication: StorageSnapshotPublication
+    ) -> StorageSnapshotPublication:
+        with self.telemetry.span(
+            "snapshot.verify",
+            attributes={
+                "snapshot.backend": "s3",
+                "snapshot.layer_count": len(publication.layers),
+            },
+        ):
+            return self._verify_unobserved(publication)
+
+    def _verify_unobserved(
         self, publication: StorageSnapshotPublication
     ) -> StorageSnapshotPublication:
         if publication.backend != "s3":
@@ -420,7 +465,10 @@ class S3SnapshotPublisher:
             )
             config_payload = config_future.result()
             layer_stats = tuple(future.result() for future in layer_futures)
-        if len(config_payload) != config_size or _digest(config_payload) != config_digest:
+        if (
+            len(config_payload) != config_size
+            or _digest(config_payload) != config_digest
+        ):
             raise ValueError("S3 snapshot config content is corrupt")
         expected = RegistrySnapshotPublisher._snapshot_config(
             virtual_size=publication.virtual_size,
@@ -428,7 +476,9 @@ class S3SnapshotPublisher:
         )
         if config_payload != expected:
             raise ValueError("S3 snapshot config does not match its publication")
-        manifest_layers = tuple(PublishedStorageLayer.from_dict(raw) for raw in layers_raw)
+        manifest_layers = tuple(
+            PublishedStorageLayer.from_dict(raw) for raw in layers_raw
+        )
         if manifest_layers != publication.layers:
             raise ValueError("S3 snapshot layers do not match its publication")
         for layer, stat in zip(publication.layers, layer_stats):
@@ -484,44 +534,53 @@ class S3SnapshotPublisher:
         if should_compact:
             if global_config_path is None or not global_config_path.is_absolute():
                 raise ValueError("compacted publication requires a global config")
-            layer = self._publish_compacted_layer(
-                client,
-                exporter,
-                existing_layers=existing_layers,
-                existing_repo_blob_url=existing_repo_blob_url,
-                source_layer_paths=source_layer_paths,
-                global_config_path=global_config_path,
-            )
+            with self.telemetry.span(
+                "snapshot.compact_and_upload",
+                attributes={"snapshot.input_bytes": input_bytes},
+            ):
+                layer = self._publish_compacted_layer(
+                    client,
+                    exporter,
+                    existing_layers=existing_layers,
+                    existing_repo_blob_url=existing_repo_blob_url,
+                    source_layer_paths=source_layer_paths,
+                    global_config_path=global_config_path,
+                )
             layers = (layer,)
             uploaded_bytes += layer.size
         else:
-            new_layers = tuple(
-                self._publish_dense_layer(client, exporter, path)
-                for path in source_layer_paths
-            )
+            with self.telemetry.span(
+                "snapshot.export_and_upload",
+                attributes={"snapshot.input_bytes": input_bytes},
+            ):
+                new_layers = tuple(
+                    self._publish_dense_layer(client, exporter, path)
+                    for path in source_layer_paths
+                )
             layers = (*existing_layers, *new_layers)
             uploaded_bytes += sum(layer.size for layer in new_layers)
 
-        config = RegistrySnapshotPublisher._snapshot_config(
-            virtual_size=virtual_size, layers=layers
-        )
-        config_digest = _digest(config)
-        self._put_content_addressed(
-            client, self._metadata_key(config_digest), config, config_digest
-        )
-        tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
-        manifest = RegistrySnapshotPublisher._oci_manifest(
-            config_digest=config_digest,
-            config_size=len(config),
-            layers=layers,
-        )
-        manifest_digest = _digest(manifest)
-        self._put_content_addressed(
-            client,
-            self._manifest_key(manifest_digest),
-            manifest,
-            manifest_digest,
-        )
+        with self.telemetry.span("snapshot.commit_metadata"):
+            config = RegistrySnapshotPublisher._snapshot_config(
+                virtual_size=virtual_size, layers=layers
+            )
+            config_digest = _digest(config)
+            self._put_content_addressed(
+                client, self._metadata_key(config_digest), config, config_digest
+            )
+            tag = f"ucloud-storage-v1-{config_digest.removeprefix('sha256:')}"
+            manifest = RegistrySnapshotPublisher._oci_manifest(
+                config_digest=config_digest,
+                config_size=len(config),
+                layers=layers,
+            )
+            manifest_digest = _digest(manifest)
+            self._put_content_addressed(
+                client,
+                self._manifest_key(manifest_digest),
+                manifest,
+                manifest_digest,
+            )
         return (
             StorageSnapshotPublication(
                 manifest_digest=manifest_digest,
@@ -737,7 +796,10 @@ def _resolve_credential_process(command: str) -> dict[str, str]:
     if not isinstance(raw, dict):
         raise ValueError("S3 credential process must return an object")
     access_key_id = str(
-        raw.get("AccessKeyId") or raw.get("accessKeyId") or raw.get("access_key_id") or ""
+        raw.get("AccessKeyId")
+        or raw.get("accessKeyId")
+        or raw.get("access_key_id")
+        or ""
     ).strip()
     secret_access_key = str(
         raw.get("SecretAccessKey")

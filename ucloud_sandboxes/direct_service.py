@@ -41,6 +41,7 @@ from .sandbox import (
     SandboxSpec,
     validate_container_path,
 )
+from .telemetry import Telemetry
 
 
 _LOG = logging.getLogger(__name__)
@@ -193,6 +194,7 @@ class DirectSandboxService:
         idle_park_seconds: float = 0.0,
         deletion_reconcile_interval_seconds: float = 5.0,
         image_reconcile_interval_seconds: float = 300.0,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if max_concurrent_restores < 1:
             raise ValueError("max_concurrent_restores must be positive")
@@ -205,6 +207,7 @@ class DirectSandboxService:
         self.provisioner = provisioner
         self.warden = provisioner.warden
         self.process_runner = process_runner or DirectProcessRunner()
+        self.telemetry = telemetry or Telemetry.disabled("direct-sandbox-service")
         self._restore_slots = threading.Semaphore(max_concurrent_restores)
         self._active_capacity: ResourceQuantity | None = None
         self._runtime_metrics_provider: (
@@ -564,10 +567,18 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     f"direct sandbox cannot park from {record.state.value}"
                 )
-            self.warden.park(
-                sandbox,
-                operation_id=operation_id,
-            )
+            with self.telemetry.span(
+                "sandbox.park",
+                attributes={
+                    "sandbox.id": sandbox_id,
+                    "sandbox.generation": registration.sandbox_generation,
+                    "sandbox.park.background_publication": background,
+                },
+            ):
+                self.warden.park(
+                    sandbox,
+                    operation_id=operation_id,
+                )
             if background:
                 self._start_storage_publication(
                     registration,
@@ -597,16 +608,26 @@ class DirectSandboxService:
             if existing is not None and existing.is_alive():
                 return
             self._publication_errors.pop(key, None)
+            trace_context = self.telemetry.current_trace_headers()
 
             def publish() -> None:
-                try:
-                    self.warden.publish_storage_snapshot(
-                        registration.to_direct_sandbox(),
-                        operation_id=operation_id,
-                    )
-                except BaseException as exc:
-                    with self._publication_guard:
-                        self._publication_errors[key] = exc
+                with self.telemetry.span(
+                    "sandbox.storage_publication.background",
+                    attributes={
+                        "sandbox.id": registration.sandbox_id,
+                        "sandbox.generation": registration.sandbox_generation,
+                    },
+                    parent_context=self.telemetry.extracted_context(trace_context),
+                ) as span:
+                    try:
+                        self.warden.publish_storage_snapshot(
+                            registration.to_direct_sandbox(),
+                            operation_id=operation_id,
+                        )
+                    except BaseException as exc:
+                        with self._publication_guard:
+                            self._publication_errors[key] = exc
+                        span.set_error(exc)
 
             thread = threading.Thread(
                 target=publish,
@@ -648,11 +669,22 @@ class DirectSandboxService:
             if record.state != HibernationState.PARKED:
                 record = self.warden.reconcile(sandbox)
             if record.state == HibernationState.PARKED:
-                self.provisioner.ensure_network(registration)
-                record = self.warden.resume(
-                    sandbox,
-                    operation_id=operation_id,
-                )
+                timings: dict[str, float] = {}
+                with self.telemetry.span(
+                    "sandbox.wake",
+                    attributes={
+                        "sandbox.id": sandbox_id,
+                        "sandbox.generation": generation,
+                    },
+                ) as span:
+                    with self.telemetry.span("sandbox.wake.ensure_network"):
+                        self.provisioner.ensure_network(registration)
+                    record = self.warden.resume(
+                        sandbox,
+                        operation_id=operation_id,
+                        timings=timings,
+                    )
+                    span.add_event("sandbox.wake.timings", timings)
             if record.state != HibernationState.RUNNING:
                 raise DirectWardenError(
                     f"direct sandbox cannot wake from {record.state.value}"

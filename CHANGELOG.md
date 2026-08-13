@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Replaced SQLite pseudo-traces with bounded, nonblocking OTLP/HTTP traces and
+  metrics, W3C propagation, exporter-health reporting, and a strict schema-5
+  telemetry contract.
+- Added correlated gateway, worker, relay, exec, image-build, park/wake,
+  storage Unix-socket, S3/Registry publication, provider, and VM-bootstrap
+  spans, including async context capture and queue-wait phases.
+- Enabled AgentEnv's loopback Prometheus endpoint, removed the old dashboard
+  trace store, and added overload and microbenchmark coverage proving exporter
+  backpressure cannot delay product work.
+- Added sampled per-span thread CPU duration, from which the trace backend can
+  derive CPU/wall ratios and distinguish wait-heavy phases from optimization
+  candidates.
+
 ## 0.4.1 - 2026-08-13
 
 - Moved detached sandbox snapshot authority from the gateway Registry to

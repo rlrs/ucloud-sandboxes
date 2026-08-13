@@ -20,8 +20,10 @@ from typing import Any, Awaitable, Callable, TypeVar
 from uuid import uuid4
 
 from aiohttp import web
+from opentelemetry.trace import SpanKind
 
 from .deployment import service_health
+from .telemetry import Telemetry, trace_id_hex
 
 
 JsonObject = dict[str, Any]
@@ -65,6 +67,8 @@ ACCEPTED_NOTIFIER_KEY = web.AppKey(
     "model_relay_accepted_notifier",
     Callable[["RelayRequest"], Awaitable[str | None]] | None,
 )
+TELEMETRY_KEY = web.AppKey("model_relay_telemetry", Telemetry)
+_DISABLED_TELEMETRY = Telemetry.disabled("model-relay")
 _TransitionResult = TypeVar("_TransitionResult")
 
 
@@ -2022,9 +2026,15 @@ def create_model_relay_app(
     state_path: Path | None = None,
     accepted_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
     result_notifier: Callable[[RelayRequest], Awaitable[str | None]] | None = None,
+    telemetry: Telemetry | None = None,
 ) -> web.Application:
     # Base64 expands worker response bodies by 4/3 inside the JSON control API.
-    app = web.Application(client_max_size=48 * 1024**2)
+    resolved_telemetry = telemetry or Telemetry.disabled("model-relay")
+    app = web.Application(
+        client_max_size=48 * 1024**2,
+        middlewares=[_telemetry_middleware] if resolved_telemetry.enabled else (),
+    )
+    app[TELEMETRY_KEY] = resolved_telemetry
     app[STATE_KEY] = ModelRelayState(
         state_path=state_path,
         request_timeout_seconds=request_timeout_seconds,
@@ -2085,6 +2095,56 @@ def create_model_relay_app(
         tunnel_http_proxy,
     )
     return app
+
+
+@web.middleware
+async def _telemetry_middleware(
+    request: web.Request,
+    handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+) -> web.StreamResponse:
+    telemetry = request.app[TELEMETRY_KEY]
+    route = getattr(request.match_info.route.resource, "canonical", request.path)
+    attributes: dict[str, Any] = {
+        "http.request.method": request.method,
+        "http.route": route,
+        "url.path": request.path,
+    }
+    for key, attribute in (("rollout_id", "relay.rollout.id"),):
+        value = request.match_info.get(key)
+        if value:
+            attributes[attribute] = value[:256]
+    parent_context = telemetry.extracted_context(dict(request.headers))
+    with telemetry.span(
+        f"{request.method} {route}",
+        kind=SpanKind.SERVER,
+        attributes=attributes,
+        parent_context=parent_context,
+        metric_operation="http.server.request",
+    ) as span:
+        try:
+            response = await handler(request)
+        except web.HTTPException as exc:
+            span.set_attribute("http.response.status_code", int(exc.status))
+            if exc.status >= 500:
+                span.status = "error"
+            headers: dict[str, str] = {}
+            telemetry.inject(headers)
+            exc.headers.update(headers)
+            trace_id = trace_id_hex()
+            if trace_id:
+                exc.headers["X-Trace-Id"] = trace_id
+            raise
+        status = int(response.status)
+        span.set_attribute("http.response.status_code", status)
+        if status >= 500:
+            span.status = "error"
+        headers: dict[str, str] = {}
+        telemetry.inject(headers)
+        response.headers.update(headers)
+        trace_id = trace_id_hex()
+        if trace_id:
+            response.headers["X-Trace-Id"] = trace_id
+        return response
 
 
 async def healthz(_request: web.Request) -> web.Response:
@@ -2437,33 +2497,44 @@ async def _wait_for_worker_response(
     *,
     openai_errors: bool,
 ) -> RelayWorkerResponse:
-    try:
-        response = await _state(request).wait_for_response(
-            relay_request,
-            timeout_seconds=request.app[REQUEST_TIMEOUT_KEY],
-        )
-    except asyncio.TimeoutError:
-        timeout_response = RelayWorkerResponse(
-            504,
-            _relay_error(
-                "relay request timed out",
-                "relay_timeout",
-                openai=openai_errors,
-            ),
-        )
-        persisted = await _state(request).cancel_request(
-            request_id=relay_request.request_id,
-            response=timeout_response,
-            reason="timeout",
-        )
-        response = persisted or timeout_response
-    except asyncio.CancelledError:
-        # A parked or migrated sandbox necessarily loses this TCP connection.
-        # The durable request remains claimable and the next byte-identical
-        # retry reattaches to it instead of sampling again.
-        await _state(request).mark_caller_detached(relay_request.request_id)
-        raise
-    return response
+    with _telemetry(request).span(
+        "relay.wait_for_worker",
+        attributes={
+            "relay.request.id": relay_request.request_id,
+            "relay.rollout.id": relay_request.rollout_id,
+        },
+    ) as span:
+        try:
+            response = await _state(request).wait_for_response(
+                relay_request,
+                timeout_seconds=request.app[REQUEST_TIMEOUT_KEY],
+            )
+        except asyncio.TimeoutError:
+            span.set_attribute("relay.outcome", "timeout")
+            timeout_response = RelayWorkerResponse(
+                504,
+                _relay_error(
+                    "relay request timed out",
+                    "relay_timeout",
+                    openai=openai_errors,
+                ),
+            )
+            persisted = await _state(request).cancel_request(
+                request_id=relay_request.request_id,
+                response=timeout_response,
+                reason="timeout",
+            )
+            response = persisted or timeout_response
+        except asyncio.CancelledError:
+            span.set_attribute("relay.outcome", "caller_detached")
+            # A parked or migrated sandbox necessarily loses this TCP connection.
+            # The durable request remains claimable and the next byte-identical
+            # retry reattaches to it instead of sampling again.
+            await _state(request).mark_caller_detached(relay_request.request_id)
+            raise
+        else:
+            span.set_attribute("relay.outcome", "completed")
+        return response
 
 
 async def _notify_accepted(
@@ -2475,6 +2546,7 @@ async def _notify_accepted(
         return
     if relay_request.accepted_notified_at is not None:
         return
+
     async def notify_and_persist() -> None:
         try:
             transport_epoch = await notifier(relay_request)
@@ -2497,7 +2569,14 @@ async def _notify_accepted(
     # Checkpointing the caller can destroy this HTTP connection. Do not let
     # that cancellation interrupt the durable lifecycle transition or leave a
     # successfully parked request looking unacknowledged after restart.
-    await _finish_before_cancellation(notify_and_persist())
+    with _telemetry(request).span(
+        "relay.park_caller",
+        attributes={
+            "relay.request.id": relay_request.request_id,
+            "sandbox.id": relay_request.sandbox_id,
+        },
+    ):
+        await _finish_before_cancellation(notify_and_persist())
 
 
 async def _notify_result(
@@ -2512,26 +2591,41 @@ async def _notify_result(
         or relay_request.wake_notified_at is not None
     ):
         return
-    try:
-        wake_transport_epoch = await notifier(relay_request)
-    except Exception as exc:
-        # The result is already committed. A 503 makes the worker retry its
-        # idempotent response POST, which re-attempts only the wake notification.
-        raise web.HTTPServiceUnavailable(
-            text=f"model response committed but sandbox wake failed: {exc}",
-            headers={"Retry-After": "1"},
-        ) from exc
-    if (
-        relay_request.parked_transport_epoch is not None
-        and wake_transport_epoch is not None
-        and relay_request.parked_transport_epoch != wake_transport_epoch
+    telemetry = _telemetry(request)
+    original_request_link = telemetry.link_from_headers(relay_request.headers)
+    with telemetry.span(
+        "relay.wake_caller",
+        attributes={
+            "relay.request.id": relay_request.request_id,
+            "relay.rollout.id": relay_request.rollout_id,
+            "sandbox.id": relay_request.sandbox_id,
+        },
+        links=((original_request_link,) if original_request_link is not None else ()),
     ):
-        await _state(request).mark_transport_reset(relay_request.request_id)
-    await _state(request).mark_wake_notified(relay_request.request_id)
+        try:
+            wake_transport_epoch = await notifier(relay_request)
+        except Exception as exc:
+            # The result is already committed. A 503 makes the worker retry its
+            # idempotent response POST, which re-attempts only the wake notification.
+            raise web.HTTPServiceUnavailable(
+                text=f"model response committed but sandbox wake failed: {exc}",
+                headers={"Retry-After": "1"},
+            ) from exc
+        if (
+            relay_request.parked_transport_epoch is not None
+            and wake_transport_epoch is not None
+            and relay_request.parked_transport_epoch != wake_transport_epoch
+        ):
+            await _state(request).mark_transport_reset(relay_request.request_id)
+        await _state(request).mark_wake_notified(relay_request.request_id)
 
 
 def _state(request: web.Request) -> ModelRelayState:
     return request.app[STATE_KEY]
+
+
+def _telemetry(request: web.Request) -> Telemetry:
+    return request.app.get(TELEMETRY_KEY, _DISABLED_TELEMETRY)
 
 
 async def _json_object(request: web.Request) -> JsonObject:

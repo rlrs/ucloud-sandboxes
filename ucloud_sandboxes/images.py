@@ -26,6 +26,7 @@ from .managed_registry import (
 )
 from .models import parse_iso_datetime, utc_now
 from .sandbox import CommandExecutor, CommandResult, SubprocessExecutor
+from .telemetry import Telemetry
 
 IMAGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _UPLOADED_CONTEXT_IDENTITY_RE = re.compile(r"archive:sha256:[0-9a-f]{64}")
@@ -694,12 +695,14 @@ class ImageManager:
         build_store: ImageBuildStore | None = None,
         max_active_builds: int = 4,
         max_concurrent_pulls: int = 8,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self.store = store
         self.runtime = runtime
         self.build_store = build_store or ImageBuildStore(store.path)
         self.max_active_builds = max(1, max_active_builds)
         self.max_concurrent_pulls = max(1, max_concurrent_pulls)
+        self.telemetry = telemetry or Telemetry.disabled("image-manager")
         self._build_lock = RLock()
         self._build_conditions: dict[str, Condition] = {}
         self._active_threads: dict[str, Thread] = {}
@@ -884,6 +887,7 @@ class ImageManager:
             raise
 
         build_id = record.build_id
+        trace_context = self.telemetry.current_trace_headers()
         thread = Thread(
             target=self._run_tracked_build,
             args=(
@@ -892,6 +896,7 @@ class ImageManager:
                 push,
                 direct_push,
                 effective_cleanup,
+                trace_context,
             ),
             daemon=True,
         )
@@ -978,6 +983,39 @@ class ImageManager:
         return record, result
 
     def _run_tracked_build(
+        self,
+        build_id: str,
+        spec: ImageBuildSpec,
+        push: bool,
+        direct_push: bool,
+        cleanup: Callable[[], None] | None,
+        trace_context: dict[str, str],
+    ) -> None:
+        with self.telemetry.span(
+            "image.build.worker",
+            attributes={
+                "image.build.id": build_id,
+                "image.id": spec.id,
+                "image.build.push": push,
+                "image.build.direct_push": direct_push,
+            },
+            parent_context=self.telemetry.extracted_context(trace_context),
+        ) as span:
+            self._run_tracked_build_unobserved(
+                build_id,
+                spec,
+                push,
+                direct_push,
+                cleanup,
+            )
+            record = self.build_store.get(build_id)
+            if record is not None:
+                span.set_attribute("image.build.status", record.status)
+                span.add_event("image.build.timings", record.timings)
+                if record.status == "failed":
+                    span.status = "error"
+
+    def _run_tracked_build_unobserved(
         self,
         build_id: str,
         spec: ImageBuildSpec,

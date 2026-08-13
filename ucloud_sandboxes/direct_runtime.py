@@ -15,6 +15,7 @@ from .direct_warden import DirectRunscWarden, DirectRunscWardenConfig
 from .hibernation import HibernationRuntimeFingerprint
 from .image_rootfs import DockerOverlay2RootfsStore, OverlayRootfsManager
 from .storage_native_daemon import StorageNativeNodeClient
+from .telemetry import Telemetry
 
 
 def build_direct_runtime_service(
@@ -32,6 +33,7 @@ def build_direct_runtime_service(
     max_concurrent_restores: int = 8,
     idle_park_seconds: float = 0.0,
     storage_native_socket: Path,
+    telemetry: Telemetry | None = None,
 ) -> DirectSandboxService:
     """Assemble the one production direct-runtime owner for an entire node."""
     for label, path in (
@@ -96,7 +98,10 @@ def build_direct_runtime_service(
         if network == "sandbox"
         else None
     )
-    storage_client = StorageNativeNodeClient(storage_native_socket)
+    storage_client = StorageNativeNodeClient(
+        storage_native_socket,
+        telemetry=telemetry,
+    )
     storage_client.wait_ready()
     warden = DirectRunscWarden(
         DirectRunscWardenConfig(
@@ -110,6 +115,7 @@ def build_direct_runtime_service(
         ),
         storage=storage_client,
         rootfs_lifecycle=overlays,
+        telemetry=telemetry,
     )
     provisioner = DirectSandboxProvisioner(
         registry=DirectSandboxRegistry(state_root / "direct-registry.sqlite"),
@@ -127,6 +133,7 @@ def build_direct_runtime_service(
         provisioner,
         max_concurrent_restores=max_concurrent_restores,
         idle_park_seconds=idle_park_seconds,
+        telemetry=telemetry,
     )
 
 

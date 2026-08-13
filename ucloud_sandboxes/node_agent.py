@@ -30,6 +30,7 @@ from .http_server import (
     DEFAULT_MAX_JSON_BODY_BYTES,
     HighBacklogThreadingHTTPServer,
     RequestBodyTooLargeError,
+    traced_http_request,
 )
 from .images import (
     DockerImageRuntime,
@@ -60,6 +61,7 @@ from .storage_native_migration import (
     STORAGE_NATIVE_MIGRATION_SCHEMA,
     StorageNativeMigration,
 )
+from .telemetry import Telemetry
 
 DEFAULT_MAX_FILE_BODY_BYTES = 256 * 1024 * 1024
 DEFAULT_MAX_BUILD_CONTEXT_STORE_BYTES = 2 * 1024 * 1024 * 1024
@@ -94,6 +96,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
     max_file_body_bytes = DEFAULT_MAX_FILE_BODY_BYTES
     server_version = "ucloud-sandboxes-node-agent/0.1"
 
+    @traced_http_request
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/healthz":
@@ -260,6 +263,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
+    @traced_http_request
     def do_POST(self) -> None:
         if not self._check_node_control_authorized():
             return
@@ -391,6 +395,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             }
         )
 
+    @traced_http_request
     def do_PUT(self) -> None:
         if not self._check_node_control_authorized():
             return
@@ -458,6 +463,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
         status = (
             HTTPStatus.OK if manager_timings.get("idempotent") else HTTPStatus.CREATED
         )
+        self.telemetry.add_event(
+            "sandbox.create.timings",
+            {
+                "total_ms": _elapsed_ms(started),
+                "phases": phases,
+                "manager": manager_timings,
+            },
+        )
         self._write_json(
             {
                 "sandbox": record.to_dict(),
@@ -485,6 +498,13 @@ class NodeAgentHandler(BuildContextHttpHandler):
             self._write_exception(exc)
             return
         manager_timings = self.manager.consume_exec_start_timings()
+        self.telemetry.add_event(
+            "sandbox.exec.start.timings",
+            {
+                "start_ms": _elapsed_ms(started),
+                "manager": manager_timings,
+            },
+        )
         self._write_json(
             {
                 "session": session.to_dict(),
@@ -1069,6 +1089,14 @@ class NodeAgentHandler(BuildContextHttpHandler):
             "phases": phases,
             "build": build.timings,
         }
+        self.telemetry.add_event("image.build.timings", timings)
+        self.telemetry.set_current_attributes(
+            {
+                "image.build.id": build.build_id,
+                "image.build.status": build.status,
+                "image.build.started": build_started,
+            }
+        )
         if not wait:
             self._write_json(
                 {
@@ -1218,6 +1246,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
             return unquote(path[len(prefix) : -len(suffix)])
         return unquote(path[len(prefix) :])
 
+    @traced_http_request
     def do_DELETE(self) -> None:
         if not self._check_node_control_authorized():
             return
@@ -1319,6 +1348,7 @@ def build_builder_node_agent_server(
     max_concurrent_image_pulls: int = 8,
     physical_disk_path: Path | None = None,
     build_context_store_dir: Path | None = None,
+    telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     token = node_control_bearer_token.strip()
     if not token:
@@ -1336,12 +1366,14 @@ def build_builder_node_agent_server(
     if not resources.is_valid:
         raise ValueError("total_resources cannot contain negative or non-finite values")
 
+    resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-builder")
     runtime = BuilderNodeRuntime(NodeStateStore(state_file))
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime,
         max_active_builds=max_active_image_builds,
         max_concurrent_pulls=max_concurrent_image_pulls,
+        telemetry=resolved_telemetry,
     )
     context_store = BuildContextBlobStore(
         build_context_store_dir or image_file.parent / f"{image_file.stem}-contexts",
@@ -1376,6 +1408,7 @@ def build_builder_node_agent_server(
     BuilderHandler.runtime_metrics_provider = staticmethod(
         runtime_metrics_provider or sample_node_runtime_metrics
     )
+    BuilderHandler.telemetry = resolved_telemetry
     return HighBacklogThreadingHTTPServer((host, port), BuilderHandler)
 
 
@@ -1398,6 +1431,7 @@ def build_direct_node_agent_server(
     max_file_body_bytes: int = DEFAULT_MAX_FILE_BODY_BYTES,
     runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None] | None = None,
     max_concurrent_image_pulls: int = 8,
+    telemetry: Telemetry | None = None,
 ) -> HighBacklogThreadingHTTPServer:
     """Serve a sandbox node with direct runsc and storage-native ownership."""
     node_control_bearer_token = node_control_bearer_token.strip()
@@ -1411,6 +1445,7 @@ def build_direct_node_agent_server(
     if not configured_resources.is_valid:
         raise ValueError("total_resources cannot contain negative values")
     host_runtime_metrics = runtime_metrics_provider or sample_node_runtime_metrics
+    resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-node")
     if configured_resources.vcpu > 0 or configured_resources.memory_mb > 0:
         service.configure_active_capacity(
             configured_resources,
@@ -1418,11 +1453,12 @@ def build_direct_node_agent_server(
         )
     service.start()
     manager = DirectNodeRuntime(service)
-    exec_manager = ExecSessionManager(manager)
+    exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
     image_manager = ImageManager(
         ImageStore(image_file),
         image_runtime,
         max_concurrent_pulls=max_concurrent_image_pulls,
+        telemetry=resolved_telemetry,
     )
     build_context_store = BuildContextBlobStore(
         image_file.parent / f"{image_file.stem}-contexts",
@@ -1523,6 +1559,7 @@ def build_direct_node_agent_server(
         )
 
     DirectBoundHandler.runtime_metrics_provider = staticmethod(direct_runtime_metrics)
+    DirectBoundHandler.telemetry = resolved_telemetry
 
     class DirectServiceHTTPServer(HighBacklogThreadingHTTPServer):
         def server_close(self) -> None:

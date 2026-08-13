@@ -246,8 +246,10 @@ class BootstrapRetryTests(unittest.TestCase):
             attempt_count,
             assert_provider_fence,
             attempt_started_perf,
+            telemetry,
+            trace_context,
         ):
-            del attempt_started_perf
+            del attempt_started_perf, telemetry, trace_context
             assert_provider_fence()
             nonlocal fast_attempts
             if bootstrap_intent.job_id == "slow":

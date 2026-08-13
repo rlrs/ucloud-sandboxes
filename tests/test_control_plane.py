@@ -802,9 +802,7 @@ class ControlPlaneTests(unittest.TestCase):
                         "tty": False,
                     },
                 )
-                stored = RoutingStore(route_file).get_sandbox_readonly(
-                    route.sandbox_id
-                )
+                stored = RoutingStore(route_file).get_sandbox_readonly(route.sandbox_id)
 
         self.assertEqual(response["session"]["id"], "exec-implicit-wake")
         self.assertIsNotNone(stored)
@@ -3399,13 +3397,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(result["body"]["retryable"])
         self.assertIn("reserving sandbox placement", result["body"]["error"])
         self.assertLess(elapsed, 1)
-        self.assertTrue(
-            any(
-                item["status"] == "error"
-                and item["spans"][0]["attributes"].get("outcome") == "placement_busy"
-                for item in metrics["traces"]["recent"]
-            )
-        )
+        self.assertNotIn("traces", metrics)
+        self.assertFalse(metrics["telemetry"]["enabled"])
 
     def test_gateway_create_burst_returns_only_retryable_json(self) -> None:
         with TemporaryDirectory() as raw_dir:

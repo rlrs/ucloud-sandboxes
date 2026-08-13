@@ -307,8 +307,8 @@ DASHBOARD_HTML = """<!doctype html>
           <div class="table-wrap"><table><thead><tr><th>Status</th><th>Image</th><th>Tag</th><th>Location</th><th>Age</th><th>Details</th></tr></thead><tbody id="buildRows"><tr><td colspan="6" class="empty-cell">No builds loaded</td></tr></tbody></table></div>
         </details>
         <details class="event-panel diagnostic-disclosure trace-panel">
-          <summary><span>Traces</span><span id="traceSummary">No traces</span></summary>
-          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Status</th><th>Trace</th><th>Duration</th><th>Details</th></tr></thead><tbody id="traceRows"><tr><td colspan="5" class="empty-cell">No traces loaded</td></tr></tbody></table></div>
+          <summary><span>Telemetry export</span><span id="telemetrySummary">Disabled</span></summary>
+          <div class="table-wrap"><table><thead><tr><th>State</th><th>Queue</th><th>Accepted</th><th>Exported</th><th>Dropped / failed</th></tr></thead><tbody id="telemetryRows"><tr><td colspan="5" class="empty-cell">Telemetry is disabled</td></tr></tbody></table></div>
         </details>
       </section>
     </section>
@@ -5056,8 +5056,8 @@ document.addEventListener("DOMContentLoaded", () => {
     "registryBuildRows",
     "buildSummary",
     "buildRows",
-    "traceSummary",
-    "traceRows",
+    "telemetrySummary",
+    "telemetryRows",
     "eventSummary",
     "eventRows",
   ]) {
@@ -5451,7 +5451,7 @@ function renderSnapshot(snapshot) {
 function renderOverviewDetail(snapshot) {
   if (!snapshot || !snapshot.generated_at) return;
   renderBuilds(snapshot);
-  renderTraces(snapshot);
+  renderTelemetry(snapshot);
   renderEvents(snapshot);
   redrawCharts();
 }
@@ -6910,42 +6910,18 @@ function buildDetails(build) {
   return parts.join(", ") || "-";
 }
 
-function renderTraces(snapshot) {
-  const traces = snapshot.traces || {};
-  const items = Array.isArray(traces.recent) ? traces.recent.slice(-12).reverse() : [];
-  els.traceSummary.textContent = items.length
-    ? `${items.length} traces, ${formatInteger(traces.span_count)} spans`
-    : "No traces";
-  if (items.length === 0) {
-    els.traceRows.innerHTML = '<tr><td colspan="5" class="empty-cell">No traces loaded</td></tr>';
-    return;
-  }
-  els.traceRows.replaceChildren(...items.map(traceRow));
-}
-
-function traceRow(trace) {
+function renderTelemetry(snapshot) {
+  const telemetry = snapshot.telemetry || {};
+  els.telemetrySummary.textContent = telemetry.enabled
+    ? `${formatInteger(telemetry.exported_spans)} spans exported`
+    : "Disabled";
   const tr = document.createElement("tr");
-  appendCell(tr, formatTime(trace.started_at));
-  const statusCell = document.createElement("td");
-  const status = String(trace.status || "ok");
-  const badge = document.createElement("span");
-  badge.className = `build-status ${status === "ok" ? "succeeded" : "failed"}`;
-  badge.textContent = status;
-  statusCell.append(badge);
-  tr.append(statusCell);
-  appendCell(tr, trace.name || "-");
-  appendCell(tr, formatDurationMs(trace.duration_ms));
-  appendCell(tr, traceDetails(trace));
-  return tr;
-}
-
-function traceDetails(trace) {
-  const spans = Array.isArray(trace.spans) ? trace.spans.slice() : [];
-  spans.sort((a, b) => asNumber(b.duration_ms) - asNumber(a.duration_ms));
-  const slow = spans.slice(0, 3).map((span) => `${span.name || "span"} ${formatDurationMs(span.duration_ms)}`);
-  const attrs = (spans[0] && spans[0].attributes) || {};
-  const outcome = attrs.outcome ? `outcome ${attrs.outcome}` : "";
-  return [outcome, ...slow].filter(Boolean).join(", ") || `${formatInteger(trace.span_count)} spans`;
+  appendCell(tr, telemetry.enabled ? "Enabled" : "Disabled");
+  appendCell(tr, `${formatInteger(telemetry.queue_size)} / ${formatInteger(telemetry.queue_capacity)}`);
+  appendCell(tr, formatInteger(telemetry.accepted_spans));
+  appendCell(tr, formatInteger(telemetry.exported_spans));
+  appendCell(tr, `${formatInteger(telemetry.dropped_spans)} / ${formatInteger(telemetry.failed_exports)}`);
+  els.telemetryRows.replaceChildren(tr);
 }
 
 function eventRow(event) {

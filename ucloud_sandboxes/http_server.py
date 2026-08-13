@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from functools import wraps
 import json
 import socket
 from threading import BoundedSemaphore
-from typing import Any
+from typing import Any, Callable
+from urllib.parse import unquote, urlparse
+
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
+
+from .telemetry import Telemetry, trace_id_hex
 
 
 DEFAULT_HTTP_REQUEST_QUEUE_SIZE = 4096
@@ -21,6 +28,7 @@ class RequestBodyTooLargeError(ValueError):
 
 class JsonHttpHandler(BaseHTTPRequestHandler):
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
+    telemetry: Telemetry | None = None
 
     def _read_json_body(self) -> object:
         raw = self._read_raw_body(max_bytes=self.max_json_body_bytes).decode("utf-8")
@@ -82,8 +90,81 @@ class JsonHttpHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_response(self, code: int, message: str | None = None) -> None:
+        span = trace.get_current_span()
+        span.set_attribute("http.response.status_code", int(code))
+        if code >= 500:
+            span.set_status(Status(StatusCode.ERROR, f"HTTP {code}"))
+        super().send_response(code, message)
+
+    def end_headers(self) -> None:
+        telemetry = self.telemetry
+        if telemetry is not None:
+            for key, value in telemetry.current_trace_headers().items():
+                self.send_header(key, value)
+            current_trace_id = trace_id_hex()
+            if current_trace_id:
+                self.send_header("X-Trace-Id", current_trace_id)
+        super().end_headers()
+
     def log_message(self, _format: str, *args: object) -> None:
         del args
+
+
+def traced_http_request(
+    function: Callable[..., None],
+) -> Callable[..., None]:
+    """Wrap one HTTP handler without adding any work when telemetry is disabled."""
+
+    @wraps(function)
+    def wrapped(self: JsonHttpHandler, *args: Any, **kwargs: Any) -> None:
+        telemetry = self.telemetry
+        if telemetry is None or not telemetry.enabled:
+            return function(self, *args, **kwargs)
+        parsed = urlparse(self.path)
+        route, object_attributes = _normalized_http_route(parsed.path)
+        attributes: dict[str, Any] = {
+            "http.request.method": self.command,
+            "http.route": route,
+            "url.path": parsed.path,
+            **object_attributes,
+        }
+        content_length = self.headers.get("Content-Length")
+        if content_length and content_length.isdigit():
+            attributes["http.request.body.size"] = int(content_length)
+        parent_context = telemetry.extracted_context(dict(self.headers.items()))
+        with telemetry.span(
+            f"{self.command} {route}",
+            kind=SpanKind.SERVER,
+            attributes=attributes,
+            parent_context=parent_context,
+            metric_operation="http.server.request",
+        ):
+            return function(self, *args, **kwargs)
+
+    return wrapped
+
+
+def _normalized_http_route(path: str) -> tuple[str, dict[str, str]]:
+    parts = path.split("/")
+    attributes: dict[str, str] = {}
+    dynamic_collections = {
+        "sandboxes": "sandbox.id",
+        "exec": "exec.session.id",
+        "jobs": "sandbox.job.id",
+        "image-contexts": "image.context.digest",
+        "prepare": "capacity.prepare.id",
+        "builders": "builder.id",
+    }
+    for index in range(1, len(parts) - 1):
+        label = dynamic_collections.get(parts[index])
+        if label is None or not parts[index + 1]:
+            continue
+        raw = unquote(parts[index + 1])
+        attributes[label] = raw[:256]
+        placeholder = label.replace(".", "_")
+        parts[index + 1] = "{" + placeholder + "}"
+    return "/".join(parts), attributes
 
 
 def _http_overload_response() -> bytes:

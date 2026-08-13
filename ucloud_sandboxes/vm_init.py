@@ -124,6 +124,14 @@ class VmInitOptions:
     node_agent_host: str = DEFAULT_NODE_AGENT_HOST
     node_agent_port: int = DEFAULT_NODE_AGENT_PORT
     deployment_id: str = ""
+    telemetry_otlp_endpoint: str = ""
+    telemetry_cloud_provider: str = ""
+    telemetry_cloud_machine_type: str = ""
+    telemetry_trace_sample_ratio: float = 0.1
+    telemetry_export_interval_ms: int = 5_000
+    telemetry_export_timeout_ms: int = 3_000
+    telemetry_max_queue_size: int = 4_096
+    telemetry_max_export_batch_size: int = 512
     ssh_port_start: int = DEFAULT_SSH_PORT_START
     ssh_port_end: int = DEFAULT_SSH_PORT_END
     total_resources: ResourceQuantity = ResourceQuantity()
@@ -202,9 +210,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         options.package_spec,
         role=options.role,
     )
-    cached_agent_runtime_dir = str(
-        PurePosixPath(package_cache_dir) / "agent-runtime"
-    )
+    cached_agent_runtime_dir = str(PurePosixPath(package_cache_dir) / "agent-runtime")
     direct_runsc = DEFAULT_DIRECT_RUNSC
     storage_native_backend = DEFAULT_STORAGE_NATIVE_BACKEND
     storage_native_backend_socket = DEFAULT_STORAGE_NATIVE_BACKEND_SOCKET
@@ -212,9 +218,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     storage_native_root = DEFAULT_STORAGE_NATIVE_ROOT
     storage_native_cache_root = DEFAULT_STORAGE_NATIVE_CACHE_ROOT
     storage_native_backend_config = DEFAULT_STORAGE_NATIVE_BACKEND_CONFIG
-    storage_native_resize_backend_config = (
-        DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
-    )
+    storage_native_resize_backend_config = DEFAULT_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG
     env_file = "/etc/ucloud-sandboxes/node.env"
     node_service = "/etc/systemd/system/ucloud-sandbox-node.service"
     storage_backend_service = (
@@ -256,6 +260,17 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         " --snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}"
         " --snapshot-registry-url ${UCLOUD_STORAGE_NATIVE_REGISTRY_URL}"
         " --snapshot-repository ${UCLOUD_STORAGE_NATIVE_REPOSITORY}"
+    )
+    telemetry_args = (
+        " --telemetry-otlp-endpoint ${UCLOUD_TELEMETRY_OTLP_ENDPOINT}"
+        " --telemetry-cloud-provider ${UCLOUD_TELEMETRY_CLOUD_PROVIDER}"
+        " --telemetry-cloud-machine-type ${UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE}"
+        " --telemetry-trace-sample-ratio ${UCLOUD_TELEMETRY_TRACE_SAMPLE_RATIO}"
+        " --telemetry-export-interval-ms ${UCLOUD_TELEMETRY_EXPORT_INTERVAL_MS}"
+        " --telemetry-export-timeout-ms ${UCLOUD_TELEMETRY_EXPORT_TIMEOUT_MS}"
+        " --telemetry-max-queue-size ${UCLOUD_TELEMETRY_MAX_QUEUE_SIZE}"
+        " --telemetry-max-export-batch-size "
+        "${UCLOUD_TELEMETRY_MAX_EXPORT_BATCH_SIZE}"
     )
     if options.storage_native_snapshot_backend == "s3":
         storage_publication_args += (
@@ -309,6 +324,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
             f"{node_control_auth_flag}"
+            f"{telemetry_args}"
         )
         node_service_user = "root"
         node_service_group = "root"
@@ -338,6 +354,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --total-disk-mb ${UCLOUD_TOTAL_DISK_MB}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
             f"{builder_flags}{node_control_auth_flag}"
+            f"{telemetry_args}"
         )
         node_service_user = "$UCLOUD_SERVICE_USER"
         node_service_group = "$UCLOUD_SERVICE_GROUP"
@@ -382,6 +399,14 @@ UCLOUD_NODE_AGENT_PORT={options.node_agent_port}
 UCLOUD_NODE_URL={shlex.quote(options.advertised_node_url())}
 UCLOUD_AGENT_VERSION={shlex.quote(package_version())}
 UCLOUD_DEPLOYMENT_ID={shlex.quote(options.deployment_id)}
+UCLOUD_TELEMETRY_OTLP_ENDPOINT={shlex.quote(options.telemetry_otlp_endpoint)}
+UCLOUD_TELEMETRY_CLOUD_PROVIDER={shlex.quote(options.telemetry_cloud_provider)}
+UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE={shlex.quote(options.telemetry_cloud_machine_type)}
+UCLOUD_TELEMETRY_TRACE_SAMPLE_RATIO={options.telemetry_trace_sample_ratio}
+UCLOUD_TELEMETRY_EXPORT_INTERVAL_MS={options.telemetry_export_interval_ms}
+UCLOUD_TELEMETRY_EXPORT_TIMEOUT_MS={options.telemetry_export_timeout_ms}
+UCLOUD_TELEMETRY_MAX_QUEUE_SIZE={options.telemetry_max_queue_size}
+UCLOUD_TELEMETRY_MAX_EXPORT_BATCH_SIZE={options.telemetry_max_export_batch_size}
 UCLOUD_INIT_VERSION={shlex.quote(DEFAULT_INIT_VERSION)}
 UCLOUD_SSH_PORT_START={options.ssh_port_start}
 UCLOUD_SSH_PORT_END={options.ssh_port_end}
@@ -1294,6 +1319,14 @@ UCLOUD_NODE_URL=$UCLOUD_NODE_URL
 UCLOUD_AGENT_VERSION=$UCLOUD_AGENT_VERSION
 UCLOUD_DEPLOYMENT_ID=$UCLOUD_DEPLOYMENT_ID
 UCLOUD_INIT_VERSION=$UCLOUD_INIT_VERSION
+UCLOUD_TELEMETRY_OTLP_ENDPOINT=$UCLOUD_TELEMETRY_OTLP_ENDPOINT
+UCLOUD_TELEMETRY_CLOUD_PROVIDER=$UCLOUD_TELEMETRY_CLOUD_PROVIDER
+UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE=$UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE
+UCLOUD_TELEMETRY_TRACE_SAMPLE_RATIO=$UCLOUD_TELEMETRY_TRACE_SAMPLE_RATIO
+UCLOUD_TELEMETRY_EXPORT_INTERVAL_MS=$UCLOUD_TELEMETRY_EXPORT_INTERVAL_MS
+UCLOUD_TELEMETRY_EXPORT_TIMEOUT_MS=$UCLOUD_TELEMETRY_EXPORT_TIMEOUT_MS
+UCLOUD_TELEMETRY_MAX_QUEUE_SIZE=$UCLOUD_TELEMETRY_MAX_QUEUE_SIZE
+UCLOUD_TELEMETRY_MAX_EXPORT_BATCH_SIZE=$UCLOUD_TELEMETRY_MAX_EXPORT_BATCH_SIZE
 UCLOUD_SSH_PORT_START=$UCLOUD_SSH_PORT_START
 UCLOUD_SSH_PORT_END=$UCLOUD_SSH_PORT_END
 UCLOUD_TOTAL_VCPU=$UCLOUD_TOTAL_VCPU
@@ -1352,7 +1385,7 @@ Group=root
 RuntimeDirectory=ucloud-sandboxes/storage-native
 RuntimeDirectoryMode=0700
 ExecStartPre=/usr/sbin/modprobe ublk_drv
-ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --resize-global-config ${{UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG}} --metrics-listen-addr "" --enable-pool --pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --pool-startup-prewarm true
+ExecStart=${{UCLOUD_STORAGE_NATIVE_BACKEND}} --socket-path ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --resize-global-config ${{UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG}} --metrics-listen-addr "127.0.0.1:9103" --enable-pool --pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --pool-startup-prewarm true
 Restart=always
 RestartSec=2
 
@@ -1373,7 +1406,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
 Restart=always
 RestartSec=2
 
@@ -1511,9 +1544,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         if options.storage_native_snapshot_backend not in {"registry", "s3"}:
             raise ValueError("storage-native snapshot backend must be registry or s3")
         if options.storage_native_snapshot_backend == "s3":
-            if not re.fullmatch(
-                r"https?://[^\s]+", options.storage_native_s3_endpoint
-            ):
+            if not re.fullmatch(r"https?://[^\s]+", options.storage_native_s3_endpoint):
                 raise ValueError("storage-native S3 endpoint must be HTTP(S)")
             if (
                 not options.storage_native_s3_bucket
@@ -1521,7 +1552,9 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
                 or not options.storage_native_s3_region
                 or not options.storage_native_s3_prefix.strip("/")
             ):
-                raise ValueError("storage-native S3 bucket, region, and prefix are required")
+                raise ValueError(
+                    "storage-native S3 bucket, region, and prefix are required"
+                )
             if (
                 not options.storage_native_s3_access_key_id
                 or not options.storage_native_s3_secret_access_key
@@ -1801,9 +1834,7 @@ def remote_package_spec_for_local_path(
     digest = package_sha256 or local_package_sha256(local_path)
     if not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ValueError("package sha256 must be a lowercase SHA-256 digest.")
-    return str(
-        PurePosixPath(remote_dir) / digest / DEFAULT_REMOTE_PACKAGE_FILENAME
-    )
+    return str(PurePosixPath(remote_dir) / digest / DEFAULT_REMOTE_PACKAGE_FILENAME)
 
 
 def static_runtime_receipt_for_remote_package(
@@ -1818,8 +1849,7 @@ def static_runtime_receipt_for_remote_package(
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", init_version):
         raise ValueError("init version is unsafe for a runtime receipt path")
     return str(
-        PurePosixPath(remote_path).parent
-        / f"runtime-ready-v{init_version}-{role}"
+        PurePosixPath(remote_path).parent / f"runtime-ready-v{init_version}-{role}"
     )
 
 
@@ -1915,7 +1945,7 @@ def stage_vm_init_package_over_ssh(
         )
     remote_command = (
         'if [ "$(id -u)" -eq 0 ]; then STAGE_SUDO=""; '
-        'else STAGE_SUDO=sudo; fi; '
+        "else STAGE_SUDO=sudo; fi; "
         f"$STAGE_SUDO install -d -m 0755 -o root -g root {quoted_parent} && "
         f"$STAGE_SUDO rm -f {quoted_temporary} {quoted_marker_temporary} && "
         f"$STAGE_SUDO tee {quoted_temporary} >/dev/null && "

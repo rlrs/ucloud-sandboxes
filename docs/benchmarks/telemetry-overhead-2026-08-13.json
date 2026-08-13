@@ -1,0 +1,40 @@
+{
+  "schema": "ucloud-telemetry-overhead-v1",
+  "measured_at": "2026-08-13",
+  "environment": {
+    "os": "Darwin 25.5.0 arm64",
+    "python": "3.10.13"
+  },
+  "workload": {
+    "iterations": 100000,
+    "attributes_per_operation": 1,
+    "sample_ratio": 0.1,
+    "exporter": "in-process nonblocking sink",
+    "queue_capacity": 4096,
+    "batch_size": 512
+  },
+  "results": {
+    "disabled_total_seconds": 0.453594,
+    "disabled_microseconds_per_explicit_span": 4.536,
+    "sampled_total_seconds": 0.982069,
+    "sampled_microseconds_per_operation": 9.821,
+    "sampled_spans_accepted": 9966,
+    "sampled_spans_dropped": 0
+  },
+  "thread_cpu_follow_up": {
+    "iterations_per_run": 100000,
+    "runs_per_variant": 7,
+    "sample_ratio": 0.1,
+    "control_median_microseconds_per_operation": 12.596,
+    "thread_cpu_median_microseconds_per_operation": 13.731,
+    "incremental_microseconds_per_operation": 1.136,
+    "incremental_percent_of_instrumentation": 9.02,
+    "minimum_span_duration_for_attribute_ms": 1,
+    "qualification": "The empty synthetic spans skip CPU attribute storage, so the measured increment isolates the two sampled thread-clock reads. The relative percentage is exaggerated by the intentionally empty operation; the absolute increment is the relevant guardrail."
+  },
+  "qualifications": [
+    "This is an instrumentation microbenchmark, not a sandbox latency benchmark.",
+    "Disabled HTTP handlers bypass span construction and pay only the enabled check.",
+    "A separate unit test freezes the exporter, saturates the queue, and proves callers do not wait for export."
+  ]
+}

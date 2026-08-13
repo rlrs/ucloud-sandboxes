@@ -59,7 +59,7 @@ the transition is in progress.
 
 ## Configuration and credentials
 
-Deployment schema 4 keeps snapshot authority and OCI registry storage as
+Deployment schema 5 keeps snapshot authority and OCI registry storage as
 independent deployment choices. S3 credentials are referenced by
 environment-variable name and are never serialized into `deployment.json`:
 
@@ -112,10 +112,11 @@ publisher and AgentEnv. Static Hetzner S3 keys are re-read for every
 publication and every new AgentEnv credential resolution; rotating a key
 requires replacing the worker credential file or reprovisioning the worker.
 
-For migration, schema-1 and schema-2 deployments load as schema 4 with
-`snapshot_store.kind=registry`; schema-1 through schema-3 registry paths become
-`registry_store.kind=filesystem`. Loading a newer binary therefore never moves
-bytes. `ucloud-sandboxes-registry-migrate` dry-runs and verifies an explicit,
+Older deployment schemas are intentionally rejected. Before deploying schema 5,
+construct a complete current document and map the old registry paths explicitly
+to `registry_store.kind=filesystem`; keep `snapshot_store.kind=registry` until
+the backend transition is ready. Loading configuration never moves bytes.
+`ucloud-sandboxes-registry-migrate` dry-runs and verifies an explicit,
 stopped-registry filesystem-to-S3 copy before the configuration is switched.
 Changing either production backend remains a separate rollout after its
 bucket, key policy, lifecycle policy, and performance gate pass.
@@ -235,7 +236,7 @@ counter, and completed without a lifecycle retry.
    multipart-abort lifecycle rule.
 2. Run publication, cold/warm wake, concurrency, and fault qualification on a
    disposable worker.
-3. Deploy schema 4 and the reference-based GC timer.
+3. Deploy schema 5 and the reference-based GC timer.
 4. Change the primary backend to `s3`. Keep the old Registry during
    the rollback window; old descriptors remain readable.
 5. Observe publication latency, first-command wake latency, S3 retries, cache

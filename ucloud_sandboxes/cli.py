@@ -17,6 +17,8 @@ from urllib.parse import quote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from uuid import uuid4
 
+from opentelemetry.propagate import inject
+
 from .agent import (
     build_heartbeat,
     default_node_id,
@@ -158,6 +160,7 @@ from .routing import (
     is_worker_detachable_parked_route,
     sandbox_demand_from_routing_state,
 )
+from .telemetry import Telemetry, TelemetrySettings
 from .providers.ucloud.api import (
     SessionStore,
     UCloudClient,
@@ -193,6 +196,7 @@ from .providers.ucloud.payloads import (
 
 
 _MAX_CONTROL_RESPONSE_BYTES = 1024 * 1024
+_DISABLED_AUTOSCALER_TELEMETRY = Telemetry.disabled("autoscaler")
 
 
 def ucloud_settings(
@@ -419,6 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
     )
+    add_telemetry_args(direct_node_agent)
     direct_node_agent.set_defaults(func=cmd_serve_direct_node_agent)
 
     builder_agent = subparsers.add_parser(
@@ -447,6 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     builder_agent.add_argument(
         "--node-control-bearer-token-file", type=Path, required=True
     )
+    add_telemetry_args(builder_agent)
     builder_agent.set_defaults(func=cmd_serve_builder_agent)
 
     model_relay = subparsers.add_parser(
@@ -824,6 +830,17 @@ def add_resource_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_telemetry_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--telemetry-otlp-endpoint", default="")
+    parser.add_argument("--telemetry-cloud-provider", default="")
+    parser.add_argument("--telemetry-cloud-machine-type", default="")
+    parser.add_argument("--telemetry-trace-sample-ratio", type=float, default=0.1)
+    parser.add_argument("--telemetry-export-interval-ms", type=int, default=5_000)
+    parser.add_argument("--telemetry-export-timeout-ms", type=int, default=3_000)
+    parser.add_argument("--telemetry-max-queue-size", type=int, default=4_096)
+    parser.add_argument("--telemetry-max-export-batch-size", type=int, default=512)
+
+
 def load_config(args: argparse.Namespace) -> DeploymentConfig:
     config = DeploymentConfig.from_file(args.config)
     session_file = getattr(args, "session_file", None)
@@ -832,6 +849,55 @@ def load_config(args: argparse.Namespace) -> DeploymentConfig:
     return replace(
         config,
         provider=config.provider.with_setting("session_file", str(session_file)),
+    )
+
+
+def telemetry_from_config(
+    config: DeploymentConfig,
+    service_name: str,
+    *,
+    attributes: dict[str, str | int | float | bool] | None = None,
+) -> Telemetry:
+    resource_attributes: dict[str, str | int | float | bool] = {
+        "cloud.provider": config.provider.kind,
+        **dict(attributes or {}),
+    }
+    return Telemetry.create(
+        config.telemetry,
+        service_name=service_name,
+        service_version=package_version(),
+        deployment_id=config.deployment_id,
+        attributes=resource_attributes,
+    )
+
+
+def telemetry_from_args(
+    args: argparse.Namespace,
+    service_name: str,
+    *,
+    deployment_id: str,
+    attributes: dict[str, str | int | float | bool] | None = None,
+) -> Telemetry:
+    resource_attributes: dict[str, str | int | float | bool] = {
+        **dict(attributes or {}),
+    }
+    if args.telemetry_cloud_provider:
+        resource_attributes["cloud.provider"] = args.telemetry_cloud_provider
+    if args.telemetry_cloud_machine_type:
+        resource_attributes["cloud.machine.type"] = args.telemetry_cloud_machine_type
+    return Telemetry.create(
+        TelemetrySettings(
+            endpoint=args.telemetry_otlp_endpoint,
+            trace_sample_ratio=args.telemetry_trace_sample_ratio,
+            export_interval_ms=args.telemetry_export_interval_ms,
+            export_timeout_ms=args.telemetry_export_timeout_ms,
+            max_queue_size=args.telemetry_max_queue_size,
+            max_export_batch_size=args.telemetry_max_export_batch_size,
+        ),
+        service_name=service_name,
+        service_version=package_version(),
+        deployment_id=deployment_id,
+        attributes=resource_attributes,
     )
 
 
@@ -928,6 +994,7 @@ def cmd_agent_heartbeat(args: argparse.Namespace) -> int:
 
 def cmd_serve_control_plane(args: argparse.Namespace) -> int:
     config = load_config(args)
+    telemetry = telemetry_from_config(config, "ucloud-sandboxes-gateway")
     server = build_server(
         args.host,
         config.gateway_port,
@@ -955,6 +1022,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
         max_http_request_threads=config.gateway_max_http_request_threads,
         max_sandbox_resources=config.sandbox.resources,
+        telemetry=telemetry,
     )
     host, port = server.server_address
     print(f"Serving gateway on http://{host}:{port}")
@@ -964,6 +1032,7 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         print("Stopping gateway.")
     finally:
         server.server_close()
+        telemetry.shutdown()
     return 0
 
 
@@ -973,13 +1042,20 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
+    node_id = args.node_id or default_node_id(job_id)
+    telemetry = telemetry_from_args(
+        args,
+        "ucloud-sandboxes-builder",
+        deployment_id=args.deployment_id,
+        attributes={"service.instance.id": node_id, "cloud.instance.id": job_id},
+    )
     server = build_builder_node_agent_server(
         args.host,
         args.port,
         state_file=args.state_file.absolute(),
         image_file=args.image_file.absolute(),
         job_id=job_id,
-        node_id=args.node_id or default_node_id(job_id),
+        node_id=node_id,
         node_url=args.node_url,
         agent_version=args.agent_version,
         deployment_id=args.deployment_id,
@@ -997,6 +1073,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
             args.node_control_bearer_token_file,
             "node control bearer token",
         ),
+        telemetry=telemetry,
     )
     host, port = server.server_address
     print(f"Serving builder node agent on http://{host}:{port}")
@@ -1006,6 +1083,7 @@ def cmd_serve_builder_agent(args: argparse.Namespace) -> int:
         print("Stopping builder node agent.")
     finally:
         server.server_close()
+        telemetry.shutdown()
     return 0
 
 
@@ -1016,6 +1094,13 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     job_id = args.job_id or detect_job_id()
     if not job_id:
         raise ValueError("job id is required via --job-id or UCLOUD_JOB_ID.")
+    node_id = args.node_id or default_node_id(job_id)
+    telemetry = telemetry_from_args(
+        args,
+        "ucloud-sandboxes-worker",
+        deployment_id=args.deployment_id,
+        attributes={"service.instance.id": node_id, "cloud.instance.id": job_id},
+    )
     state_root = args.state_root
     image_file = args.image_file
     service = build_direct_runtime_service(
@@ -1036,6 +1121,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         max_concurrent_restores=args.max_concurrent_restores,
         idle_park_seconds=float(args.idle_park_seconds),
         storage_native_socket=args.storage_native_socket.absolute(),
+        telemetry=telemetry,
     )
     server = build_direct_node_agent_server(
         args.host,
@@ -1043,7 +1129,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
         service=service,
         image_file=image_file,
         job_id=job_id,
-        node_id=args.node_id or default_node_id(job_id),
+        node_id=node_id,
         node_url=args.node_url,
         agent_version=args.agent_version,
         deployment_id=args.deployment_id,
@@ -1058,6 +1144,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
             args.node_control_bearer_token_file,
             "node control bearer token",
         ),
+        telemetry=telemetry,
     )
     host, port = server.server_address
     print(f"Serving direct-runsc node agent on http://{host}:{port}")
@@ -1078,6 +1165,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     finally:
         server.server_close()
         service.stop()
+        telemetry.shutdown()
     return 0
 
 
@@ -1085,6 +1173,7 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
     from aiohttp import web
 
     config = load_config(args)
+    telemetry = telemetry_from_config(config, "ucloud-sandboxes-model-relay")
     gateway_url = f"http://127.0.0.1:{config.gateway_port}"
     gateway_token = read_required_token_file(
         config.gateway_token_file(), "gateway bearer token"
@@ -1128,7 +1217,13 @@ def cmd_serve_model_relay(args: argparse.Namespace) -> int:
         state_path=config.relay_state_file(),
         accepted_notifier=accepted_notifier,
         result_notifier=result_notifier,
+        telemetry=telemetry,
     )
+
+    async def shutdown_telemetry(_app: object) -> None:
+        await asyncio.to_thread(telemetry.shutdown)
+
+    app.on_cleanup.append(shutdown_telemetry)
     print(f"Serving model relay on http://{args.host}:{config.relay_port}")
     web.run_app(app, host=args.host, port=config.relay_port, print=None)
     return 0
@@ -1160,6 +1255,7 @@ def _post_bounded_json(
         if not bearer_token:
             raise ValueError(empty_token_error)
         headers["Authorization"] = f"Bearer {bearer_token}"
+    inject(headers)
     req = Request(
         f"{base_url}{path}",
         data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
@@ -1976,6 +2072,7 @@ def reject_mutating_jobs_fixture(
 
 def cmd_autoscaler(args: argparse.Namespace) -> int:
     config = load_config(args)
+    telemetry = telemetry_from_config(config, "ucloud-sandboxes-autoscaler")
     provider = compute_provider_from_args(args, config)
     if not provider.scope_id:
         raise ValueError("provider.scope_id is required")
@@ -1999,6 +2096,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
         _VmBootstrapCoordinator(
             max(1, config.autoscaler_max_init_per_cycle),
             metrics_store,
+            telemetry=telemetry,
         )
         if (args.execute and not args.once and config.autoscaler_max_init_per_cycle > 0)
         else None
@@ -2040,27 +2138,46 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
             prepared_builder_count = sum(
                 item.count for item in prepared_builder_snapshot
             )
-            result = run_reconcile_cycle(
-                config,
-                args,
-                provider=provider,
-                demand=demand,
-                pending_image_builds=pending_image_builds,
-                prepared_builder_count=prepared_builder_count,
-                metrics_store=metrics_store,
-                provider_state=provider_state,
-                provider_mutations_allowed=controller_active,
-                route_reservations=route_reservations,
-                sandbox_routes=tuple(routing_state.sandboxes.values()),
-                program_requests=tuple(program_request_snapshot),
-                pending_wake_sandbox_ids={
-                    item.sandbox_id.removeprefix("__wake__:")
-                    for item in pending_snapshot
-                    if item.sandbox_id.startswith("__wake__:")
+            with telemetry.span(
+                "autoscaler.reconcile",
+                attributes={
+                    "autoscaler.cycle": cycle,
+                    "autoscaler.controller_active": controller_active,
+                    "autoscaler.execute": execution_requested,
+                    "autoscaler.pending_sandboxes": len(pending_snapshot),
+                    "autoscaler.pending_image_builds": pending_image_builds,
                 },
-                bootstrap_coordinator=bootstrap_coordinator,
-                provider_fence=assert_process_fence,
-            )
+            ) as reconcile_span:
+                result = run_reconcile_cycle(
+                    config,
+                    args,
+                    provider=provider,
+                    demand=demand,
+                    pending_image_builds=pending_image_builds,
+                    prepared_builder_count=prepared_builder_count,
+                    metrics_store=metrics_store,
+                    provider_state=provider_state,
+                    provider_mutations_allowed=controller_active,
+                    route_reservations=route_reservations,
+                    sandbox_routes=tuple(routing_state.sandboxes.values()),
+                    program_requests=tuple(program_request_snapshot),
+                    pending_wake_sandbox_ids={
+                        item.sandbox_id.removeprefix("__wake__:")
+                        for item in pending_snapshot
+                        if item.sandbox_id.startswith("__wake__:")
+                    },
+                    bootstrap_coordinator=bootstrap_coordinator,
+                    provider_fence=assert_process_fence,
+                    telemetry=telemetry,
+                )
+                reconcile_span.set_attributes(
+                    {
+                        "autoscaler.create_count": len(
+                            result.get("submittedJobIds", [])
+                        ),
+                        "autoscaler.stop_count": len(result.get("stopJobIds", [])),
+                    }
+                )
             removed_routes = []
             consumed_pending_demand = []
             consumed_pending_image_builds = []
@@ -2223,6 +2340,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
             bootstrap_coordinator.shutdown(wait=True)
         if process_lock is not None:
             process_lock.release()
+        telemetry.shutdown()
 
 
 def _post_node_drain(
@@ -2375,7 +2493,9 @@ def apply_prepared_provider_operations(
     source: str,
     allowed_kinds: set[str],
     allowed_stop_operation_ids: set[str] | None = None,
+    telemetry: Telemetry | None = None,
 ) -> list[ProviderOperationOutcome]:
+    telemetry = telemetry or _DISABLED_AUTOSCALER_TELEMETRY
     results: list[ProviderOperationOutcome] = []
     prepared_operations = provider_state.list_operations(states={"prepared"})
     # Release a destructively power-cycled VM before submitting its replacement
@@ -2404,10 +2524,20 @@ def apply_prepared_provider_operations(
             continue
         submitting = provider_state.begin_provider_call(prepared.operation_id)
         try:
-            if submitting.kind == "create":
-                outcome = provider.create(submitting.request)
-            else:
-                outcome = provider.terminate(submitting.target_job_ids)
+            with telemetry.span(
+                f"provider.{submitting.kind}",
+                attributes={
+                    "provider.operation.id": submitting.operation_id,
+                    "provider.operation.kind": submitting.kind,
+                    "provider.role": submitting.role,
+                    "provider.target_count": len(submitting.target_job_ids),
+                },
+            ) as provider_span:
+                if submitting.kind == "create":
+                    outcome = provider.create(submitting.request)
+                else:
+                    outcome = provider.terminate(submitting.target_job_ids)
+                provider_span.set_attribute("provider.outcome", outcome.status)
         except Exception as exc:
             # Unknown adapter failures cannot prove whether the provider applied
             # the request. Adapters should normally return an uncertain result.
@@ -2503,6 +2633,7 @@ def run_reconcile_cycle(
     pending_wake_sandbox_ids: set[str] | None = None,
     bootstrap_coordinator: _VmBootstrapCoordinator | None = None,
     provider_fence: Callable[[], None] | None = None,
+    telemetry: Telemetry | None = None,
 ) -> dict[str, Any]:
     execution_requested = bool(args.execute)
     if (
@@ -2526,7 +2657,8 @@ def run_reconcile_cycle(
             provider_fence()
 
     provider = provider or compute_provider_from_args(args, config)
-    jobs = load_instances_for_plan(config, provider, args)
+    telemetry = telemetry or _DISABLED_AUTOSCALER_TELEMETRY
+    jobs = load_instances_for_plan(config, provider, args, telemetry=telemetry)
     operation_deployment_id = config.deployment_id or provider.scope_id
     provider_operation_results: list[ProviderOperationOutcome] = []
     create_visibility_guards: list[dict[str, Any]] = []
@@ -2547,6 +2679,7 @@ def run_reconcile_cycle(
             source="prepared-replay",
             allowed_kinds=allowed_kinds,
             allowed_stop_operation_ids=set(),
+            telemetry=telemetry,
         )
         provider_operation_results.extend(replay_results)
         for operation in provider_state.list_operations(
@@ -2715,7 +2848,7 @@ def run_reconcile_cycle(
     if metrics_store is not None:
         pressure_events = metrics_store.load_events(
             max_events=10_000,
-            kinds=("node_heartbeat", "trace_span"),
+            kinds=("node_heartbeat", "sandbox_create_busy"),
             since_seconds=max(
                 effective_policy.live_pressure_window_seconds,
                 effective_policy.create_pressure_window_seconds,
@@ -3466,6 +3599,7 @@ def run_reconcile_cycle(
             allowed_stop_operation_ids={
                 operation.operation_id for operation in journaled_stop_operations
             },
+            telemetry=telemetry,
         )
         provider_operation_results.extend(planned_results)
         # An already-applied stop can be encountered again before the next job
@@ -3606,6 +3740,8 @@ def run_reconcile_cycle(
                             attempt_count=attempt_count,
                             assert_provider_fence=assert_provider_fence,
                             attempt_started_perf=started_perf,
+                            telemetry=telemetry,
+                            trace_context=telemetry.current_trace_headers(),
                         )
                     except Exception as exc:
                         future = Future()
@@ -3766,11 +3902,18 @@ class _InFlightVmBootstrap:
 class _VmBootstrapCoordinator:
     """Run VM init attempts across reconcile cycles without worker state writes."""
 
-    def __init__(self, max_workers: int, metrics_store: MetricsStore | None) -> None:
+    def __init__(
+        self,
+        max_workers: int,
+        metrics_store: MetricsStore | None,
+        *,
+        telemetry: Telemetry | None = None,
+    ) -> None:
         if max_workers < 1:
             raise ValueError("VM bootstrap concurrency must be positive")
         self.max_workers = max_workers
         self.metrics_store = metrics_store
+        self.telemetry = telemetry or _DISABLED_AUTOSCALER_TELEMETRY
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="vm-bootstrap",
@@ -3812,6 +3955,7 @@ class _VmBootstrapCoordinator:
             record.attempts if record is not None else intent.previous_attempts + 1
         )
         try:
+            trace_context = self.telemetry.current_trace_headers()
             future = self._executor.submit(
                 _execute_vm_bootstrap_attempt,
                 intent,
@@ -3819,6 +3963,8 @@ class _VmBootstrapCoordinator:
                 attempt_count=attempt_count,
                 assert_provider_fence=assert_provider_fence,
                 attempt_started_perf=started_perf,
+                telemetry=self.telemetry,
+                trace_context=trace_context,
             )
             future.add_done_callback(lambda _future: self._activity.set())
         except Exception as exc:
@@ -3929,6 +4075,48 @@ class _VmBootstrapCoordinator:
 
 
 def _execute_vm_bootstrap_attempt(
+    intent: VmBootstrapIntent,
+    config: DeploymentConfig,
+    *,
+    attempt_count: int,
+    assert_provider_fence: Callable[[], None],
+    attempt_started_perf: float,
+    telemetry: Telemetry | None = None,
+    trace_context: dict[str, str] | None = None,
+) -> _VmBootstrapAttemptResult:
+    telemetry = telemetry or _DISABLED_AUTOSCALER_TELEMETRY
+    with telemetry.span(
+        "vm.bootstrap",
+        attributes={
+            "cloud.instance.id": intent.job_id,
+            "service.instance.id": intent.node_id,
+            "vm.role": intent.role,
+            "vm.bootstrap.attempt": attempt_count,
+        },
+        parent_context=telemetry.extracted_context(trace_context or {}),
+    ) as span:
+        result = _execute_vm_bootstrap_attempt_unobserved(
+            intent,
+            config,
+            attempt_count=attempt_count,
+            assert_provider_fence=assert_provider_fence,
+            attempt_started_perf=attempt_started_perf,
+        )
+        span.set_attribute("vm.bootstrap.status", result.status)
+        if result.status != "succeeded":
+            span.status = "error"
+            if result.error:
+                span.set_attribute("error.message", result.error)
+        if result.stage_duration_ms is not None:
+            span.set_attribute(
+                "vm.bootstrap.stage_duration_ms", result.stage_duration_ms
+            )
+        if result.run_duration_ms is not None:
+            span.set_attribute("vm.bootstrap.run_duration_ms", result.run_duration_ms)
+        return result
+
+
+def _execute_vm_bootstrap_attempt_unobserved(
     intent: VmBootstrapIntent,
     config: DeploymentConfig,
     *,
@@ -4182,6 +4370,8 @@ def load_instances_for_plan(
     config: DeploymentConfig,
     provider: ComputeProvider,
     args: argparse.Namespace,
+    *,
+    telemetry: Telemetry | None = None,
 ) -> list[ProviderInstance]:
     if args.jobs_file:
         payload = json.loads(args.jobs_file.read_text(encoding="utf-8"))
@@ -4196,7 +4386,11 @@ def load_instances_for_plan(
             if isinstance(item, dict)
         ]
     else:
-        instances = provider.list_instances()
+        with (telemetry or _DISABLED_AUTOSCALER_TELEMETRY).span(
+            "provider.list_instances"
+        ) as span:
+            instances = provider.list_instances()
+            span.set_attribute("provider.instance_count", len(instances))
 
     include_ids = {str(job_id) for job_id in args.include_job}
     jobs: list[ProviderInstance] = []
@@ -5160,6 +5354,14 @@ def vm_init_options_for_job(
         node_agent_host="0.0.0.0",
         node_agent_port=8090,
         deployment_id=config.deployment_id,
+        telemetry_otlp_endpoint=config.telemetry.endpoint,
+        telemetry_cloud_provider=config.provider.kind,
+        telemetry_cloud_machine_type=job.product_id,
+        telemetry_trace_sample_ratio=config.telemetry.trace_sample_ratio,
+        telemetry_export_interval_ms=config.telemetry.export_interval_ms,
+        telemetry_export_timeout_ms=config.telemetry.export_timeout_ms,
+        telemetry_max_queue_size=config.telemetry.max_queue_size,
+        telemetry_max_export_batch_size=config.telemetry.max_export_batch_size,
         ssh_port_start=22000,
         ssh_port_end=22999,
         total_resources=resources,
@@ -5191,15 +5393,9 @@ def vm_init_options_for_job(
         storage_native_s3_endpoint=(
             snapshot_store.endpoint if role == "sandbox" else ""
         ),
-        storage_native_s3_bucket=(
-            snapshot_store.bucket if role == "sandbox" else ""
-        ),
-        storage_native_s3_region=(
-            snapshot_store.region if role == "sandbox" else ""
-        ),
-        storage_native_s3_prefix=(
-            snapshot_store.prefix if role == "sandbox" else ""
-        ),
+        storage_native_s3_bucket=(snapshot_store.bucket if role == "sandbox" else ""),
+        storage_native_s3_region=(snapshot_store.region if role == "sandbox" else ""),
+        storage_native_s3_prefix=(snapshot_store.prefix if role == "sandbox" else ""),
         storage_native_s3_access_key_id=s3_access_key_id,
         storage_native_s3_secret_access_key=s3_secret_access_key,
         storage_native_s3_security_token=s3_security_token,
@@ -5238,6 +5434,14 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "nodeAgentPort": options.node_agent_port,
         "nodeUrl": options.advertised_node_url(),
         "deploymentId": options.deployment_id,
+        "telemetryOtlpEndpoint": options.telemetry_otlp_endpoint,
+        "telemetryCloudProvider": options.telemetry_cloud_provider,
+        "telemetryCloudMachineType": options.telemetry_cloud_machine_type,
+        "telemetryTraceSampleRatio": options.telemetry_trace_sample_ratio,
+        "telemetryExportIntervalMs": options.telemetry_export_interval_ms,
+        "telemetryExportTimeoutMs": options.telemetry_export_timeout_ms,
+        "telemetryMaxQueueSize": options.telemetry_max_queue_size,
+        "telemetryMaxExportBatchSize": options.telemetry_max_export_batch_size,
         "sshPortStart": options.ssh_port_start,
         "sshPortEnd": options.ssh_port_end,
         "totalResources": options.total_resources.to_dict(),

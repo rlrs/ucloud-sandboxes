@@ -6,14 +6,13 @@ import unittest
 
 from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.metrics import (
-    GatewayBusyTraceSampler,
+    GatewayBusySampler,
     MetricEvent,
     MetricsStore,
     build_live_scale_signals,
     build_metrics_snapshot,
     build_program_state_summary,
     record_autoscaler_cycle,
-    record_trace_span,
 )
 from ucloud_sandboxes.models import (
     NodeRuntimeMetrics,
@@ -195,14 +194,11 @@ class MetricsTests(unittest.TestCase):
         events = [
             MetricEvent(
                 timestamp=(now - timedelta(seconds=offset)).isoformat(),
-                kind="trace_span",
+                kind="sandbox_create_busy",
                 data={
-                    "name": "gateway.sandbox_create",
-                    "attributes": {
-                        "outcome": "gateway_busy",
-                        "aggregated_rejections": rejections,
-                        "max_concurrent_sandbox_creates": 32,
-                    },
+                    "outcome": "gateway_busy",
+                    "aggregated_rejections": rejections,
+                    "max_concurrent_sandbox_creates": 32,
                 },
             )
             for offset, rejections in ((10, 4), (1, 7))
@@ -365,14 +361,13 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(summary["response_to_wake_p50_ms"], 5000)
         self.assertEqual(summary["response_to_wake_p95_ms"], 9000)
 
-    def test_gateway_busy_traces_are_aggregated_between_samples(self) -> None:
+    def test_gateway_busy_signals_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
-            sampler = GatewayBusyTraceSampler(store, min_interval_seconds=60)
+            sampler = GatewayBusySampler(store, min_interval_seconds=60)
 
             emitted = [
                 sampler.record(
-                    trace_id=f"busy-{index}",
                     max_concurrent_sandbox_creates=32,
                 )
                 for index in range(100)
@@ -381,10 +376,10 @@ class MetricsTests(unittest.TestCase):
 
         self.assertEqual(emitted.count(True), 1)
         self.assertEqual(len(events), 1)
-        self.assertEqual(events[0].kind, "trace_span")
-        self.assertEqual(events[0].data["attributes"]["outcome"], "gateway_busy")
+        self.assertEqual(events[0].kind, "sandbox_create_busy")
+        self.assertEqual(events[0].data["outcome"], "gateway_busy")
         self.assertEqual(
-            events[0].data["attributes"]["max_concurrent_sandbox_creates"],
+            events[0].data["max_concurrent_sandbox_creates"],
             32,
         )
 
@@ -865,46 +860,15 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(item["last_successful_remote_init_ms"], 59_000)
         self.assertEqual(item["first_sandbox_scale_up_wait_ms"], 112_000)
 
-    def test_builds_trace_summary_from_spans(self) -> None:
-        now = utc_now()
-        with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
-            record_trace_span(
-                store,
-                trace_id="trace-1",
-                span_id="root",
-                name="gateway.sandbox_create",
-                started_at=(now - timedelta(seconds=2)).isoformat(),
-                finished_at=now.isoformat(),
-                duration_ms=2000,
-                attributes={"sandbox_id": "sandbox-1"},
-            )
-            record_trace_span(
-                store,
-                trace_id="trace-1",
-                span_id="node",
-                parent_span_id="root",
-                name="gateway.sandbox_proxy_create",
-                started_at=(now - timedelta(seconds=1)).isoformat(),
-                finished_at=now.isoformat(),
-                duration_ms=1000,
-                attributes={"node_timings": {"total_ms": 900}},
-            )
-
-            snapshot = build_metrics_snapshot(
-                {},
-                None,
-                store.load_events(),
-                heartbeat_ttl_seconds=120,
-            )
-
-        traces = snapshot["traces"]
-        self.assertEqual(traces["span_count"], 2)
-        self.assertEqual(traces["recent"][0]["trace_id"], "trace-1")
-        self.assertEqual(traces["recent"][0]["duration_ms"], 2000)
-        self.assertEqual(
-            traces["recent"][0]["spans"][1]["name"], "gateway.sandbox_proxy_create"
+    def test_metrics_snapshot_does_not_embed_trace_storage(self) -> None:
+        snapshot = build_metrics_snapshot(
+            {},
+            None,
+            [],
+            heartbeat_ttl_seconds=120,
         )
+
+        self.assertNotIn("traces", snapshot)
 
 
 if __name__ == "__main__":

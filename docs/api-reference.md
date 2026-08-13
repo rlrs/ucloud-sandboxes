@@ -160,16 +160,13 @@ the entire wake queue. `effective_policy` contains only non-secret operational
 knobs and is observational; `/v1/metrics` does not provide a policy mutation
 path.
 
-Trace spans are written to the same indexed metrics database as autoscaler and
-heartbeat events. Sandbox create traces cover gateway image resolution,
-existing-route checks, node selection, image availability or pull, and node
-create proxying. Image build traces cover builder selection, pending-build
-enqueueing, builder proxying, and node-reported build timings. Node-agent
-responses include `timings` fields for sandbox creation and image builds; image
-build records also include Docker build/push phase durations. In particular,
-the builder response separates request-body read, context materialization,
-build wait, Docker build, and registry push. Sandbox responses separate the
-gateway proxy from node-side request handling and Docker container creation.
+`telemetry` reports the bounded OTLP exporter queue and accepted, exported,
+dropped, and failed span counts. Trace payloads are not stored in this response
+or in the metrics SQLite database. Sandbox, build, park/wake, relay, storage,
+provider, and VM-bootstrap traces are exported to the configured OTLP backend;
+see [Performance telemetry](telemetry.md). Node-agent responses retain bounded
+`timings` fields because they are also useful to clients during a single
+operation.
 
 The lifecycle boundaries have deliberately narrow meanings:
 

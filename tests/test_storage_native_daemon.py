@@ -1143,7 +1143,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                     if time.monotonic() >= deadline:
                         raise
                     time.sleep(0.01)
-            self.assertEqual(features["protocol_schema"], 3)
+            self.assertEqual(features["protocol_schema"], 4)
             self.assertEqual(features["upper_mode"], "hybridLogStructured")
             with self.assertRaisesRegex(StorageNativeNodeError, "invalid schema"):
                 client._call({"operation": "GetFeatures", "unexpected": True})
@@ -1260,7 +1260,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 results = list(pool.map(lambda _: client.get_features(), range(64)))
 
             self.assertEqual(len(results), 64)
-            self.assertTrue(all(result["protocol_schema"] == 3 for result in results))
+            self.assertTrue(all(result["protocol_schema"] == 4 for result in results))
             server.shutdown()
             thread.join(timeout=2)
             self.assertFalse(thread.is_alive())

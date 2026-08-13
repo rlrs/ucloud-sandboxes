@@ -192,7 +192,7 @@ class SandboxExecProtocolTests(unittest.TestCase):
         for pump in pumps:
             pump.start()
 
-        manager._wait_process(session.id, process, pumps)  # noqa: SLF001
+        manager._wait_process(session.id, process, pumps, {})  # noqa: SLF001
 
         self.assertTrue(process.stdin.closed)
         self.assertIsNone(session.process)

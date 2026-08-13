@@ -46,6 +46,8 @@ under `docs/`, not in this overview.
   design, performance expectations, and concurrency notes.
 - [Scaling policy](docs/scaling-policy.md): scale-to-zero policy, prepare
   signals, builder policy, overcommit, and observed scale-up metrics.
+- [Performance telemetry](docs/telemetry.md): distributed traces, OTLP metrics,
+  propagation boundaries, backend layout, and overhead guarantees.
 - [Security stance](docs/security-stance.md): gVisor/container security model,
   storage authority, authentication boundaries, and verified bootstrap.
 - [VM init](docs/vm-init.md): provider-instance bootstrap and verified post-boot

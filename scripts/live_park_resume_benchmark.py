@@ -62,6 +62,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image", default="python:3.13-slim-bookworm")
     parser.add_argument("--cycles", type=int, default=20)
     parser.add_argument("--detach-before-wake", action="store_true")
+    parser.add_argument(
+        "--wake-via-exec",
+        action="store_true",
+        help=(
+            "wake by starting a no-op exec instead of using the operator wake "
+            "route, and retain the node's phase timings"
+        ),
+    )
     parser.add_argument("--force-different-worker", action="store_true")
     parser.add_argument("--node-control-token-file", type=Path)
     parser.add_argument("--output", type=Path)
@@ -391,18 +399,35 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         detach_seconds = time.monotonic() - detach_started
 
                     wake_started = time.monotonic()
-                    woke, wake_retries = await gateway_json(
-                        session,
-                        args.gateway_url,
-                        token,
-                        "POST",
-                        f"/v1/sandboxes/{sandbox_id}/wake",
-                        payload={
-                            "generation": sandbox_generation,
-                            "operation_id": f"wake-benchmark:{suffix}:{index}",
-                        },
-                        attempts=101,
-                    )
+                    if args.wake_via_exec:
+                        woke, wake_retries = await gateway_json(
+                            session,
+                            args.gateway_url,
+                            sandbox_api_token,
+                            "POST",
+                            f"/v1/sandboxes/{sandbox_id}/exec",
+                            payload={
+                                "command": ["true"],
+                                "env": {},
+                                "working_dir": None,
+                                "stdin": False,
+                                "tty": False,
+                            },
+                            attempts=101,
+                        )
+                    else:
+                        woke, wake_retries = await gateway_json(
+                            session,
+                            args.gateway_url,
+                            token,
+                            "POST",
+                            f"/v1/sandboxes/{sandbox_id}/wake",
+                            payload={
+                                "generation": sandbox_generation,
+                                "operation_id": f"wake-benchmark:{suffix}:{index}",
+                            },
+                            attempts=101,
+                        )
                     wake_seconds = time.monotonic() - wake_started
                 finally:
                     if drained:
@@ -435,6 +460,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     destination_node if isinstance(destination_node, dict) else {}
                 )
                 woke_record = woke.get("sandbox", {})
+                if args.wake_via_exec:
+                    woke_record = {"state": running_route.get("cached_state")}
                 detached_record = detached.get("sandbox", {})
                 cycles.append(
                     {
@@ -444,6 +471,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         "detach_seconds": detach_seconds,
                         "park_retries": park_retries,
                         "wake_retries": wake_retries,
+                        "wake_timings": woke.get("timings", {}),
                         "detach_retries": detach_retries,
                         "parked_state": parked_record.get("state"),
                         "woke_state": woke_record.get("state"),

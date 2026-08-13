@@ -25,6 +25,7 @@ class FakeS3:
         self,
         *,
         upload_delay: float = 0.0,
+        stat_delay: float = 0.0,
         lose_complete_response: bool = False,
     ) -> None:
         self.objects: dict[str, bytes] = {}
@@ -33,10 +34,13 @@ class FakeS3:
         self.next_upload = 0
         self.modified_at: dict[str, float] = {}
         self.upload_delay = upload_delay
+        self.stat_delay = stat_delay
         self.lose_complete_response = lose_complete_response
         self.active_uploads = 0
         self.max_active_uploads = 0
         self.upload_lock = threading.Lock()
+        self.active_stats = 0
+        self.max_active_stats = 0
 
     def create_multipart_upload(self, key: str) -> str:
         self.next_upload += 1
@@ -72,14 +76,23 @@ class FakeS3:
         self.aborted.append((key, upload_id))
 
     def stat(self, key: str) -> S3ObjectStat | None:
-        payload = self.objects.get(key)
-        return (
-            None
-            if payload is None
-            else S3ObjectStat(
-                size=len(payload), modified_at=self.modified_at.get(key, 0.0)
+        with self.upload_lock:
+            self.active_stats += 1
+            self.max_active_stats = max(self.max_active_stats, self.active_stats)
+        try:
+            if self.stat_delay:
+                time.sleep(self.stat_delay)
+            payload = self.objects.get(key)
+            return (
+                None
+                if payload is None
+                else S3ObjectStat(
+                    size=len(payload), modified_at=self.modified_at.get(key, 0.0)
+                )
             )
-        )
+        finally:
+            with self.upload_lock:
+                self.active_stats -= 1
 
     def put_bytes(self, key: str, payload: bytes, *, sha256: str) -> None:
         if digest(payload) != sha256:
@@ -283,6 +296,31 @@ class StorageNativeS3Tests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "missing"):
                 publisher.verify(publication)
+
+    def test_verify_checks_layer_objects_concurrently(self):
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            sources = tuple(
+                (root / f"delta-{index}.commit").resolve() for index in range(3)
+            )
+            payloads = {
+                source: f"delta-{index}".encode()
+                for index, source in enumerate(sources)
+            }
+            for source, payload in payloads.items():
+                source.write_bytes(payload)
+            s3 = FakeS3(stat_delay=0.05)
+            publisher = self._publisher(root, s3)
+            publication = publisher.publish(
+                exporter=FakeExporter(payloads),
+                source_layer_paths=sources,
+                virtual_size=4096,
+            )
+            s3.max_active_stats = 0
+
+            self.assertEqual(publisher.verify(publication), publication)
+
+            self.assertGreaterEqual(s3.max_active_stats, 2)
 
     def test_hetzner_compatibility_retry_is_narrow_and_bounded(self):
         class Response:

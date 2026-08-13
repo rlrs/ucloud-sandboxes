@@ -300,24 +300,32 @@ and server architectures must match, so the qualified amd64 runtime needs an
 x86 snapshot and x86 server type. Snapshot storage remains billable after the
 source server is deleted.
 
-The current validated CPX62/Ubuntu 26.04 artifact is snapshot `419550929` in
+The current validated CPX62/Ubuntu 26.04 artifact is snapshot `419603017` in
 the tested Hetzner project. It was built on the production CPX62 worker shape:
 the retained 64 GiB sparse XFS quota image does not fit on a CPX12 source disk,
 and initializing such a source fails closed before modifying it. The snapshot
-stores about 1.931 GiB and requires a server whose disk is at least as large as
+stores about 1.908 GiB and requires a server whose disk is at least as large as
 its CPX62 source. Its worker profile reserves no swap, 16 GiB for the bounded
 remote-layer cache, and 24 GiB of host headroom. After normalizing Hetzner's
 decimal 640 GB disk to 596 binary GiB, that leaves 492 GiB of hard
 storage-native capacity for active parkable sandboxes.
 
 Its exact sandbox bundle SHA-256 is
-`c0f343c27105dd9e97268693708ef5e9c9c9135258f14011da1c4402f8b97706`.
+`62ed18bbe5bab5155bb12084ee1c8dae1b7caec7eea81290117c05328e4d874e`.
 The matching local artifact is
-`.hetzner/bundles/sandbox-node-package-ubuntu-26.04-amd64-v0.4.1.tar.gz`.
+`.hetzner/bundles/sandbox-node-package-ubuntu-26.04-amd64-park-wake-opt.tar.gz`.
 Install that artifact as the gateway's configured sandbox-node bundle when
 using this snapshot. A differently built release deliberately misses the
 receipt and takes the safe full-transfer/full-install upgrade path; create a
 new golden snapshot after validating that release to restore the fast path.
+
+The promoted snapshot canary was confirmed through the Hetzner API to use
+image `419603017`. It completed two full SDK-driven park, S3 detach, and wake
+cycles with exact process and filesystem checks and no retries. The first wake
+on its empty remote-block cache took 8.288 seconds; the immediately following
+warm-cache wake took 1.641 seconds. The canary worker and the sanitized source
+worker were deleted after qualification, leaving the gateway as the only
+running production server.
 
 The `0.4.1` release bundle carries AgentEnv v0.1.2 plus the owner,
 pooled-delete, and streaming dense-export patches, the S3 publisher and its
@@ -367,7 +375,10 @@ resolved DNS and reported the CPX12 gateway's public IP without a post-create
 route command. All temporary source, worker, gateway, firewall, and Primary IP
 resources were deleted after validation.
 
-Snapshot `419293093` is the immediately previous 40 GB / 1.296 GB compaction-v4
+Snapshot `419550929` is the immediately previous CPX62 / 1.931 GiB artifact. It
+carries the pre-optimization `0.4.1` bundle and remains a billable rollback
+image rather than a schedulable worker image. Snapshot `419293093` is the older
+40 GB / 1.296 GB compaction-v4
 artifact. It carries the same AgentEnv backend but agent version `0.3.95` and a
 different runtime receipt, so it remains a billable rollback artifact rather
 than a schedulable `0.4.0` image. Snapshot `419216526` is the older 40 GB /
@@ -402,13 +413,14 @@ root disk:
 | Sequential direct I/O | about 2.7 GB/s | about 315 MB/s |
 | Mixed 4-KiB direct I/O | about 44.3k IOPS | about 9.9k IOPS |
 
-The initial safe placement is:
+The provider-neutral storage placement is:
 
 - local root disk: active sandbox COW, ublk runtime data, Docker quota image,
   active image layers, and journals;
 - gateway local root: routing, autoscaler, relay, metrics, registry-usage, and
   image-index SQLite state, plus their transactional backups;
-- gateway Hetzner Volume: Docker Distribution's OCI image/build blob tree;
+- configured registry store: Docker Distribution's OCI image/build blob tree,
+  using either a fail-closed filesystem mount or its native S3 driver;
 - Hetzner Object Storage: published sealed sandbox snapshots, written directly
   by workers and range-read by AgentEnv through the bounded local cache.
 
@@ -418,15 +430,29 @@ are specified in
 configuration now uses the `sandboxes` Object Storage bucket in `hel1`; the
 live park/detach/cold-wake and compaction evidence is recorded in
 [`benchmarks/hetzner-object-storage-snapshots-2026-08-13.json`](benchmarks/hetzner-object-storage-snapshots-2026-08-13.json).
+The daily collector records the first sweep at which an object has no durable
+route reference and requires that marker to remain continuously unreferenced
+for seven days. Object creation time is not the retention clock, and a route
+that references the object again clears the marker.
 
-Deployment schema 3 expresses that boundary directly. For example:
+Deployment schema 4 expresses that boundary directly. The Hetzner target is:
 
 ```json
 {
-  "schema": 3,
+  "schema": 4,
   "data_root": "/var/lib/ucloud-sandboxes/state",
-  "registry_mount_point": "/mnt/ucloud-registry",
-  "registry_data_root": "/mnt/ucloud-registry/docker-registry",
+  "registry_store": {
+    "kind": "s3",
+    "mount_point": "",
+    "data_root": "",
+    "endpoint": "https://hel1.your-objectstorage.com",
+    "bucket": "sandboxes",
+    "region": "hel1",
+    "prefix": "production/oci",
+    "access_key_id_env": "HETZNER_S3_ACCESS_KEY",
+    "secret_access_key_env": "HETZNER_S3_SECRET_KEY",
+    "force_path_style": false
+  },
   "snapshot_store": {
     "kind": "s3",
     "endpoint": "https://hel1.your-objectstorage.com",
@@ -440,17 +466,25 @@ Deployment schema 3 expresses that boundary directly. For example:
 ```
 
 The snippet shows only the relevant fields; deployment configuration remains
-an exact full object. Schema-1 and schema-2 files migrate in memory while
-retaining Registry-backed snapshot authority; schema 1 also retains its old derived
-registry path, so merely upgrading does not silently move data. The explicit
+an exact full object. Schema-1 through schema-3 files migrate in memory while
+retaining their filesystem-backed registry and Registry-backed snapshot
+authority, so merely upgrading never moves data. The explicit
 production switch to S3 forces a one-time compact publication, so a manifest
 never mixes Registry and S3 lower layers. Before changing the Registry blob
-path, mount the Volume, stop the registry, copy and verify its blob tree, and
-configure `registry_mount_point` so both deployment and registry startup fail
-closed if the Volume is absent. The generated registry and offline-GC systemd
-drop-ins also bind to that mount. A Volume is attached to only one server at a time, grows but does not
-shrink, has no built-in snapshots/backups, and is not included in server
-snapshots. The compute provider therefore does not create or delete Volumes.
+backend, stop the registry and run `ucloud-sandboxes-registry-migrate` against
+the proposed schema-4 configuration. It hashes every source object, refuses
+unexpected target objects unless overwrite is explicit, uploads through the
+native S3 API, and verifies size and digest before cutover. Filesystem mode
+retains the old mount fence; S3 mode removes that dependency. A Volume remains
+available as a filesystem implementation where object storage is unavailable,
+but the compute provider does not choose the storage policy.
+
+The production OCI registry was migrated to the native S3 driver on 2026-08-13.
+The verified 16-object copy, presigned redirect read, offline GC, and read-only
+filesystem fallback evidence is recorded in
+[`benchmarks/hetzner-registry-s3-2026-08-13.json`](benchmarks/hetzner-registry-s3-2026-08-13.json).
+The old Volume tree remains unchanged as a rollback source; it is no longer on
+the live registry data path.
 
 ## Worker-local active set and remote parked set
 
@@ -488,6 +522,35 @@ state, and completed without lifecycle retries. This is evidence for the small
 warm-network case against the former Registry/Volume backend, not a general
 cold-wake SLO or evidence for Hetzner Object Storage; multi-gigabyte snapshots, cold
 layer caches, and concurrent wake bursts still need measurement.
+
+The S3 import path avoids manufacturing a new snapshot layer during wake. A
+remote ublk mount gives the same XFS files a new Linux `st_dev`, but that is a
+property of the mount, not changed sandbox data. When inode, size, authenticated
+manifest, and file inventory are unchanged, import keeps the published
+manifest identity and discards its empty temporary COW instead of sealing and
+uploading it. S3 config and per-layer existence checks also run concurrently
+with a bounded verifier. Finally, ordinary SDK activity such as exec or file
+access commits its implicit wake at the gateway, so the next park publishes
+against the current running route rather than stale snapshot authority.
+
+On the production S3 backend these changes reduced the small detached-wake
+median from 2.626 seconds to 1.538-1.584 seconds, about 40%. A clean CPX62
+provisioning canary repeated three SDK-triggered detached wakes at 1.493-1.974
+seconds (1.542-second median), with zero lifecycle retries, preserved managed
+process identity, and advancing checksum-protected filesystem state. Snapshot
+chains grew by one real park delta per cycle instead of one real delta plus an
+empty import delta. Attached wake remained about 0.56 seconds. Evidence and
+the AgentEnv portability review are in
+[`benchmarks/hetzner-park-wake-optimization-2026-08-13.json`](benchmarks/hetzner-park-wake-optimization-2026-08-13.json).
+
+AgentEnv main was also reviewed through commit
+`f8f725e2b962a0bae3eadcd426c7e1ecf243b34e`. The production v0.1.2 pin already
+contains its shared bounded cache, warm ublk pool, and compact fixes. The newer
+direct-to-OverlayBD packaging work is tied to AgentEnv's Firecracker memory
+snapshot path and is not directly portable to this gVisor combined-state XFS
+volume. Background whole-layer download remains disabled: demand paging is a
+better default for a combined layer when the sandbox may touch only a fraction
+of it.
 
 Published layers also have a bounded-chain rule. An ordinary detach appends
 the latest sealed delta, but a publication that would exceed eight layers or

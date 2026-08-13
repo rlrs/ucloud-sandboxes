@@ -98,8 +98,16 @@ class ConfigTests(unittest.TestCase):
             ("string number", ("registry_retention_days",), "30"),
             ("nan", ("autoscaler_interval_seconds",), float("nan")),
             ("relative root", ("data_root",), "state"),
-            ("relative registry root", ("registry_data_root",), "registry"),
-            ("relative registry mount", ("registry_mount_point",), "registry"),
+            (
+                "relative registry root",
+                ("registry_store", "data_root"),
+                "registry",
+            ),
+            (
+                "relative registry mount",
+                ("registry_store", "mount_point"),
+                "registry",
+            ),
             ("colliding port", ("relay_port",), 8090),
             ("wrong tuple", ("sandbox", "direct_network_allow_tcp"), "10.0.0.1:1"),
             ("low disk", ("sandbox", "disk_gb"), 1),
@@ -121,8 +129,10 @@ class ConfigTests(unittest.TestCase):
     def test_sqlite_and_registry_roots_are_independent(self) -> None:
         raw = self._raw()
         raw["data_root"] = "/srv/ucloud/state"
-        raw["registry_mount_point"] = "/mnt/registry"
-        raw["registry_data_root"] = "/mnt/registry/docker-registry"
+        registry_store = raw["registry_store"]
+        assert isinstance(registry_store, dict)
+        registry_store["mount_point"] = "/mnt/registry"
+        registry_store["data_root"] = "/mnt/registry/docker-registry"
 
         config = DeploymentConfig.from_dict(raw)
 
@@ -147,8 +157,7 @@ class ConfigTests(unittest.TestCase):
         raw = self._raw()
         raw["schema"] = 1
         raw["data_root"] = "/srv/ucloud/state"
-        raw.pop("registry_data_root")
-        raw.pop("registry_mount_point")
+        raw.pop("registry_store")
         raw.pop("snapshot_store")
         raw["autoscaler_max_storage_native_migrations_per_cycle"] = raw.pop(
             "autoscaler_max_storage_native_detaches_per_cycle"
@@ -156,22 +165,64 @@ class ConfigTests(unittest.TestCase):
 
         config = DeploymentConfig.from_dict(raw)
 
-        self.assertEqual(config.schema, 3)
+        self.assertEqual(config.schema, 4)
         self.assertEqual(config.autoscaler_max_storage_native_detaches_per_cycle, 2)
         self.assertEqual(
             config.registry_data_dir(),
             Path("/srv/ucloud-sandbox-registry/docker-registry"),
         )
         self.assertEqual(config.registry_mount_point, "/srv")
-        self.assertEqual(config.to_dict()["schema"], 3)
+        self.assertEqual(config.to_dict()["schema"], 4)
+
+    def test_schema_three_migrates_filesystem_registry_store(self) -> None:
+        raw = self._raw()
+        raw["schema"] = 3
+        registry_store = raw.pop("registry_store")
+        assert isinstance(registry_store, dict)
+        raw["registry_mount_point"] = registry_store["mount_point"]
+        raw["registry_data_root"] = registry_store["data_root"]
+
+        config = DeploymentConfig.from_dict(raw)
+
+        self.assertEqual(config.schema, 4)
+        self.assertEqual(config.registry_store.kind, "filesystem")
+        self.assertEqual(config.registry_mount_point, "/work/data")
 
     def test_registry_data_must_be_inside_its_fail_closed_mount(self) -> None:
         raw = self._raw()
-        raw["registry_mount_point"] = "/mnt/registry"
-        raw["registry_data_root"] = "/var/lib/registry"
+        registry_store = raw["registry_store"]
+        assert isinstance(registry_store, dict)
+        registry_store["mount_point"] = "/mnt/registry"
+        registry_store["data_root"] = "/var/lib/registry"
 
-        with self.assertRaisesRegex(ValueError, "inside registry_mount_point"):
+        with self.assertRaisesRegex(ValueError, "inside registry_store.mount_point"):
             DeploymentConfig.from_dict(raw)
+
+    def test_s3_registry_store_has_no_filesystem_dependency(self) -> None:
+        raw = self._raw()
+        raw["registry_store"] = {
+            "kind": "s3",
+            "mount_point": "",
+            "data_root": "",
+            "endpoint": "https://images.hel1.your-objectstorage.com/",
+            "bucket": "images",
+            "region": "hel1",
+            "prefix": "/production/oci/",
+            "access_key_id_env": "REGISTRY_ACCESS_KEY",
+            "secret_access_key_env": "REGISTRY_SECRET_KEY",
+            "force_path_style": False,
+        }
+
+        config = DeploymentConfig.from_dict(raw)
+
+        self.assertEqual(config.registry_store.kind, "s3")
+        self.assertEqual(
+            config.registry_store.endpoint,
+            "https://hel1.your-objectstorage.com",
+        )
+        self.assertEqual(config.registry_store.prefix, "production/oci")
+        with self.assertRaisesRegex(ValueError, "no local registry data directory"):
+            config.registry_data_dir()
 
     def test_s3_snapshot_store_keeps_only_environment_names_in_state(self) -> None:
         raw = self._raw()

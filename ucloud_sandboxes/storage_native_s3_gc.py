@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,7 +14,7 @@ from .config import DeploymentConfig
 from .routing import RoutingStore
 from .storage_native_migration import StorageNativeMigration
 from .storage_native_registry import StorageSnapshotPublication
-from .storage_native_s3 import Boto3S3ObjectClient, S3ObjectClient
+from .storage_native_s3 import Boto3S3ObjectClient, S3ObjectClient, S3ObjectStat
 
 
 @dataclass(frozen=True)
@@ -21,6 +23,8 @@ class S3SnapshotGcPlan:
     candidates: tuple[str, ...]
     candidate_bytes: int
     inventory_objects: int
+    markers_to_create: tuple[str, ...] = ()
+    markers_to_clear: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -28,6 +32,8 @@ class S3SnapshotGcPlan:
             "candidateObjects": len(self.candidates),
             "candidateBytes": self.candidate_bytes,
             "inventoryObjects": self.inventory_objects,
+            "newlyUnreferencedObjects": len(self.markers_to_create),
+            "clearedUnreferencedMarkers": len(self.markers_to_clear),
             "candidates": list(self.candidates),
         }
 
@@ -67,10 +73,9 @@ def plan_s3_snapshot_gc(
             for layer in publication.layers
         )
 
-    inventory = client.list_objects(f"{normalized_prefix}/")
+    inventory = dict(client.list_objects(f"{normalized_prefix}/"))
     candidates: list[str] = []
     candidate_bytes = 0
-    regular_cutoff = now - grace_seconds
     upload_cutoff = now - incomplete_upload_grace_seconds
     managed_roots = (
         f"{normalized_prefix}/manifests/",
@@ -78,23 +83,61 @@ def plan_s3_snapshot_gc(
         f"{normalized_prefix}/managed-layers/",
     )
     upload_root = f"{normalized_prefix}/.uploads/"
-    for key, stat in inventory:
-        if key in protected:
+    marker_root = _unreferenced_marker_root(normalized_prefix)
+    marker_stats: dict[str, tuple[str, S3ObjectStat]] = {}
+    markers_to_clear: set[str] = set()
+    for marker_key, marker_stat in inventory.items():
+        if not marker_key.startswith(marker_root):
             continue
-        eligible = (
-            key.startswith(upload_root) and stat.modified_at <= upload_cutoff
-        ) or (
-            key.startswith(managed_roots) and stat.modified_at <= regular_cutoff
+        target_key = _target_from_unreferenced_marker(
+            normalized_prefix,
+            marker_key,
         )
-        if not eligible:
+        if target_key is None or not target_key.startswith(managed_roots):
+            markers_to_clear.add(marker_key)
             continue
-        candidates.append(key)
-        candidate_bytes += stat.size
+        marker_stats[target_key] = (marker_key, marker_stat)
+
+    markers_to_create: set[str] = set()
+    for key, stat in inventory.items():
+        if key.startswith(upload_root):
+            if stat.modified_at <= upload_cutoff:
+                candidates.append(key)
+                candidate_bytes += stat.size
+            continue
+        if not key.startswith(managed_roots):
+            continue
+        marker = marker_stats.get(key)
+        if key in protected:
+            if marker is not None:
+                markers_to_clear.add(marker[0])
+            continue
+        if marker is None:
+            markers_to_create.add(key)
+            continue
+        marker_key, marker_stat = marker
+        # A write after the object was marked unreferenced restarts the grace
+        # period. Reads are represented by durable routes and clear the marker
+        # through the protected-object branch above.
+        if stat.modified_at > marker_stat.modified_at:
+            markers_to_clear.add(marker_key)
+            markers_to_create.add(key)
+            continue
+        if marker_stat.modified_at <= now - grace_seconds:
+            candidates.append(key)
+            candidate_bytes += stat.size
+
+    for target_key, (marker_key, _marker_stat) in marker_stats.items():
+        if target_key not in inventory:
+            markers_to_clear.add(marker_key)
+
     return S3SnapshotGcPlan(
         protected=tuple(sorted(protected)),
         candidates=tuple(sorted(candidates)),
         candidate_bytes=candidate_bytes,
         inventory_objects=len(inventory),
+        markers_to_create=tuple(sorted(markers_to_create)),
+        markers_to_clear=tuple(sorted(markers_to_clear)),
     )
 
 
@@ -110,9 +153,74 @@ def execute_s3_snapshot_gc(
         raise ValueError(
             "S3 snapshot GC candidate count exceeds --max-delete-objects"
         )
+    candidate_markers: set[str] = set()
     for key in plan.candidates:
         client.delete(key)
+        marker_key = _unreferenced_marker_for_target(key)
+        if marker_key is not None:
+            client.delete(marker_key)
+            candidate_markers.add(marker_key)
+    for marker_key in plan.markers_to_clear:
+        if marker_key not in candidate_markers:
+            client.delete(marker_key)
+    for target_key in plan.markers_to_create:
+        marker_key = _unreferenced_marker_for_target(target_key)
+        if marker_key is None:
+            raise ValueError("S3 snapshot GC cannot mark an unmanaged object")
+        payload = _unreferenced_marker_payload(target_key)
+        client.put_bytes(
+            marker_key,
+            payload,
+            sha256="sha256:" + hashlib.sha256(payload).hexdigest(),
+        )
     return len(plan.candidates)
+
+
+def _unreferenced_marker_root(prefix: str) -> str:
+    return f"{prefix.strip('/')}/.gc/unreferenced/"
+
+
+def _unreferenced_marker_for_target(target_key: str) -> str | None:
+    prefix = ""
+    for managed_root in ("/manifests/", "/metadata/", "/managed-layers/"):
+        if managed_root in target_key:
+            prefix = target_key.split(managed_root, 1)[0]
+            break
+    if not prefix:
+        return None
+    encoded = base64.urlsafe_b64encode(target_key.encode("utf-8")).decode("ascii")
+    return _unreferenced_marker_root(prefix) + encoded.rstrip("=") + ".json"
+
+
+def _target_from_unreferenced_marker(prefix: str, marker_key: str) -> str | None:
+    root = _unreferenced_marker_root(prefix)
+    if not marker_key.startswith(root) or not marker_key.endswith(".json"):
+        return None
+    encoded = marker_key[len(root) : -len(".json")]
+    if not encoded:
+        return None
+    try:
+        padding = "=" * (-len(encoded) % 4)
+        target = base64.b64decode(
+            encoded + padding,
+            altchars=b"-_",
+            validate=True,
+        ).decode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return target if _unreferenced_marker_for_target(target) == marker_key else None
+
+
+def _unreferenced_marker_payload(target_key: str) -> bytes:
+    return (
+        json.dumps(
+            {"schema": 1, "target": target_key},
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("ascii")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

@@ -59,7 +59,8 @@ the transition is in progress.
 
 ## Configuration and credentials
 
-Deployment schema 3 adds `snapshot_store`. S3 credentials are referenced by
+Deployment schema 4 keeps snapshot authority and OCI registry storage as
+independent deployment choices. S3 credentials are referenced by
 environment-variable name and are never serialized into `deployment.json`:
 
 ```json
@@ -77,6 +78,33 @@ environment-variable name and are never serialized into `deployment.json`:
 }
 ```
 
+The private OCI registry independently selects a filesystem or S3-compatible
+Distribution storage driver. A UCloud deployment can retain its durable
+filesystem mount:
+
+```json
+{
+  "registry_store": {
+    "kind": "filesystem",
+    "mount_point": "/work/data",
+    "data_root": "/work/data/ucloud-sandbox-registry/docker-registry",
+    "endpoint": "",
+    "bucket": "",
+    "region": "",
+    "prefix": "",
+    "access_key_id_env": "UCLOUD_REGISTRY_S3_ACCESS_KEY_ID",
+    "secret_access_key_env": "UCLOUD_REGISTRY_S3_SECRET_ACCESS_KEY",
+    "force_path_style": false
+  }
+}
+```
+
+An object-storage deployment instead leaves the filesystem fields empty and
+configures its own bucket or prefix. OCI content and direct sandbox snapshots
+must use distinct prefixes and independent collectors even when they share a
+bucket. The registry's native driver owns OCI layout and redirects; the
+snapshot publisher owns storage-native manifests and range-readable layers.
+
 The gateway autoscaler resolves the named variables only while rendering a
 worker bootstrap. The worker installs a root-only credential file and a
 root-only credential-process executable shared by the Python multipart
@@ -84,10 +112,13 @@ publisher and AgentEnv. Static Hetzner S3 keys are re-read for every
 publication and every new AgentEnv credential resolution; rotating a key
 requires replacing the worker credential file or reprovisioning the worker.
 
-For migration, schema-1 and schema-2 deployments load as schema 3 with
-`snapshot_store.kind=registry`. Switching the production config to `s3` is a
-separate, explicit rollout after the bucket, key policy, lifecycle policy, and
-performance gate pass.
+For migration, schema-1 and schema-2 deployments load as schema 4 with
+`snapshot_store.kind=registry`; schema-1 through schema-3 registry paths become
+`registry_store.kind=filesystem`. Loading a newer binary therefore never moves
+bytes. `ucloud-sandboxes-registry-migrate` dry-runs and verifies an explicit,
+stopped-registry filesystem-to-S3 copy before the configuration is switched.
+Changing either production backend remains a separate rollout after its
+bucket, key policy, lifecycle policy, and performance gate pass.
 
 ## Retention and garbage collection
 
@@ -96,7 +127,10 @@ mark-and-sweep, not age-only deletion:
 
 - mark every manifest and layer reachable from a live route, pending detach,
   or retained rollback publication;
-- sweep unreferenced manifests and metadata after a rollback grace period;
+- when the final durable reference disappears, write a durable first-seen-
+  unreferenced marker under `<prefix>/.gc/unreferenced/`;
+- sweep an object only after it has remained continuously unreferenced for the
+  full rollback grace period;
 - sweep a managed layer only when no retained manifest references its digest;
 - expire incomplete objects under `.uploads/` after 24 hours with an S3
   lifecycle rule;
@@ -106,7 +140,11 @@ mark-and-sweep, not age-only deletion:
 `ucloud-sandboxes-snapshot-gc` implements this mark-and-sweep operation. It is
 dry-run by default, refuses to exceed its configured deletion bound, and
 aborts if a protected manifest is missing or malformed. A daily systemd timer
-runs it with a seven-day grace period. Bucket lifecycle is still responsible
+runs it with a seven-day grace period. The grace clock starts on the first
+sweep after the final route reference disappears, not at object creation; a
+returning reference clears the marker and a later write restarts the clock.
+This deliberately retains objects for between seven and roughly eight days
+after last route use with a daily sweep. Bucket lifecycle is still responsible
 for abandoned multipart uploads because they are not ordinary listed objects.
 
 ## Performance qualification
@@ -197,7 +235,7 @@ counter, and completed without a lifecycle retry.
    multipart-abort lifecycle rule.
 2. Run publication, cold/warm wake, concurrency, and fault qualification on a
    disposable worker.
-3. Deploy schema 3 and the reference-based GC timer.
+3. Deploy schema 4 and the reference-based GC timer.
 4. Change the primary backend to `s3`. Keep the old Registry during
    the rollback window; old descriptors remain readable.
 5. Observe publication latency, first-command wake latency, S3 retries, cache

@@ -17,6 +17,7 @@ dependencies = [
 ucloud-sandboxes = "ucloud_sandboxes.cli:main"
 ucloud-sandboxes-storage = "ucloud_sandboxes.storage_native_service:main"
 ucloud-sandboxes-snapshot-gc = "ucloud_sandboxes.storage_native_s3_gc:main"
+ucloud-sandboxes-registry-migrate = "ucloud_sandboxes.registry_storage_migration:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ucloud_sandboxes"]

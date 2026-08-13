@@ -6,4 +6,5 @@ Conflicts=ucloud-sandbox-registry-prune.service
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/ucloud-sandboxes/registry-store.env
 ExecStart=/work/ucloud-sandboxes/gateway-venv/bin/python -m ucloud_sandboxes.systemd registry-gc --config /etc/ucloud-sandboxes/deployment.json

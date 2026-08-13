@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import ipaddress
 import json
@@ -354,6 +354,22 @@ class StorageNativeMigrationStore:
         artifact_store: HibernationArtifactStore,
         writable_incarnation: Path,
     ) -> HibernationManifest:
+        manifest, _changed = self.rebind_mounted_snapshot_with_status(
+            migration,
+            expected_runtime=expected_runtime,
+            artifact_store=artifact_store,
+            writable_incarnation=writable_incarnation,
+        )
+        return manifest
+
+    def rebind_mounted_snapshot_with_status(
+        self,
+        migration: StorageNativeMigration,
+        *,
+        expected_runtime: HibernationRuntimeFingerprint,
+        artifact_store: HibernationArtifactStore,
+        writable_incarnation: Path,
+    ) -> tuple[HibernationManifest, bool]:
         """Replace source-local file identities after mounting a remote snapshot."""
 
         portable = migration.manifest
@@ -375,18 +391,38 @@ class StorageNativeMigrationStore:
         generation = writable_incarnation / (
             f"hibernate-{portable.hibernation_generation}"
         )
-        local_files = tuple(
+        published = artifact_store.load_published_metadata(
+            sandbox_id=portable.sandbox_id,
+            sandbox_generation=portable.sandbox_generation,
+            hibernation_generation=portable.hibernation_generation,
+        )
+        observed_files = tuple(
             LocalHibernationArtifactFile.from_path(
                 generation / item.name,
                 role=item.role,
             )
             for item in portable.files
         )
-        for expected, actual in zip(portable.files, local_files):
+        for expected, actual in zip(portable.files, observed_files):
             if actual.artifact.logical_bytes != expected.logical_bytes:
                 raise StorageNativeMigrationError(
                     f"migrated artifact size changed: {actual.artifact.name}"
                 )
+        local_files = observed_files
+        if not artifact_store.require_stable_device:
+            published_files = {item.artifact.name: item for item in published.files}
+            try:
+                local_files = tuple(
+                    replace(
+                        observed,
+                        device=published_files[observed.artifact.name].device,
+                    )
+                    for observed in observed_files
+                )
+            except KeyError as exc:
+                raise StorageNativeMigrationError(
+                    "mounted snapshot artifact inventory changed"
+                ) from exc
         local_manifest = HibernationManifest(
             sandbox_id=portable.sandbox_id,
             sandbox_generation=portable.sandbox_generation,
@@ -403,14 +439,12 @@ class StorageNativeMigrationStore:
             files=local_files,
             managed_process_sha256=portable.managed_process_sha256,
         )
-        published = artifact_store.load_published_metadata(
-            sandbox_id=portable.sandbox_id,
-            sandbox_generation=portable.sandbox_generation,
-            hibernation_generation=portable.hibernation_generation,
-        )
         if published.metadata_sha256 == local_manifest.metadata_sha256:
-            local_manifest.validate_files(generation)
-            return local_manifest
+            local_manifest.validate_files(
+                generation,
+                require_stable_device=artifact_store.require_stable_device,
+            )
+            return local_manifest, False
         if published.metadata_sha256 != portable.source_manifest_sha256:
             raise StorageNativeMigrationError(
                 "mounted snapshot has another hibernation manifest identity"
@@ -420,7 +454,7 @@ class StorageNativeMigrationStore:
         (generation / artifact_store.COMPLETE_NAME).unlink()
         (generation / artifact_store.MANIFEST_NAME).unlink()
         self._fsync_directory(generation)
-        return artifact_store.publish_complete(local_manifest)
+        return artifact_store.publish_complete(local_manifest), True
 
     def _path(self, migration_id: str) -> Path:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", migration_id):

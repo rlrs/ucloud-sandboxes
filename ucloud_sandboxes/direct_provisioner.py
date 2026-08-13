@@ -195,6 +195,7 @@ class DirectSandboxProvisioner:
     ) -> tuple[DirectSandboxRegistration, StorageNativeMigration]:
         portable = migration.manifest
         migration_sha256 = migration.sha256
+        storage_manifest_changed = True
         registration = self.registry.plan_import(
             spec=portable.spec,
             sandbox_generation=portable.sandbox_generation,
@@ -243,7 +244,10 @@ class DirectSandboxProvisioner:
         ):
             raise DirectRegistryError("destination already owns another migration")
         if registration.phase == "importing":
-            local_manifest = self.storage_migrations.rebind_mounted_snapshot(
+            (
+                local_manifest,
+                storage_manifest_changed,
+            ) = self.storage_migrations.rebind_mounted_snapshot_with_status(
                 migration,
                 expected_runtime=replace(
                     self.warden.config.runtime_fingerprint,
@@ -277,7 +281,10 @@ class DirectSandboxProvisioner:
                         operation_id=f"import:{migration_id}:remount",
                     )
                     self.overlays.resume_sandbox(sandbox)
-                    self.storage_migrations.rebind_mounted_snapshot(
+                    (
+                        local_manifest,
+                        storage_manifest_changed,
+                    ) = self.storage_migrations.rebind_mounted_snapshot_with_status(
                         migration,
                         expected_runtime=replace(
                             self.warden.config.runtime_fingerprint,
@@ -286,20 +293,36 @@ class DirectSandboxProvisioner:
                         artifact_store=self.warden.artifacts,
                         writable_incarnation=Path(registration.quota_path),
                     )
-                local_manifest = self.warden.artifacts.load_complete(
-                    sandbox_id=registration.sandbox_id,
-                    sandbox_generation=registration.sandbox_generation,
-                    hibernation_generation=portable.hibernation_generation,
-                )
+                else:
+                    local_manifest = self.warden.artifacts.load_complete(
+                        sandbox_id=registration.sandbox_id,
+                        sandbox_generation=registration.sandbox_generation,
+                        hibernation_generation=portable.hibernation_generation,
+                    )
                 record = self.warden.adopt_parked(sandbox, local_manifest)
             if record.state != HibernationState.PARKED:
                 raise DirectRegistryError(
                     "storage-native destination is not durably parked"
                 )
-            published = self.warden.publish_storage_snapshot(
-                sandbox,
-                operation_id=f"import:{migration_id}:publish",
-            )
+            if storage_manifest_changed:
+                published = self.warden.publish_storage_snapshot(
+                    sandbox,
+                    operation_id=f"import:{migration_id}:publish",
+                )
+            else:
+                # The imported lower already contains the exact authenticated
+                # manifest. Overlay preparation only created an ephemeral work
+                # directory, so drop that empty upper instead of sealing and
+                # uploading another layer on every detached wake.
+                self.overlays.park_sandbox(sandbox)
+                published = self.warden.storage.discard_resume(
+                    self._storage_owner(registration),
+                    operation_id=f"import:{migration_id}:discard-empty-cow",
+                )
+                if published.state.value != "published":
+                    raise DirectRegistryError(
+                        "unchanged storage-native import did not restore publication"
+                    )
             destination_migration = StorageNativeMigration(
                 manifest=portable,
                 publication=published.publication(),

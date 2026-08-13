@@ -3,10 +3,12 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: install_hetzner_gateway.sh --public-ip <ipv4> --volume-device <path>
+usage: install_hetzner_gateway.sh --public-ip <ipv4> [--volume-device <path>]
+
+--volume-device is required only when registry_store.kind=filesystem.
 
 The following release inputs must already be staged on the gateway:
-  /tmp/ucloud_sandboxes-0.4.0-py3-none-any.whl
+  /tmp/ucloud_sandboxes-0.4.1-py3-none-any.whl
   /tmp/ucloud-sandboxes-deployment.json
   /tmp/ucloud-sandboxes-node-package.tar.gz
   /tmp/ucloud-sandboxes-gateway-init
@@ -49,12 +51,7 @@ if [[ ! "$public_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "--public-ip must be an IPv4 address" >&2
   exit 2
 fi
-if [[ -z "$volume_device" || "$volume_device" != /dev/* ]]; then
-  echo "--volume-device must be an absolute /dev path" >&2
-  exit 2
-fi
-
-wheel=/tmp/ucloud_sandboxes-0.4.0-py3-none-any.whl
+wheel=/tmp/ucloud_sandboxes-0.4.1-py3-none-any.whl
 deployment=/tmp/ucloud-sandboxes-deployment.json
 node_bundle=/tmp/ucloud-sandboxes-node-package.tar.gz
 init_key=/tmp/ucloud-sandboxes-gateway-init
@@ -75,34 +72,60 @@ for required in \
   fi
 done
 
+registry_store_kind="$(python3 - "$deployment" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    payload = json.load(source)
+store = payload.get("registry_store")
+if isinstance(store, dict):
+    print(store.get("kind", ""))
+else:
+    # Schema 1-3 deployments used the filesystem registry implicitly.
+    print("filesystem")
+PY
+)"
+if [[ "$registry_store_kind" != filesystem && "$registry_store_kind" != s3 ]]; then
+  echo "deployment registry_store.kind must be filesystem or s3" >&2
+  exit 2
+fi
+if [[ "$registry_store_kind" == filesystem && \
+      ( -z "$volume_device" || "$volume_device" != /dev/* ) ]]; then
+  echo "--volume-device must be an absolute /dev path for filesystem registry storage" >&2
+  exit 2
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl docker.io nftables openssl python3-venv
 systemctl enable --now docker.service
 
-for attempt in $(seq 1 60); do
-  if [[ -b "$volume_device" ]]; then break; fi
-  if [[ "$attempt" == 60 ]]; then
-    echo "registry Volume did not appear: $volume_device" >&2
+registry_mount=/mnt/ucloud-registry
+if [[ "$registry_store_kind" == filesystem ]]; then
+  for attempt in $(seq 1 60); do
+    if [[ -b "$volume_device" ]]; then break; fi
+    if [[ "$attempt" == 60 ]]; then
+      echo "registry Volume did not appear: $volume_device" >&2
+      exit 1
+    fi
+    sleep 1
+  done
+  if [[ "$(blkid -o value -s TYPE "$volume_device")" != ext4 ]]; then
+    echo "registry Volume is not the expected preformatted ext4 filesystem" >&2
     exit 1
   fi
-  sleep 1
-done
-if [[ "$(blkid -o value -s TYPE "$volume_device")" != ext4 ]]; then
-  echo "registry Volume is not the expected preformatted ext4 filesystem" >&2
-  exit 1
+  install -d -m 0755 "$registry_mount"
+  volume_uuid="$(blkid -o value -s UUID "$volume_device")"
+  if ! grep -qF "UUID=$volume_uuid $registry_mount " /etc/fstab; then
+    printf 'UUID=%s %s ext4 defaults,nofail,x-systemd.device-timeout=30s 0 2\n' \
+      "$volume_uuid" "$registry_mount" >>/etc/fstab
+  fi
+  mount "$registry_mount" 2>/dev/null || mountpoint -q "$registry_mount"
+  mountpoint -q "$registry_mount"
+  install -d -m 0755 "$registry_mount/docker-registry"
 fi
-registry_mount=/mnt/ucloud-registry
-install -d -m 0755 "$registry_mount"
-volume_uuid="$(blkid -o value -s UUID "$volume_device")"
-if ! grep -qF "UUID=$volume_uuid $registry_mount " /etc/fstab; then
-  printf 'UUID=%s %s ext4 defaults,nofail,x-systemd.device-timeout=30s 0 2\n' \
-    "$volume_uuid" "$registry_mount" >>/etc/fstab
-fi
-mount "$registry_mount" 2>/dev/null || mountpoint -q "$registry_mount"
-mountpoint -q "$registry_mount"
-install -d -m 0755 "$registry_mount/docker-registry"
 
 if ! id ucloud >/dev/null 2>&1; then
   useradd --system --create-home \
@@ -122,6 +145,7 @@ install -m 0644 "$node_bundle" "$release_dir/builder-node-package.tar.gz"
 install -m 0644 "$deployment" /etc/ucloud-sandboxes/deployment.json
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/hetzner.env
 install -m 0600 "$provider_env" /etc/ucloud-sandboxes/snapshot-store.env
+install -m 0600 "$provider_env" /etc/ucloud-sandboxes/registry-store.env
 install -m 0600 -o ucloud -g ucloud "$init_key" "$data_root/ssh/gateway-init"
 install -m 0644 -o ucloud -g ucloud \
   "$init_public_key" "$data_root/ssh/gateway-init.pub"
@@ -175,13 +199,17 @@ EOF
 for unit in \
   ucloud-sandbox-registry.service \
   ucloud-sandbox-registry-gc.service; do
-  cat >"/etc/systemd/system/$unit.d/volume.conf" <<'EOF'
+  if [[ "$registry_store_kind" == filesystem ]]; then
+    cat >"/etc/systemd/system/$unit.d/volume.conf" <<'EOF'
 [Unit]
 RequiresMountsFor=/mnt/ucloud-registry
 
 [Service]
 ExecStartPre=/usr/bin/mountpoint -q /mnt/ucloud-registry
 EOF
+  else
+    rm -f "/etc/systemd/system/$unit.d/volume.conf"
+  fi
 done
 
 cat >/usr/local/sbin/ucloud-sandboxes-nat <<'EOF'

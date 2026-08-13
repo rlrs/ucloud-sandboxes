@@ -221,6 +221,59 @@ class StorageNativeMigrationTests(unittest.TestCase):
                 rebound,
             )
 
+    def test_storage_native_rebind_ignores_only_remounted_device_identity(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            registration, manifest, incarnation = self.make_source(root)
+            generation = incarnation / "hibernate-3"
+            (generation / HibernationArtifactStore.COMPLETE_NAME).unlink()
+            (generation / HibernationArtifactStore.MANIFEST_NAME).unlink()
+            remounted_manifest = replace(
+                manifest,
+                files=tuple(
+                    replace(item, device=item.device + 10_000)
+                    for item in manifest.files
+                ),
+            )
+            artifacts = HibernationArtifactStore(
+                root,
+                require_stable_device=False,
+            )
+            artifacts.publish_complete(remounted_manifest)
+            portable = StorageNativeSandboxManifest.from_local(
+                registration,
+                remounted_manifest,
+                source_guest_ip=None,
+            )
+            migration = StorageNativeMigration(
+                manifest=portable,
+                publication=StorageSnapshotPublication(
+                    manifest_digest="sha256:" + "1" * 64,
+                    tag="snapshot",
+                    repository="snapshots",
+                    repo_blob_url="https://registry/v2/snapshots/blobs",
+                    virtual_size=4096,
+                    layers=(
+                        PublishedStorageLayer(
+                            digest="sha256:" + "2" * 64,
+                            size=4096,
+                        ),
+                    ),
+                ),
+            )
+
+            rebound, changed = StorageNativeMigrationStore(
+                root / "migration-metadata"
+            ).rebind_mounted_snapshot_with_status(
+                migration,
+                expected_runtime=self.runtime(),
+                artifact_store=artifacts,
+                writable_incarnation=incarnation,
+            )
+
+            self.assertFalse(changed)
+            self.assertEqual(rebound, remounted_manifest)
+
     def test_networked_manifest_requires_disconnect_policy_and_source_ip(
         self,
     ) -> None:

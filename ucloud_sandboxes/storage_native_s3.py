@@ -209,6 +209,18 @@ class Boto3S3ObjectClient:
             Metadata={"sha256": sha256},
         )
 
+    def put_file(self, key: str, path: Path, *, sha256: str) -> None:
+        self._client.upload_file(
+            str(path),
+            self.bucket,
+            key,
+            Config=self._transfer_config,
+            ExtraArgs={
+                "ContentType": "application/octet-stream",
+                "Metadata": {"sha256": sha256},
+            },
+        )
+
     def get_bytes(self, key: str, *, max_bytes: int) -> bytes:
         response = self._client.get_object(Bucket=self.bucket, Key=key)
         length = int(response.get("ContentLength") or 0)
@@ -269,6 +281,7 @@ class S3SnapshotPublisher:
         upload_part_concurrency: int = 4,
         stream_timeout_seconds: float = 120.0,
         max_concurrent_publications: int = 2,
+        verification_concurrency: int = 8,
         compact_after_layers: int = DEFAULT_COMPACT_AFTER_LAYERS,
         compact_after_bytes: int = DEFAULT_COMPACT_AFTER_BYTES,
         client_factory: Callable[[], S3ObjectClient] | None = None,
@@ -294,6 +307,8 @@ class S3SnapshotPublisher:
             raise ValueError("stream timeout must be positive")
         if max_concurrent_publications <= 0:
             raise ValueError("publication concurrency must be positive")
+        if verification_concurrency <= 0:
+            raise ValueError("verification concurrency must be positive")
         if compact_after_layers < 1 or compact_after_bytes < 1:
             raise ValueError("compaction thresholds must be positive")
         self.endpoint = normalize_s3_endpoint(
@@ -307,6 +322,7 @@ class S3SnapshotPublisher:
         self.upload_chunk_bytes = upload_chunk_bytes
         self.upload_part_concurrency = upload_part_concurrency
         self.stream_timeout_seconds = stream_timeout_seconds
+        self.verification_concurrency = verification_concurrency
         self.compact_after_layers = compact_after_layers
         self.compact_after_bytes = compact_after_bytes
         self.repository = f"{bucket}/{normalized_prefix}"
@@ -388,9 +404,22 @@ class S3SnapshotPublisher:
         config_size = config_raw.get("size")
         if not _valid_digest(config_digest) or not isinstance(config_size, int):
             raise ValueError("S3 snapshot config descriptor is invalid")
-        config_payload = client.get_bytes(
-            self._metadata_key(config_digest), max_bytes=1024 * 1024
+        workers = min(
+            self.verification_concurrency,
+            len(publication.layers) + 1,
         )
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            config_future = executor.submit(
+                client.get_bytes,
+                self._metadata_key(config_digest),
+                max_bytes=1024 * 1024,
+            )
+            layer_futures = tuple(
+                executor.submit(client.stat, self._layer_key(layer.digest))
+                for layer in publication.layers
+            )
+            config_payload = config_future.result()
+            layer_stats = tuple(future.result() for future in layer_futures)
         if len(config_payload) != config_size or _digest(config_payload) != config_digest:
             raise ValueError("S3 snapshot config content is corrupt")
         expected = RegistrySnapshotPublisher._snapshot_config(
@@ -402,8 +431,7 @@ class S3SnapshotPublisher:
         manifest_layers = tuple(PublishedStorageLayer.from_dict(raw) for raw in layers_raw)
         if manifest_layers != publication.layers:
             raise ValueError("S3 snapshot layers do not match its publication")
-        for layer in publication.layers:
-            stat = client.stat(self._layer_key(layer.digest))
+        for layer, stat in zip(publication.layers, layer_stats):
             if stat is None or stat.size != layer.size:
                 raise ValueError("S3 snapshot layer is missing or has the wrong size")
         return publication
@@ -420,6 +448,7 @@ class S3SnapshotPublisher:
                 "snapshot_compact_after_bytes": self.compact_after_bytes,
                 "snapshot_upload_part_concurrency": self.upload_part_concurrency,
                 "snapshot_upload_part_bytes": self.upload_chunk_bytes,
+                "snapshot_verification_concurrency": self.verification_concurrency,
             }
 
     def _publish_locked(

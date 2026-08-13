@@ -1,0 +1,48 @@
+{
+  "date": "2026-08-13",
+  "deployment": "hetzner-production",
+  "registry": {
+    "image": "registry:3.1.1",
+    "storage_backend": "s3",
+    "bucket": "sandboxes",
+    "prefix": "production/oci"
+  },
+  "isolated_smoke": {
+    "push": "ok",
+    "blob_response_status": 307,
+    "redirected_blob_read": "ok",
+    "temporary_objects_deleted": 16,
+    "temporary_objects_remaining": 0
+  },
+  "migration": {
+    "source_backend": "filesystem",
+    "source_root": "/mnt/ucloud-registry/docker-registry",
+    "source_objects": 16,
+    "source_bytes": 129686209,
+    "target_conflicts": 0,
+    "uploaded_objects": 16,
+    "post_copy_existing_objects": 16,
+    "post_copy_upload_objects": 0,
+    "rollback_source_retained": true
+  },
+  "post_cutover": {
+    "catalog": [
+      "ucloud-sandbox-snapshots"
+    ],
+    "tag_count": 2,
+    "blob_response_status": 307,
+    "redirected_blob_read": "ok",
+    "registry_service": "active",
+    "maintenance_timers": "active"
+  },
+  "offline_gc": {
+    "marked_blobs": 6,
+    "eligible_blobs": 0,
+    "eligible_manifests": 0,
+    "registry_ready_after_restart": true
+  },
+  "filesystem_fallback": {
+    "registry_v3_read_only_catalog": "ok",
+    "registry_v3_read_only_tags": 2
+  }
+}

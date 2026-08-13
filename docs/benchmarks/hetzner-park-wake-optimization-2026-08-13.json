@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-08-13",
+  "environment": {
+    "cloud": "hetzner",
+    "location": "hel1",
+    "gateway_server_type": "cpx12",
+    "worker_server_type": "cpx62",
+    "worker_snapshot_id": 419550929,
+    "promoted_snapshot": {
+      "id": 419603017,
+      "status": "available",
+      "architecture": "x86",
+      "source_disk_gib": 640,
+      "stored_image_gib": 1.90843089453125
+    },
+    "snapshot_backend": "s3",
+    "snapshot_endpoint": "https://hel1.your-objectstorage.com",
+    "bundle_sha256": "62ed18bbe5bab5155bb12084ee1c8dae1b7caec7eea81290117c05328e4d874e",
+    "sandbox": {
+      "vcpu": 1,
+      "memory_mib": 1024,
+      "writable_disk_mib": 2048,
+      "image": "python:3.13-slim-bookworm"
+    }
+  },
+  "agentenv_review": {
+    "production_version": "v0.1.2",
+    "production_commit": "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0",
+    "reviewed_main_commit": "f8f725e2b962a0bae3eadcd426c7e1ecf243b34e",
+    "result": "No newer portable park/wake optimization applies to the gVisor combined-state volume. The post-v0.1.2 direct OverlayBD packaging work is coupled to AgentEnv's Firecracker memory-snapshot path. The production pin already contains the shared bounded cache, warm ublk pool, and compact correctness/performance fixes.",
+    "background_download_enabled": false,
+    "background_download_decision": "Retained. Whole-layer prefetch would contend with demand reads and download untouched bytes from the combined writable-filesystem/application-memory volume."
+  },
+  "changes": {
+    "unchanged_import_fast_path": "A detached wake now preserves authenticated artifact identities when only Linux st_dev changed after the ublk remount, then discards the empty temporary COW and restores the existing remote publication authority.",
+    "parallel_s3_verification": "The snapshot config GET and layer HEAD requests use a bounded eight-worker verifier instead of serial layer checks.",
+    "implicit_sdk_wake_commit": "Successful SDK activity that wakes a parked sandbox now atomically changes the gateway route to running, clears obsolete snapshot authority, and releases its durable snapshot reference.",
+    "benchmark_instrumentation": "The live benchmark can wake through sandbox-scoped SDK exec and retain node restore-phase timings."
+  },
+  "measurements": {
+    "before": {
+      "detached_wake_seconds": [
+        2.6263,
+        2.1896,
+        3.3913
+      ],
+      "detached_wake_median_seconds": 2.6263,
+      "park_median_seconds": 0.290,
+      "snapshot_chain_layers_after_cycles": [
+        1,
+        3,
+        5
+      ]
+    },
+    "optimized_same_worker": {
+      "attached_wake_median_seconds": 0.5563,
+      "sdk_exec_detached_wake_seconds": [
+        1.7957,
+        1.4414,
+        1.5378,
+        1.5632,
+        1.3585
+      ],
+      "sdk_exec_detached_wake_median_seconds": 1.5378,
+      "explicit_detached_wake_seconds": [
+        1.6263,
+        1.3919,
+        1.5836,
+        1.3411,
+        1.7185
+      ],
+      "explicit_detached_wake_median_seconds": 1.5836,
+      "detach_median_seconds": 0.9985,
+      "park_median_seconds": 0.2523,
+      "snapshot_chain_layers_after_cycles": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "detached_wake_median_improvement_percent": 39.7
+    },
+    "optimized_fresh_node_canary": {
+      "sdk_exec_detached_wake_seconds": [
+        1.9743412420011737,
+        1.4932720430006157,
+        1.5417030959997646
+      ],
+      "sdk_exec_detached_wake_median_seconds": 1.5417030959997646,
+      "detach_seconds": [
+        3.8241145339998184,
+        0.7057365110013052,
+        0.8997659829983604
+      ],
+      "detach_median_seconds": 0.8997659829983604,
+      "park_seconds": [
+        0.24355525800092437,
+        3.2899625789996207,
+        0.24615262299994356
+      ],
+      "park_median_seconds": 0.24615262299994356,
+      "lifecycle_retries": 0,
+      "node_restore_milliseconds": [
+        389.8626040000295,
+        482.0253469999898,
+        399.6630099999834
+      ]
+    },
+    "promoted_snapshot_canary": {
+      "provider_server_id": 162120557,
+      "provider_image_id_verified": 419603017,
+      "sdk_exec_detached_wake_seconds": [
+        8.287976232000801,
+        1.6406888729979983
+      ],
+      "detach_seconds": [
+        3.55483623499822,
+        1.3898949989998073
+      ],
+      "park_seconds": [
+        0.29076475300098537,
+        0.29835476099833613
+      ],
+      "lifecycle_retries": 0,
+      "process_identity_preserved": true,
+      "counter_checksum_verified": true,
+      "note": "The first wake is the empty-cache observation; the second is the immediately following warm-cache observation. A two-sample median is intentionally not used as the steady-state claim."
+    }
+  },
+  "correctness": {
+    "every_park_reached_parked": true,
+    "every_detach_reached_detached": true,
+    "every_sdk_wake_reached_running": true,
+    "process_identity_preserved": true,
+    "counter_advanced_after_every_wake": true,
+    "sandbox_scoped_sdk_exec_succeeded": true,
+    "empty_import_layers_eliminated": true,
+    "promoted_snapshot_booted_and_passed": true,
+    "full_test_suite_passed": true,
+    "full_test_suite_tests": 826,
+    "full_test_suite_skipped": 1
+  },
+  "caveats": [
+    "These are qualification observations, not latency percentiles.",
+    "The sandbox is deliberately small; multi-GiB dirty working sets and concurrent wake bursts still need separate load measurements.",
+    "Park and detach each contain an Object Storage write and show transient tail outliers even though their medians are stable.",
+    "The optimization removes redundant import work; it does not remove the real new delta produced by the next park."
+  ]
+}

@@ -737,6 +737,85 @@ class ControlPlaneTests(unittest.TestCase):
             3,
         )
 
+    def test_successful_exec_implicitly_commits_parked_route_wake(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            route_file = root / "routes.sqlite"
+            heartbeat_file = root / "control-state.sqlite"
+            snapshot = _portable_snapshot("sandbox-implicit-wake")
+            route = RoutingStore(route_file).upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id=snapshot.manifest.sandbox_id,
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node.invalid",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=snapshot.publication.manifest_digest,
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+            )
+            ControlStateStore(heartbeat_file).upsert_heartbeat(
+                build_heartbeat(
+                    job_id=route.job_id,
+                    node_id=route.node_id,
+                    node_url=route.node_url,
+                    active_sandboxes=0,
+                    capabilities=("sandbox", "disk-quota"),
+                    total_resources=ResourceQuantity(
+                        vcpu=8,
+                        memory_mb=16_384,
+                        disk_mb=100_000,
+                    ),
+                    inventory_complete=True,
+                )
+            )
+            gateway = build_server(
+                "127.0.0.1",
+                0,
+                heartbeat_file,
+                routing_file=route_file,
+            )
+
+            def successful_exec(_handler, *_args, **_kwargs):
+                return control_plane.ProxiedResponse(
+                    201,
+                    {"Content-Type": "application/json"},
+                    b'{"session":{"id":"exec-implicit-wake"}}',
+                )
+
+            gateway.RequestHandlerClass._proxy_request = successful_exec
+            with _running_server(gateway):
+                host, port = gateway.server_address
+                response = self._json_request(
+                    f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}/exec",
+                    method="POST",
+                    payload={
+                        "command": ["true"],
+                        "env": {},
+                        "working_dir": None,
+                        "stdin": False,
+                        "tty": False,
+                    },
+                )
+                stored = RoutingStore(route_file).get_sandbox_readonly(
+                    route.sandbox_id
+                )
+
+        self.assertEqual(response["session"]["id"], "exec-implicit-wake")
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.state, "running")
+        self.assertEqual(stored.storage_schema, "storage-native-v1")
+        self.assertEqual(stored.snapshot_manifest_digest, "")
+        self.assertEqual(stored.snapshot_repository, "")
+        self.assertEqual(stored.snapshot_tag, "")
+        self.assertEqual(stored.storage_snapshot, {})
+
     def test_worker_detach_retries_ambiguous_eviction_and_commits_once(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)

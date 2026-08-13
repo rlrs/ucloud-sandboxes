@@ -15,7 +15,7 @@ import sqlite3
 import socket
 from threading import BoundedSemaphore, Event, RLock, Thread
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib import error, request
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
@@ -3575,9 +3575,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     wake_placement_routes,
                 )
 
-        if (route.state or "unknown").lower() == "parked" and _sandbox_request_wakes(
-            path, self.command
-        ):
+        request_wakes = _sandbox_request_wakes(path, self.command)
+        implicit_wake = bool(
+            not lifecycle_action
+            and request_wakes
+            and (route.state or "unknown").lower() in {"parked", "waking"}
+        )
+        if (route.state or "unknown").lower() == "parked" and request_wakes:
             current = self.routing_store.get_sandbox_readonly(sandbox_id)
             if current is None:
                 self._write_json(
@@ -3649,6 +3653,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 self.path,
                 method=self.command,
                 extra_headers=extra_headers,
+                on_success=(
+                    lambda: self._commit_implicit_wake(route)
+                    if implicit_wake
+                    else None
+                ),
             )
             return
         proxy_body = body
@@ -3677,6 +3686,21 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             body=proxy_body,
             extra_headers=extra_headers,
         )
+        if implicit_wake and response.status >= 300:
+            try:
+                failed_state = str(response.json().get("lifecycle_state") or "").lower()
+            except (TypeError, ValueError, json.JSONDecodeError):
+                failed_state = ""
+            if failed_state == "parked":
+                rolled_back = self.routing_store.set_sandbox_state_if_current(
+                    route,
+                    expected_states={"waking"},
+                    state="parked",
+                )
+                if rolled_back is not None:
+                    route = rolled_back
+        if implicit_wake and 200 <= response.status < 300:
+            route = self._commit_implicit_wake(route)
         if (
             managed_path is not None
             and managed_path[0] == "status"
@@ -4229,6 +4253,31 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             },
         )
         return None
+
+    def _commit_implicit_wake(self, route: SandboxRoute) -> SandboxRoute:
+        """Commit the wake performed as a side effect of SDK activity."""
+
+        updated = self.routing_store.set_sandbox_state_if_current(
+            route,
+            expected_states={"waking", "running"},
+            state="running",
+            storage_schema=route.storage_schema,
+            snapshot_manifest_digest="",
+            snapshot_repository="",
+            snapshot_tag="",
+            storage_snapshot={},
+        )
+        if updated is None:
+            current = self.routing_store.get_sandbox_readonly(route.sandbox_id)
+            if current is None:
+                return route
+            updated = current
+        if route.snapshot_manifest_digest and (
+            route.snapshot_manifest_digest != updated.snapshot_manifest_digest
+            or route.snapshot_tag != updated.snapshot_tag
+        ):
+            self._release_registry_snapshot_reference(route)
+        return updated
 
     def _route_exec_request(self, session_id: str) -> None:
         route = self.routing_store.get_exec(session_id)
@@ -5101,6 +5150,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         body: Any = None,
         timeout_seconds: float = DEFAULT_PROXY_TIMEOUT_SECONDS,
         extra_headers: dict[str, str] | None = None,
+        on_success: Callable[[], None] | None = None,
     ) -> None:
         proxied = self._build_proxy_request(
             node_url,
@@ -5161,6 +5211,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     status=HTTPStatus.BAD_GATEWAY,
                 )
                 return
+            if on_success is not None:
+                on_success()
             self.send_response(response.status)
             self._copy_streaming_response_headers(
                 response.headers,

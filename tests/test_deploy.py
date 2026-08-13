@@ -121,7 +121,7 @@ class DeployTests(unittest.TestCase):
             script = render_remote_deploy_script(plan)
 
         self.assertIn("/etc/ucloud-sandboxes/deployment.json", script)
-        self.assertIn('"schema": 3', script)
+        self.assertIn('"schema": 4', script)
         self.assertIn('"deployment_id": "prod-a"', script)
         self.assertNotIn("/etc/ucloud-sandboxes/gateway.env", script)
         self.assertNotIn("/etc/ucloud-sandboxes/autoscaler.env", script)
@@ -168,8 +168,11 @@ class DeployTests(unittest.TestCase):
     def test_registry_units_fence_the_configured_registry_mount(self) -> None:
         with TemporaryDirectory() as raw_dir:
             config = self._config(
-                registry_mount_point="/mnt/registry",
-                registry_data_root="/mnt/registry/docker-registry",
+                registry_store={
+                    **DeploymentConfig.default().to_dict()["registry_store"],
+                    "mount_point": "/mnt/registry",
+                    "data_root": "/mnt/registry/docker-registry",
+                },
             )
             plan = self._plan(Path(raw_dir), config=config)
             script = render_remote_deploy_script(plan)
@@ -177,6 +180,41 @@ class DeployTests(unittest.TestCase):
         self.assertIn("REGISTRY_MOUNT_POINT=/mnt/registry", script)
         self.assertIn("RequiresMountsFor=/mnt/registry", script)
         self.assertIn("ExecStartPre=/usr/bin/mountpoint -q /mnt/registry", script)
+        syntax = subprocess.run(
+            ["bash", "-n"],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_s3_registry_units_have_no_filesystem_mount_fence(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            config = self._config(
+                registry_store={
+                    "kind": "s3",
+                    "mount_point": "",
+                    "data_root": "",
+                    "endpoint": "https://hel1.your-objectstorage.com",
+                    "bucket": "sandboxes",
+                    "region": "hel1",
+                    "prefix": "production/oci",
+                    "access_key_id_env": "REGISTRY_ACCESS_KEY",
+                    "secret_access_key_env": "REGISTRY_SECRET_KEY",
+                    "force_path_style": False,
+                },
+            )
+            plan = self._plan(Path(raw_dir), config=config)
+            script = render_remote_deploy_script(plan)
+
+        self.assertIn("REGISTRY_STORE_KIND=s3", script)
+        self.assertIn(
+            "sudo rm -f /etc/systemd/system/ucloud-sandbox-registry.service.d/persistent-storage.conf",
+            script,
+        )
+        self.assertNotIn("REGISTRY_ACCESS_KEY=", script)
+        self.assertNotIn("REGISTRY_SECRET_KEY=", script)
         syntax = subprocess.run(
             ["bash", "-n"],
             input=script,

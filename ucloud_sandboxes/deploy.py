@@ -344,7 +344,10 @@ def render_remote_deploy_script(
         )
 
     persistent_storage_dropin = mount_dropin(plan.project_mount_dir)
-    registry_storage_dropin = mount_dropin(plan.config.registry_mount_point)
+    registry_filesystem = plan.config.registry_store.kind == "filesystem"
+    registry_storage_dropin = (
+        mount_dropin(plan.config.registry_mount_point) if registry_filesystem else ""
+    )
     node_runtime_packages = " ".join(SANDBOX_RUNTIME_PACKAGES)
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
@@ -355,6 +358,7 @@ def render_remote_deploy_script(
         f"INSTALL_ROOT={shlex.quote(plan.install_root)}",
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
+        f"REGISTRY_STORE_KIND={shlex.quote(plan.config.registry_store.kind)}",
         f"REGISTRY_MOUNT_POINT={shlex.quote(plan.config.registry_mount_point)}",
         f"REGISTRY_DATA_ROOT={shlex.quote(plan.config.registry_data_root)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
@@ -379,9 +383,11 @@ def render_remote_deploy_script(
         '  echo "Persistent project drive is not mounted at $PROJECT_MOUNT_DIR" >&2',
         "  exit 1",
         "fi",
-        'if ! mountpoint -q "$REGISTRY_MOUNT_POINT"; then',
-        '  echo "Registry storage is not mounted at $REGISTRY_MOUNT_POINT" >&2',
-        "  exit 1",
+        'if [ "$REGISTRY_STORE_KIND" = filesystem ]; then',
+        '  if ! mountpoint -q "$REGISTRY_MOUNT_POINT"; then',
+        '    echo "Registry storage is not mounted at $REGISTRY_MOUNT_POINT" >&2',
+        "    exit 1",
+        "  fi",
         "fi",
         'if [ ! -s "$STAGED_SESSION_FILE" ] && [ ! -s "$SESSION_FILE" ]; then',
         '  echo "No staged or persistent UCloud session is available" >&2',
@@ -690,7 +696,9 @@ def render_remote_deploy_script(
         'sudo chmod 0700 "$DATA_ROOT"',
         'sudo chown -R "$SERVICE_USER:$SERVICE_GROUP" "$DATA_ROOT"',
         'sudo install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DATA_ROOT/ssh"',
-        'sudo install -d -m 0750 "$REGISTRY_DATA_ROOT"',
+        'if [ "$REGISTRY_STORE_KIND" = filesystem ]; then',
+        '  sudo install -d -m 0750 "$REGISTRY_DATA_ROOT"',
+        "fi",
         'if [ -s "$STAGED_SESSION_FILE" ]; then',
         '  sudo install -m 0600 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STAGED_SESSION_FILE" "$SESSION_FILE"',
         '  rm -f "$STAGED_SESSION_FILE"',
@@ -736,8 +744,7 @@ def render_remote_deploy_script(
     for path, content in unit_files.items():
         script_parts.append(_install_root_file_snippet(path, content, mode="0644"))
     for unit_name, storage_dropin in (
-        *((name, persistent_storage_dropin) for name in PERSISTENT_STATE_SYSTEMD_UNITS),
-        *((name, registry_storage_dropin) for name in REGISTRY_STORAGE_SYSTEMD_UNITS),
+        (name, persistent_storage_dropin) for name in PERSISTENT_STATE_SYSTEMD_UNITS
     ):
         dropin_dir = f"/etc/systemd/system/{unit_name}.d"
         script_parts.append(f"sudo install -d -m 0755 {shlex.quote(dropin_dir)}")
@@ -748,6 +755,20 @@ def render_remote_deploy_script(
                 mode="0644",
             )
         )
+    for unit_name in REGISTRY_STORAGE_SYSTEMD_UNITS:
+        dropin_dir = f"/etc/systemd/system/{unit_name}.d"
+        dropin_path = f"{dropin_dir}/persistent-storage.conf"
+        script_parts.append(f"sudo install -d -m 0755 {shlex.quote(dropin_dir)}")
+        if registry_filesystem:
+            script_parts.append(
+                _install_root_file_snippet(
+                    dropin_path,
+                    registry_storage_dropin,
+                    mode="0644",
+                )
+            )
+        else:
+            script_parts.append(f"sudo rm -f {shlex.quote(dropin_path)}")
     script_parts.extend(
         [
             "sudo systemctl daemon-reload",

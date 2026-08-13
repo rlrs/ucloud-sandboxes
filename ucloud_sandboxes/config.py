@@ -15,7 +15,7 @@ from .providers import (
 )
 
 
-DEPLOYMENT_CONFIG_SCHEMA = 3
+DEPLOYMENT_CONFIG_SCHEMA = 4
 DEFAULT_DATA_ROOT = "/work/data/ucloud-sandboxes/state"
 DEFAULT_REGISTRY_MOUNT_POINT = "/work/data"
 DEFAULT_REGISTRY_DATA_ROOT = "/work/data/ucloud-sandbox-registry/docker-registry"
@@ -110,7 +110,120 @@ class SnapshotStoreConfig:
         )
 
 
-def normalize_s3_endpoint(endpoint: str, *, bucket: str, region: str) -> str:
+@dataclass(frozen=True)
+class RegistryStoreConfig:
+    """Storage driver used by the deployment's private OCI registry.
+
+    Filesystem deployments retain the existing fail-closed mount contract.
+    S3 deployments keep credentials out of deployment.json and let Docker
+    Distribution store OCI blobs below an isolated bucket prefix.
+    """
+
+    kind: str = "filesystem"
+    mount_point: str = DEFAULT_REGISTRY_MOUNT_POINT
+    data_root: str = DEFAULT_REGISTRY_DATA_ROOT
+    endpoint: str = ""
+    bucket: str = ""
+    region: str = ""
+    prefix: str = ""
+    access_key_id_env: str = "UCLOUD_REGISTRY_S3_ACCESS_KEY_ID"
+    secret_access_key_env: str = "UCLOUD_REGISTRY_S3_SECRET_ACCESS_KEY"
+    force_path_style: bool = False
+
+    @classmethod
+    def from_dict(cls, raw: object) -> "RegistryStoreConfig":
+        result = cls(**_exact_dataclass_values("registry_store", raw, cls()))
+        if result.kind not in {"filesystem", "s3"}:
+            raise ValueError("registry_store.kind must be filesystem or s3")
+        for name in (
+            "mount_point",
+            "data_root",
+            "endpoint",
+            "bucket",
+            "region",
+            "prefix",
+            "access_key_id_env",
+            "secret_access_key_env",
+        ):
+            value = getattr(result, name)
+            if not isinstance(value, str) or any(
+                character in value for character in ("\x00", "\r", "\n")
+            ):
+                raise ValueError(f"registry_store.{name} must be a string")
+        if not isinstance(result.force_path_style, bool):
+            raise ValueError("registry_store.force_path_style must be a boolean")
+        for name in ("access_key_id_env", "secret_access_key_env"):
+            value = getattr(result, name)
+            if not value or not value.replace("_", "A").isalnum() or not (
+                value[0].isalpha() or value[0] == "_"
+            ):
+                raise ValueError(
+                    f"registry_store.{name} must be an environment variable name"
+                )
+        if result.kind == "filesystem":
+            mount_point = _require_absolute_path(
+                "registry_store.mount_point", result.mount_point
+            )
+            data_root = _require_absolute_path(
+                "registry_store.data_root", result.data_root
+            )
+            if not Path(data_root).is_relative_to(Path(mount_point)):
+                raise ValueError(
+                    "registry_store.data_root must be inside "
+                    "registry_store.mount_point"
+                )
+            if result.endpoint or result.bucket or result.region or result.prefix:
+                raise ValueError(
+                    "filesystem registry store cannot configure S3 endpoint, "
+                    "bucket, region, or prefix"
+                )
+            if result.force_path_style:
+                raise ValueError(
+                    "registry_store.force_path_style requires an S3 registry store"
+                )
+            return replace(
+                result,
+                mount_point=mount_point,
+                data_root=data_root,
+            )
+        if result.mount_point or result.data_root:
+            raise ValueError(
+                "S3 registry store cannot configure filesystem mount_point or data_root"
+            )
+        if not result.endpoint.startswith(("http://", "https://")):
+            raise ValueError("registry_store.endpoint must be HTTP(S) for S3")
+        if "/" in result.bucket or not result.bucket.strip():
+            raise ValueError("registry_store.bucket is invalid")
+        if not result.region.strip():
+            raise ValueError("registry_store.region is required for S3")
+        normalized_prefix = result.prefix.strip("/")
+        if (
+            not normalized_prefix
+            or any(part in {"", ".", ".."} for part in normalized_prefix.split("/"))
+        ):
+            raise ValueError("registry_store.prefix is invalid")
+        endpoint = normalize_s3_endpoint(
+            result.endpoint,
+            bucket=result.bucket.strip(),
+            region=result.region.strip(),
+            field_name="registry_store.endpoint",
+        )
+        return replace(
+            result,
+            endpoint=endpoint,
+            bucket=result.bucket.strip(),
+            region=result.region.strip(),
+            prefix=normalized_prefix,
+        )
+
+
+def normalize_s3_endpoint(
+    endpoint: str,
+    *,
+    bucket: str,
+    region: str,
+    field_name: str = "snapshot_store.endpoint",
+) -> str:
     """Return an SDK endpoint origin, accepting Hetzner's bucket URL too."""
 
     parsed = urlsplit(endpoint)
@@ -123,7 +236,7 @@ def normalize_s3_endpoint(endpoint: str, *, bucket: str, region: str) -> str:
         or parsed.query
         or parsed.fragment
     ):
-        raise ValueError("snapshot_store.endpoint must be an HTTP(S) origin")
+        raise ValueError(f"{field_name} must be an HTTP(S) origin")
     hostname = parsed.hostname.rstrip(".").lower()
     if hostname == f"{bucket}.{region}.your-objectstorage.com".lower():
         hostname = f"{region}.your-objectstorage.com".lower()
@@ -245,8 +358,7 @@ class DeploymentConfig:
     deployment_id: str
     provider: ProviderConfiguration
     data_root: str
-    registry_mount_point: str
-    registry_data_root: str
+    registry_store: RegistryStoreConfig
     gateway_private_host: str
     registry_private_ip: str
     gateway_port: int
@@ -280,8 +392,7 @@ class DeploymentConfig:
             deployment_id="production",
             provider=default_provider_configuration(scope_id),
             data_root=DEFAULT_DATA_ROOT,
-            registry_mount_point=DEFAULT_REGISTRY_MOUNT_POINT,
-            registry_data_root=DEFAULT_REGISTRY_DATA_ROOT,
+            registry_store=RegistryStoreConfig(),
             gateway_private_host="sandbox-gateway-production",
             registry_private_ip="",
             gateway_port=8090,
@@ -328,8 +439,7 @@ class DeploymentConfig:
         schema = _require_int("schema", raw.get("schema"), minimum=1)
         if schema == 1:
             legacy_expected = expected - {
-                "registry_data_root",
-                "registry_mount_point",
+                "registry_store",
                 "autoscaler_max_storage_native_detaches_per_cycle",
                 "snapshot_store",
             } | {"autoscaler_max_storage_native_migrations_per_cycle"}
@@ -337,26 +447,64 @@ class DeploymentConfig:
             legacy_data_root = _require_absolute_path("data_root", raw["data_root"])
             raw = {
                 **raw,
-                "schema": 2,
-                "registry_data_root": str(
-                    Path(legacy_data_root).parent.parent
-                    / "ucloud-sandbox-registry/docker-registry"
+                "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "registry_store": asdict(
+                    replace(
+                        RegistryStoreConfig(),
+                        data_root=str(
+                            Path(legacy_data_root).parent.parent
+                            / "ucloud-sandbox-registry/docker-registry"
+                        ),
+                        mount_point=str(Path(legacy_data_root).parent.parent),
+                    )
                 ),
-                "registry_mount_point": str(Path(legacy_data_root).parent.parent),
+                "snapshot_store": asdict(SnapshotStoreConfig()),
                 "autoscaler_max_storage_native_detaches_per_cycle": raw[
                     "autoscaler_max_storage_native_migrations_per_cycle"
                 ],
             }
             raw.pop("autoscaler_max_storage_native_migrations_per_cycle")
-            schema = 2
+            schema = DEPLOYMENT_CONFIG_SCHEMA
         if schema == 2:
-            schema_two_expected = expected - {"snapshot_store"}
+            schema_two_expected = expected - {"registry_store", "snapshot_store"} | {
+                "registry_mount_point",
+                "registry_data_root",
+            }
             _require_exact_keys("deployment config", raw, schema_two_expected)
             raw = {
                 **raw,
                 "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "registry_store": asdict(
+                    replace(
+                        RegistryStoreConfig(),
+                        mount_point=raw["registry_mount_point"],
+                        data_root=raw["registry_data_root"],
+                    )
+                ),
                 "snapshot_store": asdict(SnapshotStoreConfig()),
             }
+            raw.pop("registry_mount_point")
+            raw.pop("registry_data_root")
+            schema = DEPLOYMENT_CONFIG_SCHEMA
+        elif schema == 3:
+            schema_three_expected = expected - {"registry_store"} | {
+                "registry_mount_point",
+                "registry_data_root",
+            }
+            _require_exact_keys("deployment config", raw, schema_three_expected)
+            raw = {
+                **raw,
+                "schema": DEPLOYMENT_CONFIG_SCHEMA,
+                "registry_store": asdict(
+                    replace(
+                        RegistryStoreConfig(),
+                        mount_point=raw["registry_mount_point"],
+                        data_root=raw["registry_data_root"],
+                    )
+                ),
+            }
+            raw.pop("registry_mount_point")
+            raw.pop("registry_data_root")
             schema = DEPLOYMENT_CONFIG_SCHEMA
         elif schema == DEPLOYMENT_CONFIG_SCHEMA:
             _require_exact_keys("deployment config", raw, expected)
@@ -368,6 +516,7 @@ class DeploymentConfig:
         validate_provider_configuration(provider)
         sandbox = SandboxPoolConfig.from_dict(raw["sandbox"])
         builder = BuilderPoolConfig.from_dict(raw["builder"])
+        registry_store = RegistryStoreConfig.from_dict(raw["registry_store"])
         snapshot_store = SnapshotStoreConfig.from_dict(raw["snapshot_store"])
         heartbeat_ttl = _require_int(
             "gateway_heartbeat_ttl_seconds",
@@ -385,12 +534,7 @@ class DeploymentConfig:
             deployment_id=_require_string("deployment_id", raw["deployment_id"]),
             provider=provider,
             data_root=_require_absolute_path("data_root", raw["data_root"]),
-            registry_mount_point=_require_absolute_path(
-                "registry_mount_point", raw["registry_mount_point"]
-            ),
-            registry_data_root=_require_absolute_path(
-                "registry_data_root", raw["registry_data_root"]
-            ),
+            registry_store=registry_store,
             gateway_private_host=_require_string(
                 "gateway_private_host", raw["gateway_private_host"]
             ),
@@ -473,10 +617,6 @@ class DeploymentConfig:
             result.relay_port == result.registry_port
         ):
             raise ValueError("gateway, relay, and registry ports must be distinct")
-        if not Path(result.registry_data_root).is_relative_to(
-            Path(result.registry_mount_point)
-        ):
-            raise ValueError("registry_data_root must be inside registry_mount_point")
         return result
 
     def control_state_file(self) -> Path:
@@ -534,7 +674,21 @@ class DeploymentConfig:
         return Path(DEFAULT_INSTALL_ROOT) / "release/builder-node-package.tar.gz"
 
     def registry_data_dir(self) -> Path:
-        return Path(self.registry_data_root)
+        if self.registry_store.kind != "filesystem":
+            raise ValueError("S3 registry store has no local registry data directory")
+        return Path(self.registry_store.data_root)
+
+    @property
+    def registry_mount_point(self) -> str:
+        """Compatibility accessor for filesystem-specific deployment code."""
+
+        return self.registry_store.mount_point
+
+    @property
+    def registry_data_root(self) -> str:
+        """Compatibility accessor for filesystem-specific deployment code."""
+
+        return self.registry_store.data_root
 
     @property
     def registry_endpoint_host(self) -> str:
@@ -581,8 +735,7 @@ class DeploymentConfig:
             "deployment_id": self.deployment_id,
             "provider": provider,
             "data_root": self.data_root,
-            "registry_mount_point": self.registry_mount_point,
-            "registry_data_root": self.registry_data_root,
+            "registry_store": asdict(self.registry_store),
             "gateway_private_host": self.gateway_private_host,
             "registry_private_ip": self.registry_private_ip,
             "gateway_port": self.gateway_port,

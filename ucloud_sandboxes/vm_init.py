@@ -262,9 +262,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
         " --snapshot-repository ${UCLOUD_STORAGE_NATIVE_REPOSITORY}"
     )
     telemetry_args = (
-        " --telemetry-otlp-endpoint ${UCLOUD_TELEMETRY_OTLP_ENDPOINT}"
-        " --telemetry-cloud-provider ${UCLOUD_TELEMETRY_CLOUD_PROVIDER}"
-        " --telemetry-cloud-machine-type ${UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE}"
+        ' --telemetry-otlp-endpoint "${UCLOUD_TELEMETRY_OTLP_ENDPOINT}"'
+        ' --telemetry-cloud-provider "${UCLOUD_TELEMETRY_CLOUD_PROVIDER}"'
+        ' --telemetry-cloud-machine-type "${UCLOUD_TELEMETRY_CLOUD_MACHINE_TYPE}"'
         " --telemetry-trace-sample-ratio ${UCLOUD_TELEMETRY_TRACE_SAMPLE_RATIO}"
         " --telemetry-export-interval-ms ${UCLOUD_TELEMETRY_EXPORT_INTERVAL_MS}"
         " --telemetry-export-timeout-ms ${UCLOUD_TELEMETRY_EXPORT_TIMEOUT_MS}"

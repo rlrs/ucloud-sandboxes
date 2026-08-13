@@ -145,6 +145,15 @@ class VmInitTests(unittest.TestCase):
         self.assertNotIn("test-access", node_env)
         self.assertNotIn("test-secret", node_env)
 
+    def test_empty_telemetry_endpoint_remains_an_empty_argument(self) -> None:
+        script = render_vm_init_script(self._options(telemetry_otlp_endpoint=""))
+
+        self.assertIn(
+            '--telemetry-otlp-endpoint "${UCLOUD_TELEMETRY_OTLP_ENDPOINT}"',
+            script,
+        )
+        self.assertIn("UCLOUD_TELEMETRY_OTLP_ENDPOINT=''", script)
+
     @staticmethod
     def _run_bundle_validator(validator, root):
         return subprocess.run(

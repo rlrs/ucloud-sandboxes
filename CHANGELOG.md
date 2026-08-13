@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-08-13
 
 - Replaced SQLite pseudo-traces with bounded, nonblocking OTLP/HTTP traces and
   metrics, W3C propagation, exporter-health reporting, and a strict schema-5

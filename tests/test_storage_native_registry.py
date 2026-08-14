@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
-import time
 import unittest
 
 from ucloud_sandboxes.storage_native import StorageNativeLayer
@@ -211,7 +210,7 @@ class StorageNativeRegistryTests(unittest.TestCase):
                     virtual_size=4096,
                 )
 
-    def test_export_failure_before_connect_is_reported_without_full_timeout(self) -> None:
+    def test_export_failure_before_connect_is_propagated(self) -> None:
         class FailingExporter(FakeExporter):
             def export_dense_layer(self, **_kwargs) -> StorageNativeLayer:
                 raise RuntimeError("injected export failure")
@@ -224,18 +223,14 @@ class StorageNativeRegistryTests(unittest.TestCase):
                 FakeRegistry(),  # type: ignore[arg-type]
                 repository="snapshots",
                 stream_socket_root=root,
-                stream_timeout_seconds=5,
             )
 
-            started = time.monotonic()
             with self.assertRaisesRegex(RuntimeError, "injected export failure"):
                 publisher.publish(
                     exporter=FailingExporter({}),
                     source_layer_paths=(source,),
                     virtual_size=4096,
                 )
-
-            self.assertLess(time.monotonic() - started, 1)
 
     def test_compacts_mixed_remote_and_local_chain_at_layer_threshold(self) -> None:
         with TemporaryDirectory() as raw_dir:

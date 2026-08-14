@@ -2,6 +2,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from hypothesis import given, settings, strategies as st
+
 from ucloud_sandboxes.runtime_metrics import (
     cpu_percent_from_samples,
     read_proc_meminfo,
@@ -12,6 +14,54 @@ from ucloud_sandboxes.runtime_metrics import (
 
 
 class RuntimeMetricsTests(unittest.TestCase):
+    @settings(max_examples=100, deadline=None, derandomize=True)
+    @given(
+        total=st.integers(min_value=0, max_value=10**12),
+        idle=st.integers(min_value=0, max_value=10**12),
+        total_delta=st.integers(min_value=1, max_value=10**9),
+        idle_delta=st.integers(min_value=0, max_value=10**9),
+    )
+    def test_monotonic_cpu_samples_are_bounded_or_rejected(
+        self,
+        total: int,
+        idle: int,
+        total_delta: int,
+        idle_delta: int,
+    ) -> None:
+        result = cpu_percent_from_samples(
+            (total, idle),
+            (total + total_delta, idle + idle_delta),
+        )
+
+        if idle_delta > total_delta:
+            self.assertIsNone(result)
+        else:
+            assert result is not None
+            self.assertGreaterEqual(result, 0.0)
+            self.assertLessEqual(result, 100.0)
+
+    @settings(max_examples=100, deadline=None, derandomize=True)
+    @given(
+        st.text(
+            alphabet=st.characters(blacklist_categories=("Cs",)),
+            max_size=512,
+        )
+    )
+    def test_malformed_proc_text_fails_closed(self, payload: str) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "proc-file"
+            path.write_text(payload, encoding="utf-8")
+
+            cpu = read_proc_stat_cpu(path)
+            memory = read_proc_meminfo(path)
+            pressure = read_proc_pressure(path)
+
+        if cpu is not None:
+            self.assertGreaterEqual(cpu[0], 0)
+            self.assertGreaterEqual(cpu[1], 0)
+        self.assertTrue(all(value >= 0 for value in memory.values()))
+        self.assertTrue(all(0.0 <= value <= 100.0 for value in pressure.values()))
+
     def test_calculates_cpu_percent_from_proc_stat_samples(self) -> None:
         self.assertEqual(
             cpu_percent_from_samples((1000, 800), (2000, 1600)),

@@ -22,8 +22,17 @@ ucloud-sandboxes-storage = "ucloud_sandboxes.storage_native_service:main"
 ucloud-sandboxes-snapshot-gc = "ucloud_sandboxes.storage_native_s3_gc:main"
 ucloud-sandboxes-registry-migrate = "ucloud_sandboxes.registry_storage_migration:main"
 
+[dependency-groups]
+dev = [
+    "hypothesis>=6.100,<7",
+    "ruff>=0.12,<1",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["ucloud_sandboxes"]
 
 [tool.hatch.build.targets.sdist]
 exclude = ["/ucloud-sandboxes-sdk"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

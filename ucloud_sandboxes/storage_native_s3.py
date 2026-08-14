@@ -78,6 +78,7 @@ class Boto3S3ObjectClient:
         region: str,
         credential_process: str = "",
         credentials: dict[str, str] | None = None,
+        force_path_style: bool = False,
     ) -> None:
         endpoint = normalize_s3_endpoint(endpoint, bucket=bucket, region=region)
         resolved_credentials = credentials or _resolve_credential_process(
@@ -118,7 +119,7 @@ class Boto3S3ObjectClient:
                 request_checksum_calculation="when_required",
                 response_checksum_validation="when_required",
                 s3={
-                    "addressing_style": "virtual",
+                    "addressing_style": "path" if force_path_style else "virtual",
                     "payload_signing_enabled": False,
                 },
             ),

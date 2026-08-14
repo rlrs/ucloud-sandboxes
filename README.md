@@ -55,11 +55,19 @@ under `docs/`, not in this overview.
 
 ## Quick Local Checks
 
-Run tests:
+Run the complete local verification suite (main Python, shell syntax, managed
+process Go tests, and the separately checked-out SDK when present):
 
 ```bash
-uv run python -m unittest
+bash scripts/check.sh
 ```
+
+This intentionally fails if ShellCheck or the sibling SDK checkout is absent.
+For a deliberately reduced local run, set
+`UCLOUD_CHECK_ALLOW_MISSING_SHELLCHECK=1` and/or
+`UCLOUD_CHECK_ALLOW_MISSING_SDK=1`; the output will identify the omitted tier.
+
+For a quick main-package-only test run, use `uv run python -m unittest`.
 
 Inspect the canonical configuration:
 

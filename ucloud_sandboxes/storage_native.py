@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import socket
 import struct
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
-
 
 AGENTENV_UBLK_PROTOCOL_MAX_BYTES = 16 * 1024 * 1024
 
@@ -348,10 +347,16 @@ class AgentEnvUblkClient:
             connection.connect(str(self.socket_path))
             connection.sendall(struct.pack(">I", len(payload)))
             connection.sendall(payload)
-            length = struct.unpack(">I", self._recv_exact(connection, 4))[0]
+            length = struct.unpack(">I", self._recv_protocol_bytes(connection, 4))[0]
             if length > AGENTENV_UBLK_PROTOCOL_MAX_BYTES:
                 raise StorageNativeError("ublk daemon response is too large")
-            response = json.loads(self._recv_exact(connection, length).decode("utf-8"))
+            raw_response = self._recv_protocol_bytes(connection, length)
+            try:
+                response = json.loads(raw_response.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise StorageNativeError(
+                    "ublk daemon returned malformed JSON"
+                ) from exc
         if not isinstance(response, dict):
             raise StorageNativeError("ublk daemon response must be an object")
         status = str(response.get("status") or "")
@@ -374,3 +379,12 @@ class AgentEnvUblkClient:
                 raise EOFError("ublk daemon closed the connection early")
             result.extend(chunk)
         return bytes(result)
+
+    @classmethod
+    def _recv_protocol_bytes(cls, connection: socket.socket, size: int) -> bytes:
+        try:
+            return cls._recv_exact(connection, size)
+        except EOFError as exc:
+            raise StorageNativeError(
+                "ublk daemon returned a truncated response"
+            ) from exc

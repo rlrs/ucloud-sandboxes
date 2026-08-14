@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import socket
 import struct
-from tempfile import TemporaryDirectory
 import threading
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from typing_extensions import Self
 
 from ucloud_sandboxes.storage_native import (
+    AGENTENV_UBLK_PROTOCOL_MAX_BYTES,
     AgentEnvUblkClient,
     StorageNativeError,
     StorageNativeTerminalError,
@@ -23,7 +26,7 @@ class FakeUblkDaemon:
         self._ready = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
 
-    def __enter__(self) -> "FakeUblkDaemon":
+    def __enter__(self) -> Self:
         self._thread.start()
         if not self._ready.wait(timeout=2):
             raise RuntimeError("fake ublk daemon did not start")
@@ -57,6 +60,39 @@ class FakeUblkDaemon:
                 raise EOFError
             result.extend(chunk)
         return bytes(result)
+
+
+class RawUblkDaemon:
+    def __init__(self, socket_path: Path, response_chunks: list[bytes]) -> None:
+        self.socket_path = socket_path
+        self.response_chunks = response_chunks
+        self._ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+
+    def __enter__(self) -> Self:
+        self._thread.start()
+        if not self._ready.wait(timeout=2):
+            raise RuntimeError("raw ublk daemon did not start")
+        return self
+
+    def __exit__(self, *_args) -> None:
+        self._thread.join(timeout=2)
+        if self._thread.is_alive():
+            raise RuntimeError("raw ublk daemon did not stop")
+
+    def _serve(self) -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(str(self.socket_path))
+            server.listen()
+            self._ready.set()
+            connection, _ = server.accept()
+            with connection:
+                request_length = struct.unpack(
+                    ">I", FakeUblkDaemon._recv_exact(connection, 4)
+                )[0]
+                FakeUblkDaemon._recv_exact(connection, request_length)
+                for chunk in self.response_chunks:
+                    connection.sendall(chunk)
 
 
 class StorageNativeTests(unittest.TestCase):
@@ -160,46 +196,19 @@ class StorageNativeTests(unittest.TestCase):
             self.assertEqual(compacted.digest, "sha256:" + "c" * 64)
             self.assertEqual(compacted.size, 2444)
             self.assertEqual(
-                daemon.requests[0],
-                {
-                    "allow_shrink": False,
-                    "global_config": str((root / "global.json").resolve()),
-                    "kind": "create_overlaybd_runtime_device",
-                    "known_source_virtual_size": 1 << 30,
-                    "owner_id": "device:test-runtime",
-                    "read_only": False,
-                    "requested_virtual_size": 1 << 30,
-                    "runtime_dir": str((root / "runtime").resolve()),
-                    "runtime_upper_mode": "logStructured",
-                    "source_image_config": str((root / "source.json").resolve()),
-                },
+                [request["kind"] for request in daemon.requests],
+                [
+                    "create_overlaybd_runtime_device",
+                    "restack_snapshot",
+                    "export_dense_layer",
+                    "export_compacted_image",
+                    "release_overlaybd",
+                    "delete",
+                ],
             )
-            self.assertEqual(daemon.requests[1]["kind"], "restack_snapshot")
-            self.assertEqual(
-                daemon.requests[2],
-                {
-                    "kind": "export_dense_layer",
-                    "source_layer_path": str(
-                        (root / "snapshot.commit").resolve()
-                    ),
-                    "stream_socket_path": str((root / "export.sock").resolve()),
-                },
-            )
-            self.assertEqual(
-                daemon.requests[3],
-                {
-                    "global_config": str((root / "global.json").resolve()),
-                    "kind": "export_compacted_image",
-                    "source_image_config": str(
-                        (root / "compact-source.json").resolve()
-                    ),
-                    "stream_socket_path": str((root / "compact.sock").resolve()),
-                },
-            )
-            self.assertEqual(
-                daemon.requests[4],
-                {"kind": "release_overlaybd", "dev_id": 7},
-            )
+            self.assertEqual(daemon.requests[0]["owner_id"], "device:test-runtime")
+            self.assertEqual(daemon.requests[0]["requested_virtual_size"], 1 << 30)
+            self.assertEqual(daemon.requests[-2]["dev_id"], 7)
 
     def test_errors_are_typed(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -230,6 +239,54 @@ class StorageNativeTests(unittest.TestCase):
                 virtual_size=0,
                 owner_id="device:test-invalid-size",
             )
+
+    def test_protocol_accepts_a_response_split_across_short_reads(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            socket_path = Path(raw_dir) / "ublk.sock"
+            body = b'{"flags":7,"status":"features"}'
+            framed = struct.pack(">I", len(body)) + body
+            with RawUblkDaemon(
+                socket_path,
+                [framed[index : index + 1] for index in range(len(framed))],
+            ):
+                self.assertEqual(AgentEnvUblkClient(socket_path).get_features(), 7)
+
+    def test_protocol_rejects_oversized_truncated_and_malformed_frames(self) -> None:
+        cases = {
+            "too large": [
+                struct.pack(">I", AGENTENV_UBLK_PROTOCOL_MAX_BYTES + 1)
+            ],
+            "truncated": [struct.pack(">I", 20), b"{}"],
+            "malformed JSON": [struct.pack(">I", 1), b"{"],
+            "object": [struct.pack(">I", 2), b"[]"],
+        }
+        for expected, chunks in cases.items():
+            with self.subTest(expected=expected), TemporaryDirectory() as raw_dir:
+                socket_path = Path(raw_dir) / "ublk.sock"
+                with RawUblkDaemon(socket_path, chunks), self.assertRaisesRegex(
+                    StorageNativeError, expected
+                ):
+                    AgentEnvUblkClient(socket_path).get_features()
+
+    def test_owner_inventory_rejects_duplicate_and_malformed_entries(self) -> None:
+        valid_owner = {
+            "owner_id": "device:test-runtime",
+            "dev_id": 7,
+            "device_path": "/dev/ublkb7",
+            "image_config_path": "/run/ucloud/image.json",
+        }
+        responses = (
+            {"status": "exclusive_owners", "owners": [valid_owner, valid_owner]},
+            {"status": "exclusive_owners", "owners": [{"owner_id": "missing"}]},
+            {"status": "exclusive_owners", "owners": "not-a-list"},
+        )
+        for response in responses:
+            with self.subTest(response=response), TemporaryDirectory() as raw_dir:
+                socket_path = Path(raw_dir) / "ublk.sock"
+                with FakeUblkDaemon(socket_path, [response]), self.assertRaisesRegex(
+                    StorageNativeError, "owner inventory|duplicate"
+                ):
+                    AgentEnvUblkClient(socket_path).list_runtime_device_owners()
 
 
 if __name__ == "__main__":

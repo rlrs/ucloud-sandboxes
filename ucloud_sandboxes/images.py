@@ -1176,10 +1176,21 @@ class ImageManager:
 
 
 def image_id_from_tag(image: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", image).strip("-.")
+    if IMAGE_ID_RE.fullmatch(image):
+        return image
+
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", image).strip("-._")
     if not cleaned:
-        return "image"
-    return cleaned[:64]
+        cleaned = "image"
+
+    # Sanitizing and truncating are both many-to-one transformations. Keep a
+    # readable prefix, but bind every transformed ID to the exact source ref so
+    # two tags cannot silently address the same image record.
+    suffix = "-" + hashlib.sha256(
+        image.encode("utf-8", errors="surrogatepass")
+    ).hexdigest()[:16]
+    prefix = cleaned[: 64 - len(suffix)].rstrip("-._") or "image"
+    return prefix + suffix
 
 
 def _build_timings(phases: dict[str, int], started: float) -> dict[str, Any]:
@@ -1366,7 +1377,11 @@ def _extract_safe_tar_gz_file(
                                 f"{max_total_bytes} extracted-byte limit."
                             )
                         total_bytes += member.size
-                    archive.extract(member, destination)
+                    # Our validator defines the accepted member types and
+                    # paths; the standard data filter additionally strips
+                    # unsafe metadata and keeps Python 3.10-3.14 extraction
+                    # behavior explicit.
+                    archive.extract(member, destination, filter="data")
             while limited.read(64 * 1024):
                 pass
     except (gzip.BadGzipFile, tarfile.TarError, EOFError) as exc:

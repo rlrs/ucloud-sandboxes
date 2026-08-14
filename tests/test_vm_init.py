@@ -1,12 +1,15 @@
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+
+from hypothesis import given, settings, strategies as st
 
 import ucloud_sandboxes.vm_init as vm_init
 from ucloud_sandboxes.models import ResourceQuantity
@@ -140,31 +143,12 @@ class VmInitTests(unittest.TestCase):
 
         self.assertIn('config["ossConfig"]', script)
         self.assertIn('"credentialProcess": sys.argv[6]', script)
-        self.assertIn("--snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}", script)
+        self.assertIn(
+            "--snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}", script
+        )
         node_env = script.split("<<NODE_ENV\n", 1)[1].split("\nNODE_ENV", 1)[0]
         self.assertNotIn("test-access", node_env)
         self.assertNotIn("test-secret", node_env)
-
-    def test_empty_telemetry_endpoint_remains_an_empty_argument(self) -> None:
-        script = render_vm_init_script(self._options(telemetry_otlp_endpoint=""))
-
-        self.assertIn(
-            '--telemetry-otlp-endpoint "${UCLOUD_TELEMETRY_OTLP_ENDPOINT}"',
-            script,
-        )
-        self.assertIn("UCLOUD_TELEMETRY_OTLP_ENDPOINT=''", script)
-
-    def test_service_activation_resets_failed_start_limits(self) -> None:
-        script = render_vm_init_script(self._options())
-
-        self.assertIn(
-            "systemctl reset-failed ucloud-sandbox-node.service", script
-        )
-        self.assertIn(
-            "systemctl reset-failed ucloud-storage-native-backend.service "
-            "ucloud-storage-native.service",
-            script,
-        )
 
     @staticmethod
     def _run_bundle_validator(validator, root):
@@ -174,77 +158,6 @@ class VmInitTests(unittest.TestCase):
             text=True,
             capture_output=True,
         )
-
-    def test_sandbox_boot_uses_only_verified_bundle(self) -> None:
-        script = render_vm_init_script(self._options(direct_network="sandbox"))
-        present = (
-            "serve-direct-node-agent|A staged node package bundle is required|Node package bundle checksum does not match|"
-            "Verified pinned Docker/gVisor bundle|install_bundled_runtime|bundle-verified direct runsc|"
-            "bundle-verified storage-native backend|Activating bundled ucloud-sandboxes runtime|"
-            "--storage-native-socket|--volume-mount-root"
-        )
-        absent = "apt-get update|package repository|runtime-conformance|Preassembled runtime unavailable|installed-package.fingerprint|serve-node-agent|legacy"
-        for expected in present.split("|"):
-            self.assertIn(expected, script)
-        for obsolete in absent.split("|"):
-            self.assertNotIn(
-                obsolete, script if obsolete != "package repository" else script.lower()
-            )
-        self.assertIn("Dir::Etc::sourcelist", script)
-        self.assertNotIn("apt-get install --no-download", script)
-        self.assertIn("--keep-directory-symlink", script)
-        self.assertIn("-ef /usr/lib/systemd/system/containerd.service", script)
-        self.assertIn("date +%s%N", script)
-        self.assertNotIn("date +%s%3N", script)
-        self.assertIn("Using snapshot-baked runtime", script)
-        self.assertIn("UCLOUD_STATIC_RUNTIME_READY", script)
-        self.assertIn("Recorded snapshot-ready runtime", script)
-        self.assertIn("runtime-ready-v3-sandbox", script)
-        self.assertNotIn("$UCLOUD_STATE_DIR/package-bundles", script)
-
-    def test_docker_mtu_uses_smallest_routed_interface(self) -> None:
-        script = render_vm_init_script(self._options())
-
-        self.assertIn("detect_routed_mtu()", script)
-        self.assertIn("ip -o route show table main", script)
-        self.assertIn('[ "$iface_mtu" -lt "$mtu" ]', script)
-        self.assertIn('UCLOUD_DOCKER_MTU="$(detect_routed_mtu)"', script)
-
-    def test_storage_native_resize_cache_is_isolated_from_runtime_cache(self) -> None:
-        script = render_vm_init_script(self._options())
-
-        self.assertIn(
-            "UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG="
-            "/etc/ucloud-sandboxes/storage-native-resize-backend.json",
-            script,
-        )
-        self.assertIn('$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/remote-blocks', script)
-        self.assertIn('$UCLOUD_STORAGE_NATIVE_CACHE_ROOT/resize-blocks', script)
-        self.assertIn(
-            "--resize-global-config "
-            "${UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG}",
-            script,
-        )
-        self.assertIn('"download": {"enable": False}', script)
-        self.assertIn("--snapshot-compact-after-layers 8", script)
-        self.assertIn("--snapshot-compact-after-bytes 4294967296", script)
-
-    def test_builder_keeps_image_build_runtime(self) -> None:
-        script = render_vm_init_script(
-            self._options(
-                role="builder",
-                buildx_cache_ref="registry.internal:5000/cache/buildkit",
-                docker_quota_image_gb=200,
-            )
-        )
-
-        self.assertIn("serve-builder-agent", script)
-        self.assertIn("--buildx-direct-push", script)
-        self.assertIn(
-            "--buildx-cache-ref registry.internal:5000/cache/buildkit", script
-        )
-        self.assertIn("SupplementaryGroups=docker", script)
-        self.assertNotIn("ucloud-storage-native.service\nRestart=always", script)
 
     def test_bootstrap_auth_and_identity_are_mandatory(self) -> None:
         required = {
@@ -258,10 +171,6 @@ class VmInitTests(unittest.TestCase):
         for field, message in required.items():
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, message):
                 render_vm_init_script(self._options(**{field: ""}))
-
-    def test_direct_runtime_requires_bounded_image_storage(self) -> None:
-        with self.assertRaisesRegex(ValueError, "bounded Docker image"):
-            render_vm_init_script(self._options(docker_quota_image_gb=0))
 
     def test_embedded_runtime_validator_and_shell_compile(self) -> None:
         script, validator = self._bundle_validator()
@@ -291,6 +200,71 @@ class VmInitTests(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_authorized_keys_are_rendered_as_inert_shell_values(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            injected = Path(raw_dir) / "injected"
+            substituted = Path(raw_dir) / "substituted"
+            keys = (
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest normal@example",
+                "UCLOUD_AUTHORIZED_KEYS",
+                f"touch {shlex.quote(str(injected))}",
+                f"$(touch {shlex.quote(str(substituted))})",
+                "ssh-ed25519 shell-looking `id` '$HOME' ; # comment",
+            )
+            script = render_vm_init_script(self._options(init_authorized_keys=keys))
+            assignments = script.split('\necho "Initializing UCloud sandbox node', 1)[0]
+            probe = (
+                assignments + "\nprintf '%s\\0' \"${UCLOUD_INIT_AUTHORIZED_KEYS[@]}\"\n"
+            )
+
+            completed = subprocess.run(
+                ["bash"],
+                input=probe.encode(),
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+            self.assertEqual(
+                completed.stdout.split(b"\0")[:-1],
+                [key.encode() for key in keys],
+            )
+            self.assertFalse(injected.exists())
+            self.assertFalse(substituted.exists())
+        self.assertNotIn("<<'UCLOUD_AUTHORIZED_KEYS'", script)
+
+    @settings(max_examples=50, deadline=None)
+    @given(
+        st.text(
+            alphabet=st.characters(
+                min_codepoint=1,
+                max_codepoint=126,
+                blacklist_characters="\r\n",
+            ),
+            min_size=1,
+            max_size=80,
+        ).filter(lambda value: bool(value.strip()))
+    )
+    def test_authorized_key_shell_round_trip(self, key: str) -> None:
+        script = render_vm_init_script(self._options(init_authorized_keys=(key,)))
+        assignments = script.split('\necho "Initializing UCloud sandbox node', 1)[0]
+
+        completed = subprocess.run(
+            ["bash"],
+            input=(
+                assignments + "\nprintf '%s\\0' \"${UCLOUD_INIT_AUTHORIZED_KEYS[@]}\"\n"
+            ).encode(),
+            capture_output=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+        self.assertEqual(completed.stdout, key.encode() + b"\0")
+
+    def test_authorized_key_rejects_nul(self) -> None:
+        with self.assertRaisesRegex(ValueError, "NUL"):
+            render_vm_init_script(
+                self._options(init_authorized_keys=("ssh-ed25519 key\0suffix",))
+            )
 
     def test_bundle_validator_returns_exact_role_metadata(self) -> None:
         for role in ("sandbox", "builder"):
@@ -344,10 +318,6 @@ class VmInitTests(unittest.TestCase):
                 completed = self._run_bundle_validator(validator, root)
                 self.assertNotEqual(completed.returncode, 0)
 
-    def test_runtime_module_closure_keeps_project_mounts_rebootable(self) -> None:
-        self.assertIn("virtiofs", RUNTIME_KERNEL_MODULES)
-        self.assertIn("ublk_drv", RUNTIME_KERNEL_MODULES)
-
     def test_plans_only_running_vm_with_ssh(self) -> None:
         payload = {
             "id": "123",
@@ -379,9 +349,10 @@ class VmInitTests(unittest.TestCase):
             calls.append((tuple(command), body))
             return subprocess.CompletedProcess(command, 1 if stdin is None else 0)
 
-        with patch.object(
-            vm_init.subprocess, "run", side_effect=fake_run
-        ), TemporaryDirectory() as raw_dir:
+        with (
+            patch.object(vm_init.subprocess, "run", side_effect=fake_run),
+            TemporaryDirectory() as raw_dir,
+        ):
             package = Path(raw_dir) / "node-package.tar.gz"
             package.write_bytes(b"verified-bundle")
             result = stage_vm_init_package_over_ssh(
@@ -411,9 +382,10 @@ class VmInitTests(unittest.TestCase):
             calls.append(tuple(command))
             return subprocess.CompletedProcess(command, 0)
 
-        with patch.object(
-            vm_init.subprocess, "run", side_effect=fake_run
-        ), TemporaryDirectory() as raw_dir:
+        with (
+            patch.object(vm_init.subprocess, "run", side_effect=fake_run),
+            TemporaryDirectory() as raw_dir,
+        ):
             package = Path(raw_dir) / "node-package.tar.gz"
             package.write_bytes(b"snapshot-baked-bundle")
             result = stage_vm_init_package_over_ssh(

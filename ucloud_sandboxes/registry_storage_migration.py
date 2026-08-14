@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 import hashlib
 import json
 import os
-from pathlib import Path
+import stat
 import subprocess
-from typing import Protocol, Sequence
+from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
 
 from .config import DeploymentConfig
 from .storage_native_s3 import Boto3S3ObjectClient, S3ObjectStat
@@ -27,6 +30,9 @@ class RegistryStorageMigrationItem:
     size: int
     sha256: str
     action: str
+    source_device: int
+    source_inode: int
+    source_mtime_ns: int
 
 
 @dataclass(frozen=True)
@@ -88,14 +94,11 @@ def plan_filesystem_registry_to_s3(
     items: list[RegistryStorageMigrationItem] = []
     for path in paths:
         relative = path.relative_to(root).as_posix()
-        before = path.stat()
-        digest = _sha256_file(path)
-        after = path.stat()
-        if (before.st_size, before.st_mtime_ns) != (
-            after.st_size,
-            after.st_mtime_ns,
-        ):
-            raise RuntimeError(f"registry source changed while hashing: {path}")
+        with _open_regular_source(root, relative) as (descriptor, before):
+            digest = _sha256_descriptor(descriptor)
+            after = os.fstat(descriptor)
+            if _source_identity(before) != _source_identity(after):
+                raise RuntimeError(f"registry source changed while hashing: {path}")
         key = f"{prefix}/{relative}"
         remote = client.stat(key)
         if remote is None:
@@ -111,6 +114,9 @@ def plan_filesystem_registry_to_s3(
                 size=after.st_size,
                 sha256=digest,
                 action=action,
+                source_device=after.st_dev,
+                source_inode=after.st_ino,
+                source_mtime_ns=after.st_mtime_ns,
             )
         )
     return RegistryStorageMigrationPlan(
@@ -142,10 +148,27 @@ def execute_filesystem_registry_to_s3(
 
     def upload(item: RegistryStorageMigrationItem) -> None:
         path = plan.source_root / item.relative_path
-        before = path.stat()
-        if before.st_size != item.size or _sha256_file(path) != item.sha256:
-            raise RuntimeError(f"registry source changed before upload: {path}")
-        client.put_file(item.key, path, sha256=item.sha256)
+        expected_identity = (
+            item.source_device,
+            item.source_inode,
+            item.size,
+            item.source_mtime_ns,
+        )
+        with _open_regular_source(
+            plan.source_root,
+            item.relative_path,
+        ) as (descriptor, before):
+            if _source_identity(before) != expected_identity:
+                raise RuntimeError(f"registry source changed before upload: {path}")
+            if _sha256_descriptor(descriptor) != item.sha256:
+                raise RuntimeError(f"registry source changed before upload: {path}")
+            client.put_file(
+                item.key,
+                _descriptor_path(descriptor),
+                sha256=item.sha256,
+            )
+            if _sha256_descriptor(descriptor) != item.sha256:
+                raise RuntimeError(f"registry source changed during upload: {path}")
         remote = client.stat(item.key)
         if (
             remote is None
@@ -168,12 +191,71 @@ def _registry_prefix(value: str) -> str:
     return prefix
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_descriptor(descriptor: int) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        while block := source.read(1024 * 1024):
-            digest.update(block)
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    while block := os.read(descriptor, 1024 * 1024):
+        digest.update(block)
+    os.lseek(descriptor, 0, os.SEEK_SET)
     return digest.hexdigest()
+
+
+def _source_identity(value: os.stat_result) -> tuple[int, int, int, int]:
+    return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+
+
+@contextmanager
+def _open_regular_source(
+    root: Path,
+    relative_path: str,
+) -> Iterator[tuple[int, os.stat_result]]:
+    parts = Path(relative_path).parts
+    if (
+        not parts
+        or Path(relative_path).is_absolute()
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
+        raise RuntimeError(f"registry source path is unsafe: {relative_path!r}")
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    descriptors: list[int] = []
+    try:
+        descriptors.append(os.open(root, directory_flags | nofollow))
+        for part in parts[:-1]:
+            descriptors.append(
+                os.open(
+                    part,
+                    directory_flags | nofollow,
+                    dir_fd=descriptors[-1],
+                )
+            )
+        descriptor = os.open(
+            parts[-1],
+            os.O_RDONLY | nofollow,
+            dir_fd=descriptors[-1],
+        )
+        descriptors.append(descriptor)
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise RuntimeError(
+                f"registry source is not a regular file: {relative_path!r}"
+            )
+        yield descriptor, file_stat
+    except OSError as exc:
+        raise RuntimeError(
+            f"registry source path changed or became unsafe: {relative_path!r}"
+        ) from exc
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def _descriptor_path(descriptor: int) -> Path:
+    for root in (Path("/proc/self/fd"), Path("/dev/fd")):
+        candidate = root / str(descriptor)
+        if candidate.exists():
+            return candidate
+    raise RuntimeError("cannot upload registry source through a stable descriptor")
 
 
 def _require_registry_inactive() -> None:

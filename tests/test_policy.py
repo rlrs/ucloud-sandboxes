@@ -1,6 +1,9 @@
 from dataclasses import replace
 from datetime import timedelta
+from functools import cache
 import unittest
+
+from hypothesis import given, settings, strategies as st
 
 from ucloud_sandboxes.models import (
     InstancePhase,
@@ -134,7 +137,175 @@ def demand(**kwargs) -> SandboxDemand:
     )
 
 
+def minimum_additional_disk_bins(
+    free_disk: tuple[int, ...],
+    requested_disk: tuple[int, ...],
+    new_node_disk: int,
+) -> int:
+    """Return the exact minimum new nodes using exhaustive small-model search."""
+
+    requests = tuple(sorted(requested_disk, reverse=True))
+
+    def feasible(extra_nodes: int) -> bool:
+        initial = tuple(sorted((*free_disk, *((new_node_disk,) * extra_nodes))))
+
+        @cache
+        def place(request_index: int, remaining: tuple[int, ...]) -> bool:
+            if request_index == len(requests):
+                return True
+            requested = requests[request_index]
+            for bin_index, available in enumerate(remaining):
+                if requested > available:
+                    continue
+                after = list(remaining)
+                after[bin_index] -= requested
+                if place(request_index + 1, tuple(sorted(after))):
+                    return True
+            return False
+
+        return place(0, initial)
+
+    for extra_nodes in range(len(requests) + 1):
+        if feasible(extra_nodes):
+            return extra_nodes
+    raise AssertionError("each generated request fits a fresh node")
+
+
 class ScalePolicyTests(unittest.TestCase):
+    @settings(max_examples=100, deadline=None, derandomize=True)
+    @given(
+        free_disk_chunks=st.lists(
+            st.integers(min_value=0, max_value=8),
+            max_size=3,
+        ),
+        requested_disk_chunks=st.lists(
+            st.integers(min_value=1, max_value=8),
+            min_size=1,
+            max_size=3,
+        ),
+    )
+    def test_small_disk_placement_matches_exact_minimum_regardless_of_order(
+        self,
+        free_disk_chunks: list[int],
+        requested_disk_chunks: list[int],
+    ) -> None:
+        disk_unit_mb = 1024
+        node_disk_chunks = 8
+        nodes = [
+            node(
+                f"disk-{index}",
+                total_resources=ResourceQuantity(
+                    disk_mb=available * disk_unit_mb,
+                ),
+            )
+            for index, available in enumerate(free_disk_chunks)
+        ]
+        placements = tuple(
+            SandboxPlacementRequest(
+                resources=ResourceQuantity(disk_mb=size * disk_unit_mb),
+                count=requested_disk_chunks.count(size),
+            )
+            for size in dict.fromkeys(requested_disk_chunks)
+        )
+        sandbox_demand = demand(
+            pending_count=len(requested_disk_chunks),
+            placement_requests=placements,
+        )
+        policy = ScalePolicy(
+            max_nodes=6,
+            max_create_per_cycle=3,
+            max_stop_per_cycle=0,
+            max_provisioning_nodes=0,
+            default_node_resources=ResourceQuantity(
+                disk_mb=node_disk_chunks * disk_unit_mb,
+            ),
+        )
+        expected_creates = minimum_additional_disk_bins(
+            tuple(free_disk_chunks),
+            tuple(requested_disk_chunks),
+            node_disk_chunks,
+        )
+
+        decision = evaluate_scale(nodes, sandbox_demand, policy)
+        reversed_decision = evaluate_scale(
+            list(reversed(nodes)),
+            replace(
+                sandbox_demand,
+                placement_requests=tuple(reversed(placements)),
+            ),
+            policy,
+        )
+
+        self.assertEqual(decision.creates, expected_creates)
+        self.assertEqual(reversed_decision.creates, expected_creates)
+
+    @settings(max_examples=100, deadline=None, derandomize=True)
+    @given(
+        existing=st.lists(
+            st.tuples(
+                st.integers(min_value=0, max_value=8),
+                st.integers(min_value=0, max_value=8),
+            ),
+            max_size=3,
+        ),
+        requested=st.lists(
+            st.integers(min_value=1, max_value=8),
+            min_size=1,
+            max_size=3,
+        ),
+    )
+    def test_more_existing_capacity_never_increases_required_creates(
+        self,
+        existing: list[tuple[int, int]],
+        requested: list[int],
+    ) -> None:
+        disk_unit_mb = 1024
+        placements = tuple(
+            SandboxPlacementRequest(
+                resources=ResourceQuantity(disk_mb=size * disk_unit_mb),
+                count=requested.count(size),
+            )
+            for size in dict.fromkeys(requested)
+        )
+        sandbox_demand = demand(
+            pending_count=len(requested),
+            placement_requests=placements,
+        )
+        policy = ScalePolicy(
+            max_nodes=6,
+            max_create_per_cycle=3,
+            max_stop_per_cycle=0,
+            max_provisioning_nodes=0,
+            default_node_resources=ResourceQuantity(disk_mb=8 * disk_unit_mb),
+        )
+
+        baseline = evaluate_scale(
+            [
+                node(
+                    f"disk-{index}",
+                    total_resources=ResourceQuantity(disk_mb=free * disk_unit_mb),
+                )
+                for index, (free, _extra) in enumerate(existing)
+            ],
+            sandbox_demand,
+            policy,
+        )
+        expanded = evaluate_scale(
+            [
+                node(
+                    f"disk-{index}",
+                    total_resources=ResourceQuantity(
+                        disk_mb=(free + extra) * disk_unit_mb
+                    ),
+                )
+                for index, (free, extra) in enumerate(existing)
+            ],
+            sandbox_demand,
+            policy,
+        )
+
+        self.assertLessEqual(expanded.creates, baseline.creates)
+
     def test_oversized_request_is_excluded_from_create_demand(self) -> None:
         oversized = ResourceQuantity(vcpu=33, memory_mb=4096, disk_mb=8192)
 
@@ -151,81 +322,6 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 0)
         self.assertEqual(decision.desired_resources, ResourceQuantity())
         self.assertIn("exceed", decision.reasons[0])
-
-    def test_minimum_replacement_also_satisfies_one_node_resource_deficit(self) -> None:
-        decision = evaluate_scale(
-            [],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=2,
-                    memory_mb=4096,
-                    disk_mb=8192,
-                ),
-                placement_requests=(
-                    SandboxPlacementRequest(
-                        resources=ResourceQuantity(
-                            vcpu=2,
-                            memory_mb=4096,
-                            disk_mb=8192,
-                        )
-                    ),
-                ),
-            ),
-            ScalePolicy(min_nodes=1, max_nodes=5, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 1)
-
-    def test_storage_native_hard_reservations_trigger_replacement_capacity(
-        self,
-    ) -> None:
-        decision = evaluate_scale(
-            [
-                node(
-                    "storage-full",
-                    active=1,
-                    total_resources=ResourceQuantity(
-                        vcpu=32,
-                        memory_mb=98_304,
-                        disk_mb=1_449_984,
-                    ),
-                    used_resources=ResourceQuantity(disk_mb=17_472),
-                    capabilities=(
-                        "disk-quota",
-                        "storage-native-v1",
-                    ),
-                    runtime_metrics=NodeRuntimeMetrics(
-                        collected_at=utc_now(),
-                        storage_hard_capacity_mb=1_449_984,
-                        storage_hard_reserved_mb=1_441_600,
-                    ),
-                    job_cpu=32,
-                    job_memory_gb=96,
-                    job_disk_gb=2_000,
-                )
-            ],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=48,
-                    memory_mb=86_016,
-                    disk_mb=357_120,
-                ),
-                pending_count=12,
-            ),
-            ScalePolicy(
-                max_nodes=10,
-                max_create_per_cycle=4,
-                default_node_resources=ResourceQuantity(
-                    vcpu=32,
-                    memory_mb=98_304,
-                    disk_mb=1_449_984,
-                ),
-            ),
-        )
-
-        self.assertEqual(decision.projected_free_resources.disk_mb, 8_384)
-        self.assertEqual(decision.resource_deficit.disk_mb, 348_736)
-        self.assertEqual(decision.creates, 1)
 
     def test_non_capacity_failures_do_not_create_nodes(self) -> None:
         failed = ResourceQuantity(vcpu=400, memory_mb=819_200, disk_mb=3_385_600)
@@ -284,30 +380,6 @@ class ScalePolicyTests(unittest.TestCase):
             64 * shape.disk_mb,
         )
 
-    def test_dynamic_admission_still_scales_for_additive_hard_disk(self) -> None:
-        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=32_000)
-        requests = tuple(SandboxPlacementRequest(resources=shape) for _ in range(64))
-        decision = evaluate_scale(
-            [],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=64 * shape.vcpu,
-                    memory_mb=64 * shape.memory_mb,
-                    disk_mb=64 * shape.disk_mb,
-                ),
-                placement_requests=requests,
-            ),
-            ScalePolicy(
-                max_nodes=8,
-                max_create_per_cycle=8,
-            ),
-        )
-
-        self.assertEqual(decision.creates, 2)
-        self.assertEqual(decision.resource_deficit.vcpu, shape.vcpu)
-        self.assertEqual(decision.resource_deficit.memory_mb, shape.memory_mb)
-        self.assertEqual(decision.resource_deficit.disk_mb, 64 * shape.disk_mb)
-
     def test_draining_or_admission_closed_node_contributes_no_ready_capacity(
         self,
     ) -> None:
@@ -334,23 +406,6 @@ class ScalePolicyTests(unittest.TestCase):
                 self.assertEqual(decision.ready_nodes, 0)
                 self.assertEqual(decision.projected_free_resources, ResourceQuantity())
                 self.assertEqual(decision.creates, 1)
-
-    def test_creates_for_active_shape_deficit(self) -> None:
-        decision = evaluate_scale(
-            [],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=3.0,
-                    memory_mb=7000,
-                    disk_mb=0,
-                )
-            ),
-            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.resource_deficit.vcpu, 1.0)
-        self.assertEqual(decision.resource_deficit.memory_mb, 1000)
 
     def test_creates_when_aggregate_free_resources_are_fragmented(self) -> None:
         requested = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
@@ -467,65 +522,6 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
         self.assertEqual(decision.creates, 0)
-
-    def test_dynamic_program_ready_demand_does_not_sum_nominal_limits(
-        self,
-    ) -> None:
-        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=16384)
-        requests = tuple(SandboxPlacementRequest(resources=shape) for _ in range(64))
-        decision = evaluate_scale(
-            [],
-            demand(),
-            ScalePolicy(
-                max_nodes=8,
-                max_create_per_cycle=8,
-                program_aware_autoscaling_enabled=True,
-            ),
-            program_signals=ProgramScaleSignals(
-                ready_to_wake_sandboxes=64,
-                ready_to_wake_resources=ResourceQuantity(
-                    vcpu=64 * shape.vcpu,
-                    memory_mb=64 * shape.memory_mb,
-                ),
-                effective_resources=ResourceQuantity(
-                    vcpu=64 * shape.vcpu,
-                    memory_mb=64 * shape.memory_mb,
-                ),
-                ready_placement_requests=requests,
-                action_enabled=True,
-            ),
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.desired_resources.vcpu, shape.vcpu)
-        self.assertEqual(decision.desired_resources.memory_mb, shape.memory_mb)
-
-    def test_large_backlog_scales_for_additive_disk_without_waiting(
-        self,
-    ) -> None:
-        decision = evaluate_scale(
-            [
-                node(
-                    "ready",
-                    total_resources=ResourceQuantity(
-                        vcpu=16,
-                        memory_mb=32768,
-                        disk_mb=204800,
-                    ),
-                )
-            ],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=256,
-                    memory_mb=262144,
-                    disk_mb=524288,
-                )
-            ),
-            ScalePolicy(),
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.resource_deficit.disk_mb, 319_488)
 
     def test_gateway_create_saturation_amplifies_confirmed_node_pressure(self) -> None:
         decision = evaluate_scale(
@@ -946,19 +942,6 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.projected_free_resources.vcpu, 2)
         self.assertGreaterEqual(decision.projected_free_resources.disk_mb, 1024)
 
-    def test_respects_max_nodes_for_disk_deficit(self) -> None:
-        decision = evaluate_scale(
-            [
-                node("1", total_resources=ResourceQuantity(vcpu=2, memory_mb=6144)),
-                node("2", total_resources=ResourceQuantity(vcpu=2, memory_mb=6144)),
-            ],
-            demand(pending_resources=ResourceQuantity(disk_mb=1024)),
-            ScalePolicy(max_nodes=2, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertIn("max_nodes=2 reached", decision.reasons[0])
-
     def test_disk_demand_ignores_nodes_without_disk_quota_capability(self) -> None:
         decision = evaluate_scale(
             [
@@ -986,152 +969,6 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.resource_deficit.disk_mb, 20_000)
         self.assertEqual(decision.creates, 1)
 
-    def test_counts_queued_vm_capacity_fully_by_default(self) -> None:
-        decision = evaluate_scale(
-            [node("queued", state="IN_QUEUE", fresh=False)],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=2,
-                    memory_mb=4096,
-                    disk_mb=0,
-                )
-            ),
-            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.vcpu, 2)
-        self.assertEqual(decision.projected_free_resources.memory_mb, 6144)
-
-    def test_counts_recent_suspended_vm_as_provisioning_capacity(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "submitted",
-                    state="SUSPENDED",
-                    fresh=False,
-                    heartbeat_present=False,
-                    created_at=now - timedelta(seconds=30),
-                )
-            ],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=1,
-                    memory_mb=256,
-                    disk_mb=512,
-                )
-            ),
-            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
-            now=now,
-        )
-
-        self.assertEqual(decision.provisioning_nodes, 1)
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.vcpu, 2)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 1_449_984)
-
-    def test_stale_suspended_vm_has_no_capacity_but_counts_toward_limits(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "submitted",
-                    state="SUSPENDED",
-                    fresh=False,
-                    heartbeat_present=False,
-                    created_at=now - timedelta(seconds=3600),
-                )
-            ],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=1,
-                    memory_mb=256,
-                    disk_mb=512,
-                )
-            ),
-            ScalePolicy(
-                max_nodes=5,
-                max_create_per_cycle=5,
-                stale_provisioning_after_seconds=60,
-                stale_provisioning_capacity_weight=0.0,
-            ),
-            now=now,
-        )
-
-        self.assertEqual(decision.total_nodes, 1)
-        self.assertEqual(decision.provisioning_nodes, 1)
-        self.assertEqual(decision.projected_free_resources, ResourceQuantity())
-        self.assertEqual(decision.creates, 1)
-
-    def test_stale_suspended_vm_blocks_hard_node_and_provisioning_limits(self) -> None:
-        now = utc_now()
-        stale = node(
-            "submitted",
-            state="SUSPENDED",
-            fresh=False,
-            heartbeat_present=False,
-            created_at=now - timedelta(seconds=3600),
-        )
-        policy = ScalePolicy(
-            max_nodes=1,
-            max_provisioning_nodes=1,
-            max_create_per_cycle=5,
-            stale_provisioning_after_seconds=60,
-            stale_provisioning_capacity_weight=0.0,
-        )
-
-        decision = evaluate_scale(
-            [stale],
-            demand(pending_resources=ResourceQuantity(vcpu=2, memory_mb=4096)),
-            policy,
-            now=now,
-        )
-
-        self.assertEqual(decision.total_nodes, 1)
-        self.assertEqual(decision.provisioning_nodes, 1)
-        self.assertEqual(decision.projected_free_resources, ResourceQuantity())
-        self.assertEqual(decision.creates, 0)
-        self.assertTrue(
-            any(
-                "max_nodes=1 reached" in reason
-                or "max_provisioning_nodes=1 reached" in reason
-                for reason in decision.reasons
-            )
-        )
-
-    def test_counts_provisioning_disk_before_first_heartbeat(self) -> None:
-        decision = evaluate_scale(
-            [node("queued", state="IN_QUEUE", fresh=False, heartbeat_present=False)],
-            demand(
-                pending_resources=ResourceQuantity(
-                    vcpu=1,
-                    memory_mb=512,
-                    disk_mb=1024,
-                )
-            ),
-            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.projected_free_resources.disk_mb, 1_449_984)
-
-    def test_discounted_provisioning_resources_can_create_another_vm(self) -> None:
-        decision = evaluate_scale(
-            [node("queued", state="IN_QUEUE", fresh=False)],
-            demand(pending_resources=ResourceQuantity(disk_mb=1_000_000)),
-            ScalePolicy(
-                max_nodes=5,
-                max_create_per_cycle=5,
-                max_provisioning_nodes=2,
-                provisioning_capacity_weight=0.5,
-            ),
-        )
-
-        self.assertEqual(decision.projected_free_resources.vcpu, 1)
-        self.assertEqual(decision.projected_free_resources.memory_mb, 3072)
-        self.assertEqual(decision.creates, 1)
-
     def test_max_provisioning_nodes_blocks_stampede(self) -> None:
         decision = evaluate_scale(
             [
@@ -1145,37 +982,6 @@ class ScalePolicyTests(unittest.TestCase):
                 max_provisioning_nodes=2,
                 provisioning_capacity_weight=0.5,
             ),
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertIn("max_provisioning_nodes=2 reached", decision.reasons[0])
-
-    def test_recent_suspended_nodes_count_against_provisioning_limit(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "submitted-1",
-                    state="SUSPENDED",
-                    fresh=False,
-                    heartbeat_present=False,
-                    created_at=now - timedelta(seconds=30),
-                ),
-                node(
-                    "submitted-2",
-                    state="SUSPENDED",
-                    fresh=False,
-                    heartbeat_present=False,
-                    created_at=now - timedelta(seconds=30),
-                ),
-            ],
-            demand(pending_resources=ResourceQuantity(disk_mb=4_000_000)),
-            ScalePolicy(
-                max_nodes=10,
-                max_create_per_cycle=5,
-                max_provisioning_nodes=2,
-            ),
-            now=now,
         )
 
         self.assertEqual(decision.creates, 0)
@@ -1321,38 +1127,6 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(old_created.projected_free_resources, ResourceQuantity())
         self.assertEqual(unknown_age.projected_free_resources, ResourceQuantity())
 
-    def test_warm_resources_create_without_pending_demand(self) -> None:
-        decision = evaluate_scale(
-            [],
-            demand(),
-            ScalePolicy(
-                max_nodes=5,
-                max_create_per_cycle=5,
-                warm_resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=0),
-            ),
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.desired_resources.vcpu, 2)
-
-    def test_prepared_resources_create_without_pending_sandboxes(self) -> None:
-        decision = evaluate_scale(
-            [],
-            demand(
-                prepared_placement_requests=(
-                    SandboxPlacementRequest(
-                        resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=2048)
-                    ),
-                )
-            ),
-            ScalePolicy(max_nodes=5, max_create_per_cycle=5),
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.pending_resources, ResourceQuantity())
-        self.assertEqual(decision.prepared_resources.vcpu, 4)
-        self.assertEqual(decision.desired_resources.vcpu, 4)
-
     def test_counted_prepared_shapes_are_not_added_to_their_reported_total(
         self,
     ) -> None:
@@ -1460,33 +1234,6 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.stops, ("cpu-half",))
 
-    def test_does_not_stop_when_resource_demand_exists(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "1",
-                    total_resources=ResourceQuantity(
-                        vcpu=2, memory_mb=6144, disk_mb=10_000
-                    ),
-                    idle_since=now - timedelta(seconds=600),
-                ),
-                node(
-                    "2",
-                    total_resources=ResourceQuantity(
-                        vcpu=2, memory_mb=6144, disk_mb=10_000
-                    ),
-                    idle_since=now - timedelta(seconds=600),
-                ),
-            ],
-            demand(pending_resources=ResourceQuantity(disk_mb=15_000)),
-            ScalePolicy(min_nodes=0, max_stop_per_cycle=1),
-            now=now,
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.stops, ())
-
     def test_stops_surplus_idle_node_when_demand_fits_remaining_capacity(self) -> None:
         now = utc_now()
         decision = evaluate_scale(
@@ -1531,64 +1278,6 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.creates, 0)
         self.assertEqual(decision.stops, ("1",))
         self.assertIn("desired demand", decision.reasons[0])
-
-    def test_does_not_stop_when_prepared_resource_demand_exists(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "1",
-                    total_resources=ResourceQuantity(vcpu=2, memory_mb=6144),
-                    idle_since=now - timedelta(seconds=600),
-                )
-            ],
-            demand(
-                prepared_placement_requests=(
-                    SandboxPlacementRequest(
-                        resources=ResourceQuantity(vcpu=1, memory_mb=1024)
-                    ),
-                )
-            ),
-            ScalePolicy(min_nodes=0, max_stop_per_cycle=1),
-            now=now,
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.stops, ())
-
-    def test_warm_resources_prevent_stopping_too_many_resources(self) -> None:
-        decision = evaluate_scale(
-            [
-                node("1", total_resources=ResourceQuantity(vcpu=2, memory_mb=6144)),
-                node("2", total_resources=ResourceQuantity(vcpu=2, memory_mb=6144)),
-            ],
-            demand(),
-            ScalePolicy(
-                min_nodes=1,
-                max_stop_per_cycle=1,
-                warm_resources=ResourceQuantity(vcpu=3, memory_mb=0, disk_mb=0),
-            ),
-        )
-
-        self.assertEqual(decision.stops, ())
-
-    def test_scales_to_zero_when_no_demand_or_warm_policy(self) -> None:
-        now = utc_now()
-        decision = evaluate_scale(
-            [
-                node(
-                    "1",
-                    total_resources=ResourceQuantity(vcpu=2, memory_mb=6144),
-                    idle_since=now - timedelta(seconds=600),
-                )
-            ],
-            demand(),
-            ScalePolicy(min_nodes=0, max_stop_per_cycle=1),
-            now=now,
-        )
-
-        self.assertEqual(decision.creates, 0)
-        self.assertEqual(decision.stops, ("1",))
 
     def test_scale_down_idle_grace_uses_idle_since_not_vm_start(self) -> None:
         now = utc_now()

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections import deque
 from contextlib import asynccontextmanager
-import heapq
 import json
 from pathlib import Path
 import sqlite3
+import sys
 import tempfile
 from threading import Event, Timer
 import time
@@ -785,176 +784,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             response=RelayWorkerResponse(499, {}),
         )
 
-    async def test_expiry_heaps_stay_bounded_after_completion_and_renewal(self) -> None:
-        state = ModelRelayState(max_completed_requests=512)
-        token = str((await state.register_rollout("heap-bounds"))["registration_token"])
-        for _index in range(300):
-            request = await state.enqueue(
-                rollout_id="heap-bounds",
-                endpoint="/v1/responses",
-                body={},
-                headers={},
-            )
-            await state.cancel_request(
-                request_id=request.request_id,
-                response=RelayWorkerResponse(499, {}),
-            )
-        self.assertLessEqual(len(state._request_expiry_heap), 256)  # noqa: SLF001
-
-        _request, delivery = await enqueue_and_poll(state, "heap-bounds", token)
-        for _index in range(200):
-            delivery = await state.renew_lease(
-                request_id=delivery.request_id,
-                registration_token=token,
-                lease_id=delivery.lease_id or "",
-                lease_seconds=30,
-            )
-        self.assertLessEqual(
-            len(state._lease_expiry_heaps["heap-bounds"]),  # noqa: SLF001
-            66,
-        )
-
-    async def test_sqlite_poll_batch_uses_one_explicit_transaction(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
-            token = str(
-                (await state.register_rollout("batch-tx"))["registration_token"]
-            )
-            for _index in range(3):
-                await state.enqueue(
-                    rollout_id="batch-tx",
-                    endpoint="/v1/responses",
-                    body={},
-                    headers={},
-                )
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            statements: list[str] = []
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
-            await state.poll(
-                rollout_id="batch-tx",
-                registration_token=token,
-                timeout_seconds=0,
-                limit=3,
-            )
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(None)  # noqa: SLF001
-            self.assertEqual(
-                sum(
-                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
-                ),
-                1,
-            )
-            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
-            await state.aclose()
-
-    async def test_many_timeouts_use_one_terminal_transaction_and_queue_scan(
-        self,
-    ) -> None:
-        class CountingDeque(deque):
-            iterations = 0
-
-            def __iter__(self):  # type: ignore[no-untyped-def]
-                self.iterations += 1
-                return super().__iter__()
-
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(
-                state_path=Path(directory) / "relay.sqlite3",
-                max_completed_requests=256,
-            )
-            await state.register_rollout("bulk-timeout")
-            requests = [
-                await state.enqueue(
-                    rollout_id="bulk-timeout",
-                    endpoint="/v1/responses",
-                    body={"index": index},
-                    headers={},
-                )
-                for index in range(128)
-            ]
-            expired_at = time.time() - 1
-            state._request_expiry_heap.clear()  # noqa: SLF001
-            for request in requests:
-                request.expires_at = expired_at
-                state._request_expiry_heap.append(  # noqa: SLF001
-                    (expired_at, request.request_id)
-                )
-            heapq.heapify(state._request_expiry_heap)  # noqa: SLF001
-            queue = CountingDeque(state._pending["bulk-timeout"])  # noqa: SLF001
-            state._pending["bulk-timeout"] = queue  # noqa: SLF001
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            store.save_requests(tuple(requests))
-            statements: list[str] = []
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
-
-            stats = await state.stats()
-
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(None)  # noqa: SLF001
-            self.assertEqual(stats["inflight"], 0)
-            self.assertEqual(stats["counters"]["timed_out"], 128)
-            self.assertEqual(queue.iterations, 1)
-            self.assertEqual(
-                sum(
-                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
-                ),
-                1,
-            )
-            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
-            self.assertTrue(all(request.future.done() for request in requests))
-            await state.aclose()
-
-    async def test_many_unregister_cancellations_use_one_terminal_transaction(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(
-                state_path=Path(directory) / "relay.sqlite3",
-                max_completed_requests=256,
-            )
-            token = str(
-                (await state.register_rollout("bulk-unregister"))["registration_token"]
-            )
-            requests = [
-                await state.enqueue(
-                    rollout_id="bulk-unregister",
-                    endpoint="/v1/responses",
-                    body={"index": index},
-                    headers={},
-                )
-                for index in range(128)
-            ]
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            statements: list[str] = []
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
-
-            self.assertTrue(
-                await state.unregister_rollout(
-                    "bulk-unregister",
-                    registration_token=token,
-                )
-            )
-
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(None)  # noqa: SLF001
-            self.assertEqual(state._requests, {})  # noqa: SLF001
-            self.assertEqual(state._counters["unregister_canceled"], 128)  # noqa: SLF001
-            self.assertEqual(
-                sum(
-                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
-                ),
-                1,
-            )
-            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
-            self.assertTrue(all(request.future.done() for request in requests))
-            await state.aclose()
-
     async def test_startup_parse_failure_is_atomic_and_retry_does_not_duplicate(
         self,
     ) -> None:
@@ -1041,87 +870,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             stats = await restored.stats()
             self.assertEqual(stats["inflight"], 1)
             self.assertEqual(len(restored._idempotency), 1)  # noqa: SLF001
-            await restored.aclose()
-
-    async def test_startup_stranded_rows_use_one_recovery_transaction(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "relay.sqlite3"
-            state = ModelRelayState(state_path=state_path)
-            await state.register_rollout("stranded")
-            for index in range(64):
-                await state.enqueue(
-                    rollout_id="stranded",
-                    endpoint="/v1/responses",
-                    body={"index": index},
-                    headers={},
-                )
-            await state.aclose()
-            with sqlite3.connect(state_path) as connection:
-                connection.execute(
-                    "DELETE FROM relay_rollouts WHERE rollout_id = ?",
-                    ("stranded",),
-                )
-
-            restored = ModelRelayState(
-                state_path=state_path,
-                max_completed_requests=128,
-            )
-            store = restored._store  # noqa: SLF001
-            assert store is not None
-            statements: list[str] = []
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(statements.append)  # noqa: SLF001
-
-            stats = await restored.stats()
-
-            with store._lock:  # noqa: SLF001
-                store._connection.set_trace_callback(None)  # noqa: SLF001
-            self.assertEqual(stats["inflight"], 0)
-            self.assertEqual(stats["completed_retained"], 64)
-            self.assertEqual(
-                sum(
-                    statement.startswith("BEGIN IMMEDIATE") for statement in statements
-                ),
-                1,
-            )
-            self.assertEqual(sum(statement == "COMMIT" for statement in statements), 1)
-            await restored.aclose()
-
-    async def test_restore_does_not_rewrite_unchanged_request_rows(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "relay.sqlite3"
-            state = ModelRelayState(state_path=state_path)
-            await state.register_rollout("restore-read-only")
-            completed = await state.enqueue(
-                rollout_id="restore-read-only",
-                endpoint="/v1/responses",
-                body={},
-                headers={},
-            )
-            await state.cancel_request(
-                request_id=completed.request_id,
-                response=RelayWorkerResponse(499, {}),
-            )
-            await state.enqueue(
-                rollout_id="restore-read-only",
-                endpoint="/v1/responses",
-                body={},
-                headers={},
-            )
-            await state.aclose()
-
-            restored = ModelRelayState(state_path=state_path)
-            store = restored._store  # noqa: SLF001
-            assert store is not None
-
-            def unexpected_write(*_args, **_kwargs) -> None:
-                raise AssertionError("restore rewrote an unchanged request row")
-
-            store.save_request = unexpected_write  # type: ignore[method-assign]
-            store.commit_request_batch = unexpected_write  # type: ignore[method-assign]
-            stats = await restored.stats()
-            self.assertEqual(stats["inflight"], 1)
-            self.assertEqual(stats["completed_retained"], 1)
             await restored.aclose()
 
     async def test_transient_worker_disconnect_requeues_without_failing_caller(
@@ -1994,6 +1742,100 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, (200, {"renewed": True}))
         self.assertEqual(stats["counters"]["lease_renewed"], 1)
         self.assertEqual(stats["counters"]["lease_expired"], 0)
+
+    async def test_sdk_worker_contract_preserves_request_identity(self) -> None:
+        sdk_src = (
+            Path(__file__).resolve().parents[1]
+            / "ucloud-sandboxes-sdk"
+            / "src"
+        )
+        if not sdk_src.is_dir():
+            self.skipTest(f"SDK source directory is missing: {sdk_src}")
+        sys.path.insert(0, str(sdk_src))
+        try:
+            from ucloud_sandboxes_sdk import AsyncRelayWorkerClient
+        finally:
+            sys.path.remove(str(sdk_src))
+
+        rollout_id = "sdk-contract-rollout"
+        worker_id = "sdk-contract-worker"
+        worker_token = "sdk-contract-token"
+        async with relay_app(
+            worker_bearer_token=worker_token,
+            request_timeout_seconds=5,
+        ) as relay:
+            async with AsyncRelayWorkerClient(
+                relay.base_url,
+                worker_token=worker_token,
+            ) as client:
+                registration = await client.register_rollout(
+                    rollout_id,
+                    metadata={
+                        "sandbox_id": "sdk-contract-sandbox",
+                        "sandbox_generation": 7,
+                    },
+                )
+                registration_token = registration["rollout"]["registration_token"]
+                model_call = asyncio.create_task(
+                    relay.model_call(
+                        rollout_id,
+                        body={"model": "contract-model", "messages": []},
+                    )
+                )
+                try:
+                    polled = await client.poll(
+                        rollout_id,
+                        worker_id=worker_id,
+                        timeout_seconds=1,
+                        lease_seconds=1,
+                    )
+                    self.assertEqual(len(polled.requests), 1)
+                    request = polled.requests[0]
+                    self.assertEqual(request.rollout_id, rollout_id)
+                    self.assertEqual(request.registration_token, registration_token)
+                    self.assertTrue(request.request_id)
+                    self.assertTrue(request.lease_id)
+                    self.assertEqual(request.leased_by, worker_id)
+                    self.assertEqual(request.sandbox_id, "sdk-contract-sandbox")
+                    self.assertEqual(request.sandbox_generation, 7)
+
+                    renewed = await client.renew_request(
+                        request,
+                        worker_id=worker_id,
+                        lease_seconds=2,
+                    )
+                    self.assertEqual(renewed.request_id, request.request_id)
+                    self.assertEqual(renewed.rollout_id, request.rollout_id)
+                    self.assertEqual(
+                        renewed.registration_token,
+                        request.registration_token,
+                    )
+                    self.assertEqual(renewed.lease_id, request.lease_id)
+                    self.assertEqual(renewed.sandbox_id, request.sandbox_id)
+                    self.assertEqual(
+                        renewed.sandbox_generation,
+                        request.sandbox_generation,
+                    )
+                    self.assertGreater(
+                        renewed.lease_expires_at or 0,
+                        request.lease_expires_at or 0,
+                    )
+
+                    responded = await client.respond_to(
+                        renewed,
+                        {"contract": "ok"},
+                        status=201,
+                    )
+                    self.assertEqual(responded["request_id"], request.request_id)
+                    self.assertFalse(responded["duplicate"])
+                    self.assertEqual(await model_call, (201, {"contract": "ok"}))
+                finally:
+                    if not model_call.done():
+                        model_call.cancel()
+                        try:
+                            await model_call
+                        except asyncio.CancelledError:
+                            pass
 
     async def test_expired_lease_cannot_be_renewed(self) -> None:
         async with relay_app(

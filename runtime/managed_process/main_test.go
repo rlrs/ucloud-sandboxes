@@ -39,6 +39,89 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestDecodeControlRequestIsBoundedAndConsumesOneObject(t *testing.T) {
+	valid := []byte(`{"version":1,"action":"status","job_id":"job-1"}`)
+	decoded, err := decodeControlRequest(bytes.NewReader(valid))
+	if err != nil || decoded.Action != "status" || decoded.JobID != "job-1" {
+		t.Fatalf("valid request did not decode: %#v, %v", decoded, err)
+	}
+	for name, payload := range map[string][]byte{
+		"unknown field":    []byte(`{"version":1,"action":"status","extra":true}`),
+		"trailing object":  append(append([]byte{}, valid...), []byte(` {}`)...),
+		"trailing garbage": append(append([]byte{}, valid...), []byte(` nope`)...),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeControlRequest(bytes.NewReader(payload)); err == nil {
+				t.Fatal("malformed request was accepted")
+			}
+		})
+	}
+	oversized := []byte(`{"version":1,"action":"status","job_id":"` +
+		strings.Repeat("a", maxRequestBytes) + `"}`)
+	if _, err := decodeControlRequest(bytes.NewReader(oversized)); err == nil || !strings.Contains(err.Error(), "limit") {
+		t.Fatalf("oversized request did not fail at the byte limit: %v", err)
+	}
+}
+
+func TestSupervisorRespondsWithoutClientHalfClose(t *testing.T) {
+	reply := serveRawControlRequest(t, []byte(`{"version":1,"action":"status","job_id":"job-1"}`))
+	if reply.Error != "primary process not found" {
+		t.Fatalf("valid request was rejected: %#v", reply)
+	}
+}
+
+func TestSupervisorRejectsTrailingAndOversizedRequests(t *testing.T) {
+	valid := []byte(`{"version":1,"action":"status","job_id":"job-1"}`)
+	for name, payload := range map[string][]byte{
+		"trailing object":  append(append([]byte{}, valid...), []byte(` {}`)...),
+		"trailing garbage": append(append([]byte{}, valid...), []byte(` nope`)...),
+		"oversized": []byte(`{"version":1,"action":"status","job_id":"` +
+			strings.Repeat("a", maxRequestBytes) + `"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			reply := serveRawControlRequest(t, payload)
+			if reply.Error != "invalid request" {
+				t.Fatalf("malformed request was accepted: %#v", reply)
+			}
+		})
+	}
+}
+
+func serveRawControlRequest(t *testing.T, requestPayload []byte) response {
+	t.Helper()
+	server, client := net.Pipe()
+	done := make(chan struct{})
+	go func() {
+		(&supervisor{}).serve(server)
+		close(done)
+	}()
+	defer client.Close()
+	if err := client.SetDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	writeDone := make(chan struct{})
+	go func() {
+		_, _ = client.Write(requestPayload)
+		close(writeDone)
+	}()
+	var reply response
+	if err := json.NewDecoder(client).Decode(&reply); err != nil {
+		t.Fatalf("supervisor waited for client EOF instead of replying: %v", err)
+	}
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("supervisor did not finish the one-request connection")
+	}
+	select {
+	case <-writeDone:
+	case <-time.After(time.Second):
+		t.Fatal("request writer did not finish")
+	}
+	return reply
+}
+
 func TestControlAcceptsMaximumLogResponse(t *testing.T) {
 	stateDir, err := os.MkdirTemp("/tmp", "ucmp-")
 	if err != nil {
@@ -256,6 +339,52 @@ func TestStatusSurfacesAndRetriesDurabilityFailures(t *testing.T) {
 			}
 			if persisted.State != state || persisted.Sequence != 2 {
 				t.Fatalf("unexpected persisted state: %#v", persisted)
+			}
+		})
+	}
+}
+
+func TestLoadTerminalStateFailsProcessesLostWithSupervisor(t *testing.T) {
+	for _, state := range []string{"starting", "running"} {
+		t.Run(state, func(t *testing.T) {
+			stateDir := t.TempDir()
+			original := jobRecord{
+				Version:    protocolVersion,
+				JobID:      "job-1",
+				SpecSHA256: strings.Repeat("a", 64),
+				State:      state,
+				PID:        1234,
+				Sequence:   7,
+			}
+			payload, err := json.Marshal(original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(stateDir, "state.json"), payload, 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			s := &supervisor{stateDir: stateDir}
+			if err := s.loadTerminalState(); err != nil {
+				t.Fatal(err)
+			}
+			if s.state == nil || s.state.State != "failed" || s.state.PID != 0 || s.state.Sequence != 8 {
+				t.Fatalf("lost process was not failed on restart: %#v", s.state)
+			}
+			if _, err := time.Parse(time.RFC3339Nano, s.state.CompletedAt); err != nil {
+				t.Fatalf("restart completion time is invalid: %q", s.state.CompletedAt)
+			}
+
+			persistedPayload, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var persisted jobRecord
+			if err := json.Unmarshal(persistedPayload, &persisted); err != nil {
+				t.Fatal(err)
+			}
+			if persisted.State != "failed" || persisted.PID != 0 || persisted.Sequence != 8 {
+				t.Fatalf("restart conversion was not persisted: %#v", persisted)
 			}
 		})
 	}

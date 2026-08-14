@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from ucloud_sandboxes.registry_storage_migration import (
     execute_filesystem_registry_to_s3,
@@ -109,6 +109,108 @@ class RegistryStorageMigrationTests(unittest.TestCase):
                     source_root=root,
                     target_prefix="production/oci",
                 )
+
+    def test_execute_rejects_file_replaced_by_symlink_after_planning(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir) / "registry"
+            path = root / "docker/registry/v2/blob"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"planned")
+            outside = Path(raw_dir) / "outside"
+            outside.write_bytes(b"planned")
+            client = FakeMigrationS3()
+            plan = plan_filesystem_registry_to_s3(
+                client,
+                source_root=root,
+                target_prefix="production/oci",
+            )
+            path.unlink()
+            path.symlink_to(outside)
+
+            with self.assertRaisesRegex(RuntimeError, "unsafe"):
+                execute_filesystem_registry_to_s3(client, plan)
+
+        self.assertEqual(client.objects, {})
+
+    def test_execute_rejects_directory_symlink_swap_after_planning(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir) / "registry"
+            directory = root / "docker"
+            path = directory / "registry/v2/blob"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"planned")
+            outside_directory = Path(raw_dir) / "outside"
+            outside_path = outside_directory / "registry/v2/blob"
+            outside_path.parent.mkdir(parents=True)
+            outside_path.write_bytes(b"planned")
+            client = FakeMigrationS3()
+            plan = plan_filesystem_registry_to_s3(
+                client,
+                source_root=root,
+                target_prefix="production/oci",
+            )
+            moved = root / "original-docker"
+            directory.rename(moved)
+            directory.symlink_to(outside_directory, target_is_directory=True)
+
+            with self.assertRaisesRegex(RuntimeError, "unsafe"):
+                execute_filesystem_registry_to_s3(client, plan)
+
+        self.assertEqual(client.objects, {})
+
+    def test_execute_rejects_source_mutation_and_bad_remote_verification(self) -> None:
+        class TruncatingMigrationS3(FakeMigrationS3):
+            def put_file(self, key: str, path: Path, *, sha256: str) -> None:
+                super().put_file(key, path, sha256=sha256)
+                self.objects[key] = self.objects[key][:-1]
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir) / "registry"
+            path = root / "blob"
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"planned")
+            plan = plan_filesystem_registry_to_s3(
+                FakeMigrationS3(),
+                source_root=root,
+                target_prefix="production/oci",
+            )
+            path.write_bytes(b"changed")
+            with self.assertRaisesRegex(RuntimeError, "changed before upload"):
+                execute_filesystem_registry_to_s3(FakeMigrationS3(), plan)
+
+            path.write_bytes(b"planned")
+            fresh = plan_filesystem_registry_to_s3(
+                FakeMigrationS3(),
+                source_root=root,
+                target_prefix="production/oci",
+            )
+            with self.assertRaisesRegex(RuntimeError, "post-upload verification"):
+                execute_filesystem_registry_to_s3(TruncatingMigrationS3(), fresh)
+
+    def test_plan_enforces_object_bound_and_normalized_prefix(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir) / "registry"
+            root.mkdir()
+            (root / "one").write_bytes(b"1")
+            (root / "two").write_bytes(b"2")
+
+            with self.assertRaisesRegex(ValueError, "max_objects=1"):
+                plan_filesystem_registry_to_s3(
+                    FakeMigrationS3(),
+                    source_root=root,
+                    target_prefix="production/oci",
+                    max_objects=1,
+                )
+            for prefix in ("", "/", "production/../oci", "production//oci"):
+                with self.subTest(prefix=prefix), self.assertRaisesRegex(
+                    ValueError,
+                    "prefix",
+                ):
+                    plan_filesystem_registry_to_s3(
+                        FakeMigrationS3(),
+                        source_root=root,
+                        target_prefix=prefix,
+                    )
 
 
 if __name__ == "__main__":

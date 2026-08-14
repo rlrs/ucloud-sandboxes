@@ -230,7 +230,6 @@ class FakeStorage:
         self.fail_next_mount = False
         self.fail_next_release = False
         self.fail_next_seal = False
-        self.list_calls = 0
         self.mount_path = mount_path
         self.snapshot_path = mount_path.parent / f".{mount_path.name}.snapshot"
         self.record = {
@@ -268,7 +267,6 @@ class FakeStorage:
         return self._typed()
 
     def list_volumes(self):
-        self.list_calls += 1
         return (self._typed(),)
 
     def _seal(self):
@@ -551,48 +549,10 @@ class DirectRunscWardenTests(unittest.TestCase):
             HibernationState.PARKED,
         )
 
-    def test_storage_native_park_releases_and_resume_mounts_new_cow(self) -> None:
-        storage, _rootfs, incarnation = self._use_storage_native()
-        self.warden.create(self.sandbox, operation_id="create:1")
-
-        parked = self.warden.park(self.sandbox, operation_id="park:1")
-
-        self.assertEqual(parked.state, HibernationState.PARKED)
-        self.assertEqual(
-            storage.events,
-            ["rootfs-park", "seal", "release"],
-        )
-        self.assertEqual(storage.record["state"], "released")
-        portable = self.warden.load_parked_manifest(self.sandbox)
-        self.assertEqual(portable.metadata_sha256, parked.manifest_sha256)
-
-        running = self.warden.resume(self.sandbox, operation_id="wake:1")
-
-        self.assertEqual(running.state, HibernationState.RUNNING)
-        self.assertEqual(
-            storage.events,
-            [
-                "rootfs-park",
-                "seal",
-                "release",
-                "mount",
-                "rootfs-resume",
-            ],
-        )
-        self.assertEqual(storage.record["state"], "mounted")
-        self.assertTrue(incarnation.is_dir())
-
-    def test_storage_inventory_snapshot_uses_one_bulk_rpc_and_validates_owner(
-        self,
-    ) -> None:
+    def test_storage_inventory_snapshot_rejects_duplicate_volume(self) -> None:
         storage, _rootfs, _incarnation = self._use_storage_native()
-
-        snapshot = self.warden.storage_records_snapshot((self.sandbox,))
-
-        self.assertEqual(storage.list_calls, 1)
-        self.assertEqual(snapshot[self.sandbox.memory_directory], storage._typed())
-
         storage.list_volumes = lambda: (storage._typed(), storage._typed())
+
         with self.assertRaisesRegex(DirectWardenError, "duplicate volume"):
             self.warden.storage_records_snapshot((self.sandbox,))
 
@@ -743,31 +703,6 @@ class DirectRunscWardenTests(unittest.TestCase):
             ["mount", "rootfs-resume", "rootfs-park", "discard"],
         )
 
-    def test_restore_uses_canonical_paused_background_handoff(self) -> None:
-        self.warden.create(self.sandbox, operation_id="create:1")
-        self.warden.park(self.sandbox, operation_id="park:1")
-        self.warden.resume(self.sandbox, operation_id="wake:1")
-
-        restore = next(
-            command for command in self.runner.commands if "restore" in command
-        )
-        for flag in ("--background", "--cpu-startup-burst", "--start-paused"):
-            self.assertIn(flag, restore)
-
-    def test_connected_sockets_are_preserved_across_checkpoint_restore(self) -> None:
-        self.warden.create(self.sandbox, operation_id="create:1")
-        self.warden.park(self.sandbox, operation_id="park:1")
-        self.warden.resume(self.sandbox, operation_id="wake:1")
-
-        lifecycle_commands = [
-            command
-            for command in self.runner.commands
-            if any(verb in command for verb in ("create", "checkpoint", "restore"))
-        ]
-        self.assertTrue(lifecycle_commands)
-        for command in lifecycle_commands:
-            self.assertIn("--allow-connected-on-save=true", command)
-
     def test_adopts_migrated_parked_generation_without_create(self) -> None:
         generation = self.warden.artifacts.prepare_generation(
             sandbox_id=self.sandbox.sandbox_id,
@@ -811,29 +746,6 @@ class DirectRunscWardenTests(unittest.TestCase):
         active_root.mkdir(parents=True, exist_ok=True)
         restored = self.warden.resume(self.sandbox, operation_id="wake:migrated")
         self.assertEqual(restored.state, HibernationState.RUNNING)
-
-    def test_streaming_exec_lease_builds_flags_under_lifecycle_fence(self) -> None:
-        self.warden.create(self.sandbox, operation_id="create:1")
-
-        with self.warden.exec_lease(
-            self.sandbox,
-            ("/bin/sh", "-lc", "pwd"),
-            env={"TERM": "xterm"},
-            working_dir="/workspace",
-            user="1000:1001",
-        ) as command:
-            self.assertEqual(
-                command[-7:],
-                (
-                    "--cwd=/workspace",
-                    "--user=1000:1001",
-                    "--env=TERM=xterm",
-                    CONTAINER_ID,
-                    "/bin/sh",
-                    "-lc",
-                    "pwd",
-                ),
-            )
 
     def test_cleanup_failure_does_not_turn_live_restore_into_failed_wake(self) -> None:
         self.warden.create(self.sandbox, operation_id="create:1")

@@ -1,4 +1,3 @@
-import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -198,27 +197,12 @@ def image_store(root: Path, runner: Overlay2Runner) -> DockerOverlay2RootfsStore
 
 
 class ImageRootfsTests(unittest.TestCase):
-    def test_overlay2_rootfs_identity_has_overlay_namespace(self) -> None:
-        image_id = f"sha256:{IMAGE_DIGEST}"
-        identity = hashlib.sha256(
-            b"ucloud-overlay2-rootfs-v1\0" + image_id.encode("ascii")
-        ).hexdigest()
-
-        self.assertEqual(
-            DockerOverlay2RootfsStore._rootfs_identity(image_id),
-            identity,
-        )
-
     def test_overlay2_store_mounts_shared_layers_without_export(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
             docker_root = root / "docker"
             runner = Overlay2Runner(docker_root)
-            store = DockerOverlay2RootfsStore(
-                (root / "cache").resolve(),
-                runner=runner,
-                docker_root=docker_root.resolve(),
-            )
+            store = image_store(root, runner)
 
             with store.operation_lease("example/image:latest") as first:
                 pass
@@ -261,11 +245,7 @@ class ImageRootfsTests(unittest.TestCase):
             root = Path(raw)
             docker_root = root / "docker"
             runner = Overlay2Runner(docker_root)
-            store = DockerOverlay2RootfsStore(
-                (root / "cache").resolve(),
-                runner=runner,
-                docker_root=docker_root.resolve(),
-            )
+            store = image_store(root, runner)
             with store.operation_lease("example/image:latest") as first:
                 pass
             runner.mounted.clear()
@@ -284,11 +264,7 @@ class ImageRootfsTests(unittest.TestCase):
             root = Path(raw)
             docker_root = root / "docker"
             runner = Overlay2Runner(docker_root, single_layer=True)
-            store = DockerOverlay2RootfsStore(
-                (root / "cache").resolve(),
-                runner=runner,
-                docker_root=docker_root.resolve(),
-            )
+            store = image_store(root, runner)
 
             with store.operation_lease("scratch-derived:latest") as materialized:
                 pass
@@ -320,11 +296,7 @@ class ImageRootfsTests(unittest.TestCase):
             root = Path(raw)
             docker_root = root / "docker"
             runner = Overlay2Runner(docker_root)
-            store = DockerOverlay2RootfsStore(
-                (root / "cache").resolve(),
-                runner=runner,
-                docker_root=docker_root.resolve(),
-            )
+            store = image_store(root, runner)
             with store.operation_lease("example/image:latest") as materialized:
                 pass
             runner.commands.clear()

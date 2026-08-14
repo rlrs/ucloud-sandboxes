@@ -57,7 +57,12 @@ class HttpServerTests(unittest.TestCase):
             ("127.0.0.1", 0),
             _JsonHandler,
         )
-        Thread(target=server.serve_forever, daemon=True).start()
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        thread.start()
         try:
 
             def post(headers: dict[str, str], body: bytes = b""):
@@ -93,6 +98,7 @@ class HttpServerTests(unittest.TestCase):
             )
         finally:
             server.shutdown()
+            thread.join(timeout=1)
             server.server_close()
 
     def test_accepted_clients_get_read_timeout_and_limits_are_validated(self) -> None:
@@ -135,7 +141,11 @@ class HttpServerTests(unittest.TestCase):
             _BlockingHandler,
             max_request_threads=1,
         )
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
         thread.start()
         first = HTTPConnection(*server.server_address, timeout=5)
         second = HTTPConnection(*server.server_address, timeout=5)
@@ -165,6 +175,7 @@ class HttpServerTests(unittest.TestCase):
             first.close()
             second.close()
             server.shutdown()
+            thread.join(timeout=1)
             server.server_close()
 
 

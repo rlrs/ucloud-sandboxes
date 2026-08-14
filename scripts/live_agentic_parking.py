@@ -20,7 +20,6 @@ import os
 from pathlib import Path
 import time
 from typing import Any, Mapping
-from urllib import error, request
 from uuid import uuid4
 
 import aiohttp

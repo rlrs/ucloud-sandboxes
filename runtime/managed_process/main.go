@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -275,13 +276,13 @@ func (s *supervisor) loadTerminalState() error {
 
 func (s *supervisor) serve(connection net.Conn) {
 	defer connection.Close()
-	decoder := json.NewDecoder(io.LimitReader(connection, maxRequestBytes+1))
-	decoder.DisallowUnknownFields()
-	var req request
-	if err := decoder.Decode(&req); err != nil {
+	_ = connection.SetReadDeadline(time.Now().Add(10 * time.Second))
+	req, err := decodeControlRequest(connection)
+	if err != nil {
 		writeResponse(connection, response{Version: protocolVersion, Error: "invalid request"})
 		return
 	}
+	_ = connection.SetReadDeadline(time.Time{})
 	if req.Version != protocolVersion {
 		writeResponse(connection, response{Version: protocolVersion, Error: "unsupported protocol version"})
 		return
@@ -300,6 +301,43 @@ func (s *supervisor) serve(connection net.Conn) {
 		reply = response{Version: protocolVersion, Error: "unsupported action"}
 	}
 	writeResponse(connection, reply)
+}
+
+func decodeControlRequest(reader io.Reader) (request, error) {
+	limited := &io.LimitedReader{R: reader, N: maxRequestBytes + 1}
+	decoder := json.NewDecoder(limited)
+	decoder.DisallowUnknownFields()
+	var req request
+	if err := decoder.Decode(&req); err != nil {
+		if limited.N == 0 {
+			return request{}, errors.New("request exceeds limit")
+		}
+		return request{}, err
+	}
+	if limited.N == 0 {
+		return request{}, errors.New("request exceeds limit")
+	}
+	if _, streaming := reader.(net.Conn); streaming {
+		// A request/reply client must not need to half-close its socket before
+		// receiving a response. Reject trailing bytes already consumed by the
+		// decoder; bytes sent later lose the race with the one-request close.
+		buffered, err := io.ReadAll(decoder.Buffered())
+		if err != nil {
+			return request{}, err
+		}
+		if len(bytes.TrimSpace(buffered)) != 0 {
+			return request{}, errors.New("request contains trailing data")
+		}
+		return req, nil
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return request{}, errors.New("request contains trailing data")
+	}
+	if limited.N == 0 {
+		return request{}, errors.New("request exceeds limit")
+	}
+	return req, nil
 }
 
 func (s *supervisor) start(req request) response {

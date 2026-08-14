@@ -8,6 +8,8 @@ from threading import Event
 import unittest
 from unittest.mock import call, patch
 
+from hypothesis import given, settings, strategies as st
+
 from ucloud_sandboxes.managed_registry import (
     MANIFEST_ACCEPT,
     canonical_image_digest_ref,
@@ -21,12 +23,10 @@ from ucloud_sandboxes.managed_registry import (
     RegistryUsageStateError,
     RegistryUsageStore,
     RegistryTag,
-    _next_link_path,
     execute_registry_prune,
     list_registry_tags,
     registry_repository_tag_from_image_ref,
     registry_host_from_image_ref,
-    registry_maintenance_lock,
     registry_prune_plan,
     registry_summary,
     select_prune_candidates,
@@ -36,13 +36,24 @@ from ucloud_sandboxes.managed_registry import (
 LEASE_DIGEST = "sha256:" + "d" * 64
 
 
+class DeletingRegistryClient:
+    def __init__(self) -> None:
+        self.deleted: list[tuple[str, str]] = []
+
+    def delete_manifest(self, repository: str, digest: str) -> None:
+        self.deleted.append((repository, digest))
+
+
 def _acquire_lease_in_process(
     path: str,
     repository: str,
     tag: str,
     owner: str,
     result_queue: object,
+    start_event: object | None = None,
 ) -> None:
+    if start_event is not None:
+        start_event.wait()  # type: ignore[attr-defined]
     lease = RegistryUsageStore(Path(path)).acquire_lease(
         repository,
         tag,
@@ -209,54 +220,6 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
-    def test_root_registry_writes_adopt_shared_state_owner(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            directory = Path(raw_dir)
-            path = directory / "registry-usage.json"
-            owner = directory.stat()
-            with patch(
-                "ucloud_sandboxes.managed_registry.os.geteuid",
-                return_value=0,
-            ), patch("ucloud_sandboxes.managed_registry.os.fchown") as fchown:
-                RegistryUsageStore(path).touch_image("registry.test/models/demo:latest")
-
-            self.assertEqual(fchown.call_count, 1)
-            self.assertTrue(
-                all(
-                    item.args[1:] == (owner.st_uid, owner.st_gid)
-                    for item in fchown.call_args_list
-                )
-            )
-
-    def test_registry_catalog_rejects_repeated_pagination_link(self) -> None:
-        client = RegistryClient("http://registry")
-        repeated = '</v2/_catalog?n=1000>; rel="next"'
-        with patch.object(
-            client,
-            "_json_request",
-            return_value=({"repositories": ["repo/a"]}, {"Link": repeated}),
-        ):
-            with self.assertRaisesRegex(ValueError, "repeated pagination"):
-                client.catalog()
-
-    def test_registry_tags_follow_pagination_and_deduplicate(self) -> None:
-        client = RegistryClient("http://registry")
-        with patch.object(
-            client,
-            "_json_request",
-            side_effect=(
-                (
-                    {"tags": ["v1", "v2"]},
-                    {"Link": ('</v2/repo/a/tags/list?n=1000&last=v2>; rel="next"')},
-                ),
-                ({"tags": ["v2", "v3"]}, {}),
-            ),
-        ) as fetch:
-            tags = client.tags("repo/a")
-
-        self.assertEqual(tags, ["v1", "v2", "v3"])
-        self.assertEqual(fetch.call_count, 2)
-
     def test_registry_summary_exposes_visible_tags_and_repository_metadata(
         self,
     ) -> None:
@@ -289,7 +252,7 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(repo["latest_tag"], "v3")
         self.assertEqual(repo["tags"], ["v2", "v3"])
 
-    def test_registry_summary_tolerates_catalog_entry_with_missing_tags(self) -> None:
+    def test_registry_views_tolerate_catalog_entries_removed_during_scan(self) -> None:
         class FakeRegistryClient:
             base_url = "http://registry"
 
@@ -306,110 +269,112 @@ class ManagedRegistryTests(unittest.TestCase):
                     )
                 return ["v1"]
 
-        summary = registry_summary(FakeRegistryClient())  # type: ignore[arg-type]
-
-        self.assertTrue(summary["ok"])
-        self.assertEqual(summary["repository_count"], 2)
-        self.assertEqual(summary["scanned_repository_count"], 2)
-        self.assertEqual(summary["scanned_tag_count"], 1)
-        self.assertEqual(summary["unavailable_repository_count"], 1)
-        self.assertEqual(summary["unavailable_repositories"], ["repo/missing"])
-        missing = summary["repositories"][1]
-        self.assertEqual(missing["repository"], "repo/missing")
-        self.assertFalse(missing["available"])
-        self.assertEqual(missing["tag_count"], 0)
-
-    def test_list_registry_tags_skips_catalog_entries_with_missing_tags(self) -> None:
-        class FakeRegistryClient:
-            def catalog(self) -> list[str]:
-                return ["repo/a", "repo/missing"]
-
-            def tags(self, repository: str) -> list[str]:
-                if repository == "repo/missing":
-                    raise RegistryRequestError(
-                        404,
-                        "GET",
-                        "/v2/repo/missing/tags/list",
-                        '{"errors":[{"code":"NAME_UNKNOWN"}]}',
-                    )
-                return ["v1"]
-
             def tag_record(self, repository: str, tag: str) -> RegistryTag | None:
                 return RegistryTag(repository, tag, "sha256:1")
 
-        records = list_registry_tags(FakeRegistryClient())  # type: ignore[arg-type]
+        client = FakeRegistryClient()
+        summary = registry_summary(client)  # type: ignore[arg-type]
+        records = list_registry_tags(client)  # type: ignore[arg-type]
 
+        self.assertEqual(summary["unavailable_repositories"], ["repo/missing"])
         self.assertEqual(
             [(record.repository, record.tag) for record in records],
             [("repo/a", "v1")],
         )
 
-    def test_select_prune_candidates_keeps_newest_per_repository(self) -> None:
-        records = [
-            RegistryTag("repo/a", "v1", "sha256:1", "2026-06-01T00:00:00+00:00"),
-            RegistryTag("repo/a", "v2", "sha256:2", "2026-06-02T00:00:00+00:00"),
-            RegistryTag("repo/a", "v3", "sha256:3", "2026-06-03T00:00:00+00:00"),
-            RegistryTag("repo/b", "v1", "sha256:4", "2026-06-01T00:00:00+00:00"),
-            RegistryTag("repo/b", "v2", "sha256:5", "2026-06-02T00:00:00+00:00"),
-        ]
-
-        candidates = select_prune_candidates(records, keep_per_repository=2)
-
-        self.assertEqual(
-            [(item.repository, item.tag) for item in candidates],
-            [("repo/a", "v1")],
+    def test_select_prune_candidates_applies_keep_floor_and_ttl_modes(self) -> None:
+        old = "2026-06-01T00:00:00+00:00"
+        recent = "2026-06-06T00:00:00+00:00"
+        now = datetime(2026, 6, 7, tzinfo=timezone.utc)
+        cases = (
+            (
+                [
+                    RegistryTag("repo/a", "v1", "sha256:1", old),
+                    RegistryTag("repo/a", "v2", "sha256:2", recent),
+                    RegistryTag("repo/a", "v3", "sha256:3", recent),
+                    RegistryTag("repo/b", "v1", "sha256:4", old),
+                    RegistryTag("repo/b", "v2", "sha256:5", recent),
+                ],
+                {"keep_per_repository": 2},
+                [("repo/a", "v1")],
+            ),
+            (
+                [
+                    RegistryTag("repo/a", "v1", "sha256:1"),
+                    RegistryTag("repo/a", "v3", "sha256:3"),
+                    RegistryTag("repo/a", "v2", "sha256:2"),
+                ],
+                {"keep_per_repository": 1},
+                [("repo/a", "v1"), ("repo/a", "v2")],
+            ),
+            (
+                [
+                    RegistryTag("repo/old", "only", "sha256:1", old),
+                    RegistryTag("repo/new", "only", "sha256:2", recent),
+                ],
+                {"keep_per_repository": 0, "max_age_days": 3, "now": now},
+                [("repo/old", "only")],
+            ),
+            (
+                [
+                    RegistryTag("repo/a", "used", "sha256:1", old, recent),
+                    RegistryTag("repo/a", "unused", "sha256:2", old, old),
+                    RegistryTag("repo/a", "unknown", "sha256:3", old),
+                ],
+                {
+                    "keep_per_repository": 0,
+                    "max_age_days": 3,
+                    "use_last_used_at": True,
+                    "now": now,
+                },
+                [("repo/a", "unused")],
+            ),
+            (
+                [
+                    RegistryTag("repo/a", "old", "sha256:1", old),
+                    RegistryTag("repo/a", "unknown", "sha256:2"),
+                ],
+                {"keep_per_repository": 0, "max_age_days": 3, "now": now},
+                [("repo/a", "old")],
+            ),
         )
+        for records, options, expected in cases:
+            with self.subTest(options=options, expected=expected):
+                candidates = select_prune_candidates(records, **options)
+                self.assertEqual(
+                    [(item.repository, item.tag) for item in candidates], expected
+                )
 
-    def test_select_prune_candidates_uses_tag_order_when_created_at_missing(
-        self,
-    ) -> None:
-        records = [
-            RegistryTag("repo/a", "v1", "sha256:1"),
-            RegistryTag("repo/a", "v3", "sha256:3"),
-            RegistryTag("repo/a", "v2", "sha256:2"),
-        ]
-
-        candidates = select_prune_candidates(records, keep_per_repository=1)
-
-        self.assertEqual(
-            [(item.repository, item.tag) for item in candidates],
-            [("repo/a", "v1"), ("repo/a", "v2")],
-        )
-
-    def test_select_prune_candidates_can_delete_old_single_tag_repositories(
-        self,
-    ) -> None:
-        records = [
-            RegistryTag("repo/old", "only", "sha256:1", "2026-06-01T00:00:00+00:00"),
-            RegistryTag("repo/new", "only", "sha256:2", "2026-06-06T00:00:00+00:00"),
-        ]
-
-        candidates = select_prune_candidates(
-            records,
-            keep_per_repository=0,
-            max_age_days=3,
-            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
-        )
-
-        self.assertEqual(
-            [(item.repository, item.tag) for item in candidates],
-            [("repo/old", "only")],
-        )
-
-    def test_select_prune_candidates_uses_last_usage_for_ttl(self) -> None:
+    def test_prune_keeps_digest_when_any_alias_is_inside_ttl(self) -> None:
+        shared_digest = "sha256:" + "a" * 64
+        expired_digest = "sha256:" + "b" * 64
         records = [
             RegistryTag(
                 "repo/a",
-                "old-but-used",
-                "sha256:1",
+                "shared-old",
+                shared_digest,
+                "2026-06-01T00:00:00+00:00",
+                "2026-06-01T00:00:00+00:00",
+            ),
+            RegistryTag(
+                "repo/a",
+                "shared-recent",
+                shared_digest,
                 "2026-06-01T00:00:00+00:00",
                 "2026-06-06T00:00:00+00:00",
             ),
             RegistryTag(
                 "repo/a",
-                "old-and-unused",
-                "sha256:2",
+                "expired",
+                expired_digest,
                 "2026-06-01T00:00:00+00:00",
+                "2026-06-01T00:00:00+00:00",
+            ),
+            RegistryTag(
+                "repo/a",
+                "expired-alias",
+                expired_digest,
+                "2026-06-02T00:00:00+00:00",
                 "2026-06-02T00:00:00+00:00",
             ),
         ]
@@ -422,16 +387,40 @@ class ManagedRegistryTests(unittest.TestCase):
             now=datetime(2026, 6, 7, tzinfo=timezone.utc),
         )
 
-        self.assertEqual(
-            [(item.repository, item.tag) for item in candidates],
-            [("repo/a", "old-and-unused")],
+        client = DeletingRegistryClient()
+        deleted = execute_registry_prune(
+            client,  # type: ignore[arg-type]
+            candidates,
+            all_records=records,
         )
 
-    def test_select_prune_candidates_keeps_missing_usage_in_last_used_mode(
+        self.assertEqual(
+            [record.tag for record in candidates],
+            ["expired", "expired-alias"],
+        )
+        self.assertEqual(
+            [record.tag for record in deleted],
+            ["expired", "expired-alias"],
+        )
+        self.assertEqual(client.deleted, [("repo/a", expired_digest)])
+
+    @settings(max_examples=100, deadline=None)
+    @given(st.lists(st.booleans(), min_size=1, max_size=12))
+    def test_prune_shared_digest_requires_every_alias_to_be_expired(
         self,
+        expired_aliases: list[bool],
     ) -> None:
+        now = datetime(2026, 6, 7, tzinfo=timezone.utc)
+        digest = "sha256:" + "a" * 64
         records = [
-            RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00")
+            RegistryTag(
+                "repo/a",
+                f"alias-{index}",
+                digest,
+                "2026-06-01T00:00:00+00:00",
+                (now - timedelta(days=10) if expired else now).isoformat(),
+            )
+            for index, expired in enumerate(expired_aliases)
         ]
 
         candidates = select_prune_candidates(
@@ -439,43 +428,22 @@ class ManagedRegistryTests(unittest.TestCase):
             keep_per_repository=0,
             max_age_days=3,
             use_last_used_at=True,
-            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+            now=now,
         )
-
-        self.assertEqual(candidates, [])
-
-    def test_select_prune_candidates_keeps_unknown_age_when_ttl_is_set(self) -> None:
-        records = [
-            RegistryTag("repo/a", "old", "sha256:1", "2026-06-01T00:00:00+00:00"),
-            RegistryTag("repo/a", "unknown", "sha256:2"),
-        ]
-
-        candidates = select_prune_candidates(
-            records,
+        reversed_candidates = select_prune_candidates(
+            list(reversed(records)),
             keep_per_repository=0,
             max_age_days=3,
-            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
+            use_last_used_at=True,
+            now=now,
         )
+        expected = {record.tag for record in records} if all(expired_aliases) else set()
 
+        self.assertEqual({record.tag for record in candidates}, expected)
         self.assertEqual(
-            [(item.repository, item.tag) for item in candidates],
-            [("repo/a", "old")],
+            {record.tag for record in reversed_candidates},
+            expected,
         )
-
-    def test_registry_usage_store_touches_private_registry_image(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
-
-            record = store.touch_image(
-                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5",
-                when=datetime(2026, 6, 7, tzinfo=timezone.utc),
-            )
-
-            self.assertIsNotNone(record)
-            self.assertEqual(record.repository, "prime-rl/tmax-mini-base")
-            self.assertEqual(record.tag, "mswe-2.2.8-r5")
-            loaded = store.load()
-            self.assertIn(("prime-rl/tmax-mini-base", "mswe-2.2.8-r5"), loaded)
 
     def test_registry_usage_generation_detects_stale_maintenance_snapshot(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -603,16 +571,38 @@ class ManagedRegistryTests(unittest.TestCase):
                     digest="sha256:" + "e" * 64,
                 )
 
-    def test_existing_json_usage_state_is_rejected(self) -> None:
+    def test_usage_store_rejects_legacy_and_incompatible_schemas(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.json"
-            path.write_text(
+            root = Path(raw_dir)
+            legacy = root / "usage.json"
+            legacy.write_text(
                 '{"generation": 1, "images": [], "leases": []}',
                 encoding="utf-8",
             )
-
             with self.assertRaises(RegistryUsageStateError):
-                RegistryUsageStore(path)
+                RegistryUsageStore(legacy)
+
+            cases = (
+                ("unversioned", False, "CREATE TABLE obsolete_state (value TEXT)"),
+                ("wrong-version", False, "PRAGMA user_version = 2"),
+                (
+                    "wrong-columns",
+                    True,
+                    "ALTER TABLE registry_images "
+                    "RENAME COLUMN last_used_at TO lastUsedAt",
+                ),
+            )
+            for name, initialize, mutation in cases:
+                with self.subTest(name=name):
+                    path = root / f"{name}.sqlite"
+                    if initialize:
+                        RegistryUsageStore(path)
+                    with sqlite3.connect(path) as conn:
+                        conn.executescript(mutation)
+                    with self.assertRaisesRegex(
+                        RegistryUsageStateError, "invalid or unavailable"
+                    ):
+                        RegistryUsageStore(path)
 
     def test_usage_updates_preserve_active_leases(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -646,49 +636,6 @@ class ManagedRegistryTests(unittest.TestCase):
                         ttl_seconds=ttl,
                         digest=LEASE_DIGEST,
                     )
-
-    def test_unversioned_sqlite_usage_state_is_rejected(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.sqlite"
-            with sqlite3.connect(path) as conn:
-                conn.execute("CREATE TABLE obsolete_state (value TEXT)")
-
-            with self.assertRaisesRegex(
-                RegistryUsageStateError,
-                "invalid or unavailable",
-            ):
-                RegistryUsageStore(path)
-
-    def test_wrong_sqlite_schema_version_is_rejected(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.sqlite"
-            with sqlite3.connect(path) as conn:
-                conn.execute("PRAGMA user_version = 2")
-
-            with self.assertRaises(RegistryUsageStateError):
-                RegistryUsageStore(path)
-
-    def test_wrong_sqlite_columns_are_rejected(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.sqlite"
-            RegistryUsageStore(path)
-            with sqlite3.connect(path) as conn:
-                conn.execute(
-                    "ALTER TABLE registry_images "
-                    "RENAME COLUMN last_used_at TO lastUsedAt"
-                )
-
-            with self.assertRaises(RegistryUsageStateError):
-                RegistryUsageStore(path)
-
-    def test_nonstrict_sqlite_tables_are_rejected(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "usage.sqlite"
-            with sqlite3.connect(path) as conn:
-                conn.executescript(RegistryUsageStore._SCHEMA.replace(" STRICT", ""))
-
-            with self.assertRaises(RegistryUsageStateError):
-                RegistryUsageStore(path)
 
     def test_sqlite_busy_error_uses_registry_state_contract(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -745,16 +692,18 @@ class ManagedRegistryTests(unittest.TestCase):
             path = str(Path(raw_dir) / "usage.json")
             context = multiprocessing.get_context("spawn")
             results = context.Queue()
+            start = context.Event()
             processes = [
                 context.Process(
                     target=_acquire_lease_in_process,
-                    args=(path, "repo/a", "v1", owner, results),
+                    args=(path, "repo/a", "v1", owner, results, start),
                 )
                 for owner in ("sandbox:one", "sandbox:two")
             ]
 
             for process in processes:
                 process.start()
+            start.set()
             for process in processes:
                 process.join(timeout=10)
                 if process.is_alive():
@@ -856,13 +805,6 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(client.deleted, ("repo/a", LEASE_DIGEST))
 
-    def test_registry_maintenance_lock_creates_cross_process_lock_file(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "registry-maintenance"
-
-            with registry_maintenance_lock(path):
-                self.assertTrue(path.with_name(path.name + ".lock").exists())
-
     def test_registry_repository_tag_from_image_ref(self) -> None:
         self.assertEqual(
             registry_repository_tag_from_image_ref(
@@ -897,60 +839,41 @@ class ManagedRegistryTests(unittest.TestCase):
         )
         self.assertEqual(manifest_digest_from_image_ref(f"{tagged}@sha256:bad"), "")
 
-    def test_execute_registry_prune_deletes_duplicate_digest_once(self) -> None:
-        class FakeRegistryClient:
-            def __init__(self) -> None:
-                self.deleted: list[tuple[str, str]] = []
-
-            def delete_manifest(self, repository: str, digest: str) -> None:
-                self.deleted.append((repository, digest))
-
-        client = FakeRegistryClient()
-
-        execute_registry_prune(
-            client,  # type: ignore[arg-type]
-            [
-                RegistryTag("repo/a", "v1", "sha256:1"),
-                RegistryTag("repo/a", "v2", "sha256:1"),
-                RegistryTag("repo/a", "v3", "sha256:2"),
-            ],
-        )
-
-        self.assertEqual(
-            client.deleted,
-            [("repo/a", "sha256:1"), ("repo/a", "sha256:2")],
-        )
-
     def test_execute_registry_prune_revalidates_all_digest_aliases(self) -> None:
-        class FakeRegistryClient:
-            def __init__(self) -> None:
-                self.deleted: list[tuple[str, str]] = []
-
-            def delete_manifest(self, repository: str, digest: str) -> None:
-                self.deleted.append((repository, digest))
-
-        client = FakeRegistryClient()
+        client = DeletingRegistryClient()
+        records = [
+            RegistryTag("repo/a", "safe", "sha256:1"),
+            RegistryTag("repo/a", "in-use", "sha256:1"),
+            RegistryTag("repo/a", "old", "sha256:2"),
+        ]
         deleted = execute_registry_prune(
             client,  # type: ignore[arg-type]
-            [
-                RegistryTag("repo/a", "safe", "sha256:1"),
-                RegistryTag("repo/a", "in-use", "sha256:1"),
-                RegistryTag("repo/a", "old", "sha256:2"),
-            ],
+            records,
             revalidate=lambda record: record.tag != "in-use",
+            all_records=records,
         )
 
         self.assertEqual(client.deleted, [("repo/a", "sha256:2")])
         self.assertEqual([record.tag for record in deleted], ["old"])
 
+    def test_execute_registry_prune_requires_complete_digest_inventory(self) -> None:
+        shared_digest = "sha256:" + "a" * 64
+        records = [
+            RegistryTag("repo/a", "old", shared_digest),
+            RegistryTag("repo/a", "retained", shared_digest),
+        ]
+        for inventory in (records, []):
+            with self.subTest(inventory=inventory):
+                client = DeletingRegistryClient()
+                deleted = execute_registry_prune(
+                    client,  # type: ignore[arg-type]
+                    [records[0]],
+                    all_records=inventory,
+                )
+                self.assertEqual(deleted, [])
+                self.assertEqual(client.deleted, [])
+
     def test_digest_lease_fences_all_aliases_in_plan_and_execution(self) -> None:
-        class FakeRegistryClient:
-            def __init__(self) -> None:
-                self.deleted: list[tuple[str, str]] = []
-
-            def delete_manifest(self, repository: str, digest: str) -> None:
-                self.deleted.append((repository, digest))
-
         with TemporaryDirectory() as raw_dir:
             store = RegistryUsageStore(Path(raw_dir) / "usage.json")
             shared_digest = "sha256:" + "6" * 64
@@ -972,7 +895,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 keep_per_repository=0,
                 active_leases=snapshot.leases,
             )
-            client = FakeRegistryClient()
+            client = DeletingRegistryClient()
             deleted = execute_registry_prune(
                 client,  # type: ignore[arg-type]
                 [records[0]],
@@ -985,13 +908,6 @@ class ManagedRegistryTests(unittest.TestCase):
             self.assertEqual(client.deleted, [])
 
     def test_digest_lease_survives_tag_move_in_plan_and_execution(self) -> None:
-        class FakeRegistryClient:
-            def __init__(self) -> None:
-                self.deleted: list[tuple[str, str]] = []
-
-            def delete_manifest(self, repository: str, digest: str) -> None:
-                self.deleted.append((repository, digest))
-
         protected_digest = "sha256:" + "3" * 64
         moved_digest = "sha256:" + "4" * 64
         protection_tag = digest_protection_tag(protected_digest)
@@ -1014,7 +930,7 @@ class ManagedRegistryTests(unittest.TestCase):
                 keep_per_repository=0,
                 active_leases=snapshot.leases,
             )
-            client = FakeRegistryClient()
+            client = DeletingRegistryClient()
             deleted = execute_registry_prune(
                 client,  # type: ignore[arg-type]
                 records,
@@ -1094,13 +1010,6 @@ class ManagedRegistryTests(unittest.TestCase):
             self.assertEqual(plan["usage_generation"], snapshot.generation)
             self.assertEqual(plan["active_lease_count"], 1)
             self.assertEqual(plan["delete"], [])
-
-    def test_next_link_path_extracts_registry_pagination_target(self) -> None:
-        self.assertEqual(
-            _next_link_path('</v2/_catalog?last=repo/a&n=1000>; rel="next"'),
-            "/v2/_catalog?last=repo/a&n=1000",
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

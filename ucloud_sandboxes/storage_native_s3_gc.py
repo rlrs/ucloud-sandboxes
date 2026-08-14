@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 import time
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .config import DeploymentConfig
 from .routing import RoutingStore
@@ -146,6 +146,7 @@ def execute_s3_snapshot_gc(
     plan: S3SnapshotGcPlan,
     *,
     max_delete_objects: int,
+    revalidate: Callable[[], S3SnapshotGcPlan],
 ) -> int:
     if max_delete_objects < 1:
         raise ValueError("S3 snapshot GC delete bound must be positive")
@@ -153,17 +154,42 @@ def execute_s3_snapshot_gc(
         raise ValueError(
             "S3 snapshot GC candidate count exceeds --max-delete-objects"
         )
+    # Planning reads the route database and S3 inventory independently. A
+    # portable snapshot can become referenced again after that read, so never
+    # mutate from the original plan alone. Revalidation is intentionally a
+    # callback so the fresh route and inventory reads happen inside execution,
+    # immediately before mutation.
+    current = revalidate()
+    current_candidates = set(current.candidates) - set(current.protected)
+    candidates = tuple(
+        key for key in plan.candidates if key in current_candidates
+    )
+    markers_to_create = set(plan.markers_to_create).intersection(
+        current.markers_to_create
+    )
+    allowed_marker_clears = set(plan.markers_to_clear)
+    allowed_marker_clears.update(
+        marker
+        for key in plan.candidates
+        if (marker := _unreferenced_marker_for_target(key)) is not None
+    )
     candidate_markers: set[str] = set()
-    for key in plan.candidates:
+    for key in candidates:
         client.delete(key)
         marker_key = _unreferenced_marker_for_target(key)
         if marker_key is not None:
             client.delete(marker_key)
             candidate_markers.add(marker_key)
-    for marker_key in plan.markers_to_clear:
-        if marker_key not in candidate_markers:
+    # Use the current marker-clear plan rather than the stale one. In
+    # particular, a reference that returned after planning must clear its old
+    # unreferenced marker even though the target itself is no longer deleted.
+    for marker_key in current.markers_to_clear:
+        if (
+            marker_key in allowed_marker_clears
+            and marker_key not in candidate_markers
+        ):
             client.delete(marker_key)
-    for target_key in plan.markers_to_create:
+    for target_key in sorted(markers_to_create):
         marker_key = _unreferenced_marker_for_target(target_key)
         if marker_key is None:
             raise ValueError("S3 snapshot GC cannot mark an unmanaged object")
@@ -173,7 +199,7 @@ def execute_s3_snapshot_gc(
             payload,
             sha256="sha256:" + hashlib.sha256(payload).hexdigest(),
         )
-    return len(plan.candidates)
+    return len(candidates)
 
 
 def _unreferenced_marker_root(prefix: str) -> str:
@@ -256,27 +282,45 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     expected_repository = f"{store.bucket}/{store.prefix}"
-    publications: list[StorageSnapshotPublication] = []
-    for route in RoutingStore(config.routing_file()).sandbox_routes_readonly():
-        if not route.storage_snapshot:
-            continue
-        publication = StorageNativeMigration.from_dict(
-            route.storage_snapshot
-        ).publication
-        if publication.backend == "s3" and publication.repository == expected_repository:
-            publications.append(publication)
+    routing_store = RoutingStore(config.routing_file())
+
+    def current_publications() -> list[StorageSnapshotPublication]:
+        publications: list[StorageSnapshotPublication] = []
+        for route in routing_store.sandbox_routes_readonly():
+            if not route.storage_snapshot:
+                continue
+            publication = StorageNativeMigration.from_dict(
+                route.storage_snapshot
+            ).publication
+            if (
+                publication.backend == "s3"
+                and publication.repository == expected_repository
+            ):
+                publications.append(publication)
+        return publications
+
+    grace_seconds = args.grace_days * 24 * 60 * 60
     plan = plan_s3_snapshot_gc(
         client,
         prefix=store.prefix,
-        publications=publications,
+        publications=current_publications(),
         now=time.time(),
-        grace_seconds=args.grace_days * 24 * 60 * 60,
+        grace_seconds=grace_seconds,
     )
     result = plan.to_dict()
     result["executed"] = bool(args.execute)
     result["deletedObjects"] = (
         execute_s3_snapshot_gc(
-            client, plan, max_delete_objects=args.max_delete_objects
+            client,
+            plan,
+            max_delete_objects=args.max_delete_objects,
+            revalidate=lambda: plan_s3_snapshot_gc(
+                client,
+                prefix=store.prefix,
+                publications=current_publications(),
+                now=time.time(),
+                grace_seconds=grace_seconds,
+            ),
         )
         if args.execute
         else 0

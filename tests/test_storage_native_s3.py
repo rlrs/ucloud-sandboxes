@@ -6,26 +6,39 @@ from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
 import threading
-import time
 import unittest
 
 from ucloud_sandboxes.storage_native import StorageNativeLayer
 from ucloud_sandboxes.storage_native_registry import PublishedStorageLayer
 from ucloud_sandboxes.storage_native_s3 import (
-    HETZNER_TRANSIENT_RETRY_ATTEMPTS,
     S3ObjectStat,
     S3SnapshotPublisher,
-    _retry_transient_hetzner_gateway,
-    _strip_expect_header,
 )
+
+
+class _OverlapGate:
+    """Release every caller once two operations demonstrably overlap."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._arrived = 0
+        self._overlapped = threading.Event()
+
+    def wait(self) -> None:
+        with self._lock:
+            self._arrived += 1
+            if self._arrived >= 2:
+                self._overlapped.set()
+        if not self._overlapped.wait(timeout=5):
+            raise AssertionError("operations did not overlap")
 
 
 class FakeS3:
     def __init__(
         self,
         *,
-        upload_delay: float = 0.0,
-        stat_delay: float = 0.0,
+        upload_barrier: _OverlapGate | None = None,
+        stat_barrier: _OverlapGate | None = None,
         lose_complete_response: bool = False,
     ) -> None:
         self.objects: dict[str, bytes] = {}
@@ -33,8 +46,8 @@ class FakeS3:
         self.aborted: list[tuple[str, str]] = []
         self.next_upload = 0
         self.modified_at: dict[str, float] = {}
-        self.upload_delay = upload_delay
-        self.stat_delay = stat_delay
+        self.upload_barrier = upload_barrier
+        self.stat_barrier = stat_barrier
         self.lose_complete_response = lose_complete_response
         self.active_uploads = 0
         self.max_active_uploads = 0
@@ -57,8 +70,8 @@ class FakeS3:
                 self.max_active_uploads, self.active_uploads
             )
         try:
-            if self.upload_delay:
-                time.sleep(self.upload_delay)
+            if self.upload_barrier is not None:
+                self.upload_barrier.wait()
             self.uploads[(key, upload_id)][part_number] = payload
             return f"etag-{part_number}"
         finally:
@@ -80,8 +93,8 @@ class FakeS3:
             self.active_stats += 1
             self.max_active_stats = max(self.max_active_stats, self.active_stats)
         try:
-            if self.stat_delay:
-                time.sleep(self.stat_delay)
+            if self.stat_barrier is not None:
+                self.stat_barrier.wait()
             payload = self.objects.get(key)
             return (
                 None
@@ -244,7 +257,7 @@ class StorageNativeS3Tests(unittest.TestCase):
             source = (root / "delta.commit").resolve()
             payload = b"x" * (15 * 1024 * 1024)
             source.write_bytes(payload)
-            s3 = FakeS3(upload_delay=0.05)
+            s3 = FakeS3(upload_barrier=_OverlapGate())
             publisher = self._publisher(root, s3)
 
             publication = publisher.publish(
@@ -309,7 +322,7 @@ class StorageNativeS3Tests(unittest.TestCase):
             }
             for source, payload in payloads.items():
                 source.write_bytes(payload)
-            s3 = FakeS3(stat_delay=0.05)
+            s3 = FakeS3()
             publisher = self._publisher(root, s3)
             publication = publisher.publish(
                 exporter=FakeExporter(payloads),
@@ -317,42 +330,11 @@ class StorageNativeS3Tests(unittest.TestCase):
                 virtual_size=4096,
             )
             s3.max_active_stats = 0
+            s3.stat_barrier = _OverlapGate()
 
             self.assertEqual(publisher.verify(publication), publication)
 
             self.assertGreaterEqual(s3.max_active_stats, 2)
-
-    def test_hetzner_compatibility_retry_is_narrow_and_bounded(self):
-        class Response:
-            status_code = 403
-
-        response = (Response(), {"Error": {"Code": "AccessDenied"}})
-        self.assertEqual(
-            _retry_transient_hetzner_gateway(response=response, attempts=1),
-            0.1,
-        )
-        self.assertIsNone(
-            _retry_transient_hetzner_gateway(
-                response=response,
-                attempts=HETZNER_TRANSIENT_RETRY_ATTEMPTS,
-            )
-        )
-        Response.status_code = 404
-        self.assertIsNone(
-            _retry_transient_hetzner_gateway(
-                response=(Response(), {"Error": {"Code": "NoSuchKey"}}),
-                attempts=1,
-            )
-        )
-
-    def test_hetzner_compatibility_removes_expect_header_only(self):
-        class Request:
-            headers = {"Expect": "100-continue", "X-Amz-Date": "value"}
-
-        request = Request()
-        _strip_expect_header(request)
-        self.assertEqual(request.headers, {"X-Amz-Date": "value"})
-
 
 def digest(payload: bytes) -> str:
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"

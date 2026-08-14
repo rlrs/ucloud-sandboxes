@@ -1,6 +1,5 @@
 import time
 import unittest
-from pathlib import Path
 from threading import Event, Lock, current_thread
 
 from opentelemetry.sdk.trace import TracerProvider
@@ -39,15 +38,6 @@ class _BlockingExporter(SpanExporter):
 
 
 class TelemetryTests(unittest.TestCase):
-    def test_live_park_benchmark_forces_one_searchable_trace(self) -> None:
-        source = (
-            Path(__file__).parents[1] / "scripts" / "live_park_resume_benchmark.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn('trace_headers = {"traceparent":', source)
-        self.assertIn("headers=trace_headers", source)
-        self.assertIn('"trace_id": trace_id', source)
-
     def test_settings_require_an_origin_and_bounded_queue(self) -> None:
         normalized = TelemetrySettings(
             endpoint="https://collector.example:4318/",
@@ -56,7 +46,7 @@ class TelemetryTests(unittest.TestCase):
         ).validated()
         self.assertEqual(normalized.endpoint, "https://collector.example:4318")
 
-        with self.assertRaisesRegex(ValueError, "HTTP\(S\) origin"):
+        with self.assertRaisesRegex(ValueError, r"HTTP\(S\) origin"):
             TelemetrySettings(endpoint="https://collector.example/path").validated()
         with self.assertRaisesRegex(ValueError, "cannot exceed"):
             TelemetrySettings(
@@ -163,6 +153,7 @@ class TelemetryTests(unittest.TestCase):
         attributes = spans[0].attributes
         self.assertGreater(attributes["ucloud.span.thread_cpu.duration"], 0)
         provider.shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()

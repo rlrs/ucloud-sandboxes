@@ -14,7 +14,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Callable, Iterable, Iterator, Mapping
 from urllib import error, request
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import quote, unquote, urlencode, urljoin, urlparse, urlunparse
 
 from .models import parse_iso_datetime
 
@@ -154,6 +154,31 @@ class RegistryRequestError(ValueError):
         self.body = body
 
 
+class _CaseInsensitiveHeaders(dict[str, str]):
+    def __init__(self, items: Iterable[tuple[str, str]]) -> None:
+        values: dict[str, str] = {}
+        self._names: dict[str, str] = {}
+        for name, value in items:
+            folded = name.casefold()
+            previous = self._names.get(folded)
+            if previous is not None:
+                values.pop(previous, None)
+            self._names[folded] = name
+            values[name] = value
+        super().__init__(values)
+
+    def __getitem__(self, key: str) -> str:
+        return super().__getitem__(self._names.get(key.casefold(), key))
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            return key.casefold() in self._names
+        return False
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return super().get(self._names.get(key.casefold(), key), default)
+
+
 class RegistryClient:
     def __init__(self, base_url: str, *, timeout_seconds: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/")
@@ -173,7 +198,11 @@ class RegistryClient:
             repositories = payload.get("repositories")
             if isinstance(repositories, list):
                 found.extend(item for item in repositories if isinstance(item, str))
-            path = _next_link_path(headers.get("Link"))
+            path = _next_link_path(
+                headers.get("Link"),
+                current_path=path,
+                base_url=self.base_url,
+            )
         return list(dict.fromkeys(found))
 
     def tags(self, repository: str) -> list[str]:
@@ -192,7 +221,11 @@ class RegistryClient:
             tags = payload.get("tags")
             if isinstance(tags, list):
                 found.extend(item for item in tags if isinstance(item, str))
-            path = _next_link_path(headers.get("Link"))
+            path = _next_link_path(
+                headers.get("Link"),
+                current_path=path,
+                base_url=self.base_url,
+            )
         return list(dict.fromkeys(found))
 
     def tag_record(self, repository: str, tag: str) -> RegistryTag | None:
@@ -298,12 +331,11 @@ class RegistryClient:
                 if not isinstance(raw, dict):
                     raise ValueError("registry manifest contains an invalid layer")
                 digest = normalize_manifest_digest(str(raw.get("digest") or ""))
-                try:
-                    size = int(raw.get("size"))
-                except (TypeError, ValueError) as exc:
+                size = raw.get("size")
+                if not isinstance(size, int) or isinstance(size, bool):
                     raise ValueError(
                         "registry manifest layer size must be an integer"
-                    ) from exc
+                    )
                 if not digest or size < 0:
                     raise ValueError("registry manifest contains an invalid layer")
                 layers.append(RegistryLayerDescriptor(digest=digest, size=size))
@@ -503,19 +535,17 @@ class RegistryClient:
 
     def _validate_upload_location(self, location: str) -> str:
         parsed = urlparse(location)
+        if parsed.fragment:
+            raise ValueError("registry upload Location must not contain a fragment")
         if parsed.scheme or parsed.netloc:
             base = urlparse(self.base_url)
-            if (
-                parsed.scheme.lower() != base.scheme.lower()
-                or parsed.netloc.lower() != base.netloc.lower()
-            ):
+            if not _same_url_origin(parsed, base):
                 raise ValueError("registry upload redirected to another origin")
-            path = parsed.path
-            if parsed.query:
-                path += f"?{parsed.query}"
-        else:
-            path = location
-        if not path.startswith("/v2/"):
+        path_component = parsed.path
+        if parsed.params:
+            path_component += f";{parsed.params}"
+        path = urlunparse(("", "", parsed.path, parsed.params, parsed.query, ""))
+        if not _is_safe_registry_v2_path(path_component):
             raise ValueError("registry upload Location is outside /v2/")
         return path
 
@@ -528,7 +558,7 @@ class RegistryClient:
         response = self._request(path, headers=headers)
         try:
             body = response.read(MAX_REGISTRY_JSON_RESPONSE_BYTES + 1)
-            response_headers = dict(response.headers.items())
+            response_headers = _CaseInsensitiveHeaders(response.headers.items())
         finally:
             response.close()
         if len(body) > MAX_REGISTRY_JSON_RESPONSE_BYTES:
@@ -587,6 +617,11 @@ class RegistryUsageStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = self._connect()
         try:
+            # Version and schema must come from one snapshot. Without this
+            # lock, two first-openers can observe user_version=0 before the
+            # other process commits, then observe its newly committed tables
+            # and misclassify a valid database as an unversioned legacy file.
+            conn.execute("BEGIN IMMEDIATE")
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])
             tables = {
                 row[0]
@@ -600,7 +635,27 @@ class RegistryUsageStore:
                     "unsupported registry usage schema version 0"
                 )
             if version == 0:
-                conn.executescript(self._SCHEMA)
+                conn.execute(
+                    "CREATE TABLE registry_meta "
+                    "(singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
+                    "generation INTEGER NOT NULL CHECK (generation >= 0)) STRICT"
+                )
+                conn.execute(
+                    "CREATE TABLE registry_images "
+                    "(image_ref TEXT NOT NULL, repository TEXT NOT NULL, "
+                    "tag TEXT NOT NULL, last_used_at TEXT NOT NULL, "
+                    "PRIMARY KEY (repository, tag)) STRICT"
+                )
+                conn.execute(
+                    "CREATE TABLE registry_leases "
+                    "(repository TEXT NOT NULL, tag TEXT NOT NULL, "
+                    "owner TEXT NOT NULL, acquired_at TEXT NOT NULL, "
+                    "renewed_at TEXT NOT NULL, expires_at TEXT NOT NULL, "
+                    "digest TEXT NOT NULL, "
+                    "PRIMARY KEY (repository, tag, owner)) STRICT"
+                )
+                conn.execute("INSERT INTO registry_meta VALUES (1, 0)")
+                conn.execute("PRAGMA user_version = 1")
                 tables = set(self._COLUMNS)
             elif version != 1:
                 raise sqlite3.DatabaseError(
@@ -619,12 +674,15 @@ class RegistryUsageStore:
                     raise sqlite3.DatabaseError(
                         f"invalid registry usage table: {table}"
                     )
-            journal = conn.execute("PRAGMA journal_mode = DELETE").fetchone()
+            journal = conn.execute("PRAGMA journal_mode").fetchone()
             if journal is None or str(journal[0]).lower() != "delete":
                 raise sqlite3.DatabaseError(
                     "registry usage database requires DELETE journal mode"
                 )
+            conn.commit()
         except sqlite3.Error as exc:
+            if conn.in_transaction:
+                conn.rollback()
             raise RegistryUsageStateError(_REGISTRY_USAGE_ERROR) from exc
         finally:
             conn.close()
@@ -959,23 +1017,32 @@ def execute_registry_prune(
     usage_store: RegistryUsageStore | None = None,
     expected_usage_generation: int | None = None,
     revalidate: Callable[[RegistryTag], bool] | None = None,
-    all_records: list[RegistryTag] | None = None,
+    all_records: list[RegistryTag],
     now: datetime | None = None,
 ) -> list[RegistryTag]:
-    if usage_store is not None and all_records is None:
-        raise ValueError(
-            "all_records is required with usage_store so digest aliases are fenced"
-        )
     grouped: dict[tuple[str, str], list[RegistryTag]] = {}
     for record in records:
         key = (record.repository, record.digest)
         grouped.setdefault(key, []).append(record)
     all_grouped: dict[tuple[str, str], list[RegistryTag]] = {}
-    for record in all_records or records:
+    for record in all_records:
         all_grouped.setdefault((record.repository, record.digest), []).append(record)
     deleted: list[RegistryTag] = []
     for (repository, digest), aliases in grouped.items():
-        digest_aliases = all_grouped.get((repository, digest), aliases)
+        digest_aliases = all_grouped.get((repository, digest))
+        if digest_aliases is None:
+            # A candidate absent from the supplied complete inventory is stale
+            # or the inventory is incomplete. Either way, deleting is unsafe.
+            continue
+        selected_aliases = {(record.repository, record.tag) for record in aliases}
+        known_aliases = {
+            (record.repository, record.tag) for record in digest_aliases
+        }
+        if selected_aliases != known_aliases:
+            # Deleting one manifest digest invalidates every tag alias. When a
+            # complete inventory is available, fail closed unless planning
+            # independently selected every alias of this digest.
+            continue
         if usage_store is not None:
             # The write transaction remains held through this bounded remote
             # delete, serializing new leases and references with the decision.
@@ -1146,16 +1213,22 @@ def select_prune_candidates(
             for record in ordered
             if (record.repository, record.digest) in leased_digests
         )
+        aliases_by_digest: dict[str, list[RegistryTag]] = {}
         for record in ordered:
-            if record.digest in protected_digests:
+            aliases_by_digest.setdefault(record.digest, []).append(record)
+        for digest, aliases in aliases_by_digest.items():
+            if digest in protected_digests:
                 continue
-            if cutoff is not None and not _tag_age_before(
-                record,
-                cutoff,
-                use_last_used_at=use_last_used_at,
+            if cutoff is not None and not all(
+                _tag_age_before(
+                    alias,
+                    cutoff,
+                    use_last_used_at=use_last_used_at,
+                )
+                for alias in aliases
             ):
                 continue
-            candidates.append(record)
+            candidates.extend(aliases)
     return sorted(candidates, key=lambda item: (item.repository, item.tag))
 
 
@@ -1326,8 +1399,6 @@ def _select_linux_amd64_manifest(
             and str(platform.get("architecture") or "").lower() == "amd64"
         ):
             return item
-    if len(valid) == 1:
-        return valid[0]
     raise ValueError("registry manifest index has no Linux/amd64 image")
 
 
@@ -1414,7 +1485,12 @@ def _quote_repository(repository: str) -> str:
     return quote(repository.strip("/"), safe="/")
 
 
-def _next_link_path(link: str | None) -> str:
+def _next_link_path(
+    link: str | None,
+    *,
+    current_path: str = "",
+    base_url: str = "",
+) -> str:
     if not link:
         return ""
     for part in link.split(","):
@@ -1425,12 +1501,76 @@ def _next_link_path(link: str | None) -> str:
         if start < 0 or end <= start:
             continue
         target = part[start + 1 : end]
+        if current_path and base_url:
+            base = urlparse(base_url)
+            resolved = urlparse(urljoin(f"{base_url}{current_path}", target))
+            if resolved.fragment:
+                raise ValueError(
+                    "registry pagination Link must not contain a fragment"
+                )
+            if not _same_url_origin(resolved, base):
+                raise ValueError("registry pagination Link points to another origin")
+            base_path = base.path.rstrip("/")
+            if base_path:
+                if not (
+                    resolved.path == base_path
+                    or resolved.path.startswith(f"{base_path}/")
+                ):
+                    raise ValueError(
+                        "registry pagination Link is outside the registry base path"
+                    )
+                request_path = resolved.path[len(base_path) :] or "/"
+            else:
+                request_path = resolved.path
+            path_component = request_path
+            if resolved.params:
+                path_component += f";{resolved.params}"
+            if not _is_safe_registry_v2_path(path_component):
+                raise ValueError("registry pagination Link is outside /v2/")
+            return urlunparse(
+                ("", "", request_path, resolved.params, resolved.query, "")
+            )
         parsed = urlparse(target)
-        path = parsed.path or target
-        if parsed.query:
-            path = f"{path}?{parsed.query}"
-        return path
+        return urlunparse(("", "", parsed.path, parsed.params, parsed.query, ""))
     return ""
+
+
+def _same_url_origin(left: Any, right: Any) -> bool:
+    try:
+        left_port = left.port
+        right_port = right.port
+    except ValueError:
+        return False
+    left_scheme = str(left.scheme or "").lower()
+    right_scheme = str(right.scheme or "").lower()
+    default_ports = {"http": 80, "https": 443}
+    return (
+        bool(left_scheme)
+        and left_scheme == right_scheme
+        and str(left.hostname or "").lower() == str(right.hostname or "").lower()
+        and (
+            left_port if left_port is not None else default_ports.get(left_scheme)
+        )
+        == (
+            right_port if right_port is not None else default_ports.get(right_scheme)
+        )
+    )
+
+
+def _is_safe_registry_v2_path(path: str) -> bool:
+    decoded_path = path
+    for _iteration in range(8):
+        unquoted = unquote(decoded_path)
+        if unquoted == decoded_path:
+            break
+        decoded_path = unquoted
+    else:
+        return False
+    return (
+        path.startswith("/v2/")
+        and "\\" not in decoded_path
+        and not any(part in {".", ".."} for part in decoded_path.split("/"))
+    )
 
 
 @contextmanager

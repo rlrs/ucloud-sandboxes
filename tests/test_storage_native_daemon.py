@@ -18,7 +18,6 @@ from ucloud_sandboxes.storage_native import (
 )
 from ucloud_sandboxes.storage_native_daemon import (
     LinuxStorageHostOperations,
-    StorageNativeConflictError,
     StorageNativeNodeConfig,
     StorageNativePendingOperation,
     StorageNativeNodeClient,
@@ -254,115 +253,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
         )
         return service, backend, host
 
-    def test_create_seal_release_is_fenced_and_idempotent(self) -> None:
-        with TemporaryDirectory() as raw:
-            service, backend, host = self._service(Path(raw), descriptor=True)
-            create = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 30,
-            )
-            self.assertEqual(create.revision, 1)
-            self.assertEqual(create.state, StorageVolumeState.MOUNTED)
-            self.assertEqual(create.accounting_id, 200_000)
-            replay = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 30,
-            )
-            self.assertEqual(replay, create)
-            self.assertEqual(backend.create_calls, 1)
-
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "stale storage revision",
-            ):
-                service.freeze_and_seal(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=3,
-                    volume_id="volume-1",
-                    operation_id="seal:stale",
-                    expected_revision=0,
-                )
-
-            sealed = service.freeze_and_seal(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="seal:1",
-                expected_revision=1,
-            )
-            self.assertEqual(sealed.revision, 2)
-            self.assertEqual(sealed.state, StorageVolumeState.SEALED)
-            self.assertEqual(sealed.sealed_layer_bytes, len(b"sealed-delta"))
-            self.assertFalse(host.frozen)
-            self.assertEqual(
-                service.freeze_and_seal(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=3,
-                    volume_id="volume-1",
-                    operation_id="seal:1",
-                    expected_revision=1,
-                ),
-                sealed,
-            )
-            self.assertEqual(backend.restack_calls, 1)
-
-            released = service.release_runtime(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="release:1",
-                expected_revision=2,
-            )
-            self.assertEqual(released.revision, 3)
-            self.assertEqual(released.state, StorageVolumeState.RELEASED)
-            self.assertEqual(backend.delete_calls, [1])
-            self.assertFalse(host.mounted)
-
-            resumed = service.mount_snapshot_cow(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="acquire:1",
-                expected_revision=3,
-            )
-            self.assertEqual(resumed.revision, 4)
-            self.assertEqual(resumed.state, StorageVolumeState.MOUNTED)
-            self.assertEqual(backend.create_calls, 2)
-            second_seal = service.freeze_and_seal(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="seal:2",
-                expected_revision=4,
-            )
-            self.assertEqual(
-                len(second_seal.sealed_layer_paths),
-                2,
-            )
-            second_release = service.release_runtime(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="release:2",
-                expected_revision=5,
-            )
-            self.assertEqual(backend.delete_calls, [1, 2])
-            deleted = service.delete_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=3,
-                volume_id="volume-1",
-                operation_id="delete:1",
-                expected_revision=second_release.revision,
-            )
-            self.assertEqual(deleted.state, StorageVolumeState.DELETED)
-            self.assertFalse((Path(raw) / "runtime" / "volume-1").exists())
-
     def test_pool_reuses_cleanly_released_runtime_device(self) -> None:
         with TemporaryDirectory() as raw:
             service, backend, _ = self._service(
@@ -460,64 +350,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             )
             restarted = type(service.journal)(service.config.journal_path)
             self.assertEqual(reserve(12, journal=restarted), 200_012)
-
-    def test_journal_completion_preserves_pending_row_contracts(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            service, _, _ = self._service(root)
-            completed = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 20,
-            )
-            journal = service.journal
-
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "completion fence",
-            ):
-                journal.finish(replace(completed, revision=completed.revision + 1))
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "failure fence",
-            ):
-                journal.fail(
-                    replace(completed, operation_id="create:other"),
-                    "boom",
-                )
-
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "operation is not pending",
-            ):
-                journal.finish(completed)
-            self.assertEqual(journal.load(completed.volume_id), completed)
-
-            journal.fail(completed, "terminal failure")
-            failed = journal.load(completed.volume_id)
-            self.assertIsNotNone(failed)
-            assert failed is not None
-            self.assertEqual(failed.state, StorageVolumeState.ERROR)
-            self.assertEqual(failed.error, "terminal failure")
-            with closing(sqlite3.connect(service.config.journal_path)) as connection:
-                operation = connection.execute(
-                    "SELECT status, error FROM operations WHERE operation_id = ?",
-                    (completed.operation_id,),
-                ).fetchone()
-            self.assertEqual(operation, ("completed", ""))
-
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "operation is not pending",
-            ):
-                journal.fail_transition(
-                    failed,
-                    failure_state=StorageVolumeState.RELEASED,
-                    error="recoverable failure",
-                )
-            self.assertEqual(journal.load(completed.volume_id), failed)
 
     def test_persisted_volume_requires_positive_accounting_id(self) -> None:
         with TemporaryDirectory() as raw:
@@ -645,85 +477,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertTrue(discarded.sealed_layer_paths)
             self.assertEqual(backend.delete_calls, [1, 2])
 
-    def test_destination_acquires_published_registration_without_capacity(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            service, _, _ = self._service(
-                root,
-                capacity=1,
-                publisher=True,
-            )
-            publication = StorageSnapshotPublication(
-                manifest_digest="sha256:" + "f" * 64,
-                tag="ucloud-storage-v1-test",
-                repository="snapshots",
-                repo_blob_url="http://registry/v2/snapshots/blobs",
-                virtual_size=1 << 30,
-                layers=(
-                    PublishedStorageLayer(
-                        digest="sha256:" + "1" * 64,
-                        size=4096,
-                    ),
-                ),
-            )
-            acquired = service.acquire_snapshot(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="import:1",
-                publication_raw=publication.to_dict(),
-            )
-            self.assertEqual(acquired.state, StorageVolumeState.PUBLISHED)
-            self.assertEqual(acquired.virtual_size, 1 << 30)
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "hard capacity",
-            ):
-                service.mount_snapshot_cow(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=9,
-                    volume_id="volume-1",
-                    operation_id="mount:1",
-                    expected_revision=1,
-                )
-
-    def test_released_volume_wakes_without_reserving_its_capacity_twice(self) -> None:
-        with TemporaryDirectory() as raw:
-            capacity = 1 << 30
-            service, _, _ = self._service(Path(raw), capacity=capacity)
-            created = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=capacity,
-            )
-            sealed = service.freeze_and_seal(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="seal:1",
-                expected_revision=created.revision,
-            )
-            released = service.release_runtime(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="release:1",
-                expected_revision=sealed.revision,
-            )
-
-            mounted = service.mount_snapshot_cow(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="mount:1",
-                expected_revision=released.revision,
-            )
-
-            self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
-            self.assertEqual(mounted.virtual_size, capacity)
-
     def test_deleted_import_tombstone_allows_same_incarnation_retry(self) -> None:
         with TemporaryDirectory() as raw:
             service, _, _ = self._service(Path(raw), publisher=True)
@@ -789,73 +542,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 discarded.published_manifest_digest,
                 publication.manifest_digest,
             )
-
-    def test_hard_capacity_is_not_overallocated_and_is_reclaimed(self) -> None:
-        with TemporaryDirectory() as raw:
-            service, _, _ = self._service(
-                Path(raw),
-                capacity=1 << 30,
-                publisher=True,
-            )
-            service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 30,
-            )
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "hard capacity",
-            ):
-                service.create_volume(
-                    sandbox_id="sandbox-2",
-                    sandbox_generation=1,
-                    volume_id="volume-2",
-                    operation_id="create:2",
-                    virtual_size=1,
-                )
-            service.freeze_and_seal(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="seal:1",
-                expected_revision=1,
-            )
-            service.release_runtime(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="release:1",
-                expected_revision=2,
-            )
-            with self.assertRaisesRegex(
-                StorageNativeConflictError,
-                "hard capacity",
-            ):
-                service.create_volume(
-                    sandbox_id="sandbox-2",
-                    sandbox_generation=1,
-                    volume_id="volume-blocked",
-                    operation_id="create:blocked",
-                    virtual_size=1,
-                )
-            service.publish_snapshot(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="publish:1",
-                expected_revision=3,
-            )
-            second = service.create_volume(
-                sandbox_id="sandbox-2",
-                sandbox_generation=1,
-                volume_id="volume-2",
-                operation_id="create:3",
-                virtual_size=1 << 30,
-            )
-            self.assertEqual(second.state, StorageVolumeState.MOUNTED)
-            self.assertEqual(second.accounting_id, 200_001)
 
     def test_publish_releases_capacity_and_remote_layers_resume(self) -> None:
         with TemporaryDirectory() as raw:

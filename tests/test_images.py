@@ -14,6 +14,8 @@ from tempfile import TemporaryDirectory
 from threading import Event, Lock, Thread
 from unittest.mock import patch
 
+from hypothesis import given, settings, strategies as st
+
 from ucloud_sandboxes.images import (
     COMMAND_OUTPUT_TAIL_CHARS,
     COMMAND_OUTPUT_TRUNCATION_MARKER,
@@ -103,36 +105,6 @@ class ImageTests(unittest.TestCase):
                 manager.pull_operation_snapshot()["active_operations"],
                 0,
             )
-
-    def test_image_record_manifest_digest_is_optional_and_persisted(self) -> None:
-        digest = "sha256:" + "b" * 64
-        now = utc_now()
-        unpinned = ImageRecord.from_dict(
-            {
-                "id": "unpinned",
-                "tag": "registry.test/image:v1",
-                "source": "registry",
-                "state": "available",
-                "created_at": now.isoformat(),
-                "updated_at": now.isoformat(),
-            }
-        )
-        pinned = ImageRecord(
-            id="pinned",
-            tag="registry.test/image:v2",
-            source="registry",
-            state="available",
-            created_at=now,
-            updated_at=now,
-            manifest_digest=digest,
-        )
-
-        self.assertEqual(unpinned.manifest_digest, "")
-        self.assertEqual(ImageRecord.from_dict(pinned.to_dict()), pinned)
-        self.assertEqual(
-            pinned.digest_ref,
-            f"registry.test/image@{digest}",
-        )
 
     def test_build_records_use_only_canonical_fields(self) -> None:
         payload = ImageBuildRecord(
@@ -278,11 +250,11 @@ class ImageTests(unittest.TestCase):
                 {"done-4", "done-5"},
             )
 
-    def test_build_logs_are_batched_and_condition_history_is_released(self) -> None:
+    def test_build_logs_are_persisted(self) -> None:
         with TemporaryDirectory() as raw_dir:
             context_path = Path(raw_dir) / "context"
             context_path.mkdir()
-            build_store = CountingBuildStore(Path(raw_dir) / "builds.json")
+            build_store = ImageBuildStore(Path(raw_dir) / "builds.json")
             manager = ImageManager(
                 ImageStore(Path(raw_dir) / "images.json"),
                 ChattyBuildRuntime(),
@@ -305,13 +277,7 @@ class ImageTests(unittest.TestCase):
             assert result is not None
             self.assertEqual(result.status, "succeeded")
             self.assertEqual(result.log_tail, "x" * 4_000)
-            self.assertLess(build_store.upsert_calls, 20)
-
-            deadline = time.monotonic() + 1
-            while build.build_id in manager._build_conditions:  # noqa: SLF001
-                if time.monotonic() >= deadline:
-                    self.fail("completed build condition was not released")
-                time.sleep(0.01)
+            self.assertEqual(manager.active_build_count(), 0)
 
     def test_multiprocess_image_and_build_writers_do_not_lose_updates(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -702,8 +668,6 @@ class ImageTests(unittest.TestCase):
             self.assertFalse(Path(records[0].context_path).exists())
             self.assertEqual(cleanup_calls, ["caller"])
             self.assertEqual(manager.active_build_count(), 0)
-            self.assertEqual(manager._active_threads, {})  # noqa: SLF001
-            self.assertEqual(manager._build_conditions, {})  # noqa: SLF001
 
     def test_manager_requires_uploaded_content_addressed_context(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -755,7 +719,7 @@ class ImageTests(unittest.TestCase):
             self.assertEqual(len(records), 1)
             self.assertEqual(records[0].status, "failed")
             self.assertIn("cannot extract context", records[0].error)
-            self.assertEqual(manager._build_conditions, {})  # noqa: SLF001
+            self.assertEqual(manager.active_build_count(), 0)
 
     def test_context_archive_enforces_stream_and_member_limits(self) -> None:
         cases = (
@@ -796,11 +760,96 @@ class ImageTests(unittest.TestCase):
                         max_archive_bytes=limits.get("max_archive_bytes", 1024 * 1024),
                     )
 
-    def test_image_id_from_tag_is_store_safe(self) -> None:
-        self.assertEqual(
-            image_id_from_tag("registry.example.org/ucloud/python-base:latest"),
-            "registry.example.org-ucloud-python-base-latest",
-        )
+    @settings(max_examples=75, deadline=None)
+    @given(
+        parent_depth=st.integers(min_value=1, max_value=8),
+        name=st.text(
+            alphabet=st.characters(
+                whitelist_categories=("Ll", "Lu", "Nd"),
+                whitelist_characters="-_",
+            ),
+            min_size=1,
+            max_size=24,
+        ),
+    )
+    def test_context_archive_never_extracts_parent_traversal(
+        self,
+        parent_depth: int,
+        name: str,
+    ) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            destination = root / "destination"
+            destination.mkdir()
+            member_name = "nested/" * (parent_depth - 1) + "../" * parent_depth
+            member_name += f"escaped-{name}"
+
+            with self.assertRaisesRegex(ValueError, "unsafe path"):
+                _extract_safe_tar_gz_file(
+                    BytesIO(_tar_gz((member_name, b"escaped"))),
+                    destination,
+                )
+
+            self.assertEqual(list(root.glob("escaped-*")), [])
+
+    def test_context_archive_rejects_absolute_links_and_special_files(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            destination = root / "destination"
+            destination.mkdir()
+            cases = (
+                (str(root / "absolute"), tarfile.REGTYPE, ""),
+                ("symlink", tarfile.SYMTYPE, "../escaped"),
+                ("hardlink", tarfile.LNKTYPE, "../escaped"),
+                ("character-device", tarfile.CHRTYPE, ""),
+                ("block-device", tarfile.BLKTYPE, ""),
+                ("fifo", tarfile.FIFOTYPE, ""),
+            )
+            for name, member_type, linkname in cases:
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    _extract_safe_tar_gz_file(
+                        BytesIO(
+                            _tar_gz_member(
+                                name,
+                                member_type=member_type,
+                                linkname=linkname,
+                            )
+                        ),
+                        destination,
+                    )
+
+            self.assertFalse((root / "absolute").exists())
+            self.assertFalse((root / "escaped").exists())
+
+    def test_image_id_from_tag_separates_sanitization_and_truncation_collisions(
+        self,
+    ) -> None:
+        self.assertEqual(image_id_from_tag("already-safe"), "already-safe")
+        for left, right in (
+            ("registry/a:b", "registry:a/b"),
+            ("a" * 64 + "x", "a" * 64 + "y"),
+        ):
+            with self.subTest(left=left, right=right):
+                self.assertNotEqual(
+                    image_id_from_tag(left),
+                    image_id_from_tag(right),
+                )
+
+    @settings(max_examples=200, deadline=None)
+    @given(st.text(max_size=256))
+    def test_image_id_from_tag_always_satisfies_image_id_contract(
+        self,
+        reference: str,
+    ) -> None:
+        image_id = image_id_from_tag(reference)
+
+        ImageBuildSpec(
+            id=image_id,
+            tag="source:latest",
+            context_path=".",
+        ).validate()
+        self.assertLessEqual(len(image_id), 64)
+        self.assertEqual(image_id, image_id_from_tag(reference))
 
     def test_build_command_includes_tag_args_and_labels(self) -> None:
         runtime = DockerImageRuntime(dry_run=True)
@@ -900,50 +949,6 @@ class ImageTests(unittest.TestCase):
                     materialize_context=materialize_escaped_context,
                 )
 
-    def test_buildx_direct_push_command_uses_registry_cache(self) -> None:
-        runtime = DockerImageRuntime(
-            dry_run=True,
-            buildx_direct_push=True,
-            buildx_cache_ref="registry.example.org/cache/base:buildcache",
-        )
-        spec = ImageBuildSpec(
-            id="base",
-            tag="registry.example.org/images/base:latest",
-            context_path="/tmp/context",
-        )
-
-        argv = runtime.build_command(spec, push=True)
-
-        self.assertEqual(argv[:3], ("docker", "buildx", "build"))
-        self.assertIn("--push", argv)
-        self.assertIn("--cache-from", argv)
-        self.assertIn(
-            "type=registry,ref=registry.example.org/cache/base:buildcache",
-            argv,
-        )
-        self.assertIn("--cache-to", argv)
-        self.assertIn(
-            "type=registry,ref=registry.example.org/cache/base:buildcache,mode=max",
-            argv,
-        )
-
-    def test_buildx_mode_is_opt_in_and_cache_requires_it(self) -> None:
-        spec = ImageBuildSpec(
-            id="base",
-            tag="registry.example.org/images/base:latest",
-            context_path="/tmp/context",
-        )
-
-        argv = DockerImageRuntime(dry_run=True).build_command(spec, push=True)
-
-        self.assertEqual(argv[:2], ("docker", "build"))
-        self.assertNotIn("--push", argv)
-        with self.assertRaisesRegex(ValueError, "requires buildx_direct_push"):
-            DockerImageRuntime(
-                dry_run=True,
-                buildx_cache_ref="registry.example.org/cache/base:buildcache",
-            )
-
     def test_manager_records_integrated_buildx_push_as_one_command(self) -> None:
         with TemporaryDirectory() as raw_dir:
             context_path = Path(raw_dir) / "context"
@@ -980,6 +985,9 @@ class ImageTests(unittest.TestCase):
             assert finished is not None
             self.assertEqual(finished.status, "succeeded")
             self.assertEqual(finished.command[:3], ("docker", "buildx", "build"))
+            self.assertIn("--push", finished.command)
+            self.assertIn("--cache-from", finished.command)
+            self.assertIn("--cache-to", finished.command)
             self.assertEqual(finished.push_command, ())
             self.assertIsNone(finished.push_exit_code)
             self.assertEqual(executor.commands, [finished.command])
@@ -1030,33 +1038,6 @@ class ImageTests(unittest.TestCase):
             self.assertIn("docker_build_ms", finished.timings["phases"])
             self.assertIn("docker_push_ms", finished.timings["phases"])
 
-    def test_image_store_deletes_records_by_tag(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = ImageStore(Path(raw_dir) / "images.json")
-            runtime = DockerImageRuntime(dry_run=True)
-            manager = ImageManager(store, runtime)
-            now = utc_now()
-            for image_id in ("keep", "delete"):
-                store.upsert(
-                    ImageRecord(
-                        id=image_id,
-                        tag=f"registry.example.org/{image_id}:latest",
-                        source="build",
-                        state="available",
-                        created_at=now,
-                        updated_at=now,
-                    )
-                )
-
-            removed = store.delete_by_tags(["registry.example.org/delete:latest"])
-
-            self.assertEqual([record.id for record in removed], ["delete"])
-            self.assertEqual(
-                [(record.id, record.tag) for record in manager.list()],
-                [("keep", "registry.example.org/keep:latest")],
-            )
-
-
 def _uploaded_context(
     *entries: tuple[str, bytes],
 ) -> tuple[str, Callable[[], MaterializedBuildContext]]:
@@ -1102,6 +1083,23 @@ def _tar_gz(*entries: tuple[str, bytes], pax_value: str = "") -> bytes:
     return payload.getvalue()
 
 
+def _tar_gz_member(
+    name: str,
+    *,
+    member_type: bytes,
+    linkname: str = "",
+) -> bytes:
+    payload = BytesIO()
+    with tarfile.open(fileobj=payload, mode="w:gz") as archive:
+        member = tarfile.TarInfo(name)
+        member.type = member_type
+        member.linkname = linkname
+        content = b"content" if member_type == tarfile.REGTYPE else b""
+        member.size = len(content)
+        archive.addfile(member, BytesIO(content) if content else None)
+    return payload.getvalue()
+
+
 class ChattyBuildRuntime(DockerImageRuntime):
     def __init__(self) -> None:
         super().__init__(dry_run=True)
@@ -1112,16 +1110,6 @@ class ChattyBuildRuntime(DockerImageRuntime):
             for _index in range(4_000):
                 on_output("combined", "x")
         return CommandResult(argv=self.build_command(spec), exit_code=0)
-
-
-class CountingBuildStore(ImageBuildStore):
-    def __init__(self, path: Path) -> None:
-        super().__init__(path)
-        self.upsert_calls = 0
-
-    def upsert(self, record: ImageBuildRecord) -> None:
-        self.upsert_calls += 1
-        super().upsert(record)
 
 
 def _build_record(

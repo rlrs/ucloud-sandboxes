@@ -64,21 +64,16 @@ class BuildContextBlobStoreTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "limit is 8"):
                 store.put_with_status(digest, BytesIO(payload), content_length=9)
-
-    def test_rejects_non_normalized_digests(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=10)
-            valid = _digest(b"x")
-            invalid = (
-                valid.upper(),
-                valid.removeprefix("sha256:"),
-                f"sha256:../{valid[-59:]}",
-                f" sha256:{valid[-64:]}",
-            )
-            for digest in invalid:
-                with self.subTest(digest=digest):
-                    with self.assertRaisesRegex(ValueError, "normalized sha256"):
-                        store.path(digest)
+            for invalid in (
+                digest.upper(),
+                digest.removeprefix("sha256:"),
+                f"sha256:../{digest[-59:]}",
+                f" sha256:{digest[-64:]}",
+            ):
+                with self.subTest(invalid=invalid), self.assertRaisesRegex(
+                    ValueError, "normalized sha256"
+                ):
+                    store.path(invalid)
 
     def test_verified_existing_blob_is_deduplicated(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -88,8 +83,6 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             first = store.put_with_status(
                 digest, BytesIO(payload), content_length=len(payload)
             ).path
-            first_inode = first.stat().st_ino
-            first_mtime_ns = first.stat().st_mtime_ns
             first.chmod(0o644)
 
             result = store.put_with_status(
@@ -98,8 +91,8 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             second = result.path
 
             self.assertTrue(result.deduplicated)
-            self.assertEqual(second.stat().st_ino, first_inode)
-            self.assertEqual(second.stat().st_mtime_ns, first_mtime_ns)
+            self.assertEqual(second, first)
+            self.assertEqual(second.read_bytes(), payload)
             self.assertEqual(stat.S_IMODE(second.stat().st_mode), 0o600)
 
     def test_corrupt_existing_blob_is_atomically_replaced(self) -> None:

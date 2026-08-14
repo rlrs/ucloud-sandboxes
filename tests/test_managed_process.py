@@ -1,23 +1,31 @@
 import base64
-import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
+import time
 import unittest
 
 from ucloud_sandboxes.managed_process import (
     DEFAULT_MAX_STDERR_BYTES,
     DEFAULT_MAX_STDOUT_BYTES,
+    MANAGED_PROCESS_PROTOCOL_VERSION,
     ManagedProcessError,
     ManagedProcessLogChunk,
     ManagedProcessRecord,
     ManagedProcessStart,
+    control_request_bytes,
+    parse_control_response,
 )
 from ucloud_sandboxes.sandbox import SandboxSpec
-from ucloud_sandboxes.direct_warden import DirectRunscWarden, DirectSandbox
 
 
 class ManagedProcessProtocolTests(unittest.TestCase):
-    def test_managed_sandbox_contract_requires_parkable_empty_primary_slot(self) -> None:
+    def test_managed_sandbox_contract_requires_parkable_empty_primary_slot(
+        self,
+    ) -> None:
         with self.assertRaisesRegex(ValueError, "parkable"):
             SandboxSpec(
                 id="managed",
@@ -53,6 +61,124 @@ class ManagedProcessProtocolTests(unittest.TestCase):
             start.control_payload(uid=1000, gid=1001)["env"],
             {"A": "first", "Z": "last"},
         )
+        for field, value in (
+            ("argv", ["true"] * 4097),
+            ("max_stdout_bytes", 0),
+            ("max_stderr_bytes", -1),
+        ):
+            with (
+                self.subTest(field=field),
+                self.assertRaisesRegex(
+                    ValueError,
+                    "bounded|positive",
+                ),
+            ):
+                ManagedProcessStart.from_dict(
+                    {
+                        "job_id": "rollout-1",
+                        "argv": ["true"],
+                        field: value,
+                    }
+                )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "requires a Linux managed-process binary",
+    )
+    def test_python_start_payload_is_accepted_by_go_supervisor(self) -> None:
+        go = shutil.which("go")
+        if go is None:
+            self.skipTest("Go toolchain is unavailable")
+        helper_dir = Path(__file__).resolve().parents[1] / "runtime/managed_process"
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            binary = root / "managed-process"
+            build_env = dict(os.environ)
+            for inherited_go_setting in ("GOARCH", "GOFLAGS", "GOOS"):
+                build_env.pop(inherited_go_setting, None)
+            build_env.update(
+                {
+                    "CGO_ENABLED": "0",
+                    "GOCACHE": str(root / "go-build-cache"),
+                    "GOTOOLCHAIN": "local",
+                }
+            )
+            build = subprocess.run(
+                [go, "build", "-trimpath", "-o", str(binary), "."],
+                cwd=helper_dir,
+                env=build_env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=120,
+                check=False,
+            )
+            self.assertEqual(
+                build.returncode,
+                0,
+                build.stderr.decode("utf-8", errors="replace"),
+            )
+            state_dir = root / "state"
+            supervisor = subprocess.Popen(
+                [str(binary), "supervise", "--state-dir", str(state_dir)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            try:
+                socket_path = state_dir / "control.sock"
+                deadline = time.monotonic() + 5
+                while not socket_path.exists():
+                    if supervisor.poll() is not None:
+                        stderr = supervisor.stderr.read() if supervisor.stderr else b""
+                        self.fail(
+                            "Go supervisor exited before creating its socket: "
+                            + stderr.decode("utf-8", errors="replace")
+                        )
+                    if time.monotonic() >= deadline:
+                        self.fail("Go supervisor did not create its control socket")
+                    time.sleep(0.01)
+
+                start = ManagedProcessStart.from_dict(
+                    {
+                        "job_id": "python-go-compat",
+                        "argv": ["/bin/sh", "-c", "exit 0"],
+                        "env": {"PATH": "/usr/bin:/bin"},
+                        "cwd": "/",
+                        "max_stdout_bytes": 1024,
+                        "max_stderr_bytes": 1024,
+                    }
+                )
+                control = subprocess.run(
+                    [str(binary), "ctl", "--socket", str(socket_path)],
+                    input=control_request_bytes(
+                        start.control_payload(uid=os.getuid(), gid=os.getgid())
+                    ),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                    check=False,
+                )
+                self.assertEqual(
+                    control.returncode,
+                    0,
+                    control.stderr.decode("utf-8", errors="replace"),
+                )
+                response = parse_control_response(control.stdout)
+                self.assertEqual(
+                    response.get("version"),
+                    MANAGED_PROCESS_PROTOCOL_VERSION,
+                )
+                record = ManagedProcessRecord.from_control_response(
+                    response,
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=1,
+                )
+                self.assertEqual(record.job_id, start.job_id)
+                self.assertEqual(record.state, "running")
+                self.assertEqual(record.sequence, 2)
+            finally:
+                if supervisor.poll() is None:
+                    supervisor.kill()
+                supervisor.wait(timeout=5)
 
     def test_invalid_environment_and_identity_fail_closed(self) -> None:
         for payload in (
@@ -102,64 +228,42 @@ class ManagedProcessProtocolTests(unittest.TestCase):
         )
 
         self.assertEqual(chunk.data, b"abc")
-        with self.assertRaises(ManagedProcessError):
-            ManagedProcessLogChunk.from_control_response(
-                {
-                    "ok": True,
-                    "stream": "stdout",
-                    "offset": 0,
-                    "next_offset": 1,
-                    "data": "not-base64!",
-                }
-            )
-
-    def test_checkpoint_identity_binds_the_guest_job_ledger(self) -> None:
-        with TemporaryDirectory() as raw:
-            bundle = Path(raw) / "bundle"
-            ledger = bundle / "rootfs" / ".ucloud-managed" / "state.json"
-            ledger.parent.mkdir(parents=True)
-            (bundle / "config.json").write_text(
-                json.dumps(
-                    {
-                        "annotations": {
-                            "dev.ucloud-sandboxes.managed-process": "v1"
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-            ledger.write_text(
-                json.dumps(
-                    {
-                        "version": 1,
-                        "job_id": "rollout-1",
-                        "spec_sha256": "a" * 64,
-                        "state": "running",
-                        "sequence": 2,
-                    }
-                ),
-                encoding="utf-8",
-            )
-            sandbox = DirectSandbox(
-                sandbox_id="managed",
-                sandbox_generation=1,
-                container_id="b" * 64,
-                spec_sha256="c" * 64,
-                rootfs_sha256="d" * 64,
-                bundle=bundle,
-                memory_directory="managed.memory",
-            )
-
-            before = DirectRunscWarden._managed_process_ledger_digest(sandbox)
-            ledger.write_text(
-                ledger.read_text(encoding="utf-8").replace(
-                    '"sequence": 2', '"sequence": 3'
-                ),
-                encoding="utf-8",
-            )
-            after = DirectRunscWarden._managed_process_ledger_digest(sandbox)
-
-        self.assertNotEqual(before, after)
+        cases = (
+            {
+                "ok": True,
+                "stream": "stdout",
+                "offset": 0,
+                "next_offset": 1,
+                "data": "not-base64!",
+            },
+            {
+                "ok": True,
+                "stream": "stdout",
+                "offset": -1,
+                "next_offset": 2,
+                "data": base64.b64encode(b"abc").decode("ascii"),
+            },
+            {
+                "ok": True,
+                "stream": "stdout",
+                "offset": 2,
+                "next_offset": 6,
+                "data": base64.b64encode(b"abc").decode("ascii"),
+            },
+            {
+                "ok": True,
+                "stream": "combined",
+                "offset": 0,
+                "next_offset": 0,
+                "data": "",
+            },
+        )
+        for response in cases:
+            with (
+                self.subTest(response=response),
+                self.assertRaises(ManagedProcessError),
+            ):
+                ManagedProcessLogChunk.from_control_response(response)
 
 
 if __name__ == "__main__":

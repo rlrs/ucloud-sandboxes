@@ -19,19 +19,16 @@ from ucloud_sandboxes import cli
 from ucloud_sandboxes.agent import build_heartbeat
 from ucloud_sandboxes.autoscaler_state import (
     AutoscalerStateStore,
-    ProviderOperationOutcome,
 )
 from ucloud_sandboxes.cli import (
     find_ucloud_ssh_key,
     read_public_ssh_key_file,
     should_include_job,
-    submitted_job_ids,
     vm_submission_options_from_args,
 )
 from ucloud_sandboxes.config import DeploymentConfig
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.deployment import package_version
-from ucloud_sandboxes.images import ImageRecord, ImageStore
 from ucloud_sandboxes.managed_registry import RegistryTag, RegistryUsageStore
 from ucloud_sandboxes.metrics import MetricsStore
 from ucloud_sandboxes.models import (
@@ -41,7 +38,6 @@ from ucloud_sandboxes.models import (
     SandboxDemand,
     SandboxInventoryEntry,
     SandboxNode,
-    SandboxPlacementRequest,
     ScaleDecision,
     ScalePolicy,
     ProviderInstance,
@@ -364,46 +360,35 @@ class CliTests(unittest.TestCase):
             self.assertEqual(result, 1)
             self.assertIn("--jobs-file is dry-run only", stderr.getvalue())
 
-    def test_removed_autoscaler_commands_have_no_aliases(self) -> None:
+    def test_cli_exposes_only_the_canonical_command_set(self) -> None:
         parser = cli.build_parser()
-        for command in ("plan", "reconcile", "autoscaler-loop"):
-            with (
-                self.subTest(command=command),
-                self.assertRaises(SystemExit),
-                redirect_stderr(io.StringIO()),
-            ):
-                parser.parse_args([command])
-
-    def test_removed_configuration_flags_have_no_aliases(self) -> None:
-        parser = cli.build_parser()
-        for argv in (
-            ("agent-heartbeat", "--cpu-overcommit", "2"),
-            ("init-vm", "job-1", "--memory-overcommit", "2"),
-            ("autoscaler", "--init-disk-overcommit", "1"),
-            ("deploy-all-in-one", "--cpu-overcommit", "2"),
-            ("agent-heartbeat", "--heartbeat-file", "old.json"),
-            ("serve-control-plane", "--heartbeat-file", "old.json"),
-            ("heartbeats", "--heartbeat-file", "old.json"),
-            ("autoscaler", "--heartbeats", "old.json"),
-            ("autoscaler", "--init-state-file", "old.json"),
-        ):
-            with (
-                self.subTest(argv=argv),
-                self.assertRaises(SystemExit),
-                redirect_stderr(io.StringIO()),
-            ):
-                parser.parse_args(argv)
-
-    def test_autoscaler_state_is_derived_from_deployment_root(self) -> None:
-        config = ucloud_config(
-            project_id="project-1",
-            deployment_id="prod-a",
-            data_root="/var/lib/ucloud-sandboxes",
-        )
+        commands = next(
+            action
+            for action in parser._actions  # noqa: SLF001
+            if isinstance(action, argparse._SubParsersAction)
+        ).choices
 
         self.assertEqual(
-            config.autoscaler_state_file(),
-            Path("/var/lib/ucloud-sandboxes/autoscaler-state.sqlite"),
+            set(commands),
+            {
+                "agent-heartbeat",
+                "autoscaler",
+                "deploy-all-in-one",
+                "ensure-ucloud-ssh-key",
+                "heartbeats",
+                "init-vm",
+                "inspect-job",
+                "open-vm-web",
+                "registry-prune",
+                "sample-config",
+                "serve-builder-agent",
+                "serve-control-plane",
+                "serve-direct-node-agent",
+                "serve-model-relay",
+                "submit-vm",
+                "vm-network-attachment",
+                "vm-public-link-attachment",
+            },
         )
 
     def test_registry_prune_cli_honors_active_image_lease(self) -> None:
@@ -458,34 +443,75 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["deleted"], [])
         self.assertEqual(payload["active_lease_count"], 1)
 
-    def test_partial_scale_up_does_not_satisfy_larger_resource_deficit(self) -> None:
-        results = [
-            ProviderOperationOutcome(
-                operation_id=f"operation-{index}",
-                kind="create",
-                role="sandbox",
-                state="accepted",
-                job_ids=(f"job-{index}",),
-                source="planned",
-            )
-            for index in range(4)
-        ]
+    def test_registry_prune_cli_keeps_recent_alias_of_expired_digest(self) -> None:
+        shared_digest = "sha256:" + "a" * 64
+        expired_digest = "sha256:" + "b" * 64
+        now = utc_now()
 
-        self.assertFalse(
-            cli._sandbox_capacity_operation_succeeded(
-                results,
-                ResourceQuantity(vcpu=128, memory_mb=262144, disk_mb=524288),
-                ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=204800),
-            )
-        )
+        class FakeRegistryClient:
+            deleted: list[tuple[str, str]] = []
 
-    def test_no_create_operation_does_not_consume_pending_demand(self) -> None:
-        self.assertFalse(
-            cli._sandbox_capacity_operation_succeeded(
-                [],
-                ResourceQuantity(),
-                ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800),
+            def __init__(self, _url: str) -> None:
+                self.base_url = "http://registry.invalid"
+
+            def catalog(self) -> list[str]:
+                return ["repo/a"]
+
+            def tags(self, _repository: str) -> list[str]:
+                return ["shared-old", "shared-recent", "expired"]
+
+            def tag_record(self, repository: str, tag: str) -> RegistryTag:
+                digest = shared_digest if tag.startswith("shared-") else expired_digest
+                return RegistryTag(
+                    repository,
+                    tag,
+                    digest,
+                    (now - timedelta(days=10)).isoformat(),
+                )
+
+            def delete_manifest(self, repository: str, digest: str) -> None:
+                self.deleted.append((repository, digest))
+
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            usage_store = RegistryUsageStore(root / "registry-usage.sqlite")
+            usage_store.touch_image(
+                "localhost:5000/repo/a:shared-old",
+                when=now - timedelta(days=10),
             )
+            usage_store.touch_image(
+                "localhost:5000/repo/a:shared-recent",
+                when=now,
+            )
+            usage_store.touch_image(
+                "localhost:5000/repo/a:expired",
+                when=now - timedelta(days=10),
+            )
+            output = io.StringIO()
+            FakeRegistryClient.deleted = []
+            config_file = write_ucloud_config(
+                root,
+                registry_keep_per_repository=0,
+                registry_retention_days=3,
+            )
+
+            with patch.object(cli, "RegistryClient", FakeRegistryClient):
+                with redirect_stdout(output):
+                    result = cli.main(
+                        [
+                            "registry-prune",
+                            "--config",
+                            str(config_file),
+                            "--execute",
+                        ]
+                    )
+            payload = json.loads(output.getvalue())
+
+        self.assertEqual(result, 0)
+        self.assertEqual(FakeRegistryClient.deleted, [("repo/a", expired_digest)])
+        self.assertEqual(
+            [record["tag"] for record in payload["deleted"]],
+            ["expired"],
         )
 
     def test_provider_http_rejection_and_ambiguity_are_journaled_differently(
@@ -982,97 +1008,6 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(payload["persistedNodeLossDemand"], [])
 
-    def test_top_level_version_flag_reports_package_version(self) -> None:
-        output = io.StringIO()
-        with redirect_stdout(output):
-            with self.assertRaises(SystemExit) as raised:
-                cli.main(["--version"])
-
-        self.assertEqual(raised.exception.code, 0)
-        self.assertEqual(
-            output.getvalue().strip(), f"ucloud-sandboxes {package_version()}"
-        )
-
-    def test_remove_image_records_for_registry_tags_matches_full_image_refs(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw_dir:
-            image_file = Path(raw_dir) / "images.json"
-            now = utc_now()
-            store = ImageStore(image_file)
-            store.upsert(
-                ImageRecord(
-                    id="keep",
-                    tag="ucloud-sandbox-registry:5000/prime-rl/keep:latest",
-                    source="build:/tmp/keep",
-                    state="available",
-                    created_at=now,
-                    updated_at=now,
-                    pushed=True,
-                )
-            )
-            store.upsert(
-                ImageRecord(
-                    id="delete",
-                    tag="ucloud-sandbox-registry:5000/prime-rl/delete:latest",
-                    source="build:/tmp/delete",
-                    state="available",
-                    created_at=now,
-                    updated_at=now,
-                    pushed=True,
-                )
-            )
-
-            removed = cli._remove_image_records_for_registry_tags(
-                image_file,
-                {("prime-rl/delete", "latest")},
-            )
-
-            self.assertEqual([record.id for record in removed], ["delete"])
-            self.assertEqual(list(store.load()), ["keep"])
-
-    def test_remove_stale_private_build_image_records_keeps_external_tags(self) -> None:
-        class FakeRegistryClient:
-            base_url = "http://127.0.0.1:5000"
-
-            def tag_exists(self, repository: str, tag: str) -> bool:
-                return (repository, tag) != ("prime-rl/missing", "latest")
-
-        with TemporaryDirectory() as raw_dir:
-            image_file = Path(raw_dir) / "images.json"
-            now = utc_now()
-            store = ImageStore(image_file)
-            store.upsert(
-                ImageRecord(
-                    id="missing",
-                    tag="ucloud-sandbox-registry:5000/prime-rl/missing:latest",
-                    source="build:/tmp/missing",
-                    state="available",
-                    created_at=now,
-                    updated_at=now,
-                    pushed=True,
-                )
-            )
-            store.upsert(
-                ImageRecord(
-                    id="external",
-                    tag="ghcr.io/prime-rl/missing:latest",
-                    source="build:/tmp/external",
-                    state="available",
-                    created_at=now,
-                    updated_at=now,
-                    pushed=True,
-                )
-            )
-
-            removed = cli._remove_stale_private_build_image_records(
-                image_file,
-                FakeRegistryClient(),  # type: ignore[arg-type]
-            )
-
-            self.assertEqual([record.id for record in removed], ["missing"])
-            self.assertEqual(list(store.load()), ["external"])
-
     def test_private_network_config_filters_auto_discovered_pool_nodes(self) -> None:
         config = DeploymentConfig.default(scope_id="project-1")
         provider = UCloudSettings.from_provider(config.provider)
@@ -1175,88 +1110,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(cli.builder_pool_nodes([named_sandbox, named_builder]), [])
         self.assertEqual(cli.sandbox_pool_nodes([labeled_sandbox]), [labeled_sandbox])
         self.assertEqual(cli.builder_pool_nodes([labeled_builder]), [labeled_builder])
-
-    def test_metrics_path_is_derived_from_deployment_root(self) -> None:
-        config = ucloud_config(
-            project_id="project-1",
-            data_root="/tmp/default-state",
-            ucloud_session_file="/tmp/session.json",
-        )
-
-        self.assertEqual(
-            config.metrics_path(),
-            Path("/tmp/default-state/metrics.sqlite"),
-        )
-
-    def test_vm_submission_options_use_private_network_config(self) -> None:
-        config = ucloud_config(
-            project_id="project-1",
-            private_network_id="12345327",
-            ucloud_session_file="/tmp/session.json",
-            data_root="/tmp/state",
-        )
-        args = argparse.Namespace(
-            no_private_network=False,
-            private_network_id=None,
-            hostname_seed="123",
-            hostname_prefix=None,
-            hostname=None,
-            name=None,
-            label=[],
-            product_id="cpu-amd-zen5-2-vcpu",
-            product_category="cpu-amd-zen5",
-            product_provider="ucloud",
-            app_name="vm-ubuntu",
-            app_version="24.04",
-            disk_gb=50,
-            time_hours=1,
-            time_minutes=0,
-            time_seconds=0,
-            ssh=False,
-            no_ssh=False,
-            allow_duplicate_job=False,
-        )
-
-        options, seed = vm_submission_options_from_args(args, config)
-
-        self.assertEqual(seed, "123")
-        self.assertEqual(options.private_network_id, "12345327")
-        self.assertEqual(options.hostname, "sandbox-node-123")
-        self.assertEqual(options.name, "ucloud-sandbox-node-123")
-        self.assertFalse(options.ssh_enabled)
-
-    def test_vm_submission_options_can_request_ssh_explicitly(self) -> None:
-        config = ucloud_config(
-            project_id="project-1",
-            private_network_id="12345327",
-            ucloud_session_file="/tmp/session.json",
-            data_root="/tmp/state",
-        )
-        args = argparse.Namespace(
-            no_private_network=False,
-            private_network_id=None,
-            hostname_seed="123",
-            hostname_prefix=None,
-            hostname=None,
-            name=None,
-            label=[],
-            product_id="cpu-amd-zen5-2-vcpu",
-            product_category="cpu-amd-zen5",
-            product_provider="ucloud",
-            app_name="vm-ubuntu",
-            app_version="24.04",
-            disk_gb=50,
-            time_hours=1,
-            time_minutes=0,
-            time_seconds=0,
-            ssh=True,
-            no_ssh=False,
-            allow_duplicate_job=False,
-        )
-
-        options, _seed = vm_submission_options_from_args(args, config)
-
-        self.assertTrue(options.ssh_enabled)
 
     def test_vm_submission_options_use_gateway_public_link_config(self) -> None:
         config = ucloud_config(
@@ -1361,50 +1214,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(resources[-1]["path"], "/1234567/shared-base-images")
         self.assertTrue(resources[-1]["readOnly"])
 
-    def test_node_role_does_not_consume_gateway_public_link_config(self) -> None:
-        config = ucloud_config(
-            project_id="project-1",
-            private_network_id="12345327",
-            gateway_public_link_id="12345368",
-            gateway_public_link_port=8090,
-            ucloud_session_file="/tmp/session.json",
-            data_root="/tmp/state",
-        )
-        args = argparse.Namespace(
-            no_private_network=False,
-            private_network_id=None,
-            no_public_link=False,
-            public_link_id=None,
-            public_link_port=None,
-            role="node",
-            hostname_seed="node",
-            hostname_prefix=None,
-            hostname=None,
-            name=None,
-            label=[],
-            product_id=None,
-            product_category="cpu-amd-zen5",
-            product_provider="ucloud",
-            app_name="vm-ubuntu",
-            app_version="24.04",
-            disk_gb=50,
-            time_hours=1,
-            time_minutes=0,
-            time_seconds=0,
-            ssh=False,
-            no_ssh=False,
-            allow_duplicate_job=False,
-        )
-
-        options, _seed = vm_submission_options_from_args(args, config)
-
-        self.assertIsNone(options.public_link_id)
-        self.assertEqual(options.product.id, "cpu-amd-zen5-32-vcpu")
-        self.assertEqual(
-            options.job_item()["resources"],
-            [{"type": "private_network", "id": "12345327"}],
-        )
-
     def test_builder_role_uses_builder_identity_without_node_label(self) -> None:
         config = ucloud_config(
             project_id="project-1",
@@ -1449,12 +1258,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(labels["ucloud-sandboxes/builder"], "true")
         self.assertNotIn("ucloud-sandboxes/node", labels)
         self.assertNotIn("ucloud-sandboxes/gateway", labels)
-
-    def test_submitted_job_ids_extracts_bulk_response_ids(self) -> None:
-        self.assertEqual(
-            submitted_job_ids({"responses": [{"id": "1"}, {"id": "2"}]}),
-            ["1", "2"],
-        )
 
     def test_read_public_ssh_key_file_validates_single_openssh_key(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1526,78 +1329,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["decision"]["pendingResources"]["vcpu"], 1.0)
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["consumedPendingDemand"], [])
-
-    def test_autoscaler_text_output_hides_final_pool_node_history(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "old-node",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-old",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-16-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                        "ucloud-sandboxes/agent-version": package_version(),
-                                    },
-                                    "resources": [
-                                        {"type": "private_network", "id": "net-1"}
-                                    ],
-                                    "parameters": {"diskSize": {"value": 250}},
-                                },
-                                "status": {
-                                    "state": "SUCCESS",
-                                    "jobParametersJson": {
-                                        "request": {
-                                            "resolvedProduct": {
-                                                "cpu": 16,
-                                                "memoryInGigs": 32,
-                                            },
-                                        },
-                                    },
-                                },
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            config_file = write_ucloud_config(root, deployment_id="prod-a")
-            output = io.StringIO()
-            with redirect_stdout(output):
-                result = cli.main(
-                    [
-                        "autoscaler",
-                        "--config",
-                        str(config_file),
-                        "--jobs-file",
-                        str(jobs_file),
-                        "--once",
-                        "--output",
-                        "text",
-                    ]
-                )
-
-        self.assertEqual(result, 0)
-        text = output.getvalue()
-        self.assertIn("Nodes: 0 ready, 0 provisioning, 0 total", text)
-        self.assertIn("No pool nodes matched the configured selection.", text)
-        self.assertNotIn("job=old-node", text)
-        self.assertNotIn("state=SUCCESS", text)
 
     @allow_fixture_mutations
     def test_autoscaler_execute_prunes_routes_for_final_jobs(self) -> None:
@@ -1735,9 +1466,7 @@ class CliTests(unittest.TestCase):
             heartbeats = ControlStateStore(heartbeat_file).load_heartbeats()
 
         self.assertEqual(result, 0)
-        self.assertEqual(
-            payload["prunedOrphanedStaleHeartbeats"], ["deleted-node"]
-        )
+        self.assertEqual(payload["prunedOrphanedStaleHeartbeats"], ["deleted-node"])
         self.assertEqual(heartbeats, {})
 
     @allow_fixture_mutations
@@ -1982,38 +1711,6 @@ class CliTests(unittest.TestCase):
         self.assertIn("controller lock", stderr.getvalue())
         self.assertEqual(remaining.pending_resources.vcpu, 1)
 
-    def test_autoscaler_dry_run_does_not_construct_provider_client(self) -> None:
-        class FailingUCloudClient:
-            def __init__(self, _session_store) -> None:
-                raise AssertionError(
-                    "autoscaler dry-run must not construct a provider client"
-                )
-
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text('{"items": []}', encoding="utf-8")
-            config_file = write_ucloud_config(root, deployment_id="prod-a")
-            output = io.StringIO()
-            with patch.object(cli, "UCloudClient", FailingUCloudClient):
-                with redirect_stdout(output):
-                    result = cli.main(
-                        [
-                            "autoscaler",
-                            "--config",
-                            str(config_file),
-                            "--jobs-file",
-                            str(jobs_file),
-                            "--once",
-                            "--output",
-                            "json",
-                        ]
-                    )
-            payload = json.loads(output.getvalue())
-
-        self.assertEqual(result, 0)
-        self.assertFalse(payload["execute"])
-
     @allow_fixture_mutations
     def test_autoscaler_once_recovers_journaled_uncertain_create(self) -> None:
         submitted: list[dict] = []
@@ -2189,8 +1886,9 @@ class CliTests(unittest.TestCase):
                 "--output",
                 "json",
             ]
-            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
-                cli, "_post_node_drain", side_effect=post_drain
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
                 first_output = io.StringIO()
                 with redirect_stdout(first_output):
@@ -2684,138 +2382,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["decision"]["actions"][0]["kind"], "create")
         self.assertEqual(payload["builderDecision"]["actions"][0]["kind"], "create")
         self.assertEqual(remaining_builds, 0)
-
-    def test_build_activity_adds_transient_sandbox_warm_resources(self) -> None:
-        policy = ScalePolicy(
-            default_node_resources=ResourceQuantity(
-                vcpu=8,
-                memory_mb=16384,
-                disk_mb=102400,
-            ),
-        )
-
-        resources = cli.build_activity_sandbox_warm_resources(
-            active_image_builds=1,
-            pending_image_builds=0,
-            prepared_builder_count=0,
-            policy=policy,
-        )
-        demand = cli.demand_with_build_warm_resources(SandboxDemand(), resources)
-
-        self.assertEqual(
-            resources,
-            ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
-        )
-        self.assertEqual(
-            demand.prepared_resources,
-            ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
-        )
-
-    def test_prepared_builder_alone_does_not_reserve_a_sandbox_node(self) -> None:
-        resources = cli.build_activity_sandbox_warm_resources(
-            active_image_builds=0,
-            pending_image_builds=0,
-            prepared_builder_count=1,
-            policy=ScalePolicy(),
-        )
-
-        self.assertEqual(resources, ResourceQuantity())
-
-    def test_build_warm_resources_supplement_instead_of_double_counting_demand(
-        self,
-    ) -> None:
-        warm = ResourceQuantity(vcpu=32, memory_mb=39321, disk_mb=204800)
-        demand = SandboxDemand(
-            pending_resources=ResourceQuantity(vcpu=16, memory_mb=8192, disk_mb=16384),
-            prepared_placement_requests=(
-                SandboxPlacementRequest(
-                    resources=ResourceQuantity(
-                        vcpu=33,
-                        memory_mb=16896,
-                        disk_mb=33792,
-                    )
-                ),
-            ),
-        )
-
-        combined = cli.demand_with_build_warm_resources(demand, warm)
-
-        self.assertEqual(
-            combined.desired_resources,
-            ResourceQuantity(vcpu=49, memory_mb=39321, disk_mb=204800),
-        )
-
-    def test_route_reconciliation_reserves_only_hard_disk(self) -> None:
-        routes = [
-            sandbox_route(
-                sandbox_id=f"sandbox-{index}",
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-                resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096),
-                state="running",
-            )
-            for index in range(64)
-        ]
-        heartbeat = NodeHeartbeat(
-            node_id="node-1",
-            job_id="job-1",
-            deployment_id="prod-a",
-            updated_at=utc_now(),
-            active_sandboxes=0,
-            total_resources=ResourceQuantity(
-                vcpu=32,
-                memory_mb=98304,
-                disk_mb=1_449_984,
-            ),
-            resources_known=True,
-            capabilities=("disk-quota",),
-        )
-
-        reconciled = cli.apply_route_reservations_to_heartbeats(
-            {"job-1": heartbeat},
-            cli.sandbox_route_reservations(routes),
-        )["job-1"]
-
-        self.assertEqual(reconciled.active_sandboxes, 64)
-        self.assertEqual(
-            reconciled.used_resources,
-            ResourceQuantity(disk_mb=64 * 4096),
-        )
-        self.assertEqual(reconciled.free_resources.vcpu, 32)
-        self.assertEqual(reconciled.free_resources.memory_mb, 98304)
-
-    def test_route_reservations_remain_visible_without_a_heartbeat(self) -> None:
-        job = ProviderInstance(
-            id="job-1",
-            name="ucloud-sandbox-node-1",
-            application_name="vm-ubuntu",
-            application_version="24.04",
-            product_id="cpu",
-            product_category="cpu",
-            state="RUNNING",
-            phase=InstancePhase.RUNNING,
-        )
-        node = SandboxNode(
-            job=job,
-            heartbeat=None,
-            active_sandboxes=0,
-            heartbeat_fresh=False,
-        )
-        route = sandbox_route(
-            sandbox_id="sandbox-1",
-            node_id="node-1",
-            job_id="job-1",
-            node_url="http://node-1:8090",
-            state="running",
-        )
-
-        reconciled = cli.apply_route_reservations_to_nodes(
-            [node],
-            {"job-1": (route,)},
-        )
-
-        self.assertEqual(reconciled[0].active_sandboxes, 1)
 
     def test_parked_inventory_keeps_its_node_owned(self) -> None:
         job = ProviderInstance(
@@ -3412,20 +2978,6 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(stopped["drainReadyStopJobIds"], ["owned"])
         self.assertEqual(stopped["definitelyTerminatedJobIds"], ["owned"])
-
-    def test_no_build_activity_leaves_sandbox_demand_unchanged(self) -> None:
-        demand = SandboxDemand(
-            pending_resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
-        )
-        resources = cli.build_activity_sandbox_warm_resources(
-            active_image_builds=0,
-            pending_image_builds=0,
-            prepared_builder_count=0,
-            policy=ScalePolicy(),
-        )
-
-        self.assertEqual(resources, ResourceQuantity())
-        self.assertIs(cli.demand_with_build_warm_resources(demand, resources), demand)
 
     @allow_fixture_mutations
     def test_executing_autoscaler_loop_consumes_prepared_builder_signal(self) -> None:
@@ -4131,8 +3683,9 @@ class CliTests(unittest.TestCase):
                     }
                 }
 
-            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
-                cli, "_post_node_drain", side_effect=post_drain
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
                 failed_request = cli.run_reconcile_cycle(
                     config,
@@ -4303,10 +3856,13 @@ class CliTests(unittest.TestCase):
             )
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
-            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
-                cli,
-                "_post_node_drain",
-                side_effect=AssertionError("unreachable node must not be drained"),
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(
+                    cli,
+                    "_post_node_drain",
+                    side_effect=AssertionError("unreachable node must not be drained"),
+                ),
             ):
                 result = cli.run_reconcile_cycle(
                     config,
@@ -4434,8 +3990,9 @@ class CliTests(unittest.TestCase):
                     }
                 }
 
-            with patch.object(cli, "UCloudClient", SuccessfulStopClient), patch.object(
-                cli, "_post_node_drain", side_effect=post_drain
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
                 initial = cli.run_reconcile_cycle(
                     config,

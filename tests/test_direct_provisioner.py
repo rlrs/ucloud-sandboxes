@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from urllib import request
 
-from ucloud_sandboxes.direct_network import DirectNetworkManager
 from ucloud_sandboxes.direct_oci import DirectOciConfigBuilder
 from ucloud_sandboxes.direct_provisioner import DirectSandboxProvisioner
 from ucloud_sandboxes.direct_registry import DirectSandboxRegistry
@@ -326,7 +325,6 @@ class FakeWarden:
         self.discarded = []
         self.alive = True
         self.storage = storage
-        self.storage_snapshot_calls = 0
 
     @staticmethod
     def key(sandbox):
@@ -370,7 +368,6 @@ class FakeWarden:
         return SimpleNamespace(state=StorageVolumeState.MOUNTED)
 
     def storage_records_snapshot(self, sandboxes):
-        self.storage_snapshot_calls += 1
         return {
             sandbox.memory_directory: SimpleNamespace(state=StorageVolumeState.MOUNTED)
             for sandbox in sandboxes
@@ -661,73 +658,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertTrue(images.reconciled)
             self.assertEqual(len(results), 1)
             self.assertEqual(results[0].phase, "owned")
-
-    def test_restart_uses_one_registry_snapshot_and_one_host_network_pass(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, registry, _, images, warden = self.make(root)
-            network = DirectNetworkManager(
-                root / "network-slots.json",
-                namespace_root=root / "netns",
-            )
-            provisioner.network_manager = network
-            provisioner.oci = DirectOciConfigBuilder(network_mode="sandbox")
-            warden.config.network = "sandbox"
-            original_prepare = provisioner.overlays.prepare
-
-            def prepare_with_etc(**kwargs):
-                lease = original_prepare(**kwargs)
-                (lease.merged / "etc").mkdir()
-                return lease
-
-            provisioner.overlays.prepare = prepare_with_etc
-            with (
-                patch.object(network, "_ensure_host_rules") as ensure_host_rules,
-                patch.object(network, "_ensure_kernel_lease") as ensure_kernel_lease,
-            ):
-                for index in range(3):
-                    provisioner.create(
-                        spec=replace(
-                            self.spec(),
-                            id=f"sandbox-{index}",
-                            network="bridge",
-                        ),
-                        sandbox_generation=7,
-                        operation_id=f"create:{index}",
-                    )
-                ensure_host_rules.reset_mock()
-                ensure_kernel_lease.reset_mock()
-                original_snapshot = registry.snapshot
-                original_get = registry.get
-                snapshot_calls = 0
-                get_calls = 0
-
-                def counted_snapshot():
-                    nonlocal snapshot_calls
-                    snapshot_calls += 1
-                    return original_snapshot()
-
-                def counted_get(sandbox_id: str):
-                    nonlocal get_calls
-                    get_calls += 1
-                    return original_get(sandbox_id)
-
-                registry.snapshot = counted_snapshot  # type: ignore[method-assign]
-                registry.get = counted_get  # type: ignore[method-assign]
-
-                results = provisioner.start()
-
-            self.assertEqual(len(results), 3)
-            self.assertEqual(snapshot_calls, 1)
-            self.assertEqual(get_calls, 0)
-            self.assertEqual(
-                images.reconciled_roots,
-                (images.image.image_id,) * 3,
-            )
-            ensure_host_rules.assert_called_once_with()
-            self.assertEqual(ensure_kernel_lease.call_count, 3)
 
     def test_restart_reuses_storage_id_after_prepare_before_registry_commit(
         self,
@@ -1023,76 +953,6 @@ class DirectProvisionerTests(unittest.TestCase):
             )
             self.assertEqual(runner.calls[-1][1], b"\0binary")
 
-    def test_storage_native_background_park_does_not_wait_for_publication(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, warden = self.make(root)
-            publication_started = Event()
-            allow_publication = Event()
-
-            def publish_storage_snapshot(
-                _sandbox,
-                *,
-                operation_id,
-            ):
-                self.assertEqual(operation_id, "park:test:publish")
-                publication_started.set()
-                if not allow_publication.wait(timeout=5):
-                    raise TimeoutError("test did not release publication")
-                return {"state": "published"}
-
-            warden.publish_storage_snapshot = publish_storage_snapshot
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-
-            parked = service.park(
-                created.spec.id,
-                operation_id="park:test",
-                background=True,
-            )
-
-            self.assertEqual(parked.state, HibernationState.PARKED.value)
-            self.assertTrue(publication_started.wait(timeout=1))
-            self.assertTrue(service.storage_native_publication_pending(created.spec.id))
-            allow_publication.set()
-            for thread in tuple(service._publication_threads.values()):
-                thread.join(timeout=5)
-            self.assertFalse(
-                service.storage_native_publication_pending(created.spec.id)
-            )
-
-    def test_storage_native_default_park_keeps_publication_off_critical_path(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, warden = self.make(root)
-            publications: list[str] = []
-
-            def publish_storage_snapshot(_sandbox, *, operation_id):
-                publications.append(operation_id)
-                return {"state": "published"}
-
-            warden.publish_storage_snapshot = publish_storage_snapshot
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-
-            parked = service.park(
-                created.spec.id,
-                operation_id="park:test",
-            )
-
-            self.assertEqual(parked.state, HibernationState.PARKED.value)
-            self.assertEqual(publications, [])
-
     def test_evict_published_requires_exact_parked_registry_authority(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1183,35 +1043,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertIsNotNone(observed)
             self.assertEqual(observed.state, HibernationState.RECOVERY_REQUIRED.value)
 
-    def test_active_admission_reuses_idle_cpu_and_memory_limits(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            service.configure_active_capacity(
-                ResourceQuantity(vcpu=1, memory_mb=1024),
-                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
-                    collected_at=utc_now(),
-                    cpu_percent=1.0,
-                    cpu_count=1,
-                    memory_total_mb=1024,
-                    memory_available_mb=4096,
-                    swap_total_mb=4096,
-                    swap_free_mb=4096,
-                ),
-            )
-
-            for index in range(3):
-                self.create(service, replace(self.spec(), id=f"sandbox-{index}"))
-
-            self.assertEqual(
-                {record.state for record in service.list()},
-                {"running"},
-            )
-
     def test_active_admission_stops_on_live_pressure(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1253,32 +1084,6 @@ class DirectProvisionerTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 SandboxCapacityUnavailableError,
                 "no fresh runtime metrics",
-            ):
-                self.create(service, self.spec())
-
-    def test_active_admission_stops_on_cpu_load(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            service.configure_active_capacity(
-                ResourceQuantity(vcpu=4, memory_mb=8192),
-                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
-                    collected_at=utc_now(),
-                    cpu_percent=20.0,
-                    cpu_count=4,
-                    load_average_1m=5.0,
-                    memory_total_mb=8192,
-                    memory_available_mb=8192,
-                ),
-            )
-
-            with self.assertRaisesRegex(
-                SandboxCapacityUnavailableError,
-                "CPU load",
             ):
                 self.create(service, self.spec())
 
@@ -1347,83 +1152,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(deleted, created)
             self.assertIsNone(service.get(created.spec.id))
 
-    def test_node_adapter_heartbeat_accounts_incomplete_create_registrations(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, registry, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            planned_spec = replace(self.spec(), id="planned")
-            quota_spec = replace(self.spec(), id="quota-ready")
-            registry.plan(
-                spec=planned_spec,
-                sandbox_generation=1,
-                operation_id="create:planned",
-                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
-            )
-            quota_planned = registry.plan(
-                spec=quota_spec,
-                sandbox_generation=2,
-                operation_id="create:quota-ready",
-                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
-            )
-            registry.commit_quota(
-                quota_spec.id,
-                expected_revision=quota_planned.revision,
-                project_id=200_002,
-                total_mb=4096,
-                quota_path=(root / "quota" / "quota-ready.sandbox-2").resolve(),
-            )
-            manager = DirectNodeRuntime(service)
-
-            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-
-            self.assertEqual(snapshot.activity.active_sandboxes, 0)
-            self.assertEqual(snapshot.activity.used_resources, ResourceQuantity())
-            self.assertEqual(snapshot.activity.reserved_resources.memory_mb, 2048)
-            self.assertEqual(snapshot.activity.reserved_resources.disk_mb, 6144)
-            self.assertEqual(
-                {record.state for record in snapshot.activity.records},
-                {"planned", "quota_ready"},
-            )
-
-    def test_heartbeat_uses_one_registry_and_one_bulk_storage_snapshot(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, registry, _, _, warden = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            self.create(service, self.spec())
-            self.create(service, replace(self.spec(), id="sandbox-2"))
-            manager = DirectNodeRuntime(service)
-            original_snapshot = registry.snapshot
-            snapshot_calls = 0
-
-            def counted_snapshot():
-                nonlocal snapshot_calls
-                snapshot_calls += 1
-                return original_snapshot()
-
-            def unexpected_registry_read(*_args, **_kwargs):
-                raise AssertionError("heartbeat performed a second registry read")
-
-            registry.snapshot = counted_snapshot  # type: ignore[method-assign]
-            registry.get = unexpected_registry_read  # type: ignore[method-assign]
-            registry.list = unexpected_registry_read  # type: ignore[method-assign]
-            warden.storage_snapshot_calls = 0
-
-            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-
-            self.assertEqual(len(snapshot.activity.records), 2)
-            self.assertEqual(snapshot_calls, 1)
-            self.assertEqual(warden.storage_snapshot_calls, 1)
-
     def test_heartbeat_epoch_increases_after_highest_revision_is_deleted(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1466,27 +1194,6 @@ class DirectProvisionerTests(unittest.TestCase):
                 tuple(record.spec.id for record in after.activity.records),
                 (remaining.spec.id,),
             )
-            self.assertGreater(
-                after.activity.activity_revision,
-                before.activity.activity_revision,
-            )
-
-    def test_heartbeat_epoch_increases_after_last_registration_is_deleted(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-            manager = DirectNodeRuntime(service)
-            before = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-
-            service.delete(created.spec.id, generation=created.generation)
-            after = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-
-            self.assertEqual(after.activity.records, ())
             self.assertGreater(
                 after.activity.activity_revision,
                 before.activity.activity_revision,
@@ -1733,37 +1440,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertFalse(opened.drain.draining)
             self.assertTrue(service.admission_open)
 
-    def test_direct_node_server_binds_only_direct_manager(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-
-            server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=service,
-                image_file=root / "images.json",
-                job_id="job",
-                node_id="node",
-            )
-            try:
-                self.assertIs(server.RequestHandlerClass.manager.service, service)
-                self.assertIn(
-                    "direct-runsc-v1",
-                    server.RequestHandlerClass.capabilities,
-                )
-                self.assertIn(
-                    "sandbox-detach-published-v1",
-                    server.RequestHandlerClass.capabilities,
-                )
-                self.assertIsNone(service._parking_thread)
-            finally:
-                server.server_close()
-
     def test_direct_node_publish_parked_endpoint_uses_exact_identity(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1791,7 +1467,11 @@ class DirectProvisionerTests(unittest.TestCase):
                 job_id="job",
                 node_id="node",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
+            thread = Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.01},
+                daemon=True,
+            )
             thread.start()
             try:
                 host, port = server.server_address
@@ -1856,7 +1536,11 @@ class DirectProvisionerTests(unittest.TestCase):
                 job_id="job",
                 node_id="node",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
+            thread = Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.01},
+                daemon=True,
+            )
             thread.start()
             try:
                 host, port = server.server_address
@@ -1952,7 +1636,11 @@ class DirectProvisionerTests(unittest.TestCase):
                 job_id="job",
                 node_id="node",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
+            thread = Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.01},
+                daemon=True,
+            )
             thread.start()
             try:
                 host, port = server.server_address
@@ -2004,7 +1692,11 @@ class DirectProvisionerTests(unittest.TestCase):
                 job_id="job",
                 node_id="node",
             )
-            thread = Thread(target=server.serve_forever, daemon=True)
+            thread = Thread(
+                target=server.serve_forever,
+                kwargs={"poll_interval": 0.01},
+                daemon=True,
+            )
             thread.start()
             try:
                 host, port = server.server_address

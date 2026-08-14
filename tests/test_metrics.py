@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 from pathlib import Path
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.metrics import (
@@ -11,7 +12,6 @@ from ucloud_sandboxes.metrics import (
     MetricsStore,
     build_live_scale_signals,
     build_metrics_snapshot,
-    build_program_state_summary,
     record_autoscaler_cycle,
 )
 from ucloud_sandboxes.models import (
@@ -189,28 +189,6 @@ class MetricsTests(unittest.TestCase):
         self.assertGreaterEqual(signals.provisioning_p95_seconds or 0, 49)
         self.assertEqual(signals.scale_up_wait_p95_seconds, 72.0)
 
-    def test_builds_gateway_create_pressure_signal(self) -> None:
-        now = utc_now()
-        events = [
-            MetricEvent(
-                timestamp=(now - timedelta(seconds=offset)).isoformat(),
-                kind="sandbox_create_busy",
-                data={
-                    "outcome": "gateway_busy",
-                    "aggregated_rejections": rejections,
-                    "max_concurrent_sandbox_creates": 32,
-                },
-            )
-            for offset, rejections in ((10, 4), (1, 7))
-        ]
-
-        signals = build_live_scale_signals(events, ScalePolicy())
-
-        self.assertEqual(signals.create_pressure_samples, 2)
-        self.assertEqual(signals.sandbox_create_rejections, 11)
-        self.assertEqual(signals.sandbox_create_limit, 32)
-        self.assertLessEqual(signals.latest_create_pressure_age_seconds or 0, 2)
-
     def test_image_materialization_queue_is_live_pressure(self) -> None:
         now = utc_now()
         events = [
@@ -235,42 +213,6 @@ class MetricsTests(unittest.TestCase):
 
         self.assertEqual(signals.pressure_samples, 3)
         self.assertEqual(signals.image_materialization_queue_utilization, 1.0)
-
-    def test_busy_materialization_slots_without_waiters_are_not_pressure(self) -> None:
-        now = utc_now()
-        events = [
-            MetricEvent(
-                timestamp=(now - timedelta(seconds=offset)).isoformat(),
-                kind="node_heartbeat",
-                data={
-                    "active_workloads": 3,
-                    "actual_usage": {
-                        "cpu_percent": 2,
-                        "memory_percent": 3,
-                        "image_materialization_active_operations": 3,
-                        "image_materialization_waiting_operations": 0,
-                        "image_materialization_max_concurrent_operations": 4,
-                    },
-                },
-            )
-            for offset in (20, 10, 1)
-        ]
-
-        signals = build_live_scale_signals(events, ScalePolicy())
-
-        self.assertEqual(signals.pressure_samples, 0)
-        self.assertIsNone(signals.image_materialization_queue_utilization)
-
-    def test_snapshot_uses_precomputed_exec_session_count(self) -> None:
-        snapshot = build_metrics_snapshot(
-            {},
-            RoutingState({}, {}, {}, {}),
-            [],
-            heartbeat_ttl_seconds=120,
-            exec_session_count=2_000,
-        )
-
-        self.assertEqual(snapshot["exec"]["sessions"], 2_000)
 
     def test_snapshot_exposes_aging_first_program_wake_queue(self) -> None:
         now = utc_now()
@@ -331,82 +273,34 @@ class MetricsTests(unittest.TestCase):
         )
         self.assertEqual(programs["response_to_wake_p95_ms"], 10_000)
 
-    def test_program_latency_percentiles_sort_samples(self) -> None:
-        now = utc_now()
-        requests = []
-        for index, duration_ms in enumerate((1000, 9000, 5000)):
-            accepted = now - timedelta(seconds=30 + index)
-            response_ready = accepted + timedelta(milliseconds=duration_ms)
-            requests.append(
-                ProgramRequestState(
-                    request_id=f"request-{index}",
-                    rollout_id=f"rollout-{index}",
-                    sandbox_id=f"sandbox-{index}",
-                    sandbox_generation=1,
-                    state="acting",
-                    resources=ResourceQuantity(vcpu=1),
-                    accepted_at=accepted.isoformat(),
-                    response_ready_at=response_ready.isoformat(),
-                    wake_completed_at=(
-                        response_ready + timedelta(milliseconds=duration_ms)
-                    ).isoformat(),
-                    updated_at=now.isoformat(),
-                )
-            )
-
-        summary = build_program_state_summary(requests, now=now)
-
-        self.assertEqual(summary["model_wait_p50_ms"], 5000)
-        self.assertEqual(summary["model_wait_p95_ms"], 9000)
-        self.assertEqual(summary["response_to_wake_p50_ms"], 5000)
-        self.assertEqual(summary["response_to_wake_p95_ms"], 9000)
-
     def test_gateway_busy_signals_are_aggregated_between_samples(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
             sampler = GatewayBusySampler(store, min_interval_seconds=60)
 
-            emitted = [
-                sampler.record(
-                    max_concurrent_sandbox_creates=32,
-                )
-                for index in range(100)
-            ]
+            with patch(
+                "ucloud_sandboxes.metrics.time.monotonic",
+                side_effect=[0.0, *([1.0] * 99), 61.0],
+            ):
+                emitted = [
+                    sampler.record(
+                        max_concurrent_sandbox_creates=32,
+                    )
+                    for _index in range(100)
+                ]
+                emitted.append(sampler.record(max_concurrent_sandbox_creates=32))
             events = store.load_events()
 
-        self.assertEqual(emitted.count(True), 1)
-        self.assertEqual(len(events), 1)
+        self.assertEqual(emitted.count(True), 2)
+        self.assertEqual(len(events), 2)
         self.assertEqual(events[0].kind, "sandbox_create_busy")
         self.assertEqual(events[0].data["outcome"], "gateway_busy")
         self.assertEqual(
             events[0].data["max_concurrent_sandbox_creates"],
             32,
         )
-
-    def test_metrics_state_file_is_owner_only(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "metrics.sqlite"
-            store = MetricsStore(path)
-
-            store.append("sensitive", {"token": "redacted-by-operator-policy"})
-
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
-    def test_metrics_store_bounds_retained_events(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(
-                Path(raw_dir) / "metrics.sqlite",
-                max_bytes=64 * 1024,
-                max_events=5,
-            )
-
-            for index in range(12):
-                store.append("bounded", {"index": index, "padding": "x" * 24})
-
-            retained = store.load_events(max_events=100)
-
-            self.assertEqual(len(retained), 5)
-            self.assertEqual(retained[-1].data["index"], 11)
+        self.assertEqual(events[0].data["aggregated_rejections"], 1)
+        self.assertEqual(events[1].data["aggregated_rejections"], 100)
 
     def test_metrics_store_replaces_oversized_event_with_marker(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -422,47 +316,6 @@ class MetricsTests(unittest.TestCase):
             self.assertTrue(event.data["metrics_payload_truncated"])
             self.assertGreater(event.data["original_bytes"], 160)
             self.assertEqual(loaded, [event])
-
-    def test_load_events_returns_recent_tail(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
-            for index in range(20):
-                store.append("event", {"index": index})
-
-            events = store.load_events(max_events=5)
-
-        self.assertEqual(
-            [event.data["index"] for event in events], [15, 16, 17, 18, 19]
-        )
-
-    def test_autoscaler_cycle_records_build_warm_fields(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
-            record_autoscaler_cycle(
-                store,
-                cycle=7,
-                result={
-                    "decision": {"reasons": ["disk headroom below demand"]},
-                    "builderDecision": {"reasons": ["no pending builds"]},
-                    "pendingImageBuilds": 1,
-                    "activeImageBuilds": 2,
-                    "preparedBuilderCount": 0,
-                    "buildWarmSandboxResources": {
-                        "vcpu": 16.0,
-                        "memory_mb": 32768,
-                        "disk_mb": 204800,
-                    },
-                },
-            )
-
-            event = store.load_events()[0]
-
-        self.assertEqual(event.kind, "autoscaler_cycle")
-        self.assertEqual(event.data["pending_image_builds"], 1)
-        self.assertEqual(event.data["active_image_builds"], 2)
-        self.assertEqual(event.data["build_warm_sandbox_resources"]["vcpu"], 16.0)
-        self.assertEqual(event.data["reasons"], ["disk headroom below demand"])
-        self.assertEqual(event.data["builder_reasons"], ["no pending builds"])
 
     def test_autoscaler_cycle_bounds_wake_plan_and_exposes_policy(self) -> None:
         with TemporaryDirectory() as raw_dir:

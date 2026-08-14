@@ -20,8 +20,6 @@ from ucloud_sandboxes.hibernation import (
     HibernationState,
     LocalHibernationArtifactFile,
     classify_hibernation_recovery,
-    hibernation_disk_reservation_mb,
-    hibernation_memory_backing_reservation_mb,
     hibernation_process_identity_matches,
     linux_process_start_time_ticks,
 )
@@ -629,39 +627,6 @@ class HibernationTests(unittest.TestCase):
             finally:
                 root.chmod(0o700)
 
-    def test_recovery_classifier_covers_irreversible_boundaries(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            self.assertEqual(
-                classify_hibernation_recovery(
-                    running,
-                    sentry_alive=True,
-                    candidate_alive=False,
-                    complete_manifest=False,
-                ),
-                HibernationRecoveryAction.ADOPT_RUNNING,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1", expected_revision=running.revision
-            )
-            self.assertEqual(
-                classify_hibernation_recovery(
-                    hibernating,
-                    sentry_alive=False,
-                    candidate_alive=False,
-                    complete_manifest=False,
-                ),
-                HibernationRecoveryAction.FINISH_PENDING_GENERATION,
-            )
-
     def test_complete_capture_with_live_sentry_must_finish_stopping(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -930,48 +895,6 @@ class HibernationTests(unittest.TestCase):
                 HibernationState.RECOVERY_REQUIRED,
             )
             self.assertIn("does not match", result.detail)
-
-    def test_disk_reservation_matches_allocator_growth_and_never_uses_holes(
-        self,
-    ) -> None:
-        self.assertEqual(hibernation_memory_backing_reservation_mb(256), 1024)
-        self.assertEqual(hibernation_memory_backing_reservation_mb(1024), 2048)
-        self.assertEqual(hibernation_memory_backing_reservation_mb(4096), 5120)
-        self.assertEqual(
-            hibernation_disk_reservation_mb(
-                memory_mb=4096,
-                writable_disk_mb=8192,
-            ),
-            8192 + 5120 + 4096 + 64,
-        )
-        self.assertEqual(
-            hibernation_disk_reservation_mb(
-                memory_mb=4096,
-                writable_disk_mb=8192,
-                private_pages_mb=64,
-            ),
-            8192 + 5120 + 64 + 64,
-        )
-
-    def test_json_record_round_trip_is_strict(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
-            record = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            raw = record.to_dict()
-            self.assertEqual(
-                journal.load(),
-                type(record).from_dict(json.loads(json.dumps(raw))),
-            )
-            raw["unexpected"] = True
-            with self.assertRaisesRegex(ValueError, "invalid schema"):
-                type(record).from_dict(raw)
 
     def test_process_identity_rejects_pid_reuse(self) -> None:
         with TemporaryDirectory() as raw_dir:

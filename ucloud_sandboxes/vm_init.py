@@ -227,7 +227,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     storage_service = "/etc/systemd/system/ucloud-storage-native.service"
     heartbeat_service = "/etc/systemd/system/ucloud-sandbox-heartbeat.service"
     heartbeat_timer = "/etc/systemd/system/ucloud-sandbox-heartbeat.timer"
-    authorized_keys_blob = "\n".join(options.init_authorized_keys)
+    authorized_keys_shell = "\n".join(
+        f"  {shlex.quote(key)}" for key in options.init_authorized_keys
+    )
     runtime_role = options.role
     runtime_packages = (
         BUILDER_RUNTIME_PACKAGES
@@ -456,9 +458,8 @@ UCLOUD_STORAGE_NATIVE_S3_SECURITY_TOKEN={shlex.quote(options.storage_native_s3_s
 UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_FILE={shlex.quote(DEFAULT_STORAGE_NATIVE_CREDENTIAL_FILE)}
 UCLOUD_STORAGE_NATIVE_S3_CREDENTIAL_PROCESS={shlex.quote(DEFAULT_STORAGE_NATIVE_CREDENTIAL_PROCESS)}
 UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES={writable_disk_mb * 1024 * 1024}
-UCLOUD_INIT_AUTHORIZED_KEYS=$(cat <<'UCLOUD_AUTHORIZED_KEYS'
-{authorized_keys_blob}
-UCLOUD_AUTHORIZED_KEYS
+UCLOUD_INIT_AUTHORIZED_KEYS=(
+{authorized_keys_shell}
 )
 
 echo "Initializing UCloud sandbox node $UCLOUD_NODE_ID for job $UCLOUD_JOB_ID"
@@ -491,15 +492,14 @@ $SUDO mkdir -p "$UCLOUD_WORK_DIR" "$(dirname "$UCLOUD_DOCKER_DATA_ROOT")" /etc/u
 $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_WORK_DIR"
 $SUDO install -d -m 0700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_STATE_DIR"
 
-if [ -n "$UCLOUD_INIT_AUTHORIZED_KEYS" ]; then
+if [ "${{#UCLOUD_INIT_AUTHORIZED_KEYS[@]}}" -gt 0 ]; then
   $SUDO install -d -m 700 -o "$UCLOUD_SERVICE_USER" -g "$UCLOUD_SERVICE_GROUP" "$UCLOUD_SERVICE_HOME/.ssh"
   $SUDO touch "$UCLOUD_SERVICE_HOME/.ssh/authorized_keys"
-  while IFS= read -r key; do
-    [ -n "$key" ] || continue
+  for key in "${{UCLOUD_INIT_AUTHORIZED_KEYS[@]}}"; do
     if ! $SUDO grep -Fx -- "$key" "$UCLOUD_SERVICE_HOME/.ssh/authorized_keys" >/dev/null 2>&1; then
       printf '%s\\n' "$key" | $SUDO tee -a "$UCLOUD_SERVICE_HOME/.ssh/authorized_keys" >/dev/null
     fi
-  done <<< "$UCLOUD_INIT_AUTHORIZED_KEYS"
+  done
   $SUDO chown "$UCLOUD_SERVICE_USER:$UCLOUD_SERVICE_GROUP" "$UCLOUD_SERVICE_HOME/.ssh/authorized_keys"
   $SUDO chmod 600 "$UCLOUD_SERVICE_HOME/.ssh/authorized_keys"
 fi
@@ -1673,6 +1673,8 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         if not key.strip():
             raise ValueError("init authorized keys cannot contain empty keys.")
         _reject_newline("init authorized key", key)
+        if "\0" in key:
+            raise ValueError("init authorized key cannot contain NUL.")
 
 
 def ssh_init_command(

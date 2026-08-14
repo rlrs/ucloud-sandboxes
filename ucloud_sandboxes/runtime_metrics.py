@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 import time
@@ -73,7 +74,7 @@ def read_proc_stat_cpu(path: Path) -> tuple[int, int] | None:
         values = [int(value) for value in fields[1:]]
     except ValueError:
         return None
-    if len(values) < 4:
+    if len(values) < 4 or any(value < 0 for value in values):
         return None
     idle = values[3] + (values[4] if len(values) > 4 else 0)
     total = sum(values)
@@ -94,9 +95,11 @@ def read_proc_meminfo(path: Path) -> dict[str, int]:
         if not parts:
             continue
         try:
-            result[key] = int(parts[0])
+            parsed = int(parts[0])
         except ValueError:
             continue
+        if parsed >= 0:
+            result[key] = parsed
     if "MemAvailable" not in result and "MemFree" in result:
         result["MemAvailable"] = result["MemFree"]
     return result
@@ -120,9 +123,12 @@ def read_proc_pressure(path: Path) -> dict[str, float]:
             if key != "avg10" or not separator:
                 continue
             try:
-                result[sample_type] = max(0.0, float(value))
+                parsed = float(value)
             except ValueError:
                 pass
+            else:
+                if math.isfinite(parsed) and 0.0 <= parsed <= 100.0:
+                    result[sample_type] = parsed
             break
     return result
 
@@ -135,7 +141,7 @@ def cpu_percent_from_samples(
         return None
     total_delta = second[0] - first[0]
     idle_delta = second[1] - first[1]
-    if total_delta <= 0:
+    if total_delta <= 0 or idle_delta < 0 or idle_delta > total_delta:
         return None
-    busy_delta = max(0, total_delta - idle_delta)
+    busy_delta = total_delta - idle_delta
     return (busy_delta / total_delta) * 100.0

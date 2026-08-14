@@ -181,7 +181,11 @@ class AgentTests(unittest.TestCase):
                 return
 
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = Thread(target=server.serve_forever, daemon=True)
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
         thread.start()
         try:
             host, port = server.server_address
@@ -191,6 +195,7 @@ class AgentTests(unittest.TestCase):
             )
         finally:
             server.shutdown()
+            thread.join(timeout=1)
             server.server_close()
 
         self.assertEqual(fetched.job_id, "123")

@@ -217,6 +217,7 @@ class DirectOciConfigBuilder:
             if (
                 network_namespace_path is None
                 or not network_namespace_path.is_absolute()
+                or "\0" in str(network_namespace_path)
             ):
                 raise DirectOciConfigError(
                     "sandbox networking requires an absolute network namespace path"
@@ -504,7 +505,7 @@ class DirectOciConfigBuilder:
         environment: dict[str, str] = {}
         for item in image.env:
             key, separator, value = item.partition("=")
-            if not separator or not _ENV_KEY.fullmatch(key):
+            if not separator or not _ENV_KEY.fullmatch(key) or "\0" in value:
                 raise DirectOciConfigError(
                     "Docker image contains an invalid environment"
                 )

@@ -1,7 +1,9 @@
 import json
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from ucloud_sandboxes.config import DeploymentConfig
 
@@ -226,13 +228,24 @@ class ConfigTests(unittest.TestCase):
             "security_token_env": "SNAPSHOT_SECURITY_TOKEN",
         }
 
-        config = DeploymentConfig.from_dict(raw)
+        secret = "secret-access-key-value"
+        with patch.dict(os.environ, {"SNAPSHOT_SECRET_KEY": secret}):
+            config = DeploymentConfig.from_dict(raw)
 
         self.assertEqual(config.snapshot_store.kind, "s3")
         self.assertEqual(config.snapshot_store.prefix, "production")
         encoded = json.dumps(config.to_dict())
         self.assertIn("SNAPSHOT_SECRET_KEY", encoded)
-        self.assertNotIn("secret-access-key-value", encoded)
+        self.assertNotIn(secret, encoded)
+
+    def test_s3_snapshot_store_rejects_literal_credentials(self) -> None:
+        raw = self._raw()
+        snapshot_store = raw["snapshot_store"]
+        assert isinstance(snapshot_store, dict)
+        snapshot_store["secret_access_key"] = "secret-access-key-value"
+
+        with self.assertRaisesRegex(ValueError, "secret_access_key"):
+            DeploymentConfig.from_dict(raw)
 
     def test_s3_snapshot_store_accepts_hetzner_bucket_url_as_endpoint(self) -> None:
         raw = self._raw()

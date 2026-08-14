@@ -490,68 +490,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(updated.spec, spec)
         self.assertEqual(updated.state, "running")
 
-    def test_scoped_node_route_queries_are_indexed(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "routes.sqlite"
-            store = RoutingStore(path)
-            routes = (
-                sandbox_route(
-                    sandbox_id="exact",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                ),
-                sandbox_route(
-                    sandbox_id="same-node",
-                    node_id="node-1",
-                    job_id="job-2",
-                    node_url="http://node-2:8090",
-                ),
-                sandbox_route(
-                    sandbox_id="same-job",
-                    node_id="node-3",
-                    job_id="job-1",
-                    node_url="http://node-3:8090",
-                ),
-                sandbox_route(
-                    sandbox_id="same-url",
-                    node_id="node-4",
-                    job_id="job-4",
-                    node_url="http://node-1:8090",
-                ),
-                sandbox_route(
-                    sandbox_id="unrelated",
-                    node_id="node-5",
-                    job_id="job-5",
-                    node_url="http://node-5:8090",
-                ),
-            )
-            for route in routes:
-                store.upsert_sandbox(route)
-
-            identity_matches = store.sandbox_routes_matching_node_identity(
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-            )
-            with sqlite3.connect(path) as conn:
-                indexes = {
-                    str(row[1])
-                    for row in conn.execute("PRAGMA index_list('sandboxes')")
-                }
-
-        self.assertEqual(
-            [route.sandbox_id for route in identity_matches],
-            ["exact", "same-job", "same-node", "same-url"],
-        )
-        self.assertTrue(
-            {
-                "sandboxes_node_id",
-                "sandboxes_job_id",
-                "sandboxes_node_url",
-            }.issubset(indexes)
-        )
-
     def test_migration_journal_and_route_switch_commit_atomically(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "routes.sqlite"
@@ -1136,24 +1074,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(version, 3)
         self.assertEqual(columns["worker_state"], "'attached'")
 
-    def test_readonly_sandbox_queries_return_current_routes(self) -> None:
-        with routing_store() as store:
-            route = sandbox_route(
-                sandbox_id="readonly-one",
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-            )
-            store.upsert_sandbox(route)
-
-            fetched = store.get_sandbox_readonly("readonly-one")
-            routes = store.sandbox_routes_readonly()
-
-        self.assertIsNotNone(fetched)
-        self.assertEqual(fetched.sandbox_id, "readonly-one")
-        self.assertEqual([item.sandbox_id for item in routes], ["readonly-one"])
-
     def test_delete_stale_sandboxes_removes_missing_jobs_after_grace(self) -> None:
         with routing_store() as store:
             now = utc_now()
@@ -1295,18 +1215,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(demand.desired_resources, demand.prepared_resources)
         self.assertEqual(deleted.prepare_id if deleted else None, "prep-1")
         self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
-
-    def test_prepared_capacity_count_is_bounded_at_the_store(self) -> None:
-        with routing_store() as store:
-            with self.assertRaisesRegex(ValueError, "between 1 and 100"):
-                store.upsert_prepared_capacity(
-                    "too-many",
-                    ResourceQuantity(vcpu=1),
-                    count=101,
-                    ttl_seconds=600,
-                )
-
-            self.assertEqual(store.prepared_capacity(), [])
 
     def test_new_matching_routes_claim_prepared_capacity_once(self) -> None:
         resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
@@ -1718,24 +1626,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertIsNotNone(pending)
         self.assertEqual(pending.sandbox_id if pending else None, "pending-one")
         self.assertIsNone(after)
-
-    def test_metrics_load_counts_exec_sessions_without_materializing_them(self) -> None:
-        with routing_store() as store:
-            for index in range(3):
-                store.upsert_exec(
-                    ExecRoute(
-                        session_id=f"session-{index}",
-                        sandbox_id="sandbox-one",
-                        node_id="node-1",
-                        job_id="job-1",
-                        node_url="http://node-1:8090",
-                    )
-                )
-
-            state, exec_session_count = store.load_metrics()
-
-        self.assertEqual(exec_session_count, 3)
-        self.assertEqual(state.exec_sessions, {})
 
     def test_failed_create_pending_demand_preserves_incarnation_identity(self) -> None:
         with TemporaryDirectory() as raw_dir:

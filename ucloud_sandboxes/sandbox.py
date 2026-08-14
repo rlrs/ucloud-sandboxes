@@ -457,11 +457,17 @@ class SandboxSpec:
                 "sandbox id must be 1-64 characters of letters, digits, _, . or - "
                 "and start with a letter or digit."
             )
-        if not self.image.strip():
+        if not self.image.strip() or "\0" in self.image:
             raise ValueError("sandbox image is required.")
-        for key in self.env:
+        if any("\0" in argument for argument in self.command):
+            raise ValueError("sandbox command cannot contain NUL.")
+        for key, value in self.env.items():
             if not ENV_KEY_RE.match(key):
                 raise ValueError(f"invalid environment variable name: {key!r}")
+            if "\0" in value:
+                raise ValueError("sandbox environment values cannot contain NUL.")
+        if any("\0" in key or "\0" in value for key, value in self.labels.items()):
+            raise ValueError("sandbox labels cannot contain NUL.")
         reserved_labels = sorted(
             key
             for key in self.labels

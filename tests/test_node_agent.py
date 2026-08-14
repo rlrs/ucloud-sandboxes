@@ -50,7 +50,11 @@ class BuilderNodeAgentTests(unittest.TestCase):
             image_runtime=DockerImageRuntime(dry_run=True),
             node_control_bearer_token=TOKEN,
         )
-        self.thread = Thread(target=self.server.serve_forever, daemon=True)
+        self.thread = Thread(
+            target=self.server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
         self.thread.start()
         host, port = self.server.server_address
         self.base_url = f"http://{host}:{port}"

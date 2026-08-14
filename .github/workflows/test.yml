@@ -1,0 +1,101 @@
+name: test
+
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the SDK contract peer
+        uses: actions/checkout@v6
+        with:
+          repository: rlrs/ucloud-sandboxes-sdk
+          # Deliberately pinned: update this SHA with coordinated SDK changes.
+          ref: 96409abda3291195bc9567dfc63f20ffa576205e
+          path: ucloud-sandboxes-sdk
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: runtime/managed_process/go.mod
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.2"
+          enable-cache: true
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+      - name: Run the canonical repository check
+        run: bash scripts/check.sh
+      - name: Run the Docker Distribution contract
+        if: matrix.python-version == '3.13'
+        run: |
+          docker run --detach --name ucloud-test-registry \
+            --publish 5000:5000 \
+            --env REGISTRY_STORAGE_DELETE_ENABLED=true \
+            registry:2.8.3
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5000/v2/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              docker logs ucloud-test-registry
+              exit 1
+            fi
+            sleep 1
+          done
+          UCLOUD_TEST_REGISTRY_URL=http://127.0.0.1:5000 \
+            uv run python -m unittest tests.test_registry_distribution_contract
+      - name: Remove the Docker Distribution contract container
+        if: always() && matrix.python-version == '3.13'
+        run: docker rm --force ucloud-test-registry 2>/dev/null || true
+      - name: Run the S3-compatible contract
+        if: matrix.python-version == '3.13'
+        run: |
+          docker run --detach --name ucloud-test-minio \
+            --publish 9000:9000 \
+            --env MINIO_ROOT_USER=minioadmin \
+            --env MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z \
+            server /data --address :9000
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              docker logs ucloud-test-minio
+              exit 1
+            fi
+            sleep 1
+          done
+          UCLOUD_TEST_S3_ENDPOINT=http://127.0.0.1:9000 \
+          UCLOUD_TEST_S3_ACCESS_KEY=minioadmin \
+          UCLOUD_TEST_S3_SECRET_KEY=minioadmin \
+            uv run python -m unittest tests.test_s3_compatible_contract
+      - name: Remove the S3-compatible contract container
+        if: always() && matrix.python-version == '3.13'
+        run: docker rm --force ucloud-test-minio 2>/dev/null || true
+      - name: Exercise managed-process fuzz targets
+        if: github.event_name == 'schedule' && matrix.python-version == '3.13'
+        working-directory: runtime/managed_process
+        run: |
+          go test -run='^$' -fuzz=FuzzControlRequestDecoding -fuzztime=30s
+          go test -run='^$' -fuzz=FuzzValidatedSpec -fuzztime=30s
+          go test -run='^$' -fuzz=FuzzResponseEncoding -fuzztime=30s

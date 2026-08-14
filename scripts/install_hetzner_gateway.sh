@@ -311,15 +311,13 @@ systemctl enable --now \
   ucloud-sandbox-snapshot-gc.timer
 systemctl restart ucloud-sandbox-registry.service
 
-for url in http://127.0.0.1:5000/v2/; do
-  for attempt in $(seq 1 60); do
-    if curl -fsS "$url" >/dev/null; then break; fi
-    if [[ "$attempt" == 60 ]]; then
-      systemctl --no-pager --full status ucloud-sandbox-registry.service
-      exit 1
-    fi
-    sleep 1
-  done
+for attempt in $(seq 1 60); do
+  if curl -fsS http://127.0.0.1:5000/v2/ >/dev/null; then break; fi
+  if [[ "$attempt" == 60 ]]; then
+    systemctl --no-pager --full status ucloud-sandbox-registry.service
+    exit 1
+  fi
+  sleep 1
 done
 
 systemctl restart ucloud-sandbox-gateway.service

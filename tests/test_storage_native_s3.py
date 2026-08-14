@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
-import socket
 from tempfile import TemporaryDirectory
 import unittest
 
-from ucloud_sandboxes.storage_native import StorageNativeLayer
+from tests.storage_native_publisher_support import FakeExporter, digest
 from ucloud_sandboxes.storage_native_registry import PublishedStorageLayer
 from ucloud_sandboxes.storage_native_s3 import (
     S3ObjectStat,
@@ -88,32 +85,6 @@ class FakeS3:
         )
 
 
-class FakeExporter:
-    def __init__(self, payloads: dict[Path, bytes], compacted: bytes = b"compact"):
-        self.payloads = payloads
-        self.compacted = compacted
-        self.compaction_configs: list[dict] = []
-
-    def export_dense_layer(self, *, source_layer_path, stream_socket_path):
-        payload = self.payloads[source_layer_path]
-        return self._send(payload, stream_socket_path)
-
-    def export_compacted_image(
-        self, *, source_image_config, global_config, stream_socket_path
-    ):
-        self.compaction_configs.append(
-            json.loads(source_image_config.read_text(encoding="ascii"))
-        )
-        return self._send(self.compacted, stream_socket_path)
-
-    @staticmethod
-    def _send(payload: bytes, stream_socket_path: Path) -> StorageNativeLayer:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.connect(str(stream_socket_path))
-            connection.sendall(payload)
-        return StorageNativeLayer(digest=digest(payload), size=len(payload))
-
-
 class StorageNativeS3Tests(unittest.TestCase):
     def _publisher(self, root: Path, s3: FakeS3) -> S3SnapshotPublisher:
         return S3SnapshotPublisher(
@@ -164,7 +135,7 @@ class StorageNativeS3Tests(unittest.TestCase):
             global_config = (root / "global.json").resolve()
             global_config.write_text("{}\n", encoding="ascii")
             s3 = FakeS3()
-            exporter = FakeExporter({source: b"delta"}, compacted=b"flattened")
+            exporter = FakeExporter({source: b"delta"}, compact_payload=b"flattened")
             publisher = self._publisher(root, s3)
 
             publication = publisher.publish(
@@ -178,7 +149,7 @@ class StorageNativeS3Tests(unittest.TestCase):
 
             self.assertEqual(len(publication.layers), 1)
             self.assertEqual(
-                exporter.compaction_configs[0]["repoBlobUrl"],
+                exporter.compact_calls[0][0]["repoBlobUrl"],
                 "http://old-registry/v2/snapshots/blobs",
             )
             self.assertEqual(publisher.metrics()["snapshot_compactions"], 1)
@@ -241,10 +212,6 @@ class StorageNativeS3Tests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "missing"):
                 publisher.verify(publication)
-
-
-def digest(payload: bytes) -> str:
-    return f"sha256:{hashlib.sha256(payload).hexdigest()}"
 
 
 if __name__ == "__main__":

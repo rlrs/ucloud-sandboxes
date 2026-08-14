@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-import socket
 from tempfile import TemporaryDirectory
 import unittest
 
+from tests.storage_native_publisher_support import FakeExporter
 from ucloud_sandboxes.storage_native import StorageNativeLayer
 from ucloud_sandboxes.storage_native_registry import (
     PublishedStorageLayer,
@@ -83,63 +83,6 @@ class FakeRegistry:
         return payload
 
 
-class FakeExporter:
-    def __init__(
-        self,
-        payloads: dict[Path, bytes],
-        *,
-        compact_payload: bytes = b"compacted-layer",
-        wrong_digest: bool = False,
-    ):
-        self.payloads = payloads
-        self.compact_payload = compact_payload
-        self.wrong_digest = wrong_digest
-        self.compact_calls: list[tuple[dict, Path]] = []
-
-    def export_dense_layer(
-        self,
-        *,
-        source_layer_path: Path,
-        stream_socket_path: Path,
-    ) -> StorageNativeLayer:
-        payload = self.payloads[source_layer_path]
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.connect(str(stream_socket_path))
-            for offset in range(0, len(payload), 7):
-                connection.sendall(payload[offset : offset + 7])
-        digest = hashlib.sha256(payload).hexdigest()
-        if self.wrong_digest:
-            digest = "0" * 64
-        return StorageNativeLayer(
-            digest=f"sha256:{digest}",
-            size=len(payload),
-        )
-
-    def export_compacted_image(
-        self,
-        *,
-        source_image_config: Path,
-        global_config: Path,
-        stream_socket_path: Path,
-    ) -> StorageNativeLayer:
-        self.compact_calls.append(
-            (
-                json.loads(source_image_config.read_text(encoding="ascii")),
-                global_config,
-            )
-        )
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.connect(str(stream_socket_path))
-            connection.sendall(self.compact_payload)
-        digest = hashlib.sha256(self.compact_payload).hexdigest()
-        if self.wrong_digest:
-            digest = "0" * 64
-        return StorageNativeLayer(
-            digest=f"sha256:{digest}",
-            size=len(self.compact_payload),
-        )
-
-
 class StorageNativeRegistryTests(unittest.TestCase):
     def test_streams_layers_and_publishes_content_addressed_manifest(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -177,9 +120,7 @@ class StorageNativeRegistryTests(unittest.TestCase):
                 strict=True,
             ):
                 self.assertEqual(registry.blobs[layer.digest], payload)
-            manifest = json.loads(
-                registry.manifests[publication.tag].decode("ascii")
-            )
+            manifest = json.loads(registry.manifests[publication.tag].decode("ascii"))
             config_digest = manifest["config"]["digest"]
             config = json.loads(registry.blobs[config_digest].decode("ascii"))
             self.assertEqual(config["schema"], SNAPSHOT_SCHEMA)
@@ -270,7 +211,9 @@ class StorageNativeRegistryTests(unittest.TestCase):
             source, observed_global = exporter.compact_calls[0]
             self.assertEqual(observed_global, global_config)
             self.assertEqual(source["repoBlobUrl"], publisher.repo_blob_url)
-            self.assertEqual(source["lowers"][:2], [layer.to_dict() for layer in existing])
+            self.assertEqual(
+                source["lowers"][:2], [layer.to_dict() for layer in existing]
+            )
             self.assertEqual(source["lowers"][2], {"file": str(delta)})
             self.assertEqual(
                 publisher.metrics(),

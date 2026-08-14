@@ -391,6 +391,28 @@ consolidation recorded below:
   coverage collector; the retained-behavior inventory above is therefore the
   confidence measure for this pass rather than an unverified percentage.
 
+### 2026-08-14 - coverage-preserving shared-harness pass
+
+- Kept every remaining named test and behavioral assertion. This pass did not
+  delete or merge cases; all reductions came from shared setup, transport, and
+  lifecycle fixtures.
+- Control-plane tests now share temporary-root, gateway construction, and
+  URL-yielding server lifecycle helpers. CLI autoscaler workflows share their
+  canonical provider job, heartbeat, argument, temporary-root, and reconcile
+  setup instead of rebuilding the same durable environment inline.
+- SDK tests now use one scripted synchronous/asynchronous response transport
+  and shared Compose build-context/launch helpers. Storage Registry and S3
+  publisher tests use one exporter that still crosses the real Unix-socket
+  streaming boundary.
+- Root tests fell from 27,371 to 26,844 lines while retaining 545 discovered
+  tests. SDK tests fell from 2,991 to 2,861 lines while retaining all 53 tests.
+  Combined, shared fixtures removed another 657 lines (2.2%) with no reduction
+  in test count, bringing the suite to 29,705 lines and 598 tests.
+- Full root discovery passed on CPython 3.10.13 with 545 tests and four
+  environment-gated skips in 15.1 seconds. All 53 SDK tests passed on CPython
+  3.14.3 in 0.6 seconds. Root and SDK Ruff lint and diff whitespace validation
+  also passed. No dependency synchronization was performed.
+
 Residual coordination caveat: the root workflow pins the currently published
 SDK commit `96409ab`, and the compatibility pipeline passes against it. After
 the SDK changes in this remediation pass are committed and published, update

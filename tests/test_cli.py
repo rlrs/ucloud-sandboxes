@@ -1,5 +1,5 @@
 import argparse
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from datetime import timedelta
 from functools import wraps
@@ -133,6 +133,86 @@ def save_heartbeats(path: Path, heartbeats: dict[str, NodeHeartbeat]) -> None:
         store.upsert_heartbeat(heartbeat)
 
 
+def write_jobs(root: Path, *jobs: dict) -> Path:
+    path = root / "jobs.json"
+    path.write_text(json.dumps({"items": list(jobs)}), encoding="utf-8")
+    return path
+
+
+def owned_node_job(*, agent_version: bool = False) -> dict:
+    labels = {
+        "ucloud-sandboxes/node": "true",
+        "ucloud-sandboxes/deployment": "prod-a",
+    }
+    if agent_version:
+        labels["ucloud-sandboxes/agent-version"] = package_version()
+    return {
+        "id": "owned",
+        "owner": {"project": "project-1"},
+        "specification": {
+            "name": "ucloud-sandbox-node-owned",
+            "application": {"name": "vm-ubuntu", "version": "24.04"},
+            "product": {
+                "id": "cpu-amd-zen5-2-vcpu",
+                "category": "cpu-amd-zen5",
+            },
+            "labels": labels,
+        },
+        "status": {"state": "RUNNING"},
+    }
+
+
+def owned_heartbeat(**values) -> NodeHeartbeat:
+    fields = {
+        "node_id": "node-owned",
+        "job_id": "owned",
+        "deployment_id": "prod-a",
+        "updated_at": utc_now(),
+        "active_sandboxes": 0,
+        "node_url": "http://node-owned:8090",
+        "agent_version": package_version(),
+        "capabilities": ("disk-quota",),
+    }
+    fields.update(values)
+    return NodeHeartbeat(**fields)
+
+
+def autoscaler_args(jobs_file: Path, heartbeat_file: Path) -> argparse.Namespace:
+    return argparse.Namespace(
+        jobs_file=jobs_file,
+        control_state_file=heartbeat_file,
+        include_job=[],
+        execute=True,
+        pending_image_builds=0,
+        max_builder_nodes=0,
+        seed_prefix="test",
+    )
+
+
+@contextmanager
+def temporary_root():
+    with TemporaryDirectory() as raw_dir:
+        yield Path(raw_dir)
+
+
+def reconcile(
+    config: DeploymentConfig,
+    args: argparse.Namespace,
+    state: AutoscalerStateStore,
+    *,
+    demand: SandboxDemand | None = None,
+    **values,
+) -> dict:
+    return cli.run_reconcile_cycle(
+        config,
+        args,
+        demand=SandboxDemand() if demand is None else demand,
+        provider_state=state,
+        provider_mutations_allowed=True,
+        **values,
+    )
+
+
 def allow_fixture_mutations(test):
     """Run provider-journal unit cases against deterministic fixtures."""
 
@@ -249,8 +329,7 @@ class CliTests(unittest.TestCase):
             def __init__(self, *_args, **_kwargs) -> None:
                 raise AssertionError("provider client must not be constructed")
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with temporary_root() as root:
             jobs_file = root / "jobs.json"
             jobs_file.write_text('{"items": []}', encoding="utf-8")
             config_file = write_ucloud_config(root, deployment_id="prod-a")
@@ -290,8 +369,7 @@ class CliTests(unittest.TestCase):
             def delete_manifest(self, repository: str, digest: str) -> None:
                 self.deleted.append((repository, digest))
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with temporary_root() as root:
             usage_file = root / "registry-usage.sqlite"
             RegistryUsageStore(usage_file).acquire_lease(
                 "repo/a",
@@ -380,8 +458,7 @@ class CliTests(unittest.TestCase):
                 retrieve_calls.append((project_id, job_id, include_updates))
                 return job_payload(include_updates=include_updates)
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with temporary_root() as root:
             heartbeat_path = root / "control-state.sqlite"
             ControlStateStore(heartbeat_path).upsert_heartbeat(
                 build_heartbeat(
@@ -410,7 +487,7 @@ class CliTests(unittest.TestCase):
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
                 private_network_id="net-1",
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(min_nodes=1, max_nodes=2),
             )
             args = cli.build_parser().parse_args(
@@ -460,8 +537,7 @@ class CliTests(unittest.TestCase):
                 terminated.append(tuple(job_ids))
                 return {"responses": [{"id": job_id} for job_id in job_ids]}
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with temporary_root() as root:
             jobs_file = root / "jobs.json"
             jobs_file.write_text(
                 json.dumps(
@@ -550,8 +626,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["persistedNodeLossDemand"], [])
 
     def test_read_public_ssh_key_file_validates_single_openssh_key(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            key_file = Path(raw_dir) / "gateway-init.pub"
+        with temporary_root() as root:
+            key_file = root / "gateway-init.pub"
             key_file.write_text("ssh-ed25519 AAAA gateway\n", encoding="utf-8")
 
             self.assertEqual(
@@ -597,8 +673,7 @@ class CliTests(unittest.TestCase):
         original_client = cli.UCloudClient
         cli.UCloudClient = FailingUCloudClient
         try:
-            with TemporaryDirectory() as raw_dir:
-                root = Path(raw_dir)
+            with temporary_root() as root:
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text('{"items": []}', encoding="utf-8")
                 route_file = root / "routes.sqlite"
@@ -646,8 +721,7 @@ class CliTests(unittest.TestCase):
 
         original_client = cli.UCloudClient
         try:
-            with TemporaryDirectory() as raw_dir:
-                root = Path(raw_dir)
+            with temporary_root() as root:
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text('{"items": []}', encoding="utf-8")
                 route_file = root / "routes.sqlite"
@@ -716,8 +790,7 @@ class CliTests(unittest.TestCase):
         original_client = cli.UCloudClient
         cli.UCloudClient = AmbiguousUCloudClient
         try:
-            with TemporaryDirectory() as raw_dir:
-                root = Path(raw_dir)
+            with temporary_root() as root:
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text('{"items": []}', encoding="utf-8")
                 route_file = root / "routes.sqlite"
@@ -810,8 +883,7 @@ class CliTests(unittest.TestCase):
         original_client = cli.UCloudClient
         cli.UCloudClient = SuccessfulUCloudClient
         try:
-            with TemporaryDirectory() as raw_dir:
-                root = Path(raw_dir)
+            with temporary_root() as root:
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text('{"items": []}', encoding="utf-8")
                 route_file = root / "routes.sqlite"
@@ -911,39 +983,8 @@ class CliTests(unittest.TestCase):
             resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=8192),
             state="parked",
         )
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "owned",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-owned",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-2-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                        "ucloud-sandboxes/agent-version": package_version(),
-                                    },
-                                },
-                                "status": {"state": "RUNNING"},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job(agent_version=True))
             heartbeat_file = root / "control-state.sqlite"
 
             def heartbeat(*, token: str = "", inventory=True) -> NodeHeartbeat:
@@ -961,15 +1002,8 @@ class CliTests(unittest.TestCase):
                     if inventory
                     else ()
                 )
-                return NodeHeartbeat(
-                    node_id="node-owned",
-                    job_id="owned",
-                    deployment_id="prod-a",
-                    updated_at=utc_now(),
-                    active_sandboxes=0,
+                return owned_heartbeat(
                     idle_since=utc_now() - timedelta(minutes=10),
-                    node_url="http://node-owned:8090",
-                    agent_version=package_version(),
                     capabilities=(
                         "disk-quota",
                         "storage-native-v1",
@@ -995,18 +1029,10 @@ class CliTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
             )
-            args = argparse.Namespace(
-                jobs_file=jobs_file,
-                control_state_file=heartbeat_file,
-                include_job=[],
-                execute=True,
-                pending_image_builds=0,
-                max_builder_nodes=0,
-                seed_prefix="test",
-            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
             def post_drain(
@@ -1042,12 +1068,10 @@ class CliTests(unittest.TestCase):
                     side_effect=post_detach,
                 ),
             ):
-                detached = cli.run_reconcile_cycle(
+                detached = reconcile(
                     config,
                     args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
+                    state,
                     route_reservations={"owned": (route,)},
                 )
                 (intent,) = state.pending_drain_intents(deployment_id="prod-a")
@@ -1055,12 +1079,10 @@ class CliTests(unittest.TestCase):
                     heartbeat_file,
                     {"owned": heartbeat(token=intent.token, inventory=False)},
                 )
-                stopped = cli.run_reconcile_cycle(
+                stopped = reconcile(
                     config,
                     args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
+                    state,
                     route_reservations={},
                 )
 
@@ -1114,8 +1136,7 @@ class CliTests(unittest.TestCase):
         original_client = cli.UCloudClient
         cli.UCloudClient = FakeUCloudClient
         try:
-            with TemporaryDirectory() as raw_dir:
-                root = Path(raw_dir)
+            with temporary_root() as root:
                 jobs_file = root / "jobs.json"
                 jobs_file.write_text(
                     json.dumps(
@@ -1153,7 +1174,7 @@ class CliTests(unittest.TestCase):
                     project_id="project-1",
                     deployment_id="prod-a",
                     ucloud_session_file=str(root / "session.json"),
-                    data_root=raw_dir,
+                    data_root=str(root),
                     policy=ScalePolicy(max_stop_per_cycle=2, scale_down_idle_seconds=0),
                 )
                 args = argparse.Namespace(
@@ -1199,38 +1220,8 @@ class CliTests(unittest.TestCase):
                 terminate_calls.append(tuple(job_ids))
                 return {"responses": [{"id": job_id} for job_id in job_ids]}
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "owned",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-owned",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-2-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                    },
-                                },
-                                "status": {"state": "RUNNING"},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job())
             heartbeat_file = root / "control-state.sqlite"
 
             def save_heartbeat(
@@ -1242,16 +1233,9 @@ class CliTests(unittest.TestCase):
                 save_heartbeats(
                     heartbeat_file,
                     {
-                        "owned": NodeHeartbeat(
-                            node_id="node-owned",
-                            job_id="owned",
-                            deployment_id="prod-a",
+                        "owned": owned_heartbeat(
                             updated_at=updated_at or utc_now(),
-                            active_sandboxes=0,
                             idle_since=utc_now() - timedelta(minutes=10),
-                            node_url="http://node-owned:8090",
-                            agent_version=package_version(),
-                            capabilities=("disk-quota",),
                             draining=bool(token),
                             admission_open=not bool(token),
                             drain_token=token,
@@ -1268,22 +1252,14 @@ class CliTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(
                     max_stop_per_cycle=1,
                     scale_down_idle_seconds=0,
                     unreachable_stop_after_seconds=0,
                 ),
             )
-            args = argparse.Namespace(
-                jobs_file=jobs_file,
-                control_state_file=heartbeat_file,
-                include_job=[],
-                execute=True,
-                pending_image_builds=0,
-                max_builder_nodes=0,
-                seed_prefix="test",
-            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
             def post_drain(
@@ -1309,72 +1285,30 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
                 patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
-                failed_request = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                failed_request = reconcile(config, args, state)
                 (intent,) = state.pending_drain_intents(deployment_id="prod-a")
 
                 save_heartbeat(
                     token=intent.token,
                     updated_at=utc_now() - timedelta(hours=1),
                 )
-                stale = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                stale = reconcile(config, args, state)
                 save_heartbeat(token="wrong-token")
-                mismatch = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                mismatch = reconcile(config, args, state)
                 save_heartbeat(
                     token=intent.token,
                     reserved=ResourceQuantity(vcpu=1),
                 )
-                reserved = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                reserved = reconcile(config, args, state)
                 save_heartbeat()
-                acknowledged = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                acknowledged = reconcile(config, args, state)
                 save_heartbeat()
-                rearmed = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                rearmed = reconcile(config, args, state)
                 (replacement_intent,) = state.pending_drain_intents(
                     deployment_id="prod-a"
                 )
                 save_heartbeat(token=replacement_intent.token)
-                terminated = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                terminated = reconcile(config, args, state)
 
         self.assertEqual(terminate_calls, [("owned",)])
         self.assertEqual(len({token for token, _draining in drain_actions}), 2)
@@ -1408,51 +1342,14 @@ class CliTests(unittest.TestCase):
                 terminate_calls.append(tuple(job_ids))
                 return {"responses": [{"id": job_id} for job_id in job_ids]}
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "owned",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-owned",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-2-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                    },
-                                },
-                                "status": {"state": "RUNNING"},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job())
             heartbeat_file = root / "control-state.sqlite"
             save_heartbeats(
                 heartbeat_file,
                 {
-                    "owned": NodeHeartbeat(
-                        node_id="node-owned",
-                        job_id="owned",
-                        deployment_id="prod-a",
+                    "owned": owned_heartbeat(
                         updated_at=utc_now() - timedelta(hours=1),
-                        active_sandboxes=0,
-                        node_url="http://node-owned:8090",
-                        agent_version=package_version(),
-                        capabilities=("disk-quota",),
                         inventory_complete=True,
                     )
                 },
@@ -1461,21 +1358,13 @@ class CliTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(
                     max_stop_per_cycle=1,
                     unreachable_stop_after_seconds=1800,
                 ),
             )
-            args = argparse.Namespace(
-                jobs_file=jobs_file,
-                control_state_file=heartbeat_file,
-                include_job=[],
-                execute=True,
-                pending_image_builds=0,
-                max_builder_nodes=0,
-                seed_prefix="test",
-            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
             with (
@@ -1486,13 +1375,7 @@ class CliTests(unittest.TestCase):
                     side_effect=AssertionError("unreachable node must not be drained"),
                 ),
             ):
-                result = cli.run_reconcile_cycle(
-                    config,
-                    args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
+                result = reconcile(config, args, state)
 
         self.assertEqual(terminate_calls, [("owned",)])
         self.assertEqual(result["unreachableReadyStopJobIds"], ["owned"])
@@ -1515,52 +1398,14 @@ class CliTests(unittest.TestCase):
                 terminate_calls.append(tuple(job_ids))
                 return {"responses": [{"id": job_id} for job_id in job_ids]}
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "owned",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-owned",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-2-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                    },
-                                },
-                                "status": {"state": "RUNNING"},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job())
             heartbeat_file = root / "control-state.sqlite"
             save_heartbeats(
                 heartbeat_file,
                 {
-                    "owned": NodeHeartbeat(
-                        node_id="node-owned",
-                        job_id="owned",
-                        deployment_id="prod-a",
-                        updated_at=utc_now(),
-                        active_sandboxes=0,
+                    "owned": owned_heartbeat(
                         idle_since=utc_now() - timedelta(minutes=10),
-                        node_url="http://node-owned:8090",
-                        agent_version=package_version(),
-                        capabilities=("disk-quota",),
                         total_resources=ResourceQuantity(
                             vcpu=2,
                             memory_mb=6144,
@@ -1574,18 +1419,10 @@ class CliTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
             )
-            args = argparse.Namespace(
-                jobs_file=jobs_file,
-                control_state_file=heartbeat_file,
-                include_job=[],
-                execute=True,
-                pending_image_builds=0,
-                max_builder_nodes=0,
-                seed_prefix="test",
-            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
 
             cancel_attempts = 0
@@ -1616,26 +1453,18 @@ class CliTests(unittest.TestCase):
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
                 patch.object(cli, "_post_node_drain", side_effect=post_drain),
             ):
-                initial = cli.run_reconcile_cycle(
+                initial = reconcile(config, args, state)
+                rising = reconcile(
                     config,
                     args,
-                    demand=SandboxDemand(),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
-                )
-                rising = cli.run_reconcile_cycle(
-                    config,
-                    args,
+                    state,
                     demand=SandboxDemand(pending_resources=ResourceQuantity(vcpu=1)),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
                 )
-                acknowledged = cli.run_reconcile_cycle(
+                acknowledged = reconcile(
                     config,
                     args,
+                    state,
                     demand=SandboxDemand(pending_resources=ResourceQuantity(vcpu=1)),
-                    provider_state=state,
-                    provider_mutations_allowed=True,
                 )
             intent = state.get_drain_intent("prod-a", "owned")
 
@@ -1667,53 +1496,14 @@ class CliTests(unittest.TestCase):
                 terminate_calls.append(tuple(job_ids))
                 raise UCloudError("connection dropped during terminate")
 
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            jobs_file = root / "jobs.json"
-            jobs_file.write_text(
-                json.dumps(
-                    {
-                        "items": [
-                            {
-                                "id": "owned",
-                                "owner": {"project": "project-1"},
-                                "specification": {
-                                    "name": "ucloud-sandbox-node-owned",
-                                    "application": {
-                                        "name": "vm-ubuntu",
-                                        "version": "24.04",
-                                    },
-                                    "product": {
-                                        "id": "cpu-amd-zen5-2-vcpu",
-                                        "category": "cpu-amd-zen5",
-                                    },
-                                    "labels": {
-                                        "ucloud-sandboxes/node": "true",
-                                        "ucloud-sandboxes/deployment": "prod-a",
-                                        "ucloud-sandboxes/agent-version": package_version(),
-                                    },
-                                },
-                                "status": {"state": "RUNNING"},
-                            }
-                        ]
-                    }
-                ),
-                encoding="utf-8",
-            )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job(agent_version=True))
             heartbeat_file = root / "control-state.sqlite"
             save_heartbeats(
                 heartbeat_file,
                 {
-                    "owned": NodeHeartbeat(
-                        node_id="node-owned",
-                        job_id="owned",
-                        deployment_id="prod-a",
-                        updated_at=utc_now(),
-                        active_sandboxes=0,
+                    "owned": owned_heartbeat(
                         idle_since=utc_now() - timedelta(minutes=10),
-                        node_url="http://node-owned:8090",
-                        agent_version=package_version(),
-                        capabilities=("disk-quota",),
                     )
                 },
             )
@@ -1721,44 +1511,22 @@ class CliTests(unittest.TestCase):
                 project_id="project-1",
                 deployment_id="prod-a",
                 ucloud_session_file=str(root / "session.json"),
-                data_root=raw_dir,
+                data_root=str(root),
                 policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
             )
-            args = argparse.Namespace(
-                jobs_file=jobs_file,
-                control_state_file=heartbeat_file,
-                include_job=[],
-                execute=True,
-                pending_image_builds=0,
-                max_builder_nodes=0,
-                seed_prefix="test",
-            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
             original_client = cli.UCloudClient
             cli.UCloudClient = AmbiguousStopClient
             try:
                 with patch.object(cli, "_post_node_drain", return_value={}):
-                    first = cli.run_reconcile_cycle(
-                        config,
-                        args,
-                        demand=SandboxDemand(),
-                        provider_state=state,
-                        provider_mutations_allowed=True,
-                    )
+                    first = reconcile(config, args, state)
                     (intent,) = state.pending_drain_intents(deployment_id="prod-a")
                     save_heartbeats(
                         heartbeat_file,
                         {
-                            "owned": NodeHeartbeat(
-                                node_id="node-owned",
-                                job_id="owned",
-                                deployment_id="prod-a",
-                                updated_at=utc_now(),
-                                active_sandboxes=0,
+                            "owned": owned_heartbeat(
                                 idle_since=utc_now() - timedelta(minutes=10),
-                                node_url="http://node-owned:8090",
-                                agent_version=package_version(),
-                                capabilities=("disk-quota",),
                                 draining=True,
                                 admission_open=False,
                                 drain_token=intent.token,
@@ -1768,25 +1536,11 @@ class CliTests(unittest.TestCase):
                             )
                         },
                     )
-                    second = cli.run_reconcile_cycle(
-                        config,
-                        args,
-                        demand=SandboxDemand(),
-                        provider_state=state,
-                        provider_mutations_allowed=True,
-                    )
+                    second = reconcile(config, args, state)
                     save_heartbeats(
                         heartbeat_file,
                         {
-                            "owned": NodeHeartbeat(
-                                node_id="node-owned",
-                                job_id="owned",
-                                deployment_id="prod-a",
-                                updated_at=utc_now(),
-                                active_sandboxes=0,
-                                node_url="http://node-owned:8090",
-                                agent_version=package_version(),
-                                capabilities=("disk-quota",),
+                            "owned": owned_heartbeat(
                                 draining=True,
                                 admission_open=False,
                                 drain_token=intent.token,
@@ -1797,25 +1551,11 @@ class CliTests(unittest.TestCase):
                             )
                         },
                     )
-                    third = cli.run_reconcile_cycle(
-                        config,
-                        args,
-                        demand=SandboxDemand(),
-                        provider_state=state,
-                        provider_mutations_allowed=True,
-                    )
+                    third = reconcile(config, args, state)
                     save_heartbeats(
                         heartbeat_file,
                         {
-                            "owned": NodeHeartbeat(
-                                node_id="node-owned",
-                                job_id="owned",
-                                deployment_id="prod-a",
-                                updated_at=utc_now(),
-                                active_sandboxes=0,
-                                node_url="http://node-owned:8090",
-                                agent_version=package_version(),
-                                capabilities=("disk-quota",),
+                            "owned": owned_heartbeat(
                                 draining=True,
                                 admission_open=False,
                                 drain_token=intent.token,
@@ -1825,13 +1565,7 @@ class CliTests(unittest.TestCase):
                             )
                         },
                     )
-                    fourth = cli.run_reconcile_cycle(
-                        config,
-                        args,
-                        demand=SandboxDemand(),
-                        provider_state=state,
-                        provider_mutations_allowed=True,
-                    )
+                    fourth = reconcile(config, args, state)
             finally:
                 cli.UCloudClient = original_client
             remaining = ControlStateStore(heartbeat_file).load_heartbeats()

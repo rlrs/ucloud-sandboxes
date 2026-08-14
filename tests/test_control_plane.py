@@ -270,6 +270,21 @@ def _wait_for(predicate, *, timeout_seconds: float = 2.0) -> bool:
 
 
 @contextmanager
+def _temporary_root():
+    with TemporaryDirectory() as raw_dir:
+        yield Path(raw_dir)
+
+
+def _gateway_server(root: Path, *, heartbeat_file: Path | None = None, **kwargs):
+    return build_server(
+        "127.0.0.1",
+        0,
+        heartbeat_file or root / "control-state.sqlite",
+        **kwargs,
+    )
+
+
+@contextmanager
 def _running_server(server: ThreadingHTTPServer):
     thread = Thread(
         target=server.serve_forever,
@@ -278,7 +293,8 @@ def _running_server(server: ThreadingHTTPServer):
     )
     thread.start()
     try:
-        yield
+        host, port = server.server_address
+        yield f"http://{host}:{port}"
     finally:
         server.shutdown()
         thread.join(timeout=1)
@@ -340,8 +356,7 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 class ControlPlaneTests(unittest.TestCase):
     def test_parked_managed_job_status_is_gateway_state_and_does_not_wake(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             heartbeat_file = root / "control-state.sqlite"
             routing = RoutingStore(route_file)
@@ -394,10 +409,9 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory_complete=True,
                 )
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
             )
             proxied = Event()
@@ -407,29 +421,17 @@ class ControlPlaneTests(unittest.TestCase):
                 raise AssertionError("parked status must not reach a node")
 
             gateway.RequestHandlerClass._proxy_request = fail_proxy
-            thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = gateway.server_address
+            with _running_server(gateway) as gateway_url:
                 payload = self._json_request(
-                    f"http://{host}:{port}/v1/sandboxes/managed-one/jobs/rollout-1"
+                    f"{gateway_url}/v1/sandboxes/managed-one/jobs/rollout-1"
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                thread.join(timeout=1)
 
         self.assertFalse(proxied.is_set())
         self.assertEqual(payload["job"]["state"], "running")
         self.assertEqual(payload["job"]["sandbox_generation"], 1)
 
     def test_managed_job_status_uses_gateway_state_during_node_transition(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             heartbeat_file = root / "control-state.sqlite"
             routing = RoutingStore(route_file)
@@ -464,10 +466,9 @@ class ControlPlaneTests(unittest.TestCase):
                     updated_at="2026-08-03T00:00:00+00:00",
                 ),
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
             )
 
@@ -480,29 +481,16 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
             gateway.RequestHandlerClass._proxy_request = transition_response
-            thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = gateway.server_address
+            with _running_server(gateway) as gateway_url:
                 payload = self._json_request(
-                    f"http://{host}:{port}/v1/sandboxes/managed-transition/"
-                    "jobs/rollout-1"
+                    f"{gateway_url}/v1/sandboxes/managed-transition/jobs/rollout-1"
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                thread.join(timeout=1)
 
         self.assertEqual(payload["job"]["state"], "running")
         self.assertEqual(payload["job"]["sequence"], 2)
 
     def test_relay_lifecycle_persists_program_request_transitions(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             heartbeat_file = root / "control-state.sqlite"
             metrics_file = root / "metrics.sqlite"
@@ -535,10 +523,9 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory_complete=True,
                 )
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
                 metrics_file=metrics_file,
             )
@@ -554,15 +541,8 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
             gateway.RequestHandlerClass._proxy_request = fake_proxy_request
-            gateway_thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            gateway_thread.start()
-            try:
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
+            with _running_server(gateway) as gateway_url:
+                base = f"{gateway_url}/v1/sandboxes/{route.sandbox_id}"
                 identity = {
                     "generation": route.generation,
                     "operation_id": "relay-lifecycle:request-1",
@@ -593,10 +573,6 @@ class ControlPlaneTests(unittest.TestCase):
                         "program_wake_actual",
                     ),
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                gateway_thread.join(timeout=1)
 
         self.assertEqual(len(records), 1)
         self.assertEqual(
@@ -633,8 +609,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_failed_wake_rolls_route_back_and_deduplicates_program_error(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             heartbeat_file = root / "control-state.sqlite"
             metrics_file = root / "metrics.sqlite"
@@ -663,10 +638,9 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory_complete=True,
                 )
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
                 metrics_file=metrics_file,
             )
@@ -679,15 +653,8 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
             gateway.RequestHandlerClass._proxy_request = failed_wake
-            gateway_thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            gateway_thread.start()
-            try:
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}"
+            with _running_server(gateway) as gateway_url:
+                base = f"{gateway_url}/v1/sandboxes/{route.sandbox_id}"
                 identity = {
                     "generation": route.generation,
                     "operation_id": "relay-wake:request-1",
@@ -715,10 +682,6 @@ class ControlPlaneTests(unittest.TestCase):
                     max_events=20,
                     kinds=("program_state_transition", "program_wake_shadow_plan"),
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                gateway_thread.join(timeout=1)
 
         self.assertEqual(first["status"], 503)
         self.assertEqual(second["status"], 503)
@@ -737,8 +700,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_successful_exec_implicitly_commits_parked_route_wake(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             heartbeat_file = root / "control-state.sqlite"
             snapshot = _portable_snapshot("sandbox-implicit-wake")
@@ -773,10 +735,9 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory_complete=True,
                 )
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
             )
 
@@ -788,10 +749,9 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
             gateway.RequestHandlerClass._proxy_request = successful_exec
-            with _running_server(gateway):
-                host, port = gateway.server_address
+            with _running_server(gateway) as base:
                 response = self._json_request(
-                    f"http://{host}:{port}/v1/sandboxes/{route.sandbox_id}/exec",
+                    f"{base}/v1/sandboxes/{route.sandbox_id}/exec",
                     method="POST",
                     payload={
                         "command": ["true"],
@@ -814,8 +774,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored.storage_snapshot, {})
 
     def test_worker_detach_retries_ambiguous_eviction_and_commits_once(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             snapshot = _portable_snapshot("sandbox-1")
             route = routing.upsert_sandbox(
@@ -886,8 +845,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_worker_detach_publishes_park_before_eviction(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             snapshot = _portable_snapshot("sandbox-1")
             route = routing.upsert_sandbox(
@@ -977,8 +935,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_detached_park_wakes_without_contacting_former_worker(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             snapshot = _portable_snapshot("sandbox-1")
             route = routing.upsert_sandbox(
@@ -1085,8 +1042,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_attached_park_never_uses_registry_failover_without_source_proof(
         self,
     ) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             snapshot = _portable_snapshot("sandbox-1")
             route = routing.upsert_sandbox(
@@ -1164,27 +1120,24 @@ class ControlPlaneTests(unittest.TestCase):
             def log_message(self, *_args: object) -> None:
                 return
 
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             node = ThreadingHTTPServer(("127.0.0.1", 0), NodeProbeHandler)
-            with _running_server(node):
-                node_host, node_port = node.server_address
+            with _running_server(node) as node_url:
                 heartbeat_file, route_file = _seed_gateway_node(
-                    Path(raw_dir),
-                    node_url=f"http://{node_host}:{node_port}",
+                    root,
+                    node_url=node_url,
                     sandbox_id="auth-one",
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    heartbeat_file,
+                gateway = _gateway_server(
+                    root,
+                    heartbeat_file=heartbeat_file,
                     routing_file=route_file,
                     gateway_bearer_token="gateway-secret",
                     node_control_bearer_token="node-secret",
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
+                with _running_server(gateway) as gateway_url:
                     payload = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes/auth-one",
+                        f"{gateway_url}/v1/sandboxes/auth-one",
                         headers={
                             "Authorization": "Bearer gateway-secret",
                             "X-UCloud-Sandbox-Token": "gateway-secret",
@@ -1200,17 +1153,15 @@ class ControlPlaneTests(unittest.TestCase):
     def test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment(
         self,
     ) -> None:
-        with TemporaryDirectory() as raw_dir:
-            heartbeat_file = Path(raw_dir) / "control-state.sqlite"
-            server = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+        with _temporary_root() as root:
+            heartbeat_file = root / "control-state.sqlite"
+            server = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 deployment_id="prod-a",
             )
-            with _running_server(server):
-                host, port = server.server_address
-                base = f"http://{host}:{port}/v1/nodes/heartbeat"
+            with _running_server(server) as server_url:
+                base = f"{server_url}/v1/nodes/heartbeat"
                 rejected = post_heartbeat(
                     base,
                     build_heartbeat(
@@ -1275,8 +1226,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_wake_image_pull_does_not_hold_global_placement_lock(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
             resources = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=8192)
             parked = routing.upsert_sandbox(
@@ -1421,8 +1371,7 @@ class ControlPlaneTests(unittest.TestCase):
             def log_message(self, format: str, *args: object) -> None:
                 del format, args
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             image_file = raw_path / "images.json"
             registry = ThreadingHTTPServer(
                 ("127.0.0.1", 0),
@@ -1444,17 +1393,14 @@ class ControlPlaneTests(unittest.TestCase):
                         pushed=True,
                     )
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=raw_path / "routes.sqlite",
                     image_file=image_file,
                     registry_url=f"http://{registry_host}:{registry_port}",
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    images = self._json_request(f"http://{host}:{port}/v1/images")
+                with _running_server(gateway) as gateway_url:
+                    images = self._json_request(f"{gateway_url}/v1/images")
 
             self.assertEqual(images["images"], [])
             self.assertEqual(ImageStore(image_file).load(), {})
@@ -1467,25 +1413,22 @@ class ControlPlaneTests(unittest.TestCase):
             def log_message(self, format: str, *args: object) -> None:
                 del format, args
 
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             node = ThreadingHTTPServer(("127.0.0.1", 0), DisconnectingHandler)
-            with _running_server(node):
-                node_host, node_port = node.server_address
+            with _running_server(node) as node_url:
                 heartbeat_file, route_file = _seed_gateway_node(
-                    Path(raw_dir),
-                    node_url=f"http://{node_host}:{node_port}",
+                    root,
+                    node_url=node_url,
                     sandbox_id="disconnect-one",
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    heartbeat_file,
+                gateway = _gateway_server(
+                    root,
+                    heartbeat_file=heartbeat_file,
                     routing_file=route_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
+                with _running_server(gateway) as gateway_url:
                     response = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes/disconnect-one",
+                        f"{gateway_url}/v1/sandboxes/disconnect-one",
                         allow_error=True,
                     )
 
@@ -1536,13 +1479,10 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), ListingNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
-                node_url = f"http://{node_host}:{node_port}"
+            with _running_server(node) as node_url:
                 RoutingStore(route_file).upsert_sandbox(
                     _sandbox_route(
                         sandbox_id="cached-one",
@@ -1561,15 +1501,11 @@ class ControlPlaneTests(unittest.TestCase):
                         spec_hash=spec_hash,
                     )
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     result = post_heartbeat(
                         f"{base}/v1/nodes/heartbeat",
                         build_heartbeat(
@@ -1606,39 +1542,34 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored.state if stored is not None else None, "running")
 
     def test_gateway_rejects_unavailable_registry_usage_state(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             usage_path = raw_path / "registry-usage.json"
             usage_path.mkdir()
             with self.assertRaisesRegex(
                 ValueError,
                 "registry usage database is invalid or unavailable",
             ):
-                build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                _gateway_server(
+                    raw_path,
                     registry_usage_file=usage_path,
                 )
 
     def test_gateway_sdk_and_heartbeat_tokens_are_channel_scoped(self) -> None:
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "control-state.sqlite",
-                routing_file=Path(raw_dir) / "routes.sqlite",
-                image_file=Path(raw_dir) / "images.json",
-                metrics_file=Path(raw_dir) / "metrics.sqlite",
+                root / "control-state.sqlite",
+                routing_file=root / "routes.sqlite",
+                image_file=root / "images.json",
+                metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with _running_server(gateway) as base:
                 heartbeat = build_heartbeat(
                     job_id="job-1",
                     node_id="node-1",
@@ -1705,7 +1636,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(gateway_token_in_public_link_header["sandboxes"], [])
 
     def test_build_server_requires_distinct_nonempty_credentials(self) -> None:
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             for credentials in (
                 {
                     "gateway_bearer_token": "",
@@ -1733,33 +1664,32 @@ class ControlPlaneTests(unittest.TestCase):
                     _build_server(
                         "127.0.0.1",
                         0,
-                        Path(raw_dir) / "control-state.sqlite",
-                        routing_file=Path(raw_dir) / "routes.sqlite",
-                        image_file=Path(raw_dir) / "images.json",
-                        metrics_file=Path(raw_dir) / "metrics.sqlite",
+                        root / "control-state.sqlite",
+                        routing_file=root / "routes.sqlite",
+                        image_file=root / "images.json",
+                        metrics_file=root / "metrics.sqlite",
                         deployment_id="test-deployment",
                         **credentials,
                     )
 
     def test_authenticated_malformed_heartbeat_returns_bad_request(self) -> None:
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             gateway = _build_server(
                 "127.0.0.1",
                 0,
-                Path(raw_dir) / "control-state.sqlite",
-                routing_file=Path(raw_dir) / "routes.sqlite",
-                image_file=Path(raw_dir) / "images.json",
-                metrics_file=Path(raw_dir) / "metrics.sqlite",
+                root / "control-state.sqlite",
+                routing_file=root / "routes.sqlite",
+                image_file=root / "images.json",
+                metrics_file=root / "metrics.sqlite",
                 gateway_bearer_token="gateway-secret",
                 sandbox_api_token="sandbox-api-secret",
                 heartbeat_bearer_token="heartbeat-secret",
                 node_control_bearer_token="node-secret",
                 deployment_id="test-deployment",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
+            with _running_server(gateway) as gateway_url:
                 response = self._json_request(
-                    f"http://{host}:{port}/v1/nodes/heartbeat",
+                    f"{gateway_url}/v1/nodes/heartbeat",
                     method="POST",
                     headers={"Authorization": "Bearer heartbeat-secret"},
                     payload={
@@ -1779,8 +1709,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(response["body"], {"error": "invalid heartbeat payload"})
 
     def test_heartbeat_identity_is_bound_to_authoritative_route(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             RoutingStore(route_file).upsert_sandbox(
                 _sandbox_route(
@@ -1806,16 +1735,9 @@ class ControlPlaneTests(unittest.TestCase):
                 node_control_bearer_token="node-secret",
                 deployment_id="prod",
             )
-            thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = gateway.server_address
+            with _running_server(gateway) as gateway_url:
                 response = post_heartbeat_with_headers(
-                    f"http://{host}:{port}/v1/nodes/heartbeat",
+                    f"{gateway_url}/v1/nodes/heartbeat",
                     build_heartbeat(
                         job_id="job-1",
                         node_id="node-1",
@@ -1826,18 +1748,13 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                     {"Authorization": "Bearer heartbeat-secret"},
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                thread.join(timeout=1)
             stored = ControlStateStore(root / "control-state.sqlite").load_heartbeats()
 
         self.assertEqual(response.status, 403)
         self.assertEqual(stored, {})
 
     def test_heartbeat_rejects_node_url_owned_by_another_route(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
+        with _temporary_root() as root:
             route_file = root / "routes.sqlite"
             RoutingStore(route_file).upsert_sandbox(
                 _sandbox_route(
@@ -1863,16 +1780,9 @@ class ControlPlaneTests(unittest.TestCase):
                 node_control_bearer_token="node-secret",
                 deployment_id="prod",
             )
-            thread = Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = gateway.server_address
+            with _running_server(gateway) as gateway_url:
                 response = post_heartbeat_with_headers(
-                    f"http://{host}:{port}/v1/nodes/heartbeat",
+                    f"{gateway_url}/v1/nodes/heartbeat",
                     build_heartbeat(
                         job_id="job-1",
                         node_id="node-1",
@@ -1883,28 +1793,20 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                     {"Authorization": "Bearer heartbeat-secret"},
                 )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                thread.join(timeout=1)
             stored = ControlStateStore(root / "control-state.sqlite").load_heartbeats()
 
         self.assertEqual(response.status, 403)
         self.assertEqual(stored, {})
 
     def test_dashboard_assets_are_public_but_metrics_remain_protected(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                Path(raw_dir) / "control-state.sqlite",
-                routing_file=Path(raw_dir) / "routes.sqlite",
+        with _temporary_root() as root:
+            gateway = _gateway_server(
+                root,
+                routing_file=root / "routes.sqlite",
                 gateway_bearer_token="secret-token",
-                metrics_file=Path(raw_dir) / "metrics.sqlite",
+                metrics_file=root / "metrics.sqlite",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with _running_server(gateway) as base:
                 with request.urlopen(f"{base}/dashboard", timeout=5) as response:
                     html = response.read().decode("utf-8")
                     html_type = response.headers.get("Content-Type")
@@ -1960,24 +1862,20 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(authorized_metrics["nodes"]["total"], 0)
 
     def test_gateway_placement_contention_fails_fast_with_retryable_json(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+        with _temporary_root() as raw_path:
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.sqlite",
                 metrics_file=raw_path / "metrics.sqlite",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
+            with _running_server(gateway) as base:
                 self.assertTrue(
                     control_plane._GATEWAY_SCHEDULING_LOCK.acquire(blocking=False)
                 )
                 started = monotonic()
                 try:
                     result = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes",
+                        f"{base}/v1/sandboxes",
                         method="POST",
                         payload={
                             "id": "placement-busy",
@@ -1991,7 +1889,7 @@ class ControlPlaneTests(unittest.TestCase):
                 finally:
                     control_plane._GATEWAY_SCHEDULING_LOCK.release()
                 elapsed = monotonic() - started
-                metrics = self._json_request(f"http://{host}:{port}/v1/metrics")
+                metrics = self._json_request(f"{base}/v1/metrics")
 
         self.assertEqual(result["status"], 503)
         self.assertTrue(result["body"]["retryable"])
@@ -2001,21 +1899,17 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertFalse(metrics["telemetry"]["enabled"])
 
     def test_gateway_create_burst_returns_only_retryable_json(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+        with _temporary_root() as raw_path:
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.sqlite",
                 max_concurrent_sandbox_creates=8,
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
+            with _running_server(gateway) as base:
 
                 def create(index: int) -> dict:
                     return self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes",
+                        f"{base}/v1/sandboxes",
                         method="POST",
                         payload={
                             "id": f"overload-{index}",
@@ -2046,12 +1940,10 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertLess(elapsed, 5)
 
     def test_gateway_create_admission_precedes_body_read_and_caps_json(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                Path(raw_dir) / "control-state.sqlite",
-                routing_file=Path(raw_dir) / "routes.sqlite",
+        with _temporary_root() as root:
+            gateway = _gateway_server(
+                root,
+                routing_file=root / "routes.sqlite",
                 max_concurrent_sandbox_creates=1,
             )
             with _running_server(gateway):
@@ -2135,76 +2027,53 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), SlowCreateNode)
-            node_thread = Thread(
-                target=node.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            node_thread.start()
-            try:
-                node_host, node_port = node.server_address
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+            with _running_server(node) as node_url:
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     metrics_file=raw_path / "metrics.sqlite",
                 )
-                gateway_thread = Thread(
-                    target=gateway.serve_forever,
-                    kwargs={"poll_interval": 0.01},
-                    daemon=True,
-                )
-                gateway_thread.start()
-                try:
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
-                    result = post_heartbeat(
-                        f"{base}/v1/nodes/heartbeat",
-                        build_heartbeat(
-                            job_id="job-1",
-                            node_id="node-1",
-                            node_url=f"http://{node_host}:{node_port}",
-                            capabilities=("sandbox", "image-cache", "disk-quota"),
-                            cached_images=("busybox",),
-                            total_resources=ResourceQuantity(
-                                vcpu=4,
-                                memory_mb=4096,
-                                disk_mb=8192,
+                with _running_server(gateway) as base:
+                    try:
+                        result = post_heartbeat(
+                            f"{base}/v1/nodes/heartbeat",
+                            build_heartbeat(
+                                job_id="job-1",
+                                node_id="node-1",
+                                node_url=node_url,
+                                capabilities=("sandbox", "image-cache", "disk-quota"),
+                                cached_images=("busybox",),
+                                total_resources=ResourceQuantity(
+                                    vcpu=4,
+                                    memory_mb=4096,
+                                    disk_mb=8192,
+                                ),
                             ),
-                        ),
-                    )
-                    self.assertEqual(result.status, 200)
-
-                    with ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(
-                            self._json_request,
-                            f"{base}/v1/sandboxes",
-                            method="POST",
-                            payload={
-                                "id": "slow-one",
-                                "image": "busybox",
-                                "cpus": 1,
-                                "memory_mb": 512,
-                                "disk_mb": 1024,
-                            },
                         )
-                        self.assertTrue(SlowCreateNode.started.wait(timeout=5))
-                        route = RoutingStore(route_file).get_sandbox("slow-one")
+                        self.assertEqual(result.status, 200)
+
+                        with ThreadPoolExecutor(max_workers=1) as executor:
+                            future = executor.submit(
+                                self._json_request,
+                                f"{base}/v1/sandboxes",
+                                method="POST",
+                                payload={
+                                    "id": "slow-one",
+                                    "image": "busybox",
+                                    "cpus": 1,
+                                    "memory_mb": 512,
+                                    "disk_mb": 1024,
+                                },
+                            )
+                            self.assertTrue(SlowCreateNode.started.wait(timeout=5))
+                            route = RoutingStore(route_file).get_sandbox("slow-one")
+                            SlowCreateNode.release.set()
+                            created = future.result(timeout=5)
+                    finally:
                         SlowCreateNode.release.set()
-                        created = future.result(timeout=5)
-                finally:
-                    SlowCreateNode.release.set()
-                    gateway.shutdown()
-                    gateway.server_close()
-            finally:
-                SlowCreateNode.release.set()
-                node.shutdown()
-                node.server_close()
 
         self.assertIsNotNone(route)
         self.assertEqual(created["sandbox"]["spec"]["id"], "slow-one")
@@ -2238,12 +2107,10 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), PlannedNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
+            with _running_server(node) as node_url:
                 spec = SandboxSpec(
                     id="planned-one",
                     image="busybox",
@@ -2264,7 +2131,7 @@ class ControlPlaneTests(unittest.TestCase):
                         sandbox_id=spec.id,
                         node_id="node-1",
                         job_id="job-1",
-                        node_url=f"http://{node_host}:{node_port}",
+                        node_url=node_url,
                         resources=spec.requested_resources(),
                         spec=spec.to_dict(),
                         state="planned",
@@ -2273,16 +2140,13 @@ class ControlPlaneTests(unittest.TestCase):
                         spec_hash=spec_hash,
                     )
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
+                with _running_server(gateway) as gateway_url:
                     result = self._json_request(
-                        f"http://{host}:{port}/v1/sandboxes/{spec.id}/exec",
+                        f"{gateway_url}/v1/sandboxes/{spec.id}/exec",
                         method="POST",
                         payload={"command": ["/bin/true"]},
                         allow_error=True,
@@ -2341,14 +2205,11 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), AmbiguousCreateNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
-                node_url = f"http://{node_host}:{node_port}"
+            with _running_server(node) as node_url:
                 image_ref = "registry.example.org/repo:v1@sha256:" + "a" * 64
                 heartbeat = build_heartbeat(
                     job_id="job-1",
@@ -2365,16 +2226,12 @@ class ControlPlaneTests(unittest.TestCase):
                     inventory=(),
                     inventory_complete=True,
                 )
-                first_gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                first_gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                with _running_server(first_gateway):
-                    host, port = first_gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(first_gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
@@ -2395,16 +2252,12 @@ class ControlPlaneTests(unittest.TestCase):
                     )
                     before_restart = RegistryUsageStore(usage_file).snapshot()
 
-                second_gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                second_gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                with _running_server(second_gateway):
-                    host, port = second_gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(second_gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
@@ -2459,29 +2312,23 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), ClosedAdmissionNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
+            with _running_server(node) as node_url:
                 image = "busybox"
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
                             build_heartbeat(
                                 job_id="job-1",
                                 node_id="node-1",
-                                node_url=f"http://{node_host}:{node_port}",
+                                node_url=node_url,
                                 capabilities=(
                                     "sandbox",
                                     "image-cache",
@@ -2547,30 +2394,24 @@ class ControlPlaneTests(unittest.TestCase):
                 del image_refs, when
                 raise OSError("usage store unavailable")
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             node = ThreadingHTTPServer(("127.0.0.1", 0), CountingNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
+            with _running_server(node) as node_url:
                 image = "registry.example.org/repo:v1"
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     registry_usage_file=raw_path / "registry-usage.json",
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
                             build_heartbeat(
                                 job_id="job-1",
                                 node_id="node-1",
-                                node_url=f"http://{node_host}:{node_port}",
+                                node_url=node_url,
                                 capabilities=(
                                     "sandbox",
                                     "image-cache",
@@ -2613,7 +2454,7 @@ class ControlPlaneTests(unittest.TestCase):
                             sandbox_id=retry_spec.id,
                             node_id="node-1",
                             job_id="job-1",
-                            node_url=f"http://{node_host}:{node_port}",
+                            node_url=node_url,
                             resources=retry_spec.requested_resources(),
                             spec=retry_spec.to_dict(),
                         ),
@@ -2654,24 +2495,20 @@ class ControlPlaneTests(unittest.TestCase):
         self,
     ) -> None:
         digest = "sha256:" + "7" * 64
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+        with _temporary_root() as raw_path:
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.sqlite",
                 registry_url="http://registry.invalid:5000",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
+            with _running_server(gateway) as base:
                 with patch.object(
                     control_plane.RegistryClient,
                     "ensure_digest_protection_tag",
                     side_effect=OSError("registry unavailable"),
                 ):
                     prepared = self._json_request(
-                        f"http://{host}:{port}/v1/capacity/prepare",
+                        f"{base}/v1/capacity/prepare",
                         method="POST",
                         payload={
                             "id": "unprotected-digest",
@@ -2692,13 +2529,10 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(stored_prepared, [])
 
     def test_failed_sandbox_pull_persists_incarnation_demand_until_cancel(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=route_file,
             )
             gateway.RequestHandlerClass._ensure_image_on_node = (  # type: ignore[attr-defined]
@@ -2708,9 +2542,7 @@ class ControlPlaneTests(unittest.TestCase):
                     b'{"error":"registry unavailable"}',
                 )
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with _running_server(gateway) as base:
                 self.assertEqual(
                     post_heartbeat(
                         f"{base}/v1/nodes/heartbeat",
@@ -2801,14 +2633,11 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), FailingDeleteNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
-                node_url = f"http://{node_host}:{node_port}"
+            with _running_server(node) as node_url:
                 routing_store = RoutingStore(route_file)
                 routing_store.upsert_sandbox(
                     _sandbox_route(
@@ -2839,16 +2668,12 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                     digest="sha256:" + "a" * 64,
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     posted = post_heartbeat(
                         f"{base}/v1/nodes/heartbeat",
                         build_heartbeat(
@@ -2913,14 +2738,11 @@ class ControlPlaneTests(unittest.TestCase):
                 self.end_headers()
                 self.wfile.write(body)
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             route_file = raw_path / "routes.sqlite"
             usage_file = raw_path / "registry-usage.json"
             node = ThreadingHTTPServer(("127.0.0.1", 0), SuccessfulDeleteNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
-                node_url = f"http://{node_host}:{node_port}"
+            with _running_server(node) as node_url:
                 routing_store = RoutingStore(route_file)
                 routing_store.upsert_sandbox(
                     _sandbox_route(
@@ -2949,16 +2771,12 @@ class ControlPlaneTests(unittest.TestCase):
                     ),
                     digest="sha256:" + "a" * 64,
                 )
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=route_file,
                     registry_usage_file=usage_file,
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
@@ -3004,16 +2822,15 @@ class ControlPlaneTests(unittest.TestCase):
                 read_sizes.append(size)
                 return b"x" * 9
 
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             heartbeat_file, route_file = _seed_gateway_node(
-                Path(raw_dir),
+                root,
                 node_url="http://node.invalid:8090",
                 sandbox_id="bounded-one",
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
             )
             with _running_server(gateway):
@@ -3064,16 +2881,15 @@ class ControlPlaneTests(unittest.TestCase):
                 del remaining[:size]
                 return chunk
 
-        with TemporaryDirectory() as raw_dir:
+        with _temporary_root() as root:
             heartbeat_file, route_file = _seed_gateway_node(
-                Path(raw_dir),
+                root,
                 node_url="http://node.invalid:8090",
                 sandbox_id="file-one",
             )
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                heartbeat_file,
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
                 routing_file=route_file,
             )
             with _running_server(gateway):
@@ -3111,8 +2927,7 @@ class ControlPlaneTests(unittest.TestCase):
     ) -> None:
         archive = _tar_gz_context({"Dockerfile": b"FROM scratch\n"})
         digest = f"sha256:{hashlib.sha256(archive).hexdigest()}"
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             gateway_contexts = raw_path / "gateway-contexts"
             builder_contexts = raw_path / "builder-contexts"
             runtime = ContextRecordingRuntime()
@@ -3127,28 +2942,17 @@ class ControlPlaneTests(unittest.TestCase):
                 node_control_bearer_token="node-secret",
                 build_context_store_dir=builder_contexts,
             )
-            Thread(
-                target=builder.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            ).start()
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.json",
                 gateway_bearer_token="gateway-secret",
                 node_control_bearer_token="node-secret",
                 build_context_store_dir=gateway_contexts,
             )
-            Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            ).start()
-            try:
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with (
+                _running_server(builder) as builder_url,
+                _running_server(gateway) as base,
+            ):
 
                 def upload(
                     target_digest: str,
@@ -3206,13 +3010,12 @@ class ControlPlaneTests(unittest.TestCase):
                     ).is_file()
                 )
 
-                builder_host, builder_port = builder.server_address
                 heartbeat = post_heartbeat_with_headers(
                     f"{base}/v1/nodes/heartbeat",
                     build_heartbeat(
                         job_id="job-builder",
                         node_id="builder-1",
-                        node_url=f"http://{builder_host}:{builder_port}",
+                        node_url=builder_url,
                         capabilities=("image-cache", "image-build", "snapshot"),
                         total_resources=ResourceQuantity(
                             vcpu=16, memory_mb=49152, disk_mb=200000
@@ -3259,12 +3062,6 @@ class ControlPlaneTests(unittest.TestCase):
                     allow_error=True,
                 )
 
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                builder.shutdown()
-                builder.server_close()
-
             self.assertEqual(unauthorized[0], 401)
             self.assertEqual(mismatch[0], 400)
             self.assertIn("digest mismatch", mismatch[1]["error"])
@@ -3308,17 +3105,12 @@ class ControlPlaneTests(unittest.TestCase):
             )
 
     def test_gateway_records_pending_demand_when_no_node_can_fit(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+        with _temporary_root() as raw_path:
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.json",
             )
-            with _running_server(gateway):
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with _running_server(gateway) as base:
                 result = self._json_request(
                     f"{base}/v1/sandboxes",
                     method="POST",
@@ -3406,28 +3198,22 @@ class ControlPlaneTests(unittest.TestCase):
             def log_message(self, format: str, *args: object) -> None:
                 del format, args
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             node = ThreadingHTTPServer(("127.0.0.1", 0), ImageNode)
-            with _running_server(node):
-                node_host, node_port = node.server_address
-                gateway = build_server(
-                    "127.0.0.1",
-                    0,
-                    raw_path / "control-state.sqlite",
+            with _running_server(node) as node_url:
+                gateway = _gateway_server(
+                    raw_path,
                     routing_file=raw_path / "routes.sqlite",
                     registry_url="http://127.0.0.1:9",
                 )
-                with _running_server(gateway):
-                    host, port = gateway.server_address
-                    base = f"http://{host}:{port}"
+                with _running_server(gateway) as base:
                     self.assertEqual(
                         post_heartbeat(
                             f"{base}/v1/nodes/heartbeat",
                             build_heartbeat(
                                 job_id="job-1",
                                 node_id="node-1",
-                                node_url=f"http://{node_host}:{node_port}",
+                                node_url=node_url,
                                 capabilities=("sandbox", "image-cache"),
                                 cached_images=(mutable,),
                                 total_resources=ResourceQuantity(
@@ -3479,36 +3265,23 @@ class ControlPlaneTests(unittest.TestCase):
             def log_message(self, format: str, *args: object) -> None:
                 del format, args
 
-        with TemporaryDirectory() as raw_dir:
-            raw_path = Path(raw_dir)
+        with _temporary_root() as raw_path:
             node = ThreadingHTTPServer(("127.0.0.1", 0), CountingNode)
-            Thread(
-                target=node.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            ).start()
-            gateway = build_server(
-                "127.0.0.1",
-                0,
-                raw_path / "control-state.sqlite",
+            gateway = _gateway_server(
+                raw_path,
                 routing_file=raw_path / "routes.sqlite",
             )
-            Thread(
-                target=gateway.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            ).start()
-            try:
-                node_host, node_port = node.server_address
-                host, port = gateway.server_address
-                base = f"http://{host}:{port}"
+            with (
+                _running_server(node) as node_url,
+                _running_server(gateway) as base,
+            ):
                 self.assertEqual(
                     post_heartbeat(
                         f"{base}/v1/nodes/heartbeat",
                         build_heartbeat(
                             job_id="job-1",
                             node_id="node-1",
-                            node_url=f"http://{node_host}:{node_port}",
+                            node_url=node_url,
                             capabilities=("sandbox", "image-cache", "disk-quota"),
                             cached_images=("busybox",),
                             total_resources=ResourceQuantity(
@@ -3535,11 +3308,6 @@ class ControlPlaneTests(unittest.TestCase):
                         },
                         allow_error=True,
                     )
-            finally:
-                gateway.shutdown()
-                gateway.server_close()
-                node.shutdown()
-                node.server_close()
 
         self.assertEqual(response["status"], 409)
         self.assertEqual(CountingNode.creates, 0)

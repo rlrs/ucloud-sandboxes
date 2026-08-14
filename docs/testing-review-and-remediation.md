@@ -1,8 +1,8 @@
 # Test-suite review and remediation ledger
 
-Status: first remediation and subtractive quality passes implemented and
-locally validated on 2026-08-14. The infrastructure-dependent and larger
-architectural tiers listed below remain outstanding.
+Status: remediation, subtractive, and behavior-architecture passes implemented
+and locally validated on 2026-08-14. The infrastructure-dependent tiers listed
+below remain outstanding.
 
 This document persists the repository-wide test review and tracks the work
 needed to turn its findings into simpler, stronger tests. The central finding
@@ -175,6 +175,30 @@ Small finite recovery classifiers should use exhaustive truth tables instead
 of randomized generation. Crash consistency and races should use deterministic
 failpoints and process orchestration rather than relying on scheduler timing.
 
+## Test ownership rules
+
+These rules are the basis for future additions and for the aggressive
+consolidation recorded below:
+
+- A public behavior has one primary owning tier. CLI tests own parsing, wiring,
+  safety fences, and complete operator workflows; they do not duplicate policy,
+  routing, provider, or persistence algorithms.
+- State machines own combinations of durable transitions, replay, restart, and
+  stale identities. Named examples remain only for distinct incidents, crash
+  boundaries, security failures, or unusually diagnostic edge cases.
+- Property tests own broad input spaces and algebraic rules. A new fixed example
+  must demonstrate a boundary not already expressed by the property or serve as
+  a readable regression for a real defect.
+- Real HTTP, process, socket, registry, and object-store contracts own transport
+  behavior. Mocked request choreography should be limited to failures that a
+  local contract cannot deterministically induce.
+- Exact SQL, cache, queue, call-count, timing, argv, and generated-text assertions
+  are not contracts unless an external protocol makes that exact representation
+  observable. Prefer resulting state, resource safety, and operation ordering.
+- A table-driven scenario should represent error taxonomies and equivalent
+  variants. Separate tests are warranted when setup, recovery, or the expected
+  invariant is materially different.
+
 ## Contract and integration test program
 
 - [ ] Add an always-on contract suite between the real gateway/relay app and
@@ -204,16 +228,21 @@ failpoints and process orchestration rather than relying on scheduler timing.
   are not yet centralized.
 - [ ] Split `tests/test_control_plane.py` by authentication, placement,
   lifecycle, proxying, registry, and builder behavior.
+  Partial: the file was reduced from 5,131 lines and 71 tests to 3,597 lines and
+  41 representative vertical tests. Physical splitting remains useful for
+  navigation but is no longer required to remove duplicated subsystem coverage.
 - [ ] Keep CLI tests focused on parsing and wiring; move orchestration
   scenarios behind reusable application/service harnesses.
-  Partial: 19 repetitive derived-path, helper, option, and presentation tests
-  were removed while preserving command wiring and destructive-operation
-  coverage.
+  Partial: the CLI suite is now 1,849 lines and 17 vertical wiring, recovery,
+  fencing, and destructive-operation workflows, down from 4,833 lines and 69
+  tests before remediation. Further extraction is a maintainability choice,
+  rather than a prerequisite for eliminating policy/provider duplication.
 - [ ] Replace the SDK's large semantic fake services with a concise scripted
   request/response transport plus a small set of real-socket tests.
-  Partial: mirrored fake cases were substantially reduced and the real relay
-  and gateway contracts retained; the remaining fake is still larger than the
-  intended end state.
+  Partial: Inspect create/build behavior now uses two table-driven scenario
+  clients, mirrored cases were removed, and the real relay/gateway contracts
+  remain. The general SDK client fake still covers several unrelated endpoints
+  and can be replaced incrementally by the real contract tier.
 - [ ] Parameterize shared synchronous/asynchronous SDK scenarios instead of
   maintaining partially duplicated test bodies.
   Partial: generated poll construction is shared and redundant mirrored cases
@@ -221,6 +250,9 @@ failpoints and process orchestration rather than relying on scheduler timing.
   separate for readable failures.
 - [ ] Split large multi-concern snapshot and lifecycle scenarios where a
   failure currently obscures which invariant broke.
+  Partial: storage, hibernation, provider, SDK retry, and CLI families now share
+  scenario harnesses or tables. A few intentionally end-to-end crash and
+  content-addressed build tests remain large.
 
 ## Validation and continuous integration
 
@@ -324,6 +356,40 @@ failpoints and process orchestration rather than relying on scheduler timing.
   about 21.6 seconds. All 85 SDK tests passed on CPython 3.14.3 in 0.9 seconds.
   Root and SDK Ruff lint, diff whitespace validation, and the externally linked
   Go supervisor suite also passed. No dependency synchronization was performed.
+
+### 2026-08-14 - aggressive behavior-architecture pass
+
+- Assigned each behavior to one primary tier using the ownership rules above,
+  then removed secondary copies. The largest reductions came from CLI policy
+  duplication, control-plane endpoint variants, storage/registry happy paths,
+  routing and relay examples already represented by state machines, and SDK
+  retry tests that each carried a bespoke fake client.
+- Replaced families of examples with stronger coverage: an exhaustive placement
+  oracle, routing/storage/relay state machines, a generated program-demand
+  reducer, table-driven provider and failure classifications, shared SDK
+  create/build recovery clients, and real loopback registry behavior replacing
+  mocked private request choreography.
+- Root tests fell from 35,714 lines and 745 executed tests at the start of this
+  pass to 27,371 lines and 545 tests: 8,343 fewer lines (23.4%) and 200 fewer
+  tests. SDK tests fell from 4,057 lines and 85 tests to 2,991 lines and 53
+  tests: 1,066 fewer lines (26.3%) and 32 fewer tests.
+- Combined, this pass removed 9,409 lines (23.7%) and 232 tests. Compared with
+  the original reviewed baseline, the resulting suites are 10,063 lines (24.9%)
+  and 348 tests (36.8%) smaller while retaining the new property, model,
+  process, fuzz, and real-protocol tiers. Compared with the post-remediation
+  peak, they are 14,453 lines (32.3%) and 408 tests (40.6%) smaller.
+- The remaining named regressions emphasize authentication, bounds, traversal,
+  corruption, crash recovery, durable ambiguity, ownership, stale-generation
+  fencing, non-resurrection, data-loss prevention, and deterministic races.
+  Exact internals remain only where they represent an external adapter or wire
+  contract that cannot yet be exercised on this host.
+- Full discovery passed on CPython 3.10.13 and 3.13.5 with 545 root tests and
+  four environment-gated skips in 18.0 and 17.8 seconds respectively. All 53
+  SDK tests passed on CPython 3.14.3 in 0.7 seconds. Root and SDK Ruff lint, Go
+  supervisor tests, shell syntax, and diff whitespace validation also passed.
+  Coverage was not rerun because the existing environments do not contain a
+  coverage collector; the retained-behavior inventory above is therefore the
+  confidence measure for this pass rather than an unverified percentage.
 
 Residual coordination caveat: the root workflow pins the currently published
 SDK commit `96409ab`, and the compatibility pipeline passes against it. After

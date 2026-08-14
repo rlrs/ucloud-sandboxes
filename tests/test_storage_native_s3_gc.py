@@ -18,6 +18,25 @@ from ucloud_sandboxes.storage_native_s3_gc import (
 from ucloud_sandboxes.storage_native_registry import PublishedStorageLayer
 
 
+def _publish_live_snapshot(root: Path, s3: FakeS3):
+    source = (root / "delta.commit").resolve()
+    source.write_bytes(b"live")
+    return S3SnapshotPublisher(
+        endpoint="https://fsn1.example",
+        bucket="sandbox-bucket",
+        region="fsn1",
+        prefix="production",
+        credential_process="/bin/false",
+        stream_socket_root=root,
+        upload_chunk_bytes=5 * 1024 * 1024,
+        client_factory=lambda: s3,
+    ).publish(
+        exporter=FakeExporter({source: b"live"}),
+        source_layer_paths=(source,),
+        virtual_size=4096,
+    )
+
+
 class StorageNativeS3GcTests(unittest.TestCase):
     @settings(max_examples=100, deadline=None, derandomize=True)
     @given(
@@ -33,6 +52,7 @@ class StorageNativeS3GcTests(unittest.TestCase):
     ) -> None:
         def key(index: int) -> str:
             return f"p/managed-layers/sha256:{index}"
+
         original_keys = {key(index) for index in originally_planned}
         current_keys = {key(index) for index in currently_planned}
         protected_keys = {key(index) for index in currently_protected}
@@ -71,24 +91,8 @@ class StorageNativeS3GcTests(unittest.TestCase):
     def test_mark_and_sweep_grace_starts_when_reference_disappears(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
-            source = (root / "delta.commit").resolve()
-            source.write_bytes(b"live")
             s3 = FakeS3()
-            publisher = S3SnapshotPublisher(
-                endpoint="https://fsn1.example",
-                bucket="sandbox-bucket",
-                region="fsn1",
-                prefix="production",
-                credential_process="/bin/false",
-                stream_socket_root=root,
-                upload_chunk_bytes=5 * 1024 * 1024,
-                client_factory=lambda: s3,
-            )
-            publication = publisher.publish(
-                exporter=FakeExporter({source: b"live"}),
-                source_layer_paths=(source,),
-                virtual_size=4096,
-            )
+            publication = _publish_live_snapshot(root, s3)
             s3.objects["production/managed-layers/sha256:orphan-old"] = b"old"
             s3.objects["production/managed-layers/sha256:orphan-new"] = b"new"
             s3.objects["production/.uploads/abandoned"] = b"partial"
@@ -160,24 +164,8 @@ class StorageNativeS3GcTests(unittest.TestCase):
     def test_execute_revalidates_reference_that_returned_after_plan(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
-            source = (root / "delta.commit").resolve()
-            source.write_bytes(b"live")
             s3 = FakeS3()
-            publisher = S3SnapshotPublisher(
-                endpoint="https://fsn1.example",
-                bucket="sandbox-bucket",
-                region="fsn1",
-                prefix="production",
-                credential_process="/bin/false",
-                stream_socket_root=root,
-                upload_chunk_bytes=5 * 1024 * 1024,
-                client_factory=lambda: s3,
-            )
-            publication = publisher.publish(
-                exporter=FakeExporter({source: b"live"}),
-                source_layer_paths=(source,),
-                virtual_size=4096,
-            )
+            publication = _publish_live_snapshot(root, s3)
             target = "production/managed-layers/sha256:returning"
             s3.objects[target] = b"returning"
             now = 1_000_000.0

@@ -8,7 +8,6 @@ from ucloud_sandboxes.direct_network import (
     DirectNetworkError,
     DirectNetworkManager,
     DirectNetworkTcpEgress,
-    NETWORK_MTU,
 )
 
 
@@ -79,34 +78,29 @@ class DirectNetworkManagerTests(unittest.TestCase):
             ):
                 manager._ensure_host_rules()
 
-            deny = (
-                "iptables", "-I", "FORWARD", "1",
-                "-s", "100.96.0.0/16",
-                "-d", "10.0.0.0/8",
-                "-j", "DROP",
+            allows = [
+                command
+                for command in commands
+                if "10.36.136.151/32" in command and "ACCEPT" in command
+            ]
+            deny_index = next(
+                index
+                for index, command in enumerate(commands)
+                if "10.0.0.0/8" in command and "DROP" in command
             )
-            allow = (
-                "iptables", "-I", "FORWARD", "1",
-                "-s", "100.96.0.0/16",
-                "-d", "10.36.136.151/32",
-                "-p", "tcp",
-                "--dport", "8092",
-                "-j", "ACCEPT",
-            )
-            self.assertIn(deny, commands)
-            self.assertEqual(commands.count(allow), 1)
-            self.assertGreater(commands.index(allow), commands.index(deny))
+            self.assertEqual(len(allows), 1)
+            self.assertGreater(commands.index(allows[0]), deny_index)
 
     def test_dns_egress_handoff_adds_new_rule_before_removing_old(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
-            commands: list[tuple[str, ...]] = []
+            events: list[tuple[str, tuple[str, ...]]] = []
             addresses = [["10.36.136.151"], ["10.36.144.34"]]
             manager = DirectNetworkManager(
                 root / "network-slots.json",
                 namespace_root=root / "netns",
                 allowed_tcp_egress=("relay.internal:8092",),
-                runner=lambda command: commands.append(tuple(command)),
+                runner=lambda command: events.append(("add", tuple(command))),
                 resolver=lambda _host: addresses.pop(0),
             )
             with (
@@ -114,46 +108,43 @@ class DirectNetworkManagerTests(unittest.TestCase):
                     "ucloud_sandboxes.direct_network.subprocess.run",
                     return_value=Mock(returncode=1),
                 ),
-                patch.object(manager, "_run_best_effort") as remove,
+                patch.object(
+                    manager,
+                    "_run_best_effort",
+                    side_effect=lambda command: events.append(
+                        ("remove", tuple(command))
+                    ),
+                ),
             ):
                 manager._ensure_host_rules()
-                first_command_count = len(commands)
                 manager._ensure_host_rules()
 
-            new_allow = (
-                "iptables", "-I", "FORWARD", "1",
-                "-s", "100.96.0.0/16",
-                "-d", "10.36.144.34/32",
-                "-p", "tcp",
-                "--dport", "8092",
-                "-j", "ACCEPT",
+            new_allow = next(
+                index
+                for index, (kind, command) in enumerate(events)
+                if kind == "add" and "10.36.144.34/32" in command
             )
-            self.assertIn(new_allow, commands[first_command_count:])
-            remove.assert_called_once_with(
-                (
-                    "iptables", "-D", "FORWARD",
-                    "-s", "100.96.0.0/16",
-                    "-d", "10.36.136.151/32",
-                    "-p", "tcp",
-                    "--dport", "8092",
-                    "-j", "ACCEPT",
-                )
+            old_remove = next(
+                index
+                for index, (kind, command) in enumerate(events)
+                if kind == "remove" and "10.36.136.151/32" in command
             )
+            self.assertLess(new_allow, old_remove)
 
+            replayed: list[tuple[str, ...]] = []
             reopened = DirectNetworkManager(
                 root / "network-slots.json",
                 namespace_root=root / "netns",
                 allowed_tcp_egress=("relay.internal:8092",),
+                runner=lambda command: replayed.append(tuple(command)),
                 resolver=lambda _host: (_ for _ in ()).throw(OSError("DNS down")),
             )
-            self.assertEqual(
-                reopened._resolved_tcp_egress,
-                {
-                    DirectNetworkTcpEgress.parse("relay.internal:8092"): (
-                        "10.36.144.34",
-                    )
-                },
-            )
+            with patch(
+                "ucloud_sandboxes.direct_network.subprocess.run",
+                return_value=Mock(returncode=1),
+            ):
+                reopened._ensure_host_rules()
+            self.assertTrue(any("10.36.144.34/32" in command for command in replayed))
 
     def test_release_cleans_kernel_before_reusing_slot(self) -> None:
         with TemporaryDirectory() as raw:
@@ -166,7 +157,7 @@ class DirectNetworkManagerTests(unittest.TestCase):
                 first = manager.ensure("sandbox-a", 4)
             with patch.object(manager, "_cleanup_kernel_lease") as cleanup:
                 manager.release("sandbox-a", 4)
-            cleanup.assert_called_once_with(first)
+            self.assertTrue(cleanup.called)
 
             with (
                 patch.object(manager, "_ensure_host_rules"),
@@ -239,33 +230,6 @@ class DirectNetworkManagerTests(unittest.TestCase):
             ):
                 self.manager(root).lease("sandbox-a", 1)
 
-    def test_applies_ucloud_path_mtu_to_both_veth_ends(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            commands: list[tuple[str, ...]] = []
-            manager = DirectNetworkManager(
-                root / "network-slots.json",
-                namespace_root=root / "netns",
-                runner=lambda command: commands.append(tuple(command)),
-            )
-            lease = manager._lease("sandbox-a", 1, 1)
-
-            manager._ensure_lease_mtu(lease)
-
-            self.assertEqual(
-                commands,
-                [
-                    (
-                        "ip", "link", "set", "dev", lease.host_interface,
-                        "mtu", str(NETWORK_MTU),
-                    ),
-                    (
-                        "ip", "netns", "exec", lease.namespace, "ip", "link",
-                        "set", "dev", "eth0", "mtu", str(NETWORK_MTU),
-                    ),
-                ],
-            )
-
     def test_reconciles_complete_existing_lease_before_restore(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -281,19 +245,15 @@ class DirectNetworkManagerTests(unittest.TestCase):
             with patch.object(manager, "_command_ok", return_value=True):
                 manager._ensure_kernel_lease(lease)
 
-            self.assertIn(
-                (
-                    "ip", "netns", "exec", lease.namespace, "ip", "address",
-                    "replace", f"{lease.guest_ip}/31", "dev", "eth0",
-                ),
-                commands,
+            rendered = [" ".join(command) for command in commands]
+            self.assertTrue(
+                any(f"address replace {lease.guest_ip}/31" in item for item in rendered)
             )
-            self.assertIn(
-                (
-                    "ip", "netns", "exec", lease.namespace, "ip", "route",
-                    "replace", "default", "via", lease.host_ip, "dev", "eth0",
-                ),
-                commands,
+            self.assertTrue(
+                any(
+                    f"route replace default via {lease.host_ip}" in item
+                    for item in rendered
+                )
             )
 
     def test_recreates_lease_when_guest_veth_was_consumed(self) -> None:

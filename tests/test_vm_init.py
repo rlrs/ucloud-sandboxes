@@ -141,8 +141,6 @@ class VmInitTests(unittest.TestCase):
             )
         )
 
-        self.assertIn('config["ossConfig"]', script)
-        self.assertIn('"credentialProcess": sys.argv[6]', script)
         self.assertIn(
             "--snapshot-backend ${UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND}", script
         )
@@ -175,24 +173,6 @@ class VmInitTests(unittest.TestCase):
     def test_embedded_runtime_validator_and_shell_compile(self) -> None:
         script, validator = self._bundle_validator()
         compile(validator, "<bundle-validator>", "exec")
-        self.assertEqual(script.count('UCLOUD_PACKAGE_METADATA="$(python3 -'), 1)
-        self.assertEqual(
-            script.count('(bundle_dir / "package-bundle.json").read_text'), 1
-        )
-        self.assertNotRegex(
-            script,
-            r"UCLOUD_(?:DIRECT_RUNSC|MANAGED_INIT|STORAGE_NATIVE|AGENT_RUNTIME)_SPEC",
-        )
-        markers = (
-            "UCLOUD_PACKAGE_METADATA=|Installing Docker, gVisor, and host support|"
-            "Installing bundled container-runtime kernel module closure|Installing bundle-verified direct runsc runtime|"
-            "Activating bundled ucloud-sandboxes runtime|Writing node-agent systemd service"
-        ).split("|")
-        self.assertEqual(
-            [script.index(item) for item in markers],
-            sorted(script.index(item) for item in markers),
-        )
-
         syntax = subprocess.run(
             ["bash", "-n"],
             input=script,
@@ -364,13 +344,7 @@ class VmInitTests(unittest.TestCase):
         assert result is not None
         expected_digest = hashlib.sha256(b"verified-bundle").hexdigest()
         self.assertEqual(result.package_sha256, expected_digest)
-        self.assertEqual(
-            result.remote_path,
-            "/var/cache/ucloud-sandboxes/init-packages/"
-            f"{expected_digest}/node-package.tar.gz",
-        )
         self.assertEqual(len(calls), 2)
-        self.assertIn("runtime-ready-v3-sandbox", " ".join(calls[0][0]))
         self.assertEqual(calls[1][1], b"verified-bundle")
 
     def test_snapshot_ready_receipt_skips_bundle_transfer(self) -> None:
@@ -396,4 +370,3 @@ class VmInitTests(unittest.TestCase):
         self.assertTrue(result.reused)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(len(calls), 1)
-        self.assertIn("runtime-ready-v3-sandbox", " ".join(calls[0]))

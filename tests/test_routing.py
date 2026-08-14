@@ -191,7 +191,7 @@ class RoutingStoreTests(unittest.TestCase):
                     running,
                 )
 
-    def test_program_request_transitions_are_durable_and_monotonic(self) -> None:
+    def test_program_request_lifecycle_is_monotonic_durable_and_terminal(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "routes.sqlite"
             store = RoutingStore(path)
@@ -201,94 +201,66 @@ class RoutingStoreTests(unittest.TestCase):
                     node_id="node-1",
                     job_id="job-1",
                     node_url="http://node-1:8090",
-                    resources=ResourceQuantity(
-                        vcpu=2,
-                        memory_mb=4096,
-                        disk_mb=8192,
-                    ),
+                    resources=ResourceQuantity(memory_mb=4096, disk_mb=8192),
                     state="parked",
                 )
             )
-
-            store.upsert_program_request_transition_with_change(
+            transition = store.upsert_program_request_transition_with_change
+            transition(
                 route,
                 request_id="request-1",
                 rollout_id="rollout-1",
                 state="model_wait",
                 transition_at="2026-07-31T10:00:00+00:00",
             )
-            store.upsert_program_request_transition_with_change(
+            ready, changed = transition(
                 route,
                 request_id="request-1",
                 rollout_id="rollout-1",
                 state="ready_to_wake",
                 transition_at="2026-07-31T10:00:10+00:00",
+                last_error="restore failed",
             )
-            store.upsert_program_request_transition_with_change(
+            duplicate, duplicate_changed = transition(
+                route,
+                request_id="request-1",
+                rollout_id="rollout-1",
+                state="ready_to_wake",
+                transition_at="2026-07-31T10:00:11+00:00",
+                last_error="restore failed",
+            )
+            regressed, regressed_changed = transition(
                 route,
                 request_id="request-1",
                 rollout_id="rollout-1",
                 state="model_wait",
-                transition_at="2026-07-31T10:00:11+00:00",
+                transition_at="2026-07-31T10:00:12+00:00",
             )
-            records = RoutingStore(path).program_requests_readonly()
-
-        self.assertEqual(len(records), 1)
-        self.assertEqual(records[0].state, "ready_to_wake")
-        self.assertEqual(
-            records[0].response_ready_at,
-            "2026-07-31T10:00:10+00:00",
-        )
-        self.assertEqual(records[0].resources.disk_mb, 8192)
-
-    def test_duplicate_program_transition_does_not_refresh_or_repeat_error(
-        self,
-    ) -> None:
-        with routing_store() as store:
-            route = store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    state="parked",
-                )
-            )
-            first, first_changed = store.upsert_program_request_transition_with_change(
+            acting, acting_changed = transition(
                 route,
                 request_id="request-1",
                 rollout_id="rollout-1",
-                state="waking",
-                transition_at="2026-08-03T10:00:00+00:00",
-                last_error="HTTP 503: restore failed",
+                state="acting",
+                transition_at="2026-07-31T10:00:13+00:00",
+                clear_error=True,
             )
-            duplicate, duplicate_changed = (
-                store.upsert_program_request_transition_with_change(
-                    route,
-                    request_id="request-1",
-                    rollout_id="rollout-1",
-                    state="waking",
-                    transition_at="2026-08-03T10:01:00+00:00",
-                    last_error="HTTP 503: restore failed",
-                )
+            durable = RoutingStore(path).program_requests_readonly()[0]
+            store.delete_sandbox_if_current(
+                route.sandbox_id,
+                generation=route.generation,
             )
-            acting, acting_changed = (
-                store.upsert_program_request_transition_with_change(
-                    route,
-                    request_id="request-1",
-                    rollout_id="rollout-1",
-                    state="acting",
-                    transition_at="2026-08-03T10:02:00+00:00",
-                    clear_error=True,
-                )
-            )
+            active_after_delete = store.program_requests_readonly()
+            terminal = store.program_requests_readonly(include_terminal=True)[0]
 
-        self.assertTrue(first_changed)
-        self.assertFalse(duplicate_changed)
-        self.assertEqual(duplicate.updated_at, first.updated_at)
+        self.assertTrue(changed)
+        self.assertEqual((duplicate, regressed), (ready, ready))
+        self.assertEqual((duplicate_changed, regressed_changed), (False, False))
         self.assertTrue(acting_changed)
-        self.assertEqual(acting.last_error, "")
-        self.assertEqual(acting.wake_completed_at, "2026-08-03T10:02:00+00:00")
+        self.assertEqual(durable, acting)
+        self.assertEqual(durable.resources.disk_mb, 8192)
+        self.assertEqual(durable.last_error, "")
+        self.assertEqual(active_after_delete, [])
+        self.assertEqual(terminal.state, "terminal")
 
     def test_program_request_identity_is_generation_fenced(self) -> None:
         with routing_store() as store:
@@ -322,62 +294,6 @@ class RoutingStoreTests(unittest.TestCase):
                     rollout_id="rollout-2",
                     state="ready_to_wake",
                 )
-
-    def test_sandbox_delete_terminalizes_program_requests(self) -> None:
-        with routing_store() as store:
-            route = store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    state="parked",
-                )
-            )
-            store.upsert_program_request_transition_with_change(
-                route,
-                request_id="request-1",
-                rollout_id="rollout-1",
-                state="ready_to_wake",
-            )
-
-            removed = store.delete_sandbox_if_current(
-                route.sandbox_id,
-                generation=route.generation,
-            )
-
-            self.assertIsNotNone(removed)
-            self.assertEqual(store.program_requests_readonly(), [])
-            retained = store.program_requests_readonly(include_terminal=True)
-            self.assertEqual(len(retained), 1)
-            self.assertEqual(retained[0].state, "terminal")
-
-    def test_wake_state_change_is_exact_route_compare_and_swap(self) -> None:
-        with routing_store() as store:
-            route = store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    state="parked",
-                )
-            )
-
-            waking = store.set_sandbox_state_if_current(
-                route,
-                expected_states={"parked"},
-                state="waking",
-            )
-            stale = store.set_sandbox_state_if_current(
-                route,
-                expected_states={"parked"},
-                state="waking",
-            )
-
-        self.assertIsNotNone(waking)
-        self.assertEqual(waking.state, "waking")
-        self.assertIsNone(stale)
 
     def test_migration_pending_shape_excludes_source_job(self) -> None:
         with routing_store() as store:
@@ -443,52 +359,6 @@ class RoutingStoreTests(unittest.TestCase):
             state.pending["pending-0"].resources,
             ResourceQuantity(vcpu=1.0, memory_mb=1024, disk_mb=2048),
         )
-
-    def test_sandbox_route_updates_are_complete_snapshots(self) -> None:
-        with routing_store() as store:
-            spec = {
-                "id": "cached-one",
-                "image": "busybox",
-                "labels": {"run": "r1"},
-                "resources": {"vcpu": 1.0, "memory_mb": 512, "disk_mb": 1024},
-            }
-            store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="cached-one",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
-                    spec=spec,
-                    state="creating",
-                )
-            )
-
-            route = store.get_sandbox_readonly("cached-one")
-            routes = store.sandbox_routes_readonly()
-            store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="cached-one",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    resources=ResourceQuantity(vcpu=1.0, memory_mb=512, disk_mb=1024),
-                    spec=spec,
-                    state="running",
-                )
-            )
-            updated = store.get_sandbox_readonly("cached-one")
-
-        self.assertIsNotNone(route)
-        assert route is not None
-        self.assertEqual(route.spec, spec)
-        self.assertEqual(route.state, "creating")
-        self.assertEqual([item.sandbox_id for item in routes], ["cached-one"])
-        self.assertEqual(routes[0].spec["image"], "busybox")
-        self.assertIsNotNone(updated)
-        assert updated is not None
-        self.assertEqual(updated.spec, spec)
-        self.assertEqual(updated.state, "running")
 
     def test_migration_journal_and_route_switch_commit_atomically(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -829,34 +699,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(stored.state, "running")
         self.assertEqual(stored.activity_epoch, current.activity_epoch)
 
-    def test_transient_list_result_cannot_regress_stable_lifecycle_state(self) -> None:
-        with routing_store() as store:
-            current = store.upsert_sandbox(
-                sandbox_route(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    state="running",
-                    generation=1,
-                    create_operation_id="create-1",
-                    spec_hash="a" * 64,
-                    node_epoch="epoch-1",
-                    activity_epoch=1,
-                )
-            )
-
-            stored = store.upsert_sandbox(
-                replace(
-                    current,
-                    state="restoring",
-                    activity_epoch=current.activity_epoch + 1,
-                )
-            )
-
-        self.assertEqual(stored.state, "running")
-        self.assertEqual(stored.activity_epoch, current.activity_epoch)
-
     def test_delete_sandboxes_for_jobs_removes_routes_and_dependents(self) -> None:
         with routing_store() as store:
             now = utc_now().isoformat()
@@ -1040,40 +882,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(completed.worker_state, "detached")
         self.assertEqual(replayed_completion.worker_state, "detached")
 
-    def test_schema_two_routes_migrate_to_attached_worker_state(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "routes.sqlite"
-            RoutingStore(path)
-            with sqlite3.connect(path) as conn:
-                conn.execute("PRAGMA user_version=2")
-                conn.execute("ALTER TABLE sandboxes RENAME TO sandboxes_v3")
-                conn.execute(
-                    """
-                    CREATE TABLE sandboxes AS
-                    SELECT sandbox_id, node_id, job_id, node_url,
-                           resources_json, spec_json, state, generation,
-                           create_operation_id, spec_hash, delete_operation_id,
-                           node_epoch, activity_epoch, storage_schema,
-                           snapshot_manifest_digest, snapshot_repository,
-                           snapshot_tag, storage_snapshot_json, created_at, updated_at
-                    FROM sandboxes_v3
-                    """
-                )
-                conn.execute("DROP TABLE sandboxes_v3")
-                conn.commit()
-
-            migrated = RoutingStore(path)
-            with sqlite3.connect(path) as conn:
-                version = conn.execute("PRAGMA user_version").fetchone()[0]
-                columns = {
-                    row[1]: row[4]
-                    for row in conn.execute("PRAGMA table_info(sandboxes)")
-                }
-
-        self.assertIsInstance(migrated, RoutingStore)
-        self.assertEqual(version, 3)
-        self.assertEqual(columns["worker_state"], "'attached'")
-
     def test_delete_stale_sandboxes_removes_missing_jobs_after_grace(self) -> None:
         with routing_store() as store:
             now = utc_now()
@@ -1189,102 +997,6 @@ class RoutingStoreTests(unittest.TestCase):
             ):
                 RoutingStore(route_file)
 
-    def test_prepared_capacity_signal_contributes_until_deleted(
-        self,
-    ) -> None:
-        with routing_store() as store:
-            prepared = store.upsert_prepared_capacity(
-                "prep-1",
-                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-                count=4,
-                ttl_seconds=600,
-            )
-            demand = store.pending_demand()
-            deleted = store.delete_prepared_capacity("prep-1")
-            demand_after_delete = store.pending_demand()
-
-        self.assertEqual(prepared.total_resources.vcpu, 4.0)
-        self.assertEqual(demand.pending_resources, ResourceQuantity())
-        self.assertEqual(
-            demand.prepared_resources,
-            ResourceQuantity(vcpu=4, memory_mb=2048, disk_mb=4096),
-        )
-        self.assertEqual(demand.placement_requests, ())
-        self.assertEqual(len(demand.prepared_placement_requests), 1)
-        self.assertEqual(demand.prepared_placement_requests[0].count, 4)
-        self.assertEqual(demand.desired_resources, demand.prepared_resources)
-        self.assertEqual(deleted.prepare_id if deleted else None, "prep-1")
-        self.assertEqual(demand_after_delete.prepared_resources, ResourceQuantity())
-
-    def test_new_matching_routes_claim_prepared_capacity_once(self) -> None:
-        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
-        image = "registry.example.org/workload@sha256:" + "a" * 64
-        with routing_store() as store:
-            store.upsert_prepared_capacity(
-                "prep-1",
-                resources,
-                count=2,
-                ttl_seconds=600,
-                image=image,
-            )
-            route = sandbox_allocation(
-                sandbox_id="sandbox-1",
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-                resources=resources,
-                spec={"id": "sandbox-1", "image": image},
-            )
-            first = allocate_sandbox_create(store, route, spec_hash="1" * 64)
-            repeated = allocate_sandbox_create(store, route, spec_hash="1" * 64)
-            after_first = store.prepared_capacity()
-            allocate_sandbox_create(
-                store,
-                sandbox_allocation(
-                    **{
-                        **route.__dict__,
-                        "sandbox_id": "sandbox-2",
-                        "spec": {"id": "sandbox-2", "image": image},
-                    }
-                ),
-                spec_hash="2" * 64,
-            )
-            after_second = store.prepared_capacity()
-
-        self.assertEqual(first, repeated)
-        self.assertEqual(after_first[0].count, 1)
-        self.assertEqual(after_second, [])
-
-    def test_route_does_not_claim_capacity_for_a_different_image(self) -> None:
-        resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
-        with routing_store() as store:
-            store.upsert_prepared_capacity(
-                "prep-1",
-                resources,
-                count=1,
-                ttl_seconds=600,
-                image="registry.example.org/expected:latest",
-            )
-            allocate_sandbox_create(
-                store,
-                sandbox_allocation(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    resources=resources,
-                    spec={
-                        "id": "sandbox-1",
-                        "image": "registry.example.org/other:latest",
-                    },
-                ),
-                spec_hash="1" * 64,
-            )
-
-            prepared = store.prepared_capacity()
-
-        self.assertEqual([item.prepare_id for item in prepared], ["prep-1"])
-
     def test_route_claims_image_specific_capacity_before_generic_capacity(
         self,
     ) -> None:
@@ -1304,25 +1016,29 @@ class RoutingStoreTests(unittest.TestCase):
                 ttl_seconds=600,
                 image=image,
             )
-            allocate_sandbox_create(
-                store,
-                sandbox_allocation(
-                    sandbox_id="sandbox-1",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
-                    resources=resources,
-                    spec={"id": "sandbox-1", "image": image},
-                ),
-                spec_hash="1" * 64,
+            allocation = sandbox_allocation(
+                sandbox_id="sandbox-1",
+                node_id="node-1",
+                job_id="job-1",
+                node_url="http://node-1:8090",
+                resources=resources,
+                spec={"id": "sandbox-1", "image": image},
             )
+            before = store.pending_demand()
+            first = allocate_sandbox_create(store, allocation, spec_hash="1" * 64)
+            replay = allocate_sandbox_create(store, allocation, spec_hash="1" * 64)
 
             remaining = store.prepared_capacity()
+            store.delete_prepared_capacity("generic-older")
+            after_delete = store.pending_demand()
 
+        self.assertEqual(before.prepared_resources, resources + resources)
+        self.assertEqual(first, replay)
         self.assertEqual(
             [item.prepare_id for item in remaining],
             ["generic-older"],
         )
+        self.assertEqual(after_delete.prepared_resources, ResourceQuantity())
 
     def test_image_warmup_survives_automatic_prepared_capacity_claim(self) -> None:
         with routing_store() as store:
@@ -1357,7 +1073,23 @@ class RoutingStoreTests(unittest.TestCase):
             )
             remaining = store.prepared_capacity()
             warmups_after_claim = store.image_warmups()
-            marked = store.mark_image_warmup_node("prep-1", "node-1")
+            store.upsert_image_warmup(
+                "prep-1",
+                "registry.example.org/replacement:latest",
+                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+                count=4,
+                ttl_seconds=600,
+            )
+            stale = store.mark_image_warmup_node(
+                "prep-1",
+                "node-1",
+                expected_image="registry.example.org/image:latest",
+            )
+            marked = store.mark_image_warmup_node(
+                "prep-1",
+                "node-1",
+                expected_image="registry.example.org/replacement:latest",
+            )
             deleted = store.delete_image_warmup("prep-1")
             warmups_after_delete = store.image_warmups()
 
@@ -1366,92 +1098,36 @@ class RoutingStoreTests(unittest.TestCase):
             [(item.prepare_id, item.count) for item in remaining], [("prep-1", 3)]
         )
         self.assertEqual([item.warmup_id for item in warmups_after_claim], ["prep-1"])
+        self.assertIsNone(stale)
         self.assertEqual(marked.warmed_node_ids, ("node-1",))
         self.assertEqual(deleted.warmed_node_ids, ("node-1",))
         self.assertEqual(warmups_after_delete, [])
 
-    def test_image_warmup_mark_ignores_stale_image_completion(self) -> None:
-        with routing_store() as store:
-            store.upsert_image_warmup(
-                "prep-1",
-                "registry.example.org/old:latest",
-                ResourceQuantity(vcpu=1, memory_mb=512),
-                count=1,
-                ttl_seconds=600,
-            )
-            store.upsert_image_warmup(
-                "prep-1",
-                "registry.example.org/new:latest",
-                ResourceQuantity(vcpu=1, memory_mb=512),
-                count=1,
-                ttl_seconds=600,
-            )
-
-            stale_mark = store.mark_image_warmup_node(
-                "prep-1",
-                "node-1",
-                expected_image="registry.example.org/old:latest",
-            )
-            current_mark = store.mark_image_warmup_node(
-                "prep-1",
-                "node-1",
-                expected_image="registry.example.org/new:latest",
-            )
-
-        self.assertIsNone(stale_mark)
-        self.assertEqual(current_mark.warmed_node_ids, ("node-1",))
-
-    def test_prepared_builder_signal_contributes_until_consumed_or_deleted(
-        self,
-    ) -> None:
-        with routing_store() as store:
-            prepared = store.upsert_prepared_builder(
-                "builder-prep-1",
-                count=2,
-                ttl_seconds=600,
-            )
-            listed = store.prepared_builders()
-            count = store.prepared_builder_count()
-            consumed = store.consume_prepared_builders()
-            count_after_consume = store.prepared_builder_count()
-            store.upsert_prepared_builder(
-                "builder-prep-2",
-                count=1,
-                ttl_seconds=600,
-            )
-            deleted = store.delete_prepared_builder("builder-prep-2")
-            count_after_delete = store.prepared_builder_count()
-
-        self.assertEqual(prepared.count, 2)
-        self.assertEqual([item.prepare_id for item in listed], ["builder-prep-1"])
-        self.assertEqual(count, 2)
-        self.assertEqual([item.prepare_id for item in consumed], ["builder-prep-1"])
-        self.assertEqual(count_after_consume, 0)
-        self.assertEqual(deleted.prepare_id if deleted else None, "builder-prep-2")
-        self.assertEqual(count_after_delete, 0)
-
-    def test_pending_image_build_signal_contributes_until_consumed_or_deleted(
-        self,
-    ) -> None:
-        with routing_store() as store:
-            store.upsert_pending_image_build(
-                "custom",
-                "registry.example.org/custom:latest",
-            )
-            count = store.pending_image_build_count()
-            consumed = store.consume_pending_image_builds()
-            count_after_consume = store.pending_image_build_count()
-            store.upsert_pending_image_build(
-                "custom-2",
-                "registry.example.org/custom-2:latest",
-            )
-            store.clear_pending_image_build("custom-2")
-            count_after_delete = store.pending_image_build_count()
-
-        self.assertEqual(count, 1)
-        self.assertEqual([item.image_id for item in consumed], ["custom"])
-        self.assertEqual(count_after_consume, 0)
-        self.assertEqual(count_after_delete, 0)
+    def test_transient_capacity_signals_are_consumable(self) -> None:
+        cases = (
+            (
+                "builder",
+                lambda store: store.upsert_prepared_builder(
+                    "signal", count=2, ttl_seconds=600
+                ),
+                lambda store: store.prepared_builder_count(),
+                lambda store: store.consume_prepared_builders(),
+            ),
+            (
+                "image",
+                lambda store: store.upsert_pending_image_build(
+                    "signal", "registry.example.org/custom:latest"
+                ),
+                lambda store: store.pending_image_build_count(),
+                lambda store: store.consume_pending_image_builds(),
+            ),
+        )
+        for name, create, count, consume in cases:
+            with self.subTest(signal=name), routing_store() as store:
+                create(store)
+                self.assertEqual(count(store), 2 if name == "builder" else 1)
+                self.assertEqual(len(consume(store)), 1)
+                self.assertEqual(count(store), 0)
 
     def test_sqlite_store_refreshes_signals_consumed_by_another_process(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -1563,52 +1239,15 @@ class RoutingStoreTests(unittest.TestCase):
                 self.assertEqual(observe(store), expected)
                 self.assertEqual(getattr(store.load(), collection), {})
 
-    def test_consuming_pending_demand_clears_active_pending_signals(self) -> None:
-        with routing_store() as store:
-            store.upsert_pending(
-                "pending-one",
-                ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-            )
-
-            consumed = store.consume_pending_demand()
-            demand = store.pending_demand()
-
-        self.assertEqual([item.sandbox_id for item in consumed], ["pending-one"])
-        self.assertEqual(demand.pending_resources, ResourceQuantity())
-
-    def test_repeated_pending_signal_for_same_sandbox_does_not_multiply_demand(
-        self,
-    ) -> None:
-        with routing_store() as store:
-            resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
-
-            store.upsert_pending("pending-one", resources)
-            store.upsert_pending("pending-one", resources)
-            demand = store.pending_demand()
-            pending = store.pending_sandboxes()
-
-        self.assertEqual(demand.pending_resources, resources)
-        self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0].attempts, 2)
-
-    def test_pending_upsert_returns_aggregate_demand_from_same_transaction(
-        self,
-    ) -> None:
-        resources = ResourceQuantity(vcpu=2, memory_mb=1024, disk_mb=2048)
-        with routing_store() as store:
-            stored, demand = store.upsert_pending_with_demand(
-                "pending-one",
-                resources,
-            )
-
-        self.assertEqual(stored.sandbox_id, "pending-one")
-        self.assertEqual(stored.attempts, 1)
-        self.assertEqual(demand.pending_resources, resources)
-
     def test_allocation_returns_and_consumes_pending_demand_atomically(self) -> None:
         resources = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
         with routing_store() as store:
-            store.upsert_pending("pending-one", resources)
+            _first, first_demand = store.upsert_pending_with_demand(
+                "pending-one", resources
+            )
+            repeated, repeated_demand = store.upsert_pending_with_demand(
+                "pending-one", resources
+            )
             route, pending = store.allocate_sandbox_create_with_pending(
                 sandbox_allocation(
                     sandbox_id="pending-one",
@@ -1622,9 +1261,11 @@ class RoutingStoreTests(unittest.TestCase):
             )
             after = store.get_pending("pending-one")
 
+        self.assertEqual(first_demand.pending_resources, resources)
+        self.assertEqual(repeated_demand.pending_resources, resources)
+        self.assertEqual(repeated.attempts, 2)
         self.assertEqual(route.sandbox_id, "pending-one")
-        self.assertIsNotNone(pending)
-        self.assertEqual(pending.sandbox_id if pending else None, "pending-one")
+        self.assertEqual(pending, repeated)
         self.assertIsNone(after)
 
     def test_failed_create_pending_demand_preserves_incarnation_identity(self) -> None:
@@ -1737,39 +1378,6 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(remaining.image_builds["image-one"].attempts, 2)
         self.assertEqual(remaining.image_builds["image-one"].tag, "registry/image:new")
         self.assertEqual(remaining.prepared_builders["builder-one"].count, 2)
-
-    def test_generation_high_water_survives_delete_and_reopen(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "routes.sqlite"
-            base = sandbox_allocation(
-                sandbox_id="versioned-one",
-                node_id="node-1",
-                job_id="job-1",
-                node_url="http://node-1:8090",
-                resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-                spec={"id": "versioned-one", "image": "busybox"},
-            )
-            first_store = RoutingStore(path)
-            first = allocate_sandbox_create(
-                first_store,
-                base,
-                spec_hash="1" * 64,
-            )
-            removed = first_store.delete_sandbox_if_current(
-                first.sandbox_id,
-                generation=first.generation,
-                create_operation_id=first.create_operation_id,
-            )
-            second = allocate_sandbox_create(
-                RoutingStore(path),
-                base,
-                spec_hash="2" * 64,
-            )
-
-        self.assertIsNotNone(removed)
-        self.assertEqual(first.generation, 1)
-        self.assertEqual(second.generation, 2)
-        self.assertNotEqual(first.create_operation_id, second.create_operation_id)
 
     def test_stale_inventory_cannot_overwrite_or_delete_newer_generation(self) -> None:
         with routing_store() as store:

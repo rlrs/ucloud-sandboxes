@@ -10,14 +10,12 @@ from tempfile import TemporaryDirectory
 import threading
 import time
 import unittest
-from unittest.mock import patch
 
 from ucloud_sandboxes.storage_native import (
     StorageNativeDevice,
     StorageNativeDeviceOwner,
 )
 from ucloud_sandboxes.storage_native_daemon import (
-    LinuxStorageHostOperations,
     StorageNativeNodeConfig,
     StorageNativePendingOperation,
     StorageNativeNodeClient,
@@ -253,54 +251,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
         )
         return service, backend, host
 
-    def test_pool_reuses_cleanly_released_runtime_device(self) -> None:
-        with TemporaryDirectory() as raw:
-            service, backend, _ = self._service(
-                Path(raw),
-                descriptor=True,
-                pooled=True,
-            )
-            first = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 30,
-            )
-            sealed = service.freeze_and_seal(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="seal:1",
-                expected_revision=first.revision,
-            )
-            service.release_runtime(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="release:1",
-                expected_revision=sealed.revision,
-            )
-
-            second = service.create_volume(
-                sandbox_id="sandbox-2",
-                sandbox_generation=1,
-                volume_id="volume-2",
-                operation_id="create:2",
-                virtual_size=1 << 30,
-            )
-
-            self.assertEqual(first.device_id, 1)
-            self.assertEqual(second.device_id, 1)
-            self.assertEqual(backend.release_calls, [1])
-            self.assertEqual(backend.delete_calls, [])
-            metrics = service.metrics()
-            self.assertEqual(metrics["device_pool_acquires"], 2)
-            self.assertEqual(metrics["device_pool_new_acquires"], 1)
-            self.assertEqual(metrics["device_pool_reused_acquires"], 1)
-            self.assertEqual(metrics["device_pool_releases"], 1)
-            self.assertEqual(metrics["device_pool_idle_devices"], 0)
-
     def test_accounting_ids_are_transactional_and_monotonic_across_restart(
         self,
     ) -> None:
@@ -409,30 +359,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             ):
                 StorageNativeJournal(path)
 
-    def test_pool_discards_device_after_uncertain_unmount(self) -> None:
-        with TemporaryDirectory() as raw:
-            service, backend, host = self._service(Path(raw), pooled=True)
-            created = service.create_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="create:1",
-                virtual_size=1 << 30,
-            )
-            host.fail_next_unmount = True
-
-            service.delete_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=1,
-                volume_id="volume-1",
-                operation_id="delete:1",
-                expected_revision=created.revision,
-            )
-
-            self.assertEqual(backend.release_calls, [])
-            self.assertEqual(backend.delete_calls, [1])
-            self.assertEqual(service.metrics()["device_pool_discards"], 1)
-
     def test_failed_local_wake_discards_cow_back_to_released_snapshot(self) -> None:
         with TemporaryDirectory() as raw:
             service, backend, _host = self._service(Path(raw))
@@ -476,72 +402,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(discarded.state, StorageVolumeState.RELEASED)
             self.assertTrue(discarded.sealed_layer_paths)
             self.assertEqual(backend.delete_calls, [1, 2])
-
-    def test_deleted_import_tombstone_allows_same_incarnation_retry(self) -> None:
-        with TemporaryDirectory() as raw:
-            service, _, _ = self._service(Path(raw), publisher=True)
-            publication = StorageSnapshotPublication(
-                manifest_digest="sha256:" + "f" * 64,
-                tag="ucloud-storage-v1-test",
-                repository="snapshots",
-                repo_blob_url="http://registry/v2/snapshots/blobs",
-                virtual_size=1 << 30,
-                layers=(
-                    PublishedStorageLayer(
-                        digest="sha256:" + "1" * 64,
-                        size=4096,
-                    ),
-                ),
-            )
-            first = service.acquire_snapshot(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="import:1",
-                publication_raw=publication.to_dict(),
-            )
-            service.delete_volume(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="delete:1",
-                expected_revision=first.revision,
-            )
-
-            retried = service.acquire_snapshot(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="import:2",
-                publication_raw=publication.to_dict(),
-            )
-
-            self.assertEqual(retried.state, StorageVolumeState.PUBLISHED)
-            self.assertEqual(retried.revision, 3)
-            self.assertEqual(
-                retried.accounting_id,
-                first.accounting_id,
-            )
-            mounted = service.mount_snapshot_cow(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="mount:2",
-                expected_revision=3,
-            )
-            self.assertEqual(mounted.state, StorageVolumeState.MOUNTED)
-            discarded = service.discard_mounted_cow(
-                sandbox_id="sandbox-1",
-                sandbox_generation=9,
-                volume_id="volume-1",
-                operation_id="discard:2",
-                expected_revision=mounted.revision,
-            )
-            self.assertEqual(discarded.state, StorageVolumeState.PUBLISHED)
-            self.assertEqual(
-                discarded.published_manifest_digest,
-                publication.manifest_digest,
-            )
 
     def test_publish_releases_capacity_and_remote_layers_resume(self) -> None:
         with TemporaryDirectory() as raw:
@@ -663,21 +523,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             self.assertEqual(host.detached, [mount_path])
             self.assertNotIn(mount_path, host.mounted)
             self.assertEqual(service.metrics()["hard_reserved_bytes"], 0)
-
-    def test_linux_mount_detection_uses_mountinfo_without_stating_target(
-        self,
-    ) -> None:
-        target = Path("/storage/dead-volume")
-        mountinfo = (
-            b"36 25 0:31 / / rw,relatime - ext4 /dev/root rw\n"
-            b"91 36 0:54 / /storage/dead-volume rw - xfs /dev/ublkb7 rw\n"
-        )
-
-        with patch.object(Path, "read_bytes", return_value=mountinfo):
-            self.assertTrue(LinuxStorageHostOperations.is_mounted(target))
-            self.assertFalse(
-                LinuxStorageHostOperations.is_mounted(Path("/storage/absent"))
-            )
 
     def test_interrupted_create_is_not_blindly_replayed(self) -> None:
         with TemporaryDirectory() as raw:
@@ -918,38 +763,6 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 expected_revision=created.revision,
             )
             self.assertEqual(replay.state, StorageVolumeState.DELETED)
-
-    def test_unix_socket_backlog_accepts_operation_burst(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            service, _, _ = self._service(root)
-            socket_path = root / "service" / "storage.sock"
-            server = StorageNativeNodeServer(
-                socket_path,
-                service,
-                require_root_peer=False,
-            )
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            client = StorageNativeNodeClient(socket_path, timeout_seconds=2)
-            _wait_deadline = time.monotonic() + 2
-            while True:
-                try:
-                    client.get_features()
-                    break
-                except OSError:
-                    if time.monotonic() >= _wait_deadline:
-                        raise
-                    time.sleep(0.01)
-
-            with ThreadPoolExecutor(max_workers=32) as pool:
-                results = list(pool.map(lambda _: client.get_features(), range(64)))
-
-            self.assertEqual(len(results), 64)
-            self.assertTrue(all(result["protocol_schema"] == 4 for result in results))
-            server.shutdown()
-            thread.join(timeout=2)
-            self.assertFalse(thread.is_alive())
 
 
 if __name__ == "__main__":

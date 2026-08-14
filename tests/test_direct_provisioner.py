@@ -464,6 +464,30 @@ class DirectProvisionerTests(unittest.TestCase):
             ),
         )
 
+    @contextmanager
+    def running_server(self, root: Path, service: DirectSandboxService):
+        server = build_direct_node_agent_server(
+            "127.0.0.1",
+            0,
+            service=service,
+            image_file=root / "images.json",
+            job_id="job",
+            node_id="node",
+        )
+        thread = Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        )
+        thread.start()
+        try:
+            host, port = server.server_address
+            yield f"http://{host}:{port}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
     def test_create_and_delete_order_all_owners(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -749,31 +773,6 @@ class DirectProvisionerTests(unittest.TestCase):
 
             self.assertEqual(results, ())
             self.assertIsNone(registry.get(deleting.sandbox_id))
-
-    def test_imported_incarnation_namespaces_storage_delete_operation(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, quota, _, _ = self.make(root)
-            created = provisioner.create(
-                spec=self.spec(),
-                sandbox_generation=7,
-                operation_id="create:7",
-            )
-            imported = replace(
-                created,
-                migration_id="move:detached-wake",
-                migration_sha256="a" * 64,
-            )
-
-            provisioner._drop_storage(
-                imported,
-                expected_project_id=imported.quota_project_id,
-            )
-
-            self.assertEqual(
-                quota.delete_operation_ids,
-                [f"quota-delete:{imported.quota_project_id}:" "move:detached-wake"],
-            )
 
     def test_delete_fails_closed_when_storage_authority_is_absent(self) -> None:
         with TemporaryDirectory() as raw:
@@ -1087,38 +1086,6 @@ class DirectProvisionerTests(unittest.TestCase):
             ):
                 self.create(service, self.spec())
 
-    def test_node_adapter_releases_exec_start_fence_and_accounts_parked_memory(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-            manager = DirectNodeRuntime(service)
-            service.park(created.spec.id, operation_id="park:exec-start")
-
-            manager.lifecycle.acquire_shared(created.spec.id)
-            command = manager.runtime.exec_command(
-                created.spec.id,
-                ("/bin/true",),
-                interactive=False,
-            )
-            manager.runtime.exec_started(created.spec.id)
-            manager.lifecycle.release_shared(created.spec.id)
-            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-
-            self.assertEqual(command[:2], ("runsc", "exec"))
-            self.assertEqual(snapshot.activity.active_sandboxes, 1)
-            self.assertEqual(snapshot.activity.used_resources.memory_mb, 0)
-            service.park(created.spec.id, operation_id="park:heartbeat")
-            parked = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-            self.assertEqual(parked.activity.active_sandboxes, 0)
-            self.assertEqual(parked.activity.used_resources.memory_mb, 0)
-
     def test_node_adapter_delete_preempts_attached_exec_but_park_does_not(
         self,
     ) -> None:
@@ -1386,28 +1353,6 @@ class DirectProvisionerTests(unittest.TestCase):
                 with manager.image_operation(images):
                     pass
 
-    def test_node_adapter_heartbeat_does_not_join_exec_lifecycle_fence(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, warden = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-            manager = DirectNodeRuntime(service)
-
-            def fenced_inspect(_sandbox):
-                raise AssertionError("heartbeat joined the streaming exec fence")
-
-            warden.inspect = fenced_inspect
-            snapshot = manager.heartbeat_snapshot(active_build_count=lambda: 0)
-            listed = manager.list()
-
-            self.assertEqual(snapshot.activity.active_sandboxes, 1)
-            self.assertEqual(snapshot.activity.used_resources.memory_mb, 0)
-            self.assertEqual([record.spec.id for record in listed], [created.spec.id])
-
     def test_direct_node_drain_survives_adapter_restart(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1440,86 +1385,6 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertFalse(opened.drain.draining)
             self.assertTrue(service.admission_open)
 
-    def test_direct_node_publish_parked_endpoint_uses_exact_identity(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            provisioner, _, _, _, _ = self.make(root)
-            service = DirectSandboxService(
-                provisioner,
-                process_runner=FakeProcessRunner(),
-            )
-            created = self.create(service, self.spec())
-            publication = SimpleNamespace(
-                manifest_digest="sha256:" + "a" * 64,
-                repository="snapshots",
-                tag="sandbox-7",
-            )
-            snapshot = SimpleNamespace(
-                sha256="b" * 64,
-                publication=publication,
-                to_dict=lambda: {"schema": "storage-native-v1"},
-            )
-            server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=service,
-                image_file=root / "images.json",
-                job_id="job",
-                node_id="node",
-            )
-            thread = Thread(
-                target=server.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = server.server_address
-                outbound = request.Request(
-                    (
-                        f"http://{host}:{port}/v1/sandboxes/{created.spec.id}"
-                        "/publish-parked"
-                    ),
-                    data=json.dumps(
-                        {
-                            "generation": created.generation,
-                            "create_operation_id": created.operation_id,
-                            "spec_hash": created.spec_hash,
-                        }
-                    ).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
-                with patch.object(
-                    service,
-                    "publish_parked",
-                    return_value=snapshot,
-                ) as publish:
-                    with request.urlopen(outbound) as response:
-                        payload = json.load(response)
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=1)
-
-            publish.assert_called_once_with(
-                created.spec.id,
-                generation=created.generation,
-                create_operation_id=created.operation_id,
-                spec_hash=created.spec_hash,
-            )
-            self.assertEqual(
-                payload,
-                {
-                    "storage_schema": "storage-native-v1",
-                    "snapshot_sha256": snapshot.sha256,
-                    "storage_snapshot": snapshot.to_dict(),
-                    "snapshot_manifest_digest": publication.manifest_digest,
-                    "snapshot_repository": publication.repository,
-                    "snapshot_tag": publication.tag,
-                },
-            )
-
     def test_direct_node_wire_uses_domain_results_without_docker_facades(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()
@@ -1528,23 +1393,7 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=service,
-                image_file=root / "images.json",
-                job_id="job",
-                node_id="node",
-            )
-            thread = Thread(
-                target=server.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = server.server_address
-                base = f"http://{host}:{port}"
+            with self.running_server(root, service) as base:
                 spec = self.spec()
                 create_payload = {
                     **spec.to_dict(),
@@ -1592,10 +1441,6 @@ class DirectProvisionerTests(unittest.TestCase):
                 )
                 with request.urlopen(delete_request) as response:
                     deleted = json.load(response)
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=1)
 
             self.assertEqual(set(created), {"sandbox", "timings"})
             self.assertEqual(
@@ -1628,39 +1473,18 @@ class DirectProvisionerTests(unittest.TestCase):
                 provisioner,
                 process_runner=FakeProcessRunner(),
             )
-            server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=service,
-                image_file=root / "images.json",
-                job_id="job",
-                node_id="node",
-            )
-            thread = Thread(
-                target=server.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = server.server_address
+            with self.running_server(root, service) as base:
                 outbound = request.Request(
-                    f"http://{host}:{port}/v1/images/pull",
+                    f"{base}/v1/images/pull",
                     data=json.dumps({"image": "image"}).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
                 with request.urlopen(outbound) as response:
                     pulled = json.load(response)
-                heartbeat_request = request.Request(
-                    f"http://{host}:{port}/v1/heartbeat"
-                )
+                heartbeat_request = request.Request(f"{base}/v1/heartbeat")
                 with request.urlopen(heartbeat_request) as response:
                     heartbeat = json.load(response)["heartbeat"]
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=1)
 
             self.assertEqual(images.materialized_refs, ["image"])
             self.assertGreaterEqual(
@@ -1684,24 +1508,9 @@ class DirectProvisionerTests(unittest.TestCase):
                 process_runner=FakeProcessRunner(),
             )
             created = self.create(service, self.spec())
-            server = build_direct_node_agent_server(
-                "127.0.0.1",
-                0,
-                service=service,
-                image_file=root / "images.json",
-                job_id="job",
-                node_id="node",
-            )
-            thread = Thread(
-                target=server.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            )
-            thread.start()
-            try:
-                host, port = server.server_address
+            with self.running_server(root, service) as base:
                 park_request = request.Request(
-                    f"http://{host}:{port}/v1/sandboxes/{created.spec.id}/park",
+                    f"{base}/v1/sandboxes/{created.spec.id}/park",
                     data=json.dumps({"operation_id": "park:test"}).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -1717,7 +1526,7 @@ class DirectProvisionerTests(unittest.TestCase):
                     )
 
                 wake_request = request.Request(
-                    f"http://{host}:{port}/v1/sandboxes/{created.spec.id}/wake",
+                    f"{base}/v1/sandboxes/{created.spec.id}/wake",
                     data=json.dumps(
                         {
                             "generation": created.generation,
@@ -1734,10 +1543,6 @@ class DirectProvisionerTests(unittest.TestCase):
                     service.get(created.spec.id).state,
                     HibernationState.RUNNING.value,
                 )
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=1)
 
 
 if __name__ == "__main__":

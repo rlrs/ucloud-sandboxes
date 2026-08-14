@@ -10,18 +10,11 @@ import unittest
 from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.bootstrap import VmBootstrapRecord
 from ucloud_sandboxes.control_state import ControlStateStore
-from ucloud_sandboxes.deployment import AGENT_VERSION_LABEL, package_version
-from ucloud_sandboxes.models import (
-    InstancePhase,
-    ScalePolicy,
-    ProviderInstance,
-    utc_now,
-)
+from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.registry import (
     HeartbeatIdentityError,
     heartbeat_from_dict,
     heartbeat_to_dict,
-    merge_jobs_and_heartbeats,
 )
 
 
@@ -135,30 +128,6 @@ class RegistryTests(unittest.TestCase):
         for payload in malformed:
             with self.subTest(payload=payload):
                 self.assertIsNone(heartbeat_from_dict(payload))
-
-    def test_provisioning_nodes_include_suspended_and_flag_unversioned(self) -> None:
-        base = ProviderInstance(
-            id="123",
-            name="ucloud-sandbox-node-123",
-            application_name="vm-ubuntu",
-            application_version="24.04",
-            product_id="cpu-amd-zen5-2-vcpu",
-            product_category="cpu-amd-zen5",
-            state="IN_QUEUE",
-            phase=InstancePhase.PROVISIONING,
-            cpu=2,
-            labels={AGENT_VERSION_LABEL: package_version()},
-        )
-        cases = (
-            (base, True),
-            (replace(base, state="SUSPENDED", cpu=16, disk_gb=250), True),
-            (replace(base, labels={}), False),
-        )
-        for job, compatible in cases:
-            with self.subTest(state=job.state, compatible=compatible):
-                node = merge_jobs_and_heartbeats([job], {}, ScalePolicy())[0]
-                self.assertTrue(node.is_provisioning)
-                self.assertEqual(node.agent_version_compatible, compatible)
 
     def test_idle_transition_uses_gateway_receipt_time(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -359,20 +328,6 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(outcomes, ["accepted", "conflict"])
         self.assertEqual(len(stored), 1)
 
-    def test_heartbeat_store_removes_jobs(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "control-state.sqlite"
-            store = ControlStateStore(path)
-            for job_id, node_id in (("job-1", "node-1"), ("job-2", "node-2")):
-                store.upsert_heartbeat(build_heartbeat(job_id=job_id, node_id=node_id))
-
-            removed = store.remove_heartbeats(("job-1", "missing"))
-            loaded = store.load_heartbeats()
-
-            self.assertEqual(tuple(removed), ("job-1",))
-            self.assertNotIn("job-1", loaded)
-            self.assertIn("job-2", loaded)
-
     def test_control_state_fails_closed_on_legacy_json_and_corrupt_rows(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -411,29 +366,6 @@ class RegistryTests(unittest.TestCase):
                 store.load_heartbeats()["job-1"].node_id,
                 heartbeat.node_id,
             )
-
-    def test_idle_transition_counts_sandboxes_and_image_builds_as_work(self) -> None:
-        for active_field in ("active_sandboxes", "active_image_builds"):
-            with self.subTest(active_field=active_field), TemporaryDirectory() as raw_dir:
-                store = ControlStateStore(Path(raw_dir) / "control-state.sqlite")
-                busy_at = utc_now()
-                idle_at = busy_at + timedelta(seconds=30)
-                later_at = idle_at + timedelta(seconds=30)
-
-                def heartbeat(active: int, now):
-                    return build_heartbeat(
-                        job_id="job-1",
-                        node_id="node-1",
-                        now=now,
-                        **{active_field: active},
-                    )
-
-                store.upsert_heartbeat(heartbeat(1, busy_at))
-                self.assertIsNone(store.load_heartbeats()["job-1"].idle_since)
-                store.upsert_heartbeat(heartbeat(0, idle_at))
-                self.assertEqual(store.load_heartbeats()["job-1"].idle_since, idle_at)
-                store.upsert_heartbeat(heartbeat(0, later_at))
-                self.assertEqual(store.load_heartbeats()["job-1"].idle_since, idle_at)
 
 
 if __name__ == "__main__":

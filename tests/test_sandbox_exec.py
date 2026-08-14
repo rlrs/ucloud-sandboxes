@@ -15,13 +15,6 @@ from ucloud_sandboxes.sandbox_exec import (
 
 
 class SandboxExecProtocolTests(unittest.TestCase):
-    def test_session_ids_are_opaque_and_unique(self) -> None:
-        first = new_exec_session_id()
-        second = new_exec_session_id()
-
-        self.assertRegex(first, r"^exec-[0-9a-f]{32}$")
-        self.assertNotEqual(first, second)
-
     def test_exec_payload_requires_the_canonical_schema(self) -> None:
         payload = {
             "command": ["/bin/echo", "ok"],
@@ -134,12 +127,15 @@ class SandboxExecProtocolTests(unittest.TestCase):
                 raise RuntimeError("cannot start stderr pump")
             original_start(thread)
 
-        with patch(
-            "ucloud_sandboxes.sandbox_exec.subprocess.Popen",
-            return_value=process,
-        ), patch(
-            "ucloud_sandboxes.sandbox_exec.Thread.start",
-            new=fail_second_start,
+        with (
+            patch(
+                "ucloud_sandboxes.sandbox_exec.subprocess.Popen",
+                return_value=process,
+            ),
+            patch(
+                "ucloud_sandboxes.sandbox_exec.Thread.start",
+                new=fail_second_start,
+            ),
         ):
             session = manager.start(
                 SandboxExecSpec(
@@ -162,44 +158,6 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertTrue(
             any("cannot start stderr pump" in event.data for event in session.events)
         )
-
-    def test_normal_completion_closes_stdin_and_releases_process(self) -> None:
-        sandbox_manager = FakeSandboxManager()
-        manager = ExecSessionManager(sandbox_manager)
-        process = FakeProcess()
-        spec = SandboxExecSpec(
-            sandbox_id="sandbox-one",
-            command=("/bin/echo", "ok"),
-            stdin=True,
-        )
-        now = utc_now()
-        session = ExecSession(
-            id=new_exec_session_id(),
-            spec=spec,
-            argv=spec.command,
-            status="running",
-            created_at=now,
-            updated_at=now,
-            condition=Condition(manager._lock),  # noqa: SLF001
-            stdin_open=True,
-            events=deque(maxlen=32),
-            process=process,
-            activity_lease=True,
-        )
-        with manager._lock:  # noqa: SLF001
-            manager._sessions[session.id] = session  # noqa: SLF001
-        pumps = (Thread(target=lambda: None), Thread(target=lambda: None))
-        for pump in pumps:
-            pump.start()
-
-        manager._wait_process(session.id, process, pumps, {})  # noqa: SLF001
-
-        self.assertTrue(process.stdin.closed)
-        self.assertIsNone(session.process)
-        self.assertEqual(session.status, "failed")
-        self.assertFalse(session.stdin_open)
-        self.assertFalse(session.activity_lease)
-        self.assertEqual(sandbox_manager.lifecycle.released, ["sandbox-one"])
 
     def test_exec_spec_rejects_nul_before_acquiring_runtime_state(self) -> None:
         for spec in (

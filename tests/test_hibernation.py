@@ -19,7 +19,6 @@ from ucloud_sandboxes.hibernation import (
     HibernationRuntimeFingerprint,
     HibernationState,
     LocalHibernationArtifactFile,
-    classify_hibernation_recovery,
     hibernation_process_identity_matches,
     linux_process_start_time_ticks,
 )
@@ -85,6 +84,60 @@ class HibernationTests(unittest.TestCase):
             ),
             managed_process_sha256=DIGEST_C,
         )
+
+    @staticmethod
+    def _initialize_running(journal: HibernationJournal):
+        return journal.initialize_running(
+            sandbox_id="sandbox-1",
+            sandbox_generation=7,
+            spec_sha256=DIGEST_B,
+            operation_id="create:7",
+            sentry_pid=101,
+            sentry_start_time_ticks=1001,
+        )
+
+    def _publish_pending(
+        self,
+        root: Path,
+        journal: HibernationJournal,
+        artifacts: HibernationArtifactStore | None = None,
+    ):
+        running = self._initialize_running(journal)
+        hibernating = journal.begin_hibernate(
+            operation_id="park:1",
+            expected_revision=running.revision,
+        )
+        pending = journal.mark_sentry_reaped(
+            operation_id="park:1",
+            expected_revision=hibernating.revision,
+        )
+        generation = (
+            artifacts.prepare_generation(
+                sandbox_id="sandbox-1",
+                sandbox_generation=7,
+                hibernation_generation=1,
+            )
+            if artifacts is not None
+            else root
+        )
+        manifest = self._manifest(generation)
+        if artifacts is not None:
+            manifest = artifacts.publish_complete(manifest)
+        return manifest, pending
+
+    def _commit_parked(
+        self,
+        root: Path,
+        journal: HibernationJournal,
+        artifacts: HibernationArtifactStore | None = None,
+    ):
+        manifest, pending = self._publish_pending(root, journal, artifacts)
+        parked = journal.commit_parked(
+            manifest,
+            operation_id="park:1",
+            expected_revision=pending.revision,
+        )
+        return manifest, parked
 
     def test_manifest_round_trip_and_metadata_tampering(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -238,84 +291,72 @@ class HibernationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "invalid schema"):
                 HibernationManifest.from_dict(raw)
 
-    def test_artifact_store_durably_publishes_generation(self) -> None:
+    def test_artifact_generation_moves_from_pending_to_immutable_complete(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
-            store_root = root / "artifacts"
-            store = HibernationArtifactStore(store_root.resolve())
-            generation = store.prepare_generation(
+            store = HibernationArtifactStore((root / "artifacts").resolve())
+            pending = store.prepare_generation(
                 sandbox_id="sandbox-1",
                 sandbox_generation=7,
                 hibernation_generation=1,
             )
-            (generation / "application_memory.img").write_bytes(b"memory")
-            (generation / "checkpoint.img").write_bytes(b"kernel")
-            (generation / "pages_meta.img").write_bytes(b"metadata")
-            manifest = HibernationManifest(
+            (pending / "checkpoint.img").write_bytes(b"pending")
+            inventory = store.inventory_incarnation(
                 sandbox_id="sandbox-1",
                 sandbox_generation=7,
-                hibernation_generation=1,
-                operation_id="park:1",
-                spec_sha256=DIGEST_B,
-                container_id=CONTAINER_ID,
-                created_ns=1,
-                runtime=self._runtime(),
-                files=(
-                    LocalHibernationArtifactFile.from_path(
-                        generation / "application_memory.img",
-                        role=HibernationFileRole.MAIN_MEMORY,
-                    ),
-                    LocalHibernationArtifactFile.from_path(
-                        generation / "checkpoint.img",
-                        role=HibernationFileRole.KERNEL_STATE,
-                    ),
-                    LocalHibernationArtifactFile.from_path(
-                        generation / "pages_meta.img",
-                        role=HibernationFileRole.ALLOCATOR_METADATA,
-                    ),
-                ),
-                managed_process_sha256=DIGEST_C,
             )
-
-            store.publish_complete(manifest)
-            self.assertEqual(
-                store.load_complete(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                    hibernation_generation=1,
-                ),
-                manifest,
-            )
-            self.assertEqual(
-                store.inventory_incarnation(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                )[0].metadata_sha256,
-                manifest.metadata_sha256,
-            )
-
-    def test_artifact_store_never_treats_pending_as_complete(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = HibernationArtifactStore((Path(raw_dir) / "artifacts").resolve())
-            store.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            self.assertEqual(
-                store.inventory_incarnation(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                )[0].state,
-                "pending",
-            )
+            self.assertEqual(inventory[0].state, "pending")
             with self.assertRaisesRegex(
-                HibernationValidationError, "COMPLETE is absent"
+                HibernationValidationError,
+                "COMPLETE is absent",
             ):
                 store.load_complete(
                     sandbox_id="sandbox-1",
                     sandbox_generation=7,
                     hibernation_generation=1,
+                )
+            store.discard_pending(
+                sandbox_id="sandbox-1",
+                sandbox_generation=7,
+                hibernation_generation=1,
+            )
+            self.assertFalse(pending.exists())
+
+            generation = store.prepare_generation(
+                sandbox_id="sandbox-1",
+                sandbox_generation=7,
+                hibernation_generation=2,
+            )
+            manifest = replace(
+                self._manifest(generation),
+                hibernation_generation=2,
+            )
+            published = store.publish_complete(manifest)
+            restored = store.load_complete(
+                sandbox_id="sandbox-1",
+                sandbox_generation=7,
+                hibernation_generation=2,
+            )
+            self.assertEqual(restored, published)
+            with self.assertRaisesRegex(
+                HibernationConflictError,
+                "cannot discard a complete",
+            ):
+                store.discard_pending(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=7,
+                    hibernation_generation=2,
+                )
+
+            marker = generation / "COMPLETE"
+            raw_marker = json.loads(marker.read_text(encoding="utf-8"))
+            raw_marker["metadata_sha256"] = DIGEST_C
+            marker.write_text(json.dumps(raw_marker), encoding="utf-8")
+            with self.assertRaises(HibernationValidationError):
+                store.load_complete(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=7,
+                    hibernation_generation=2,
                 )
 
     def test_ignored_overlay_root_can_be_traversable_but_not_writable(self) -> None:
@@ -343,63 +384,6 @@ class HibernationTests(unittest.TestCase):
                     ignored_entries=("upper",),
                 )
 
-    def test_artifact_store_discards_only_pending_generation(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            store = HibernationArtifactStore((root / "artifacts").resolve())
-            generation = store.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            (generation / "checkpoint.img").write_bytes(b"pending")
-            store.discard_pending(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            self.assertFalse(generation.exists())
-
-            generation = store.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=2,
-            )
-            manifest = self._manifest(generation)
-            manifest = replace(manifest, hibernation_generation=2)
-            store.publish_complete(manifest)
-            with self.assertRaisesRegex(
-                HibernationConflictError,
-                "cannot discard a complete",
-            ):
-                store.discard_pending(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                    hibernation_generation=2,
-                )
-
-    def test_artifact_store_complete_marker_fences_manifest_replacement(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            store = HibernationArtifactStore((root / "artifacts").resolve())
-            generation = store.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            manifest = self._manifest(generation)
-            store.publish_complete(manifest)
-            marker = generation / "COMPLETE"
-            raw_marker = json.loads(marker.read_text(encoding="utf-8"))
-            raw_marker["metadata_sha256"] = DIGEST_C
-            marker.write_text(json.dumps(raw_marker), encoding="utf-8")
-            with self.assertRaises(HibernationValidationError):
-                store.load_complete(
-                    sandbox_id="sandbox-1",
-                    sandbox_generation=7,
-                    hibernation_generation=1,
-                )
-
     def test_artifact_store_rejects_symlinked_generation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -423,35 +407,7 @@ class HibernationTests(unittest.TestCase):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             journal = HibernationJournal((root / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            self.assertEqual(running.state, HibernationState.RUNNING)
-
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            self.assertEqual(hibernating.authority, HibernationAuthority.LIVE)
-            pending = journal.mark_sentry_reaped(
-                operation_id="park:1",
-                expected_revision=hibernating.revision,
-            )
-            self.assertEqual(pending.authority, HibernationAuthority.PENDING)
-
-            manifest = self._manifest(root)
-            parked = journal.commit_parked(
-                manifest,
-                operation_id="park:1",
-                expected_revision=pending.revision,
-            )
-            self.assertEqual(parked.state, HibernationState.PARKED)
-
+            _manifest, parked = self._commit_parked(root, journal)
             restoring = journal.begin_restore(
                 operation_id="wake:1",
                 expected_revision=parked.revision,
@@ -468,10 +424,10 @@ class HibernationTests(unittest.TestCase):
                 sentry_pid=202,
                 sentry_start_time_ticks=2002,
             )
-            self.assertEqual(resumed.state, HibernationState.RUNNING)
-            self.assertEqual(resumed.authority, HibernationAuthority.LIVE)
-            self.assertEqual(resumed.hibernation_generation, 1)
-            self.assertEqual(resumed.manifest_sha256, "")
+
+        self.assertEqual(resumed.state, HibernationState.RUNNING)
+        self.assertEqual(resumed.authority, HibernationAuthority.LIVE)
+        self.assertEqual(resumed.hibernation_generation, 1)
 
     def test_journal_can_begin_with_imported_parked_authority(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -487,21 +443,31 @@ class HibernationTests(unittest.TestCase):
             self.assertEqual(parked.authority, HibernationAuthority.PARKED)
             self.assertEqual(parked.manifest_sha256, manifest.metadata_sha256)
 
-    def test_journal_never_aborts_after_sentry_reap(self) -> None:
+    def test_journal_replay_fencing_and_irreversible_boundaries(self) -> None:
         with TemporaryDirectory() as raw_dir:
-            journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
+            root = Path(raw_dir)
+            journal = HibernationJournal((root / "journal.json").resolve())
+            running = self._initialize_running(journal)
             hibernating = journal.begin_hibernate(
                 operation_id="park:1",
                 expected_revision=running.revision,
             )
+            self.assertEqual(
+                journal.begin_hibernate(
+                    operation_id="park:1",
+                    expected_revision=running.revision,
+                ),
+                hibernating,
+            )
+            with self.assertRaisesRegex(
+                HibernationConflictError,
+                "stale hibernation revision",
+            ):
+                journal.mark_sentry_reaped(
+                    operation_id="park:1",
+                    expected_revision=running.revision,
+                )
+
             pending = journal.mark_sentry_reaped(
                 operation_id="park:1",
                 expected_revision=hibernating.revision,
@@ -513,32 +479,14 @@ class HibernationTests(unittest.TestCase):
                     sentry_pid=101,
                     sentry_start_time_ticks=1001,
                 )
-
-    def test_journal_requires_candidate_reap_before_rollback(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            journal = HibernationJournal((root / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1", expected_revision=running.revision
-            )
-            pending = journal.mark_sentry_reaped(
-                operation_id="park:1", expected_revision=hibernating.revision
-            )
             parked = journal.commit_parked(
                 self._manifest(root),
                 operation_id="park:1",
                 expected_revision=pending.revision,
             )
             restoring = journal.begin_restore(
-                operation_id="wake:1", expected_revision=parked.revision
+                operation_id="wake:1",
+                expected_revision=parked.revision,
             )
             candidate = journal.mark_candidate_started(
                 operation_id="wake:1",
@@ -547,7 +495,8 @@ class HibernationTests(unittest.TestCase):
                 candidate_start_time_ticks=2002,
             )
             with self.assertRaisesRegex(
-                HibernationConflictError, "candidate may be alive"
+                HibernationConflictError,
+                "candidate may be alive",
             ):
                 journal.rollback_restore(
                     operation_id="wake:1",
@@ -558,48 +507,14 @@ class HibernationTests(unittest.TestCase):
                 expected_revision=candidate.revision,
                 candidate_reaped=True,
             )
-            self.assertEqual(rolled_back.state, HibernationState.PARKED)
-            self.assertTrue(rolled_back.manifest_sha256)
 
-    def test_journal_compare_and_swap_and_operation_replay(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            replay = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            self.assertEqual(replay, hibernating)
-            with self.assertRaisesRegex(
-                HibernationConflictError, "stale hibernation revision"
-            ):
-                journal.mark_sentry_reaped(
-                    operation_id="park:1",
-                    expected_revision=running.revision,
-                )
+        self.assertEqual(rolled_back.state, HibernationState.PARKED)
+        self.assertTrue(rolled_back.manifest_sha256)
 
     def test_journal_rejects_another_incarnation(self) -> None:
         with TemporaryDirectory() as raw_dir:
             journal = HibernationJournal((Path(raw_dir) / "journal.json").resolve())
-            journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
+            self._initialize_running(journal)
             with self.assertRaises(HibernationConflictError):
                 journal.initialize_running(
                     sandbox_id="sandbox-1",
@@ -627,32 +542,6 @@ class HibernationTests(unittest.TestCase):
             finally:
                 root.chmod(0o700)
 
-    def test_complete_capture_with_live_sentry_must_finish_stopping(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            journal = HibernationJournal((root / "journal.json").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            self.assertEqual(
-                classify_hibernation_recovery(
-                    hibernating,
-                    sentry_alive=True,
-                    candidate_alive=False,
-                    complete_manifest=True,
-                ),
-                HibernationRecoveryAction.FINISH_PUBLISHED_GENERATION,
-            )
-
     def test_recovery_finishes_complete_artifact_after_journal_commit_crash(
         self,
     ) -> None:
@@ -660,29 +549,11 @@ class HibernationTests(unittest.TestCase):
             root = Path(raw_dir)
             journal = HibernationJournal((root / "journal.json").resolve())
             artifact_store = HibernationArtifactStore((root / "artifacts").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
+            _manifest, pending = self._publish_pending(
+                root,
+                journal,
+                artifact_store,
             )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            pending = journal.mark_sentry_reaped(
-                operation_id="park:1",
-                expected_revision=hibernating.revision,
-            )
-            generation = artifact_store.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            manifest = self._manifest(generation)
-            artifact_store.publish_complete(manifest)
 
             # Simulate process death after COMPLETE became durable but before
             # the journal moved from hibernating/pending to parked.
@@ -693,24 +564,18 @@ class HibernationTests(unittest.TestCase):
                 runtime_sha256=self._runtime().digest,
                 proc_root=root / "empty-proc",
             ).reconcile()
-            self.assertEqual(result.action, HibernationRecoveryAction.KEEP_PARKED)
-            self.assertTrue(result.changed)
-            self.assertEqual(result.record.state, HibernationState.PARKED)
-            self.assertGreater(result.record.revision, pending.revision)
+
+        self.assertEqual(result.action, HibernationRecoveryAction.KEEP_PARKED)
+        self.assertTrue(result.changed)
+        self.assertEqual(result.record.state, HibernationState.PARKED)
+        self.assertGreater(result.record.revision, pending.revision)
 
     def test_reconciler_quarantines_reused_or_missing_live_process(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             journal = HibernationJournal((root / "journal.json").resolve())
             artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
+            self._initialize_running(journal)
             result = HibernationReconciler(
                 journal,
                 artifacts,
@@ -730,34 +595,7 @@ class HibernationTests(unittest.TestCase):
             root = Path(raw_dir)
             journal = HibernationJournal((root / "journal.json").resolve())
             artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            pending = journal.mark_sentry_reaped(
-                operation_id="park:1",
-                expected_revision=hibernating.revision,
-            )
-            generation = artifacts.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            manifest = self._manifest(generation)
-            artifacts.publish_complete(manifest)
-            parked = journal.commit_parked(
-                manifest,
-                operation_id="park:1",
-                expected_revision=pending.revision,
-            )
+            _manifest, parked = self._commit_parked(root, journal, artifacts)
             restoring = journal.begin_restore(
                 operation_id="wake:1",
                 expected_revision=parked.revision,
@@ -775,9 +613,10 @@ class HibernationTests(unittest.TestCase):
                 runtime_sha256=self._runtime().digest,
                 proc_root=root / "empty-proc",
             ).reconcile()
-            self.assertEqual(result.action, HibernationRecoveryAction.KEEP_PARKED)
-            self.assertEqual(result.record.state, HibernationState.PARKED)
-            self.assertEqual(result.record.authority, HibernationAuthority.PARKED)
+
+        self.assertEqual(result.action, HibernationRecoveryAction.KEEP_PARKED)
+        self.assertEqual(result.record.state, HibernationState.PARKED)
+        self.assertEqual(result.record.authority, HibernationAuthority.PARKED)
 
     def test_reconciler_adopts_candidate_started_before_identity_commit(
         self,
@@ -788,35 +627,8 @@ class HibernationTests(unittest.TestCase):
             proc_root.mkdir()
             journal = HibernationJournal((root / "journal.json").resolve())
             artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            pending = journal.mark_sentry_reaped(
-                operation_id="park:1",
-                expected_revision=hibernating.revision,
-            )
-            generation = artifacts.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            manifest = self._manifest(generation)
-            artifacts.publish_complete(manifest)
-            parked = journal.commit_parked(
-                manifest,
-                operation_id="park:1",
-                expected_revision=pending.revision,
-            )
-            restoring = journal.begin_restore(
+            _manifest, parked = self._commit_parked(root, journal, artifacts)
+            journal.begin_restore(
                 operation_id="wake:1",
                 expected_revision=parked.revision,
             )
@@ -836,52 +648,19 @@ class HibernationTests(unittest.TestCase):
                 candidate_identity_resolver=resolve_candidate,
             )
             result = reconciler.reconcile()
-
-            self.assertEqual(
-                result.action,
-                HibernationRecoveryAction.VERIFY_CANDIDATE,
-            )
-            self.assertTrue(result.changed)
-            self.assertEqual(result.record.authority, HibernationAuthority.CANDIDATE)
-            self.assertEqual(result.record.candidate_pid, 202)
-            self.assertGreater(result.record.revision, restoring.revision)
-            self.assertEqual(resolver_calls, 1)
-
             replay = reconciler.reconcile()
-            self.assertEqual(
-                replay.action,
-                HibernationRecoveryAction.VERIFY_CANDIDATE,
-            )
-            self.assertFalse(replay.changed)
-            self.assertEqual(resolver_calls, 1)
+
+        self.assertEqual(result.action, HibernationRecoveryAction.VERIFY_CANDIDATE)
+        self.assertEqual(result.record.authority, HibernationAuthority.CANDIDATE)
+        self.assertEqual((result.record.candidate_pid, resolver_calls), (202, 1))
+        self.assertFalse(replay.changed)
 
     def test_reconciler_rejects_complete_artifact_from_another_runtime(self) -> None:
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             journal = HibernationJournal((root / "journal.json").resolve())
             artifacts = HibernationArtifactStore((root / "artifacts").resolve())
-            running = journal.initialize_running(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                spec_sha256=DIGEST_B,
-                operation_id="create:7",
-                sentry_pid=101,
-                sentry_start_time_ticks=1001,
-            )
-            hibernating = journal.begin_hibernate(
-                operation_id="park:1",
-                expected_revision=running.revision,
-            )
-            journal.mark_sentry_reaped(
-                operation_id="park:1",
-                expected_revision=hibernating.revision,
-            )
-            generation = artifacts.prepare_generation(
-                sandbox_id="sandbox-1",
-                sandbox_generation=7,
-                hibernation_generation=1,
-            )
-            artifacts.publish_complete(self._manifest(generation))
+            self._publish_pending(root, journal, artifacts)
 
             result = HibernationReconciler(
                 journal,
@@ -889,12 +668,9 @@ class HibernationTests(unittest.TestCase):
                 runtime_sha256=DIGEST_C,
                 proc_root=root / "empty-proc",
             ).reconcile()
-            self.assertEqual(result.action, HibernationRecoveryAction.QUARANTINE)
-            self.assertEqual(
-                result.record.state,
-                HibernationState.RECOVERY_REQUIRED,
-            )
-            self.assertIn("does not match", result.detail)
+
+        self.assertEqual(result.action, HibernationRecoveryAction.QUARANTINE)
+        self.assertEqual(result.record.state, HibernationState.RECOVERY_REQUIRED)
 
     def test_process_identity_rejects_pid_reuse(self) -> None:
         with TemporaryDirectory() as raw_dir:

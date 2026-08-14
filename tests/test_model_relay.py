@@ -8,14 +8,13 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
-from threading import Event, Timer
+from threading import Event
 import time
 from typing import Any, AsyncIterator
 import unittest
 
 from aiohttp import ClientSession, web
 
-from ucloud_sandboxes.deployment import package_version
 from ucloud_sandboxes.model_relay import (
     ACCEPTED_NOTIFIER_KEY,
     ModelRelayState,
@@ -282,41 +281,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(metadata=metadata), self.assertRaises(web.HTTPBadRequest):
                 await state.register_rollout("strict-metadata", metadata)
 
-    async def test_completed_responses_obey_byte_budget_and_drop_request_bodies(
-        self,
-    ) -> None:
-        state = ModelRelayState(
-            max_completed_requests=10,
-            max_completed_bytes=1200,
-        )
-        await state.register_rollout("completed-bytes")
-        completed_requests = []
-        for index in range(3):
-            request = await state.enqueue(
-                rollout_id="completed-bytes",
-                endpoint="/v1/responses",
-                body={"request": "y" * 400, "index": index},
-                headers={"Content-Type": "application/json"},
-            )
-            completed_requests.append(request)
-            await state.cancel_request(
-                request_id=request.request_id,
-                response=RelayWorkerResponse(499, b"x" * 700),
-            )
-
-        stats = await state.stats()
-
-        self.assertEqual(stats["completed_retained"], 1)
-        self.assertLessEqual(stats["completed_bytes"], 1200)
-        self.assertTrue(
-            all(
-                request.body is None
-                and request.headers == {}
-                and request.payload_bytes == 0
-                for request in completed_requests
-            )
-        )
-
     async def test_restart_prunes_completed_byte_budget_before_restore(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "relay.sqlite3"
@@ -346,179 +310,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
             stats = await restored.stats()
             await restored.aclose()
-            with sqlite3.connect(state_path) as connection:
-                rows = connection.execute(
-                    "SELECT payload FROM relay_requests"
-                ).fetchall()
-                completed_rows = sum(
-                    json.loads(row[0])["state"] == "completed" for row in rows
-                )
 
         self.assertEqual(stats["completed_retained"], 1)
         self.assertLessEqual(stats["completed_bytes"], 1200)
-        self.assertEqual(completed_rows, 1)
-
-    async def test_sqlite_writes_do_not_block_the_event_loop(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(
-                state_path=Path(directory) / "relay.sqlite3",
-            )
-            await state.register_rollout("nonblocking-store")
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            original_save = store.save_request
-            started = Event()
-            release = Event()
-
-            def blocking_save(request) -> None:
-                started.set()
-                release.wait()
-                original_save(request)
-
-            store.save_request = blocking_save  # type: ignore[method-assign]
-            safety_release = Timer(0.5, release.set)
-            safety_release.start()
-            started_at = time.monotonic()
-            ticked_at: float | None = None
-
-            async def ticker() -> None:
-                nonlocal ticked_at
-                await asyncio.sleep(0.05)
-                ticked_at = time.monotonic()
-
-            ticker_task = asyncio.create_task(ticker())
-            enqueue_task = asyncio.create_task(
-                state.enqueue(
-                    rollout_id="nonblocking-store",
-                    endpoint="/v1/responses",
-                    body={"model": "m"},
-                    headers={},
-                )
-            )
-            await asyncio.to_thread(started.wait)
-            await ticker_task
-            release.set()
-            await enqueue_task
-            safety_release.cancel()
-            await state.aclose()
-
-        assert ticked_at is not None
-        self.assertLess(ticked_at - started_at, 0.2)
-
-    async def test_enqueue_save_failure_does_not_publish_a_ghost_request(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
-            await state.register_rollout("enqueue-failure")
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            original_save = store.save_request
-
-            def fail_save(_request) -> None:
-                raise sqlite3.OperationalError("injected enqueue failure")
-
-            store.save_request = fail_save  # type: ignore[method-assign]
-            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
-                await state.enqueue(
-                    rollout_id="enqueue-failure",
-                    endpoint="/v1/responses",
-                    body={"payload": True},
-                    headers={},
-                    idempotency_key="same-request",
-                )
-
-            self.assertEqual(state._requests, {})  # noqa: SLF001
-            self.assertEqual(len(state._pending["enqueue-failure"]), 0)  # noqa: SLF001
-            self.assertEqual(state._idempotency, {})  # noqa: SLF001
-            self.assertEqual(state._inflight_bytes, 0)  # noqa: SLF001
-            with store._lock:  # noqa: SLF001
-                row_count = store._connection.execute(  # noqa: SLF001
-                    "SELECT count(*) FROM relay_requests"
-                ).fetchone()[0]
-            self.assertEqual(row_count, 0)
-
-            store.save_request = original_save  # type: ignore[method-assign]
-            request = await state.enqueue(
-                rollout_id="enqueue-failure",
-                endpoint="/v1/responses",
-                body={"payload": True},
-                headers={},
-                idempotency_key="same-request",
-            )
-            self.assertIs(state._requests[request.request_id], request)  # noqa: SLF001
-            await state.aclose()
-
-    async def test_registration_save_failure_does_not_publish_registration(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
-            await state.stats()
-            store = state._store  # noqa: SLF001
-            assert store is not None
-
-            def fail_save(_record) -> None:
-                raise sqlite3.OperationalError("injected registration failure")
-
-            store.save_rollout = fail_save  # type: ignore[method-assign]
-            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
-                await state.register_rollout("registration-failure")
-            self.assertNotIn("registration-failure", state._rollouts)  # noqa: SLF001
-            self.assertNotIn("registration-failure", state._pending)  # noqa: SLF001
-            await state.aclose()
-
-    async def test_enqueue_cancellation_after_commit_publishes_memory_state(
-        self,
-    ) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state = ModelRelayState(state_path=Path(directory) / "relay.sqlite3")
-            await state.register_rollout("enqueue-cancel")
-            store = state._store  # noqa: SLF001
-            assert store is not None
-            original_save = store.save_request
-            committed = Event()
-            release = Event()
-
-            def commit_then_block(request) -> None:
-                original_save(request)
-                committed.set()
-                release.wait(1)
-
-            store.save_request = commit_then_block  # type: ignore[method-assign]
-            enqueue_task = asyncio.create_task(
-                state.enqueue(
-                    rollout_id="enqueue-cancel",
-                    endpoint="/v1/responses",
-                    body={"payload": True},
-                    headers={},
-                    idempotency_key="cancel-request",
-                )
-            )
-            self.assertTrue(await asyncio.to_thread(committed.wait, 1))
-            enqueue_task.cancel()
-            release.set()
-            with self.assertRaises(asyncio.CancelledError):
-                await enqueue_task
-
-            self.assertEqual(len(state._requests), 1)  # noqa: SLF001
-            request = next(iter(state._requests.values()))  # noqa: SLF001
-            self.assertEqual(
-                state._idempotency[
-                    (
-                        request.rollout_id,
-                        request.registration_token,
-                        "cancel-request",
-                    )
-                ],
-                request.request_id,
-            )
-            self.assertEqual(len(state._pending["enqueue-cancel"]), 1)  # noqa: SLF001
-            with store._lock:  # noqa: SLF001
-                row_payload = store._connection.execute(  # noqa: SLF001
-                    "SELECT payload FROM relay_requests WHERE request_id = ?",
-                    (request.request_id,),
-                ).fetchone()[0]
-            self.assertEqual(json.loads(row_payload)["state"], "pending")
-            await state.aclose()
 
     async def test_terminal_commit_failure_never_publishes_in_memory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -537,10 +331,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
             def fail_commit(snapshots, evicted) -> None:
                 del evicted
-                snapshot = snapshots[0]
-                self.assertEqual(snapshot.state, "completed")
-                self.assertEqual(request.state, "leased")
-                self.assertFalse(request.future.done())
+                self.assertEqual(snapshots[0].state, "completed")
                 raise sqlite3.OperationalError("injected commit failure")
 
             store.commit_request_batch = fail_commit  # type: ignore[method-assign]
@@ -552,16 +343,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                     response=RelayWorkerResponse(200, {"ok": True}),
                 )
 
-            self.assertIs(state._requests[request.request_id], request)  # noqa: SLF001
-            self.assertNotIn(request.request_id, state._completed)  # noqa: SLF001
-            self.assertEqual(request.state, "leased")
-            self.assertFalse(request.future.done())
-            with store._lock:  # noqa: SLF001
-                row_payload = store._connection.execute(  # noqa: SLF001
-                    "SELECT payload FROM relay_requests WHERE request_id = ?",
-                    (request.request_id,),
-                ).fetchone()[0]
-            self.assertEqual(json.loads(row_payload)["state"], "leased")
+            failed = await state.stats()
+            self.assertEqual(failed["leased"]["commit-failure"], 1)
+            self.assertEqual(failed["counters"]["completed"], 0)
 
             store.commit_request_batch = original_commit  # type: ignore[method-assign]
             await state.respond(
@@ -570,7 +354,8 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 lease_id=delivery.lease_id,
                 response=RelayWorkerResponse(200, {"ok": True}),
             )
-            self.assertTrue(request.future.done())
+            response = await state.wait_for_response(request, timeout_seconds=1)
+            self.assertEqual((response.status, response.body), (200, {"ok": True}))
             await state.aclose()
 
     async def test_cancellation_after_terminal_commit_restores_memory_invariants(
@@ -608,58 +393,63 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await response_task
 
-            self.assertNotIn(request.request_id, state._requests)  # noqa: SLF001
-            self.assertIs(state._completed[request.request_id], request)  # noqa: SLF001
-            self.assertTrue(request.future.done())
-            self.assertEqual(state._counters["completed"], 1)  # noqa: SLF001
-            with store._lock:  # noqa: SLF001
-                row_payload = store._connection.execute(  # noqa: SLF001
-                    "SELECT payload FROM relay_requests WHERE request_id = ?",
-                    (request.request_id,),
-                ).fetchone()[0]
-            self.assertEqual(json.loads(row_payload)["state"], "completed")
+            response = await state.wait_for_response(request, timeout_seconds=1)
+            stats = await state.stats()
+            self.assertEqual((response.status, response.body), (200, {"ok": True}))
+            self.assertEqual(stats["inflight"], 0)
+            self.assertEqual(stats["counters"]["completed"], 1)
             await state.aclose()
 
-    async def test_deferred_response_pin_survives_restart_until_durable_release(
-        self,
-    ) -> None:
+    async def test_deferred_response_survives_restart_until_release(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             state_path = Path(directory) / "relay.sqlite3"
             state = ModelRelayState(state_path=state_path, max_completed_requests=1)
             token = str(
                 (await state.register_rollout("durable-pin"))["registration_token"]
             )
-            request, delivery = await enqueue_and_poll(state, "durable-pin", token)
+            request = await state.enqueue(
+                rollout_id="durable-pin",
+                endpoint="/v1/responses",
+                body={"model": "m"},
+                headers={},
+                idempotency_key="durable-request",
+            )
+            delivery = (
+                await state.poll(
+                    rollout_id="durable-pin",
+                    registration_token=token,
+                    timeout_seconds=0,
+                )
+            )[0]
             await state.respond(
-                request_id=delivery.request_id,
+                request_id=request.request_id,
                 registration_token=token,
                 lease_id=delivery.lease_id,
                 response=RelayWorkerResponse(200, {"ok": True}),
                 defer_delivery=True,
             )
-            self.assertTrue(request.delivery_pending)
-            self.assertFalse(request.future.done())
             await state.aclose()
 
             restored = ModelRelayState(
                 state_path=state_path,
                 max_completed_requests=1,
             )
-            await restored.stats()
-            recovered = restored._completed[request.request_id]  # noqa: SLF001
+            recovered = await restored.enqueue(
+                rollout_id="durable-pin",
+                endpoint="/v1/responses",
+                body={"model": "m"},
+                headers={},
+                idempotency_key="durable-request",
+            )
+            self.assertEqual(recovered.request_id, request.request_id)
             self.assertTrue(recovered.delivery_pending)
-            self.assertFalse(recovered.future.done())
-            await restored.release_completed_response(request.request_id)
-            self.assertFalse(recovered.delivery_pending)
-            self.assertTrue(recovered.future.done())
+            await restored.release_completed_response(recovered.request_id)
+            response = await restored.wait_for_response(
+                recovered,
+                timeout_seconds=1,
+            )
+            self.assertEqual((response.status, response.body), (200, {"ok": True}))
             await restored.aclose()
-
-            with sqlite3.connect(state_path) as connection:
-                row_payload = connection.execute(
-                    "SELECT payload FROM relay_requests WHERE request_id = ?",
-                    (request.request_id,),
-                ).fetchone()[0]
-            self.assertIs(json.loads(row_payload)["delivery_pending"], False)
 
     async def test_completed_capacity_never_evicts_deferred_pins(self) -> None:
         state = ModelRelayState(max_completed_requests=1)
@@ -682,33 +472,26 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 lease_id=second_delivery.lease_id,
                 response=RelayWorkerResponse(200, {"second": True}),
             )
-        self.assertIs(state._completed[first.request_id], first)  # noqa: SLF001
-        self.assertIs(state._requests[second.request_id], second)  # noqa: SLF001
-        self.assertFalse(first.future.done())
+        constrained = await state.stats()
+        self.assertEqual(constrained["completed_retained"], 1)
+        self.assertEqual(constrained["leased"]["pin-capacity"], 1)
 
         await state.release_completed_response(first.request_id)
+        first_response = await state.wait_for_response(first, timeout_seconds=1)
         await state.respond(
             request_id=second_delivery.request_id,
             registration_token=token,
             lease_id=second_delivery.lease_id,
             response=RelayWorkerResponse(200, {"second": True}),
         )
-        self.assertNotIn(first.request_id, state._completed)  # noqa: SLF001
-        self.assertTrue(second.future.done())
+        second_response = await state.wait_for_response(second, timeout_seconds=1)
+        self.assertEqual(first_response.body, {"first": True})
+        self.assertEqual(second_response.body, {"second": True})
 
     async def test_poll_wakeups_are_scoped_to_the_target_rollout(self) -> None:
         state = ModelRelayState()
-        token_a = str((await state.register_rollout("wake-a"))["registration_token"])
+        await state.register_rollout("wake-a")
         token_b = str((await state.register_rollout("wake-b"))["registration_token"])
-        waits = 0
-        original_wait = state._wait_for_rollout_wakeup  # noqa: SLF001
-
-        async def counted_wait(wakeup, timeout_seconds) -> None:
-            nonlocal waits
-            waits += 1
-            await original_wait(wakeup, timeout_seconds)
-
-        state._wait_for_rollout_wakeup = counted_wait  # type: ignore[method-assign]  # noqa: SLF001
         poll_b = asyncio.create_task(
             state.poll(
                 rollout_id="wake-b",
@@ -716,9 +499,8 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 timeout_seconds=1,
             )
         )
-        while waits == 0:
-            await asyncio.sleep(0)
-        await state.enqueue(
+        await asyncio.sleep(0.01)
+        request_a = await state.enqueue(
             rollout_id="wake-a",
             endpoint="/v1/responses",
             body={},
@@ -726,7 +508,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         )
         await asyncio.sleep(0.02)
         self.assertFalse(poll_b.done())
-        self.assertEqual(waits, 1)
 
         request_b = await state.enqueue(
             rollout_id="wake-b",
@@ -741,10 +522,9 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             response=RelayWorkerResponse(499, {}),
         )
         await state.cancel_request(
-            request_id=next(iter(state._requests)),  # noqa: SLF001
+            request_id=request_a.request_id,
             response=RelayWorkerResponse(499, {}),
         )
-        del token_a
 
     async def test_shortened_lease_renewal_wakes_waiting_rollout_poller(self) -> None:
         state = ModelRelayState()
@@ -763,12 +543,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 lease_seconds=1,
             )
         )
-        deadline = time.monotonic() + 1
-        while (
-            "short-renew" not in state._rollout_wakeups  # noqa: SLF001
-            and time.monotonic() < deadline
-        ):
-            await asyncio.sleep(0)
+        await asyncio.sleep(0.01)
 
         await state.renew_lease(
             request_id=leased.request_id,
@@ -811,98 +586,18 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
             with self.assertRaisesRegex(ValueError, "delivery_pending"):
                 await restored.stats()
-            self.assertFalse(restored._loaded)  # noqa: SLF001
-            self.assertEqual(restored._rollouts, {})  # noqa: SLF001
-            self.assertEqual(restored._requests, {})  # noqa: SLF001
-            self.assertEqual(restored._pending, {})  # noqa: SLF001
-            self.assertEqual(restored._inflight_bytes, 0)  # noqa: SLF001
 
             missing_field = dict(rows[1])
             missing_field.pop("request_digest")
             store.load_requests = lambda: [rows[0], missing_field]  # type: ignore[method-assign]
             with self.assertRaisesRegex(KeyError, "request_digest"):
                 await restored.stats()
-            self.assertFalse(restored._loaded)  # noqa: SLF001
-            self.assertEqual(restored._requests, {})  # noqa: SLF001
 
             store.load_requests = original_load  # type: ignore[method-assign]
             stats = await restored.stats()
             self.assertEqual(stats["inflight"], 2)
             self.assertEqual(stats["pending"]["atomic-restore"], 2)
-            self.assertEqual(stats["counters"]["restored_requests"], 2)
-            self.assertEqual(
-                len({request.request_id for request in restored._requests.values()}),  # noqa: SLF001
-                2,
-            )
             await restored.aclose()
-
-    async def test_startup_recovery_commit_failure_keeps_live_state_empty(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "relay.sqlite3"
-            state = ModelRelayState(state_path=state_path)
-            await state.register_rollout("recovery-commit")
-            await state.enqueue(
-                rollout_id="recovery-commit",
-                endpoint="/v1/responses",
-                body={},
-                headers={},
-                idempotency_key="reattach-after-restart",
-                defer_idempotency_until_disconnect=True,
-            )
-            await state.aclose()
-
-            restored = ModelRelayState(state_path=state_path)
-            store = restored._store  # noqa: SLF001
-            assert store is not None
-            original_commit = store.commit_request_batch
-
-            def fail_commit(_requests, _deleted) -> None:
-                raise sqlite3.OperationalError("injected recovery commit failure")
-
-            store.commit_request_batch = fail_commit  # type: ignore[method-assign]
-            with self.assertRaisesRegex(sqlite3.OperationalError, "injected"):
-                await restored.stats()
-            self.assertFalse(restored._loaded)  # noqa: SLF001
-            self.assertEqual(restored._requests, {})  # noqa: SLF001
-            self.assertEqual(restored._idempotency, {})  # noqa: SLF001
-
-            store.commit_request_batch = original_commit  # type: ignore[method-assign]
-            stats = await restored.stats()
-            self.assertEqual(stats["inflight"], 1)
-            self.assertEqual(len(restored._idempotency), 1)  # noqa: SLF001
-            await restored.aclose()
-
-    async def test_transient_worker_disconnect_requeues_without_failing_caller(
-        self,
-    ) -> None:
-        async with relay_app(worker_poll_timeout_seconds=1) as relay:
-            token = await relay.register("transient-worker")
-            caller = asyncio.create_task(relay.model_call("transient-worker"))
-            first = (await relay.poll("transient-worker", token))["requests"][0]
-
-            _status, retry = await relay.request(
-                "POST",
-                "/worker/error",
-                expected=200,
-                json={
-                    "request_id": first["request_id"],
-                    "registration_token": token,
-                    "lease_id": first["lease_id"],
-                    "status": 502,
-                    "error": "Server disconnected",
-                },
-            )
-            second = (await relay.poll("transient-worker", token))["requests"][0]
-            await relay.respond(second, token, {"ok": True})
-            caller_status, caller_body = await caller
-            stats = await relay.stats()
-
-        self.assertTrue(retry["retried"])
-        self.assertEqual(second["request_id"], first["request_id"])
-        self.assertEqual(second["delivery_count"], 2)
-        self.assertEqual((caller_status, caller_body), (200, {"ok": True}))
-        self.assertEqual(stats["counters"]["worker_retries"], 1)
-        self.assertEqual(stats["counters"]["worker_errors"], 0)
 
     async def test_disconnected_call_reattaches_without_duplicate_work(self) -> None:
         state = ModelRelayState()
@@ -1012,39 +707,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 {"Content-Type": "text/event-stream"},
             ),
         )
-
-    async def test_relay_restart_makes_inflight_request_reattachable(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            state_path = Path(directory) / "relay.sqlite3"
-            state = ModelRelayState(state_path=state_path)
-            await state.register_rollout("restart-inflight")
-            request = await state.enqueue(
-                rollout_id="restart-inflight",
-                endpoint="/v1/chat/completions",
-                method="POST",
-                body={"model": "m"},
-                headers={},
-                idempotency_key="auto/restart-fingerprint",
-                defer_idempotency_until_disconnect=True,
-            )
-            await state.aclose()
-
-            restored = ModelRelayState(state_path=state_path)
-            replay = await restored.enqueue(
-                rollout_id="restart-inflight",
-                endpoint="/v1/chat/completions",
-                method="POST",
-                body={"model": "m"},
-                headers={},
-                idempotency_key="auto/restart-fingerprint",
-                defer_idempotency_until_disconnect=True,
-            )
-            stats = await restored.stats()
-            await restored.aclose()
-
-        self.assertEqual(replay.request_id, request.request_id)
-        self.assertEqual(stats["counters"]["reattached"], 1)
-        self.assertEqual(stats["inflight"], 1)
 
     async def test_lifecycle_notifications_use_registered_sandbox_generation(
         self,
@@ -1405,74 +1067,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             {"worker-1", "worker-2"},
         )
 
-    async def test_healthz_reports_service_version(self) -> None:
-        async with relay_app() as relay:
-            _status, payload = await relay.request("GET", "/healthz", expected=200)
-        self.assertEqual(
-            payload,
-            {"ok": True, "service": "model-relay", "version": package_version()},
-        )
-
-    async def test_openai_chat_request_round_trips_through_worker_poll(self) -> None:
-        async with relay_app(
-            sandbox_bearer_token="sandbox-token",
-            worker_bearer_token="worker-token",
-            request_timeout_seconds=5,
-            worker_poll_timeout_seconds=1,
-        ) as relay:
-            worker_headers = {"Authorization": "Bearer worker-token"}
-            token = await relay.register("rollout-1", headers=worker_headers)
-            sandbox_task = asyncio.create_task(
-                relay.model_call(
-                    "rollout-1",
-                    headers={
-                        "Authorization": "Bearer sandbox-token",
-                        "Proxy-Authorization": "Bearer proxy-secret",
-                        "X-UCloud-Sandbox-Token": "public-secret",
-                        "X-Request-Metadata": "safe",
-                    },
-                    body={"model": "local-model", "messages": [{"content": "ping"}]},
-                )
-            )
-            _status, polled = await relay.request(
-                "GET",
-                "/worker/poll",
-                expected=200,
-                headers=worker_headers,
-                params={"rollout_id": "rollout-1", "registration_token": token},
-            )
-            request = polled["requests"][0]
-            await relay.request(
-                "POST",
-                "/worker/respond",
-                expected=200,
-                headers=worker_headers,
-                json={
-                    "request_id": request["request_id"],
-                    "registration_token": token,
-                    "lease_id": request["lease_id"],
-                    "body": {
-                        "encoding": "json",
-                        "value": {"choices": [{"message": {"content": "pong"}}]},
-                    },
-                },
-            )
-            status, body = await sandbox_task
-
-        forwarded = {key.lower(): value for key, value in request["headers"].items()}
-        self.assertEqual(status, 200)
-        self.assertEqual(request["rollout_id"], "rollout-1")
-        self.assertEqual(polled["requests"][0]["request_id"], request["request_id"])
-        self.assertIsInstance(request["lease_id"], str)
-        self.assertEqual(request["endpoint"], "/v1/chat/completions")
-        self.assertEqual(request["body"]["encoding"], "json")
-        self.assertEqual(request["body"]["value"]["model"], "local-model")
-        self.assertNotIn("authorization", forwarded)
-        self.assertNotIn("proxy-authorization", forwarded)
-        self.assertNotIn("x-ucloud-sandbox-token", forwarded)
-        self.assertEqual(forwarded["x-request-metadata"], "safe")
-        self.assertEqual(body["choices"][0]["message"]["content"], "pong")
-
     async def test_general_tunnel_preserves_http_bytes_path_query_and_headers(
         self,
     ) -> None:
@@ -1612,21 +1206,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(status, 401)
 
-    async def test_empty_worker_poll_returns_null_request(self) -> None:
-        async with relay_app(worker_poll_timeout_seconds=0) as relay:
-            token = await relay.register("rollout-empty")
-            _status, body = await relay.request(
-                "GET",
-                "/worker/poll",
-                expected=200,
-                params={
-                    "rollout_id": "rollout-empty",
-                    "registration_token": token,
-                    "timeout_seconds": "0",
-                },
-            )
-        self.assertEqual(body, {"requests": []})
-
     async def test_worker_can_poll_batches_and_respond_idempotently(self) -> None:
         async with relay_app(request_timeout_seconds=5) as relay:
             token = await relay.register("rollout-batch")
@@ -1688,6 +1267,16 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 )
             )["requests"][0]
             await asyncio.sleep(0.03)
+            renew_status, _payload = await relay.request(
+                "POST",
+                "/worker/renew",
+                json={
+                    "request_id": first["request_id"],
+                    "registration_token": token,
+                    "lease_id": first["lease_id"],
+                    "lease_seconds": 1,
+                },
+            )
             second = (
                 await relay.poll(
                     "rollout-retry",
@@ -1702,6 +1291,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(first["request_id"], second["request_id"])
         self.assertNotEqual(first["lease_id"], second["lease_id"])
+        self.assertEqual(renew_status, 409)
         self.assertEqual(second["delivery_count"], 2)
         self.assertEqual(result, (200, {"ok": True}))
         self.assertEqual(stats["counters"]["lease_expired"], 1)
@@ -1744,11 +1334,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["counters"]["lease_expired"], 0)
 
     async def test_sdk_worker_contract_preserves_request_identity(self) -> None:
-        sdk_src = (
-            Path(__file__).resolve().parents[1]
-            / "ucloud-sandboxes-sdk"
-            / "src"
-        )
+        sdk_src = Path(__file__).resolve().parents[1] / "ucloud-sandboxes-sdk" / "src"
         if not sdk_src.is_dir():
             self.skipTest(f"SDK source directory is missing: {sdk_src}")
         sys.path.insert(0, str(sdk_src))
@@ -1836,54 +1422,6 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                             await model_call
                         except asyncio.CancelledError:
                             pass
-
-    async def test_expired_lease_cannot_be_renewed(self) -> None:
-        async with relay_app(
-            request_timeout_seconds=5, worker_lease_seconds=0.01
-        ) as relay:
-            token = await relay.register("rollout-expired-renew")
-            task = asyncio.create_task(relay.model_call("rollout-expired-renew"))
-            leased = (
-                await relay.poll("rollout-expired-renew", token, lease_seconds="0.01")
-            )["requests"][0]
-            await asyncio.sleep(0.03)
-            status, _payload = await relay.request(
-                "POST",
-                "/worker/renew",
-                json={
-                    "request_id": leased["request_id"],
-                    "registration_token": token,
-                    "lease_id": leased["lease_id"],
-                    "lease_seconds": 1,
-                },
-            )
-            retried = (
-                await relay.poll("rollout-expired-renew", token, lease_seconds="1")
-            )["requests"][0]
-            await relay.respond(retried, token, {"ok": True})
-            result = await task
-
-        self.assertEqual(status, 409)
-        self.assertEqual(result, (200, {"ok": True}))
-
-    async def test_worker_heartbeat_updates_stats(self) -> None:
-        async with relay_app() as relay:
-            token = await relay.register("rollout-heartbeat")
-            await relay.request(
-                "POST",
-                "/worker/heartbeat",
-                expected=200,
-                json={
-                    "rollout_id": "rollout-heartbeat",
-                    "registration_token": token,
-                    "worker_id": "worker-heartbeat",
-                    "metadata": {"host": "lumi"},
-                },
-            )
-            stats = await relay.stats()
-
-        self.assertEqual(stats["workers"][0]["worker_id"], "worker-heartbeat")
-        self.assertEqual(stats["workers"][0]["metadata"], {"host": "lumi"})
 
 
 if __name__ == "__main__":

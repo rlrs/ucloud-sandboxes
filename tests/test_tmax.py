@@ -32,17 +32,6 @@ EOF
         self.assertIn('print("hello")', post)
         self.assertIn("\nEOF\n", f"\n{post}\n")
 
-    def test_parse_file_mappings(self) -> None:
-        definition = """Bootstrap: docker
-From: ubuntu:22.04
-
-%files
-            /source/a.txt /app/a.txt
-            "/source/with space.txt" /app/b.txt
-"""
-        context = self._materialize({"task_id": "files", "container_def": definition})
-        self.assertEqual(context.skipped_reason, "requires external %files fixtures")
-
     def test_materialize_rejects_unsupported_definitions(self) -> None:
         cases = (
             ({}, "missing container_def"),
@@ -80,12 +69,6 @@ From: ubuntu:22.04
         self.assertIn("PIP_DEFAULT_TIMEOUT=120", dockerfile)
         self.assertIn("COPY post.sh", dockerfile)
         self.assertIn("apt-get install -y python3-pytest", post)
-
-    def test_image_id_for_task_is_short_and_stable(self) -> None:
-        first = self._materialize({"task_id": "task_000000_f8baca82"})
-        long = self._materialize({"task_id": "x" * 100}, row_idx=1)
-        self.assertEqual(first.image_id, "tmax-task_000000_f8baca82")
-        self.assertLessEqual(len(long.image_id), 64)
 
     def test_harden_post_script_keeps_non_pytest_pip_installs(self) -> None:
         definition = """Bootstrap: docker

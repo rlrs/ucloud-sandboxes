@@ -392,6 +392,9 @@ class DirectOciConfigTests(unittest.TestCase):
             init = root / "docker-init"
             init.write_bytes(b"trusted-init")
             init.chmod(0o755)
+            outside = root / "outside"
+            outside.write_bytes(b"untouched")
+            (image.rootfs / ".ucloud-init").symlink_to(outside)
             builder = DirectOciConfigBuilder(init_binary=init)
             spec = SandboxSpec(
                 id="with-init",
@@ -416,6 +419,8 @@ class DirectOciConfigTests(unittest.TestCase):
                 )
             )
             installed = image.rootfs / ".ucloud-init"
+            self.assertEqual(outside.read_bytes(), b"untouched")
+            self.assertFalse(installed.is_symlink())
             self.assertEqual(installed.read_bytes(), b"trusted-init")
             self.assertEqual(installed.stat().st_mode & 0o777, 0o755)
 
@@ -465,28 +470,6 @@ class DirectOciConfigTests(unittest.TestCase):
             self.assertEqual(
                 (image.rootfs / ".ucloud-job-init").read_bytes(),
                 b"static-managed-init",
-            )
-
-    def test_init_install_replaces_image_symlink(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw).resolve()
-            image = self.image(root)
-            init = root / "docker-init"
-            init.write_bytes(b"trusted-init")
-            init.chmod(0o755)
-            outside = root / "outside"
-            outside.write_bytes(b"untouched")
-            (image.rootfs / ".ucloud-init").symlink_to(outside)
-            builder = DirectOciConfigBuilder(init_binary=init)
-
-            with reported_file_uid(init, 0):
-                builder.install_init(image.rootfs, enabled=True)
-
-            self.assertEqual(outside.read_bytes(), b"untouched")
-            self.assertFalse((image.rootfs / ".ucloud-init").is_symlink())
-            self.assertEqual(
-                (image.rootfs / ".ucloud-init").read_bytes(),
-                b"trusted-init",
             )
 
     def test_init_validation_rejects_untrusted_sources(self) -> None:

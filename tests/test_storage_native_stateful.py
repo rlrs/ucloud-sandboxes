@@ -125,6 +125,7 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
         index: int,
         kind: str,
         virtual_size: int,
+        operation_id: str | None = None,
     ) -> StorageVolumeRecord:
         fields = {
             "sandbox_id": f"sandbox-{index}",
@@ -134,12 +135,12 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
         if kind == "create":
             return self.service.create_volume(
                 **fields,
-                operation_id=f"create-{index}",
+                operation_id=operation_id or f"create-{index}",
                 virtual_size=virtual_size,
             )
         return self.service.acquire_snapshot(
             **fields,
-            operation_id=f"import-{index}",
+            operation_id=operation_id or f"import-{index}",
             publication_raw=self._publication(index, virtual_size).to_dict(),
         )
 
@@ -215,14 +216,16 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
 
     @rule()
     @precondition(
-        lambda self: self.current is not None
-        and self.current.state
-        in {
-            StorageVolumeState.MOUNTED,
-            StorageVolumeState.SEALED,
-            StorageVolumeState.RELEASED,
-            StorageVolumeState.PUBLISHED,
-        }
+        lambda self: (
+            self.current is not None
+            and self.current.state
+            in {
+                StorageVolumeState.MOUNTED,
+                StorageVolumeState.SEALED,
+                StorageVolumeState.RELEASED,
+                StorageVolumeState.PUBLISHED,
+            }
+        )
     )
     def advance_lifecycle(self) -> None:
         assert self.current is not None
@@ -246,15 +249,17 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
 
     @rule(failure=st.sampled_from(("none", "release", "unmount")))
     @precondition(
-        lambda self: self.current is not None
-        and self.current.state
-        in {
-            StorageVolumeState.MOUNTED,
-            StorageVolumeState.SEALED,
-            StorageVolumeState.RELEASED,
-            StorageVolumeState.PUBLISHED,
-            StorageVolumeState.ERROR,
-        }
+        lambda self: (
+            self.current is not None
+            and self.current.state
+            in {
+                StorageVolumeState.MOUNTED,
+                StorageVolumeState.SEALED,
+                StorageVolumeState.RELEASED,
+                StorageVolumeState.PUBLISHED,
+                StorageVolumeState.ERROR,
+            }
+        )
     )
     def delete(self, failure: str) -> None:
         assert self.current is not None
@@ -295,9 +300,11 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
 
     @rule()
     @precondition(
-        lambda self: self.current is not None
-        and self.current.state
-        not in {StorageVolumeState.DELETING, StorageVolumeState.DELETED}
+        lambda self: (
+            self.current is not None
+            and self.current.state
+            not in {StorageVolumeState.DELETING, StorageVolumeState.DELETED}
+        )
     )
     def reject_stale_revision_and_owner(self) -> None:
         assert self.current is not None
@@ -325,13 +332,14 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
     @rule()
     @precondition(lambda self: bool(self.retired))
     def deleted_records_do_not_resurrect(self) -> None:
-        deleted = self.retired[-1]
+        deleted = self.retired.pop()
         index = self._index(deleted)
+        kind = self.initial_kind[deleted.volume_id]
         self._restart()
         assert (
             self._call_initial(
                 index,
-                self.initial_kind[deleted.volume_id],
+                kind,
                 deleted.virtual_size,
             )
             == deleted
@@ -342,6 +350,33 @@ class StorageNativeServiceStateMachine(RuleBasedStateMachine):
             )
         )
         assert self.service.journal.load(deleted.volume_id) == deleted
+        if kind != "import":
+            return
+
+        retry_operation = self._operation_id("retry-import")
+        retried = self._call_initial(
+            index,
+            kind,
+            deleted.virtual_size,
+            retry_operation,
+        )
+        assert retried.state == StorageVolumeState.PUBLISHED
+        assert retried.accounting_id == deleted.accounting_id
+        assert retried.revision == deleted.revision + 1
+        self.current = retried
+        self.model[retried.volume_id] = retried
+        effects = self._effects()
+        self._restart()
+        assert (
+            self._call_initial(
+                index,
+                kind,
+                deleted.virtual_size,
+                retry_operation,
+            )
+            == retried
+        )
+        assert self._effects() == effects
 
     @rule()
     def reconcile(self) -> None:

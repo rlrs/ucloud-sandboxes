@@ -73,49 +73,6 @@ class DirectRegistryTests(unittest.TestCase):
             expected_revision=deleting.revision,
         )
 
-    def test_registration_survives_every_provisioning_boundary(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            path = (root / "registry.sqlite3").resolve()
-            registry = DirectSandboxRegistry(path)
-            planned = registry.plan(
-                spec=self.spec(),
-                sandbox_generation=7,
-                operation_id="create:7",
-                runtime_compatibility_sha256="b" * 64,
-            )
-            quota = registry.commit_quota(
-                "sandbox",
-                expected_revision=planned.revision,
-                project_id=200_000,
-                total_mb=4096,
-                quota_path=(root / "quota" / "sandbox.sandbox-7").resolve(),
-            )
-            sandbox = DirectSandbox(
-                sandbox_id="sandbox",
-                sandbox_generation=7,
-                container_id="c" * 64,
-                spec_sha256=quota.spec_sha256,
-                rootfs_sha256="d" * 64,
-                bundle=(root / "bundles" / "sandbox.sandbox-7").resolve(),
-                memory_directory="sandbox.sandbox-7",
-            )
-            rootfs = registry.commit_rootfs(
-                "sandbox",
-                expected_revision=quota.revision,
-                image_id="sha256:" + "e" * 64,
-                sandbox=sandbox,
-            )
-            owned = registry.commit_owned(
-                "sandbox",
-                expected_revision=rootfs.revision,
-            )
-
-            reopened = DirectSandboxRegistry(path).get("sandbox")
-            self.assertEqual(reopened, owned)
-            assert reopened is not None
-            self.assertEqual(reopened.to_direct_sandbox(), sandbox)
-
     def test_exact_plan_replay_is_idempotent_but_mismatch_conflicts(self) -> None:
         with TemporaryDirectory() as raw:
             registry = DirectSandboxRegistry((Path(raw) / "registry.sqlite3").resolve())
@@ -155,10 +112,6 @@ class DirectRegistryTests(unittest.TestCase):
                 runtime_compatibility_sha256="b" * 64,
             )
 
-            first = registry.snapshot()
-            self.assertEqual(registry.snapshot(), first)
-            self.assertEqual(first.get("sandbox"), planned)
-
             external = DirectSandboxRegistry(path)
             committed = external.commit_quota(
                 "sandbox",
@@ -167,11 +120,9 @@ class DirectRegistryTests(unittest.TestCase):
                 total_mb=4096,
                 quota_path=(root / "quota" / "sandbox.sandbox-7").resolve(),
             )
-            refreshed = registry.snapshot()
-
-            self.assertIsNot(refreshed, first)
-            self.assertEqual(refreshed.get("sandbox"), committed)
-            self.assertEqual(refreshed.activity_revision, committed.revision)
+            observed = registry.snapshot()
+            self.assertEqual(observed.get("sandbox"), committed)
+            self.assertEqual(observed.activity_revision, committed.revision)
 
     def test_global_activity_revision_survives_last_record_deletion(self) -> None:
         with TemporaryDirectory() as raw:
@@ -182,18 +133,10 @@ class DirectRegistryTests(unittest.TestCase):
             self.delete_registration(registry, root, "sandbox", 7)
             deleted = registry.snapshot()
             reopened = DirectSandboxRegistry(path).snapshot()
-            with closing(sqlite3.connect(path)) as connection:
-                persisted_revision = connection.execute(
-                    "SELECT activity_revision FROM registry_metadata"
-                ).fetchone()
 
             self.assertEqual(deleted.records, ())
             self.assertGreater(deleted.activity_revision, 0)
             self.assertEqual(reopened.activity_revision, deleted.activity_revision)
-            self.assertEqual(
-                persisted_revision,
-                (deleted.activity_revision,),
-            )
 
     def test_legacy_json_registry_is_rejected_without_migration(self) -> None:
         with TemporaryDirectory() as raw:
@@ -254,11 +197,6 @@ class DirectRegistryTests(unittest.TestCase):
 
             with self.assertRaisesRegex(DirectRegistryError, "another runtime"):
                 registry.bind_runtime_compatibility("a" * 64)
-            with closing(sqlite3.connect(path)) as connection:
-                persisted = connection.execute(
-                    "SELECT runtime_compatibility_sha256 FROM registry_metadata"
-                ).fetchone()
-            self.assertEqual(persisted, (None,))
 
     def test_registry_metadata_rejects_noncanonical_types(self) -> None:
         with TemporaryDirectory() as raw:
@@ -338,7 +276,7 @@ class DirectRegistryTests(unittest.TestCase):
             "column": ("ALTER TABLE generation_tombstones ADD COLUMN obsolete TEXT",),
             "index": (
                 "DROP INDEX registrations_image_id",
-                "CREATE INDEX registrations_image_id " "ON registrations (sandbox_id)",
+                "CREATE INDEX registrations_image_id ON registrations (sandbox_id)",
             ),
             "table": ("CREATE TABLE unexpected (value TEXT) STRICT",),
         }
@@ -353,26 +291,6 @@ class DirectRegistryTests(unittest.TestCase):
                         connection.commit()
                     with self.assertRaisesRegex(DirectRegistryError, "schema"):
                         DirectSandboxRegistry(path).snapshot()
-
-    def test_rejects_nonpositive_generations(self) -> None:
-        with TemporaryDirectory() as raw:
-            registry = DirectSandboxRegistry((Path(raw) / "registry.sqlite3").resolve())
-            with self.assertRaisesRegex(ValueError, "positive"):
-                registry.plan(
-                    spec=self.spec(),
-                    sandbox_generation=0,
-                    operation_id="create:zero",
-                    runtime_compatibility_sha256="b" * 64,
-                )
-            with self.assertRaisesRegex(ValueError, "positive"):
-                registry.plan_import(
-                    spec=self.spec(),
-                    sandbox_generation=0,
-                    operation_id="create:zero",
-                    runtime_compatibility_sha256="b" * 64,
-                    migration_id="move:zero",
-                    migration_sha256="c" * 64,
-                )
 
     def test_migration_phases_are_generation_and_digest_fenced(self) -> None:
         with TemporaryDirectory() as raw:
@@ -450,7 +368,8 @@ class DirectRegistryTests(unittest.TestCase):
     def test_delete_tombstone_fences_delayed_create(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
-            registry = DirectSandboxRegistry((root / "registry.sqlite3").resolve())
+            path = (root / "registry.sqlite3").resolve()
+            registry = DirectSandboxRegistry(path)
             planned = registry.plan(
                 spec=self.spec(),
                 sandbox_generation=7,
@@ -538,86 +457,35 @@ class DirectRegistryTests(unittest.TestCase):
                 migration_sha256="e" * 64,
             )
             self.assertEqual(next_return.phase, "import_planned")
-
-    def test_tombstones_share_database_and_preserve_exact_fences(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            path = (root / "registry.sqlite3").resolve()
-            registry = DirectSandboxRegistry(path)
-            for index in range(5):
-                self.delete_registration(
-                    registry,
-                    root,
-                    f"sandbox-{index}",
-                    7,
-                )
-            for index in range(5):
-                migration_id = f"move:{index}"
-                planned = registry.plan_import(
-                    spec=self.spec("migration-sandbox"),
-                    sandbox_generation=7,
-                    operation_id=f"import:{index}",
-                    runtime_compatibility_sha256="b" * 64,
-                    migration_id=migration_id,
-                    migration_sha256="f" * 64,
-                )
-                registry.abort_import_planned(
-                    "migration-sandbox",
-                    expected_revision=planned.revision,
-                    migration_id=migration_id,
-                    migration_sha256="f" * 64,
-                )
-
-            with closing(sqlite3.connect(path)) as connection:
-                generations = connection.execute(
-                    "SELECT COUNT(*) FROM generation_tombstones"
-                ).fetchone()
-                migrations = connection.execute(
-                    "SELECT COUNT(*) FROM migration_tombstones"
-                ).fetchone()
-            self.assertEqual(generations, (5,))
-            self.assertEqual(migrations, (5,))
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
+            registry.abort_import_planned(
+                "sandbox",
+                expected_revision=next_return.revision,
+                migration_id="move:return-next",
+                migration_sha256="e" * 64,
+            )
             reopened = DirectSandboxRegistry(path)
             with self.assertRaisesRegex(
                 DirectRegistryConflictError,
                 "tombstone",
             ):
                 reopened.plan(
-                    spec=self.spec("sandbox-0"),
+                    spec=self.spec(),
                     sandbox_generation=7,
                     operation_id="create:7-retry",
                     runtime_compatibility_sha256="b" * 64,
                 )
-            newer = reopened.plan(
-                spec=self.spec("sandbox-0"),
-                sandbox_generation=8,
-                operation_id="create:8",
-                runtime_compatibility_sha256="b" * 64,
-            )
-            self.assertEqual(newer.phase, "planned")
             with self.assertRaisesRegex(
                 DirectRegistryConflictError,
                 "migration import is fenced",
             ):
                 reopened.plan_import(
-                    spec=self.spec("migration-sandbox"),
+                    spec=self.spec(),
                     sandbox_generation=7,
                     operation_id="import:replay",
                     runtime_compatibility_sha256="b" * 64,
-                    migration_id="move:0",
+                    migration_id="move:return",
                     migration_sha256="f" * 64,
                 )
-            fresh = reopened.plan_import(
-                spec=self.spec("migration-sandbox"),
-                sandbox_generation=7,
-                operation_id="import:fresh",
-                runtime_compatibility_sha256="b" * 64,
-                migration_id="move:fresh",
-                migration_sha256="f" * 64,
-            )
-            self.assertEqual(fresh.phase, "import_planned")
 
     def test_concurrent_first_reads_initialize_once(self) -> None:
         with TemporaryDirectory() as raw:

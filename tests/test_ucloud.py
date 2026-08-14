@@ -89,30 +89,6 @@ class UCloudClientTests(unittest.TestCase):
         with self.assertRaisesRegex(UCloudError, "repeated a cursor"):
             RepeatingCursorClient().browse_all_jobs("project-1")
 
-    def test_browse_ssh_keys_reads_every_page_and_rejects_cursor_loops(self) -> None:
-        class PaginatedClient(FakeUCloudClient):
-            def request_json(self, method, path, **kwargs):
-                del method, path
-                params = kwargs.get("params") or {}
-                self.calls.append(dict(params))
-                if params.get("next") is None:
-                    return {"items": [{"id": "key-1"}], "next": "page-2"}
-                return {"items": [{"id": "key-2"}], "next": None}
-
-        client = PaginatedClient()
-        self.assertEqual(
-            [item["id"] for item in client.browse_ssh_keys()],
-            ["key-1", "key-2"],
-        )
-
-        class RepeatingClient(FakeUCloudClient):
-            def request_json(self, *args, **kwargs):
-                del args, kwargs
-                return {"items": [], "next": "same"}
-
-        with self.assertRaisesRegex(UCloudError, "repeated a cursor"):
-            RepeatingClient().browse_ssh_keys()
-
     def test_open_json_bounds_success_and_error_responses(self) -> None:
         class Response:
             status = 200

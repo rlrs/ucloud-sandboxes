@@ -21,12 +21,8 @@ from ucloud_sandboxes.models import (
     utc_now,
 )
 from ucloud_sandboxes.routing import (
-    ExecRoute,
-    PendingImageBuildDemand,
     PendingSandboxDemand,
     ProgramRequestState,
-    PreparedBuilderDemand,
-    PreparedCapacityDemand,
     RoutingState,
     SandboxRoute,
 )
@@ -103,15 +99,6 @@ class MetricsTests(unittest.TestCase):
                 )
 
             events = store.load_events(max_events=10_000)
-            with sqlite3.connect(path) as connection:
-                retained_bytes, retained_events = connection.execute(
-                    """
-                    SELECT retained_payload_bytes, retained_events
-                    FROM metric_store_meta
-                    WHERE singleton = 1
-                    """
-                ).fetchone()
-                auto_vacuum = connection.execute("PRAGMA auto_vacuum").fetchone()[0]
             physical_bytes = sum(
                 candidate.stat().st_size
                 for candidate in (path, path.with_name(path.name + "-wal"))
@@ -120,28 +107,8 @@ class MetricsTests(unittest.TestCase):
 
         self.assertTrue(events)
         self.assertEqual(events[-1].data["index"], 199)
-        self.assertLess(retained_events, 200)
-        self.assertLessEqual(retained_bytes, max_bytes)
+        self.assertLess(len(events), 200)
         self.assertLessEqual(physical_bytes, max_bytes)
-        self.assertEqual(auto_vacuum, 2)
-
-    def test_sqlite_store_rejects_noncanonical_schema(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "metrics.sqlite"
-            with sqlite3.connect(path) as connection:
-                connection.execute(
-                    """
-                    CREATE TABLE metric_events (
-                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                        timestamp TEXT NOT NULL,
-                        timestamp_epoch REAL NOT NULL,
-                        kind TEXT NOT NULL,
-                        data_json TEXT NOT NULL
-                    )
-                    """
-                )
-            with self.assertRaisesRegex(sqlite3.DatabaseError, "schema is invalid"):
-                MetricsStore(path, max_bytes=128 * 1024)
 
     def test_builds_live_pressure_and_provisioning_signals(self) -> None:
         now = utc_now()
@@ -355,7 +322,7 @@ class MetricsTests(unittest.TestCase):
             event.data["effective_policy"]["program_aware_autoscaling_enabled"]
         )
 
-    def test_builds_dashboard_snapshot_from_heartbeats_routes_and_events(self) -> None:
+    def test_snapshot_aggregates_live_routes_and_schedulable_demand(self) -> None:
         now = utc_now()
         heartbeat = build_heartbeat(
             job_id="job-1",
@@ -365,154 +332,62 @@ class MetricsTests(unittest.TestCase):
             capabilities=("sandbox", "image-cache", "disk-quota"),
             total_resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=100_000),
             used_resources=ResourceQuantity(vcpu=1, memory_mb=2048, disk_mb=10_000),
-            runtime_metrics=NodeRuntimeMetrics(
-                collected_at=now,
-                cpu_percent=20.0,
-                cpu_vcpu=0.8,
-                cpu_count=4,
-                memory_total_mb=8192,
-                memory_used_mb=3072,
-                memory_available_mb=5120,
-                memory_percent=37.5,
-                load_average_1m=0.5,
-                load_average_5m=0.4,
-                load_average_15m=0.3,
-            ),
             now=now,
         )
         routing = RoutingState(
             sandboxes={
-                "active-one": sandbox_route(
-                    sandbox_id="active-one",
+                "active": sandbox_route(
+                    sandbox_id="active",
                     node_id="node-1",
                     job_id="job-1",
                     node_url="http://node-1:8090",
-                    resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
                     created_at=now.isoformat(),
-                ),
-                "stale-one": sandbox_route(
-                    sandbox_id="stale-one",
-                    node_id="stale-node",
-                    job_id="stale-job",
-                    node_url="http://stale-node:8090",
-                    resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
-                    created_at=now.isoformat(),
-                ),
-            },
-            exec_sessions={
-                "exec-1": ExecRoute(
-                    session_id="exec-1",
-                    sandbox_id="active-one",
-                    node_id="node-1",
-                    job_id="job-1",
-                    node_url="http://node-1:8090",
                 )
             },
+            exec_sessions={},
             pending={
-                "pending-one": PendingSandboxDemand(
-                    sandbox_id="pending-one",
-                    resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=2048),
-                    created_at=(now - timedelta(seconds=30)).isoformat(),
+                "schedulable": PendingSandboxDemand(
+                    sandbox_id="schedulable",
+                    resources=ResourceQuantity(vcpu=2, memory_mb=4096),
+                    created_at=now.isoformat(),
                     updated_at=now.isoformat(),
-                    attempts=2,
                 ),
-                "failed-image": PendingSandboxDemand(
-                    sandbox_id="failed-image",
-                    resources=ResourceQuantity(
-                        vcpu=8,
-                        memory_mb=16_384,
-                        disk_mb=32_768,
-                    ),
-                    created_at=(now - timedelta(seconds=45)).isoformat(),
+                "suppressed": PendingSandboxDemand(
+                    sandbox_id="suppressed",
+                    resources=ResourceQuantity(vcpu=8, memory_mb=16_384),
+                    created_at=now.isoformat(),
                     updated_at=now.isoformat(),
-                    attempts=3,
                     failure_reason="image_pull_http_503",
                 ),
             },
-            image_builds={
-                "image-1": PendingImageBuildDemand(
-                    image_id="image-1",
-                    tag="registry.example/image:latest",
-                    created_at=(now - timedelta(seconds=60)).isoformat(),
-                    updated_at=now.isoformat(),
-                )
-            },
-            prepared={
-                "prep-1": PreparedCapacityDemand(
-                    prepare_id="prep-1",
-                    resources=ResourceQuantity(vcpu=1, memory_mb=2048, disk_mb=1024),
-                    count=4,
-                    created_at=(now - timedelta(seconds=15)).isoformat(),
-                    updated_at=now.isoformat(),
-                    expires_at=(now + timedelta(seconds=600)).isoformat(),
-                )
-            },
-            prepared_builders={
-                "builder-prep-1": PreparedBuilderDemand(
-                    prepare_id="builder-prep-1",
-                    count=1,
-                    created_at=(now - timedelta(seconds=10)).isoformat(),
-                    updated_at=now.isoformat(),
-                    expires_at=(now + timedelta(seconds=600)).isoformat(),
-                )
-            },
+            image_builds={},
+            prepared={},
+            prepared_builders={},
         )
 
-        with TemporaryDirectory() as raw_dir:
-            store = MetricsStore(Path(raw_dir) / "metrics.sqlite")
-            store.append(
-                "sandbox_scheduled",
-                {
-                    "sandbox_id": "active-one",
-                    "scale_up_wait_ms": 12_000,
-                    "had_pending_demand": True,
-                },
-            )
-            snapshot = build_metrics_snapshot(
-                {"job-1": heartbeat},
-                routing,
-                store.load_events(),
-                heartbeat_ttl_seconds=120,
-            )
+        snapshot = build_metrics_snapshot(
+            {"job-1": heartbeat},
+            routing,
+            [],
+            heartbeat_ttl_seconds=120,
+        )
 
-        self.assertEqual(snapshot["nodes"]["fresh"], 1)
-        self.assertEqual(snapshot["nodes"]["sandbox_ready"], 1)
-        self.assertEqual(snapshot["nodes"]["sandbox_draining"], 0)
-        self.assertEqual(snapshot["nodes"]["sandbox_admission_closed"], 0)
-        self.assertEqual(snapshot["nodes"]["samples"], 0)
         self.assertEqual(
-            snapshot["nodes"]["items"][0]["actual_usage"]["cpu_percent"], 20.0
+            (
+                snapshot["nodes"]["fresh"],
+                snapshot["nodes"]["sandbox_ready"],
+                snapshot["sandboxes"]["running"],
+                snapshot["sandboxes"]["routes_on_fresh_nodes"],
+            ),
+            (1, 1, 1, 1),
         )
-        self.assertEqual(
-            snapshot["resources"]["sandbox"]["actual_usage"]["cpu_vcpu"], 0.8
-        )
-        self.assertEqual(snapshot["resources"]["sandbox"]["load"]["vcpu"], 0.25)
-        self.assertEqual(snapshot["sandboxes"]["running"], 1)
-        self.assertEqual(snapshot["sandboxes"]["active_routes"], 2)
-        self.assertEqual(snapshot["sandboxes"]["states"], {"unknown": 2})
-        self.assertEqual(snapshot["sandboxes"]["routes_on_fresh_nodes"], 1)
-        self.assertEqual(snapshot["sandboxes"]["provisional_running_routes"], 0)
-        self.assertEqual(snapshot["sandboxes"]["stale_routes"], 1)
         self.assertEqual(snapshot["sandboxes"]["pending"], 1)
         self.assertEqual(snapshot["sandboxes"]["pending_resources"]["vcpu"], 2.0)
-        self.assertEqual(snapshot["sandboxes"]["pending_attempts"], 2)
         self.assertEqual(snapshot["sandboxes"]["suppressed_pending"], 1)
         self.assertEqual(
             snapshot["sandboxes"]["suppressed_pending_resources"]["vcpu"],
             8.0,
         )
-        self.assertEqual(snapshot["sandboxes"]["suppressed_pending_attempts"], 3)
-        self.assertEqual(snapshot["capacity"]["prepared"], 1)
-        self.assertEqual(snapshot["capacity"]["prepared_sandboxes"], 4)
-        self.assertEqual(snapshot["capacity"]["prepared_resources"]["vcpu"], 4.0)
-        self.assertEqual(snapshot["exec"]["sessions"], 1)
-        self.assertEqual(snapshot["images"]["pending_builds"], 1)
-        self.assertEqual(snapshot["builders"]["prepared_builders"], 1)
-        self.assertEqual(
-            snapshot["builders"]["items"][0]["prepare_id"], "builder-prep-1"
-        )
-        self.assertEqual(snapshot["scale_up"]["samples"], 1)
-        self.assertEqual(snapshot["scale_up"]["last_ms"], 12_000)
 
     def test_recent_route_on_fresh_node_counts_as_provisional_running(self) -> None:
         now = utc_now()

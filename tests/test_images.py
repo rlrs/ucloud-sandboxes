@@ -37,18 +37,6 @@ from ucloud_sandboxes.models import utc_now
 from ucloud_sandboxes.sandbox import CommandResult
 
 
-class RecordingExecutor:
-    def __init__(self) -> None:
-        self.commands: list[tuple[str, ...]] = []
-
-    def run(
-        self, argv: tuple[str, ...], *, input: bytes | None = None
-    ) -> CommandResult:
-        del input
-        self.commands.append(argv)
-        return CommandResult(argv=argv, exit_code=0)
-
-
 class ImageTests(unittest.TestCase):
     def test_cold_pull_slots_bound_concurrency_without_losing_drain_fence(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -105,34 +93,6 @@ class ImageTests(unittest.TestCase):
                 manager.pull_operation_snapshot()["active_operations"],
                 0,
             )
-
-    def test_build_records_use_only_canonical_fields(self) -> None:
-        payload = ImageBuildRecord(
-            build_id="build-1",
-            image_id="image-1",
-            tag="local/image-1:latest",
-            status="succeeded",
-            created_at="2026-01-01T00:00:00+00:00",
-            updated_at="2026-01-01T00:00:01+00:00",
-            exit_code=0,
-            push_exit_code=0,
-        ).to_dict()
-        canonical = ImageBuildRecord.from_dict(payload)
-        missing = dict(payload)
-        missing.pop("error")
-        invalid = (
-            missing,
-            {**payload, "exitCode": 0},
-            {**payload, "command": "docker build"},
-            {**payload, "push": "false"},
-        )
-
-        self.assertIsNotNone(canonical)
-        for raw in invalid:
-            self.assertIsNone(ImageBuildRecord.from_dict(raw))
-        assert canonical is not None
-        self.assertEqual((canonical.exit_code, canonical.push_exit_code), (0, 0))
-        self.assertEqual(ImageBuildRecord.from_dict(canonical.to_dict()), canonical)
 
     def test_image_state_rejects_noncanonical_schemas_and_payloads(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -250,35 +210,6 @@ class ImageTests(unittest.TestCase):
                 {"done-4", "done-5"},
             )
 
-    def test_build_logs_are_persisted(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            build_store = ImageBuildStore(Path(raw_dir) / "builds.json")
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                ChattyBuildRuntime(),
-                build_store=build_store,
-            )
-            identity, materialize = _uploaded_context()
-
-            build, started = manager.start_build(
-                ImageBuildSpec(
-                    id="chatty",
-                    tag="local/chatty:latest",
-                    context_path=str(context_path),
-                ),
-                context_identity=identity,
-                materialize_context=materialize,
-            )
-            self.assertTrue(started)
-            result = manager.wait_for_build(build.build_id, timeout_seconds=2)
-            self.assertIsNotNone(result)
-            assert result is not None
-            self.assertEqual(result.status, "succeeded")
-            self.assertEqual(result.log_tail, "x" * 4_000)
-            self.assertEqual(manager.active_build_count(), 0)
-
     def test_multiprocess_image_and_build_writers_do_not_lose_updates(self) -> None:
         with TemporaryDirectory() as raw_dir:
             state_path = Path(raw_dir) / "image-state.sqlite3"
@@ -385,43 +316,6 @@ class ImageTests(unittest.TestCase):
             assert build is not None
             self.assertEqual(build.status, "running")
 
-    def test_manager_rejects_builds_above_concurrency_limit(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            executor = BlockingBuildExecutor()
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(executor=executor),
-                max_active_builds=1,
-            )
-            identity, materialize = _uploaded_context()
-            first, started = manager.start_build(
-                ImageBuildSpec(
-                    id="one",
-                    tag="local/one:latest",
-                    context_path=str(context_path),
-                ),
-                context_identity=identity,
-                materialize_context=materialize,
-            )
-            self.assertTrue(started)
-            self.assertTrue(executor.started.wait(1))
-            try:
-                with self.assertRaisesRegex(ImageBuildCapacityError, "capacity"):
-                    manager.start_build(
-                        ImageBuildSpec(
-                            id="two",
-                            tag="local/two:latest",
-                            context_path=str(context_path),
-                        ),
-                        context_identity=identity,
-                        materialize_context=materialize,
-                    )
-            finally:
-                executor.release.set()
-                manager.wait_for_build(first.build_id, timeout_seconds=2)
-
     def test_build_singleflight_requires_exact_immutable_fingerprint(self) -> None:
         with TemporaryDirectory() as raw_dir:
             context_path = Path(raw_dir) / "context"
@@ -484,6 +378,16 @@ class ImageTests(unittest.TestCase):
                     materialize_context=materialize,
                     cleanup=lambda: cleanup_calls.append("spec"),
                 )
+            with self.assertRaisesRegex(ImageBuildConflictError, "id or tag"):
+                manager.start_build(
+                    ImageBuildSpec(
+                        id="other-id",
+                        tag=spec.tag,
+                        context_path=spec.context_path,
+                    ),
+                    context_identity=context_identity,
+                    materialize_context=materialize,
+                )
             old_fingerprint = image_build_fingerprint(
                 spec,
                 context_identity=context_identity,
@@ -515,114 +419,6 @@ class ImageTests(unittest.TestCase):
             executor.release.set()
             manager.wait_for_build(first.build_id, timeout_seconds=2)
             self.assertFalse(snapshot_path.exists())
-
-    def test_active_build_output_key_conflicts_on_id_or_tag(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            (context_path / "Dockerfile").write_text(
-                "FROM scratch\n",
-                encoding="utf-8",
-            )
-            executor = BlockingBuildExecutor()
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(executor=executor),
-                max_active_builds=4,
-            )
-            identity, materialize = _uploaded_context(("Dockerfile", b"FROM scratch\n"))
-            first, started = manager.start_build(
-                ImageBuildSpec(
-                    id="shared-id",
-                    tag="local/shared-tag:latest",
-                    context_path=str(context_path),
-                ),
-                context_identity=identity,
-                materialize_context=materialize,
-            )
-            self.assertTrue(started)
-            self.assertTrue(executor.started.wait(1))
-            try:
-                with self.assertRaisesRegex(ImageBuildConflictError, "id or tag"):
-                    manager.start_build(
-                        ImageBuildSpec(
-                            id="shared-id",
-                            tag="local/different-tag:latest",
-                            context_path=str(context_path),
-                        ),
-                        context_identity=identity,
-                        materialize_context=materialize,
-                    )
-                with self.assertRaisesRegex(ImageBuildConflictError, "id or tag"):
-                    manager.start_build(
-                        ImageBuildSpec(
-                            id="different-id",
-                            tag="local/shared-tag:latest",
-                            context_path=str(context_path),
-                        ),
-                        context_identity=identity,
-                        materialize_context=materialize,
-                    )
-            finally:
-                executor.release.set()
-                manager.wait_for_build(first.build_id, timeout_seconds=2)
-
-    def test_reservation_precedes_context_materialization(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            (context_path / "Dockerfile").write_text(
-                "FROM scratch\n",
-                encoding="utf-8",
-            )
-            executor = BlockingBuildExecutor()
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(executor=executor),
-            )
-            identity, materialize_uploaded = _uploaded_context(
-                ("Dockerfile", b"FROM scratch\n")
-            )
-            materializations = 0
-
-            def materialize():
-                nonlocal materializations
-                materializations += 1
-                return materialize_uploaded()
-
-            spec = ImageBuildSpec(
-                id="lazy-context",
-                tag="local/lazy-context:latest",
-                context_path=str(context_path),
-            )
-            first, started = manager.start_build(
-                spec,
-                context_identity=identity,
-                materialize_context=materialize,
-            )
-            self.assertTrue(started)
-            self.assertTrue(executor.started.wait(1))
-            duplicate, duplicate_started = manager.start_build(
-                spec,
-                context_identity=identity,
-                materialize_context=materialize,
-            )
-            self.assertFalse(duplicate_started)
-            self.assertEqual(duplicate.build_id, first.build_id)
-            with self.assertRaises(ImageBuildConflictError):
-                manager.start_build(
-                    ImageBuildSpec(
-                        id=spec.id,
-                        tag=spec.tag,
-                        context_path=spec.context_path,
-                        build_args={"DIFFERENT": "1"},
-                    ),
-                    context_identity=identity,
-                    materialize_context=materialize,
-                )
-            self.assertEqual(materializations, 1)
-            executor.release.set()
-            manager.wait_for_build(first.build_id, timeout_seconds=2)
 
     def test_build_worker_thread_start_failure_is_terminal_and_cleans_snapshot(
         self,
@@ -851,36 +647,6 @@ class ImageTests(unittest.TestCase):
         self.assertLessEqual(len(image_id), 64)
         self.assertEqual(image_id, image_id_from_tag(reference))
 
-    def test_build_command_includes_tag_args_and_labels(self) -> None:
-        runtime = DockerImageRuntime(dry_run=True)
-        spec = ImageBuildSpec(
-            id="base",
-            tag="local/base:latest",
-            context_path="/tmp/context",
-            dockerfile="Containerfile",
-            build_args={"B": "2", "A": "1"},
-            labels={"role": "base"},
-        )
-
-        argv = runtime.build_command(spec)
-
-        self.assertEqual(
-            argv[:6],
-            (
-                "docker",
-                "build",
-                "-f",
-                "/tmp/context/Containerfile",
-                "-t",
-                "local/base:latest",
-            ),
-        )
-        self.assertIn("--build-arg", argv)
-        self.assertIn("A=1", argv)
-        self.assertIn("B=2", argv)
-        self.assertIn("role=base", argv)
-        self.assertEqual(argv[-1], "/tmp/context")
-
     def test_dockerfile_must_be_normalized_context_relative_path(self) -> None:
         runtime = DockerImageRuntime(dry_run=True)
         for dockerfile in (
@@ -949,94 +715,6 @@ class ImageTests(unittest.TestCase):
                     materialize_context=materialize_escaped_context,
                 )
 
-    def test_manager_records_integrated_buildx_push_as_one_command(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            executor = RecordingExecutor()
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(
-                    executor=executor,
-                    buildx_direct_push=True,
-                    buildx_cache_ref="registry.example.org/cache/base:buildcache",
-                ),
-            )
-            spec = ImageBuildSpec(
-                id="base",
-                tag="registry.example.org/images/base:latest",
-                context_path=str(context_path),
-            )
-            identity, materialize = _uploaded_context()
-
-            started_record, started = manager.start_build(
-                spec,
-                context_identity=identity,
-                materialize_context=materialize,
-                push=True,
-            )
-            finished = manager.wait_for_build(
-                started_record.build_id,
-                timeout_seconds=2,
-            )
-
-            self.assertTrue(started)
-            self.assertIsNotNone(finished)
-            assert finished is not None
-            self.assertEqual(finished.status, "succeeded")
-            self.assertEqual(finished.command[:3], ("docker", "buildx", "build"))
-            self.assertIn("--push", finished.command)
-            self.assertIn("--cache-from", finished.command)
-            self.assertIn("--cache-to", finished.command)
-            self.assertEqual(finished.push_command, ())
-            self.assertIsNone(finished.push_exit_code)
-            self.assertEqual(executor.commands, [finished.command])
-            self.assertIn(
-                "docker_build_and_push_ms",
-                finished.timings["phases"],
-            )
-            self.assertNotIn("docker_push_ms", finished.timings["phases"])
-            self.assertTrue(finished.image["pushed"])
-
-    def test_manager_preserves_separate_push_by_default(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            context_path = Path(raw_dir) / "context"
-            context_path.mkdir()
-            executor = RecordingExecutor()
-            manager = ImageManager(
-                ImageStore(Path(raw_dir) / "images.json"),
-                DockerImageRuntime(executor=executor),
-            )
-            spec = ImageBuildSpec(
-                id="base",
-                tag="registry.example.org/images/base:latest",
-                context_path=str(context_path),
-            )
-            identity, materialize = _uploaded_context()
-
-            started_record, _started = manager.start_build(
-                spec,
-                context_identity=identity,
-                materialize_context=materialize,
-                push=True,
-            )
-            finished = manager.wait_for_build(
-                started_record.build_id,
-                timeout_seconds=2,
-            )
-
-            assert finished is not None
-            self.assertEqual(finished.command[:2], ("docker", "build"))
-            self.assertEqual(
-                finished.push_command,
-                ("docker", "push", "registry.example.org/images/base:latest"),
-            )
-            self.assertEqual(
-                executor.commands,
-                [finished.command, finished.push_command],
-            )
-            self.assertIn("docker_build_ms", finished.timings["phases"])
-            self.assertIn("docker_push_ms", finished.timings["phases"])
 
 def _uploaded_context(
     *entries: tuple[str, bytes],
@@ -1098,18 +776,6 @@ def _tar_gz_member(
         member.size = len(content)
         archive.addfile(member, BytesIO(content) if content else None)
     return payload.getvalue()
-
-
-class ChattyBuildRuntime(DockerImageRuntime):
-    def __init__(self) -> None:
-        super().__init__(dry_run=True)
-
-    def build(self, spec, *, push=False, on_output=None):  # type: ignore[no-untyped-def]
-        del push
-        if on_output is not None:
-            for _index in range(4_000):
-                on_output("combined", "x")
-        return CommandResult(argv=self.build_command(spec), exit_code=0)
 
 
 def _build_record(

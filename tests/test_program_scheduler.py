@@ -2,13 +2,13 @@ from dataclasses import replace
 from datetime import timedelta
 import unittest
 
+from hypothesis import given, strategies as st
+
 from ucloud_sandboxes.models import (
     ResourceQuantity,
-    SandboxDemand,
     ScalePolicy,
     utc_now,
 )
-from ucloud_sandboxes.policy import evaluate_scale
 from ucloud_sandboxes.program_scheduler import build_program_scale_signals
 from ucloud_sandboxes.program_scheduler import (
     WakeNodeCandidate,
@@ -60,6 +60,25 @@ class ProgramSchedulerTests(unittest.TestCase):
             )
             for index, route in enumerate(routes)
         ]
+        hard_route = sandbox_route(
+            sandbox_id="sandbox-hard",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            state="parked",
+            resources=ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=50000),
+        )
+        routes.append(hard_route)
+        requests.append(
+            ProgramRequestState(
+                request_id="request-hard",
+                rollout_id="rollout-hard",
+                sandbox_id=hard_route.sandbox_id,
+                sandbox_generation=hard_route.generation,
+                state="ready_to_wake",
+                resources=hard_route.resources,
+            )
+        )
         candidates = [
             WakeNodeCandidate(
                 node_id="node-1",
@@ -104,116 +123,23 @@ class ProgramSchedulerTests(unittest.TestCase):
         self.assertEqual(placements[0]["request_id"], "request-0")
         self.assertEqual(placements[0]["node_id"], "node-1")
         self.assertTrue(placements[0]["local"])
-        self.assertEqual(plan["unplaced_count"], 0)
-
-    def test_shadow_wake_queue_reports_unplaced_hard_shape(self) -> None:
-        route = sandbox_route(
-            sandbox_id="sandbox-1",
-            node_id="node-1",
-            job_id="job-1",
-            node_url="http://node-1:8090",
-            generation=1,
-            state="parked",
-            resources=ResourceQuantity(vcpu=16, memory_mb=32768, disk_mb=50000),
-        )
-        request = ProgramRequestState(
-            request_id="request-1",
-            rollout_id="rollout-1",
-            sandbox_id=route.sandbox_id,
-            sandbox_generation=route.generation,
-            state="ready_to_wake",
-            resources=route.resources,
-        )
-
-        plan = plan_shadow_wake_queue(
-            [request],
-            [route],
-            [
-                WakeNodeCandidate(
-                    node_id="node-2",
-                    job_id="job-2",
-                    available=ResourceQuantity(
-                        vcpu=8,
-                        memory_mb=16384,
-                        disk_mb=100000,
-                    ),
-                    total=ResourceQuantity(
-                        vcpu=8,
-                        memory_mb=16384,
-                        disk_mb=100000,
-                    ),
-                )
-            ],
-        )
-
-        self.assertEqual(plan["placed"], 0)
         self.assertEqual(plan["unplaced_count"], 1)
-        unplaced = plan["unplaced"]
-        assert isinstance(unplaced, list)
-        self.assertEqual(unplaced[0]["reason"], "no_hard_fit")
+        self.assertEqual(plan["unplaced"][0]["reason"], "no_hard_fit")
 
-    def test_program_demand_deduplicates_concurrent_requests_per_sandbox(self) -> None:
-        now = utc_now()
-        route = sandbox_route(
-            sandbox_id="sandbox-1",
-            node_id="node-1",
-            job_id="job-1",
-            node_url="http://node-1:8090",
-            generation=2,
-            state="parked",
-            resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=32768),
-        )
-        requests = [
-            ProgramRequestState(
-                request_id="wait",
-                rollout_id="rollout-1",
-                sandbox_id=route.sandbox_id,
-                sandbox_generation=route.generation,
-                state="model_wait",
-                resources=route.resources,
-                accepted_at=(now - timedelta(seconds=30)).isoformat(),
-            ),
-            ProgramRequestState(
-                request_id="ready",
-                rollout_id="rollout-1",
-                sandbox_id=route.sandbox_id,
-                sandbox_generation=route.generation,
-                state="ready_to_wake",
-                resources=route.resources,
-                response_ready_at=(now - timedelta(seconds=10)).isoformat(),
-            ),
-        ]
-
-        signals = build_program_scale_signals(
-            requests,
-            [route],
-            ScalePolicy(model_wait_capacity_weight=0.5),
-            now=now,
-        )
-
-        self.assertEqual(signals.model_wait_requests, 1)
-        self.assertEqual(signals.ready_to_wake_requests, 1)
-        self.assertEqual(signals.model_wait_sandboxes, 0)
-        self.assertEqual(signals.ready_to_wake_sandboxes, 1)
-        self.assertEqual(
-            signals.ready_to_wake_resources,
-            ResourceQuantity(vcpu=4, memory_mb=8192),
-        )
-        self.assertEqual(len(signals.ready_placement_requests), 1)
-        self.assertEqual(
-            signals.ready_placement_requests[0].resources,
-            route.resources,
-        )
-        self.assertEqual(
-            signals.ready_placement_requests[0].owned_job_id,
-            route.job_id,
-        )
-        self.assertEqual(
-            signals.ready_placement_requests[0].owned_disk_mb,
-            route.resources.disk_mb,
-        )
-
-    def test_completed_acting_request_does_not_hide_new_model_wait(self) -> None:
+    @given(
+        states=st.lists(
+            st.sampled_from(("model_wait", "ready_to_wake", "waking", "acting")),
+            max_size=6,
+        ),
+        pending=st.booleans(),
+        enabled=st.booleans(),
+    )
+    def test_program_demand_reduces_each_sandbox_to_one_future_phase(
+        self,
+        states: list[str],
+        pending: bool,
+        enabled: bool,
+    ) -> None:
         route = sandbox_route(
             sandbox_id="sandbox-1",
             node_id="node-1",
@@ -225,35 +151,46 @@ class ProgramSchedulerTests(unittest.TestCase):
         )
         requests = [
             ProgramRequestState(
-                request_id="previous",
-                rollout_id="rollout-1",
+                request_id=f"request-{index}",
+                rollout_id=f"rollout-{index}",
                 sandbox_id=route.sandbox_id,
                 sandbox_generation=route.generation,
-                state="acting",
+                state=state,
                 resources=route.resources,
-            ),
-            ProgramRequestState(
-                request_id="current",
-                rollout_id="rollout-1",
-                sandbox_id=route.sandbox_id,
-                sandbox_generation=route.generation,
-                state="model_wait",
-                resources=route.resources,
-            ),
+            )
+            for index, state in enumerate(states)
         ]
-
+        policy = ScalePolicy(
+            program_aware_autoscaling_enabled=enabled,
+            model_wait_capacity_weight=1,
+            model_wait_max_headroom_nodes=10,
+            default_node_resources=ResourceQuantity(vcpu=8, memory_mb=16384),
+        )
         signals = build_program_scale_signals(
             requests,
             [route],
-            ScalePolicy(model_wait_capacity_weight=0.5),
+            policy,
+            pending_wake_sandbox_ids={"sandbox-1"} if pending else set(),
         )
-
-        self.assertEqual(signals.acting_requests, 1)
-        self.assertEqual(signals.model_wait_sandboxes, 1)
+        for state in ("model_wait", "ready_to_wake", "waking", "acting"):
+            self.assertEqual(
+                getattr(signals, f"{state}_requests"),
+                states.count(state),
+            )
+        ready = "ready_to_wake" in states and not pending
+        waiting = "model_wait" in states and "ready_to_wake" not in states
+        self.assertEqual(signals.ready_to_wake_sandboxes, int(ready))
+        self.assertEqual(signals.model_wait_sandboxes, int(waiting))
+        expected = (
+            ResourceQuantity(vcpu=2, memory_mb=4096)
+            if ready or waiting
+            else ResourceQuantity()
+        )
         self.assertEqual(
-            signals.weighted_model_wait_resources,
-            ResourceQuantity(vcpu=1, memory_mb=2048),
+            signals.effective_resources,
+            expected if enabled else ResourceQuantity(),
         )
+        self.assertEqual(len(signals.ready_placement_requests), int(ready))
 
     def test_model_wait_demand_is_weighted_capped_and_shadow_only_by_default(
         self,
@@ -311,76 +248,6 @@ class ProgramSchedulerTests(unittest.TestCase):
             enabled.effective_resources,
             ResourceQuantity(vcpu=8, memory_mb=16384),
         )
-
-    def test_pending_wake_is_not_counted_twice(self) -> None:
-        route = sandbox_route(
-            sandbox_id="sandbox-1",
-            node_id="node-1",
-            job_id="job-1",
-            node_url="http://node-1:8090",
-            generation=1,
-            state="parked",
-            resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
-        )
-        request = ProgramRequestState(
-            request_id="request-1",
-            rollout_id="rollout-1",
-            sandbox_id=route.sandbox_id,
-            sandbox_generation=route.generation,
-            state="ready_to_wake",
-            resources=route.resources,
-        )
-
-        signals = build_program_scale_signals(
-            [request],
-            [route],
-            ScalePolicy(program_aware_autoscaling_enabled=True),
-            pending_wake_sandbox_ids={"sandbox-1"},
-        )
-
-        self.assertEqual(signals.ready_to_wake_sandboxes, 0)
-        self.assertEqual(signals.effective_resources, ResourceQuantity())
-        self.assertEqual(signals.ready_placement_requests, ())
-
-    def test_enabled_program_demand_participates_in_scale_decision(self) -> None:
-        policy = ScalePolicy(
-            program_aware_autoscaling_enabled=True,
-            default_node_resources=ResourceQuantity(
-                vcpu=8,
-                memory_mb=16384,
-                disk_mb=100000,
-            ),
-        )
-        route = sandbox_route(
-            sandbox_id="sandbox-1",
-            node_id="node-1",
-            job_id="job-1",
-            node_url="http://node-1:8090",
-            generation=1,
-            state="parked",
-            resources=ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=10000),
-        )
-        request = ProgramRequestState(
-            request_id="request-1",
-            rollout_id="rollout-1",
-            sandbox_id=route.sandbox_id,
-            sandbox_generation=route.generation,
-            state="ready_to_wake",
-            resources=route.resources,
-        )
-        signals = build_program_scale_signals([request], [route], policy)
-
-        decision = evaluate_scale(
-            [],
-            SandboxDemand(),
-            policy,
-            program_signals=signals,
-        )
-
-        self.assertEqual(decision.creates, 1)
-        self.assertEqual(decision.desired_resources.vcpu, 4)
-        self.assertEqual(decision.desired_resources.memory_mb, 8192)
-        self.assertEqual(decision.desired_resources.disk_mb, 0)
 
 
 if __name__ == "__main__":

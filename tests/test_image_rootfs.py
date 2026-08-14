@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Event, Lock, Thread
+from threading import Event, Thread
 from time import monotonic, sleep
 import unittest
 
@@ -14,6 +14,8 @@ from ucloud_sandboxes.image_rootfs import (
 
 IMAGE_DIGEST = "a" * 64
 OTHER_IMAGE_DIGEST = "b" * 64
+
+
 class FakeRunner:
     def __init__(self) -> None:
         self.commands: list[tuple[str, ...]] = []
@@ -29,11 +31,7 @@ class FakeRunner:
         elif command[0] == "mountpoint":
             return CommandResult(
                 command,
-                (
-                    0
-                    if command[-1] in self.mounted
-                    else self.not_mounted_returncode
-                ),
+                (0 if command[-1] in self.mounted else self.not_mounted_returncode),
             )
         elif command[0] == "umount":
             self.mounted.discard(command[-1])
@@ -104,35 +102,13 @@ class Overlay2Runner(FakeRunner):
                 command,
                 0,
                 "\n".join(
-                    f"{DockerOverlay2RootfsStore.PIN_REPOSITORY} "
-                    f"{digest} {image_id}"
+                    f"{DockerOverlay2RootfsStore.PIN_REPOSITORY} {digest} {image_id}"
                     for digest, image_id in sorted(self.pins.items())
                 ),
             )
         if command[0] == "umount" and self.fail_umount:
             self.commands.append(command)
             return CommandResult(command, 32, stderr="injected unmount failure")
-        return super().run(command, timeout=timeout)
-
-
-class BlockingInspectRunner(Overlay2Runner):
-    def __init__(self, docker_root: Path) -> None:
-        super().__init__(docker_root)
-        self.inspect_started = Event()
-        self.inspect_release = Event()
-        self._inspect_guard = Lock()
-        self._inspect_calls = 0
-
-    def run(self, argv, *, timeout):
-        command = tuple(str(item) for item in argv)
-        if command[:3] == ("docker", "image", "inspect"):
-            with self._inspect_guard:
-                self._inspect_calls += 1
-                first = self._inspect_calls == 1
-            if first:
-                self.inspect_started.set()
-                if not self.inspect_release.wait(timeout=5):
-                    raise AssertionError("test did not release Docker inspection")
         return super().run(command, timeout=timeout)
 
 
@@ -175,10 +151,7 @@ class MultiImageBlockingMountRunner(Overlay2Runner):
                     ]
                 ),
             )
-        if (
-            command[0] == "mount"
-            and command[-1].endswith(f"/{IMAGE_DIGEST}/rootfs")
-        ):
+        if command[0] == "mount" and command[-1].endswith(f"/{IMAGE_DIGEST}/rootfs"):
             self.commands.append(command)
             self.first_mount_started.set()
             if not self.first_mount_release.wait(timeout=5):
@@ -200,8 +173,7 @@ class ImageRootfsTests(unittest.TestCase):
     def test_overlay2_store_mounts_shared_layers_without_export(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw)
-            docker_root = root / "docker"
-            runner = Overlay2Runner(docker_root)
+            runner = Overlay2Runner(root / "docker")
             store = image_store(root, runner)
 
             with store.operation_lease("example/image:latest") as first:
@@ -211,84 +183,15 @@ class ImageRootfsTests(unittest.TestCase):
 
             self.assertEqual(first, second)
             self.assertEqual(first.image_config.command, ("true",))
-            mounts = [command for command in runner.commands if command[0] == "mount"]
-            self.assertEqual(len(mounts), 1)
-            options = mounts[0][mounts[0].index("-o") + 1]
             self.assertEqual(
-                options,
-                "ro,lowerdir="
-                f"{runner.top}:{runner.middle}:{runner.base}",
-            )
-            self.assertIn(
-                (
-                    "docker",
-                    "image",
-                    "tag",
-                    f"sha256:{IMAGE_DIGEST}",
-                    f"ucloud-sandbox-rootfs-cache:{IMAGE_DIGEST}",
-                ),
-                runner.commands,
-            )
-            self.assertEqual(
-                sum(command[:3] == ("docker", "image", "tag") for command in runner.commands),
+                sum(command[0] == "mount" for command in runner.commands),
                 1,
             )
             self.assertFalse(
-                any(command[:2] == ("docker", "create") for command in runner.commands)
-            )
-            self.assertFalse(
-                any(command[:2] == ("docker", "export") for command in runner.commands)
-            )
-
-    def test_overlay2_store_remounts_completed_image_after_restart(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            docker_root = root / "docker"
-            runner = Overlay2Runner(docker_root)
-            store = image_store(root, runner)
-            with store.operation_lease("example/image:latest") as first:
-                pass
-            runner.mounted.clear()
-
-            with store.operation_lease(f"sha256:{IMAGE_DIGEST}") as restored:
-                pass
-
-            self.assertEqual(restored.rootfs, first.rootfs)
-            self.assertEqual(
-                len([command for command in runner.commands if command[0] == "mount"]),
-                2,
-            )
-
-    def test_overlay2_store_bind_mounts_single_layer_image_read_only(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            docker_root = root / "docker"
-            runner = Overlay2Runner(docker_root, single_layer=True)
-            store = image_store(root, runner)
-
-            with store.operation_lease("scratch-derived:latest") as materialized:
-                pass
-
-            self.assertEqual(
-                [
-                    command
+                any(
+                    command[1:2] in (("create",), ("export",))
                     for command in runner.commands
-                    if command[0] == "mount"
-                ],
-                [
-                    (
-                        "mount",
-                        "--bind",
-                        str(runner.top),
-                        str(materialized.rootfs),
-                    ),
-                    (
-                        "mount",
-                        "-o",
-                        "remount,bind,ro",
-                        str(materialized.rootfs),
-                    ),
-                ],
+                )
             )
 
     def test_overlay2_startup_reconciles_durable_image_lease(self) -> None:
@@ -333,40 +236,6 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertFalse(target.exists())
             self.assertNotIn(str(materialized.rootfs), runner.mounted)
             self.assertNotIn(IMAGE_DIGEST, runner.pins)
-
-    def test_overlay2_targeted_collection_rechecks_shared_registry_root(self) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            runner = Overlay2Runner(root / "docker")
-            store = image_store(root, runner)
-            with store.operation_lease("example/image:latest") as materialized:
-                pass
-
-            retained = store.collect_image(
-                materialized.image_id,
-                is_referenced=lambda _image_id: True,
-            )
-            collected = store.collect_image(
-                materialized.image_id,
-                is_referenced=lambda _image_id: False,
-            )
-
-            self.assertFalse(retained)
-            self.assertTrue(collected)
-            self.assertFalse(materialized.rootfs.parent.exists())
-            self.assertNotIn(IMAGE_DIGEST, runner.pins)
-            inventory_commands = [
-                command
-                for command in runner.commands
-                if command[:3] == ("docker", "image", "ls")
-            ]
-            self.assertEqual(len(inventory_commands), 2)
-            self.assertTrue(
-                all(
-                    f"reference={store.PIN_REPOSITORY}:{IMAGE_DIGEST}" in command
-                    for command in inventory_commands
-                )
-            )
 
     def test_overlay2_gc_waits_for_digest_lease_and_rechecks_registry_root(
         self,
@@ -436,59 +305,6 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertTrue(materialized.rootfs.parent.exists())
             self.assertIn(str(materialized.rootfs), runner.mounted)
             self.assertIn(IMAGE_DIGEST, runner.pins)
-
-    def test_overlay2_materialization_enforces_concurrency_and_reports_waiters(
-        self,
-    ) -> None:
-        with TemporaryDirectory() as raw:
-            root = Path(raw)
-            runner = BlockingInspectRunner(root / "docker")
-            store = DockerOverlay2RootfsStore(
-                (root / "cache").resolve(),
-                runner=runner,
-                docker_root=runner.docker_root,
-                max_concurrent_operations=1,
-            )
-            results = []
-            errors: list[BaseException] = []
-
-            def materialize() -> None:
-                try:
-                    with store.operation_lease("example/image:latest") as image:
-                        results.append(image)
-                except BaseException as exc:
-                    errors.append(exc)
-
-            first = Thread(target=materialize)
-            second = Thread(target=materialize)
-            first.start()
-            self.assertTrue(runner.inspect_started.wait(timeout=2))
-            second.start()
-            deadline = monotonic() + 2
-            snapshot = store.operation_snapshot()
-            while snapshot["waiting_operations"] != 1 and monotonic() < deadline:
-                sleep(0.01)
-                snapshot = store.operation_snapshot()
-
-            self.assertEqual(snapshot["active_operations"], 1)
-            self.assertEqual(snapshot["waiting_operations"], 1)
-            self.assertEqual(snapshot["max_concurrent_operations"], 1)
-            runner.inspect_release.set()
-            first.join(timeout=5)
-            second.join(timeout=5)
-
-            self.assertFalse(first.is_alive())
-            self.assertFalse(second.is_alive())
-            self.assertEqual(errors, [])
-            self.assertEqual(len(results), 2)
-            self.assertEqual(
-                store.operation_snapshot(),
-                {
-                    "active_operations": 0,
-                    "waiting_operations": 0,
-                    "max_concurrent_operations": 1,
-                },
-            )
 
     def test_same_digest_waiters_do_not_starve_an_unrelated_image(self) -> None:
         with TemporaryDirectory() as raw:
@@ -656,9 +472,7 @@ class ImageRootfsTests(unittest.TestCase):
             runner.not_mounted_returncode = 32
             manager.resume_sandbox(lease.sandbox)
             self.assertIn(str(lease.merged), runner.mounted)
-            mounts = [
-                command for command in runner.commands if command[0] == "mount"
-            ]
+            mounts = [command for command in runner.commands if command[0] == "mount"]
             self.assertEqual(len(mounts), 3)
 
             manager.release(lease)
@@ -758,6 +572,7 @@ class ImageRootfsTests(unittest.TestCase):
             self.assertEqual((lease.upper / "payload").read_bytes(), b"migrated")
             self.assertTrue((generation / "checkpoint.img").is_file())
             self.assertTrue(lease.work.is_dir())
+
 
 if __name__ == "__main__":
     unittest.main()

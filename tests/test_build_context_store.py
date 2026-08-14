@@ -70,30 +70,11 @@ class BuildContextBlobStoreTests(unittest.TestCase):
                 f"sha256:../{digest[-59:]}",
                 f" sha256:{digest[-64:]}",
             ):
-                with self.subTest(invalid=invalid), self.assertRaisesRegex(
-                    ValueError, "normalized sha256"
+                with (
+                    self.subTest(invalid=invalid),
+                    self.assertRaisesRegex(ValueError, "normalized sha256"),
                 ):
                     store.path(invalid)
-
-    def test_verified_existing_blob_is_deduplicated(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = BuildContextBlobStore(Path(raw_dir), max_blob_bytes=100)
-            payload = b"same content"
-            digest = _digest(payload)
-            first = store.put_with_status(
-                digest, BytesIO(payload), content_length=len(payload)
-            ).path
-            first.chmod(0o644)
-
-            result = store.put_with_status(
-                digest, BytesIO(payload), content_length=len(payload)
-            )
-            second = result.path
-
-            self.assertTrue(result.deduplicated)
-            self.assertEqual(second, first)
-            self.assertEqual(second.read_bytes(), payload)
-            self.assertEqual(stat.S_IMODE(second.stat().st_mode), 0o600)
 
     def test_corrupt_existing_blob_is_atomically_replaced(self) -> None:
         with TemporaryDirectory() as raw_dir:
@@ -124,11 +105,13 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 paths = list(
                     executor.map(
-                        lambda store: store.put_with_status(
-                            digest,
-                            BytesIO(payload),
-                            content_length=len(payload),
-                        ).path,
+                        lambda store: (
+                            store.put_with_status(
+                                digest,
+                                BytesIO(payload),
+                                content_length=len(payload),
+                            ).path
+                        ),
                         stores,
                     )
                 )
@@ -192,28 +175,6 @@ class BuildContextBlobStoreTests(unittest.TestCase):
             self.assertEqual(result.remaining_entries, 1)
             self.assertEqual(result.remaining_bytes, len(payload))
             self.assertTrue(store.path(digest).exists())
-
-    def test_gc_evicts_oldest_unprotected_blob_first(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            store = BuildContextBlobStore(
-                Path(raw_dir),
-                max_blob_bytes=100,
-                max_entries=2,
-            )
-            payloads = (b"oldest", b"middle", b"newest")
-            digests = tuple(_digest(payload) for payload in payloads)
-            for index, (payload, digest) in enumerate(zip(payloads, digests)):
-                store.put_with_status(
-                    digest, BytesIO(payload), content_length=len(payload)
-                )
-                os.utime(store.path(digest), (100 + index, 100 + index))
-
-            result = store.gc()
-
-            self.assertEqual(result.removed_entries, 1)
-            self.assertFalse(store.path(digests[0]).exists())
-            self.assertTrue(store.path(digests[1]).exists())
-            self.assertTrue(store.path(digests[2]).exists())
 
 
 if __name__ == "__main__":

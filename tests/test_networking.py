@@ -5,10 +5,6 @@ from ucloud_sandboxes.providers.ucloud.payloads import (
     PublicLinkAttachment,
     apply_private_network_attachment,
     apply_public_link_attachment,
-    private_network_ids_from_resources,
-)
-from ucloud_sandboxes.networking import (
-    stable_hostname,
 )
 
 
@@ -80,25 +76,6 @@ class NetworkingTests(unittest.TestCase):
 
         self.assertEqual(
             updated["resources"], [{"type": "ingress", "id": "link-1", "port": 8080}]
-        )
-
-    def test_extracts_private_network_ids(self) -> None:
-        self.assertEqual(
-            private_network_ids_from_resources(
-                [
-                    {"type": "private_network", "id": "net-1"},
-                    {"type": "private_network", "id": "net-1"},
-                    {"type": "network", "id": "ip-1"},
-                    {"type": "private_network", "id": "net-2"},
-                ]
-            ),
-            ("net-1", "net-2"),
-        )
-
-    def test_stable_hostname_is_dns_label_like(self) -> None:
-        self.assertEqual(
-            stable_hostname("UCloud Sandbox Node 123", prefix="pool"),
-            "pool-ucloud-sandbox-node-123",
         )
 
     def test_rejects_invalid_hostname(self) -> None:

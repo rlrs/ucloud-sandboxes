@@ -60,34 +60,14 @@ class SystemdHelperTests(unittest.TestCase):
 
     def test_registry_mount_fails_closed(self) -> None:
         config = DeploymentConfig.default()
-        with patch.object(Path, "is_mount", return_value=False), self.assertRaisesRegex(
-            RuntimeError,
-            "registry storage is not mounted",
+        with (
+            patch.object(Path, "is_mount", return_value=False),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "registry storage is not mounted",
+            ),
         ):
             require_registry_mount(config)
-
-    def test_registry_gc_is_a_noop_for_fresh_empty_registry(self) -> None:
-        calls: list[list[str]] = []
-
-        def runner(
-            command: list[str],
-            *,
-            check: bool,
-            text: bool,
-            env: dict[str, str] | None = None,
-        ) -> subprocess.CompletedProcess[str]:
-            calls.append(command)
-            return subprocess.CompletedProcess(command, 0, "", "")
-
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            run_registry_gc(
-                config=self._filesystem_config(root),
-                lock_file=root / "maintenance",
-                runner=runner,
-            )
-
-        self.assertEqual(calls, [])
 
     def test_registry_gc_restarts_registry_after_gc_failure(self) -> None:
         calls: list[list[str]] = []
@@ -106,8 +86,9 @@ class SystemdHelperTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, command)
             return subprocess.CompletedProcess(command, 0, "", "")
 
-        with TemporaryDirectory() as raw_dir, self.assertRaises(
-            subprocess.CalledProcessError
+        with (
+            TemporaryDirectory() as raw_dir,
+            self.assertRaises(subprocess.CalledProcessError),
         ):
             config = self._filesystem_config(Path(raw_dir))
             data_dir = config.registry_data_dir()

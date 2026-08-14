@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
-import threading
 import unittest
 
 from ucloud_sandboxes.storage_native import StorageNativeLayer
@@ -16,29 +15,10 @@ from ucloud_sandboxes.storage_native_s3 import (
 )
 
 
-class _OverlapGate:
-    """Release every caller once two operations demonstrably overlap."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._arrived = 0
-        self._overlapped = threading.Event()
-
-    def wait(self) -> None:
-        with self._lock:
-            self._arrived += 1
-            if self._arrived >= 2:
-                self._overlapped.set()
-        if not self._overlapped.wait(timeout=5):
-            raise AssertionError("operations did not overlap")
-
-
 class FakeS3:
     def __init__(
         self,
         *,
-        upload_barrier: _OverlapGate | None = None,
-        stat_barrier: _OverlapGate | None = None,
         lose_complete_response: bool = False,
     ) -> None:
         self.objects: dict[str, bytes] = {}
@@ -46,14 +26,7 @@ class FakeS3:
         self.aborted: list[tuple[str, str]] = []
         self.next_upload = 0
         self.modified_at: dict[str, float] = {}
-        self.upload_barrier = upload_barrier
-        self.stat_barrier = stat_barrier
         self.lose_complete_response = lose_complete_response
-        self.active_uploads = 0
-        self.max_active_uploads = 0
-        self.upload_lock = threading.Lock()
-        self.active_stats = 0
-        self.max_active_stats = 0
 
     def create_multipart_upload(self, key: str) -> str:
         self.next_upload += 1
@@ -64,19 +37,8 @@ class FakeS3:
     def upload_part(
         self, key: str, upload_id: str, part_number: int, payload: bytes
     ) -> str:
-        with self.upload_lock:
-            self.active_uploads += 1
-            self.max_active_uploads = max(
-                self.max_active_uploads, self.active_uploads
-            )
-        try:
-            if self.upload_barrier is not None:
-                self.upload_barrier.wait()
-            self.uploads[(key, upload_id)][part_number] = payload
-            return f"etag-{part_number}"
-        finally:
-            with self.upload_lock:
-                self.active_uploads -= 1
+        self.uploads[(key, upload_id)][part_number] = payload
+        return f"etag-{part_number}"
 
     def complete_multipart_upload(self, key, upload_id, parts) -> None:
         upload = self.uploads.pop((key, upload_id))
@@ -89,23 +51,14 @@ class FakeS3:
         self.aborted.append((key, upload_id))
 
     def stat(self, key: str) -> S3ObjectStat | None:
-        with self.upload_lock:
-            self.active_stats += 1
-            self.max_active_stats = max(self.max_active_stats, self.active_stats)
-        try:
-            if self.stat_barrier is not None:
-                self.stat_barrier.wait()
-            payload = self.objects.get(key)
-            return (
-                None
-                if payload is None
-                else S3ObjectStat(
-                    size=len(payload), modified_at=self.modified_at.get(key, 0.0)
-                )
+        payload = self.objects.get(key)
+        return (
+            None
+            if payload is None
+            else S3ObjectStat(
+                size=len(payload), modified_at=self.modified_at.get(key, 0.0)
             )
-        finally:
-            with self.upload_lock:
-                self.active_stats -= 1
+        )
 
     def put_bytes(self, key: str, payload: bytes, *, sha256: str) -> None:
         if digest(payload) != sha256:
@@ -195,7 +148,9 @@ class StorageNativeS3Tests(unittest.TestCase):
                 "s3://sandbox-bucket/ucloud/test/managed-layers",
             )
             self.assertEqual(
-                s3.objects[f"ucloud/test/managed-layers/{publication.layers[0].digest}"],
+                s3.objects[
+                    f"ucloud/test/managed-layers/{publication.layers[0].digest}"
+                ],
                 payload,
             )
             self.assertFalse(any("/.uploads/" in key for key in s3.objects))
@@ -251,27 +206,6 @@ class StorageNativeS3Tests(unittest.TestCase):
             self.assertFalse(s3.objects)
             self.assertFalse(s3.uploads)
 
-    def test_uploads_bounded_multipart_parts_concurrently(self):
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            source = (root / "delta.commit").resolve()
-            payload = b"x" * (15 * 1024 * 1024)
-            source.write_bytes(payload)
-            s3 = FakeS3(upload_barrier=_OverlapGate())
-            publisher = self._publisher(root, s3)
-
-            publication = publisher.publish(
-                exporter=FakeExporter({source: payload}),
-                source_layer_paths=(source,),
-                virtual_size=1 << 30,
-            )
-
-            self.assertGreaterEqual(s3.max_active_uploads, 2)
-            self.assertEqual(publication.layers[0].size, len(payload))
-            self.assertEqual(
-                publisher.metrics()["snapshot_upload_part_concurrency"], 4
-            )
-
     def test_lost_multipart_completion_response_is_resolved_by_stat(self):
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
@@ -303,38 +237,11 @@ class StorageNativeS3Tests(unittest.TestCase):
                 source_layer_paths=(source,),
                 virtual_size=4096,
             )
-            del s3.objects[
-                f"ucloud/test/managed-layers/{publication.layers[0].digest}"
-            ]
+            del s3.objects[f"ucloud/test/managed-layers/{publication.layers[0].digest}"]
 
             with self.assertRaisesRegex(ValueError, "missing"):
                 publisher.verify(publication)
 
-    def test_verify_checks_layer_objects_concurrently(self):
-        with TemporaryDirectory() as raw_dir:
-            root = Path(raw_dir)
-            sources = tuple(
-                (root / f"delta-{index}.commit").resolve() for index in range(3)
-            )
-            payloads = {
-                source: f"delta-{index}".encode()
-                for index, source in enumerate(sources)
-            }
-            for source, payload in payloads.items():
-                source.write_bytes(payload)
-            s3 = FakeS3()
-            publisher = self._publisher(root, s3)
-            publication = publisher.publish(
-                exporter=FakeExporter(payloads),
-                source_layer_paths=sources,
-                virtual_size=4096,
-            )
-            s3.max_active_stats = 0
-            s3.stat_barrier = _OverlapGate()
-
-            self.assertEqual(publisher.verify(publication), publication)
-
-            self.assertGreaterEqual(s3.max_active_stats, 2)
 
 def digest(payload: bytes) -> str:
     return f"sha256:{hashlib.sha256(payload).hexdigest()}"

@@ -12,6 +12,7 @@ from ucloud_sandboxes.managed_registry import (
     MANIFEST_ACCEPT,
     RegistryClient,
     RegistryRequestError,
+    digest_protection_tag,
 )
 
 Response = tuple[int, dict[str, str], bytes]
@@ -166,23 +167,64 @@ class RegistryClientHTTPContractTests(unittest.TestCase):
         manifest_headers = server.requests[-1][2]
         self.assertEqual(manifest_headers["accept"], MANIFEST_ACCEPT)
 
-    def test_json_response_headers_remain_case_insensitive(self) -> None:
-        digest = "sha256:" + "a" * 64
+    def test_index_selection_and_digest_protection_over_real_http(self) -> None:
+        amd64_digest = "sha256:" + "a" * 64
+        arm64_digest = "sha256:" + "b" * 64
+        layer_digest = "sha256:" + "c" * 64
+        protection_tag = digest_protection_tag(amd64_digest)
+        manifest = json.dumps(
+            {"layers": [{"digest": layer_digest, "size": 512}]}
+        ).encode()
+        protected_payload: list[bytes] = []
 
-        with _RegistryHTTPServer(
-            lambda _method, _path, _headers, _body: _json_response(
-                {"schemaVersion": 2, "layers": []},
-                **{"docker-content-digest": digest},
-            )
-        ) as server:
+        def respond(
+            method: str,
+            path: str,
+            _headers: dict[str, str],
+            body: bytes,
+        ) -> Response:
+            if path.endswith("/manifests/latest"):
+                return _json_response(
+                    {
+                        "manifests": [
+                            {
+                                "digest": arm64_digest,
+                                "platform": {"os": "linux", "architecture": "arm64"},
+                            },
+                            {
+                                "digest": amd64_digest,
+                                "platform": {"os": "linux", "architecture": "amd64"},
+                            },
+                        ]
+                    }
+                )
+            if path.endswith(f"/manifests/{amd64_digest}"):
+                return (
+                    200,
+                    {
+                        "Content-Type": "application/vnd.oci.image.manifest.v1+json",
+                        "Docker-Content-Digest": amd64_digest,
+                    },
+                    manifest,
+                )
+            if path.endswith(f"/manifests/{protection_tag}"):
+                if method == "PUT":
+                    protected_payload.append(body)
+                    return (201, {}, b"")
+                if protected_payload:
+                    return (200, {"Docker-Content-Digest": amd64_digest}, b"")
+                return (404, {}, b"missing")
+            return (404, {}, b"missing route")
+
+        with _RegistryHTTPServer(respond) as server:
             client = RegistryClient(server.base_url)
             layers = client.manifest_layers("repo/a", "latest")
-            _manifest, headers = client.manifest_document("repo/a", "latest")
+            observed_tag = client.ensure_digest_protection_tag("repo/a", amd64_digest)
 
-        self.assertEqual(layers.manifest_digest, digest)
-        self.assertIsInstance(headers, dict)
-        self.assertEqual(headers.get("Docker-Content-Digest"), digest)
-        self.assertEqual(headers.get("docker-content-digest"), digest)
+        self.assertEqual(layers.manifest_digest, amd64_digest)
+        self.assertEqual(layers.total_size, 512)
+        self.assertEqual(observed_tag, protection_tag)
+        self.assertEqual(protected_payload, [manifest])
 
     def test_pagination_links_cannot_escape_registry_origin_or_base(self) -> None:
         cases = (

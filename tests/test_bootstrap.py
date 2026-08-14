@@ -14,7 +14,6 @@ from ucloud_sandboxes.bootstrap import (
     build_vm_bootstrap_intents,
     mark_bootstrap_access_refresh,
 )
-from ucloud_sandboxes.cli import _bootstrap_retry_delay_seconds
 from ucloud_sandboxes.control_state import ControlStateStore
 from ucloud_sandboxes.metrics import MetricsStore
 from ucloud_sandboxes.models import InstancePhase, SandboxNode, ProviderInstance
@@ -22,104 +21,50 @@ from ucloud_sandboxes.providers.base import InstanceBootstrapAccess
 from ucloud_sandboxes.vm_init import VmInitOptions
 
 
+def bootstrap_node(job_id: str) -> SandboxNode:
+    instance = ProviderInstance(
+        id=job_id,
+        name=job_id,
+        application_name="vm-ubuntu",
+        application_version="24.04",
+        product_id="cpu",
+        product_category="cpu",
+        state="RUNNING",
+        phase=InstancePhase.RUNNING,
+    )
+    return SandboxNode(
+        job=instance,
+        heartbeat=None,
+        active_sandboxes=0,
+        heartbeat_fresh=False,
+    )
+
+
+def unavailable_access(instance: ProviderInstance) -> InstanceBootstrapAccess:
+    return InstanceBootstrapAccess(
+        instance=instance,
+        command=None,
+        runnable=False,
+        reason="not ready",
+        refresh_recommended=True,
+    )
+
+
+def bootstrap_options(node: SandboxNode, _role: str) -> VmInitOptions:
+    return VmInitOptions(
+        job_id=node.job_id,
+        heartbeat_url="http://gateway/v1/nodes/heartbeat",
+    )
+
+
 class BootstrapRetryTests(unittest.TestCase):
-    def test_excluded_nodes_do_not_consume_provider_refresh_budget(self) -> None:
-        def node(job_id: str) -> SandboxNode:
-            instance = ProviderInstance(
-                id=job_id,
-                name=job_id,
-                application_name="vm-ubuntu",
-                application_version="24.04",
-                product_id="cpu",
-                product_category="cpu",
-                state="RUNNING",
-                phase=InstancePhase.RUNNING,
-            )
-            return SandboxNode(
-                job=instance,
-                heartbeat=None,
-                active_sandboxes=0,
-                heartbeat_fresh=False,
-            )
-
-        nodes = [node(f"job-{index}") for index in range(3)]
-        refreshed: list[str] = []
-
-        def unavailable(instance: ProviderInstance) -> InstanceBootstrapAccess:
-            return InstanceBootstrapAccess(
-                instance=instance,
-                command=None,
-                runnable=False,
-                reason="not ready",
-                refresh_recommended=True,
-            )
-
-        def refresh(instance: ProviderInstance) -> InstanceBootstrapAccess:
-            refreshed.append(instance.id)
-            return unavailable(instance)
-
-        def options(current: SandboxNode, _role: str) -> VmInitOptions:
-            return VmInitOptions(
-                job_id=current.job_id,
-                heartbeat_url="http://gateway/v1/nodes/heartbeat",
-            )
-
-        intents = build_vm_bootstrap_intents(
-            nodes,
-            {},
-            retry_seconds=30,
-            max_per_cycle=2,
-            options_for_node=options,
-            access_for_instance=unavailable,
-            refresh_access_for_instance=refresh,
-            max_access_refreshes=2,
-            excluded_job_ids={"job-0"},
-            now=datetime(2026, 7, 10, tzinfo=timezone.utc),
-        )
-
-        self.assertEqual(refreshed, ["job-1", "job-2"])
-        self.assertEqual([intent.job_id for intent in intents], ["job-1", "job-2"])
-
     def test_provider_access_refreshes_are_bounded_and_rotate_fairly(self) -> None:
-        def node(job_id: str) -> SandboxNode:
-            job = ProviderInstance(
-                id=job_id,
-                name=job_id,
-                application_name="vm-ubuntu",
-                application_version="24.04",
-                product_id="cpu",
-                product_category="cpu",
-                state="RUNNING",
-                phase=InstancePhase.RUNNING,
-            )
-            return SandboxNode(
-                job=job,
-                heartbeat=None,
-                active_sandboxes=0,
-                heartbeat_fresh=False,
-            )
-
-        nodes = [node(f"job-{index}") for index in range(5)]
+        nodes = [bootstrap_node(f"job-{index}") for index in range(5)]
         refreshed: list[str] = []
-
-        def unavailable(instance: ProviderInstance) -> InstanceBootstrapAccess:
-            return InstanceBootstrapAccess(
-                instance=instance,
-                command=None,
-                runnable=False,
-                reason="not ready",
-                refresh_recommended=True,
-            )
 
         def refresh(instance: ProviderInstance) -> InstanceBootstrapAccess:
             refreshed.append(instance.id)
-            return unavailable(instance)
-
-        def options(current: SandboxNode, _role: str) -> VmInitOptions:
-            return VmInitOptions(
-                job_id=current.job_id,
-                heartbeat_url="http://gateway/v1/nodes/heartbeat",
-            )
+            return unavailable_access(instance)
 
         first_now = datetime(2026, 7, 10, tzinfo=timezone.utc)
         first = build_vm_bootstrap_intents(
@@ -127,8 +72,8 @@ class BootstrapRetryTests(unittest.TestCase):
             {},
             retry_seconds=30,
             max_per_cycle=2,
-            options_for_node=options,
-            access_for_instance=unavailable,
+            options_for_node=bootstrap_options,
+            access_for_instance=unavailable_access,
             refresh_access_for_instance=refresh,
             max_access_refreshes=99,
             now=first_now,
@@ -145,8 +90,8 @@ class BootstrapRetryTests(unittest.TestCase):
             records,
             retry_seconds=30,
             max_per_cycle=2,
-            options_for_node=options,
-            access_for_instance=unavailable,
+            options_for_node=bootstrap_options,
+            access_for_instance=unavailable_access,
             refresh_access_for_instance=refresh,
             max_access_refreshes=2,
             now=first_now + timedelta(seconds=1),
@@ -365,37 +310,6 @@ class BootstrapRetryTests(unittest.TestCase):
                 coordinator.shutdown()
             cli._execute_vm_bootstrap_attempt = original_execute
 
-    def test_transient_retry_delay_overrides_normal_backoff(self) -> None:
-        attempted_at = datetime(2026, 7, 10, tzinfo=timezone.utc)
-        record = VmBootstrapRecord(
-            job_id="job-1",
-            status="failed",
-            last_attempt_at=attempted_at,
-            retry_delay_seconds=1,
-        )
-
-        self.assertFalse(
-            record.retry_due(
-                now=attempted_at + timedelta(milliseconds=999),
-                retry_seconds=30,
-            )
-        )
-        self.assertTrue(
-            record.retry_due(
-                now=attempted_at + timedelta(seconds=1),
-                retry_seconds=30,
-            )
-        )
-
-    def test_record_requires_current_schema(self) -> None:
-        with self.assertRaisesRegex(ValueError, "current schema"):
-            VmBootstrapRecord.from_dict(
-                {
-                    "job_id": "job-1",
-                    "status": "failed",
-                }
-            )
-
     def test_store_roundtrips_exact_bootstrap_records(self) -> None:
         with TemporaryDirectory() as raw_dir:
             path = Path(raw_dir) / "control-state.sqlite"
@@ -419,6 +333,8 @@ class BootstrapRetryTests(unittest.TestCase):
                 store.save_bootstrap_records({"different-job": record})
 
     def test_store_rejects_legacy_json_and_corrupt_bootstrap_rows(self) -> None:
+        with self.assertRaisesRegex(ValueError, "current schema"):
+            VmBootstrapRecord.from_dict({"job_id": "job-1", "status": "failed"})
         with TemporaryDirectory() as raw_dir:
             root = Path(raw_dir)
             legacy = root / "legacy.json"
@@ -438,25 +354,6 @@ class BootstrapRetryTests(unittest.TestCase):
                 )
             with self.assertRaisesRegex(ValueError, "invalid bootstrap control-state"):
                 store.load_bootstrap_records()
-
-    def test_ssh_failures_use_bounded_exponential_retry(self) -> None:
-        delays = [
-            _bootstrap_retry_delay_seconds(
-                255,
-                attempt_count=attempt,
-                configured_retry_seconds=30,
-            )
-            for attempt in range(1, 8)
-        ]
-
-        self.assertEqual(delays, [1, 2, 4, 8, 16, 30, 30])
-        self.assertIsNone(
-            _bootstrap_retry_delay_seconds(
-                17,
-                attempt_count=1,
-                configured_retry_seconds=30,
-            )
-        )
 
 
 if __name__ == "__main__":

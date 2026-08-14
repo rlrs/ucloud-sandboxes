@@ -6,14 +6,10 @@ from ucloud_sandboxes.providers.ucloud.payloads import (
     VmProductRef,
     VmSubmissionOptions,
     VmTimeAllocation,
-    bulk_submission_payload,
 )
 
 
 class VmSubmitTests(unittest.TestCase):
-    def test_default_vm_product_uses_large_sandbox_node(self) -> None:
-        self.assertEqual(VmProductRef().id, "cpu-amd-zen5-32-vcpu")
-
     def test_builds_ucloud_vm_submission_payload(self) -> None:
         options = VmSubmissionOptions(
             name="ucloud-sandbox-node-1",
@@ -65,32 +61,6 @@ class VmSubmitTests(unittest.TestCase):
 
         self.assertTrue(item["sshEnabled"])
 
-    def test_can_build_payload_without_private_network_when_explicit(self) -> None:
-        item = VmSubmissionOptions(
-            name="node",
-            hostname="sandbox-node-1",
-            private_network_id=None,
-        ).job_item()
-
-        self.assertEqual(item["resources"], [])
-
-    def test_can_attach_public_link_to_vm_port(self) -> None:
-        item = VmSubmissionOptions(
-            name="gateway",
-            hostname="sandbox-gateway-1",
-            private_network_id="net-1",
-            public_link_id="link-1",
-            public_link_port=8090,
-        ).job_item()
-
-        self.assertEqual(
-            item["resources"],
-            [
-                {"type": "private_network", "id": "net-1"},
-                {"type": "ingress", "id": "link-1", "port": 8090},
-            ],
-        )
-
     def test_can_attach_project_file_mounts(self) -> None:
         item = VmSubmissionOptions(
             name="gateway",
@@ -121,26 +91,6 @@ class VmSubmitTests(unittest.TestCase):
                 private_network_id=None,
                 file_mounts=(VmFileMount("relative/path"),),
             ).job_item()
-
-    def test_bulk_submission_payload_supports_multiple_vm_items(self) -> None:
-        payload = bulk_submission_payload(
-            [
-                VmSubmissionOptions(
-                    name="node-1",
-                    hostname="sandbox-node-1",
-                    private_network_id=None,
-                ),
-                VmSubmissionOptions(
-                    name="node-2",
-                    hostname="sandbox-node-2",
-                    private_network_id=None,
-                ),
-            ]
-        )
-
-        self.assertEqual(payload["type"], "bulk")
-        self.assertEqual(len(payload["items"]), 2)
-        self.assertEqual(payload["items"][1]["name"], "node-2")
 
     def test_rejects_bad_hostname(self) -> None:
         with self.assertRaises(ValueError):

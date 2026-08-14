@@ -229,9 +229,9 @@ class AutoscalerStateTests(unittest.TestCase):
                 target_job_ids=("job-1",),
             )
 
-            recovered = AutoscalerStateStore(
-                store.path
-            ).reconcile_provider_inventory([])
+            recovered = AutoscalerStateStore(store.path).reconcile_provider_inventory(
+                []
+            )
 
             self.assertEqual(len(recovered), 1)
             self.assertEqual(recovered[0].state, "recovered")

@@ -6,17 +6,12 @@ import sqlite3
 from tempfile import TemporaryDirectory
 from threading import Event
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 from hypothesis import given, settings, strategies as st
 
 from ucloud_sandboxes.managed_registry import (
-    MANIFEST_ACCEPT,
-    canonical_image_digest_ref,
     digest_protection_tag,
-    image_ref_with_manifest_digest,
-    manifest_digest_from_image_ref,
-    RegistryClient,
     RegistryRequestError,
     RegistryImageLeaseNotFound,
     RegistryUsageGenerationChanged,
@@ -25,9 +20,6 @@ from ucloud_sandboxes.managed_registry import (
     RegistryTag,
     execute_registry_prune,
     list_registry_tags,
-    registry_repository_tag_from_image_ref,
-    registry_host_from_image_ref,
-    registry_prune_plan,
     registry_summary,
     select_prune_candidates,
 )
@@ -65,193 +57,6 @@ def _acquire_lease_in_process(
 
 
 class ManagedRegistryTests(unittest.TestCase):
-    def test_registry_client_reads_compressed_manifest_layers(self) -> None:
-        manifest_digest = "sha256:" + "a" * 64
-        first = "sha256:" + "1" * 64
-        second = "sha256:" + "2" * 64
-        client = RegistryClient("http://registry")
-        with patch.object(
-            client,
-            "_json_request",
-            return_value=(
-                {
-                    "schemaVersion": 2,
-                    "layers": [
-                        {"digest": first, "size": 100},
-                        {"digest": second, "size": 250},
-                    ],
-                },
-                {"Docker-Content-Digest": manifest_digest},
-            ),
-        ):
-            result = client.manifest_layers("repo/a", manifest_digest)
-
-        self.assertEqual(result.repository, "repo/a")
-        self.assertEqual(result.manifest_digest, manifest_digest)
-        self.assertEqual(
-            [(layer.digest, layer.size) for layer in result.layers],
-            [(first, 100), (second, 250)],
-        )
-        self.assertEqual(result.total_size, 350)
-
-    def test_registry_client_selects_linux_amd64_manifest_from_index(self) -> None:
-        index_digest = "sha256:" + "a" * 64
-        amd64_digest = "sha256:" + "b" * 64
-        arm64_digest = "sha256:" + "c" * 64
-        layer_digest = "sha256:" + "d" * 64
-        client = RegistryClient("http://registry")
-        with patch.object(
-            client,
-            "_json_request",
-            side_effect=(
-                (
-                    {
-                        "schemaVersion": 2,
-                        "manifests": [
-                            {
-                                "digest": arm64_digest,
-                                "platform": {
-                                    "os": "linux",
-                                    "architecture": "arm64",
-                                },
-                            },
-                            {
-                                "digest": amd64_digest,
-                                "platform": {
-                                    "os": "linux",
-                                    "architecture": "amd64",
-                                },
-                            },
-                        ],
-                    },
-                    {"Docker-Content-Digest": index_digest},
-                ),
-                (
-                    {
-                        "schemaVersion": 2,
-                        "layers": [{"digest": layer_digest, "size": 512}],
-                    },
-                    {"Docker-Content-Digest": amd64_digest},
-                ),
-            ),
-        ) as request_manifest:
-            result = client.manifest_layers("repo/a", index_digest)
-
-        self.assertEqual(result.manifest_digest, amd64_digest)
-        self.assertEqual(result.total_size, 512)
-        self.assertEqual(
-            request_manifest.call_args_list,
-            [
-                call(
-                    f"/v2/repo/a/manifests/{index_digest}",
-                    headers={"Accept": MANIFEST_ACCEPT},
-                ),
-                call(
-                    f"/v2/repo/a/manifests/{amd64_digest}",
-                    headers={"Accept": MANIFEST_ACCEPT},
-                ),
-            ],
-        )
-
-    def test_registry_client_creates_digest_protection_tag_from_exact_manifest(
-        self,
-    ) -> None:
-        digest = "sha256:" + "1" * 64
-        manifest = b'{"schemaVersion":2}'
-
-        class FakeResponse:
-            def __init__(
-                self,
-                body: bytes = b"",
-                content_type: str = "application/json",
-            ) -> None:
-                self.body = body
-                self.headers = {"Content-Type": content_type}
-
-            def read(self, _limit: int = -1) -> bytes:
-                return self.body
-
-            def close(self) -> None:
-                return None
-
-        client = RegistryClient("http://registry")
-        missing = RegistryRequestError(404, "HEAD", "/missing", "")
-        with patch.object(
-            client,
-            "manifest_digest",
-            side_effect=(missing, digest),
-        ), patch.object(
-            client,
-            "_request",
-            side_effect=(
-                FakeResponse(
-                    manifest,
-                    "application/vnd.oci.image.manifest.v1+json",
-                ),
-                FakeResponse(),
-            ),
-        ) as request_manifest:
-            tag = client.ensure_digest_protection_tag("repo/a", digest)
-
-        expected_tag = digest_protection_tag(digest)
-        self.assertEqual(tag, expected_tag)
-        self.assertEqual(
-            request_manifest.call_args_list,
-            [
-                call(
-                    f"/v2/repo/a/manifests/{digest}",
-                    headers={"Accept": MANIFEST_ACCEPT},
-                ),
-                call(
-                    f"/v2/repo/a/manifests/{expected_tag}",
-                    method="PUT",
-                    headers={
-                        "Content-Type": "application/vnd.oci.image.manifest.v1+json"
-                    },
-                    data=manifest,
-                ),
-            ],
-        )
-
-    def test_registry_usage_state_is_owner_only(self) -> None:
-        with TemporaryDirectory() as raw_dir:
-            path = Path(raw_dir) / "registry-usage.json"
-            RegistryUsageStore(path).touch_image("registry.test/models/demo:latest")
-
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
-    def test_registry_summary_exposes_visible_tags_and_repository_metadata(
-        self,
-    ) -> None:
-        class FakeRegistryClient:
-            base_url = "http://registry"
-
-            def catalog(self) -> list[str]:
-                return ["repo/a", "plain"]
-
-            def tags(self, repository: str) -> list[str]:
-                return {
-                    "plain": [],
-                    "repo/a": ["v1", "v3", "v2"],
-                }[repository]
-
-        summary = registry_summary(
-            FakeRegistryClient(),  # type: ignore[arg-type]
-            max_tags_per_repository=2,
-        )
-
-        self.assertEqual(summary["repository_count"], 2)
-        self.assertEqual(summary["scanned_tag_count"], 3)
-        self.assertEqual(summary["visible_tag_count"], 2)
-        repo = summary["repositories"][1]
-        self.assertEqual(repo["repository"], "repo/a")
-        self.assertEqual(repo["namespace"], "repo")
-        self.assertEqual(repo["tag_count"], 3)
-        self.assertEqual(repo["visible_tag_count"], 2)
-        self.assertTrue(repo["tags_truncated"])
-        self.assertEqual(repo["latest_tag"], "v3")
-        self.assertEqual(repo["tags"], ["v2", "v3"])
-
     def test_registry_views_tolerate_catalog_entries_removed_during_scan(self) -> None:
         class FakeRegistryClient:
             base_url = "http://registry"
@@ -281,128 +86,6 @@ class ManagedRegistryTests(unittest.TestCase):
             [(record.repository, record.tag) for record in records],
             [("repo/a", "v1")],
         )
-
-    def test_select_prune_candidates_applies_keep_floor_and_ttl_modes(self) -> None:
-        old = "2026-06-01T00:00:00+00:00"
-        recent = "2026-06-06T00:00:00+00:00"
-        now = datetime(2026, 6, 7, tzinfo=timezone.utc)
-        cases = (
-            (
-                [
-                    RegistryTag("repo/a", "v1", "sha256:1", old),
-                    RegistryTag("repo/a", "v2", "sha256:2", recent),
-                    RegistryTag("repo/a", "v3", "sha256:3", recent),
-                    RegistryTag("repo/b", "v1", "sha256:4", old),
-                    RegistryTag("repo/b", "v2", "sha256:5", recent),
-                ],
-                {"keep_per_repository": 2},
-                [("repo/a", "v1")],
-            ),
-            (
-                [
-                    RegistryTag("repo/a", "v1", "sha256:1"),
-                    RegistryTag("repo/a", "v3", "sha256:3"),
-                    RegistryTag("repo/a", "v2", "sha256:2"),
-                ],
-                {"keep_per_repository": 1},
-                [("repo/a", "v1"), ("repo/a", "v2")],
-            ),
-            (
-                [
-                    RegistryTag("repo/old", "only", "sha256:1", old),
-                    RegistryTag("repo/new", "only", "sha256:2", recent),
-                ],
-                {"keep_per_repository": 0, "max_age_days": 3, "now": now},
-                [("repo/old", "only")],
-            ),
-            (
-                [
-                    RegistryTag("repo/a", "used", "sha256:1", old, recent),
-                    RegistryTag("repo/a", "unused", "sha256:2", old, old),
-                    RegistryTag("repo/a", "unknown", "sha256:3", old),
-                ],
-                {
-                    "keep_per_repository": 0,
-                    "max_age_days": 3,
-                    "use_last_used_at": True,
-                    "now": now,
-                },
-                [("repo/a", "unused")],
-            ),
-            (
-                [
-                    RegistryTag("repo/a", "old", "sha256:1", old),
-                    RegistryTag("repo/a", "unknown", "sha256:2"),
-                ],
-                {"keep_per_repository": 0, "max_age_days": 3, "now": now},
-                [("repo/a", "old")],
-            ),
-        )
-        for records, options, expected in cases:
-            with self.subTest(options=options, expected=expected):
-                candidates = select_prune_candidates(records, **options)
-                self.assertEqual(
-                    [(item.repository, item.tag) for item in candidates], expected
-                )
-
-    def test_prune_keeps_digest_when_any_alias_is_inside_ttl(self) -> None:
-        shared_digest = "sha256:" + "a" * 64
-        expired_digest = "sha256:" + "b" * 64
-        records = [
-            RegistryTag(
-                "repo/a",
-                "shared-old",
-                shared_digest,
-                "2026-06-01T00:00:00+00:00",
-                "2026-06-01T00:00:00+00:00",
-            ),
-            RegistryTag(
-                "repo/a",
-                "shared-recent",
-                shared_digest,
-                "2026-06-01T00:00:00+00:00",
-                "2026-06-06T00:00:00+00:00",
-            ),
-            RegistryTag(
-                "repo/a",
-                "expired",
-                expired_digest,
-                "2026-06-01T00:00:00+00:00",
-                "2026-06-01T00:00:00+00:00",
-            ),
-            RegistryTag(
-                "repo/a",
-                "expired-alias",
-                expired_digest,
-                "2026-06-02T00:00:00+00:00",
-                "2026-06-02T00:00:00+00:00",
-            ),
-        ]
-
-        candidates = select_prune_candidates(
-            records,
-            keep_per_repository=0,
-            max_age_days=3,
-            use_last_used_at=True,
-            now=datetime(2026, 6, 7, tzinfo=timezone.utc),
-        )
-
-        client = DeletingRegistryClient()
-        deleted = execute_registry_prune(
-            client,  # type: ignore[arg-type]
-            candidates,
-            all_records=records,
-        )
-
-        self.assertEqual(
-            [record.tag for record in candidates],
-            ["expired", "expired-alias"],
-        )
-        self.assertEqual(
-            [record.tag for record in deleted],
-            ["expired", "expired-alias"],
-        )
-        self.assertEqual(client.deleted, [("repo/a", expired_digest)])
 
     @settings(max_examples=100, deadline=None)
     @given(st.lists(st.booleans(), min_size=1, max_size=12))
@@ -456,54 +139,37 @@ class ManagedRegistryTests(unittest.TestCase):
 
             with self.assertRaises(RegistryUsageGenerationChanged):
                 store.save({}, expected_generation=original.generation)
-
-            self.assertEqual(store.snapshot().generation, 1)
+            self.assertEqual(store.path.stat().st_mode & 0o777, 0o600)
 
     def test_registry_leases_acquire_renew_release_and_expire(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RegistryUsageStore(Path(raw_dir) / "usage.json")
             started = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+            identity = ("repo/a", "v1", "sandbox:one")
 
             acquired = store.acquire_lease(
-                "repo/a",
-                "v1",
-                "sandbox:one",
+                *identity,
                 ttl_seconds=30,
                 digest=LEASE_DIGEST,
                 now=started,
             )
-            self.assertEqual(store.snapshot(now=started).generation, 1)
             renewed = store.renew_lease(
-                "repo/a",
-                "v1",
-                "sandbox:one",
+                *identity,
                 ttl_seconds=60,
                 digest=LEASE_DIGEST,
                 now=started + timedelta(seconds=10),
             )
             self.assertEqual(acquired.acquired_at, renewed.acquired_at)
             self.assertNotEqual(acquired.expires_at, renewed.expires_at)
-            self.assertEqual(
-                store.snapshot(now=started + timedelta(seconds=10)).generation,
-                2,
-            )
             self.assertTrue(
                 store.release_lease(
-                    "repo/a",
-                    "v1",
-                    "sandbox:one",
+                    *identity,
                     now=started + timedelta(seconds=11),
                 )
             )
-            self.assertEqual(
-                store.snapshot(now=started + timedelta(seconds=11)).generation,
-                3,
-            )
             with self.assertRaises(RegistryImageLeaseNotFound):
                 store.renew_lease(
-                    "repo/a",
-                    "v1",
-                    "sandbox:one",
+                    *identity,
                     ttl_seconds=60,
                     digest=LEASE_DIGEST,
                     now=started + timedelta(seconds=12),
@@ -644,15 +310,18 @@ class ManagedRegistryTests(unittest.TestCase):
             blocker = sqlite3.connect(path, isolation_level=None)
             blocker.execute("BEGIN EXCLUSIVE")
             try:
-                with patch.object(
-                    store,
-                    "_connect",
-                    side_effect=lambda: sqlite3.connect(
-                        path,
-                        timeout=0,
-                        isolation_level=None,
+                with (
+                    patch.object(
+                        store,
+                        "_connect",
+                        side_effect=lambda: sqlite3.connect(
+                            path,
+                            timeout=0,
+                            isolation_level=None,
+                        ),
                     ),
-                ), self.assertRaises(RegistryUsageStateError):
+                    self.assertRaises(RegistryUsageStateError),
+                ):
                     store.touch_image("localhost:5000/repo/a:v1")
             finally:
                 blocker.rollback()
@@ -805,40 +474,6 @@ class ManagedRegistryTests(unittest.TestCase):
 
             self.assertEqual(client.deleted, ("repo/a", LEASE_DIGEST))
 
-    def test_registry_repository_tag_from_image_ref(self) -> None:
-        self.assertEqual(
-            registry_repository_tag_from_image_ref(
-                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5"
-            ),
-            ("prime-rl/tmax-mini-base", "mswe-2.2.8-r5"),
-        )
-        self.assertEqual(
-            registry_repository_tag_from_image_ref("localhost:5000/repo/image"),
-            ("repo/image", "latest"),
-        )
-        self.assertEqual(
-            registry_host_from_image_ref(
-                "ucloud-sandbox-registry:5000/prime-rl/tmax-mini-base:mswe-2.2.8-r5"
-            ),
-            "ucloud-sandbox-registry:5000",
-        )
-        self.assertEqual(registry_host_from_image_ref("ubuntu:latest"), "")
-
-    def test_manifest_digest_helpers_preserve_tag_and_canonicalize_cache_key(
-        self,
-    ) -> None:
-        digest = "sha256:" + "a" * 64
-        tagged = "registry.example.org/team/image:v1"
-        pinned = image_ref_with_manifest_digest(tagged, digest)
-
-        self.assertEqual(pinned, f"{tagged}@{digest}")
-        self.assertEqual(manifest_digest_from_image_ref(pinned), digest)
-        self.assertEqual(
-            canonical_image_digest_ref(pinned),
-            f"registry.example.org/team/image@{digest}",
-        )
-        self.assertEqual(manifest_digest_from_image_ref(f"{tagged}@sha256:bad"), "")
-
     def test_execute_registry_prune_revalidates_all_digest_aliases(self) -> None:
         client = DeletingRegistryClient()
         records = [
@@ -959,57 +594,6 @@ class ManagedRegistryTests(unittest.TestCase):
 
         self.assertEqual(candidates, [records[3]])
 
-    def test_registry_summary_hides_internal_digest_protection_tags(self) -> None:
-        protection_tag = digest_protection_tag("sha256:" + "5" * 64)
-
-        class FakeRegistryClient:
-            base_url = "http://registry"
-
-            def catalog(self) -> list[str]:
-                return ["repo/a"]
-
-            def tags(self, repository: str) -> list[str]:
-                del repository
-                return ["v1", protection_tag]
-
-        summary = registry_summary(FakeRegistryClient())  # type: ignore[arg-type]
-
-        self.assertEqual(summary["scanned_tag_count"], 1)
-        self.assertEqual(summary["internal_tag_count"], 1)
-        self.assertEqual(summary["repositories"][0]["tags"], ["v1"])
-
-    def test_prune_plan_reports_generation_and_excludes_active_lease(self) -> None:
-        class FakeRegistryClient:
-            def catalog(self) -> list[str]:
-                return ["repo/a"]
-
-            def tags(self, repository: str) -> list[str]:
-                return ["v1"]
-
-            def tag_record(self, repository: str, tag: str) -> RegistryTag:
-                return RegistryTag(repository, tag, "sha256:" + "1" * 64)
-
-        with TemporaryDirectory() as raw_dir:
-            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
-            store.acquire_lease(
-                "repo/a",
-                "v1",
-                "sandbox:one",
-                ttl_seconds=60,
-                digest="sha256:" + "1" * 64,
-            )
-            snapshot = store.snapshot()
-
-            plan = registry_prune_plan(
-                FakeRegistryClient(),  # type: ignore[arg-type]
-                keep_per_repository=0,
-                active_leases=snapshot.leases,
-                usage_generation=snapshot.generation,
-            )
-
-            self.assertEqual(plan["usage_generation"], snapshot.generation)
-            self.assertEqual(plan["active_lease_count"], 1)
-            self.assertEqual(plan["delete"], [])
 
 if __name__ == "__main__":
     unittest.main()

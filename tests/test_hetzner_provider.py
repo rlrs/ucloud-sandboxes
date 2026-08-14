@@ -153,74 +153,33 @@ class HetznerSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.sandbox_image, 9001)
         self.assertEqual(settings.builder_image, "ubuntu-24.04")
-        self.assertEqual(settings.api_token_env, "HETZNER_API_KEY")
-        self.assertEqual(settings.sandbox_server_type, "cpx62")
-        self.assertEqual(settings.builder_server_type, "cpx62")
         self.assertFalse(settings.enable_ipv4)
         self.assertFalse(settings.enable_ipv6)
         self.assertFalse(settings.enable_private_egress)
-        self.assertEqual(settings.private_dns_servers, ("1.1.1.1", "8.8.8.8"))
 
     def test_settings_reject_unknown_missing_and_wrong_typed_fields(self):
-        cases = [
-            {"sandbox_image": 1, "builder_image": 2},
+        valid = {
+            "network_id": 1,
+            "sandbox_image": 1,
+            "builder_image": 2,
+            "ssh_key_ids": [11],
+        }
+        cases = (
+            {key: value for key, value in valid.items() if key != "network_id"},
+            {**valid, "volume_size": 100},
+            {**valid, "enable_ipv4": "false"},
+            {**valid, "sandbox_image": True},
+            {**valid, "ssh_key_ids": []},
+            {**valid, "enable_ipv4": True},
+            {**valid, "api_base_url": "http://api.example.test/v1"},
             {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "volume_size": 100,
-                "ssh_key_ids": [11],
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "enable_ipv4": "false",
-                "ssh_key_ids": [11],
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": True,
-                "builder_image": 2,
-                "ssh_key_ids": [11],
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "ssh_key_ids": [],
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "ssh_key_ids": [11],
-                "enable_ipv4": True,
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "ssh_key_ids": [11],
-                "api_base_url": "http://api.example.test/v1",
-            },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "ssh_key_ids": [11],
+                **valid,
                 "enable_ipv4": True,
                 "firewall_ids": [22],
                 "enable_private_egress": True,
             },
-            {
-                "network_id": 1,
-                "sandbox_image": 1,
-                "builder_image": 2,
-                "ssh_key_ids": [11],
-                "private_dns_servers": ["not-an-ip"],
-            },
-        ]
+            {**valid, "private_dns_servers": ["not-an-ip"]},
+        )
         for settings in cases:
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 HetznerSettings.from_provider(
@@ -300,13 +259,6 @@ class HetznerProviderTests(unittest.TestCase):
         self.assertEqual(client.calls[0], ("list", MANAGED_SERVER_LABEL_SELECTOR))
         self.assertEqual(instance.phase, InstancePhase.RUNNING)
         self.assertEqual(instance.hostname, "10.20.0.42")
-        self.assertEqual(instance.product_id, "cx43")
-        self.assertEqual(instance.application_name, "sandbox-node-v2")
-        self.assertEqual(instance.cpu, 8)
-        self.assertEqual(instance.memory_gb, 16)
-        # Hetzner's decimal GB is normalized to the binary GiB used by core
-        # resource accounting: floor(160e9 / 2^30) == 149.
-        self.assertEqual(instance.disk_gb, 149)
         self.assertTrue(compute.instance_is_eligible(instance))
         self.assertTrue(access.runnable)
         self.assertEqual(access.command, "ssh root@10.20.0.42")
@@ -324,58 +276,34 @@ class HetznerProviderTests(unittest.TestCase):
         self.assertTrue(access.refresh_recommended)
         self.assertFalse(compute.instance_is_eligible(running_without_network))
 
-    def test_render_private_create_uses_snapshot_network_and_no_volume(self):
-        request = provider(FakeHetznerClient()).render_create_request([create_intent()])
-
+    def test_render_create_exposes_only_selected_networking(self):
+        private = provider(FakeHetznerClient()).render_create_request(
+            [create_intent()]
+        )["servers"][0]
+        self.assertEqual(private["image"], 9001)
+        self.assertEqual(private["networks"], [1001])
         self.assertEqual(
-            request,
-            {
-                "servers": [
-                    {
-                        "name": "ucloud-sandbox-node-seed-1",
-                        "server_type": "cx43",
-                        "image": 9001,
-                        "location": "hel1",
-                        "start_after_create": True,
-                        "labels": create_intent().labels,
-                        "networks": [1001],
-                        "public_net": {
-                            "enable_ipv4": False,
-                            "enable_ipv6": False,
-                        },
-                        "ssh_keys": [11],
-                        "placement_group": 33,
-                    }
-                ]
-            },
+            private["public_net"], {"enable_ipv4": False, "enable_ipv6": False}
         )
-        self.assertNotIn("volumes", request["servers"][0])
-        self.assertNotIn("firewalls", request["servers"][0])
-        self.assertNotIn("root_password", str(request))
+        self.assertFalse({"volumes", "firewalls", "root_password"} & private.keys())
 
-    def test_render_public_create_attaches_the_configured_firewall(self):
-        compute = provider(FakeHetznerClient(), enable_ipv4=True)
+        public = provider(FakeHetznerClient(), enable_ipv4=True).render_create_request(
+            [create_intent()]
+        )["servers"][0]
+        self.assertTrue(public["public_net"]["enable_ipv4"])
+        self.assertEqual(public["firewalls"], [{"firewall": 22}])
 
-        server = compute.render_create_request([create_intent()])["servers"][0]
-
-        self.assertTrue(server["public_net"]["enable_ipv4"])
-        self.assertEqual(server["firewalls"], [{"firewall": 22}])
-
-    def test_render_private_egress_uses_cloud_init_without_public_networking(self):
-        compute = provider(FakeHetznerClient(), enable_private_egress=True)
-
-        server = compute.render_create_request([create_intent()])["servers"][0]
-
-        self.assertEqual(
-            server["public_net"], {"enable_ipv4": False, "enable_ipv6": False}
-        )
-        self.assertNotIn("firewalls", server)
-        self.assertIn("#cloud-config", server["user_data"])
-        self.assertIn("169.254.169.254/32", server["user_data"])
-        self.assertIn("ip -4 route replace default", server["user_data"])
-        self.assertIn("rm -f /etc/resolv.conf", server["user_data"])
-        self.assertIn("nameserver 1.1.1.1", server["user_data"])
-        self.assertIn("nameserver 8.8.8.8", server["user_data"])
+        egress = provider(
+            FakeHetznerClient(), enable_private_egress=True
+        ).render_create_request([create_intent()])["servers"][0]
+        self.assertFalse(egress["public_net"]["enable_ipv4"])
+        self.assertNotIn("firewalls", egress)
+        for directive in (
+            "169.254.169.254/32",
+            "ip -4 route replace default",
+            "nameserver 1.1.1.1",
+        ):
+            self.assertIn(directive, egress["user_data"])
 
     def test_render_rejects_invalid_names_labels_and_duplicates(self):
         compute = provider(FakeHetznerClient())

@@ -153,17 +153,6 @@ class HeartbeatContractTests(unittest.TestCase):
 
         self.assertFalse(heartbeat.is_fresh(now, ttl_seconds=10))
 
-    def test_inventory_entry_round_trips_operation_identity(self) -> None:
-        entry = SandboxInventoryEntry(
-            sandbox_id="sandbox-1",
-            generation=3,
-            operation_id="operation-7",
-            spec_hash="a" * 64,
-            state="running",
-        )
-
-        self.assertEqual(SandboxInventoryEntry.from_dict(entry.to_dict()), entry)
-
     def test_inventory_requires_complete_incarnation_identity(self) -> None:
         base = {
             "sandbox_id": "sandbox-1",

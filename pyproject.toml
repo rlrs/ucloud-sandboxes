@@ -16,6 +16,9 @@ dependencies = [
     "opentelemetry-sdk>=1.30,<2",
 ]
 
+[tool.uv]
+exclude-newer = "2026-08-07T10:10:16.296145Z"
+
 [project.scripts]
 ucloud-sandboxes = "ucloud_sandboxes.cli:main"
 ucloud-sandboxes-storage = "ucloud_sandboxes.storage_native_service:main"

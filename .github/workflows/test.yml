@@ -26,7 +26,7 @@ jobs:
         with:
           repository: rlrs/ucloud-sandboxes-sdk
           # Deliberately pinned: update this SHA with coordinated SDK changes.
-          ref: 96409abda3291195bc9567dfc63f20ffa576205e
+          ref: 68a444548d40f54c7c274597ae12dad308976fa2
           path: ucloud-sandboxes-sdk
           persist-credentials: false
       - uses: actions/setup-python@v6

@@ -385,6 +385,8 @@ class DeploymentConfig:
     autoscaler_max_init_per_cycle: int
     autoscaler_init_retry_seconds: int
     autoscaler_init_timeout_seconds: int
+    autoscaler_max_pending_delete_retries_per_cycle: int
+    autoscaler_max_orphaned_migration_reconciles_per_cycle: int
     autoscaler_max_storage_native_detaches_per_cycle: int
     heartbeat_interval_seconds: int
     telemetry: TelemetrySettings
@@ -420,6 +422,8 @@ class DeploymentConfig:
             autoscaler_max_init_per_cycle=4,
             autoscaler_init_retry_seconds=30,
             autoscaler_init_timeout_seconds=1800,
+            autoscaler_max_pending_delete_retries_per_cycle=16,
+            autoscaler_max_orphaned_migration_reconciles_per_cycle=128,
             autoscaler_max_storage_native_detaches_per_cycle=2,
             heartbeat_interval_seconds=20,
             telemetry=TelemetrySettings(),
@@ -545,6 +549,16 @@ class DeploymentConfig:
                 "autoscaler_init_timeout_seconds",
                 raw["autoscaler_init_timeout_seconds"],
                 minimum=1,
+            ),
+            autoscaler_max_pending_delete_retries_per_cycle=_require_int(
+                "autoscaler_max_pending_delete_retries_per_cycle",
+                raw["autoscaler_max_pending_delete_retries_per_cycle"],
+                minimum=0,
+            ),
+            autoscaler_max_orphaned_migration_reconciles_per_cycle=_require_int(
+                "autoscaler_max_orphaned_migration_reconciles_per_cycle",
+                raw["autoscaler_max_orphaned_migration_reconciles_per_cycle"],
+                minimum=0,
             ),
             autoscaler_max_storage_native_detaches_per_cycle=_require_int(
                 "autoscaler_max_storage_native_detaches_per_cycle",
@@ -706,6 +720,12 @@ class DeploymentConfig:
             "autoscaler_max_init_per_cycle": self.autoscaler_max_init_per_cycle,
             "autoscaler_init_retry_seconds": self.autoscaler_init_retry_seconds,
             "autoscaler_init_timeout_seconds": self.autoscaler_init_timeout_seconds,
+            "autoscaler_max_pending_delete_retries_per_cycle": (
+                self.autoscaler_max_pending_delete_retries_per_cycle
+            ),
+            "autoscaler_max_orphaned_migration_reconciles_per_cycle": (
+                self.autoscaler_max_orphaned_migration_reconciles_per_cycle
+            ),
             "autoscaler_max_storage_native_detaches_per_cycle": (
                 self.autoscaler_max_storage_native_detaches_per_cycle
             ),

@@ -339,6 +339,15 @@ class MetricsTests(unittest.TestCase):
                             "deleted": {"secret": "must-not-be-persisted"},
                         }
                     ],
+                    "orphanedMigrationReconciles": [
+                        {
+                            "migration_id": "migration-orphaned-1",
+                            "sandbox_id": "sandbox-orphaned-1",
+                            "phase": "complete",
+                            "error": "sandbox route is absent",
+                            "storage_snapshot": {"secret": "must-not-be-persisted"},
+                        }
+                    ],
                     "providerOperationResults": [
                         {
                             "operationId": "operation-1",
@@ -398,6 +407,10 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(
             scale_down["pending_delete_attempts"][0]["delete_operation_id"],
             "delete-operation-1",
+        )
+        self.assertEqual(
+            scale_down["orphaned_migration_reconciles"][0]["migration_id"],
+            "migration-orphaned-1",
         )
         self.assertEqual(
             execution["provider_operations"][0]["job_ids"],

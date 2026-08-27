@@ -406,19 +406,24 @@ durable, so a compaction failure blocks detachment and scale-down rather than
 discarding recoverable state.
 
 Durable delete intents are also controller-owned cleanup work. The autoscaler
-replays the oldest pending deletes every cycle. If deletion meets an
+replays the oldest pending deletes every cycle, bounded independently by
+`autoscaler_max_pending_delete_retries_per_cycle`. If deletion meets an
 uncommitted storage-native migration, the gateway first aborts the destination
 import and restores the source registration, then reuses the existing
-generation-fenced delete operation. A successful route deletion terminalizes
-any remaining migration journal. This means a client timeout or disconnect
-cannot leave `moving_out` or `import_ready` inventory pinning a worker forever.
+generation-fenced delete operation. An activated import retains this migration
+identity as a storage-operation namespace, but can be deleted normally while
+preserving that fence. A successful route deletion terminalizes any remaining
+migration journal. This means a client timeout or disconnect cannot leave
+`moving_out` or `import_ready` inventory pinning a worker forever.
 
-The autoscaler derives the gateway address and credentials from
-`deployment.json`. Each cycle starts at most
-`autoscaler_max_storage_native_detaches_per_cycle` storage cleanup operations:
-pending delete replays consume the budget first and worker detach operations use
-the remainder. Results are recorded as `pending_delete_attempts` and
-`storage_detach_attempts` in the autoscaler execution metrics. A node is not a
+Legacy active migration journals whose canonical route is already absent are
+terminalized by the controller, bounded by
+`autoscaler_max_orphaned_migration_reconciles_per_cycle`. This is DB-only
+journal reconciliation; it neither contacts workers nor changes a live route.
+Delete retry, orphan reconciliation, and worker detachment therefore have
+separate limits. Results are recorded as `pending_delete_attempts`,
+`orphaned_migration_reconciles`, and `storage_detach_attempts` in autoscaler
+execution metrics. A node is not a
 stop candidate when any remaining route is running, has an incomplete identity,
 is absent from the worker's fresh complete inventory, or the worker lacks the
 publication/detach capability. A failed publication leaves the park attached

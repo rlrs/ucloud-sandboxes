@@ -801,6 +801,75 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(registry.get("sandbox").phase, "importing")
             self.assertNotIn(("sandbox", 9), warden.records)
 
+    def test_delete_activated_import_preserves_migration_storage_fence(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, _, warden = self.make(root)
+            migration_id = "move:activated"
+            migration_sha256 = "a" * 64
+            planned = registry.plan_import(
+                spec=self.spec(),
+                sandbox_generation=9,
+                operation_id="create:9",
+                runtime_compatibility_sha256=(provisioner.runtime_compatibility_sha256),
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            total_mb = provisioner._quota_total_mb(planned)
+            volume = quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
+            )
+            importing = registry.commit_import_quota(
+                planned.sandbox_id,
+                expected_revision=planned.revision,
+                project_id=volume.accounting_id,
+                total_mb=total_mb,
+                quota_path=Path(volume.mount_path),
+            )
+            bundle = (root / "bundles" / "sandbox.sandbox-9").resolve()
+            bundle.mkdir()
+            sandbox = DirectSandbox(
+                sandbox_id=planned.sandbox_id,
+                sandbox_generation=planned.sandbox_generation,
+                container_id="c" * 64,
+                spec_sha256=planned.spec_sha256,
+                rootfs_sha256="d" * 64,
+                bundle=bundle,
+                memory_directory="sandbox.sandbox-9",
+            )
+            rootfs = registry.commit_import_rootfs(
+                planned.sandbox_id,
+                expected_revision=importing.revision,
+                image_id="sha256:" + "e" * 64,
+                sandbox=sandbox,
+            )
+            ready = registry.commit_import_ready(
+                planned.sandbox_id,
+                expected_revision=rootfs.revision,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            owned = registry.activate_import(
+                planned.sandbox_id,
+                expected_revision=ready.revision,
+                migration_id=migration_id,
+                migration_sha256=migration_sha256,
+            )
+            warden.records[(owned.sandbox_id, owned.sandbox_generation)] = (
+                SimpleNamespace(state=HibernationState.PARKED)
+            )
+
+            provisioner.delete(owned.sandbox_id)
+
+            self.assertIsNone(registry.get(owned.sandbox_id))
+            self.assertEqual(quota.active_records, {})
+            self.assertEqual(
+                quota.delete_operation_ids,
+                [f"quota-delete:{volume.accounting_id}:{migration_id}"],
+            )
+
     def test_restart_completes_delete_after_storage_delete_boundary(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

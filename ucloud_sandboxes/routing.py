@@ -1320,6 +1320,68 @@ class RoutingStore:
                 )
             ]
 
+    def terminalize_orphaned_sandbox_migrations(
+        self,
+        *,
+        max_count: int,
+    ) -> list[SandboxMigration]:
+        """Bound stale active journals that no longer have a canonical route."""
+
+        if max_count < 0:
+            raise ValueError("orphaned migration reconciliation limit cannot be negative")
+        if max_count == 0:
+            return []
+        now = utc_now().isoformat()
+        terminalized: list[SandboxMigration] = []
+        with self._lock:
+            with self._transaction() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT migration_id, sandbox_id, phase,
+                           source_node_id, source_job_id, source_node_url,
+                           destination_node_id, destination_job_id,
+                           destination_node_url, generation,
+                           create_operation_id, spec_hash,
+                           storage_schema, snapshot_sha256,
+                           storage_snapshot_json, source_fenced,
+                           created_at, updated_at, error
+                    FROM sandbox_migrations AS migration
+                    WHERE migration.phase != 'complete'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM sandboxes AS sandbox
+                          WHERE sandbox.sandbox_id = migration.sandbox_id
+                      )
+                    ORDER BY migration.created_at, migration.migration_id
+                    LIMIT ?
+                    """,
+                    (max_count,),
+                ).fetchall()
+                for row in rows:
+                    migration = _sandbox_migration_from_row(row)
+                    error = migration.error or "sandbox route is absent"
+                    updated = conn.execute(
+                        """
+                        UPDATE sandbox_migrations
+                        SET phase = 'complete', updated_at = ?, error = ?
+                        WHERE migration_id = ? AND phase != 'complete'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM sandboxes AS sandbox
+                              WHERE sandbox.sandbox_id = sandbox_migrations.sandbox_id
+                          )
+                        """,
+                        (now, error, migration.migration_id),
+                    )
+                    if updated.rowcount:
+                        terminalized.append(
+                            replace(
+                                migration,
+                                phase="complete",
+                                updated_at=now,
+                                error=error,
+                            )
+                        )
+        return terminalized
+
     def advance_sandbox_migration(
         self,
         migration_id: str,

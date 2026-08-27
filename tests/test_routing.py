@@ -461,6 +461,50 @@ class RoutingStoreTests(unittest.TestCase):
             "sandbox deleted before migration completed",
         )
 
+    def test_orphaned_migration_reconciliation_is_bounded(self) -> None:
+        with routing_store() as store:
+            migration_ids: list[str] = []
+            for index in range(2):
+                sandbox_id = f"legacy-orphan-{index}"
+                source = allocate_sandbox_create(
+                    store,
+                    sandbox_allocation(
+                        sandbox_id=sandbox_id,
+                        node_id="source-node",
+                        job_id="source-job",
+                        node_url="http://source:8090",
+                        resources=ResourceQuantity(disk_mb=4096),
+                        spec={"id": sandbox_id, "image": "busybox"},
+                    ),
+                    spec_hash="a" * 64,
+                    create_operation_id=f"create-operation-{index}",
+                )
+                source = set_sandbox_state(store, source, "parked")
+                migration = store.begin_sandbox_migration(
+                    source,
+                    migration_id=f"legacy-orphan-migration-{index}",
+                    destination_node_id="destination-node",
+                    destination_job_id="destination-job",
+                    destination_node_url="http://destination:8090",
+                )
+                migration_ids.append(migration.migration_id)
+            # Model state written by a pre-reconciliation release, which could
+            # remove the route without terminalizing its migration journal.
+            with store._transaction() as connection:
+                connection.execute("DELETE FROM sandboxes")
+
+            first = store.terminalize_orphaned_sandbox_migrations(max_count=1)
+            remaining = store.sandbox_migrations(active_only=True)
+            second = store.terminalize_orphaned_sandbox_migrations(max_count=1)
+
+        self.assertEqual([item.migration_id for item in first], migration_ids[:1])
+        self.assertEqual([item.migration_id for item in remaining], migration_ids[1:])
+        self.assertEqual([item.migration_id for item in second], migration_ids[1:])
+        self.assertTrue(all(item.phase == "complete" for item in (*first, *second)))
+        self.assertTrue(
+            all(item.error == "sandbox route is absent" for item in (*first, *second))
+        )
+
     def test_wake_completion_atomically_marks_destination_waking(self) -> None:
         with routing_store() as store:
             source = allocate_sandbox_create(

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.6 - 2026-08-27
+
+- Fixed deletion of successfully migrated sandboxes: activated imports retain
+  their migration identity as a storage fence but no longer fail every ordinary
+  delete with HTTP 503.
+- Split durable-delete retries from the storage-detach budget, allowing cleanup
+  backlogs to drain promptly without starving node detachment.
+- Added bounded controller reconciliation and metrics for legacy active
+  migration journals whose canonical sandbox route is already absent.
+
 ## 0.5.5 - 2026-08-27
 
 - Replayed durable sandbox delete intents from the autoscaler so a client does

@@ -2174,6 +2174,16 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
                 )
             controller_active = bool(process_lock is not None and process_lock.held)
             routing_store = RoutingStore(route_file)
+            orphaned_migrations_terminalized = []
+            if controller_active and execution_requested:
+                assert_process_fence()
+                orphaned_migrations_terminalized = (
+                    routing_store.terminalize_orphaned_sandbox_migrations(
+                        max_count=(
+                            config.autoscaler_max_orphaned_migration_reconciles_per_cycle
+                        )
+                    )
+                )
             routing_state = routing_store.load()
             pending_snapshot = list(routing_state.pending.values())
             capacity_pending_snapshot = [
@@ -2344,6 +2354,9 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
             ]
             result["persistedNodeLossDemand"] = [
                 item.to_dict() for item in persisted_node_loss_demand
+            ]
+            result["orphanedMigrationReconciles"] = [
+                item.to_dict() for item in orphaned_migrations_terminalized
             ]
             result["removedRoutes"] = [route.to_dict() for route in removed_routes]
             record_autoscaler_cycle(metrics_store, cycle=cycle, result=result)
@@ -3206,10 +3219,6 @@ def run_reconcile_cycle(
     pending_delete_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
     canceled_drain_job_ids: list[str] = []
-    remaining_storage_cleanup_budget = max(
-        0,
-        config.autoscaler_max_storage_native_detaches_per_cycle,
-    )
     detach_gateway_url = f"http://127.0.0.1:{config.gateway_port}"
     detach_gateway_error = ""
     node_control_bearer_token = read_required_token_file(
@@ -3225,7 +3234,11 @@ def run_reconcile_cycle(
             (route for route in sandbox_routes if route.delete_operation_id),
             key=lambda route: (route.updated_at, route.sandbox_id),
         )
-        for route in pending_delete_routes[:remaining_storage_cleanup_budget]:
+        pending_delete_budget = max(
+            0,
+            config.autoscaler_max_pending_delete_retries_per_cycle,
+        )
+        for route in pending_delete_routes[:pending_delete_budget]:
             delete_error = ""
             delete_payload: dict[str, Any] = {}
             try:
@@ -3249,8 +3262,10 @@ def run_reconcile_cycle(
                     "error": delete_error,
                 }
             )
-            remaining_storage_cleanup_budget -= 1
-    remaining_detach_budget = remaining_storage_cleanup_budget
+    remaining_detach_budget = max(
+        0,
+        config.autoscaler_max_storage_native_detaches_per_cycle,
+    )
     if drain_workflow_enabled:
         nodes_by_job_id = {node.job_id: node for node in nodes}
         for job_id in destructive_stop_job_ids:

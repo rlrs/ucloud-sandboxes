@@ -1004,6 +1004,7 @@ class CliTests(unittest.TestCase):
     def test_reconcile_detaches_park_before_provider_stop(self) -> None:
         terminate_calls: list[tuple[str, ...]] = []
         detach_calls: list[str] = []
+        delete_calls: list[str] = []
 
         class SuccessfulStopClient:
             def __init__(self, _session_store) -> None:
@@ -1022,6 +1023,13 @@ class CliTests(unittest.TestCase):
             node_url="http://node-owned:8090",
             resources=ResourceQuantity(vcpu=1, memory_mb=1024, disk_mb=8192),
             state="parked",
+        )
+        delete_route = sandbox_route(
+            sandbox_id="delete-pending-elsewhere",
+            node_id="other-node",
+            job_id="other-job",
+            state="parked",
+            delete_operation_id="delete-pending-elsewhere-operation",
         )
         with temporary_root() as root:
             jobs_file = write_jobs(root, owned_node_job(agent_version=True))
@@ -1071,6 +1079,8 @@ class CliTests(unittest.TestCase):
                 ucloud_session_file=str(root / "session.json"),
                 data_root=str(root),
                 policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+                autoscaler_max_pending_delete_retries_per_cycle=1,
+                autoscaler_max_storage_native_detaches_per_cycle=1,
             )
             args = autoscaler_args(jobs_file, heartbeat_file)
             state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
@@ -1099,6 +1109,14 @@ class CliTests(unittest.TestCase):
                 detach_calls.append(sandbox_id)
                 return {"sandbox": {"id": sandbox_id, "worker_state": "detached"}}
 
+            def replay_delete(
+                _gateway_url: str,
+                sandbox_id: str,
+                **_kwargs,
+            ) -> dict:
+                delete_calls.append(sandbox_id)
+                return {"deleted": {"sandbox_id": sandbox_id}}
+
             with (
                 patch.object(cli, "UCloudClient", SuccessfulStopClient),
                 patch.object(cli, "_post_node_drain", side_effect=post_drain),
@@ -1107,12 +1125,18 @@ class CliTests(unittest.TestCase):
                     "_post_gateway_sandbox_detach",
                     side_effect=post_detach,
                 ),
+                patch.object(
+                    cli,
+                    "_delete_gateway_sandbox",
+                    side_effect=replay_delete,
+                ),
             ):
                 detached = reconcile(
                     config,
                     args,
                     state,
                     route_reservations={"owned": (route,)},
+                    sandbox_routes=(delete_route,),
                 )
                 (intent,) = state.pending_drain_intents(deployment_id="prod-a")
                 save_heartbeats(
@@ -1127,6 +1151,7 @@ class CliTests(unittest.TestCase):
                 )
 
         self.assertEqual(detach_calls, [route.sandbox_id])
+        self.assertEqual(delete_calls, [delete_route.sandbox_id])
         self.assertEqual(terminate_calls, [("owned",)])
         self.assertEqual(detached["definitelyTerminatedJobIds"], [])
         self.assertTrue(

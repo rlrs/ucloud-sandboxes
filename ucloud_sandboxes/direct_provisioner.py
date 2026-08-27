@@ -442,10 +442,15 @@ class DirectSandboxProvisioner:
         if registration is None:
             return
         if registration.phase != "deleting":
-            if registration.migration_id:
+            if registration.migration_id and registration.phase != "owned":
                 raise DirectRegistryError(
                     "migration registration requires its fenced deletion path"
                 )
+            # An activated import is an ordinary owned sandbox whose retained
+            # migration identity namespaces later storage operations.  The
+            # registry revision and generation already fence this transition;
+            # preserve the migration identity through deletion so quota
+            # cleanup cannot collide with an earlier local incarnation.
             registration = self.registry.begin_delete(
                 sandbox_id,
                 expected_revision=registration.revision,

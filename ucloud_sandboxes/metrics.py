@@ -689,6 +689,15 @@ def _autoscaler_execution_summary(result: dict[str, Any]) -> dict[str, Any]:
                     ("error", "error"),
                 ),
             ),
+            "orphaned_migration_reconciles": _bounded_result_summaries(
+                result.get("orphanedMigrationReconciles"),
+                (
+                    ("migration_id", "migration_id"),
+                    ("sandbox_id", "sandbox_id"),
+                    ("phase", "phase"),
+                    ("error", "error"),
+                ),
+            ),
         },
     }
 

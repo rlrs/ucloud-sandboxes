@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from collections import deque
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 import heapq
 import hashlib
@@ -36,6 +36,7 @@ SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
 DEFAULT_WORKER_LEASE_SECONDS = 600.0
+DEFAULT_MAINTENANCE_INTERVAL_SECONDS = 1.0
 DEFAULT_COMPLETED_REQUEST_RETENTION_SECONDS = 3600.0
 DEFAULT_WORKER_RETENTION_SECONDS = 3600.0
 DEFAULT_MAX_INFLIGHT_REQUESTS = 4096
@@ -1047,6 +1048,17 @@ class ModelRelayState:
                 },
             }
 
+    async def maintain(self) -> None:
+        """Advance time-based durable state without requiring API traffic."""
+
+        async with self._lock:
+            await self._ensure_loaded_locked()
+            now = time.time()
+            await self._prune_completed_locked(now)
+            self._prune_workers_locked(now)
+            await self._expire_requests_locked(now)
+            await self._requeue_expired_leases_locked(now)
+
     async def mark_wake_notified(self, request_id: str) -> None:
         async with self._lock:
             await self._ensure_loaded_locked()
@@ -2015,6 +2027,7 @@ def create_model_relay_app(
     request_timeout_seconds: float = DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS,
     worker_poll_timeout_seconds: float = DEFAULT_WORKER_POLL_TIMEOUT_SECONDS,
     worker_lease_seconds: float = DEFAULT_WORKER_LEASE_SECONDS,
+    maintenance_interval_seconds: float = DEFAULT_MAINTENANCE_INTERVAL_SECONDS,
     completed_request_retention_seconds: float = DEFAULT_COMPLETED_REQUEST_RETENTION_SECONDS,
     worker_retention_seconds: float = DEFAULT_WORKER_RETENTION_SECONDS,
     max_inflight_requests: int = DEFAULT_MAX_INFLIGHT_REQUESTS,
@@ -2054,6 +2067,20 @@ def create_model_relay_app(
     app[LEASE_SECONDS_KEY] = worker_lease_seconds
     app[ACCEPTED_NOTIFIER_KEY] = accepted_notifier
     app[RESULT_NOTIFIER_KEY] = result_notifier
+
+    async def maintain_state(_app: web.Application):
+        interval = max(0.01, maintenance_interval_seconds)
+        task = asyncio.create_task(
+            _model_relay_maintenance_loop(_app[STATE_KEY], interval)
+        )
+        try:
+            yield
+        finally:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    app.cleanup_ctx.append(maintain_state)
 
     async def close_state(_app: web.Application) -> None:
         await _app[STATE_KEY].aclose()
@@ -2095,6 +2122,20 @@ def create_model_relay_app(
         tunnel_http_proxy,
     )
     return app
+
+
+async def _model_relay_maintenance_loop(
+    state: ModelRelayState,
+    interval_seconds: float,
+) -> None:
+    while True:
+        try:
+            await state.maintain()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            LOGGER.exception("model relay background maintenance failed")
+        await asyncio.sleep(interval_seconds)
 
 
 @web.middleware

@@ -229,6 +229,39 @@ async def enqueue_and_poll(
 
 
 class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_maintenance_requeues_expired_lease_without_api_traffic(
+        self,
+    ) -> None:
+        state = ModelRelayState(request_timeout_seconds=5)
+        registration = await state.register_rollout("maintenance")
+        token = str(registration["registration_token"])
+        request, delivery = await enqueue_and_poll(
+            state,
+            "maintenance",
+            token,
+            lease_seconds=0.01,
+            worker_id="lost-worker",
+        )
+
+        await asyncio.sleep(0.03)
+        await state.maintain()
+
+        self.assertEqual(request.state, "pending")
+        self.assertIsNone(request.lease_id)
+        replacement = (
+            await state.poll(
+                rollout_id="maintenance",
+                registration_token=token,
+                timeout_seconds=0,
+                lease_seconds=1,
+                worker_id="replacement-worker",
+            )
+        )[0]
+        self.assertEqual(replacement.request_id, delivery.request_id)
+        self.assertEqual(replacement.delivery_count, 2)
+        self.assertEqual((await state.stats())["counters"]["lease_expired"], 1)
+        await state.aclose()
+
     async def test_accepted_notification_survives_caller_cancellation(self) -> None:
         state = ModelRelayState()
         await state.register_rollout(

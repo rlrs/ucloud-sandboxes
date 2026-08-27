@@ -334,6 +334,34 @@ class CliTests(unittest.TestCase):
         self.assertEqual(post.call_count, 2)
         sleep.assert_called_once_with(0.05)
 
+        unsafe_exec = HTTPError(
+            "https://gateway.example",
+            409,
+            "Conflict",
+            {},
+            io.BytesIO(
+                b'{"error":"sandbox has active exec/file activity that cannot '
+                b'survive park; use SDK start_agent()"}'
+            ),
+        )
+        with (
+            patch.object(
+                cli,
+                "_post_bounded_json",
+                side_effect=unsafe_exec,
+            ) as post,
+            patch.object(cli.time, "sleep") as sleep,
+            self.assertRaisesRegex(RuntimeError, "start_agent"),
+        ):
+            cli._post_gateway_sandbox_lifecycle(
+                "https://gateway.example",
+                "secret",
+                relay_request,
+                action="park",
+            )
+        self.assertEqual(post.call_count, 1)
+        sleep.assert_not_called()
+
     def test_autoscaler_execute_rejects_jobs_fixture_before_provider_calls(
         self,
     ) -> None:

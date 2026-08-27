@@ -21,6 +21,7 @@ from .sandbox import (
     NodeDrainState,
     SandboxActivitySnapshot,
     SandboxAdmissionClosedError,
+    SandboxBusyError,
     SandboxConflictError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
@@ -330,12 +331,19 @@ class DirectNodeRuntime:
             operation_id
         ):
             raise ValueError("park operation id is invalid")
-        with self.lifecycle.exclusive(sandbox_id):
-            return self.service.park(
-                sandbox_id,
-                operation_id=operation_id,
-                background=background,
-            )
+        try:
+            with self.lifecycle.exclusive(sandbox_id):
+                return self.service.park(
+                    sandbox_id,
+                    operation_id=operation_id,
+                    background=background,
+                )
+        except SandboxBusyError as exc:
+            raise SandboxBusyError(
+                "sandbox has active exec/file activity that cannot survive park: "
+                f"{sandbox_id}; launch a long-lived agent in a managed_process "
+                "sandbox through the SDK start_agent() API"
+            ) from exc
 
     def wake(
         self,

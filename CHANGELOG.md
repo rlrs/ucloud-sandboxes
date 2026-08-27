@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.4 - 2026-08-27
+
+- Added traffic-independent model-relay maintenance so expired requests and
+  worker leases advance even when no client is polling relay state.
+- Made park failures explain when attached exec or file activity cannot survive
+  a gVisor restore and direct long-lived agents to the checkpoint-owned managed
+  process API.
+- Stopped lifecycle notification retries immediately for this permanent park
+  conflict while retaining bounded retries for transient lifecycle races.
+- Documented the coordinated backend/SDK contract for parking-aware agents:
+  managed process state and logs survive park/wake, while attached exec
+  transports deliberately fence parking.
+
 ## 0.5.0 - 2026-08-13
 
 - Replaced SQLite pseudo-traces with bounded, nonblocking OTLP/HTTP traces and

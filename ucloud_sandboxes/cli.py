@@ -1315,7 +1315,19 @@ def _post_gateway_sandbox_lifecycle(
             # durably record the request transition.
             if exc.code != 409 or attempt >= 100:
                 raise
+            error_body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+            try:
+                error_payload = json.loads(error_body.decode("utf-8"))
+                error_message = (
+                    str(error_payload.get("error") or "").strip()
+                    if isinstance(error_payload, dict)
+                    else ""
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                error_message = ""
             exc.close()
+            if "cannot survive park" in error_message:
+                raise RuntimeError(error_message) from exc
             time.sleep(0.05)
     transport_epoch = headers.get("X-UCloud-Sandbox-Transport-Epoch", "").strip()
     return transport_epoch or None

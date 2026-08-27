@@ -85,6 +85,8 @@ sandbox = client.create_sandbox(
     memory_mb=2048,
     disk_mb=10240,
     network="bridge",
+    parkable=True,
+    managed_process=True,
     env={
         "VF_RELAY_ROLLOUT_ID": "run-001",
         "OPENAI_BASE_URL": "https://relay.example.org/rollouts/run-001/v1",
@@ -93,6 +95,12 @@ sandbox = client.create_sandbox(
     labels={"rollout": "run-001"},
 )
 ```
+
+Start the long-lived sandbox-side agent with the SDK `start_agent()` method.
+It uses the checkpoint-owned managed-process protocol, so status and bounded
+logs survive park/wake and cross-node restore. Do not launch the primary agent
+with `start_exec()`: attached exec transports cannot be reattached after a
+gVisor restore and therefore intentionally block parking with HTTP `409`.
 
 ## General HTTP Reverse Tunnel
 

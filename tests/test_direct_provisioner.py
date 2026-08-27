@@ -1315,8 +1315,9 @@ class DirectProvisionerTests(unittest.TestCase):
                 interactive=False,
             )
             manager.runtime.exec_started(created.spec.id)
-            with self.assertRaisesRegex(SandboxBusyError, "active exec"):
+            with self.assertRaisesRegex(SandboxBusyError, "active exec") as raised:
                 manager.park(created.spec.id, operation_id="park-busy")
+            self.assertIn("start_agent()", str(raised.exception))
 
             deleted = manager.delete(
                 created.spec.id,

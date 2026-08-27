@@ -433,4 +433,7 @@ gateway/tunnel layer rather than exposing container SSH ports publicly.
 
 Exec commands are session-based. The node records ordered
 stdout/stderr/status/exit events, accepts stdin writes, and supports bounded
-long-poll reads. See [routing-gateway.md](routing-gateway.md).
+long-poll reads. Attached exec sessions intentionally block parking because
+their host-side transport cannot be reattached after gVisor restore. Launch a
+parking-aware long-lived agent through the managed job API instead; the SDK
+exposes this as `start_agent()`. See [routing-gateway.md](routing-gateway.md).

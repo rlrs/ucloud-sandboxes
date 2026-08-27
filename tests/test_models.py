@@ -7,9 +7,22 @@ from ucloud_sandboxes.models import (
     NodeRuntimeMetrics,
     ResourceQuantity,
     SandboxInventoryEntry,
+    parse_iso_datetime,
     utc_now,
 )
 from ucloud_sandboxes.providers.ucloud.models import instance_from_payload
+
+
+class TimestampParsingTests(unittest.TestCase):
+    def test_accepts_go_rfc3339_nanoseconds_on_python_310(self) -> None:
+        parsed = parse_iso_datetime("2026-08-27T13:05:18.123456789Z")
+
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.isoformat(), "2026-08-27T13:05:18.123456+00:00")
+
+    def test_rejects_invalid_high_precision_timestamp(self) -> None:
+        self.assertIsNone(parse_iso_datetime("2026-08-27T13:05:18.123456789oops"))
 
 
 class VmJobParsingTests(unittest.TestCase):

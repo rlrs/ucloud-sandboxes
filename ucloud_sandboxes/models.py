@@ -18,6 +18,10 @@ def parse_iso_datetime(value: object) -> datetime | None:
     raw = value.strip()
     if raw.endswith("Z"):
         raw = raw[:-1] + "+00:00"
+    # Go's RFC3339Nano timestamps may carry seven to nine fractional digits,
+    # while Python 3.10's fromisoformat() accepts at most microseconds. Preserve
+    # the same instant at the highest precision Python's datetime can retain.
+    raw = re.sub(r"(\.\d{6})\d+([+-]\d{2}:\d{2})?$", r"\1\2", raw)
     try:
         parsed = datetime.fromisoformat(raw)
     except ValueError:

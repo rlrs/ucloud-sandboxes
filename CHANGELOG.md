@@ -12,6 +12,9 @@
 - Documented the coordinated backend/SDK contract for parking-aware agents:
   managed process state and logs survive park/wake, while attached exec
   transports deliberately fence parking.
+- Accepted Go RFC3339 nanosecond timestamps on Python 3.10 by retaining their
+  representable microsecond precision, keeping managed-agent state portable
+  across the supported Python matrix.
 
 ## 0.5.0 - 2026-08-13
 

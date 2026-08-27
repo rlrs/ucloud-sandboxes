@@ -494,6 +494,28 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 raise ValueError("exec payload must be a JSON object")
             spec = SandboxExecSpec.from_dict(raw, sandbox_id=sandbox_id)
             session = self.exec_manager.start(spec)
+        except SandboxAdmissionClosedError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_admission_closed",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1"},
+            )
+            return
+        except SandboxCapacityUnavailableError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "node_active_exec_deferred",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "1"},
+            )
+            return
         except (RuntimeError, ValueError) as exc:
             self._write_exception(exc)
             return
@@ -1547,6 +1569,7 @@ def build_direct_node_agent_server(
             ),
             storage_ublk_active_devices=int(raw.get("ublk_active_devices", 0)),
             storage_ublk_live_devices=int(raw.get("ublk_live_devices", 0)),
+            storage_ublk_max_devices=int(raw.get("ublk_max_devices", 0)),
             storage_device_pool_acquires=int(raw.get("device_pool_acquires", 0)),
             storage_device_pool_reused_acquires=int(
                 raw.get("device_pool_reused_acquires", 0)

@@ -411,6 +411,16 @@ class DirectNodeRuntime:
             raise ValueError(f"sandbox not found: {sandbox_id}")
         return record
 
+    def acquire_exec_capacity(self, sandbox_id: str) -> str:
+        registration = self.service._require_registration(sandbox_id)
+        return self.service.acquire_exec_capacity(
+            sandbox_id,
+            registration.sandbox_generation,
+        )
+
+    def release_exec_capacity(self, token: str) -> None:
+        self.service.release_exec_capacity(token)
+
     def consume_exec_start_timings(self) -> dict[str, float]:
         timings = dict(getattr(self._exec_start_state, "timings", {}))
         self._exec_start_state.timings = {}

@@ -228,6 +228,7 @@ class NodeRuntimeMetrics:
     storage_device_pool_idle_devices: int = 0
     storage_ublk_active_devices: int = 0
     storage_ublk_live_devices: int = 0
+    storage_ublk_max_devices: int = 0
     storage_device_pool_acquires: int = 0
     storage_device_pool_reused_acquires: int = 0
     storage_device_pool_new_acquires: int = 0
@@ -243,7 +244,13 @@ class NodeRuntimeMetrics:
     @classmethod
     def from_dict(cls, raw: object) -> "NodeRuntimeMetrics | None":
         field_names = {item.name for item in fields(cls)}
-        if not isinstance(raw, dict) or set(raw) != field_names:
+        if not isinstance(raw, dict):
+            return None
+        # A gateway may be upgraded before all workers. The new device-limit
+        # signal is optional only for that rolling-upgrade boundary.
+        raw = dict(raw)
+        raw.setdefault("storage_ublk_max_devices", 0)
+        if set(raw) != field_names:
             return None
         collected_at = parse_iso_datetime(raw["collected_at"])
         if collected_at is None:
@@ -413,6 +420,12 @@ class NodeHeartbeat:
                     metrics.storage_hard_capacity_mb - metrics.storage_hard_reserved_mb,
                 ),
             )
+            if (
+                metrics.storage_ublk_max_devices > 0
+                and metrics.storage_ublk_active_devices
+                >= metrics.storage_ublk_max_devices
+            ):
+                disk_mb = 0
         return ResourceQuantity(
             vcpu=max(0.0, self.total_resources.vcpu - unavailable.vcpu),
             memory_mb=max(0, self.total_resources.memory_mb - unavailable.memory_mb),

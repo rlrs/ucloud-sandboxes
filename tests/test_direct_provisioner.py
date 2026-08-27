@@ -509,6 +509,63 @@ class DirectProvisionerTests(unittest.TestCase):
             self.assertEqual(quota.active_records, {})
             self.assertEqual(quota.delete_operation_ids, ["quota-delete:200000"])
 
+    def test_delete_rolls_back_planned_create_without_advancing_image(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, images, _ = self.make(root)
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_compatibility_sha256=(
+                    provisioner.runtime_compatibility_sha256
+                ),
+            )
+            total_mb = provisioner._quota_total_mb(planned)
+            quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
+            )
+
+            provisioner.delete(planned.sandbox_id)
+
+            self.assertIsNone(registry.get(planned.sandbox_id))
+            self.assertEqual(quota.active_records, {})
+            self.assertEqual(images.materialized_refs, [])
+
+    def test_delete_rolls_back_quota_ready_create_without_advancing_image(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, quota, images, _ = self.make(root)
+            planned = registry.plan(
+                spec=self.spec(),
+                sandbox_generation=7,
+                operation_id="create:7",
+                runtime_compatibility_sha256=(
+                    provisioner.runtime_compatibility_sha256
+                ),
+            )
+            total_mb = provisioner._quota_total_mb(planned)
+            prepared = quota.prepare_volume(
+                provisioner._storage_owner(planned),
+                operation_id=planned.operation_id,
+                virtual_size=total_mb * 1024 * 1024,
+            )
+            quota_ready = registry.commit_quota(
+                planned.sandbox_id,
+                expected_revision=planned.revision,
+                project_id=prepared.accounting_id,
+                total_mb=total_mb,
+                quota_path=Path(prepared.mount_path),
+            )
+
+            provisioner.delete(quota_ready.sandbox_id)
+
+            self.assertIsNone(registry.get(quota_ready.sandbox_id))
+            self.assertEqual(quota.active_records, {})
+            self.assertEqual(images.materialized_refs, [])
+
     def test_create_rejects_noncanonical_storage_record(self) -> None:
         cases = (
             (
@@ -1085,6 +1142,158 @@ class DirectProvisionerTests(unittest.TestCase):
                 "no fresh runtime metrics",
             ):
                 self.create(service, self.spec())
+
+    def test_exec_capacity_uses_live_pressure_not_sandbox_shape(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            runtime_metrics = [
+                NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=10.0,
+                    cpu_count=4,
+                    memory_total_mb=4096,
+                    memory_available_mb=4096,
+                )
+            ]
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=4096),
+                runtime_metrics_provider=lambda: runtime_metrics[0],
+            )
+            records = [
+                self.create(
+                    service,
+                    replace(
+                        self.spec(),
+                        id=f"sandbox-{index}",
+                        cpus=2.0,
+                    ),
+                )
+                for index in range(3)
+            ]
+
+            first = service.acquire_exec_capacity(
+                records[0].spec.id,
+                records[0].generation,
+            )
+            second = service.acquire_exec_capacity(
+                records[1].spec.id,
+                records[1].generation,
+            )
+            third = service.acquire_exec_capacity(
+                records[2].spec.id,
+                records[2].generation,
+            )
+            reservations, _epoch = service.active_reservations_snapshot()
+
+            self.assertEqual(len(service.list_snapshot()), 3)
+            self.assertEqual(len(reservations), 3)
+            self.assertEqual(sum(item.vcpu for item in reservations.values()), 0)
+            self.assertEqual(
+                sum(item.memory_mb for item in reservations.values()),
+                0,
+            )
+
+            runtime_metrics[0] = replace(runtime_metrics[0], cpu_percent=95.0)
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "CPU pressure",
+            ):
+                service.acquire_exec_capacity(
+                    records[0].spec.id,
+                    records[0].generation,
+                )
+
+            runtime_metrics[0] = replace(
+                runtime_metrics[0],
+                cpu_percent=10.0,
+                memory_available_mb=1024,
+            )
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "live memory headroom",
+            ):
+                service.acquire_exec_capacity(
+                    records[0].spec.id,
+                    records[0].generation,
+                )
+
+            service.release_exec_capacity(first)
+            service.release_exec_capacity(second)
+            service.release_exec_capacity(third)
+            self.assertEqual(service.active_reservations_snapshot()[0], {})
+
+    def test_exec_capacity_samples_live_pressure_in_parallel(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            records = [
+                self.create(
+                    service,
+                    replace(self.spec(), id=f"sandbox-{index}"),
+                )
+                for index in range(2)
+            ]
+            calls = 0
+            calls_guard = Lock()
+            both_sampling = Event()
+            release_samples = Event()
+
+            def runtime_metrics() -> NodeRuntimeMetrics:
+                nonlocal calls
+                with calls_guard:
+                    calls += 1
+                    if calls == 2:
+                        both_sampling.set()
+                release_samples.wait(timeout=2.0)
+                return NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=10.0,
+                    cpu_count=4,
+                    memory_total_mb=4096,
+                    memory_available_mb=4096,
+                )
+
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=4096),
+                runtime_metrics_provider=runtime_metrics,
+            )
+            tokens: list[str] = []
+            errors: list[BaseException] = []
+
+            def acquire(record) -> None:
+                try:
+                    token = service.acquire_exec_capacity(
+                        record.spec.id,
+                        record.generation,
+                    )
+                    with calls_guard:
+                        tokens.append(token)
+                except BaseException as exc:
+                    with calls_guard:
+                        errors.append(exc)
+
+            threads = [Thread(target=acquire, args=(record,)) for record in records]
+            for thread in threads:
+                thread.start()
+            sampled_in_parallel = both_sampling.wait(timeout=1.0)
+            release_samples.set()
+            for thread in threads:
+                thread.join(timeout=2.0)
+
+            self.assertTrue(sampled_in_parallel)
+            self.assertEqual(errors, [])
+            self.assertEqual(len(tokens), 2)
+            for token in tokens:
+                service.release_exec_capacity(token)
 
     def test_node_adapter_delete_preempts_attached_exec_but_park_does_not(
         self,

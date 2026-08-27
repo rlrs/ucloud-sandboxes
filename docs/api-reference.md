@@ -158,7 +158,18 @@ samples from the latest autoscaler cycle and reports omitted counts. This
 prevents a model-return burst from making every dashboard poll proportional to
 the entire wake queue. `effective_policy` contains only non-secret operational
 knobs and is observational; `/v1/metrics` does not provide a policy mutation
-path.
+path. It contains every `ScalePolicy` field, including feedback windows,
+provisioning credit, heartbeat and unreachable leases, idle grace, and warm
+resources.
+
+The autoscaler object also includes an `execution` section. Its `scale_down`
+object separates requested, planned, blocked, draining, drain-ready,
+unreachable-ready, and definitely terminated job IDs. Bounded drain and
+storage-detach attempt summaries preserve success and error information without
+persisting drain tokens or sandbox payloads. Bounded provider-operation outcomes
+show whether create and stop mutations were accepted, recovered, uncertain, or
+failed. This distinction is important because a valid policy stop decision can
+still be waiting for a drain proof or blocked by attached storage.
 
 `telemetry` reports the bounded OTLP exporter queue and accepted, exported,
 dropped, and failed span counts. Trace payloads are not stored in this response

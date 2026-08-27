@@ -120,6 +120,7 @@ class ExecSession:
         default=None, repr=False, compare=False
     )
     activity_lease: bool = field(default=False, repr=False, compare=False)
+    capacity_lease: object | None = field(default=None, repr=False, compare=False)
     stdin_lock: Lock = field(
         default_factory=Lock,
         repr=False,
@@ -159,8 +160,16 @@ class ExecSessionManager:
         spec.validate()
         self.sandbox_manager.lifecycle.acquire_shared(spec.sandbox_id)
         runtime = self.sandbox_manager.runtime
+        capacity_lease: object | None = None
         try:
             self.sandbox_manager.require_activity_sandbox(spec.sandbox_id)
+            acquire_capacity = getattr(
+                self.sandbox_manager,
+                "acquire_exec_capacity",
+                None,
+            )
+            if callable(acquire_capacity):
+                capacity_lease = acquire_capacity(spec.sandbox_id)
             argv = runtime.exec_command(
                 spec.sandbox_id,
                 spec.command,
@@ -170,6 +179,8 @@ class ExecSessionManager:
                 tty=spec.tty,
             )
         except Exception:
+            if capacity_lease is not None:
+                self._release_capacity_lease(capacity_lease)
             self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
             raise
         now = utc_now()
@@ -184,6 +195,7 @@ class ExecSessionManager:
             stdin_open=spec.stdin,
             events=deque(maxlen=self.max_events_per_session),
             activity_lease=True,
+            capacity_lease=capacity_lease,
         )
         try:
             with self._lock:
@@ -191,8 +203,14 @@ class ExecSessionManager:
                 self._sessions[session.id] = session
                 self._append_event_locked(session, "status", "started")
         except Exception:
-            self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
-            session.activity_lease = False
+            try:
+                runtime.exec_start_failed(spec.sandbox_id)
+            finally:
+                if session.capacity_lease is not None:
+                    self._release_capacity_lease(session.capacity_lease)
+                    session.capacity_lease = None
+                self.sandbox_manager.lifecycle.release_shared(spec.sandbox_id)
+                session.activity_lease = False
             raise
         self._start_process(session)
         return session
@@ -506,6 +524,17 @@ class ExecSessionManager:
         session.exit_code = exit_code
         session.status = "exited" if exit_code == 0 else "failed"
         self._append_event_locked(session, "exit", "", exit_code=exit_code)
+        if session.capacity_lease is not None:
+            capacity_lease = session.capacity_lease
+            session.capacity_lease = None
+            try:
+                self._release_capacity_lease(capacity_lease)
+            except Exception as exc:
+                self._append_event_locked(
+                    session,
+                    "error",
+                    f"exec capacity lease cleanup failed: {exc}",
+                )
         if session.activity_lease:
             session.activity_lease = False
             try:
@@ -516,3 +545,12 @@ class ExecSessionManager:
                     "error",
                     f"exec activity lease cleanup failed: {exc}",
                 )
+
+    def _release_capacity_lease(self, capacity_lease: object) -> None:
+        release_capacity = getattr(
+            self.sandbox_manager,
+            "release_exec_capacity",
+            None,
+        )
+        if callable(release_capacity):
+            release_capacity(capacity_lease)

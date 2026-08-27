@@ -16,6 +16,7 @@ from ucloud_sandboxes.storage_native import (
     StorageNativeDeviceOwner,
 )
 from ucloud_sandboxes.storage_native_daemon import (
+    StorageNativeConflictError,
     StorageNativeNodeConfig,
     StorageNativePendingOperation,
     StorageNativeNodeClient,
@@ -231,6 +232,7 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
         descriptor: bool = False,
         publisher: bool = False,
         pooled: bool = False,
+        max_ublk_devices: int = 0,
     ) -> tuple[StorageNativeNodeService, FakeBlockBackend, FakeHost]:
         backend = FakeBlockBackend(descriptor=descriptor, pooled=pooled)
         host = FakeHost(backend)
@@ -243,6 +245,13 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
                 mount_root=root / "mounts",
                 hard_capacity_bytes=capacity,
                 device_pool_enabled=pooled,
+                device_pool_low_watermark=(
+                    min(2, max_ublk_devices) if max_ublk_devices > 0 else 2
+                ),
+                device_pool_high_watermark=(
+                    min(16, max_ublk_devices) if max_ublk_devices > 0 else 16
+                ),
+                max_ublk_devices=max_ublk_devices,
             ),
             backend=backend,
             global_config_path=global_config,
@@ -250,6 +259,108 @@ class StorageNativeNodeServiceTests(unittest.TestCase):
             publisher=FakePublisher() if publisher else None,
         )
         return service, backend, host
+
+    def test_ublk_limit_rejects_before_journaling_and_reuses_idle_device(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, backend, _ = self._service(
+                Path(raw),
+                pooled=True,
+                max_ublk_devices=1,
+            )
+            first = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+
+            with self.assertRaisesRegex(
+                StorageNativeConflictError,
+                "ublk device capacity is exhausted",
+            ):
+                service.create_volume(
+                    sandbox_id="sandbox-2",
+                    sandbox_generation=1,
+                    volume_id="volume-2",
+                    operation_id="create:2",
+                    virtual_size=1 << 30,
+                )
+
+            self.assertIsNone(service.journal.load("volume-2"))
+            self.assertEqual(service.metrics()["ublk_max_devices"], 1)
+            service.delete_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="delete:1",
+                expected_revision=first.revision,
+            )
+            second = service.create_volume(
+                sandbox_id="sandbox-2",
+                sandbox_generation=1,
+                volume_id="volume-2",
+                operation_id="create:2",
+                virtual_size=1 << 30,
+            )
+
+            self.assertEqual(second.device_id, first.device_id)
+            self.assertEqual(backend.live, {first.device_id})
+
+    def test_ublk_limit_rejects_wake_before_changing_released_volume(self) -> None:
+        with TemporaryDirectory() as raw:
+            service, _, _ = self._service(
+                Path(raw),
+                pooled=True,
+                max_ublk_devices=1,
+            )
+            created = service.create_volume(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="create:1",
+                virtual_size=1 << 30,
+            )
+            sealed = service.freeze_and_seal(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="seal:1",
+                expected_revision=created.revision,
+            )
+            released = service.release_runtime(
+                sandbox_id="sandbox-1",
+                sandbox_generation=1,
+                volume_id="volume-1",
+                operation_id="release:1",
+                expected_revision=sealed.revision,
+            )
+            service.create_volume(
+                sandbox_id="sandbox-2",
+                sandbox_generation=1,
+                volume_id="volume-2",
+                operation_id="create:2",
+                virtual_size=1 << 30,
+            )
+
+            with self.assertRaisesRegex(
+                StorageNativeConflictError,
+                "ublk device capacity is exhausted",
+            ):
+                service.mount_snapshot_cow(
+                    sandbox_id="sandbox-1",
+                    sandbox_generation=1,
+                    volume_id="volume-1",
+                    operation_id="wake:1",
+                    expected_revision=released.revision,
+                )
+
+            unchanged = service.journal.load("volume-1")
+            self.assertIsNotNone(unchanged)
+            assert unchanged is not None
+            self.assertEqual(unchanged.state, StorageVolumeState.RELEASED)
+            self.assertEqual(unchanged.revision, released.revision)
+            self.assertEqual(unchanged.error, "")
 
     def test_accounting_ids_are_transactional_and_monotonic_across_restart(
         self,

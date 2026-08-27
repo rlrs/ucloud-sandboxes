@@ -18,6 +18,7 @@ from opentelemetry.metrics import Meter
 from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import ReadableSpan, Span, TracerProvider
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult, SpanProcessor
@@ -31,6 +32,26 @@ DEFAULT_MAX_QUEUE_SIZE = 4_096
 DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
 _SHUTDOWN_JOIN_SECONDS = 5.0
 _MIN_THREAD_CPU_SPAN_DURATION_SECONDS = 0.001
+OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS = (
+    0.001,
+    0.0025,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
+    25.0,
+    60.0,
+    120.0,
+    300.0,
+    600.0,
+)
 
 
 @dataclass(frozen=True)
@@ -358,7 +379,16 @@ class Telemetry:
             export_timeout_millis=settings.export_timeout_ms,
         )
         meter_provider = MeterProvider(
-            resource=resource, metric_readers=[metric_reader]
+            resource=resource,
+            metric_readers=[metric_reader],
+            views=[
+                View(
+                    instrument_name="ucloud.platform.operation.duration",
+                    aggregation=ExplicitBucketHistogramAggregation(
+                        boundaries=OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
+                    ),
+                )
+            ],
         )
         return cls(
             settings=settings,

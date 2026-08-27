@@ -169,6 +169,9 @@ from .providers.ucloud.api import (
 from .vm_init import (
     DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
     DEFAULT_MANAGED_INIT,
+    DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES,
+    DEFAULT_UCLOUD_NODE_STATE_DIR,
+    DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES,
     VmInitOptions,
     render_vm_init_script,
     run_init_over_ssh,
@@ -1155,9 +1158,7 @@ def cmd_serve_direct_node_agent(args: argparse.Namespace) -> int:
     )
     print(f"Storage-native mount root: {args.volume_mount_root}")
     print(f"Storage-native service: {args.storage_native_socket}")
-    print(
-        "Runtime compatibility: " f"{service.provisioner.runtime_compatibility_sha256}"
-    )
+    print(f"Runtime compatibility: {service.provisioner.runtime_compatibility_sha256}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -4171,7 +4172,7 @@ def _execute_vm_bootstrap_attempt_unobserved(
             "reused": stage_result.reused,
         }
         if stage_result.returncode != 0:
-            error = "package staging exited with status " f"{stage_result.returncode}"
+            error = f"package staging exited with status {stage_result.returncode}"
             retry_delay_seconds = _bootstrap_retry_delay_seconds(
                 stage_result.returncode,
                 attempt_count=attempt_count,
@@ -5043,11 +5044,23 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
     return {
         "min_nodes": policy.min_nodes,
         "max_nodes": policy.max_nodes,
+        "warm_resources": policy.warm_resources.to_dict(),
         "max_create_per_cycle": policy.max_create_per_cycle,
         "max_stop_per_cycle": policy.max_stop_per_cycle,
         "max_provisioning_nodes": policy.max_provisioning_nodes,
+        "provisioning_capacity_weight": policy.provisioning_capacity_weight,
+        "stale_provisioning_after_seconds": (policy.stale_provisioning_after_seconds),
+        "stale_provisioning_capacity_weight": (
+            policy.stale_provisioning_capacity_weight
+        ),
+        "unreachable_stop_after_seconds": policy.unreachable_stop_after_seconds,
         "scale_down_idle_seconds": policy.scale_down_idle_seconds,
+        "builder_scale_down_idle_seconds": policy.builder_scale_down_idle_seconds,
+        "heartbeat_ttl_seconds": policy.heartbeat_ttl_seconds,
         "live_pressure_enabled": policy.live_pressure_enabled,
+        "live_pressure_window_seconds": policy.live_pressure_window_seconds,
+        "live_pressure_min_samples": policy.live_pressure_min_samples,
+        "live_pressure_fresh_seconds": policy.live_pressure_fresh_seconds,
         "target_cpu_utilization": policy.target_cpu_utilization,
         "target_memory_utilization": policy.target_memory_utilization,
         "max_memory_psi_full_avg10": policy.max_memory_psi_full_avg10,
@@ -5064,6 +5077,12 @@ def dashboard_scale_policy_to_dict(policy: ScalePolicy) -> dict[str, Any]:
         ),
         "pressure_scale_down_cooldown_seconds": (
             policy.pressure_scale_down_cooldown_seconds
+        ),
+        "provisioning_latency_lookback_seconds": (
+            policy.provisioning_latency_lookback_seconds
+        ),
+        "provisioning_scale_down_multiplier": (
+            policy.provisioning_scale_down_multiplier
         ),
         "program_aware_autoscaling_enabled": (policy.program_aware_autoscaling_enabled),
         "model_wait_capacity_weight": policy.model_wait_capacity_weight,
@@ -5370,6 +5389,9 @@ def vm_init_options_for_job(
         init_authorized_keys=authorized_keys,
         node_id=resolved_node_id,
         work_dir=DEFAULT_INSTALL_ROOT,
+        state_dir=(
+            DEFAULT_UCLOUD_NODE_STATE_DIR if config.provider.kind == "ucloud" else ""
+        ),
         package_spec=package_spec,
         package_sha256=package_sha256,
         node_agent_host="0.0.0.0",
@@ -5427,8 +5449,14 @@ def vm_init_options_for_job(
         storage_native_pool_high_watermark=(
             config.sandbox.storage_native_pool_high_watermark
         ),
+        storage_native_max_ublk_devices=(
+            DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES
+            if config.provider.kind == "ucloud" and role == "sandbox"
+            else DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
+        ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,
         direct_max_concurrent_restores=(config.sandbox.direct_max_concurrent_restores),
+        direct_idle_park_seconds=config.sandbox.direct_idle_park_seconds,
         max_concurrent_image_pulls=(
             config.builder.max_concurrent_image_pulls
             if role == "builder"
@@ -5449,6 +5477,7 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "serviceUser": options.service_user,
         "initAuthorizedKeys": list(options.init_authorized_keys),
         "workDir": options.work_dir,
+        "stateDir": options.state_dir,
         "packageSpec": options.package_spec,
         "packageSha256": options.package_sha256,
         "nodeAgentHost": options.node_agent_host,
@@ -5484,8 +5513,10 @@ def vm_init_options_to_dict(options: VmInitOptions) -> dict[str, Any]:
         "storageNativeCacheGb": options.storage_native_cache_gb,
         "storageNativePoolLowWatermark": (options.storage_native_pool_low_watermark),
         "storageNativePoolHighWatermark": (options.storage_native_pool_high_watermark),
+        "storageNativeMaxUblkDevices": options.storage_native_max_ublk_devices,
         "directDiskHeadroomMb": options.direct_disk_headroom_mb,
         "directMaxConcurrentRestores": options.direct_max_concurrent_restores,
+        "directIdleParkSeconds": options.direct_idle_park_seconds,
         "maxConcurrentImagePulls": options.max_concurrent_image_pulls,
         "heartbeatIntervalSeconds": options.heartbeat_interval_seconds,
         "capabilities": list(options.capabilities()),

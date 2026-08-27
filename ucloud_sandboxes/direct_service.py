@@ -35,6 +35,7 @@ from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
     SandboxCapacityUnavailableError,
+    SandboxConflictError,
     SandboxFileTooLargeError,
     SandboxOperation,
     SandboxRecord,
@@ -214,6 +215,9 @@ class DirectSandboxService:
             Callable[[], NodeRuntimeMetrics | None] | None
         ) = None
         self._active_reservations: dict[tuple[str, int], ResourceQuantity] = {}
+        self._active_exec_reservations: dict[
+            str, tuple[tuple[str, int], ResourceQuantity]
+        ] = {}
         # Cover transient work that deliberately precedes a durable registry
         # record, notably cold rootfs materialization. A per-process
         # nanosecond seed prevents a restarted draining Warden from reusing a
@@ -247,7 +251,7 @@ class DirectSandboxService:
         *,
         runtime_metrics_provider: Callable[[], NodeRuntimeMetrics | None],
     ) -> None:
-        """Install the per-shape and concurrent CPU/RAM admission ceiling."""
+        """Install lifecycle capacity and the live-pressure admission source."""
 
         if not capacity.is_valid:
             raise ValueError("direct active capacity cannot be negative")
@@ -954,20 +958,27 @@ class DirectSandboxService:
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             sandbox = registration.to_direct_sandbox()
             self._ensure_running(sandbox)
-            with self.warden.exec_lease(
-                sandbox,
-                argv,
-                env=env,
-                working_dir=working_dir,
-                user=user,
-            ) as command:
-                result = self.process_runner.run(
-                    command,
-                    input_bytes=input_bytes,
-                    timeout_seconds=timeout_seconds,
-                    max_stdout_bytes=max_stdout_bytes,
-                    max_stderr_bytes=max_stderr_bytes,
-                )
+            token = self.acquire_exec_capacity(
+                sandbox_id,
+                registration.sandbox_generation,
+            )
+            try:
+                with self.warden.exec_lease(
+                    sandbox,
+                    argv,
+                    env=env,
+                    working_dir=working_dir,
+                    user=user,
+                ) as command:
+                    result = self.process_runner.run(
+                        command,
+                        input_bytes=input_bytes,
+                        timeout_seconds=timeout_seconds,
+                        max_stdout_bytes=max_stdout_bytes,
+                        max_stderr_bytes=max_stderr_bytes,
+                    )
+            finally:
+                self.release_exec_capacity(token)
             self.mark_activity(sandbox_id, registration.sandbox_generation)
             return result
 
@@ -1165,6 +1176,14 @@ class DirectSandboxService:
                     last_activity = self._last_activity.setdefault(key, now)
                 if now - last_activity < self._idle_park_seconds:
                     continue
+                with self._capacity_guard:
+                    if any(
+                        active_key == key
+                        for active_key, _resources in (
+                            self._active_exec_reservations.values()
+                        )
+                    ):
+                        continue
                 try:
                     with self._try_lock(*key) as acquired:
                         if not acquired:
@@ -1329,6 +1348,10 @@ class DirectSandboxService:
                 for candidate_key, reservation in self._active_reservations.items():
                     if candidate_key != key:
                         used = used + reservation
+                for _active_key, reservation in (
+                    self._active_exec_reservations.values()
+                ):
+                    used = used + reservation
                 available = ResourceQuantity(
                     vcpu=max(0.0, capacity.vcpu - used.vcpu),
                     memory_mb=max(0, capacity.memory_mb - used.memory_mb),
@@ -1352,17 +1375,75 @@ class DirectSandboxService:
                 self._active_reservations.pop(key, None)
                 self._activity_epoch += 1
 
+    def acquire_exec_capacity(self, sandbox_id: str, generation: int) -> str:
+        """Admit an exec from live node pressure and track its lifetime."""
+
+        registration = self._require_registration(sandbox_id)
+        if registration.sandbox_generation != generation:
+            raise SandboxConflictError(
+                "exec generation does not own direct sandbox"
+            )
+        token = f"exec:{uuid4().hex}"
+        key = (sandbox_id, generation)
+        # Sampling host CPU currently spans a short /proc/stat interval. Do it
+        # outside the capacity guard so unrelated exec starts can sample in
+        # parallel instead of turning admission into a serialized hot path.
+        with self._capacity_guard:
+            metrics_provider = (
+                self._runtime_metrics_provider
+                if self._active_capacity is not None
+                else None
+            )
+        metrics = metrics_provider() if metrics_provider is not None else None
+        with self._capacity_guard:
+            if not self._admission_open:
+                raise SandboxAdmissionClosedError("direct node admission is closed")
+            if self._active_capacity is not None:
+                # A sandbox's configured limits bound that sandbox; they do not
+                # describe what its next command will consume. Charging the
+                # complete shape here artificially capped a 32-vCPU worker at
+                # eight concurrent execs from 4-vCPU sandboxes even when the
+                # host was mostly idle. Admit from current host CPU, load,
+                # memory and PSI instead. ExecSessionManager retains the hard
+                # session-count backstop for admission bursts between samples.
+                self._require_dynamic_headroom_for_metrics(
+                    ResourceQuantity(),
+                    metrics,
+                )
+            # Keep a zero-resource lease so drain fencing, idle parking and
+            # active-operation telemetry still cover the full exec lifetime.
+            self._active_exec_reservations[token] = (key, ResourceQuantity())
+            self._activity_epoch += 1
+        return token
+
+    def release_exec_capacity(self, token: str) -> None:
+        with self._capacity_guard:
+            if self._active_exec_reservations.pop(token, None) is not None:
+                self._activity_epoch += 1
+
     def active_reservations_snapshot(
         self,
-    ) -> tuple[dict[tuple[str, int], ResourceQuantity], int]:
+    ) -> tuple[dict[tuple[str, ...], ResourceQuantity], int]:
         """Return admitted transient work and its drain-fencing epoch."""
 
         with self._capacity_guard:
-            return dict(self._active_reservations), self._activity_epoch
+            reservations: dict[tuple[str, ...], ResourceQuantity] = dict(
+                self._active_reservations
+            )
+            for token, (key, resources) in self._active_exec_reservations.items():
+                reservations[(*key, token)] = resources
+            return reservations, self._activity_epoch
 
     def _require_dynamic_headroom(self, requested: ResourceQuantity) -> None:
         provider = self._runtime_metrics_provider
         metrics = provider() if provider is not None else None
+        self._require_dynamic_headroom_for_metrics(requested, metrics)
+
+    @staticmethod
+    def _require_dynamic_headroom_for_metrics(
+        requested: ResourceQuantity,
+        metrics: NodeRuntimeMetrics | None,
+    ) -> None:
         if metrics is None:
             raise SandboxCapacityUnavailableError(
                 "direct node has no fresh runtime metrics for dynamic admission"

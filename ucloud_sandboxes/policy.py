@@ -79,6 +79,10 @@ def evaluate_scale(
         )
     ]
     total_nodes = len(pool_nodes)
+    # A RUNNING provider job with an expired worker heartbeat is billable but
+    # not useful capacity. Keep it in total_nodes for accounting and eventual
+    # eviction, while allowing one-for-one replacement inside max_nodes.
+    available_pool_nodes = max(0, total_nodes - len(unreachable_nodes))
     effective_scale_down_idle_seconds = policy.scale_down_idle_seconds
     if (
         policy.live_pressure_enabled
@@ -232,11 +236,16 @@ def evaluate_scale(
         )
         reasons.append(reason)
 
-    if total_nodes < policy.min_nodes:
-        missing_nodes = policy.min_nodes - total_nodes
+    if available_pool_nodes < policy.min_nodes:
+        missing_nodes = policy.min_nodes - available_pool_nodes
         create_count = min(
             missing_nodes,
-            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+            _create_budget(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            ),
         )
         if create_count > 0:
             reason = f"below min_nodes={policy.min_nodes}"
@@ -247,7 +256,7 @@ def evaluate_scale(
         else:
             reason = _create_limit_reason(
                 policy,
-                total_nodes,
+                available_pool_nodes,
                 len(provisioning_nodes),
                 actions,
             )
@@ -272,7 +281,12 @@ def evaluate_scale(
         )
         create_count = min(
             needed_nodes,
-            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+            _create_budget(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            ),
         )
         if create_count > 0:
             if placement_nodes > deficit_nodes:
@@ -293,7 +307,7 @@ def evaluate_scale(
         else:
             reason = _create_limit_reason(
                 policy,
-                total_nodes,
+                available_pool_nodes,
                 len(provisioning_nodes),
                 actions,
             )
@@ -316,7 +330,12 @@ def evaluate_scale(
     ):
         create_count = min(
             1,
-            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+            _create_budget(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            ),
         )
         if create_count > 0:
             reason = _live_pressure_reason(policy, live_signals)
@@ -333,7 +352,7 @@ def evaluate_scale(
                 baseline_nodes,
                 _nodes_for_resource_deficit(desired_resources, policy),
             )
-        elif total_nodes > 0:
+        elif available_pool_nodes > 0:
             baseline_nodes = max(baseline_nodes, 1)
         pipeline_nodes = _ceil_div(
             max(1, live_signals.sandbox_create_limit),
@@ -351,11 +370,16 @@ def evaluate_scale(
         )
         needed_nodes = max(
             0,
-            target_nodes - total_nodes - _planned_creates(actions),
+            target_nodes - available_pool_nodes - _planned_creates(actions),
         )
         create_count = min(
             needed_nodes,
-            _create_budget(policy, total_nodes, len(provisioning_nodes), actions),
+            _create_budget(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            ),
         )
         if create_count > 0:
             reason = (
@@ -368,10 +392,10 @@ def evaluate_scale(
                 ScaleAction(kind="create", count=create_count, reason=reason)
             )
             reasons.append(reason)
-        elif target_nodes > total_nodes + _planned_creates(actions):
+        elif target_nodes > available_pool_nodes + _planned_creates(actions):
             reason = _create_limit_reason(
                 policy,
-                total_nodes,
+                available_pool_nodes,
                 len(provisioning_nodes),
                 actions,
             )

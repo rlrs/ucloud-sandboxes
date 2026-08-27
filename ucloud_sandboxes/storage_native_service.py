@@ -43,6 +43,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--device-pool-enabled", action="store_true")
     parser.add_argument("--device-pool-low-watermark", default=2, type=int)
     parser.add_argument("--device-pool-high-watermark", default=16, type=int)
+    parser.add_argument("--max-ublk-devices", default=0, type=int)
     parser.add_argument("--snapshot-registry-url")
     parser.add_argument("--snapshot-repository")
     parser.add_argument(
@@ -201,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             device_pool_enabled=args.device_pool_enabled,
             device_pool_low_watermark=args.device_pool_low_watermark,
             device_pool_high_watermark=args.device_pool_high_watermark,
+            max_ublk_devices=args.max_ublk_devices,
         ),
         backend=backend,
         global_config_path=args.backend_global_config.resolve(),

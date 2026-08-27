@@ -109,6 +109,8 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertEqual(sandbox_manager.lifecycle.released, ["sandbox-one"])
         self.assertEqual(sandbox_manager.runtime.start_failed, ["sandbox-one"])
         self.assertEqual(sandbox_manager.runtime.started, [])
+        self.assertEqual(sandbox_manager.capacity_acquired, ["sandbox-one"])
+        self.assertEqual(sandbox_manager.capacity_released, ["capacity:sandbox-one"])
         self.assertTrue(
             any("embedded null byte" in event.data for event in session.events)
         )
@@ -155,6 +157,8 @@ class SandboxExecProtocolTests(unittest.TestCase):
         self.assertEqual(sandbox_manager.runtime.started, ["sandbox-one"])
         self.assertEqual(sandbox_manager.runtime.start_failed, ["sandbox-one"])
         self.assertEqual(sandbox_manager.lifecycle.released, ["sandbox-one"])
+        self.assertEqual(sandbox_manager.capacity_acquired, ["sandbox-one"])
+        self.assertEqual(sandbox_manager.capacity_released, ["capacity:sandbox-one"])
         self.assertTrue(
             any("cannot start stderr pump" in event.data for event in session.events)
         )
@@ -200,9 +204,18 @@ class FakeSandboxManager:
     def __init__(self) -> None:
         self.lifecycle = FakeLifecycle()
         self.runtime = FakeRuntime()
+        self.capacity_acquired: list[str] = []
+        self.capacity_released: list[str] = []
 
     def require_activity_sandbox(self, _sandbox_id: str) -> object:
         return object()
+
+    def acquire_exec_capacity(self, sandbox_id: str) -> str:
+        self.capacity_acquired.append(sandbox_id)
+        return f"capacity:{sandbox_id}"
+
+    def release_exec_capacity(self, token: str) -> None:
+        self.capacity_released.append(token)
 
 
 class BlockingStdin:

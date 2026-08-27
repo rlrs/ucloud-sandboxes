@@ -1,6 +1,6 @@
 import argparse
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import timedelta
 from functools import wraps
 import io
@@ -225,6 +225,18 @@ def allow_fixture_mutations(test):
 
 
 class CliTests(unittest.TestCase):
+    def test_dashboard_policy_exposes_every_scale_policy_field(self) -> None:
+        policy = ScalePolicy()
+
+        exposed = cli.dashboard_scale_policy_to_dict(policy)
+
+        self.assertEqual(set(exposed), {field.name for field in fields(policy)})
+        self.assertEqual(
+            exposed["default_node_resources"],
+            policy.default_node_resources.to_dict(),
+        )
+        self.assertEqual(exposed["warm_resources"], policy.warm_resources.to_dict())
+
     def test_control_posts_share_auth_redirect_and_response_bounds(self) -> None:
         def opener_for(body: bytes) -> tuple[MagicMock, MagicMock]:
             response = MagicMock(headers={})

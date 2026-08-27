@@ -666,6 +666,35 @@ class ScalePolicyTests(unittest.TestCase):
         self.assertEqual(decision.projected_free_resources.vcpu, 0)
         self.assertEqual(decision.creates, 1)
 
+    def test_unreachable_worker_does_not_consume_its_useful_max_node_slot(
+        self,
+    ) -> None:
+        now = utc_now()
+        decision = evaluate_scale(
+            [
+                node(
+                    "unreachable",
+                    active=1,
+                    fresh=False,
+                    heartbeat_updated_at=now - timedelta(minutes=5),
+                    inventory_complete=False,
+                )
+            ],
+            demand(pending_resources=ResourceQuantity(vcpu=1)),
+            ScalePolicy(
+                min_nodes=1,
+                max_nodes=1,
+                max_create_per_cycle=1,
+                unreachable_stop_after_seconds=1800,
+            ),
+            now=now,
+        )
+
+        self.assertEqual(decision.total_nodes, 1)
+        self.assertEqual(decision.unreachable_nodes, 1)
+        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.stops, ())
+
     def test_stops_unreachable_empty_node_after_eviction_lease(self) -> None:
         now = utc_now()
         decision = evaluate_scale(

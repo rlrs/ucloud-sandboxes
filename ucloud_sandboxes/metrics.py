@@ -33,6 +33,7 @@ DEFAULT_RECENT_EVENT_LIMIT = 50
 DEFAULT_SCALE_UP_SAMPLE_LIMIT = 200
 DEFAULT_VM_LIFECYCLE_LIMIT = 100
 DEFAULT_PROGRAM_WAKE_PLAN_SAMPLE_LIMIT = 100
+DEFAULT_AUTOSCALER_OPERATION_SAMPLE_LIMIT = 100
 DEFAULT_METRICS_MAX_BYTES = 64 * 1024**2
 DEFAULT_METRICS_MAX_EVENT_BYTES = 1024**2
 DEFAULT_METRICS_MAX_EVENTS = 100_000
@@ -605,6 +606,7 @@ def record_autoscaler_cycle(
             "reasons": decision.get("reasons", []),
             "created_job_ids": result.get("createdJobIds", []),
             "stop_job_ids": result.get("stopJobIds", []),
+            "execution": _autoscaler_execution_summary(result),
             "pending_image_builds": result.get("pendingImageBuilds", 0),
             "active_image_builds": result.get("activeImageBuilds", 0),
             "prepared_builder_count": result.get("preparedBuilderCount", 0),
@@ -616,6 +618,98 @@ def record_autoscaler_cycle(
             "builder_reasons": builder_decision.get("reasons", []),
         },
     )
+
+
+def _autoscaler_execution_summary(result: dict[str, Any]) -> dict[str, Any]:
+    """Expose controller outcomes without persisting drain tokens or payloads."""
+
+    return {
+        "execute": bool(result.get("execute")),
+        "controller_lock_held": bool(result.get("controllerLockHeld")),
+        "blocked_create_roles": _string_list(result.get("blockedCreateRoles")),
+        "created_job_ids": _string_list(result.get("createdJobIds")),
+        "provider_operations": _bounded_result_summaries(
+            result.get("providerOperationResults"),
+            (
+                ("operationId", "operation_id"),
+                ("kind", "kind"),
+                ("role", "role"),
+                ("state", "state"),
+                ("jobIds", "job_ids"),
+                ("source", "source"),
+                ("error", "error"),
+            ),
+        ),
+        "scale_down": {
+            "requested_job_ids": _string_list(result.get("requestedStopJobIds")),
+            "planned_job_ids": _string_list(result.get("stopJobIds")),
+            "blocked_job_ids": _string_list(result.get("blockedStopJobIds")),
+            "blocked_storage_detach_job_ids": _string_list(
+                result.get("blocked_storage_native_detach_stop_job_ids")
+            ),
+            "draining_job_ids": _string_list(result.get("drainingJobIds")),
+            "canceling_drain_job_ids": _string_list(result.get("cancelingDrainJobIds")),
+            "canceled_drain_job_ids": _string_list(result.get("canceledDrainJobIds")),
+            "drain_ready_job_ids": _string_list(result.get("drainReadyStopJobIds")),
+            "unreachable_ready_job_ids": _string_list(
+                result.get("unreachableReadyStopJobIds")
+            ),
+            "destructive_job_ids": _string_list(result.get("destructive_stop_job_ids")),
+            "terminated_job_ids": _string_list(
+                result.get("definitelyTerminatedJobIds")
+            ),
+            "drain_attempts": _bounded_result_summaries(
+                result.get("drainResults"),
+                (
+                    ("jobId", "job_id"),
+                    ("role", "role"),
+                    ("action", "action"),
+                    ("requestSucceeded", "request_succeeded"),
+                    ("heartbeatReady", "heartbeat_ready"),
+                    ("cancellationAcknowledged", "cancellation_acknowledged"),
+                    ("error", "error"),
+                ),
+            ),
+            "storage_detach_attempts": _bounded_result_summaries(
+                result.get("storage_native_detach_results"),
+                (
+                    ("job_id", "job_id"),
+                    ("sandbox_id", "sandbox_id"),
+                    ("request_succeeded", "request_succeeded"),
+                    ("error", "error"),
+                ),
+            ),
+        },
+    }
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [str(item) for item in value][:DEFAULT_AUTOSCALER_OPERATION_SAMPLE_LIMIT]
+
+
+def _bounded_result_summaries(
+    value: Any,
+    fields: tuple[tuple[str, str], ...],
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for raw in value[:DEFAULT_AUTOSCALER_OPERATION_SAMPLE_LIMIT]:
+        if not isinstance(raw, dict):
+            continue
+        summary: dict[str, Any] = {}
+        for source, destination in fields:
+            item = raw.get(source)
+            if isinstance(item, str):
+                summary[destination] = item[:2000]
+            elif isinstance(item, (bool, int, float)) or item is None:
+                summary[destination] = item
+            elif isinstance(item, (list, tuple, set)):
+                summary[destination] = _string_list(item)
+        summaries.append(summary)
+    return summaries
 
 
 def _bounded_program_wake_plan(value: Any) -> dict[str, Any]:

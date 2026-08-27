@@ -99,12 +99,14 @@ def validate_source_bundle(root: Path, manifest: dict[str, object]) -> None:
         path = root / "runtime/debs" / str(item["name"])
         validate_digest(path, str(item["sha256"]), f"runtime package {path.name}")
 
-    for section, default_root in (
-        ("agent", root),
-        ("direct_runsc", root),
-        ("managed_init", root),
-        ("storage_native", root),
-    ):
+    role = runtime.get("role")
+    if role not in {"sandbox", "builder"}:
+        raise ValueError(f"source bundle has unsupported role {role!r}")
+    required_sections = ["agent"]
+    if role == "sandbox":
+        required_sections.extend(("direct_runsc", "managed_init", "storage_native"))
+    for section in required_sections:
+        default_root = root
         item = runtime.get(section)
         if not isinstance(item, dict):
             raise ValueError(f"source bundle is missing {section}")
@@ -322,21 +324,24 @@ def update_manifest(
     if not isinstance(runtime, dict):
         raise ValueError("invalid package bundle runtime")
     agent = runtime["agent"]
-    storage = runtime["storage_native"]
-    if not isinstance(agent, dict) or not isinstance(storage, dict):
+    storage = runtime.get("storage_native")
+    if not isinstance(agent, dict) or (
+        storage is not None and not isinstance(storage, dict)
+    ):
         raise ValueError("invalid package bundle artifacts")
 
     agent.update(
         sha256=sha256_file(agent_archive), size=agent_archive.stat().st_size
     )
-    storage.update(
-        agentenv_commit=storage_build["agentenv_commit"],
-        host_architecture=storage_build.get("host_architecture"),
-        sha256=sha256_file(storage_backend),
-        size=storage_backend.stat().st_size,
-        manifest_sha256=sha256_file(storage_manifest),
-        license_sha256=sha256_file(storage_license),
-    )
+    if isinstance(storage, dict):
+        storage.update(
+            agentenv_commit=storage_build["agentenv_commit"],
+            host_architecture=storage_build.get("host_architecture"),
+            sha256=sha256_file(storage_backend),
+            size=storage_backend.stat().st_size,
+            manifest_sha256=sha256_file(storage_manifest),
+            license_sha256=sha256_file(storage_license),
+        )
     if kernel_release is not None and kernel_module_dir is not None:
         kernel = runtime.get("kernel")
         if not isinstance(kernel, dict):
@@ -497,16 +502,18 @@ def main() -> None:
         validate_agent_runtime_dependencies(agent_root)
         build_agent_archive(agent_root, agent_archive)
 
-        shutil.copyfile(
-            args.storage_backend, bundle_root / "runtime/storage-native/backend"
-        )
-        shutil.copyfile(
-            args.storage_manifest,
-            bundle_root / "runtime/storage-native/build-manifest.json",
-        )
-        shutil.copyfile(
-            args.storage_license, bundle_root / "runtime/storage-native/LICENSE"
-        )
+        runtime = manifest.get("runtime")
+        if isinstance(runtime, dict) and "storage_native" in runtime:
+            shutil.copyfile(
+                args.storage_backend, bundle_root / "runtime/storage-native/backend"
+            )
+            shutil.copyfile(
+                args.storage_manifest,
+                bundle_root / "runtime/storage-native/build-manifest.json",
+            )
+            shutil.copyfile(
+                args.storage_license, bundle_root / "runtime/storage-native/LICENSE"
+            )
         if args.kernel_release is not None and args.kernel_module_dir is not None:
             kernel_root = bundle_root / "runtime/kernel"
             shutil.rmtree(kernel_root)

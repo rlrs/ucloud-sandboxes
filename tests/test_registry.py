@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import timedelta
+import json
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -10,7 +11,7 @@ import unittest
 from ucloud_sandboxes.agent import build_heartbeat as _build_heartbeat
 from ucloud_sandboxes.bootstrap import VmBootstrapRecord
 from ucloud_sandboxes.control_state import ControlStateStore
-from ucloud_sandboxes.models import utc_now
+from ucloud_sandboxes.models import NodeRuntimeMetrics, utc_now
 from ucloud_sandboxes.registry import (
     HeartbeatIdentityError,
     heartbeat_from_dict,
@@ -63,6 +64,33 @@ class RegistryTests(unittest.TestCase):
 
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertIn("job-1", ControlStateStore(path).load_heartbeats())
+
+    def test_control_state_accepts_canonical_pre_device_limit_metrics(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            path = Path(raw_dir) / "control-state.sqlite"
+            heartbeat = replace(
+                build_heartbeat(job_id="job-1", node_id="node-1"),
+                runtime_metrics=NodeRuntimeMetrics(collected_at=utc_now()),
+            )
+            store = ControlStateStore(path)
+            store.upsert_heartbeat(heartbeat)
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM control_records "
+                        "WHERE namespace = 'heartbeat' AND record_id = 'job-1'"
+                    ).fetchone()[0]
+                )
+                payload["runtime_metrics"].pop("storage_ublk_max_devices")
+                connection.execute(
+                    "UPDATE control_records SET payload = ? "
+                    "WHERE namespace = 'heartbeat' AND record_id = 'job-1'",
+                    (json.dumps(payload, sort_keys=True, separators=(",", ":")),),
+                )
+
+            stored = store.load_heartbeats()["job-1"]
+
+        self.assertEqual(stored.runtime_metrics.storage_ublk_max_devices, 0)
 
     def test_heartbeat_schema_is_strict_and_fail_closed(self) -> None:
         raw = heartbeat_to_dict(build_heartbeat(job_id="job-1", node_id="node-1"))

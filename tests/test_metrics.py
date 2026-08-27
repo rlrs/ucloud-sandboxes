@@ -1,6 +1,7 @@
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from pathlib import Path
+import json
 import sqlite3
 import unittest
 from unittest.mock import patch
@@ -292,6 +293,54 @@ class MetricsTests(unittest.TestCase):
                 cycle=8,
                 result={
                     "decision": {},
+                    "execute": True,
+                    "controllerLockHeld": True,
+                    "blockedCreateRoles": ["sandbox"],
+                    "createdJobIds": ["created-1"],
+                    "requestedStopJobIds": ["requested-1", "blocked-1"],
+                    "stopJobIds": ["requested-1"],
+                    "blockedStopJobIds": ["blocked-1"],
+                    "blocked_storage_native_detach_stop_job_ids": ["blocked-1"],
+                    "drainingJobIds": ["requested-1"],
+                    "cancelingDrainJobIds": ["canceling-1"],
+                    "canceledDrainJobIds": ["canceled-1"],
+                    "drainReadyStopJobIds": ["ready-1"],
+                    "unreachableReadyStopJobIds": ["unreachable-1"],
+                    "destructive_stop_job_ids": ["destructive-1"],
+                    "definitelyTerminatedJobIds": ["terminated-1"],
+                    "drainResults": [
+                        {
+                            "jobId": "requested-1",
+                            "role": "sandbox",
+                            "action": "drain",
+                            "requestSucceeded": True,
+                            "heartbeatReady": False,
+                            "cancellationAcknowledged": False,
+                            "error": "",
+                            "token": "must-not-be-persisted",
+                        }
+                    ],
+                    "storage_native_detach_results": [
+                        {
+                            "job_id": "requested-1",
+                            "sandbox_id": "sandbox-1",
+                            "request_succeeded": False,
+                            "error": "registry unavailable",
+                            "sandbox": {"secret": "must-not-be-persisted"},
+                        }
+                    ],
+                    "providerOperationResults": [
+                        {
+                            "operationId": "operation-1",
+                            "kind": "stop",
+                            "role": "sandbox",
+                            "state": "accepted",
+                            "jobIds": ["terminated-1"],
+                            "source": "planned",
+                            "error": "",
+                            "request": {"secret": "must-not-be-persisted"},
+                        }
+                    ],
                     "programWakePlan": {
                         "mode": "action",
                         "queued": 300,
@@ -321,6 +370,23 @@ class MetricsTests(unittest.TestCase):
         self.assertTrue(
             event.data["effective_policy"]["program_aware_autoscaling_enabled"]
         )
+        execution = event.data["execution"]
+        self.assertTrue(execution["controller_lock_held"])
+        self.assertEqual(execution["blocked_create_roles"], ["sandbox"])
+        scale_down = execution["scale_down"]
+        self.assertEqual(scale_down["blocked_job_ids"], ["blocked-1"])
+        self.assertEqual(scale_down["draining_job_ids"], ["requested-1"])
+        self.assertEqual(scale_down["terminated_job_ids"], ["terminated-1"])
+        self.assertFalse(scale_down["drain_attempts"][0]["heartbeat_ready"])
+        self.assertEqual(
+            scale_down["storage_detach_attempts"][0]["error"],
+            "registry unavailable",
+        )
+        self.assertEqual(
+            execution["provider_operations"][0]["job_ids"],
+            ["terminated-1"],
+        )
+        self.assertNotIn("must-not-be-persisted", json.dumps(event.data))
 
     def test_snapshot_aggregates_live_routes_and_schedulable_demand(self) -> None:
         now = utc_now()

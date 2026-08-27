@@ -52,15 +52,22 @@ REGISTRY_STORAGE_SYSTEMD_UNITS = (
 # service packages.  Include that version-locked closure explicitly.
 BUNDLED_SYSTEMD_RUNTIME_PACKAGES = (
     "apparmor",
+    # UCloud's minimal Ubuntu VM image omits depmod(8), which vm-init needs
+    # after installing the verified kernel-module closure.
+    "kmod",
     "libnss-systemd",
     "libpam-systemd",
     "libsystemd-shared",
     "systemd",
-    "systemd-cryptsetup",
     "systemd-resolved",
     "systemd-sysv",
     "udev",
 )
+# Ubuntu 24.04 ships systemd-cryptsetup in the main systemd package, while
+# Ubuntu 26.04 exposes the same runtime as a separate package.  Include the
+# split package when the target release publishes it without making the UCloud
+# 24.04 bundle fail resolution.
+OPTIONAL_BUNDLED_SYSTEMD_RUNTIME_PACKAGES = ("systemd-cryptsetup",)
 
 
 @dataclass(frozen=True)
@@ -352,6 +359,9 @@ def render_remote_deploy_script(
     builder_runtime_packages = " ".join(BUILDER_RUNTIME_PACKAGES)
     runtime_kernel_modules = " ".join(RUNTIME_KERNEL_MODULES)
     bundled_systemd_runtime_packages = " ".join(BUNDLED_SYSTEMD_RUNTIME_PACKAGES)
+    optional_bundled_systemd_runtime_packages = " ".join(
+        OPTIONAL_BUNDLED_SYSTEMD_RUNTIME_PACKAGES
+    )
     script_parts = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -359,6 +369,7 @@ def render_remote_deploy_script(
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
         f"REGISTRY_STORE_KIND={shlex.quote(plan.config.registry_store.kind)}",
+        f"SNAPSHOT_STORE_KIND={shlex.quote(plan.config.snapshot_store.kind)}",
         f"REGISTRY_MOUNT_POINT={shlex.quote(plan.config.registry_mount_point)}",
         f"REGISTRY_DATA_ROOT={shlex.quote(plan.config.registry_data_root)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
@@ -434,6 +445,8 @@ def render_remote_deploy_script(
         'RUNTIME_KERNEL_RELEASE="$(uname -r)"',
         'RUNTIME_KERNEL_MODULE_DIR="$NODE_PACKAGE_WORK/kernel-modules/$RUNTIME_KERNEL_RELEASE"',
         f"RUNTIME_KERNEL_MODULES={shlex.quote(runtime_kernel_modules)}",
+        "AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES=()",
+        f"OPTIONAL_SYSTEMD_RUNTIME_PACKAGES={shlex.quote(optional_bundled_systemd_runtime_packages)}",
         "download_runtime_packages() {",
         '  runtime_name="$1"',
         "  shift",
@@ -485,8 +498,15 @@ def render_remote_deploy_script(
         "DOCKER_SOURCES",
         "  [ -s /etc/apt/sources.list.d/docker.sources ] || return 1",
         "  sudo apt-get update || return 1",
+        "  for package in $OPTIONAL_SYSTEMD_RUNTIME_PACKAGES; do",
+        "    if apt-cache show \"$package\" >/dev/null 2>&1; then",
+        "      AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES+=(\"$package\")",
+        "    else",
+        "      echo \"Skipping unavailable optional runtime package: $package\"",
+        "    fi",
+        "  done",
         "  collect_runtime_kernel_modules || return 1",
-        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_systemd_runtime_packages} || return 1",
+        f"  download_runtime_packages runtime {node_runtime_packages} {bundled_systemd_runtime_packages} \"${{AVAILABLE_OPTIONAL_SYSTEMD_RUNTIME_PACKAGES[@]}}\" || return 1",
         '  sudo chmod -R a+rX "$NODE_PACKAGE_WORK/runtime" || return 1',
         "}",
         "build_runtime_bundle",
@@ -670,7 +690,10 @@ def render_remote_deploy_script(
         "                    archive.addfile(info, handle)",
         "os.replace(temporary, target)",
         "target_digest = sha256_file(target)",
-        "target.with_name(target.name + '.sha256').write_text(target_digest + '\\n', encoding='ascii')",
+        "marker = target.with_name(target.name + '.sha256')",
+        "marker_temporary = marker.with_name(marker.name + '.tmp')",
+        "marker_temporary.write_text(target_digest + '\\n', encoding='ascii')",
+        "os.replace(marker_temporary, marker)",
         "PY",
         "done",
         'rm -rf "$NODE_PACKAGE_WORK"',
@@ -775,7 +798,12 @@ def render_remote_deploy_script(
             "sudo systemctl enable ucloud-sandbox-registry.service",
             "sudo systemctl enable --now ucloud-sandbox-registry-prune.timer",
             "sudo systemctl enable --now ucloud-sandbox-registry-gc.timer",
-            "sudo systemctl enable --now ucloud-sandbox-snapshot-gc.timer",
+            'if [ "$SNAPSHOT_STORE_KIND" = s3 ]; then',
+            "  sudo systemctl enable --now ucloud-sandbox-snapshot-gc.timer",
+            "else",
+            "  sudo systemctl disable --now ucloud-sandbox-snapshot-gc.timer",
+            "  sudo systemctl reset-failed ucloud-sandbox-snapshot-gc.service || true",
+            "fi",
             "sudo systemctl enable ucloud-sandbox-gateway.service",
             "sudo systemctl enable ucloud-sandbox-relay.service",
             "sudo systemctl enable ucloud-sandbox-autoscaler.service",
@@ -822,8 +850,15 @@ def stage_file_over_ssh(
     remote_parent = str(PurePosixPath(remote_path).parent)
     remote_command = (
         f"mkdir -p {shlex.quote(remote_parent)} && "
-        f"cat > {shlex.quote(remote_path)} && "
-        f"chmod {shlex.quote(mode)} {shlex.quote(remote_path)}"
+        f"temporary=$(mktemp {shlex.quote(remote_parent)}/.ucloud-stage.XXXXXX) && "
+        "trap 'rm -f \"$temporary\"' EXIT HUP INT TERM && "
+        "cat > \"$temporary\" && "
+        f"chmod {shlex.quote(mode)} \"$temporary\" && "
+        f"if [ -e {shlex.quote(remote_path)} ] && "
+        f"[ ! -w {shlex.quote(remote_path)} ]; then "
+        f"sudo install -m {shlex.quote(mode)} \"$temporary\" "
+        f"{shlex.quote(remote_path)}; else "
+        f"mv -f \"$temporary\" {shlex.quote(remote_path)}; fi"
     )
     command = ssh_remote_command(
         ssh_command,

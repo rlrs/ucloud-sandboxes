@@ -9,6 +9,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 )
 
 from ucloud_sandboxes.telemetry import (
+    OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS,
     NonBlockingBatchSpanProcessor,
     Telemetry,
     TelemetryHealth,
@@ -38,6 +39,14 @@ class _BlockingExporter(SpanExporter):
 
 
 class TelemetryTests(unittest.TestCase):
+    def test_operation_histogram_covers_hot_and_cold_paths(self) -> None:
+        boundaries = OPERATION_DURATION_BUCKET_BOUNDARIES_SECONDS
+        self.assertEqual(tuple(sorted(set(boundaries))), boundaries)
+        self.assertLessEqual(boundaries[0], 0.001)
+        self.assertIn(0.01, boundaries)
+        self.assertIn(1.0, boundaries)
+        self.assertGreaterEqual(boundaries[-1], 600.0)
+
     def test_settings_require_an_origin_and_bounded_queue(self) -> None:
         normalized = TelemetrySettings(
             endpoint="https://collector.example:4318/",

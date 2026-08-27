@@ -200,7 +200,7 @@ class ControlStateStore:
             if (
                 heartbeat is None
                 or heartbeat.job_id != job_id
-                or _json(heartbeat_to_dict(heartbeat)) != payload
+                or not _heartbeat_payload_is_canonical(raw, heartbeat, payload)
             ):
                 raise ValueError("invalid heartbeat control-state record")
             _assert_heartbeat_binding(result, heartbeat)
@@ -273,6 +273,31 @@ class ControlStateStore:
                 ):
                     raise
                 time.sleep(0.01)
+
+
+def _heartbeat_payload_is_canonical(
+    raw: dict[str, Any],
+    heartbeat: NodeHeartbeat,
+    payload: str,
+) -> bool:
+    encoded = heartbeat_to_dict(heartbeat)
+    if _json(encoded) == payload:
+        return True
+
+    # During a rolling upgrade, persisted heartbeats from pre-0.5.1 workers do
+    # not contain this additive runtime metric. Accept only the otherwise exact
+    # canonical legacy representation. New heartbeats rewrite the row using the
+    # current schema through the normal receive path.
+    runtime_metrics = encoded.get("runtime_metrics")
+    if not isinstance(runtime_metrics, dict):
+        return False
+    if runtime_metrics.get("storage_ublk_max_devices") != 0:
+        return False
+    legacy = dict(encoded)
+    legacy_metrics = dict(runtime_metrics)
+    legacy_metrics.pop("storage_ublk_max_devices")
+    legacy["runtime_metrics"] = legacy_metrics
+    return raw == legacy and _json(raw) == payload
 
 
 def _encode_heartbeat(heartbeat: NodeHeartbeat) -> tuple[NodeHeartbeat, str]:

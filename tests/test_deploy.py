@@ -16,6 +16,7 @@ from ucloud_sandboxes.deploy import (
     packaged_systemd_units,
     render_remote_deploy_script,
     run_remote_script_over_ssh,
+    stage_file_over_ssh,
 )
 from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
@@ -157,6 +158,78 @@ class DeployTests(unittest.TestCase):
                 self.assertEqual(plan.to_dict()["deployment"], config.to_dict())
                 self.assertNotIn("REGISTRY_ACCESS_KEY=", script)
                 self.assertNotIn("REGISTRY_SECRET_KEY=", script)
+                self.assertIn(
+                    "download_runtime_packages runtime xfsprogs "
+                    "docker-ce docker-ce-cli containerd.io apparmor kmod ",
+                    script,
+                )
+                self.assertIn(
+                    "OPTIONAL_SYSTEMD_RUNTIME_PACKAGES=systemd-cryptsetup",
+                    script,
+                )
+                self.assertIn(
+                    "Skipping unavailable optional runtime package: $package",
+                    script,
+                )
+                self.assertIn("os.replace(marker_temporary, marker)", script)
+
+    def test_snapshot_gc_timer_is_gated_by_s3_snapshot_store(self) -> None:
+        s3_snapshot_store = {
+            "kind": "s3",
+            "endpoint": "https://hel1.your-objectstorage.com",
+            "bucket": "sandbox-snapshots",
+            "region": "hel1",
+            "prefix": "production",
+            "access_key_id_env": "SNAPSHOT_ACCESS_KEY",
+            "secret_access_key_env": "SNAPSHOT_SECRET_KEY",
+            "security_token_env": "SNAPSHOT_SECURITY_TOKEN",
+        }
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            registry_script = render_remote_deploy_script(self._plan(root))
+            s3_script = render_remote_deploy_script(
+                self._plan(
+                    root / "s3",
+                    config=self._config(snapshot_store=s3_snapshot_store),
+                )
+            )
+
+        self.assertIn("SNAPSHOT_STORE_KIND=registry", registry_script)
+        self.assertIn("SNAPSHOT_STORE_KIND=s3", s3_script)
+        for script in (registry_script, s3_script):
+            self.assertIn('if [ "$SNAPSHOT_STORE_KIND" = s3 ]; then', script)
+            self.assertIn(
+                "systemctl disable --now ucloud-sandbox-snapshot-gc.timer",
+                script,
+            )
+
+    def test_stage_file_atomically_replaces_root_owned_release_artifact(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            source = Path(raw_dir) / "release.whl"
+            source.write_bytes(b"new wheel")
+            completed = subprocess.CompletedProcess(
+                args=(),
+                returncode=0,
+                stdout=b"",
+                stderr=b"",
+            )
+            with patch("ucloud_sandboxes.deploy.subprocess.run", return_value=completed) as run:
+                stage_file_over_ssh(
+                    "ssh gateway",
+                    source,
+                    "/work/release/release.whl",
+                )
+
+        command = run.call_args.args[0]
+        remote_command = command[-1]
+        self.assertIn("mktemp /work/release/.ucloud-stage.XXXXXX", remote_command)
+        self.assertIn("[ ! -w /work/release/release.whl ]", remote_command)
+        self.assertIn(
+            'sudo install -m 0644 "$temporary" /work/release/release.whl',
+            remote_command,
+        )
+        self.assertIn('mv -f "$temporary" /work/release/release.whl', remote_command)
+        self.assertEqual(run.call_args.kwargs["input"], b"new wheel")
 
     def test_offline_bundle_builder_is_deterministic(self) -> None:
         with TemporaryDirectory() as raw_dir:

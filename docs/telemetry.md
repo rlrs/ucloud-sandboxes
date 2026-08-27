@@ -65,6 +65,62 @@ The data root holds Tempo's crash-recovery WAL and VictoriaMetrics' bounded
 14-day database. It must be a persistent local filesystem or attached Volume;
 trace blocks themselves are written through Tempo's native S3 client.
 
+### UCloud gateway stack
+
+UCloud does not provide the Hetzner deployment's S3-compatible object-storage
+path. For a small deployment, the gateway can instead run Collector, Tempo,
+VictoriaMetrics, and Grafana together on its local ext4 filesystem:
+
+```bash
+sudo scripts/install_ucloud_observability_stack.sh \
+  --private-bind-ip 10.40.0.2
+```
+
+The installer caps and lowers the CPU priority of all four containers. OTLP is
+bound only to the gateway's private IPv4 address. Grafana and both backend
+query APIs bind to loopback; reach Grafana with an SSH tunnel to local port
+3000. Tempo keeps 72 hours of traces, VictoriaMetrics keeps 14 days of metrics,
+and the metrics store leaves at least 20 GB of local disk free. Do not put its
+data root on `/work` or another shared UCloud mount: request-path telemetry I/O
+must not contend with sandbox images and snapshots.
+
+This is a practical single-node diagnostic setup, not an HA telemetry service.
+Gateway loss also loses the retained telemetry. If production volume or the
+gateway lifecycle outgrows those constraints, move the stores to external
+durable services while retaining the same private Collector endpoint.
+
+For agent-led diagnosis, install `ucloud_observability_report.py` beside the
+installer and retrieve one bounded, secret-free JSON snapshot directly from the
+gateway:
+
+```bash
+ssh ucloud@ssh.cloud.sdu.dk -p GATEWAY_PORT \
+  sudo ucloud-observability-report \
+    --window 30m --rate-window 5m --trace-limit 5
+```
+
+The report includes service and backend health, gateway memory/disk/load,
+telemetry container resource use, operation counts/errors/rates, p50/p95/p99
+latency by service and operation, slow trace summaries, and the longest spans
+from selected traces. Error traces are selected before merely slow traces so a
+small trace limit still captures failures. Thread CPU/wall ratios help distinguish likely CPU work
+from I/O or queue waits. Agents should use this report as their first diagnostic
+surface; Grafana is a complementary human exploration UI.
+
+The report exposes both recent rate-based quantiles and cumulative quantiles
+since each reporting process started. The cumulative view is important for
+low-frequency operations such as park, wake, image build, and VM bootstrap:
+Prometheus cannot calculate a rate for an event already present in a time
+series' first sample.
+
+From a source checkout, the wrapper resolves the live SSH port through the
+active UCloud project and returns the same report in one command:
+
+```bash
+scripts/read_ucloud_observability.sh GATEWAY_JOB_ID \
+  --window 30m --rate-window 5m --trace-limit 5
+```
+
 ## What one trace contains
 
 W3C `traceparent` and `tracestate` propagate across every synchronous boundary:

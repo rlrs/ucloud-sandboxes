@@ -1225,6 +1225,59 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_ublk_device_limit_accounts_for_inflight_route_reservations(self) -> None:
+        heartbeat = build_heartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            capabilities=("sandbox", "disk-quota", "storage-native-v1"),
+            total_resources=ResourceQuantity(
+                vcpu=32,
+                memory_mb=96 * 1024,
+                disk_mb=1_000_000,
+            ),
+            runtime_metrics=NodeRuntimeMetrics(
+                collected_at=utc_now(),
+                cpu_percent=0.0,
+                cpu_count=32,
+                memory_total_mb=96 * 1024,
+                memory_available_mb=96 * 1024,
+                storage_hard_capacity_mb=1_000_000,
+                storage_ublk_active_devices=63,
+                storage_ublk_live_devices=64,
+                storage_ublk_max_devices=64,
+            ),
+            inventory=(),
+            inventory_complete=True,
+        )
+        requested = ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024)
+        inflight = _sandbox_route(
+            sandbox_id="inflight",
+            node_id=heartbeat.node_id,
+            job_id=heartbeat.job_id,
+            node_url=heartbeat.node_url or "",
+            resources=requested,
+            state="creating",
+        )
+
+        self.assertTrue(control_plane._node_can_fit(heartbeat, requested, []))
+        self.assertFalse(
+            control_plane._node_can_fit(heartbeat, requested, [inflight])
+        )
+        self.assertFalse(
+            control_plane._node_can_fit(
+                replace(
+                    heartbeat,
+                    runtime_metrics=replace(
+                        heartbeat.runtime_metrics,
+                        storage_ublk_active_devices=64,
+                    ),
+                ),
+                requested,
+                [],
+            )
+        )
+
     def test_wake_image_pull_does_not_hold_global_placement_lock(self) -> None:
         with _temporary_root() as root:
             routing = RoutingStore(root / "routes.sqlite")
@@ -3243,6 +3296,48 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertEqual(created["status"], 502)
         self.assertEqual(ImageNode.pull_count, 1)
+
+    def test_retryable_node_image_pull_is_retried_within_route_fence(self) -> None:
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        responses = [
+            control_plane.ProxiedResponse(
+                503,
+                {"Content-Type": "application/json"},
+                b'{"error_code":"image_pull_failed","retryable":true}',
+            ),
+            control_plane.ProxiedResponse(
+                503,
+                {"Content-Type": "application/json"},
+                b'{"error_code":"image_pull_failed","retryable":true}',
+            ),
+            control_plane.ProxiedResponse(
+                200,
+                {"Content-Type": "application/json"},
+                b'{"image":{"id":"sha256:ready"}}',
+            ),
+        ]
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def proxy(*args, **kwargs):
+            calls.append((args, kwargs))
+            return responses.pop(0)
+
+        handler._proxy_request = proxy
+        heartbeat = build_heartbeat(
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+        )
+
+        with patch.object(control_plane.time, "sleep") as sleeper:
+            response = handler._pull_image_on_node(heartbeat, "image")
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(
+            [call.args[0] for call in sleeper.call_args_list],
+            [0.25, 0.5],
+        )
 
     def test_atomic_allocation_spec_conflict_never_dispatches_to_node(self) -> None:
         class CountingNode(BaseHTTPRequestHandler):

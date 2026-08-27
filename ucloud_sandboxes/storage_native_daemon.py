@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import closing, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import asdict, dataclass, fields, replace
 from enum import Enum
 import errno
@@ -163,6 +163,7 @@ class StorageNativeNodeConfig:
     device_pool_enabled: bool = False
     device_pool_low_watermark: int = 2
     device_pool_high_watermark: int = 16
+    max_ublk_devices: int = 0
 
     def __post_init__(self) -> None:
         for label, path in (
@@ -190,6 +191,13 @@ class StorageNativeNodeConfig:
             raise ValueError("device pool high watermark must be positive")
         if self.device_pool_low_watermark > self.device_pool_high_watermark:
             raise ValueError("device pool low watermark cannot exceed high watermark")
+        if self.max_ublk_devices < 0:
+            raise ValueError("maximum ublk devices must be non-negative")
+        if (
+            self.max_ublk_devices > 0
+            and self.device_pool_high_watermark > self.max_ublk_devices
+        ):
+            raise ValueError("device pool high watermark exceeds maximum ublk devices")
 
 
 @dataclass(frozen=True)
@@ -1149,6 +1157,8 @@ class StorageNativeNodeService:
         self._pool_releases = 0
         self._pool_discards = 0
         self._released_device_ids: set[int] = set()
+        self._device_slot_guard = threading.Lock()
+        self._pending_device_allocations = 0
         self._ensure_roots()
 
     def metrics(self) -> dict[str, Any]:
@@ -1186,6 +1196,7 @@ class StorageNativeNodeService:
             "device_pool_idle_devices": len(idle_device_ids),
             "ublk_active_devices": len(active_device_ids & live_device_ids),
             "ublk_live_devices": len(live_device_ids),
+            "ublk_max_devices": self.config.max_ublk_devices,
             "error_volumes": sum(
                 record.state == StorageVolumeState.ERROR for record in records
             ),
@@ -1236,55 +1247,59 @@ class StorageNativeNodeService:
             updated_ns=time.time_ns(),
         )
 
-        reserved = self.journal.reserve_create(
-            request=request,
-            record=record,
-            hard_capacity_bytes=self.config.hard_capacity_bytes,
-        )
-        if isinstance(reserved, OperationReplay):
-            return reserved.record
-        record = reserved
-        try:
-            volume_root.mkdir(mode=0o700, parents=True, exist_ok=False)
-            runtime_dir = Path(record.runtime_dir)
-            mount_path = Path(record.mount_path)
-            mount_path.mkdir(mode=0o700)
-            source = Path(record.source_image_config)
-            _atomic_write_json(
-                source,
-                {"lowers": [], "resultFile": "", "upper": {}},
+        existing = self.journal.load(volume_id)
+        slot = self._device_allocation_slot() if existing is None else suppress()
+        with slot:
+            reserved = self.journal.reserve_create(
+                request=request,
+                record=record,
+                hard_capacity_bytes=self.config.hard_capacity_bytes,
             )
-            device = self._acquire_runtime_device(
-                source_image_config=source,
-                runtime_dir=runtime_dir,
-                virtual_size=virtual_size,
-                owner_id=record.device_owner_id,
-            )
-            if device.virtual_size != virtual_size:
-                raise StorageNativeTerminalError(
-                    "block backend changed the requested virtual size"
+            if isinstance(reserved, OperationReplay):
+                return reserved.record
+            record = reserved
+            try:
+                volume_root.mkdir(mode=0o700, parents=True, exist_ok=False)
+                runtime_dir = Path(record.runtime_dir)
+                mount_path = Path(record.mount_path)
+                mount_path.mkdir(mode=0o700)
+                source = Path(record.source_image_config)
+                _atomic_write_json(
+                    source,
+                    {"lowers": [], "resultFile": "", "upper": {}},
                 )
-            record = replace(
-                record,
-                device_id=device.device_id,
-                device_path=str(device.device_path),
-                runtime_image_config=str(device.image_config_path),
-                updated_ns=time.time_ns(),
-            )
-            self.journal.update_pending(record)
-            self.host.format_xfs(device.device_path)
-            self.host.mount(device.device_path, mount_path)
-            record = replace(
-                record,
-                state=StorageVolumeState.MOUNTED,
-                updated_ns=time.time_ns(),
-            )
-            self.journal.finish(record)
-            return record
-        except BaseException as exc:
-            self._best_effort_release(record)
-            self.journal.fail(record, f"{type(exc).__name__}: {exc}")
-            raise
+                device = self._acquire_runtime_device(
+                    source_image_config=source,
+                    runtime_dir=runtime_dir,
+                    virtual_size=virtual_size,
+                    owner_id=record.device_owner_id,
+                    reserved_slot=True,
+                )
+                if device.virtual_size != virtual_size:
+                    raise StorageNativeTerminalError(
+                        "block backend changed the requested virtual size"
+                    )
+                record = replace(
+                    record,
+                    device_id=device.device_id,
+                    device_path=str(device.device_path),
+                    runtime_image_config=str(device.image_config_path),
+                    updated_ns=time.time_ns(),
+                )
+                self.journal.update_pending(record)
+                self.host.format_xfs(device.device_path)
+                self.host.mount(device.device_path, mount_path)
+                record = replace(
+                    record,
+                    state=StorageVolumeState.MOUNTED,
+                    updated_ns=time.time_ns(),
+                )
+                self.journal.finish(record)
+                return record
+            except BaseException as exc:
+                self._best_effort_release(record)
+                self.journal.fail(record, f"{type(exc).__name__}: {exc}")
+                raise
 
     def acquire_snapshot(
         self,
@@ -1479,6 +1494,24 @@ class StorageNativeNodeService:
         operation_id: str,
         expected_revision: int,
     ) -> StorageVolumeRecord:
+        with self._device_allocation_slot():
+            return self._mount_snapshot_cow_with_reserved_device(
+                sandbox_id=sandbox_id,
+                sandbox_generation=sandbox_generation,
+                volume_id=volume_id,
+                operation_id=operation_id,
+                expected_revision=expected_revision,
+            )
+
+    def _mount_snapshot_cow_with_reserved_device(
+        self,
+        *,
+        sandbox_id: str,
+        sandbox_generation: int,
+        volume_id: str,
+        operation_id: str,
+        expected_revision: int,
+    ) -> StorageVolumeRecord:
         pending = self._begin_transition(
             kind="MountSnapshotCow",
             operation_id=operation_id,
@@ -1530,6 +1563,7 @@ class StorageNativeNodeService:
                 runtime_dir=runtime_dir,
                 virtual_size=pending.virtual_size,
                 owner_id=pending.device_owner_id,
+                reserved_slot=True,
             )
             if device.virtual_size != pending.virtual_size:
                 raise StorageNativeTerminalError(
@@ -2168,6 +2202,7 @@ class StorageNativeNodeService:
         runtime_dir: Path,
         virtual_size: int,
         owner_id: str,
+        reserved_slot: bool = False,
     ) -> StorageNativeDevice:
         idle_before = (
             self.host.ublk_device_ids()
@@ -2175,14 +2210,28 @@ class StorageNativeNodeService:
             if self.config.device_pool_enabled
             else set()
         )
-        device = self.backend.create_runtime_device(
-            source_image_config=source_image_config,
-            global_config=self.global_config_path,
-            runtime_dir=runtime_dir,
-            virtual_size=virtual_size,
-            upper_mode=self.config.upper_mode,
-            owner_id=owner_id,
-        )
+        with self._device_slot_guard:
+            owners = self._backend_ownership()
+            existing_owner = owners.get(owner_id)
+            demand = len(owners) + self._pending_device_allocations
+            if reserved_slot:
+                demand -= 1
+            if (
+                self.config.max_ublk_devices > 0
+                and existing_owner is None
+                and demand >= self.config.max_ublk_devices
+            ):
+                raise StorageNativeConflictError(
+                    "storage-native ublk device capacity is exhausted"
+                )
+            device = self.backend.create_runtime_device(
+                source_image_config=source_image_config,
+                global_config=self.global_config_path,
+                runtime_dir=runtime_dir,
+                virtual_size=virtual_size,
+                upper_mode=self.config.upper_mode,
+                owner_id=owner_id,
+            )
         if self.config.device_pool_enabled:
             with self._pool_metrics_lock:
                 reused = (
@@ -2196,6 +2245,32 @@ class StorageNativeNodeService:
                 else:
                     self._pool_new_acquires += 1
         return device
+
+    @contextmanager
+    def _device_allocation_slot(self):
+        """Fence the provider's hard ublk-device ceiling before journaling.
+
+        Idle pooled devices are reusable and therefore do not consume an
+        admission slot. Active backend owners plus allocations currently
+        crossing the backend boundary are the authoritative device demand.
+        """
+
+        maximum = self.config.max_ublk_devices
+        if maximum <= 0:
+            yield
+            return
+        with self._device_slot_guard:
+            active = len(self._backend_ownership())
+            if active + self._pending_device_allocations >= maximum:
+                raise StorageNativeConflictError(
+                    "storage-native ublk device capacity is exhausted"
+                )
+            self._pending_device_allocations += 1
+        try:
+            yield
+        finally:
+            with self._device_slot_guard:
+                self._pending_device_allocations -= 1
 
     def _backend_ownership(self) -> dict[str, StorageNativeDeviceOwner]:
         owners = self.backend.list_runtime_device_owners()

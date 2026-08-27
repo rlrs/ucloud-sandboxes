@@ -18,6 +18,7 @@ from .models import ResourceQuantity
 
 
 DEFAULT_WORK_DIR = "/work/ucloud-sandboxes"
+DEFAULT_UCLOUD_NODE_STATE_DIR = "/var/lib/ucloud-sandboxes/node-state"
 DEFAULT_NODE_AGENT_HOST = "0.0.0.0"
 DEFAULT_NODE_AGENT_PORT = 8090
 DEFAULT_SSH_PORT_START = 22000
@@ -60,6 +61,8 @@ DEFAULT_STORAGE_NATIVE_CACHE_GB = 32
 DEFAULT_STORAGE_NATIVE_REPOSITORY = "ucloud-sandbox-snapshots"
 DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK = 2
 DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK = 16
+DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES = 0
+DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES = 64
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS = 8
 DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES = 4 * 1024 * 1024 * 1024
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
@@ -119,6 +122,7 @@ class VmInitOptions:
     init_authorized_keys: tuple[str, ...] = ()
     node_id: str = ""
     work_dir: str = DEFAULT_WORK_DIR
+    state_dir: str = ""
     package_spec: str = DEFAULT_PACKAGE_SPEC
     package_sha256: str = ""
     node_agent_host: str = DEFAULT_NODE_AGENT_HOST
@@ -157,8 +161,10 @@ class VmInitOptions:
     storage_native_cache_gb: int = DEFAULT_STORAGE_NATIVE_CACHE_GB
     storage_native_pool_low_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_LOW_WATERMARK
     storage_native_pool_high_watermark: int = DEFAULT_STORAGE_NATIVE_POOL_HIGH_WATERMARK
+    storage_native_max_ublk_devices: int = DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
     direct_disk_headroom_mb: int = DEFAULT_DIRECT_DISK_HEADROOM_MB
     direct_max_concurrent_restores: int = DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES
+    direct_idle_park_seconds: float = 0.0
     heartbeat_interval_seconds: int = DEFAULT_HEARTBEAT_INTERVAL_SECONDS
     labels: dict[str, str] | None = None
 
@@ -204,7 +210,9 @@ def render_vm_init_script(options: VmInitOptions) -> str:
     docker_quota_image = str(PurePosixPath(docker_storage_dir) / "docker-xfs.img")
     docker_quota_root = str(PurePosixPath(docker_storage_dir) / "docker-xfs")
     swap_file = str(PurePosixPath(docker_storage_dir) / "swapfile")
-    state_dir = str(PurePosixPath(work_dir) / "state")
+    state_dir = _clean_posix_path(
+        options.state_dir or str(PurePosixPath(work_dir) / "state")
+    )
     package_cache_dir = str(PurePosixPath(options.package_spec).parent)
     static_runtime_receipt = static_runtime_receipt_for_remote_package(
         options.package_spec,
@@ -321,7 +329,7 @@ def render_vm_init_script(options: VmInitOptions) -> str:
             " --storage-native-socket ${UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}"
             " --max-concurrent-restores ${UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES}"
             " --max-concurrent-image-pulls ${UCLOUD_MAX_CONCURRENT_IMAGE_PULLS}"
-            " --idle-park-seconds 0"
+            " --idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}"
             " --total-vcpu ${UCLOUD_TOTAL_VCPU}"
             " --total-memory-mb ${UCLOUD_TOTAL_MEMORY_MB}"
             " --total-disk-mb ${UCLOUD_DIRECT_WRITABLE_DISK_MB}"
@@ -434,6 +442,7 @@ UCLOUD_DIRECT_INIT_BINARY=/usr/libexec/docker-init
 UCLOUD_DIRECT_IMAGE_CACHE_ROOT=$UCLOUD_DOCKER_QUOTA_ROOT/ucloud-rootfs-cache
 UCLOUD_DIRECT_WRITABLE_DISK_MB={writable_disk_mb}
 UCLOUD_DIRECT_MAX_CONCURRENT_RESTORES={options.direct_max_concurrent_restores}
+UCLOUD_DIRECT_IDLE_PARK_SECONDS={options.direct_idle_park_seconds}
 UCLOUD_STORAGE_NATIVE_BACKEND={shlex.quote(storage_native_backend)}
 UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET={shlex.quote(storage_native_backend_socket)}
 UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET={shlex.quote(storage_native_service_socket)}
@@ -445,6 +454,7 @@ UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG={shlex.quote(storage_native_resize_b
 UCLOUD_STORAGE_NATIVE_CACHE_GB={options.storage_native_cache_gb}
 UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK={options.storage_native_pool_low_watermark}
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK={options.storage_native_pool_high_watermark}
+UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES={options.storage_native_max_ublk_devices}
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL={shlex.quote(options.storage_native_registry_url)}
 UCLOUD_STORAGE_NATIVE_REPOSITORY={shlex.quote(options.storage_native_repository)}
 UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND={shlex.quote(options.storage_native_snapshot_backend)}
@@ -1359,6 +1369,7 @@ UCLOUD_STORAGE_NATIVE_RESIZE_BACKEND_CONFIG=$UCLOUD_STORAGE_NATIVE_RESIZE_BACKEN
 UCLOUD_STORAGE_NATIVE_CACHE_GB=$UCLOUD_STORAGE_NATIVE_CACHE_GB
 UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK
 UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK=$UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK
+UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES=$UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES
 UCLOUD_STORAGE_NATIVE_REGISTRY_URL=$UCLOUD_STORAGE_NATIVE_REGISTRY_URL
 UCLOUD_STORAGE_NATIVE_REPOSITORY=$UCLOUD_STORAGE_NATIVE_REPOSITORY
 UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND=$UCLOUD_STORAGE_NATIVE_SNAPSHOT_BACKEND
@@ -1406,7 +1417,7 @@ User=root
 Group=root
 EnvironmentFile={env_file}
 WorkingDirectory={work_dir}
-ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
+ExecStart=${{UCLOUD_STORAGE_AGENT_BIN}} --socket ${{UCLOUD_STORAGE_NATIVE_SERVICE_SOCKET}} --backend-socket ${{UCLOUD_STORAGE_NATIVE_BACKEND_SOCKET}} --backend-global-config ${{UCLOUD_STORAGE_NATIVE_BACKEND_CONFIG}} --journal ${{UCLOUD_STORAGE_NATIVE_ROOT}}/journal.sqlite --runtime-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/runtime --mount-root ${{UCLOUD_STORAGE_NATIVE_ROOT}}/mounts --hard-capacity-bytes ${{UCLOUD_STORAGE_NATIVE_HARD_CAPACITY_BYTES}}{storage_publication_args} --snapshot-compact-after-layers {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_LAYERS} --snapshot-compact-after-bytes {DEFAULT_STORAGE_NATIVE_COMPACT_AFTER_BYTES} --device-pool-enabled --device-pool-low-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_LOW_WATERMARK}} --device-pool-high-watermark ${{UCLOUD_STORAGE_NATIVE_POOL_HIGH_WATERMARK}} --max-ublk-devices ${{UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}}{telemetry_args} --deployment-id ${{UCLOUD_DEPLOYMENT_ID}} --node-id ${{UCLOUD_NODE_ID}}
 Restart=always
 RestartSec=2
 
@@ -1585,6 +1596,16 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
             raise ValueError(
                 "storage-native pool low watermark cannot exceed high watermark."
             )
+        if options.storage_native_max_ublk_devices < 0:
+            raise ValueError("storage-native maximum ublk devices cannot be negative.")
+        if (
+            options.storage_native_max_ublk_devices > 0
+            and options.storage_native_pool_high_watermark
+            > options.storage_native_max_ublk_devices
+        ):
+            raise ValueError(
+                "storage-native pool high watermark cannot exceed maximum ublk devices."
+            )
         if options.direct_disk_headroom_mb < 1:
             raise ValueError("direct runtime disk headroom must be positive.")
         guaranteed_mb = (
@@ -1620,6 +1641,7 @@ def validate_vm_init_options(options: VmInitOptions) -> None:
         "node agent host": options.node_agent_host,
         "deployment id": options.deployment_id,
         "work dir": options.work_dir,
+        "state dir": options.state_dir,
         "package spec": options.package_spec,
         "package sha256": options.package_sha256,
         "storage-native registry URL": options.storage_native_registry_url,

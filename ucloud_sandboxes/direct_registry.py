@@ -22,18 +22,18 @@ from .sandbox import (
 
 
 DIRECT_REGISTRATION_VERSION = 3
-_MATERIALIZED_PHASES = {
+_ROOTFS_PHASES = {
     "rootfs_ready",
     "import_ready",
     "owned",
     "moving_out",
-    "deleting",
 }
-DIRECT_REGISTRATION_PHASES = _MATERIALIZED_PHASES | {
+DIRECT_REGISTRATION_PHASES = _ROOTFS_PHASES | {
     "planned",
     "import_planned",
     "quota_ready",
     "importing",
+    "deleting",
 }
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _CONTAINER_ID = re.compile(r"[0-9a-f]{64}\Z")
@@ -155,7 +155,7 @@ class DirectSandboxRegistration:
             not quota_present or rootfs_present
         ):
             raise ValueError("quota-ready direct registration is inconsistent")
-        if self.phase in _MATERIALIZED_PHASES and (
+        if self.phase in _ROOTFS_PHASES and (
             not quota_present or not rootfs_present
         ):
             raise ValueError("direct registration is missing owned resources")
@@ -172,7 +172,7 @@ class DirectSandboxRegistration:
     def has_direct_sandbox(self) -> bool:
         """Whether this registration owns a materialized runsc sandbox."""
 
-        return self.phase in _MATERIALIZED_PHASES
+        return bool(self.container_id)
 
     def to_direct_sandbox(self) -> DirectSandbox:
         if not self.has_direct_sandbox:
@@ -559,7 +559,12 @@ class DirectSandboxRegistry:
         *,
         expected_revision: int,
     ) -> DirectSandboxRegistration:
-        return self._transition(sandbox_id, expected_revision, "owned", "deleting")
+        return self._transition(
+            sandbox_id,
+            expected_revision,
+            {"planned", "quota_ready", "rootfs_ready", "owned"},
+            "deleting",
+        )
 
     def begin_delete_moved(
         self,

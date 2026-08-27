@@ -441,9 +441,11 @@ class DirectSandboxProvisioner:
         registration = self.registry.get(sandbox_id)
         if registration is None:
             return
-        if registration.phase not in {"owned", "deleting"}:
-            registration = self._advance(registration)
-        if registration.phase == "owned":
+        if registration.phase != "deleting":
+            if registration.migration_id:
+                raise DirectRegistryError(
+                    "migration registration requires its fenced deletion path"
+                )
             registration = self.registry.begin_delete(
                 sandbox_id,
                 expected_revision=registration.revision,
@@ -454,17 +456,23 @@ class DirectSandboxProvisioner:
 
     def _delete_registration(self, registration: DirectSandboxRegistration) -> None:
         sandbox_id = registration.sandbox_id
-        sandbox = registration.to_direct_sandbox()
-        self.warden.delete(sandbox)
+        if registration.has_direct_sandbox:
+            sandbox = registration.to_direct_sandbox()
+            self.warden.delete(sandbox)
+            self.overlays.release_sandbox(sandbox)
+        else:
+            # Creation can fail after quota/network preparation but before a
+            # rootfs identity is committed. Deletion is rollback, not forward
+            # progress: never retry the failed image/rootfs step just to free
+            # resources that already belong to this registration.
+            self.overlays.discard_unregistered(
+                sandbox_id=registration.sandbox_id,
+                sandbox_generation=registration.sandbox_generation,
+            )
         if self.network_manager is not None:
             self.network_manager.release(
                 registration.sandbox_id,
                 registration.sandbox_generation,
-            )
-        self.overlays.release_sandbox(sandbox)
-        if registration.quota_project_id is None or registration.quota_total_mb is None:
-            raise DirectRegistryError(
-                "deleting direct registration lacks immutable quota identity"
             )
         self._drop_storage(
             registration,
@@ -475,7 +483,8 @@ class DirectSandboxProvisioner:
             sandbox_generation=registration.sandbox_generation,
             expected_revision=registration.revision,
         )
-        self._collect_deleted_image(registration.image_id)
+        if registration.image_id:
+            self._collect_deleted_image(registration.image_id)
 
     @property
     def image_cache_reconciliation_pending(self) -> bool:

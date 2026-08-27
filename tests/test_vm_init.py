@@ -181,6 +181,30 @@ class VmInitTests(unittest.TestCase):
         )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
+    def test_explicit_state_dir_avoids_shared_work_mount(self) -> None:
+        script = render_vm_init_script(
+            self._options(
+                state_dir="/var/lib/ucloud-sandboxes/node-state",
+                storage_native_max_ublk_devices=64,
+                direct_idle_park_seconds=60.0,
+            )
+        )
+
+        self.assertIn(
+            "UCLOUD_STATE_DIR=/var/lib/ucloud-sandboxes/node-state", script
+        )
+        self.assertNotIn("UCLOUD_STATE_DIR=/work/ucloud-sandboxes/state", script)
+        self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES=64", script)
+        self.assertIn(
+            "--max-ublk-devices ${UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}",
+            script,
+        )
+        self.assertIn("UCLOUD_DIRECT_IDLE_PARK_SECONDS=60.0", script)
+        self.assertIn(
+            "--idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}",
+            script,
+        )
+
     def test_authorized_keys_are_rendered_as_inert_shell_values(self) -> None:
         with TemporaryDirectory() as raw_dir:
             injected = Path(raw_dir) / "injected"

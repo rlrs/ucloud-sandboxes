@@ -5727,6 +5727,9 @@ function renderHealth(snapshot) {
   const programs = snapshot.programs || {};
   const states = programs.states || {};
   const autoscaler = snapshot.autoscaler || {};
+  const execution = autoscaler.execution || {};
+  const scaleDown = execution.scale_down || {};
+  const blockedStopJobs = Array.isArray(scaleDown.blocked_job_ids) ? scaleDown.blocked_job_ids : [];
   const registry = snapshot.registry || {};
   const wakePlan = autoscaler.program_wake_plan || {};
   const recent = ((snapshot.events || {}).recent || []);
@@ -5758,6 +5761,10 @@ function renderHealth(snapshot) {
     severity = "warn";
     title = "Some supply is unavailable";
     detail = `${formatInteger(sandboxes.stale_routes)} stale route(s), ${formatInteger(nodes.incompatible)} incompatible node(s).`;
+  } else if (blockedStopJobs.length > 0) {
+    severity = "warn";
+    title = "Scale-down is blocked";
+    detail = `${formatInteger(blockedStopJobs.length)} node stop(s) are blocked; inspect the scheduler execution details.`;
   } else if (volumeErrors > 0 || asNumber(images.failed_builds) > 0 || (registry.configured && !registry.ok)) {
     severity = "warn";
     title = "A supporting subsystem needs attention";
@@ -5784,6 +5791,9 @@ function renderHealth(snapshot) {
   }
   if (asNumber(nodes.sandbox_draining) > 0) {
     signals.push({ text: `${formatInteger(nodes.sandbox_draining)} draining`, mode: "warn", page: "nodes" });
+  }
+  if (blockedStopJobs.length > 0) {
+    signals.push({ text: `${formatInteger(blockedStopJobs.length)} stop blocked`, mode: "warn", page: "scheduler" });
   }
   if (asNumber(images.failed_builds) > 0) {
     signals.push({ text: `${formatInteger(images.failed_builds)} failed builds`, mode: "warn", page: "registry" });
@@ -5821,6 +5831,8 @@ function renderSchedulerPage(snapshot) {
   const policy = autoscaler.effective_policy || {};
   const actions = Array.isArray(autoscaler.actions) ? autoscaler.actions : [];
   const reasons = Array.isArray(autoscaler.reasons) ? autoscaler.reasons : [];
+  const execution = autoscaler.execution || {};
+  const scaleDown = execution.scale_down || {};
   const enabled = Boolean(programSignals.action_enabled || policy.program_aware_autoscaling_enabled);
   const creates = actionCount(actions, "create");
   const stops = actionCount(actions, "stop");
@@ -5836,7 +5848,7 @@ function renderSchedulerPage(snapshot) {
   setText(
     "schedulerDecisionDetail",
     autoscaler.timestamp
-      ? `${actionSummary(actions)}, cycle ${formatTime(autoscaler.timestamp)}`
+      ? `${actionSummary(actions)}, cycle ${formatTime(autoscaler.timestamp)}; stops requested ${formatInteger((scaleDown.requested_job_ids || []).length)}, draining ${formatInteger((scaleDown.draining_job_ids || []).length)}, blocked ${formatInteger((scaleDown.blocked_job_ids || []).length)}, terminated ${formatInteger((scaleDown.terminated_job_ids || []).length)}`
       : "No autoscaler cycle loaded."
   );
   els.schedulerReasons.replaceChildren(...(reasons.length ? reasons : ["No scale action is required."]).slice(0, 6).map((reason) => {
@@ -5907,12 +5919,17 @@ function renderPolicy(policy) {
     ["Model-wait weight", formatPercentPoint(ratioToPercent(policy.model_wait_capacity_weight))],
     ["Leading headroom", `${formatInteger(policy.model_wait_max_headroom_nodes)} node max`],
     ["Node range", `${formatInteger(policy.min_nodes)}–${formatInteger(policy.max_nodes)}`],
+    ["Create limits", `${formatInteger(policy.max_create_per_cycle)} per cycle / ${formatInteger(policy.max_provisioning_nodes)} provisioning`],
+    ["Stop limit", `${formatInteger(policy.max_stop_per_cycle)} per cycle`],
     ["CPU target", formatPercentPoint(ratioToPercent(policy.target_cpu_utilization))],
     ["Memory target", formatPercentPoint(ratioToPercent(policy.target_memory_utilization))],
     ["Storage queue", formatPercentPoint(ratioToPercent(policy.target_storage_queue_utilization))],
     ["Create target", `${formatInteger(policy.create_target_concurrency_per_node)} per node`],
     ["Create burst", `${formatInteger(policy.create_pressure_max_headroom_nodes)} node max`],
     ["Idle grace", formatAge(policy.scale_down_idle_seconds)],
+    ["Pressure cooldown", formatAge(policy.pressure_scale_down_cooldown_seconds)],
+    ["Unreachable eviction", formatAge(policy.unreachable_stop_after_seconds)],
+    ["Heartbeat TTL", formatAge(policy.heartbeat_ttl_seconds)],
   ];
   els.policyValues.replaceChildren(...rows.map(([name, value]) => {
     const wrapper = document.createElement("div");
@@ -6989,11 +7006,16 @@ function summarizeEvent(event) {
     const builderActions = Array.isArray(data.builder_actions) ? data.builder_actions : [];
     const created = Array.isArray(data.created_job_ids) ? data.created_job_ids.length : 0;
     const stopped = Array.isArray(data.stop_job_ids) ? data.stop_job_ids.length : 0;
+    const scaleDown = ((data.execution || {}).scale_down || {});
+    const stopRequested = Array.isArray(scaleDown.requested_job_ids) ? scaleDown.requested_job_ids.length : 0;
+    const stopBlocked = Array.isArray(scaleDown.blocked_job_ids) ? scaleDown.blocked_job_ids.length : 0;
+    const stopDraining = Array.isArray(scaleDown.draining_job_ids) ? scaleDown.draining_job_ids.length : 0;
+    const stopTerminated = Array.isArray(scaleDown.terminated_job_ids) ? scaleDown.terminated_job_ids.length : stopped;
     const pending = data.pending_resources || {};
     const prepared = data.prepared_resources || {};
     const actionText = actionSummary(actions.concat(builderActions));
     const reasons = Array.isArray(data.reasons) && data.reasons.length ? `, because ${data.reasons.slice(0, 2).join("; ")}` : "";
-    return `ready ${asNumber(data.ready_nodes)}, provisioning ${asNumber(data.provisioning_nodes)}, created ${created}, stopped ${stopped}, pending ${formatResources(pending)}, prepared ${formatResources(prepared)}, decision ${actionText}${reasons}`;
+    return `ready ${asNumber(data.ready_nodes)}, provisioning ${asNumber(data.provisioning_nodes)}, created ${created}, stops requested ${stopRequested}, draining ${stopDraining}, blocked ${stopBlocked}, terminated ${stopTerminated}, pending ${formatResources(pending)}, prepared ${formatResources(prepared)}, decision ${actionText}${reasons}`;
   }
   if (event.kind === "sandbox_scheduled") {
     return `${data.sandbox_id || "sandbox"} on ${data.node_id || data.job_id || "node"}, wait ${formatDurationMs(data.scale_up_wait_ms)}`;

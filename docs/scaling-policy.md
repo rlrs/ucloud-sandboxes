@@ -87,6 +87,21 @@ idle node's background state cannot trigger it.
 density/latency tradeoff. Lower targets retain more headroom. The PSI and
 storage queue limits catch cases that average utilization misses.
 
+Direct-runtime exec admission follows the same live-usage model. A sandbox's
+configured CPU and memory remain its individual cgroup limits, but starting an
+exec does not reserve that entire theoretical shape from the node. The worker
+samples actual host CPU, load, available memory, swap, and full-memory PSI; it
+defers a new exec only when those live safeguards cross their limits or when
+node admission is closed. Exec lifetime leases still count as active operations
+for drain fencing and prevent idle parking, while contributing zero synthetic
+CPU or memory reservation. The exec session manager's 128-session bound remains
+the independent burst-safety ceiling.
+
+Consequently, autoscaling observes exec demand through measured heartbeat
+pressure rather than an additive sum of sandbox limits. Adding a node helps new
+placements and later wakes; it cannot relocate an exec for a sandbox that is
+already running on another node.
+
 Create pressure is an amplifier for resident host pressure, not an independent
 reason to buy capacity. Two sampled `gateway_busy` rejections in the default
 30-second window prove that all gateway create slots are occupied, but another
@@ -139,26 +154,11 @@ The scheduler always records its wake plan and metrics. With
 the setting allows its hard and weighted demand to create or retain nodes; it
 does not change route ownership, disk accounting, or generation fences.
 
-The deployed systemd service exposes every live-feedback setting through
-`/etc/ucloud-sandboxes/autoscaler.env`. The corresponding variables are
-`UCLOUD_LIVE_PRESSURE_ENABLED`, `UCLOUD_LIVE_PRESSURE_WINDOW_SECONDS`,
-`UCLOUD_LIVE_PRESSURE_MIN_SAMPLES`, `UCLOUD_LIVE_PRESSURE_FRESH_SECONDS`,
-`UCLOUD_CREATE_PRESSURE_ENABLED`, `UCLOUD_CREATE_PRESSURE_WINDOW_SECONDS`,
-`UCLOUD_CREATE_PRESSURE_MIN_SAMPLES`, `UCLOUD_CREATE_PRESSURE_FRESH_SECONDS`,
-`UCLOUD_CREATE_TARGET_CONCURRENCY_PER_NODE`,
-`UCLOUD_CREATE_PRESSURE_MAX_HEADROOM_NODES`,
-`UCLOUD_TARGET_CPU_UTILIZATION`, `UCLOUD_TARGET_MEMORY_UTILIZATION`,
-`UCLOUD_MAX_MEMORY_PSI_FULL_AVG10`,
-`UCLOUD_TARGET_STORAGE_QUEUE_UTILIZATION`,
-`UCLOUD_PRESSURE_SCALE_DOWN_COOLDOWN_SECONDS`,
-`UCLOUD_PROVISIONING_LATENCY_LOOKBACK_SECONDS`, and
-`UCLOUD_PROVISIONING_SCALE_DOWN_MULTIPLIER`. Program-aware settings use
-`UCLOUD_PROGRAM_AWARE_AUTOSCALING_ENABLED`,
-`UCLOUD_MODEL_WAIT_CAPACITY_WEIGHT`, and
-`UCLOUD_MODEL_WAIT_MAX_HEADROOM_NODES`. Changes take effect after an
-autoscaler service restart. Set the corresponding enabled variable to `false`
-for a shadow rollout: metrics and the dashboard continue to update, while that
-feedback neither creates nor retains nodes.
+The executing autoscaler reads its complete policy from the `policy` object in
+`deployment.json`; the deployed systemd unit does not add environment-file
+overrides. Changes take effect after an autoscaler service restart. Set a
+feedback feature's `enabled` field to `false` for a shadow rollout: its metrics
+continue to update while that feedback neither creates nor retains nodes.
 
 ## Knobs
 
@@ -331,13 +331,13 @@ startup is comparatively expensive. Builder nodes must carry
 `ucloud-sandboxes/builder=true` and must not carry
 `ucloud-sandboxes/node=true`.
 
-Pending, prepared, and active image-build work also acts as a transient sandbox
-warm-capacity signal. During those autoscaler cycles, the sandbox pool adds one
-default sandbox node worth of desired resources. This is not stored as prepared
-capacity and is not durable demand; it exists only while build activity is
-present or while the one-shot build signal is waiting to be consumed. The goal is
-to avoid scaling sandbox nodes to zero while a builder is preparing an image that
-will likely be launched shortly afterward.
+Pending and active image-build work also acts as a transient sandbox
+warm-capacity signal. During those autoscaler cycles, the sandbox pool adds a
+small runnable probe of at most 1 vCPU, 512 MiB RAM, and 1 GiB disk. This is not
+stored as prepared capacity and is not durable demand. Prepared builder capacity
+does not produce this sandbox signal by itself. The goal is to avoid scaling
+sandbox nodes to zero while a builder is preparing an image that will likely be
+launched shortly afterward without reserving an entire pristine sandbox node.
 
 ## Direct-runtime placement and wake
 

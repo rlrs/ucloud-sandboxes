@@ -265,6 +265,7 @@ class SandboxPoolConfig:
     storage_native_pool_high_watermark: int = 16
     direct_disk_headroom_mb: int = 16 * 1024
     direct_max_concurrent_restores: int = 8
+    direct_idle_park_seconds: float = 0.0
     max_concurrent_image_pulls: int = 8
 
     @property
@@ -304,6 +305,11 @@ class SandboxPoolConfig:
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=1)
         for name in ("swap_gb", "storage_native_pool_low_watermark"):
             _require_int(f"sandbox.{name}", getattr(result, name), minimum=0)
+        _require_float(
+            "sandbox.direct_idle_park_seconds",
+            result.direct_idle_park_seconds,
+            minimum=0.0,
+        )
         if (
             result.storage_native_pool_low_watermark
             > result.storage_native_pool_high_watermark

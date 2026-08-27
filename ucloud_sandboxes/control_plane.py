@@ -132,6 +132,8 @@ SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS = 0.25
 # context and enqueueing the build on a builder node.
 IMAGE_BUILD_PROXY_TIMEOUT_SECONDS = 30 * 60
 IMAGE_PULL_PROXY_TIMEOUT_SECONDS = 30 * 60
+IMAGE_PULL_RETRY_ATTEMPTS = 3
+IMAGE_PULL_RETRY_BASE_DELAY_SECONDS = 0.25
 # Creation includes quota allocation, rootfs preparation, networking, and
 # runsc startup. Those idempotent lifecycle operations can legitimately queue
 # behind other creates on a dense direct node.
@@ -2763,6 +2765,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         status: HTTPStatus,
         pending: PendingSandboxDemand | None = None,
     ) -> bool:
+        if not self._route_worker_is_fresh(route):
+            return False
         record = self._sandbox_record_on_node(route.node_url, spec.id)
         if (
             record is None
@@ -2798,6 +2802,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 {"error": f"sandbox already exists with different spec: {spec.id}"},
                 status=HTTPStatus.CONFLICT,
             )
+            return
+        if not self._route_worker_is_fresh(route):
+            self._write_route_worker_unreachable(route)
             return
         self._ensure_registry_route_reference(route, touch=True)
         response = self._proxy_request(
@@ -3387,6 +3394,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             return
 
+        normalized_path = urlparse(path).path
+        request_wakes = _sandbox_request_wakes(path, self.command)
+
         # Placement is durable before provisioning begins. Do not forward
         # tool traffic into a registration that is still planned, quota-ready,
         # or preparing its rootfs. Reconcile a completed node record first;
@@ -3402,6 +3412,9 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 routed_spec = SandboxSpec.from_dict(route.spec)
             except (TypeError, ValueError):
                 routed_spec = None
+            if not self._route_worker_is_fresh(route):
+                self._write_create_in_progress_response(sandbox_id)
+                return
             record = self._sandbox_record_on_node(route.node_url, sandbox_id)
             if (
                 routed_spec is not None
@@ -3426,7 +3439,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        normalized_path = urlparse(path).path
         managed_path = _managed_process_path(path, sandbox_id)
         transport_reset = False
         lifecycle_payload: dict[str, Any] = {}
@@ -3520,7 +3532,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                     wake_placement_routes,
                 )
 
-        request_wakes = _sandbox_request_wakes(path, self.command)
         implicit_wake = bool(
             not lifecycle_action
             and request_wakes
@@ -3583,6 +3594,23 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_json(
                 {"deleted": removed.to_dict() if removed is not None else None}
             )
+            return
+
+        if not self._route_worker_is_fresh(route):
+            if (
+                managed_path is not None
+                and managed_path[0] == "status"
+                and self.command == "GET"
+            ):
+                cached = self.routing_store.get_managed_process(
+                    sandbox_id,
+                    managed_path[1],
+                    sandbox_generation=route.generation,
+                )
+                if cached is not None:
+                    self._write_json({"job": cached.to_dict()})
+                    return
+            self._write_route_worker_unreachable(route)
             return
 
         extra_headers: dict[str, str] | None = None
@@ -4293,6 +4321,34 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return heartbeat
         return None
 
+    def _route_worker_is_fresh(self, route: SandboxRoute) -> bool:
+        heartbeat = self._heartbeat_for_route(
+            node_id=route.node_id,
+            job_id=route.job_id,
+            node_url=route.node_url,
+        )
+        return bool(
+            heartbeat is not None
+            and heartbeat.node_url
+            and heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
+        )
+
+    def _write_route_worker_unreachable(self, route: SandboxRoute) -> None:
+        self._write_json(
+            {
+                "error": "sandbox worker heartbeat is stale or unavailable",
+                "error_code": "sandbox_worker_unreachable",
+                "retryable": True,
+                "node_id": route.node_id,
+                "job_id": route.job_id,
+            },
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            headers={
+                "Retry-After": "1",
+                "X-UCloud-Sandbox-Retryable": "true",
+            },
+        )
+
     def _select_node(
         self,
         requested: ResourceQuantity,
@@ -4887,13 +4943,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         with _image_pull_lock(node_url, image):
             if self._node_has_image(heartbeat, image, use_heartbeat_cache=False):
                 return None
-            return self._proxy_request(
-                node_url,
-                "/v1/images/pull",
-                method="POST",
-                body=json.dumps({"image": image}).encode("utf-8"),
-                timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
-            )
+            return self._pull_image_on_node(heartbeat, image)
 
     def _warm_image_on_ready_nodes(
         self,
@@ -4970,13 +5020,23 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         payload: dict[str, Any] = {"image": image}
         if image_id:
             payload["id"] = image_id
-        return self._proxy_request(
-            heartbeat.node_url or "",
-            "/v1/images/pull",
-            method="POST",
-            body=json.dumps(payload).encode("utf-8"),
-            timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
-        )
+        response: ProxiedResponse | None = None
+        for attempt in range(IMAGE_PULL_RETRY_ATTEMPTS):
+            response = self._proxy_request(
+                heartbeat.node_url or "",
+                "/v1/images/pull",
+                method="POST",
+                body=json.dumps(payload).encode("utf-8"),
+                timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
+            )
+            if not _retryable_image_pull_response(response):
+                return response
+            if attempt + 1 < IMAGE_PULL_RETRY_ATTEMPTS:
+                time.sleep(
+                    IMAGE_PULL_RETRY_BASE_DELAY_SECONDS * (2**attempt)
+                )
+        assert response is not None
+        return response
 
     def _ready_heartbeats(self) -> list[NodeHeartbeat]:
         now = utc_now()
@@ -6011,6 +6071,12 @@ def _node_storage_pressure_allows(
         return False
     if metrics.storage_error_volumes > 0:
         return False
+    if (
+        metrics.storage_ublk_max_devices > 0
+        and metrics.storage_ublk_active_devices
+        >= metrics.storage_ublk_max_devices
+    ):
+        return False
     maximum = metrics.storage_max_concurrent_operations
     if maximum > 0 and metrics.storage_waiting_operations >= maximum:
         return False
@@ -6027,11 +6093,68 @@ def _node_available_resources(
 ) -> ResourceQuantity:
     route_reservations = _node_reserved_route_resources(heartbeat, routes)
     free = heartbeat.free_resources
+    disk_mb = max(0, free.disk_mb - route_reservations.disk_mb)
+    metrics = heartbeat.runtime_metrics
+    if (
+        STORAGE_NATIVE_CAPABILITY in heartbeat.capabilities
+        and metrics is not None
+        and metrics.storage_ublk_max_devices > 0
+    ):
+        reserved_device_slots = _node_reserved_storage_device_slots(
+            heartbeat,
+            routes,
+        )
+        if (
+            metrics.storage_ublk_active_devices + reserved_device_slots
+            >= metrics.storage_ublk_max_devices
+        ):
+            disk_mb = 0
     return ResourceQuantity(
         vcpu=max(0.0, free.vcpu - route_reservations.vcpu),
         memory_mb=max(0, free.memory_mb - route_reservations.memory_mb),
-        disk_mb=max(0, free.disk_mb - route_reservations.disk_mb),
+        disk_mb=disk_mb,
     )
+
+
+def _node_reserved_storage_device_slots(
+    heartbeat: NodeHeartbeat,
+    routes: list[PlacementRecord],
+) -> int:
+    """Count assigned volumes not yet represented by backend ownership metrics."""
+
+    inventory_identities = {
+        (
+            item.sandbox_id,
+            item.generation,
+            item.spec_hash,
+            item.operation_id,
+        )
+        for item in heartbeat.inventory
+    }
+    seen: set[tuple[str, ...]] = set()
+    reserved = 0
+    for route in routes:
+        if not _route_targets_node(route, heartbeat):
+            continue
+        identity = _placement_identity(route)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if isinstance(route, SandboxRoute):
+            if route.worker_state == "detached":
+                continue
+            if (
+                route.sandbox_id,
+                route.generation,
+                route.spec_hash,
+                route.create_operation_id,
+            ) in inventory_identities:
+                continue
+            if route.resources.disk_mb > 0:
+                reserved += 1
+        elif route.resources.disk_mb > 0:
+            reserved += 1
+    return reserved
 
 
 def _node_reserved_route_resources(
@@ -6548,6 +6671,16 @@ def _node_create_may_still_be_running(response: ProxiedResponse) -> bool:
         # the node cannot have received or persisted this create operation.
         return False
     return response.status in {408, 425, 429, 500, 502, 503, 504}
+
+
+def _retryable_image_pull_response(response: ProxiedResponse) -> bool:
+    if response.status != HTTPStatus.SERVICE_UNAVAILABLE:
+        return False
+    payload = response.json()
+    return bool(
+        payload.get("retryable") is True
+        and payload.get("error_code") == "image_pull_failed"
+    )
 
 
 def _precise_elapsed_ms(started: float) -> float:

@@ -106,11 +106,19 @@ Create pressure is an amplifier for resident host pressure, not an independent
 reason to buy capacity. Two sampled `gateway_busy` rejections in the default
 30-second window prove that all gateway create slots are occupied, but another
 VM is requested only when the ordinary sustained CPU, memory, PSI, storage, or
-image-materialization queue independently proves that it can help. The default burst
-is capped at one node beyond hard resource demand. Operators can raise
-`create_pressure_max_headroom_nodes` after observing a workload where measured
-node-side queues justify a wider burst. Already-provisioning nodes count toward
-the target, preventing repeated scale-up every cycle.
+image-materialization queue independently proves that it can help. One full
+gateway-limit worth of rejected requests confirms saturation, but does not
+override the configured bound. `create_pressure_max_headroom_nodes` is the
+maximum temporary node headroom this feedback loop may request. Durable pending
+create demand can still grow the fleet toward `max_nodes` over later cycles.
+Already-provisioning nodes count toward both targets, preventing repeated
+scale-up every cycle.
+
+Accepted create and wake retries add a second, independent signal. Their count
+is divided by `create_target_concurrency_per_node` and adds pipeline nodes only
+while real node pressure is present. This does not sum nominal sandbox CPU or
+memory limits: runtime admission and exec remain based on measured usage, while
+the retry backlog describes work the current fleet has already failed to admit.
 
 Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer
@@ -145,9 +153,11 @@ disabled for action by default, as described below.
 
 The gateway persists each relay-bound request in one of four generation-fenced
 phases: `model_wait`, `ready_to_wake`, `waking`, or `acting`. `ready_to_wake`
-is exact hard demand because the response is already committed and the sandbox
-must run. `model_wait` is only a weighted, bounded headroom signal for requests
-still executing on a model worker.
+is exact hard demand once the parked route has a validated portable snapshot,
+because the response is already committed and the sandbox must run. A local-only
+park remains observable but cannot ask for a remote node that cannot restore it.
+`model_wait` is only a weighted, bounded headroom signal for requests still
+executing on a model worker.
 
 The scheduler always records its wake plan and metrics. With
 `program_aware_autoscaling_enabled=false`, that plan is shadow-only. Enabling

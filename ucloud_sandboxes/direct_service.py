@@ -244,6 +244,11 @@ class DirectSandboxService:
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
         self._publication_errors: dict[tuple[str, int], BaseException] = {}
         self._publication_guard = threading.Lock()
+        self._published_snapshots: dict[
+            tuple[str, int], StorageNativeMigration
+        ] = {}
+        self._published_snapshots_guard = threading.Lock()
+        self._snapshot_hydration_thread: threading.Thread | None = None
 
     def configure_active_capacity(
         self,
@@ -290,6 +295,17 @@ class DirectSandboxService:
                 daemon=True,
             )
             self._deletion_thread.start()
+        if (
+            self._snapshot_hydration_thread is None
+            or not self._snapshot_hydration_thread.is_alive()
+        ):
+            self._snapshot_hydration_thread = threading.Thread(
+                target=self._hydrate_published_snapshot_cache,
+                args=(records,),
+                name="ucloud-published-snapshot-cache-hydrator",
+                daemon=True,
+            )
+            self._snapshot_hydration_thread.start()
         network_manager = self.provisioner.network_manager
         if network_manager is not None:
             if network_manager.has_dynamic_tcp_egress and (
@@ -320,6 +336,62 @@ class DirectSandboxService:
             interval = self.provisioner.network_manager.resolve_interval_seconds
             network_thread.join(timeout=max(2.0, interval * 2))
         self._network_thread = None
+        snapshot_hydration_thread = self._snapshot_hydration_thread
+        if snapshot_hydration_thread is not None:
+            snapshot_hydration_thread.join(timeout=2.0)
+        self._snapshot_hydration_thread = None
+
+    def _hydrate_published_snapshot_cache(
+        self,
+        records: tuple[SandboxRecord, ...],
+    ) -> None:
+        """Recover completed publications once without taxing heartbeats."""
+
+        for record in records:
+            if self._stop_event.is_set():
+                return
+            if record.state.lower() != HibernationState.PARKED.value:
+                continue
+            try:
+                registration = self._require_registration(record.spec.id)
+                storage = self.warden._storage_record(
+                    registration.to_direct_sandbox()
+                )
+                if storage.state.value != "published":
+                    continue
+                self.describe_storage_native_snapshot(record.spec.id)
+            except (RuntimeError, ValueError):
+                # This is a best-effort cache warmup. Lifecycle operations and
+                # the explicit descriptor endpoint retain their own errors.
+                continue
+
+    def cached_storage_native_snapshot(
+        self,
+        sandbox_id: str,
+        generation: int,
+    ) -> StorageNativeMigration | None:
+        with self._published_snapshots_guard:
+            return self._published_snapshots.get((sandbox_id, generation))
+
+    def _remember_published_snapshot(
+        self,
+        snapshot: StorageNativeMigration,
+    ) -> StorageNativeMigration:
+        if not isinstance(snapshot, StorageNativeMigration):
+            # Keep lifecycle identity tests and instrumented substitutes able
+            # to wrap the descriptor builder without requiring cache internals.
+            return snapshot
+        key = (
+            snapshot.manifest.sandbox_id,
+            snapshot.manifest.sandbox_generation,
+        )
+        with self._published_snapshots_guard:
+            self._published_snapshots[key] = snapshot
+        return snapshot
+
+    def _forget_published_snapshot(self, sandbox_id: str, generation: int) -> None:
+        with self._published_snapshots_guard:
+            self._published_snapshots.pop((sandbox_id, generation), None)
 
     def _deletion_reconciliation_loop(self) -> None:
         while not self._stop_event.wait(self._deletion_reconcile_interval_seconds):
@@ -408,6 +480,7 @@ class DirectSandboxService:
                     sandbox_generation=operation.generation,
                     operation_id=operation.operation_id,
                 )
+            self._forget_published_snapshot(spec.id, operation.generation)
             self.mark_activity(spec.id, operation.generation)
             return self._record(registration)
 
@@ -458,6 +531,7 @@ class DirectSandboxService:
         assert deleted
         with self._activity_guard:
             self._last_activity.pop(key, None)
+        self._forget_published_snapshot(*key)
         return True
 
     def delete(
@@ -478,6 +552,7 @@ class DirectSandboxService:
             self.provisioner.delete(sandbox_id)
         with self._activity_guard:
             self._last_activity.pop(key, None)
+        self._forget_published_snapshot(*key)
 
     def evict_published(
         self,
@@ -537,6 +612,7 @@ class DirectSandboxService:
                 self.provisioner.delete(sandbox_id)
         with self._activity_guard:
             self._last_activity.pop(key, None)
+        self._forget_published_snapshot(*key)
 
     def park(
         self,
@@ -579,6 +655,10 @@ class DirectSandboxService:
                     "sandbox.park.background_publication": background,
                 },
             ):
+                self._forget_published_snapshot(
+                    sandbox_id,
+                    registration.sandbox_generation,
+                )
                 self.warden.park(
                     sandbox,
                     operation_id=operation_id,
@@ -627,6 +707,9 @@ class DirectSandboxService:
                         self.warden.publish_storage_snapshot(
                             registration.to_direct_sandbox(),
                             operation_id=operation_id,
+                        )
+                        self.describe_storage_native_snapshot(
+                            registration.sandbox_id
                         )
                     except BaseException as exc:
                         with self._publication_guard:
@@ -693,6 +776,7 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     f"direct sandbox cannot wake from {record.state.value}"
                 )
+            self._forget_published_snapshot(sandbox_id, generation)
             return self._record(registration)
 
     def prepare_storage_native_move(
@@ -733,7 +817,9 @@ class DirectSandboxService:
 
         registration = self._require_registration(sandbox_id)
         with self._lock(sandbox_id, registration.sandbox_generation):
-            return self._storage_native_snapshot_locked(registration)
+            return self._remember_published_snapshot(
+                self._storage_native_snapshot_locked(registration)
+            )
 
     def publish_parked(
         self,
@@ -776,7 +862,9 @@ class DirectSandboxService:
                 raise DirectWardenError(
                     "direct sandbox is busy with another ownership transition"
                 )
-            return self._storage_native_snapshot_locked(registration)
+            return self._remember_published_snapshot(
+                self._storage_native_snapshot_locked(registration)
+            )
 
     def _storage_native_snapshot_locked(
         self,

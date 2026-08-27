@@ -110,6 +110,14 @@ def evaluate_scale(
         policy,
         live_signals,
     )
+    pending_backlog_nodes = (
+        _ceil_div(
+            max(0, demand.pending_count),
+            max(1, policy.create_target_concurrency_per_node),
+        )
+        if pressure_scale_up and demand.pending_count > 0
+        else 0
+    )
 
     maximum_request = policy.default_node_resources
     all_demand_placement_requests = (
@@ -317,12 +325,54 @@ def evaluate_scale(
                     f"{_resource_label(resource_deficit)}: {reason}"
                 )
 
+    if pending_backlog_nodes > 0:
+        # Pending create/wake rows are requests that the current fleet already
+        # failed to admit. Nominal CPU and RAM limits remain reusable; only a
+        # simultaneous real-pressure signal turns the retry backlog into
+        # additional pipeline capacity.
+        target_nodes = min(
+            policy.max_nodes,
+            available_pool_nodes + pending_backlog_nodes,
+        )
+        needed_nodes = max(
+            0,
+            target_nodes - available_pool_nodes - _planned_creates(actions),
+        )
+        create_count = min(
+            needed_nodes,
+            _create_budget(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            ),
+        )
+        if create_count > 0:
+            reason = (
+                f"{demand.pending_count} pressure-confirmed pending request(s) "
+                f"require {pending_backlog_nodes} additional create pipeline "
+                f"node(s); targeting {target_nodes} node(s)"
+            )
+            actions.append(
+                ScaleAction(kind="create", count=create_count, reason=reason)
+            )
+            reasons.append(reason)
+        elif target_nodes > available_pool_nodes + _planned_creates(actions):
+            reason = _create_limit_reason(
+                policy,
+                available_pool_nodes,
+                len(provisioning_nodes),
+                actions,
+            )
+            if reason:
+                reasons.append("cannot create for pending request backlog: " + reason)
+
     if (
         pressure_scale_up
         # Create saturation is a more specific interpretation of this same
-        # live-pressure sample and owns its bounded headroom calculation
-        # below. Letting the generic branch act first bypasses
-        # create_pressure_max_headroom_nodes on every later cycle.
+        # live-pressure sample and owns its rejection-wave calculation below.
+        # Letting the generic branch act first would undercount a sustained
+        # gateway backlog on every later cycle.
         and not create_pressure_scale_up
         and _planned_creates(actions) == 0
         and len(provisioning_nodes) == 0
@@ -364,7 +414,8 @@ def evaluate_scale(
                 baseline_nodes,
                 min(
                     pipeline_nodes,
-                    baseline_nodes + max(0, policy.create_pressure_max_headroom_nodes),
+                    baseline_nodes
+                    + max(0, policy.create_pressure_max_headroom_nodes),
                 ),
             ),
         )
@@ -571,8 +622,7 @@ def _live_pressure_reason(
         )
     suffix = f" ({', '.join(values)})" if values else ""
     return (
-        f"sustained live pressure across {signals.pressure_samples} sample(s)"
-        f"{suffix}"
+        f"sustained live pressure across {signals.pressure_samples} sample(s){suffix}"
     )
 
 

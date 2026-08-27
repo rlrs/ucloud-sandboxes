@@ -190,15 +190,14 @@ class VmInitTests(unittest.TestCase):
             )
         )
 
-        self.assertIn(
-            "UCLOUD_STATE_DIR=/var/lib/ucloud-sandboxes/node-state", script
-        )
+        self.assertIn("UCLOUD_STATE_DIR=/var/lib/ucloud-sandboxes/node-state", script)
         self.assertNotIn("UCLOUD_STATE_DIR=/work/ucloud-sandboxes/state", script)
         self.assertIn("UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES=64", script)
         self.assertIn(
             "--max-ublk-devices ${UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES}",
             script,
         )
+        self.assertIn("--max-concurrent-publications 2", script)
         self.assertIn("UCLOUD_DIRECT_IDLE_PARK_SECONDS=60.0", script)
         self.assertIn(
             "--idle-park-seconds ${UCLOUD_DIRECT_IDLE_PARK_SECONDS}",

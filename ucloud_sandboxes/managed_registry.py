@@ -793,7 +793,46 @@ class RegistryUsageStore:
         digest: str,
         now: datetime | None = None,
     ) -> RegistryImageLease:
-        return self._put_lease(repository, tag, owner, None, digest, now)
+        repository, tag, owner = _validate_lease_identity(repository, tag, owner)
+        digest = _validate_lease_digest(digest)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
+        key = (repository, tag, owner)
+        with self._transaction() as conn:
+            row = conn.execute(
+                "SELECT repository, tag, owner, acquired_at, renewed_at, "
+                "expires_at, digest FROM registry_leases "
+                "WHERE repository = ? AND tag = ? AND owner = ?",
+                key,
+            ).fetchone()
+            previous = self._lease_from_row(row) if row is not None else None
+            if previous is not None and not previous.is_active(timestamp):
+                conn.execute(
+                    "DELETE FROM registry_leases "
+                    "WHERE repository = ? AND tag = ? AND owner = ?",
+                    key,
+                )
+                previous = None
+            if previous is not None and previous.digest != digest:
+                raise ValueError("registry lease/reference digest is immutable")
+            if previous is not None and not previous.expires_at:
+                # Permanent references are identity fences, not heartbeats.
+                # Re-observing one must be an O(1), write-free operation.
+                return previous
+            reference = RegistryImageLease(
+                repository,
+                tag,
+                owner,
+                previous.acquired_at if previous else timestamp.isoformat(),
+                timestamp.isoformat(),
+                "",
+                digest,
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO registry_leases VALUES (?, ?, ?, ?, ?, ?, ?)",
+                astuple(reference),
+            )
+            self._advance_generation_unlocked(conn)
+            return reference
 
     def renew_lease(
         self,
@@ -864,20 +903,24 @@ class RegistryUsageStore:
         now: datetime | None = None,
     ) -> bool:
         key = _validate_lease_identity(repository, tag, owner)
+        timestamp = _as_utc(now or datetime.now(timezone.utc))
         with self._transaction() as conn:
-            snapshot = self._prune_expired_unlocked(
-                conn,
-                now=_as_utc(now or datetime.now(timezone.utc)),
-            )
-            if key not in snapshot.leases:
+            row = conn.execute(
+                "SELECT repository, tag, owner, acquired_at, renewed_at, "
+                "expires_at, digest FROM registry_leases "
+                "WHERE repository = ? AND tag = ? AND owner = ?",
+                key,
+            ).fetchone()
+            if row is None:
                 return False
+            lease = self._lease_from_row(row)
             conn.execute(
                 "DELETE FROM registry_leases "
                 "WHERE repository = ? AND tag = ? AND owner = ?",
                 key,
             )
             self._advance_generation_unlocked(conn)
-            return True
+            return lease.is_active(timestamp)
 
     @contextmanager
     def lease_fence(
@@ -935,19 +978,25 @@ class RegistryUsageStore:
             "SELECT repository, tag, owner, acquired_at, renewed_at, "
             "expires_at, digest FROM registry_leases"
         ):
-            if (
-                any(type(value) is not str for value in row)
-                or any(not value for value in row[:5])
-                or parse_iso_datetime(row[3]) is None
-                or parse_iso_datetime(row[4]) is None
-                or (row[5] and parse_iso_datetime(row[5]) is None)
-                or not row[6]
-                or normalize_manifest_digest(row[6]) != row[6]
-            ):
-                raise ValueError("registry usage database contains an invalid lease")
-            lease = RegistryImageLease(*row)
+            lease = self._lease_from_row(row)
             leases[lease.key] = lease
         return RegistryUsageSnapshot(self._generation_unlocked(conn), records, leases)
+
+    @staticmethod
+    def _lease_from_row(row: object) -> RegistryImageLease:
+        if (
+            not isinstance(row, (tuple, sqlite3.Row))
+            or len(row) != 7
+            or any(type(value) is not str for value in row)
+            or any(not value for value in row[:5])
+            or parse_iso_datetime(row[3]) is None
+            or parse_iso_datetime(row[4]) is None
+            or (row[5] and parse_iso_datetime(row[5]) is None)
+            or not row[6]
+            or normalize_manifest_digest(row[6]) != row[6]
+        ):
+            raise ValueError("registry usage database contains an invalid lease")
+        return RegistryImageLease(*row)
 
     def _prune_expired_unlocked(
         self,

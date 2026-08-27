@@ -113,6 +113,14 @@ low-frequency operations such as park, wake, image build, and VM bootstrap:
 Prometheus cannot calculate a rate for an event already present in a time
 series' first sample.
 
+Worker heartbeat `actual_usage` also exposes snapshot publication saturation as
+`storage_publication_active`, `storage_publication_waiting`, and
+`storage_publication_limit`. These are separate from the storage daemon's
+general operation semaphore, so an agent can distinguish a Registry/S3 upload
+queue from local mount, release, or device pressure. Publication saturation is
+diagnostic only: another VM cannot make an existing local checkpoint portable,
+so it is excluded from autoscaling's actionable storage-pressure signal.
+
 From a source checkout, the wrapper resolves the live SSH port through the
 active UCloud project and returns the same report in one command:
 

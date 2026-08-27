@@ -182,6 +182,31 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(signals.pressure_samples, 3)
         self.assertEqual(signals.image_materialization_queue_utilization, 1.0)
 
+    def test_snapshot_publication_queue_is_diagnostic_not_scale_pressure(
+        self,
+    ) -> None:
+        now = utc_now()
+        events = [
+            MetricEvent(
+                timestamp=(now - timedelta(seconds=offset)).isoformat(),
+                kind="node_heartbeat",
+                data={
+                    "active_workloads": 0,
+                    "actual_usage": {
+                        "storage_publication_active": 2,
+                        "storage_publication_waiting": 20,
+                        "storage_publication_limit": 2,
+                    },
+                },
+            )
+            for offset in (20, 10, 1)
+        ]
+
+        signals = build_live_scale_signals(events, ScalePolicy())
+
+        self.assertEqual(signals.pressure_samples, 0)
+        self.assertIsNone(signals.storage_queue_utilization)
+
     def test_snapshot_exposes_aging_first_program_wake_queue(self) -> None:
         now = utc_now()
         requests = [

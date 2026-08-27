@@ -363,6 +363,54 @@ class ScalePolicyTests(unittest.TestCase):
             64 * shape.disk_mb,
         )
 
+    def test_real_pressure_turns_retry_backlog_into_create_pipeline_nodes(
+        self,
+    ) -> None:
+        shape = ResourceQuantity(vcpu=4, memory_mb=8192, disk_mb=4096)
+        pending = 45
+        decision = evaluate_scale(
+            [
+                node(
+                    "busy-1",
+                    active=8,
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=1_449_984,
+                    ),
+                ),
+                node(
+                    "busy-2",
+                    active=8,
+                    total_resources=ResourceQuantity(
+                        vcpu=32,
+                        memory_mb=98304,
+                        disk_mb=1_449_984,
+                    ),
+                ),
+            ],
+            demand(
+                pending_count=pending,
+                placement_requests=(
+                    SandboxPlacementRequest(resources=shape, count=pending),
+                ),
+            ),
+            ScalePolicy(
+                max_nodes=6,
+                max_create_per_cycle=2,
+                max_provisioning_nodes=2,
+                create_target_concurrency_per_node=8,
+            ),
+            live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=1,
+                cpu_utilization=0.85,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 2)
+        self.assertIn("45 pressure-confirmed", decision.actions[0].reason)
+
     def test_draining_or_admission_closed_node_contributes_no_ready_capacity(
         self,
     ) -> None:
@@ -561,6 +609,31 @@ class ScalePolicyTests(unittest.TestCase):
 
         self.assertEqual(decision.creates, 0)
         self.assertFalse(decision.create_pressure_scale_up)
+
+    def test_repeated_gateway_rejections_remain_bounded_by_headroom(self) -> None:
+        decision = evaluate_scale(
+            [node("busy-1"), node("busy-2")],
+            demand(),
+            ScalePolicy(
+                max_nodes=6,
+                max_create_per_cycle=4,
+                max_provisioning_nodes=4,
+                create_target_concurrency_per_node=8,
+                create_pressure_max_headroom_nodes=1,
+            ),
+            live_signals=LiveScaleSignals(
+                pressure_samples=3,
+                latest_pressure_age_seconds=1,
+                cpu_utilization=0.85,
+                create_pressure_samples=10,
+                latest_create_pressure_age_seconds=1,
+                sandbox_create_rejections=896,
+                sandbox_create_limit=16,
+            ),
+        )
+
+        self.assertEqual(decision.creates, 0)
+        self.assertTrue(decision.create_pressure_scale_up)
 
     def test_create_pressure_headroom_caps_overlapping_live_pressure(self) -> None:
         resources = ResourceQuantity(

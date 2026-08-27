@@ -185,6 +185,27 @@ class HeartbeatContractTests(unittest.TestCase):
             )
         )
 
+    def test_inventory_round_trips_completed_snapshot_publication(self) -> None:
+        entry = SandboxInventoryEntry(
+            sandbox_id="sandbox-1",
+            generation=3,
+            operation_id="operation-7",
+            spec_hash="a" * 64,
+            state="parked",
+            resources=ResourceQuantity(vcpu=1, memory_mb=512, disk_mb=1024),
+            storage_schema="storage-native-v1",
+            snapshot_manifest_digest="sha256:" + "b" * 64,
+            snapshot_repository="snapshots/worker",
+            snapshot_tag="sandbox-1-3",
+            storage_snapshot={"schema": "storage-native-v1"},
+        )
+
+        self.assertEqual(SandboxInventoryEntry.from_dict(entry.to_dict()), entry)
+
+        incomplete = entry.to_dict()
+        incomplete.pop("snapshot_tag")
+        self.assertIsNone(SandboxInventoryEntry.from_dict(incomplete))
+
     def test_estimates_cpu_from_vm_product_id_when_resolved_product_is_absent(
         self,
     ) -> None:

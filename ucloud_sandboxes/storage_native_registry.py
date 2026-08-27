@@ -194,6 +194,9 @@ class RegistrySnapshotPublisher:
             max_concurrent_publications
         )
         self._metrics_lock = threading.Lock()
+        self._publication_limit = max_concurrent_publications
+        self._publication_active = 0
+        self._publication_waiting = 0
         self._publications = 0
         self._compactions = 0
         self._compaction_input_layers = 0
@@ -225,7 +228,13 @@ class RegistrySnapshotPublisher:
             },
         ) as span:
             waiting_started = time.monotonic()
-            with self._publication_slots:
+            with self._metrics_lock:
+                self._publication_waiting += 1
+            self._publication_slots.acquire()
+            with self._metrics_lock:
+                self._publication_waiting -= 1
+                self._publication_active += 1
+            try:
                 span.add_event(
                     "snapshot.publication_slot.acquired",
                     {
@@ -242,6 +251,10 @@ class RegistrySnapshotPublisher:
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
                 )
+            finally:
+                with self._metrics_lock:
+                    self._publication_active -= 1
+                self._publication_slots.release()
 
     def metrics(self) -> dict[str, int]:
         with self._metrics_lock:
@@ -253,6 +266,9 @@ class RegistrySnapshotPublisher:
                 "snapshot_compaction_output_bytes": self._compaction_output_bytes,
                 "snapshot_compact_after_layers": self.compact_after_layers,
                 "snapshot_compact_after_bytes": self.compact_after_bytes,
+                "snapshot_publication_limit": self._publication_limit,
+                "snapshot_publication_active": self._publication_active,
+                "snapshot_publication_waiting": self._publication_waiting,
             }
 
     def verify(

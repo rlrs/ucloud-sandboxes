@@ -93,6 +93,12 @@ node bundles, install the exact `deployment.json`, create credentials, install
 systemd units, restart services, register the gateway SSH key, and open the
 configured web ports.
 
+For rolling upgrades, update and verify the gateway before admitting workers
+from the new bundle. Gateway decoders accept the previous worker heartbeat
+shape, while an older gateway deliberately rejects unknown protocol fields.
+After the gateway reports the new package version, replace or restart workers;
+do not roll back only the gateway while newer workers remain admitted.
+
 The deployment creates independent secrets for:
 
 - least-privileged public SDK access;

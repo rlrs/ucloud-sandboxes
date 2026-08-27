@@ -13,7 +13,7 @@ from .models import (
     parse_iso_datetime,
     utc_now,
 )
-from .routing import ProgramRequestState, SandboxRoute
+from .routing import ProgramRequestState, SandboxRoute, is_portable_parked_route
 
 
 _STATE_PRIORITY = {
@@ -113,6 +113,8 @@ def plan_shadow_wake_queue(
             local = (
                 candidate.node_id == route.node_id and candidate.job_id == route.job_id
             )
+            if not local and not is_portable_parked_route(route):
+                continue
             required = ResourceQuantity(
                 vcpu=route.resources.vcpu,
                 memory_mb=route.resources.memory_mb,
@@ -138,7 +140,11 @@ def plan_shadow_wake_queue(
                     "position": position,
                     "request_id": request.request_id,
                     "sandbox_id": request.sandbox_id,
-                    "reason": "no_hard_fit",
+                    "reason": (
+                        "route_not_portable"
+                        if not is_portable_parked_route(route)
+                        else "no_hard_fit"
+                    ),
                 }
             )
             continue
@@ -229,6 +235,7 @@ def build_program_scale_signals(
         elif (
             request.state == "ready_to_wake"
             and sandbox_id not in pending_wake_sandbox_ids
+            and is_portable_parked_route(route)
         ):
             ready.append(request)
 

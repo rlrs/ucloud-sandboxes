@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.8 - 2026-08-27
+
+- Made completed background snapshot publication visible through a validated,
+  cached worker inventory descriptor without rebuilding it on every heartbeat.
+- Acquired permanent snapshot references before granting portable route
+  authority, made Registry reference reconciliation exact-key and idempotent,
+  and deleted exact routes before releasing their references.
+- Restored bounded create-pressure headroom while keeping durable actionable
+  demand able to scale toward the configured fleet maximum; publication-only
+  waits no longer create ineffective VM demand.
+- Required portable authority for remote program-aware wakes, retained local
+  wakes for local-only parks, and exposed publication saturation as diagnostics
+  without merging it into actionable storage pressure.
+- Kept snapshot publication concurrency below the storage operation ceiling so
+  wake, mount, release, and delete work cannot be starved by uploads.
+
 ## 0.5.7 - 2026-08-27
 
 - Fixed deletion of migrations whose source prepare response was lost: the

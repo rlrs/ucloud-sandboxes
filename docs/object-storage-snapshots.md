@@ -148,6 +148,19 @@ This deliberately retains objects for between seven and roughly eight days
 after last route use with a daily sweep. Bucket lifecycle is still responsible
 for abandoned multipart uploads because they are not ordinary listed objects.
 
+Each worker admits up to two concurrent snapshot publications by default. This
+queue is deliberately narrower than the storage daemon's global operation
+limit, leaving slots available for wake, mount, release, and delete work. Park
+still returns after the local checkpoint when background
+publication is requested. A wake arriving before publication completes gets a
+retryable `snapshot_publication_pending` response with `Retry-After: 1` instead
+of holding an HTTP request behind a long remote upload. The SDK retries only
+this exact pre-dispatch fence for non-idempotent operations. Once publication
+is complete, the worker caches the descriptor and reports it in heartbeats; the
+gateway validates it and acquires the Registry reference before granting
+portable route authority. Heartbeats do not rebuild descriptors or scan the
+Registry lease database.
+
 ## Performance qualification
 
 Hetzner describes Object Storage as shared infrastructure, recommends

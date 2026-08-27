@@ -225,6 +225,9 @@ class StorageNativeRegistryTests(unittest.TestCase):
                     "snapshot_compaction_output_bytes": len(b"flattened-chain"),
                     "snapshot_compact_after_layers": 2,
                     "snapshot_compact_after_bytes": 1 << 30,
+                    "snapshot_publication_limit": 2,
+                    "snapshot_publication_active": 0,
+                    "snapshot_publication_waiting": 0,
                 },
             )
 

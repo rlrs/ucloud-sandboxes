@@ -743,6 +743,140 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(stored.create_operation_id, "create-1")
         self.assertEqual(stored.state, "running")
 
+    def test_reconcile_inventory_promotes_completed_background_publication(
+        self,
+    ) -> None:
+        from tests.test_control_plane import _portable_snapshot
+
+        snapshot = _portable_snapshot(
+            "sandbox-1",
+            create_operation_id="create-1",
+        )
+        with routing_store() as store:
+            existing = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                    generation=1,
+                    create_operation_id="create-1",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    spec_hash=snapshot.manifest.spec_sha256,
+                )
+            )
+            removed, stale_snapshots = store.reconcile_sandboxes_for_node(
+                existing.node_url,
+                [
+                    SandboxInventoryEntry(
+                        sandbox_id=existing.sandbox_id,
+                        generation=existing.generation,
+                        operation_id=existing.create_operation_id,
+                        spec_hash=existing.spec_hash,
+                        state="parked",
+                        storage_schema="storage-native-v1",
+                        snapshot_manifest_digest=(
+                            snapshot.publication.manifest_digest
+                        ),
+                        snapshot_repository=snapshot.publication.repository,
+                        snapshot_tag=snapshot.publication.tag,
+                        storage_snapshot=snapshot.to_dict(),
+                    )
+                ],
+                node_id=existing.node_id,
+                job_id=existing.job_id,
+                reported_sandbox_ids={existing.sandbox_id},
+                observed_at=utc_now().isoformat(),
+            )
+            published = store.get_sandbox_readonly(existing.sandbox_id)
+
+            assert published is not None
+            removed_after_wake, stale_after_wake = store.reconcile_sandboxes_for_node(
+                existing.node_url,
+                [
+                    SandboxInventoryEntry(
+                        sandbox_id=existing.sandbox_id,
+                        generation=existing.generation,
+                        operation_id=existing.create_operation_id,
+                        spec_hash=existing.spec_hash,
+                        state="running",
+                    )
+                ],
+                node_id=existing.node_id,
+                job_id=existing.job_id,
+                reported_sandbox_ids={existing.sandbox_id},
+                observed_at=utc_now().isoformat(),
+            )
+
+        self.assertEqual(removed, [])
+        self.assertEqual(stale_snapshots, [])
+        self.assertEqual(published.snapshot_tag, snapshot.publication.tag)
+        self.assertEqual(published.storage_snapshot, snapshot.to_dict())
+        self.assertEqual(removed_after_wake, [])
+        self.assertEqual(stale_after_wake, [published])
+
+    def test_reconcile_inventory_rejects_snapshot_for_another_incarnation(
+        self,
+    ) -> None:
+        from tests.test_control_plane import _portable_snapshot
+
+        owned = _portable_snapshot(
+            "sandbox-1",
+            create_operation_id="create-1",
+        )
+        foreign = _portable_snapshot(
+            "sandbox-1",
+            generation=2,
+            create_operation_id="create-2",
+        )
+        with routing_store() as store:
+            existing = store.upsert_sandbox(
+                sandbox_route(
+                    sandbox_id="sandbox-1",
+                    node_id="node-1",
+                    job_id="job-1",
+                    node_url="http://node-1:8090",
+                    state="parked",
+                    generation=1,
+                    create_operation_id="create-1",
+                    resources=owned.manifest.spec.requested_resources(),
+                    spec=owned.manifest.spec.to_dict(),
+                    spec_hash=owned.manifest.spec_sha256,
+                )
+            )
+
+            store.reconcile_sandboxes_for_node(
+                existing.node_url,
+                [
+                    SandboxInventoryEntry(
+                        sandbox_id=existing.sandbox_id,
+                        generation=existing.generation,
+                        operation_id=existing.create_operation_id,
+                        spec_hash=existing.spec_hash,
+                        state="parked",
+                        storage_schema="storage-native-v1",
+                        snapshot_manifest_digest=(
+                            foreign.publication.manifest_digest
+                        ),
+                        snapshot_repository=foreign.publication.repository,
+                        snapshot_tag=foreign.publication.tag,
+                        storage_snapshot=foreign.to_dict(),
+                    )
+                ],
+                node_id=existing.node_id,
+                job_id=existing.job_id,
+                reported_sandbox_ids={existing.sandbox_id},
+                observed_at=utc_now().isoformat(),
+            )
+            stored = store.get_sandbox_readonly(existing.sandbox_id)
+
+        assert stored is not None
+        self.assertEqual(stored.state, "parked")
+        self.assertEqual(stored.storage_snapshot, {})
+        self.assertFalse(is_portable_parked_route(stored))
+
     def test_transient_inventory_cannot_regress_stable_lifecycle_state(self) -> None:
         with routing_store() as store:
             current = store.upsert_sandbox(
@@ -1414,13 +1548,21 @@ class RoutingStoreTests(unittest.TestCase):
                 failed,
                 failure_reason="registry_lease_unavailable",
             )
+            store.upsert_pending(
+                "publication-pending",
+                failed,
+                failure_reason="wake_snapshot_publication_pending",
+            )
 
             demand = store.pending_demand()
 
         self.assertEqual(demand.pending_resources, capacity)
         self.assertEqual(demand.pending_count, 1)
-        self.assertEqual(demand.suppressed_pending_resources, failed + failed)
-        self.assertEqual(demand.suppressed_pending_count, 2)
+        self.assertEqual(
+            demand.suppressed_pending_resources,
+            failed + failed + failed,
+        )
+        self.assertEqual(demand.suppressed_pending_count, 3)
         self.assertEqual(len(demand.placement_requests), 1)
 
     def test_snapshot_consume_does_not_delete_refreshed_signals(self) -> None:

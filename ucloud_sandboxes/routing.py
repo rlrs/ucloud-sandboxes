@@ -197,6 +197,50 @@ def is_portable_parked_route(route: SandboxRoute) -> bool:
     )
 
 
+def route_with_inventory_snapshot(
+    route: SandboxRoute,
+    item: SandboxInventoryEntry,
+) -> SandboxRoute:
+    """Validate and attach a worker's complete portable snapshot descriptor."""
+
+    if (
+        item.sandbox_id != route.sandbox_id
+        or item.generation != route.generation
+        or item.operation_id != route.create_operation_id
+        or item.spec_hash != route.spec_hash
+    ):
+        raise ValueError("inventory snapshot does not own its sandbox route")
+    if item.state.strip().lower() != "parked":
+        raise ValueError("only a parked inventory entry can publish a snapshot")
+    if item.storage_schema != STORAGE_NATIVE_CAPABILITY:
+        raise ValueError("inventory snapshot has an unknown storage schema")
+
+    # Keep the heavy descriptor parser out of routing module import startup and
+    # avoid a module cycle through the sandbox/storage lifecycle modules.
+    from .storage_native_migration import StorageNativeMigration
+
+    snapshot = StorageNativeMigration.from_dict(item.storage_snapshot)
+    if (
+        snapshot.manifest.sandbox_id != route.sandbox_id
+        or snapshot.manifest.sandbox_generation != route.generation
+        or snapshot.manifest.create_operation_id != route.create_operation_id
+        or snapshot.manifest.spec_sha256 != route.spec_hash
+        or snapshot.publication.manifest_digest
+        != item.snapshot_manifest_digest
+        or snapshot.publication.repository != item.snapshot_repository
+        or snapshot.publication.tag != item.snapshot_tag
+    ):
+        raise ValueError("inventory snapshot descriptor does not match its route")
+    return replace(
+        route,
+        storage_schema=item.storage_schema,
+        snapshot_manifest_digest=item.snapshot_manifest_digest,
+        snapshot_repository=item.snapshot_repository,
+        snapshot_tag=item.snapshot_tag,
+        storage_snapshot=snapshot.to_dict(),
+    )
+
+
 def is_worker_detachable_parked_route(route: SandboxRoute) -> bool:
     """Return whether drain can publish and remove this worker incarnation."""
 
@@ -378,6 +422,7 @@ class PendingSandboxDemand(_ExpiringDemand):
         return not (
             reason.startswith("image_pull_http_")
             or reason == "registry_lease_unavailable"
+            or reason == "wake_snapshot_publication_pending"
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1328,7 +1373,9 @@ class RoutingStore:
         """Bound stale active journals that no longer have a canonical route."""
 
         if max_count < 0:
-            raise ValueError("orphaned migration reconciliation limit cannot be negative")
+            raise ValueError(
+                "orphaned migration reconciliation limit cannot be negative"
+            )
         if max_count == 0:
             return []
         now = utc_now().isoformat()
@@ -1628,7 +1675,13 @@ class RoutingStore:
         node_epoch: str = "",
         activity_epoch: int = 0,
         inventory_complete: bool = True,
-    ) -> None:
+    ) -> tuple[list[SandboxRoute], list[SandboxRoute]]:
+        """Reconcile inventory and return removed routes and stale snapshots.
+
+        The caller owns external Registry leases, so SQLite reconciliation
+        reports the exact durable references that became obsolete instead of
+        silently leaking them.
+        """
         node_url = node_url.strip()
         node_id = node_id.strip()
         job_id = job_id.strip()
@@ -1645,6 +1698,8 @@ class RoutingStore:
         observed_at_dt = parse_iso_datetime(observed_at)
         with self._lock:
             removed_sandbox_ids: list[str] = []
+            removed_routes: list[SandboxRoute] = []
+            stale_snapshot_routes: list[SandboxRoute] = []
             with self._transaction() as conn:
                 for item in observed:
                     existing = self._get_sandbox_unlocked(conn, item.sandbox_id)
@@ -1661,6 +1716,19 @@ class RoutingStore:
                     if observed_state in _SANDBOX_TRANSITIONAL_INVENTORY_STATES:
                         continue
                     parked = observed_state == "parked"
+                    published_snapshot = bool(parked and item.storage_snapshot)
+                    validated_snapshot: SandboxRoute | None = None
+                    if published_snapshot:
+                        try:
+                            validated_snapshot = route_with_inventory_snapshot(
+                                existing,
+                                item,
+                            )
+                        except ValueError:
+                            # Presence and stable lifecycle state remain useful,
+                            # but malformed publication metadata can never grant
+                            # portable authority.
+                            published_snapshot = False
                     candidate = replace(
                         existing,
                         node_id=node_id,
@@ -1679,16 +1747,30 @@ class RoutingStore:
                         # Activity counters are scoped to a node epoch.  Do not
                         # carry the old epoch's high water into a proven restart.
                         activity_epoch=max(0, activity_epoch),
-                        storage_schema=existing.storage_schema if parked else "",
+                        storage_schema=(
+                            validated_snapshot.storage_schema
+                            if published_snapshot
+                            else (existing.storage_schema if parked else "")
+                        ),
                         snapshot_manifest_digest=(
-                            existing.snapshot_manifest_digest if parked else ""
+                            validated_snapshot.snapshot_manifest_digest
+                            if published_snapshot
+                            else (existing.snapshot_manifest_digest if parked else "")
                         ),
                         snapshot_repository=(
-                            existing.snapshot_repository if parked else ""
+                            validated_snapshot.snapshot_repository
+                            if published_snapshot
+                            else (existing.snapshot_repository if parked else "")
                         ),
-                        snapshot_tag=existing.snapshot_tag if parked else "",
+                        snapshot_tag=(
+                            validated_snapshot.snapshot_tag
+                            if published_snapshot
+                            else (existing.snapshot_tag if parked else "")
+                        ),
                         storage_snapshot=(
-                            dict(existing.storage_snapshot) if parked else {}
+                            dict(validated_snapshot.storage_snapshot)
+                            if published_snapshot
+                            else (dict(existing.storage_snapshot) if parked else {})
                         ),
                         updated_at=observed_at,
                     )
@@ -1696,6 +1778,13 @@ class RoutingStore:
                         continue
                     if not _route_update_is_current(existing, candidate):
                         continue
+                    if existing.snapshot_manifest_digest and (
+                        existing.snapshot_manifest_digest
+                        != candidate.snapshot_manifest_digest
+                        or existing.snapshot_repository != candidate.snapshot_repository
+                        or existing.snapshot_tag != candidate.snapshot_tag
+                    ):
+                        stale_snapshot_routes.append(existing)
                     self._write_sandbox(conn, candidate)
                     conn.execute(
                         "DELETE FROM pending WHERE sandbox_id = ?",
@@ -1750,9 +1839,11 @@ class RoutingStore:
                         continue
                     if not self._delete_sandbox_unlocked(conn, route):
                         continue
+                    removed_routes.append(route)
                     removed_sandbox_ids.append(sandbox_id)
             for sandbox_id in removed_sandbox_ids:
                 self._drop_cached_exec_routes_for_sandbox_unlocked(sandbox_id)
+            return removed_routes, stale_snapshot_routes
 
     def delete_sandbox(self, sandbox_id: str) -> None:
         with self._lock:

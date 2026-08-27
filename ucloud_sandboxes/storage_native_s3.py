@@ -345,6 +345,9 @@ class S3SnapshotPublisher:
             max_concurrent_publications
         )
         self._metrics_lock = threading.Lock()
+        self._publication_limit = max_concurrent_publications
+        self._publication_active = 0
+        self._publication_waiting = 0
         self._publications = 0
         self._compactions = 0
         self._uploaded_bytes = 0
@@ -376,7 +379,13 @@ class S3SnapshotPublisher:
             },
         ) as span:
             waiting_started = time.monotonic()
-            with self._publication_slots:
+            with self._metrics_lock:
+                self._publication_waiting += 1
+            self._publication_slots.acquire()
+            with self._metrics_lock:
+                self._publication_waiting -= 1
+                self._publication_active += 1
+            try:
                 span.add_event(
                     "snapshot.publication_slot.acquired",
                     {
@@ -394,6 +403,10 @@ class S3SnapshotPublisher:
                     existing_repo_blob_url=existing_repo_blob_url,
                     global_config_path=global_config_path,
                 )
+            finally:
+                with self._metrics_lock:
+                    self._publication_active -= 1
+                self._publication_slots.release()
             span.set_attributes(
                 {
                     "snapshot.compacted": compacted,
@@ -500,6 +513,9 @@ class S3SnapshotPublisher:
                 "snapshot_upload_part_concurrency": self.upload_part_concurrency,
                 "snapshot_upload_part_bytes": self.upload_chunk_bytes,
                 "snapshot_verification_concurrency": self.verification_concurrency,
+                "snapshot_publication_limit": self._publication_limit,
+                "snapshot_publication_active": self._publication_active,
+                "snapshot_publication_waiting": self._publication_waiting,
             }
 
     def _publish_locked(

@@ -1261,9 +1261,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
         self.assertTrue(control_plane._node_can_fit(heartbeat, requested, []))
-        self.assertFalse(
-            control_plane._node_can_fit(heartbeat, requested, [inflight])
-        )
+        self.assertFalse(control_plane._node_can_fit(heartbeat, requested, [inflight]))
         self.assertFalse(
             control_plane._node_can_fit(
                 replace(
@@ -1291,6 +1289,11 @@ class ControlPlaneTests(unittest.TestCase):
                     resources=resources,
                     spec={"id": "parked", "image": "cold-image"},
                     state="parked",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest="sha256:" + "a" * 64,
+                    snapshot_repository="snapshots",
+                    snapshot_tag="parked-1",
+                    storage_snapshot={"published": True},
                 )
             )
             routing.upsert_sandbox(
@@ -1409,6 +1412,84 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertLess(elapsed, control_plane.SANDBOX_PLACEMENT_LOCK_WAIT_SECONDS)
         self.assertEqual(len(migrations), 1)
         self.assertEqual(migrations[0].destination_node_id, "destination-node")
+
+    def test_unpublished_park_retries_without_starting_blocking_migration(
+        self,
+    ) -> None:
+        with _temporary_root() as root:
+            routing = RoutingStore(root / "routes.sqlite")
+            resources = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
+            parked = routing.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="parked",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=resources,
+                    spec={"id": "parked", "image": "cold-image"},
+                    state="parked",
+                )
+            )
+            heartbeats = ControlStateStore(root / "control-state.sqlite")
+            for heartbeat in (
+                build_heartbeat(
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "storage-native-v1",
+                        "sandbox-migrate-storage-native-v1",
+                    ),
+                    total_resources=ResourceQuantity(
+                        vcpu=4, memory_mb=8192, disk_mb=100_000
+                    ),
+                    runtime_metrics=NodeRuntimeMetrics(
+                        collected_at=utc_now(),
+                        cpu_percent=95.0,
+                        cpu_count=4,
+                        memory_total_mb=8192,
+                        memory_available_mb=4096,
+                        storage_hard_capacity_mb=100_000,
+                    ),
+                ),
+                build_heartbeat(
+                    node_id="destination-node",
+                    job_id="destination-job",
+                    node_url="http://destination:8090",
+                    capabilities=(
+                        "sandbox",
+                        "disk-quota",
+                        "storage-native-v1",
+                        "sandbox-migrate-storage-native-v1",
+                    ),
+                    total_resources=ResourceQuantity(
+                        vcpu=4, memory_mb=8192, disk_mb=100_000
+                    ),
+                ),
+            ):
+                heartbeats.upsert_heartbeat(heartbeat)
+            writes: list[tuple[dict[str, object], int, dict[str, str]]] = []
+            handler = object.__new__(control_plane.ControlPlaneHandler)
+            handler.routing_store = routing
+            handler.store = heartbeats
+            handler.heartbeat_ttl_seconds = 120
+            handler._write_json = lambda payload, status=200, headers=None: (
+                writes.append((payload, status, headers or {}))
+            )
+            handler._prepare_migration_destination_image = lambda *_args: (
+                _ for _ in ()
+            ).throw(AssertionError("unpublished wake must not begin migration"))
+
+            selected = handler._ensure_parked_sandbox_wake_placement(parked)
+            migrations = routing.sandbox_migrations(active_only=True)
+
+        self.assertIsNone(selected)
+        self.assertEqual(migrations, [])
+        self.assertEqual(writes[0][1], 503)
+        self.assertEqual(writes[0][0]["error_code"], "snapshot_publication_pending")
+        self.assertEqual(writes[0][2]["Retry-After"], "1")
 
     def test_gateway_hides_stale_private_registry_image_records(self) -> None:
         class MissingManifestRegistryHandler(BaseHTTPRequestHandler):
@@ -2418,6 +2499,122 @@ class ControlPlaneTests(unittest.TestCase):
             state.pending["drain-race"].failure_reason,
             "node_admission_closed",
         )
+
+    def test_closed_node_admission_reselects_another_node_in_same_request(
+        self,
+    ) -> None:
+        class ClosedNode(BaseHTTPRequestHandler):
+            creates = 0
+
+            def do_POST(self) -> None:
+                type(self).creates += 1
+                self._write_json(
+                    {
+                        "error": "direct node admission is closed",
+                        "error_code": "node_admission_closed",
+                        "retryable": True,
+                    },
+                    status=503,
+                )
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object], *, status: int) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        class ReadyNode(BaseHTTPRequestHandler):
+            creates = 0
+
+            def do_POST(self) -> None:
+                type(self).creates += 1
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = json.loads(self.rfile.read(length).decode("utf-8"))
+                operation = raw.pop("_ucloud_operation")
+                self._write_json(
+                    {
+                        "sandbox": {
+                            "spec": raw,
+                            "state": "running",
+                            "generation": operation["generation"],
+                            "operation_id": operation["operation_id"],
+                            "spec_hash": operation["spec_hash"],
+                        }
+                    },
+                    status=201,
+                )
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object], *, status: int) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with _temporary_root() as raw_path:
+            route_file = raw_path / "routes.sqlite"
+            closed = ThreadingHTTPServer(("127.0.0.1", 0), ClosedNode)
+            ready = ThreadingHTTPServer(("127.0.0.1", 0), ReadyNode)
+            with (
+                _running_server(closed) as closed_url,
+                _running_server(ready) as ready_url,
+            ):
+                gateway = _gateway_server(raw_path, routing_file=route_file)
+                with _running_server(gateway) as base:
+                    for node_id, job_id, node_url in (
+                        ("node-a", "job-a", closed_url),
+                        ("node-b", "job-b", ready_url),
+                    ):
+                        self.assertEqual(
+                            post_heartbeat(
+                                f"{base}/v1/nodes/heartbeat",
+                                build_heartbeat(
+                                    job_id=job_id,
+                                    node_id=node_id,
+                                    node_url=node_url,
+                                    capabilities=(
+                                        "sandbox",
+                                        "image-cache",
+                                        "disk-quota",
+                                    ),
+                                    cached_images=("busybox",),
+                                    total_resources=ResourceQuantity(
+                                        vcpu=4,
+                                        memory_mb=4096,
+                                        disk_mb=8192,
+                                    ),
+                                ),
+                            ).status,
+                            200,
+                        )
+                    created = self._json_request(
+                        f"{base}/v1/sandboxes",
+                        method="POST",
+                        payload={
+                            "id": "reselected",
+                            "image": "busybox",
+                            "cpus": 1,
+                            "memory_mb": 512,
+                            "disk_mb": 1024,
+                        },
+                    )
+                    route = RoutingStore(route_file).get_sandbox("reselected")
+
+        assert route is not None
+        self.assertEqual(created["sandbox"]["state"], "running")
+        self.assertEqual(route.job_id, "job-b")
+        self.assertEqual(ClosedNode.creates, 1)
+        self.assertEqual(ReadyNode.creates, 1)
+        self.assertIsNone(RoutingStore(route_file).get_pending("reselected"))
 
     def test_registry_lease_failure_blocks_sandbox_create_and_image_pull_dispatch(
         self,

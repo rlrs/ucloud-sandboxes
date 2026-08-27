@@ -121,6 +121,11 @@ class SandboxInventoryEntry:
     spec_hash: str
     state: str = ""
     resources: ResourceQuantity = ResourceQuantity()
+    storage_schema: str = ""
+    snapshot_manifest_digest: str = ""
+    snapshot_repository: str = ""
+    snapshot_tag: str = ""
+    storage_snapshot: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.sandbox_id:
@@ -138,6 +143,18 @@ class SandboxInventoryEntry:
             raise ValueError("sandbox inventory state is required")
         if not self.resources.is_valid:
             raise ValueError("sandbox inventory resources are invalid")
+        snapshot_values = (
+            self.storage_schema,
+            self.snapshot_manifest_digest,
+            self.snapshot_repository,
+            self.snapshot_tag,
+        )
+        if any(snapshot_values) != all(snapshot_values):
+            raise ValueError("sandbox inventory snapshot identity is incomplete")
+        if self.storage_snapshot and not all(snapshot_values):
+            raise ValueError("sandbox inventory snapshot descriptor has no identity")
+        if all(snapshot_values) and not self.storage_snapshot:
+            raise ValueError("sandbox inventory snapshot descriptor is required")
 
     @classmethod
     def from_dict(cls, raw: object) -> "SandboxInventoryEntry | None":
@@ -146,14 +163,25 @@ class SandboxInventoryEntry:
         sandbox_id = str(raw.get("sandbox_id") or "").strip()
         if not sandbox_id:
             return None
-        if set(raw) != {
+        required_keys = {
             "sandbox_id",
             "generation",
             "operation_id",
             "spec_hash",
             "state",
             "resources",
-        }:
+        }
+        snapshot_keys = {
+            "storage_schema",
+            "snapshot_manifest_digest",
+            "snapshot_repository",
+            "snapshot_tag",
+            "storage_snapshot",
+        }
+        supplied_snapshot_keys = set(raw) & snapshot_keys
+        if not required_keys.issubset(raw) or set(raw) - required_keys - snapshot_keys:
+            return None
+        if supplied_snapshot_keys and supplied_snapshot_keys != snapshot_keys:
             return None
         generation_raw = raw.get("generation")
         if isinstance(generation_raw, bool):
@@ -180,6 +208,29 @@ class SandboxInventoryEntry:
             resources = ResourceQuantity.from_dict(raw["resources"])
         except ValueError:
             return None
+        storage_schema = raw.get("storage_schema", "")
+        snapshot_manifest_digest = raw.get("snapshot_manifest_digest", "")
+        snapshot_repository = raw.get("snapshot_repository", "")
+        snapshot_tag = raw.get("snapshot_tag", "")
+        storage_snapshot = raw.get("storage_snapshot", {})
+        if (
+            not isinstance(storage_schema, str)
+            or not isinstance(snapshot_manifest_digest, str)
+            or not isinstance(snapshot_repository, str)
+            or not isinstance(snapshot_tag, str)
+            or not isinstance(storage_snapshot, dict)
+        ):
+            return None
+        snapshot_values = (
+            storage_schema,
+            snapshot_manifest_digest,
+            snapshot_repository,
+            snapshot_tag,
+        )
+        if any(snapshot_values) != all(snapshot_values):
+            return None
+        if bool(storage_snapshot) != all(snapshot_values):
+            return None
         return cls(
             sandbox_id=sandbox_id,
             generation=generation,
@@ -187,10 +238,15 @@ class SandboxInventoryEntry:
             spec_hash=spec_hash,
             state=state,
             resources=resources,
+            storage_schema=storage_schema,
+            snapshot_manifest_digest=snapshot_manifest_digest,
+            snapshot_repository=snapshot_repository,
+            snapshot_tag=snapshot_tag,
+            storage_snapshot=dict(storage_snapshot),
         )
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "sandbox_id": self.sandbox_id,
             "generation": self.generation,
             "operation_id": self.operation_id,
@@ -198,6 +254,17 @@ class SandboxInventoryEntry:
             "state": self.state,
             "resources": self.resources.to_dict(),
         }
+        if self.storage_snapshot:
+            payload.update(
+                {
+                    "storage_schema": self.storage_schema,
+                    "snapshot_manifest_digest": self.snapshot_manifest_digest,
+                    "snapshot_repository": self.snapshot_repository,
+                    "snapshot_tag": self.snapshot_tag,
+                    "storage_snapshot": dict(self.storage_snapshot),
+                }
+            )
+        return payload
 
 
 @dataclass(frozen=True)
@@ -224,6 +291,9 @@ class NodeRuntimeMetrics:
     storage_active_operations: int = 0
     storage_waiting_operations: int = 0
     storage_max_concurrent_operations: int = 0
+    storage_publication_active: int = 0
+    storage_publication_waiting: int = 0
+    storage_publication_limit: int = 0
     storage_published_volumes: int = 0
     storage_error_volumes: int = 0
     storage_device_pool_enabled: bool = False
@@ -250,10 +320,13 @@ class NodeRuntimeMetrics:
         field_names = {item.name for item in fields(cls)}
         if not isinstance(raw, dict):
             return None
-        # A gateway may be upgraded before all workers. The new device-limit
-        # signal is optional only for that rolling-upgrade boundary.
+        # A gateway may be upgraded before all workers. Newly introduced
+        # storage signals remain optional at that rolling-upgrade boundary.
         raw = dict(raw)
         raw.setdefault("storage_ublk_max_devices", 0)
+        raw.setdefault("storage_publication_active", 0)
+        raw.setdefault("storage_publication_waiting", 0)
+        raw.setdefault("storage_publication_limit", 0)
         if set(raw) != field_names:
             return None
         collected_at = parse_iso_datetime(raw["collected_at"])

@@ -117,15 +117,7 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 self.physical_disk_path
             )
             inventory = tuple(
-                SandboxInventoryEntry(
-                    sandbox_id=record.spec.id,
-                    generation=record.generation,
-                    operation_id=record.operation_id,
-                    spec_hash=record.spec_hash or sandbox_spec_fingerprint(record.spec),
-                    state=record.state,
-                    resources=record.spec.requested_resources(),
-                )
-                for record in activity.records
+                self._sandbox_inventory_entry(record) for record in activity.records
             )
             self._write_json(
                 {
@@ -698,6 +690,31 @@ class NodeAgentHandler(BuildContextHttpHandler):
         )
         return payload
 
+    def _sandbox_inventory_entry(self, record: Any) -> SandboxInventoryEntry:
+        """Include completed background publication metadata in heartbeats."""
+
+        snapshot = None
+        if str(record.state).lower() == "parked":
+            snapshot = self.manager.service.cached_storage_native_snapshot(
+                record.spec.id,
+                record.generation,
+            )
+        return SandboxInventoryEntry(
+            sandbox_id=record.spec.id,
+            generation=record.generation,
+            operation_id=record.operation_id,
+            spec_hash=record.spec_hash or sandbox_spec_fingerprint(record.spec),
+            state=record.state,
+            resources=record.spec.requested_resources(),
+            storage_schema=(STORAGE_NATIVE_MIGRATION_SCHEMA if snapshot else ""),
+            snapshot_manifest_digest=(
+                snapshot.publication.manifest_digest if snapshot else ""
+            ),
+            snapshot_repository=(snapshot.publication.repository if snapshot else ""),
+            snapshot_tag=(snapshot.publication.tag if snapshot else ""),
+            storage_snapshot=(snapshot.to_dict() if snapshot else {}),
+        )
+
     def _wake_sandbox(self, path: str) -> None:
         sandbox_id = _sandbox_id_from_path(path, suffix="/wake")
         try:
@@ -716,6 +733,22 @@ class NodeAgentHandler(BuildContextHttpHandler):
             generation = generation_raw
             if generation <= 0:
                 raise ValueError("generation must be positive")
+            service = self._direct_service()
+            if service.storage_native_publication_pending(sandbox_id):
+                self._write_json(
+                    {
+                        "error": "parked snapshot publication is still in progress",
+                        "error_code": "snapshot_publication_pending",
+                        "lifecycle_state": "parked",
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={
+                        "Retry-After": "1",
+                        "X-UCloud-Sandbox-Retryable": "true",
+                    },
+                )
+                return
             record = self.manager.wake(
                 sandbox_id,
                 generation=generation,
@@ -1555,6 +1588,9 @@ def build_direct_node_agent_server(
             storage_max_concurrent_operations=int(
                 raw.get("max_concurrent_operations", 0)
             ),
+            storage_publication_active=int(raw.get("snapshot_publication_active", 0)),
+            storage_publication_waiting=int(raw.get("snapshot_publication_waiting", 0)),
+            storage_publication_limit=int(raw.get("snapshot_publication_limit", 0)),
             storage_published_volumes=int(raw.get("published_volumes", 0)),
             storage_error_volumes=int(raw.get("error_volumes", 0)),
             storage_device_pool_enabled=bool(raw.get("device_pool_enabled", False)),

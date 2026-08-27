@@ -28,6 +28,53 @@ def sandbox_route(**values: object) -> SandboxRoute:
 
 
 class ProgramSchedulerTests(unittest.TestCase):
+    def test_nonportable_park_can_only_plan_on_its_current_worker(self) -> None:
+        route = sandbox_route(
+            sandbox_id="sandbox-1",
+            node_id="node-1",
+            job_id="job-1",
+            node_url="http://node-1:8090",
+            state="parked",
+            resources=ResourceQuantity(vcpu=2, memory_mb=2048, disk_mb=8000),
+        )
+        request = ProgramRequestState(
+            request_id="request-1",
+            rollout_id="rollout-1",
+            sandbox_id=route.sandbox_id,
+            sandbox_generation=route.generation,
+            state="ready_to_wake",
+            resources=route.resources,
+        )
+        remote_only = [
+            WakeNodeCandidate(
+                node_id="node-2",
+                job_id="job-2",
+                available=ResourceQuantity(
+                    vcpu=8,
+                    memory_mb=16384,
+                    disk_mb=100000,
+                ),
+                total=ResourceQuantity(
+                    vcpu=8,
+                    memory_mb=16384,
+                    disk_mb=100000,
+                ),
+            )
+        ]
+
+        plan = plan_shadow_wake_queue([request], [route], remote_only)
+        signals = build_program_scale_signals(
+            [request],
+            [route],
+            ScalePolicy(program_aware_autoscaling_enabled=True),
+        )
+
+        self.assertEqual(plan["placed"], 0)
+        self.assertEqual(plan["unplaced"][0]["reason"], "route_not_portable")
+        self.assertEqual(signals.ready_to_wake_requests, 1)
+        self.assertEqual(signals.ready_to_wake_sandboxes, 0)
+        self.assertEqual(signals.effective_resources, ResourceQuantity())
+
     def test_shadow_wake_queue_ages_first_and_prefers_local_hard_fit(self) -> None:
         now = utc_now()
         routes = [
@@ -124,7 +171,7 @@ class ProgramSchedulerTests(unittest.TestCase):
         self.assertEqual(placements[0]["node_id"], "node-1")
         self.assertTrue(placements[0]["local"])
         self.assertEqual(plan["unplaced_count"], 1)
-        self.assertEqual(plan["unplaced"][0]["reason"], "no_hard_fit")
+        self.assertEqual(plan["unplaced"][0]["reason"], "route_not_portable")
 
     @given(
         states=st.lists(
@@ -148,6 +195,11 @@ class ProgramSchedulerTests(unittest.TestCase):
             generation=1,
             state="parked",
             resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
+            storage_schema="storage-native-v1",
+            snapshot_manifest_digest="sha256:" + "d" * 64,
+            snapshot_repository="sandboxes/snapshots",
+            snapshot_tag="sandbox-1-g1",
+            storage_snapshot={"published": True},
         )
         requests = [
             ProgramRequestState(

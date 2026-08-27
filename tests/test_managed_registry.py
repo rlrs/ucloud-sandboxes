@@ -213,6 +213,33 @@ class ManagedRegistryTests(unittest.TestCase):
                 {("repo/a", LEASE_DIGEST)},
             )
 
+    def test_reobserving_registry_reference_is_write_free(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            store = RegistryUsageStore(Path(raw_dir) / "usage.json")
+            started = datetime(2026, 7, 9, 10, 0, tzinfo=timezone.utc)
+            first = store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                digest=LEASE_DIGEST,
+                now=started,
+            )
+            generation = store.snapshot(now=started).generation
+
+            second = store.acquire_reference(
+                "repo/a",
+                "v1",
+                "sandbox:one",
+                digest=LEASE_DIGEST,
+                now=started + timedelta(days=1),
+            )
+
+            self.assertEqual(second, first)
+            self.assertEqual(
+                store.snapshot(now=started + timedelta(days=1)).generation,
+                generation,
+            )
+
     def test_registry_lease_digest_is_required_and_immutable(self) -> None:
         with TemporaryDirectory() as raw_dir:
             store = RegistryUsageStore(Path(raw_dir) / "usage.json")

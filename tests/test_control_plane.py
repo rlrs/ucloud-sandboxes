@@ -166,6 +166,7 @@ def _portable_snapshot(
             "parkable": True,
             "memory_mb": 1024,
             "disk_mb": 2048,
+            "network": "none",
         }
     )
     runtime = HibernationRuntimeFingerprint(
@@ -355,6 +356,23 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_create_pipeline_target_is_bound_from_configuration(self) -> None:
+        with _temporary_root() as root:
+            server = _gateway_server(
+                root,
+                create_target_concurrency_per_node=3,
+            )
+            try:
+                self.assertEqual(
+                    server.RequestHandlerClass.create_target_concurrency_per_node,
+                    3,
+                )
+            finally:
+                server.server_close()
+
+            with self.assertRaisesRegex(ValueError, "must be positive"):
+                _gateway_server(root, create_target_concurrency_per_node=0)
+
     def test_parked_managed_job_status_is_gateway_state_and_does_not_wake(self) -> None:
         with _temporary_root() as root:
             route_file = root / "routes.sqlite"

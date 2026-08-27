@@ -69,6 +69,33 @@ DEFAULT_STORAGE_NATIVE_MAX_CONCURRENT_PUBLICATIONS = 2
 PINNED_STORAGE_NATIVE_AGENTENV_COMMIT = "db1492b7915a408b37f863c9e3a34b2ccb2fb1b0"
 DEFAULT_DIRECT_DISK_HEADROOM_MB = 16 * 1024
 DEFAULT_DIRECT_MAX_CONCURRENT_RESTORES = 8
+
+
+@dataclass(frozen=True)
+class VmRuntimeProfile:
+    """Provider-specific host constraints consumed by the common VM init."""
+
+    state_dir: str = ""
+    storage_native_max_ublk_devices: int = DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
+
+
+def vm_runtime_profile(provider_kind: str) -> VmRuntimeProfile:
+    """Return the one runtime profile for a provider.
+
+    Keeping this mapping beside the VM runtime defaults prevents bootstrap
+    callers from growing their own provider conditionals.
+    """
+
+    if provider_kind == "ucloud":
+        return VmRuntimeProfile(
+            state_dir=DEFAULT_UCLOUD_NODE_STATE_DIR,
+            storage_native_max_ublk_devices=(
+                DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES
+            ),
+        )
+    return VmRuntimeProfile()
+
+
 SANDBOX_RUNTIME_PACKAGES = (
     "xfsprogs",
     "docker-ce",

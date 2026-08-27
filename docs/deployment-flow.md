@@ -93,6 +93,13 @@ node bundles, install the exact `deployment.json`, create credentials, install
 systemd units, restart services, register the gateway SSH key, and open the
 configured web ports.
 
+UCloud deployment and the Hetzner gateway installer both finish through the
+same `gateway-reconcile` command. It is the sole service-convergence routine:
+it reloads systemd, applies registry and snapshot-GC timer state, restarts the
+gateway, relay, registry, and autoscaler, and waits for the registry and HTTP
+health endpoints. Provider installers do not carry independent restart order
+or health logic.
+
 For rolling upgrades, update and verify the gateway before admitting workers
 from the new bundle. Gateway decoders accept the previous worker heartbeat
 shape, while an older gateway deliberately rejects unknown protocol fields.

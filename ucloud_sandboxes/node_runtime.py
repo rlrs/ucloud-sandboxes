@@ -5,8 +5,9 @@ import time
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from threading import Lock, RLock, local
+from threading import Event, Lock, RLock, Thread, local
 from typing import Iterator
+from uuid import uuid4
 
 from .direct_service import DirectSandboxService
 from .managed_process import (
@@ -270,6 +271,69 @@ class DirectNodeRuntime:
             self.service.close_admission()
         else:
             self.service.open_admission()
+        self._background_stop = Event()
+        self._idle_parking_thread: Thread | None = None
+
+    def start(self) -> None:
+        idle_seconds = self.service.idle_park_seconds
+        if idle_seconds <= 0 or (
+            self._idle_parking_thread is not None
+            and self._idle_parking_thread.is_alive()
+        ):
+            return
+        self._background_stop.clear()
+        self._idle_parking_thread = Thread(
+            target=self._idle_parking_loop,
+            name="ucloud-direct-idle-parker",
+            daemon=True,
+        )
+        self._idle_parking_thread.start()
+
+    def stop(self) -> None:
+        self._background_stop.set()
+        thread = self._idle_parking_thread
+        if thread is not None:
+            thread.join(timeout=max(2.0, self.service.idle_park_seconds * 2))
+        self._idle_parking_thread = None
+
+    def _idle_parking_loop(self) -> None:
+        idle_seconds = self.service.idle_park_seconds
+        interval = min(1.0, max(0.05, idle_seconds / 4))
+        while not self._background_stop.wait(interval):
+            now = time.monotonic()
+            for registration in self.service.provisioner.registry.list():
+                # Managed agents own their park points through the SDK/relay
+                # model-wait protocol. Local request inactivity is not evidence
+                # that their primary process is idle.
+                if (
+                    registration.phase != "owned"
+                    or not registration.spec.parkable
+                    or registration.spec.managed_process
+                ):
+                    continue
+                if (
+                    self.service.idle_for_seconds(
+                        registration.sandbox_id,
+                        registration.sandbox_generation,
+                        now=now,
+                    )
+                    < idle_seconds
+                ):
+                    continue
+                record = self.service.get(registration.sandbox_id)
+                if record is None or record.state != "running":
+                    continue
+                try:
+                    self.park(
+                        registration.sandbox_id,
+                        operation_id=f"idle-park:{uuid4().hex}",
+                        background=True,
+                    )
+                except (RuntimeError, ValueError):
+                    # The normal lifecycle fence rejects concurrent activity.
+                    # Persistent failures remain visible through node health and
+                    # lifecycle reconciliation; one rejected timer tick is safe.
+                    continue
 
     def create_with_timings(
         self,

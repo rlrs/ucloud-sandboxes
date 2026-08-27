@@ -72,9 +72,23 @@ the node is ready.
 
 ## Static safety and live feedback
 
-Requested disk, CPU, and memory are still the hard placement model. Disk is
-never overallocated. Live feedback only decides when the pool should retain an
-additional ready node around that hard capacity.
+There is one resource-admission contract for sandbox create and wake. Requested
+CPU and memory must fit the physical node shape, but resident sandbox limits are
+not added together as if they were current usage. Actual host CPU, load,
+available memory, swap, and memory PSI decide whether the node can admit more
+work. Requested disk is different: it is a hard additive reservation and is
+never overallocated. A node without a fresh runtime-pressure sample fails
+closed for live create and wake admission.
+
+The worker uses those same CPU, load, memory, swap, and PSI thresholds for
+create, wake, and exec. It no longer has a second additive CPU/memory gate that
+can disagree with gateway placement.
+
+Autoscaler placement uses the same dynamic accounting: CPU and memory are
+reusable after the per-sandbox physical-shape check, while each planned
+placement consumes hard disk. Live pressure remains a separate retained-node
+signal, so the planner does not invent CPU or memory fragmentation from nominal
+sandbox limits.
 
 With `live_pressure_enabled`, the controller reads indexed recent heartbeat
 events from `metrics.sqlite`. Three pressure samples in the default 60-second
@@ -119,6 +133,8 @@ is divided by `create_target_concurrency_per_node` and adds pipeline nodes only
 while real node pressure is present. This does not sum nominal sandbox CPU or
 memory limits: runtime admission and exec remain based on measured usage, while
 the retry backlog describes work the current fleet has already failed to admit.
+The value comes only from `policy.create_target_concurrency_per_node`; gateway
+placement and autoscaler policy do not carry separate defaults.
 
 Placement still prefers an existing immutable image copy. At eight concurrent
 creates on that node it may spill to another ready node, using registry-layer

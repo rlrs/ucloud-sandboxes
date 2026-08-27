@@ -49,6 +49,7 @@ class StorageNativeMigrationTests(unittest.TestCase):
             image="registry/image@sha256:" + "f" * 64,
             memory_mb=1024,
             disk_mb=2048,
+            network="none",
             security=SandboxSecuritySpec(init=False),
         )
 

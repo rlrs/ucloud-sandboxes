@@ -298,44 +298,9 @@ WantedBy=multi-user.target
 EOF
 sysctl --system >/dev/null
 
-docker pull registry:2
-systemctl daemon-reload
 systemctl enable --now ucloud-sandboxes-nat.service
-systemctl enable ucloud-sandbox-registry.service
-systemctl enable ucloud-sandbox-gateway.service
-systemctl enable ucloud-sandbox-relay.service
-systemctl enable ucloud-sandbox-autoscaler.service
-systemctl enable --now \
-  ucloud-sandbox-registry-prune.timer \
-  ucloud-sandbox-registry-gc.timer \
-  ucloud-sandbox-snapshot-gc.timer
-systemctl restart ucloud-sandbox-registry.service
-
-for attempt in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:5000/v2/ >/dev/null; then break; fi
-  if [[ "$attempt" == 60 ]]; then
-    systemctl --no-pager --full status ucloud-sandbox-registry.service
-    exit 1
-  fi
-  sleep 1
-done
-
-systemctl restart ucloud-sandbox-gateway.service
-systemctl restart ucloud-sandbox-relay.service
-systemctl restart ucloud-sandbox-autoscaler.service
-for url in http://127.0.0.1:8090/healthz http://127.0.0.1:8092/healthz; do
-  for attempt in $(seq 1 60); do
-    if curl -fsS "$url" >/dev/null; then break; fi
-    if [[ "$attempt" == 60 ]]; then
-      systemctl --no-pager --full status \
-        ucloud-sandbox-gateway.service \
-        ucloud-sandbox-relay.service \
-        ucloud-sandbox-autoscaler.service
-      exit 1
-    fi
-    sleep 1
-  done
-done
+"$venv_dir/bin/python" -m ucloud_sandboxes.systemd \
+  gateway-reconcile --config /etc/ucloud-sandboxes/deployment.json
 
 install -m 0755 "$ingress" /usr/local/sbin/configure-hetzner-sdk-ingress
 /usr/local/sbin/configure-hetzner-sdk-ingress --public-host "$public_ip"

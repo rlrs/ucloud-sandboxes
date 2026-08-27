@@ -444,6 +444,7 @@ class DirectProvisionerTests(unittest.TestCase):
             image="image",
             memory_mb=1024,
             disk_mb=2048,
+            network="none",
             security=SandboxSecuritySpec(init=False),
         )
 
@@ -1211,6 +1212,45 @@ class DirectProvisionerTests(unittest.TestCase):
                 "no fresh runtime metrics",
             ):
                 self.create(service, self.spec())
+
+    def test_active_cpu_and_memory_limits_are_reusable_under_live_pressure(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, _, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            service.configure_active_capacity(
+                ResourceQuantity(vcpu=4, memory_mb=8192),
+                runtime_metrics_provider=lambda: NodeRuntimeMetrics(
+                    collected_at=utc_now(),
+                    cpu_percent=10.0,
+                    cpu_count=4,
+                    load_average_1m=0.5,
+                    memory_total_mb=8192,
+                    memory_available_mb=8192,
+                ),
+            )
+            request = ResourceQuantity(vcpu=4, memory_mb=4096)
+
+            with service._reserve_active_capacity("first", 1, request):
+                with service._reserve_active_capacity("second", 1, request):
+                    reservations, _epoch = service.active_reservations_snapshot()
+                    self.assertEqual(len(reservations), 2)
+
+            with self.assertRaisesRegex(
+                SandboxCapacityUnavailableError,
+                "physical node shape",
+            ):
+                with service._reserve_active_capacity(
+                    "oversized",
+                    1,
+                    ResourceQuantity(vcpu=5, memory_mb=1024),
+                ):
+                    pass
 
     def test_exec_capacity_uses_live_pressure_not_sandbox_shape(self) -> None:
         with TemporaryDirectory() as raw:

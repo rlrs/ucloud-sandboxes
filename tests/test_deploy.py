@@ -8,6 +8,7 @@ import tarfile
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
+import zipfile
 
 from ucloud_sandboxes.cli import build_parser
 from ucloud_sandboxes.config import DeploymentConfig
@@ -17,6 +18,7 @@ from ucloud_sandboxes.deploy import (
     render_remote_deploy_script,
     run_remote_script_over_ssh,
     stage_file_over_ssh,
+    wheel_package_version,
 )
 from ucloud_sandboxes.vm_init import RUNTIME_KERNEL_MODULES
 
@@ -46,7 +48,11 @@ class DeployTests(unittest.TestCase):
     ) -> AllInOneDeployPlan:
         wheel = local_wheel or root / "ucloud_sandboxes-0.2.0-py3-none-any.whl"
         wheel.parent.mkdir(parents=True, exist_ok=True)
-        wheel.write_bytes(b"wheel")
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr(
+                "ucloud_sandboxes-0.2.0.dist-info/METADATA",
+                "Metadata-Version: 2.1\nName: ucloud-sandboxes\nVersion: 0.2.0\n",
+            )
         runsc = root / "runsc"
         runsc.write_bytes(b"patched-runsc")
         runsc.chmod(0o755)
@@ -115,6 +121,30 @@ class DeployTests(unittest.TestCase):
                 run_remote_script_over_ssh("ssh ucloud@example.org", "set -eu\n")
         self.assertLess(len(str(raised.exception)), 8200)
 
+    def test_release_version_comes_from_the_wheel_metadata(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            root = Path(raw_dir)
+            wheel = root / "misleading-filename-99.0.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "ucloud_sandboxes-7.4.1.dist-info/METADATA",
+                    "Metadata-Version: 2.1\nName: ucloud-sandboxes\nVersion: 7.4.1\n",
+                )
+
+            self.assertEqual(wheel_package_version(wheel), "7.4.1")
+
+    def test_release_rejects_an_unrelated_wheel(self) -> None:
+        with TemporaryDirectory() as raw_dir:
+            wheel = Path(raw_dir) / "other.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "other-1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.1\nName: other\nVersion: 1.0\n",
+                )
+
+            with self.assertRaisesRegex(ValueError, "ucloud-sandboxes"):
+                wheel_package_version(wheel)
+
     def test_rendered_deploy_script_is_valid_for_each_registry_backend(self) -> None:
         filesystem = {
             **DeploymentConfig.default().to_dict()["registry_store"],
@@ -173,7 +203,7 @@ class DeployTests(unittest.TestCase):
                 )
                 self.assertIn("os.replace(marker_temporary, marker)", script)
 
-    def test_snapshot_gc_timer_is_gated_by_s3_snapshot_store(self) -> None:
+    def test_gateway_service_convergence_is_shared_with_hetzner(self) -> None:
         s3_snapshot_store = {
             "kind": "s3",
             "endpoint": "https://hel1.your-objectstorage.com",
@@ -194,14 +224,20 @@ class DeployTests(unittest.TestCase):
                 )
             )
 
-        self.assertIn("SNAPSHOT_STORE_KIND=registry", registry_script)
-        self.assertIn("SNAPSHOT_STORE_KIND=s3", s3_script)
         for script in (registry_script, s3_script):
-            self.assertIn('if [ "$SNAPSHOT_STORE_KIND" = s3 ]; then', script)
             self.assertIn(
-                "systemctl disable --now ucloud-sandbox-snapshot-gc.timer",
+                "ucloud_sandboxes.systemd gateway-reconcile",
                 script,
             )
+            self.assertNotIn("SNAPSHOT_STORE_KIND=", script)
+
+        hetzner_installer = (
+            Path(__file__).parents[1] / "scripts" / "install_hetzner_gateway.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "gateway-reconcile --config",
+            hetzner_installer,
+        )
 
     def test_stage_file_atomically_replaces_root_owned_release_artifact(self) -> None:
         with TemporaryDirectory() as raw_dir:

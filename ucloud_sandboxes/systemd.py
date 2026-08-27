@@ -4,13 +4,16 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import time
 from typing import Callable, Mapping, Sequence
+from urllib import request
 
 from .config import DeploymentConfig
 from .managed_registry import registry_maintenance_lock
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]
+HealthWaiter = Callable[[str, str], None]
 REGISTRY_IMAGE = "registry:3.1.1"
 REGISTRY_CONFIG_PATH = "/etc/distribution/config.yml"
 REGISTRY_S3_CHUNK_BYTES = 32 * 1024 * 1024
@@ -82,7 +85,80 @@ def build_parser() -> argparse.ArgumentParser:
         help="run the deployment Docker Distribution service",
     )
     registry.add_argument("--config", type=Path, required=True)
+    reconcile = subparsers.add_parser(
+        "gateway-reconcile",
+        help="converge and health-check the common gateway services",
+    )
+    reconcile.add_argument("--config", type=Path, required=True)
     return parser
+
+
+def wait_for_http(
+    name: str,
+    url: str,
+    *,
+    attempts: int = 60,
+    delay_seconds: float = 1.0,
+) -> None:
+    last_error: BaseException | None = None
+    for _attempt in range(max(1, attempts)):
+        try:
+            with request.urlopen(url, timeout=2.0) as response:
+                if 200 <= int(response.status) < 300:
+                    return
+                last_error = RuntimeError(f"HTTP {response.status}")
+        except Exception as exc:
+            last_error = exc
+        time.sleep(max(0.0, delay_seconds))
+    raise RuntimeError(f"timed out waiting for {name} at {url}: {last_error}")
+
+
+def reconcile_gateway_services(
+    *,
+    config: DeploymentConfig,
+    runner: CommandRunner = subprocess.run,
+    wait_for: HealthWaiter = wait_for_http,
+) -> None:
+    """Converge the provider-independent gateway service graph once."""
+
+    def systemctl(*arguments: str, check: bool = True) -> None:
+        runner(["systemctl", *arguments], check=check, text=True)
+
+    systemctl("daemon-reload")
+    systemctl("enable", "ucloud-sandbox-registry.service")
+    systemctl("enable", "--now", "ucloud-sandbox-registry-prune.timer")
+    systemctl("enable", "--now", "ucloud-sandbox-registry-gc.timer")
+    if config.snapshot_store.kind == "s3":
+        systemctl("enable", "--now", "ucloud-sandbox-snapshot-gc.timer")
+    else:
+        systemctl(
+            "disable",
+            "--now",
+            "ucloud-sandbox-snapshot-gc.timer",
+            check=False,
+        )
+        systemctl(
+            "reset-failed",
+            "ucloud-sandbox-snapshot-gc.service",
+            check=False,
+        )
+    for service in (
+        "ucloud-sandbox-gateway.service",
+        "ucloud-sandbox-relay.service",
+        "ucloud-sandbox-autoscaler.service",
+    ):
+        systemctl("enable", service)
+
+    systemctl("restart", "ucloud-sandbox-registry.service")
+    wait_for("registry", f"http://127.0.0.1:{config.registry_port}/v2/")
+    for service in (
+        "ucloud-sandbox-gateway.service",
+        "ucloud-sandbox-relay.service",
+        "ucloud-sandbox-autoscaler.service",
+    ):
+        systemctl("restart", service)
+    wait_for("gateway", f"http://127.0.0.1:{config.gateway_port}/healthz")
+    wait_for("relay", f"http://127.0.0.1:{config.relay_port}/healthz")
 
 
 def registry_run_command(config: DeploymentConfig) -> list[str]:
@@ -214,6 +290,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         command = registry_run_command(config)
         environment = registry_process_environment(config)
         os.execvpe(command[0], command, environment)
+    if args.command == "gateway-reconcile":
+        reconcile_gateway_services(config=config)
+        return 0
     raise ValueError(f"unsupported systemd helper: {args.command}")
 
 

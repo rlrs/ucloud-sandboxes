@@ -438,34 +438,21 @@ class ScalePolicyTests(unittest.TestCase):
                 self.assertEqual(decision.projected_free_resources, ResourceQuantity())
                 self.assertEqual(decision.creates, 1)
 
-    def test_creates_when_aggregate_free_resources_are_fragmented(self) -> None:
+    def test_dynamic_cpu_and_memory_are_not_theoretical_reservations(self) -> None:
         requested = ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192)
         decision = evaluate_scale(
             [
                 node(
-                    "cpu-disk",
+                    "resident-limits",
                     total_resources=ResourceQuantity(
                         vcpu=4,
                         memory_mb=8192,
                         disk_mb=16384,
                     ),
                     used_resources=ResourceQuantity(
-                        vcpu=2,
+                        vcpu=4,
                         memory_mb=8192,
                         disk_mb=8192,
-                    ),
-                ),
-                node(
-                    "memory",
-                    total_resources=ResourceQuantity(
-                        vcpu=4,
-                        memory_mb=8192,
-                        disk_mb=16384,
-                    ),
-                    used_resources=ResourceQuantity(
-                        vcpu=4,
-                        memory_mb=4096,
-                        disk_mb=16384,
                     ),
                 ),
             ],
@@ -477,7 +464,7 @@ class ScalePolicyTests(unittest.TestCase):
         )
 
         self.assertEqual(decision.resource_deficit, ResourceQuantity())
-        self.assertEqual(decision.creates, 1)
+        self.assertEqual(decision.creates, 0)
 
     def test_relocation_demand_excludes_the_current_owner(self) -> None:
         requested = ResourceQuantity(disk_mb=8192)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from email.parser import BytesParser
 from importlib import resources
 import hashlib
 import json
@@ -9,9 +10,10 @@ import re
 import shlex
 import subprocess
 from typing import Any
+import zipfile
 
 from .config import DeploymentConfig
-from .deployment import package_version
+from .deployment import PACKAGE_NAME
 from .vm_init import (
     BUILDER_RUNTIME_PACKAGES,
     PINNED_STORAGE_NATIVE_AGENTENV_COMMIT,
@@ -256,13 +258,14 @@ class AllInOneDeployPlan:
 
     @property
     def package_version(self) -> str:
-        return package_version()
+        return wheel_package_version(self.local_wheel)
 
     def validate(self) -> None:
         if not self.job_id.strip():
             raise ValueError("job id is required")
         if not self.local_wheel.is_file():
             raise ValueError(f"wheel file not found: {self.local_wheel}")
+        wheel_package_version(self.local_wheel)
         if self.local_direct_runsc is None or not self.local_direct_runsc.is_file():
             raise ValueError("deployment requires a local patched runsc binary")
         if self.local_managed_init is None or not self.local_managed_init.is_file():
@@ -312,6 +315,30 @@ def packaged_systemd_units() -> dict[str, str]:
     for name in SYSTEMD_UNIT_NAMES:
         units[name] = root.joinpath(name).read_text(encoding="utf-8")
     return units
+
+
+def wheel_package_version(path: Path) -> str:
+    """Read release identity from the artifact that will actually be deployed."""
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            metadata_names = [
+                name
+                for name in archive.namelist()
+                if name.endswith(".dist-info/METADATA")
+            ]
+            if len(metadata_names) != 1:
+                raise ValueError("wheel must contain exactly one dist-info METADATA")
+            metadata = BytesParser().parsebytes(archive.read(metadata_names[0]))
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise ValueError(f"deployment wheel is invalid: {path}") from exc
+    name = str(metadata.get("Name") or "").strip().lower().replace("_", "-")
+    version = str(metadata.get("Version") or "").strip()
+    if name != PACKAGE_NAME or not version:
+        raise ValueError(
+            f"deployment wheel metadata must identify {PACKAGE_NAME!r} with a version"
+        )
+    return version
 
 
 def render_remote_deploy_script(
@@ -369,7 +396,6 @@ def render_remote_deploy_script(
         f"PROJECT_MOUNT_DIR={shlex.quote(plan.project_mount_dir)}",
         f"DATA_ROOT={shlex.quote(plan.config.data_root)}",
         f"REGISTRY_STORE_KIND={shlex.quote(plan.config.registry_store.kind)}",
-        f"SNAPSHOT_STORE_KIND={shlex.quote(plan.config.snapshot_store.kind)}",
         f"REGISTRY_MOUNT_POINT={shlex.quote(plan.config.registry_mount_point)}",
         f"REGISTRY_DATA_ROOT={shlex.quote(plan.config.registry_data_root)}",
         f"RELEASE_DIR={shlex.quote(plan.release_dir)}",
@@ -794,41 +820,8 @@ def render_remote_deploy_script(
             script_parts.append(f"sudo rm -f {shlex.quote(dropin_path)}")
     script_parts.extend(
         [
-            "sudo systemctl daemon-reload",
-            "sudo systemctl enable ucloud-sandbox-registry.service",
-            "sudo systemctl enable --now ucloud-sandbox-registry-prune.timer",
-            "sudo systemctl enable --now ucloud-sandbox-registry-gc.timer",
-            'if [ "$SNAPSHOT_STORE_KIND" = s3 ]; then',
-            "  sudo systemctl enable --now ucloud-sandbox-snapshot-gc.timer",
-            "else",
-            "  sudo systemctl disable --now ucloud-sandbox-snapshot-gc.timer",
-            "  sudo systemctl reset-failed ucloud-sandbox-snapshot-gc.service || true",
-            "fi",
-            "sudo systemctl enable ucloud-sandbox-gateway.service",
-            "sudo systemctl enable ucloud-sandbox-relay.service",
-            "sudo systemctl enable ucloud-sandbox-autoscaler.service",
-            "sudo systemctl restart ucloud-sandbox-registry.service",
-            "sudo systemctl restart ucloud-sandbox-gateway.service",
-            "sudo systemctl restart ucloud-sandbox-relay.service",
-            "sudo systemctl restart ucloud-sandbox-autoscaler.service",
-            "wait_for_http() {",
-            '  name="$1"',
-            '  url="$2"',
-            "  attempt=1",
-            '  while [ "$attempt" -le 30 ]; do',
-            '    if curl -fsS "$url"; then',
-            "      printf '\\n'",
-            "      return 0",
-            "    fi",
-            "    sleep 1",
-            "    attempt=$((attempt + 1))",
-            "  done",
-            '  printf "Timed out waiting for %s at %s\\n" "$name" "$url" >&2',
-            "  return 1",
-            "}",
-            f"wait_for_http gateway http://127.0.0.1:{plan.config.gateway_port}/healthz",
-            f"wait_for_http relay http://127.0.0.1:{plan.config.relay_port}/healthz",
-            f"wait_for_http registry http://127.0.0.1:{plan.config.registry_port}/v2/_catalog",
+            'sudo "$VENV_DIR/bin/python" -m ucloud_sandboxes.systemd '
+            "gateway-reconcile --config /etc/ucloud-sandboxes/deployment.json",
         ]
     )
     return "\n".join(script_parts) + "\n"

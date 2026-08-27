@@ -20,6 +20,11 @@ from .models import (
     ScalePolicy,
     utc_now,
 )
+from .resource_admission import (
+    dynamic_request_fits,
+    reserve_dynamic_resources,
+    reusable_dynamic_resources,
+)
 
 
 def evaluate_scale(
@@ -462,7 +467,7 @@ def evaluate_scale(
         and placement_nodes == 0
     ):
         excess_nodes = total_nodes - policy.min_nodes
-        stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
+        stop_budget = max(0, policy.max_stop_per_cycle - planned_stops(actions))
         latest_capacity_pressure_age = _latest_capacity_pressure_age(
             policy,
             live_signals,
@@ -634,7 +639,7 @@ def _planned_creates(actions: list[ScaleAction]) -> int:
     return sum(action.count for action in actions if action.kind == "create")
 
 
-def _planned_stops(actions: list[ScaleAction]) -> int:
+def planned_stops(actions: list[ScaleAction]) -> int:
     return sum(action.count for action in actions if action.kind == "stop")
 
 
@@ -687,10 +692,15 @@ def _projected_free_resources(
             continue
         if node.heartbeat is not None:
             if node.is_schedulable:
-                total = total + _security_adjusted_resources(
+                available = _security_adjusted_resources(
                     node,
                     node.heartbeat.free_resources,
                 )
+                physical = _security_adjusted_resources(
+                    node,
+                    node.heartbeat.total_resources,
+                )
+                total = total + reusable_dynamic_resources(available, physical)
             elif node.is_provisioning:
                 total = total + _projected_provisioning_resources(
                     node,
@@ -721,15 +731,24 @@ def _nodes_for_unplaced_requests(
 
     if not requests:
         return 0
-    bins: list[tuple[str, ResourceQuantity]] = []
+    bins: list[tuple[str, ResourceQuantity, ResourceQuantity]] = []
     for node in nodes:
         if node.job.is_final:
             continue
         if node.heartbeat is not None and node.is_schedulable:
+            available = _security_adjusted_resources(
+                node,
+                node.heartbeat.free_resources,
+            )
+            total = _security_adjusted_resources(
+                node,
+                node.heartbeat.total_resources,
+            )
             bins.append(
                 (
                     node.job_id,
-                    _security_adjusted_resources(node, node.heartbeat.free_resources),
+                    reusable_dynamic_resources(available, total),
+                    total,
                 )
             )
         elif node.is_provisioning:
@@ -745,6 +764,7 @@ def _nodes_for_unplaced_requests(
                 (
                     node.job_id,
                     available,
+                    policy.default_node_resources,
                 )
             )
     default_bin = policy.default_node_resources
@@ -767,8 +787,8 @@ def _nodes_for_unplaced_requests(
         requested = placement.resources
         excluded = set(placement.excluded_job_ids)
         for _ in range(placement.count):
-            fitting: list[tuple[int, str, ResourceQuantity]] = []
-            for index, (job_id, available) in enumerate(bins):
+            fitting: list[tuple[int, str, ResourceQuantity, ResourceQuantity]] = []
+            for index, (job_id, available, total) in enumerate(bins):
                 if job_id in excluded:
                     continue
                 available_for_request = available
@@ -777,10 +797,10 @@ def _nodes_for_unplaced_requests(
                         available,
                         disk_mb=available.disk_mb + placement.owned_disk_mb,
                     )
-                if requested.fits_within(available_for_request):
-                    fitting.append((index, job_id, available_for_request))
+                if dynamic_request_fits(requested, available_for_request, total):
+                    fitting.append((index, job_id, available_for_request, total))
             if fitting:
-                index, job_id, available = min(
+                index, job_id, available, total = min(
                     fitting,
                     key=lambda item: (
                         item[2].disk_mb - requested.disk_mb,
@@ -790,16 +810,18 @@ def _nodes_for_unplaced_requests(
                 )
                 bins[index] = (
                     job_id,
-                    _subtract_dynamic_resources(available, requested),
+                    reserve_dynamic_resources(available, requested),
+                    total,
                 )
                 continue
             missing += 1
             bins.append(
                 (
                     "",
-                    _subtract_dynamic_resources(default_bin, requested)
-                    if requested.fits_within(default_bin)
+                    reserve_dynamic_resources(default_bin, requested)
+                    if dynamic_request_fits(requested, default_bin, default_bin)
                     else ResourceQuantity(),
+                    default_bin,
                 )
             )
     return missing
@@ -1011,19 +1033,6 @@ def _subtract_resources(
     )
 
 
-def _subtract_dynamic_resources(
-    left: ResourceQuantity,
-    right: ResourceQuantity,
-) -> ResourceQuantity:
-    """Consume hard disk while retaining reusable dynamic CPU/RAM headroom."""
-
-    return ResourceQuantity(
-        vcpu=left.vcpu,
-        memory_mb=left.memory_mb,
-        disk_mb=max(0, left.disk_mb - right.disk_mb),
-    )
-
-
 def _stop_candidates(
     ready_nodes: list[SandboxNode],
     policy: ScalePolicy,
@@ -1053,7 +1062,11 @@ def _stop_candidates(
             break
         if not node.is_idle:
             continue
-        if not _past_idle_grace(node, policy, now):
+        if not past_idle_grace(
+            node,
+            idle_seconds=policy.scale_down_idle_seconds,
+            now=now,
+        ):
             continue
         node_free_resources = (
             _security_adjusted_resources(node, node.heartbeat.free_resources)
@@ -1245,12 +1258,13 @@ def _node_has_disk_quota(node: SandboxNode) -> bool:
     )
 
 
-def _past_idle_grace(
+def past_idle_grace(
     node: SandboxNode,
-    policy: ScalePolicy,
+    *,
+    idle_seconds: int,
     now: datetime,
 ) -> bool:
-    idle_seconds = max(0, policy.scale_down_idle_seconds)
+    idle_seconds = max(0, idle_seconds)
     if idle_seconds == 0:
         return True
     reference = (

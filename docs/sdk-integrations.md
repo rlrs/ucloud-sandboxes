@@ -32,7 +32,7 @@ The gateway is responsible for:
 - raw byte upload/download endpoints for files
 - sandbox prepare signals for near-term resource demand
 - builder prepare signals for near-term image-build demand
-- image build/pull/snapshot endpoints, gateway-owned managed registry naming,
+- image build/pull endpoints, gateway-owned managed registry naming,
   and image-id to immutable worker pull-reference resolution
 - image prewarm controls for prepared capacity and multi-node image pulls
 - operator-authenticated dashboard and metrics data at `/v1/metrics`

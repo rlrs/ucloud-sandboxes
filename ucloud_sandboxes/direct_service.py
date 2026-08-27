@@ -31,6 +31,7 @@ from .direct_registry import DirectSandboxRegistration
 from .direct_warden import DirectWardenError
 from .hibernation import HibernationState
 from .models import NodeRuntimeMetrics, ResourceQuantity
+from .resource_admission import dynamic_pressure_error, dynamic_request_fits
 from .sandbox import (
     OPERATION_ID_RE,
     SandboxAdmissionClosedError,
@@ -238,7 +239,6 @@ class DirectSandboxService:
         self._last_activity: dict[tuple[str, int], float] = {}
         self._activity_guard = threading.Lock()
         self._stop_event = threading.Event()
-        self._parking_thread: threading.Thread | None = None
         self._network_thread: threading.Thread | None = None
         self._deletion_thread: threading.Thread | None = None
         self._publication_threads: dict[tuple[str, int], threading.Thread] = {}
@@ -279,15 +279,6 @@ class DirectSandboxService:
             self._last_activity = {
                 (record.spec.id, record.generation): now for record in records
             }
-        if self._idle_park_seconds > 0 and (
-            self._parking_thread is None or not self._parking_thread.is_alive()
-        ):
-            self._parking_thread = threading.Thread(
-                target=self._idle_parking_loop,
-                name="ucloud-direct-idle-parker",
-                daemon=True,
-            )
-            self._parking_thread.start()
         if self._deletion_thread is None or not self._deletion_thread.is_alive():
             self._deletion_thread = threading.Thread(
                 target=self._deletion_reconciliation_loop,
@@ -327,10 +318,6 @@ class DirectSandboxService:
                 timeout=max(2.0, self._deletion_reconcile_interval_seconds * 2)
             )
         self._deletion_thread = None
-        thread = self._parking_thread
-        if thread is not None:
-            thread.join(timeout=max(2.0, self._idle_park_seconds * 2))
-        self._parking_thread = None
         network_thread = self._network_thread
         if network_thread is not None:
             interval = self.provisioner.network_manager.resolve_interval_seconds
@@ -1269,48 +1256,22 @@ class DirectSandboxService:
         with self._activity_guard:
             self._last_activity[(sandbox_id, generation)] = time.monotonic()
 
-    def _idle_parking_loop(self) -> None:
-        interval = min(1.0, max(0.05, self._idle_park_seconds / 4))
-        while not self._stop_event.wait(interval):
-            now = time.monotonic()
-            for registration in self.provisioner.registry.list():
-                if registration.phase != "owned" or not registration.spec.parkable:
-                    continue
-                key = (
-                    registration.sandbox_id,
-                    registration.sandbox_generation,
-                )
-                with self._activity_guard:
-                    last_activity = self._last_activity.setdefault(key, now)
-                if now - last_activity < self._idle_park_seconds:
-                    continue
-                with self._capacity_guard:
-                    if any(
-                        active_key == key
-                        for active_key, _resources in (
-                            self._active_exec_reservations.values()
-                        )
-                    ):
-                        continue
-                try:
-                    with self._try_lock(*key) as acquired:
-                        if not acquired:
-                            continue
-                        lifecycle = self.warden.inspect(
-                            registration.to_direct_sandbox()
-                        )
-                        if (
-                            lifecycle is not None
-                            and lifecycle.state == HibernationState.RUNNING
-                        ):
-                            self.warden.park(
-                                registration.to_direct_sandbox(),
-                                operation_id=f"idle-park:{uuid4().hex}",
-                            )
-                except DirectWardenError:
-                    # Reconciliation and node health expose persistent failures;
-                    # one failed background park must not kill the daemon.
-                    continue
+    @property
+    def idle_park_seconds(self) -> float:
+        return self._idle_park_seconds
+
+    def idle_for_seconds(
+        self,
+        sandbox_id: str,
+        generation: int,
+        *,
+        now: float | None = None,
+    ) -> float:
+        observed_at = time.monotonic() if now is None else now
+        key = (sandbox_id, generation)
+        with self._activity_guard:
+            last_activity = self._last_activity.setdefault(key, observed_at)
+        return max(0.0, observed_at - last_activity)
 
     def read_file(
         self,
@@ -1447,33 +1408,36 @@ class DirectSandboxService:
         requested: ResourceQuantity,
     ):
         key = (sandbox_id, generation)
+        # Runtime sampling may briefly read /proc twice. Keep it outside the
+        # reservation guard so concurrent creates and wakes do not serialize on
+        # that I/O just as concurrent exec admission does not.
+        with self._capacity_guard:
+            metrics_provider = (
+                self._runtime_metrics_provider
+                if self._active_capacity is not None
+                else None
+            )
+        metrics = metrics_provider() if metrics_provider is not None else None
         with self._capacity_guard:
             if not self._admission_open:
                 raise SandboxAdmissionClosedError("direct node admission is closed")
             capacity = self._active_capacity
             if capacity is not None:
-                used = ResourceQuantity()
-                for candidate_key, reservation in self._active_reservations.items():
-                    if candidate_key != key:
-                        used = used + reservation
-                for _active_key, reservation in (
-                    self._active_exec_reservations.values()
-                ):
-                    used = used + reservation
-                available = ResourceQuantity(
-                    vcpu=max(0.0, capacity.vcpu - used.vcpu),
-                    memory_mb=max(0, capacity.memory_mb - used.memory_mb),
-                )
                 active_requested = ResourceQuantity(
                     vcpu=requested.vcpu,
                     memory_mb=requested.memory_mb,
                 )
-                if not active_requested.fits_within(available):
+                if not dynamic_request_fits(
+                    active_requested,
+                    ResourceQuantity(),
+                    capacity,
+                ):
                     raise SandboxCapacityUnavailableError(
-                        "direct node has insufficient active CPU or memory "
-                        "admission headroom; retry on another node"
+                        "sandbox CPU or memory request exceeds the physical node shape"
                     )
-                self._require_dynamic_headroom(active_requested)
+                pressure_error = dynamic_pressure_error(metrics, active_requested)
+                if pressure_error is not None:
+                    raise SandboxCapacityUnavailableError(pressure_error)
             self._active_reservations[key] = requested
             self._activity_epoch += 1
         try:
@@ -1514,10 +1478,9 @@ class DirectSandboxService:
                 # host was mostly idle. Admit from current host CPU, load,
                 # memory and PSI instead. ExecSessionManager retains the hard
                 # session-count backstop for admission bursts between samples.
-                self._require_dynamic_headroom_for_metrics(
-                    ResourceQuantity(),
-                    metrics,
-                )
+                pressure_error = dynamic_pressure_error(metrics, ResourceQuantity())
+                if pressure_error is not None:
+                    raise SandboxCapacityUnavailableError(pressure_error)
             # Keep a zero-resource lease so drain fencing, idle parking and
             # active-operation telemetry still cover the full exec lifetime.
             self._active_exec_reservations[token] = (key, ResourceQuantity())
@@ -1541,47 +1504,6 @@ class DirectSandboxService:
             for token, (key, resources) in self._active_exec_reservations.items():
                 reservations[(*key, token)] = resources
             return reservations, self._activity_epoch
-
-    def _require_dynamic_headroom(self, requested: ResourceQuantity) -> None:
-        provider = self._runtime_metrics_provider
-        metrics = provider() if provider is not None else None
-        self._require_dynamic_headroom_for_metrics(requested, metrics)
-
-    @staticmethod
-    def _require_dynamic_headroom_for_metrics(
-        requested: ResourceQuantity,
-        metrics: NodeRuntimeMetrics | None,
-    ) -> None:
-        if metrics is None:
-            raise SandboxCapacityUnavailableError(
-                "direct node has no fresh runtime metrics for dynamic admission"
-            )
-        if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
-            raise SandboxCapacityUnavailableError(
-                "direct node CPU pressure blocks active admission"
-            )
-        if (
-            metrics.cpu_count > 0
-            and metrics.load_average_1m is not None
-            and metrics.load_average_1m >= metrics.cpu_count * 1.25
-        ):
-            raise SandboxCapacityUnavailableError(
-                "direct node CPU load blocks active admission"
-            )
-        if (
-            metrics.memory_psi_full_avg10 is not None
-            and metrics.memory_psi_full_avg10 >= 10.0
-        ):
-            raise SandboxCapacityUnavailableError(
-                "direct node memory pressure blocks active admission"
-            )
-        available_memory_mb = metrics.memory_available_mb
-        if metrics.swap_total_mb > 0:
-            available_memory_mb += metrics.swap_free_mb
-        if available_memory_mb < max(2048, requested.memory_mb):
-            raise SandboxCapacityUnavailableError(
-                "direct node has insufficient live memory headroom"
-            )
 
     def _require_registration(
         self,

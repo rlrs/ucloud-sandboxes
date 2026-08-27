@@ -14,6 +14,12 @@ from .models import (
     utc_now,
 )
 from .routing import ProgramRequestState, SandboxRoute, is_portable_parked_route
+from .resource_admission import (
+    dynamic_request_fits,
+    node_accepts_dynamic_request,
+    reserve_dynamic_resources,
+    reusable_dynamic_resources,
+)
 
 
 _STATE_PRIORITY = {
@@ -29,6 +35,7 @@ class WakeNodeCandidate:
     available: ResourceQuantity
     total: ResourceQuantity
     pressure: float = 0.0
+    heartbeat: NodeHeartbeat | None = None
 
 
 def node_pressure_score(heartbeat: NodeHeartbeat) -> float:
@@ -86,7 +93,13 @@ def plan_shadow_wake_queue(
         ready_by_sandbox.values(),
         key=lambda request: (_request_ready_epoch(request), request.request_id),
     )
-    available = {candidate.node_id: candidate.available for candidate in candidates}
+    available = {
+        candidate.node_id: reusable_dynamic_resources(
+            candidate.available,
+            candidate.total,
+        )
+        for candidate in candidates
+    }
     placements: list[dict[str, object]] = []
     unplaced: list[dict[str, object]] = []
     for position, request in enumerate(queue, start=1):
@@ -120,13 +133,19 @@ def plan_shadow_wake_queue(
                 memory_mb=route.resources.memory_mb,
                 disk_mb=0 if local else route.resources.disk_mb,
             )
-            if not required.fits_within(current_available):
-                continue
-            remaining = ResourceQuantity(
-                vcpu=current_available.vcpu - required.vcpu,
-                memory_mb=current_available.memory_mb - required.memory_mb,
-                disk_mb=current_available.disk_mb - required.disk_mb,
+            fits = (
+                node_accepts_dynamic_request(
+                    candidate.heartbeat,
+                    required,
+                    current_available,
+                    total=candidate.total,
+                )
+                if candidate.heartbeat is not None
+                else dynamic_request_fits(required, current_available, candidate.total)
             )
+            if not fits:
+                continue
+            remaining = reserve_dynamic_resources(current_available, required)
             score = (
                 0 if local else 1,
                 max(0.0, candidate.pressure),

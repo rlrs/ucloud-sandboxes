@@ -224,7 +224,6 @@ The VM-side node agent exposes:
 - `GET /v1/exec/<session-id>/events`
 - `POST /v1/exec/<session-id>/stdin`
 - `POST /v1/exec/<session-id>/close-stdin`
-- `POST /v1/sandboxes/<sandbox-id>/snapshot` (requires `--enable-image-builds`)
 
 `GET /healthz` is public and returns the service identity and package version.
 The `service` value identifies the `control-plane`, `node-agent`,

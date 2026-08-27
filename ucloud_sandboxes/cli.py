@@ -170,12 +170,11 @@ from .vm_init import (
     DEFAULT_MAX_CONCURRENT_IMAGE_PULLS,
     DEFAULT_MANAGED_INIT,
     DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES,
-    DEFAULT_UCLOUD_NODE_STATE_DIR,
-    DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES,
     VmInitOptions,
     render_vm_init_script,
     run_init_over_ssh,
     stage_vm_init_package_over_ssh,
+    vm_runtime_profile,
 )
 from .providers.ucloud.payloads import (
     DEFAULT_PUBLIC_LINK_PORT,
@@ -1023,6 +1022,9 @@ def cmd_serve_control_plane(args: argparse.Namespace) -> int:
         registry_worker_url=config.registry_worker_url,
         registry_usage_file=config.registry_usage_file(),
         max_concurrent_sandbox_creates=(config.gateway_max_concurrent_sandbox_creates),
+        create_target_concurrency_per_node=(
+            config.policy.create_target_concurrency_per_node
+        ),
         max_http_request_threads=config.gateway_max_http_request_threads,
         max_sandbox_resources=config.sandbox.resources,
         telemetry=telemetry,
@@ -1348,10 +1350,9 @@ def _post_gateway_sandbox_lifecycle(
             )
             break
         except HTTPError as exc:
-            # The node's independent idle parker can win the lifecycle fence
-            # between enqueue and this explicit park. Once it finishes, this
-            # idempotent retry observes the parked state and lets the gateway
-            # durably record the request transition.
+            # Another lifecycle request can win the fence between enqueue and
+            # this explicit park. The idempotent retry observes its result and
+            # lets the gateway durably record the request transition.
             if exc.code != 409 or attempt >= 100:
                 raise
             error_body = exc.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
@@ -2989,6 +2990,7 @@ def run_reconcile_cycle(
                 available=node.heartbeat.free_resources,
                 total=node.heartbeat.total_resources,
                 pressure=node_pressure_score(node.heartbeat),
+                heartbeat=node.heartbeat,
             )
             for node in sandbox_nodes
             if node.is_schedulable and node.heartbeat is not None
@@ -5471,6 +5473,7 @@ def vm_init_options_for_job(
     )
     host_alias = config.registry_host_alias
     snapshot_store = config.snapshot_store
+    runtime_profile = vm_runtime_profile(config.provider.kind)
     s3_access_key_id = ""
     s3_secret_access_key = ""
     s3_security_token = ""
@@ -5506,9 +5509,7 @@ def vm_init_options_for_job(
         init_authorized_keys=authorized_keys,
         node_id=resolved_node_id,
         work_dir=DEFAULT_INSTALL_ROOT,
-        state_dir=(
-            DEFAULT_UCLOUD_NODE_STATE_DIR if config.provider.kind == "ucloud" else ""
-        ),
+        state_dir=runtime_profile.state_dir,
         package_spec=package_spec,
         package_sha256=package_sha256,
         node_agent_host="0.0.0.0",
@@ -5567,8 +5568,8 @@ def vm_init_options_for_job(
             config.sandbox.storage_native_pool_high_watermark
         ),
         storage_native_max_ublk_devices=(
-            DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES
-            if config.provider.kind == "ucloud" and role == "sandbox"
+            runtime_profile.storage_native_max_ublk_devices
+            if role == "sandbox"
             else DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES
         ),
         direct_disk_headroom_mb=config.sandbox.direct_disk_headroom_mb,

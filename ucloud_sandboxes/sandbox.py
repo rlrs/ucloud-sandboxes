@@ -360,7 +360,7 @@ class SandboxSpec:
     memory_mb: int | None = None
     cpus: float | None = None
     disk_mb: int | None = None
-    network: str = "none"
+    network: str = "bridge"
     ttl_seconds: int | None = None
     parkable: bool = False
     managed_process: bool = False
@@ -434,7 +434,7 @@ class SandboxSpec:
                 if raw.get("disk_mb") is not None
                 else None
             ),
-            network=_json_string(raw.get("network", "none"), "network"),
+            network=_json_string(raw.get("network", "bridge"), "network"),
             ttl_seconds=(
                 _json_int(raw["ttl_seconds"], "ttl_seconds")
                 if raw.get("ttl_seconds") is not None

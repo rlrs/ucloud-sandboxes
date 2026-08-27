@@ -27,7 +27,12 @@ from .models import (
     ScalePolicy,
     utc_now,
 )
-from .policy import incompatible_stop_candidates, unreachable_node_stop_ready
+from .policy import (
+    incompatible_stop_candidates,
+    past_idle_grace,
+    planned_stops,
+    unreachable_node_stop_ready,
+)
 from .providers.base import InstanceCreateIntent
 
 
@@ -193,12 +198,12 @@ def evaluate_builder_scale(
                 f"{prepared_builders} prepared builder(s))"
             )
     else:
-        stop_budget = max(0, policy.max_stop_per_cycle - _planned_stops(actions))
+        stop_budget = max(0, policy.max_stop_per_cycle - planned_stops(actions))
         stop_candidates = [
             node
             for node in ready_nodes
             if node.is_idle
-            and _past_idle_grace(
+            and past_idle_grace(
                 node,
                 idle_seconds=policy.builder_scale_down_idle_seconds,
                 now=now,
@@ -265,10 +270,6 @@ def node_drain_ready(node: SandboxNode, token: str) -> bool:
     )
 
 
-def _planned_stops(actions: list[ScaleAction]) -> int:
-    return sum(action.count for action in actions if action.kind == "stop")
-
-
 def partition_safe_stop_job_ids(
     nodes: list[Any],
     requested_job_ids: tuple[str, ...],
@@ -293,24 +294,3 @@ def partition_safe_stop_job_ids(
         else:
             blocked.append(job_id)
     return tuple(safe), tuple(blocked)
-
-
-def _past_idle_grace(
-    node: SandboxNode,
-    *,
-    idle_seconds: int,
-    now: datetime,
-) -> bool:
-    idle_seconds = max(0, idle_seconds)
-    if idle_seconds == 0:
-        return True
-    reference = (
-        node.heartbeat.idle_since
-        if node.heartbeat is not None and node.heartbeat.idle_since is not None
-        else node.heartbeat.updated_at
-        if node.heartbeat is not None and node.active_sandboxes == 0
-        else node.job.started_at or node.job.created_at
-    )
-    if reference is None:
-        return False
-    return (now - reference).total_seconds() >= idle_seconds

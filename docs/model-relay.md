@@ -101,6 +101,8 @@ It uses the checkpoint-owned managed-process protocol, so status and bounded
 logs survive park/wake and cross-node restore. Do not launch the primary agent
 with `start_exec()`: attached exec transports cannot be reattached after a
 gVisor restore and therefore intentionally block parking with HTTP `409`.
+The node's generic idle timer deliberately skips managed-process sandboxes;
+only relay acceptance/model-wait coordination may select their safe park point.
 
 ## General HTTP Reverse Tunnel
 

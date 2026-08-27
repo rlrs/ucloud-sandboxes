@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.9 - 2026-08-27
+
+- Unified create, wake, exec, and autoscaler admission around measured resource
+  pressure, with shared CPU and memory headroom rules and additive disk demand.
+- Moved idle parking into the node lifecycle and reserved managed-agent parking
+  for the coordinated SDK/relay contract, avoiding competing park decisions.
+- Consolidated sandbox HTTP routing, scale-down eligibility, deployment
+  convergence, artifact version discovery, and provider runtime profiles so
+  every execution path follows the same policy.
+- Aligned sandbox networking defaults with the SDK and removed unsupported
+  snapshot-publication API surface that could not work end to end.
+
 ## 0.5.8 - 2026-08-27
 
 - Made completed background snapshot publication visible through a validated,

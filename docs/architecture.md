@@ -71,16 +71,17 @@ installed GC timer to keep registry storage bounded.
 ## Resource Placement
 
 Sandbox placement is resource-based. Each sandbox request can ask for its own
-`cpus`, `memory_mb`, and `disk_mb`. The storage-native direct-runtime pool uses
-exact `1.0` CPU, memory, and disk capacity factors. Parked sandboxes retain
-their hard disk placement but release active CPU and memory; those resources
-are checked again on wake. Node heartbeats report
-actual CPU, memory, PSI, storage capacity, and storage-operation queueing.
-Static requested resources remain hard admission constraints, while the
-autoscaler's live feedback policy uses those observations to retain latency
-headroom. The qualified homogeneous worker shape has 32 vCPU, 96 GiB RAM, and
-a 2-TB attached disk split into bounded Docker image storage, swap, disposable
-storage cache, and headroom before sandbox hard capacity is advertised.
+`cpus`, `memory_mb`, and `disk_mb`. CPU and memory are individual cgroup limits:
+they must fit the physical node shape, but resident limits are reusable and do
+not become synthetic current usage. One live-pressure admission function uses
+actual CPU, load, available memory, swap, and PSI for both create and wake.
+Disk remains exact additive ownership and is consumed by every planned or live
+placement. Parked sandboxes retain that hard disk placement while releasing
+active CPU and memory. Node heartbeats also report storage capacity and
+storage-operation queueing. The qualified homogeneous worker shape has 32
+vCPU, 96 GiB RAM, and a 2-TB attached disk split into bounded Docker image
+storage, swap, disposable storage cache, and headroom before sandbox hard
+capacity is advertised.
 
 ## Disk Quotas
 
@@ -112,3 +113,10 @@ Heartbeats may confirm an assigned incarnation but cannot create a new
 generation or move a route. Storage-native capacity, registry digests, the
 migration journal, and route ownership therefore remain explicit durable
 authorities rather than observations inferred from runtime processes.
+
+The node has one parking path through the lifecycle coordinator. Its local idle
+timer may park ordinary opt-in sandboxes, but it never parks
+`managed_process` sandboxes: request inactivity cannot prove that a long-lived
+agent is at a safe checkpoint. Managed agents park only through the SDK/relay
+model-wait protocol, which coordinates the client process, gateway program
+state, and relay request state.

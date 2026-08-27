@@ -45,6 +45,7 @@ from .http_server import (
     HighBacklogThreadingHTTPServer,
     traced_http_request,
 )
+from .http_contract import match_sandbox_http_route
 from .images import (
     DockerImageRuntime,
     ImageBuildSpec,
@@ -92,6 +93,7 @@ from .program_scheduler import (
     node_pressure_score,
     plan_shadow_wake_queue,
 )
+from .resource_admission import node_accepts_dynamic_request
 from .control_state import ControlStateStore
 from .registry import (
     HeartbeatIdentityError,
@@ -164,12 +166,6 @@ REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
 COLD_PULL_PRESSURE_PENALTY_BYTES = 256 * 1024 * 1024
-# One direct node may own hundreds of resident sandboxes, but cold rootfs
-# creation is a bounded pipeline. Once this many creates are assigned, permit
-# another node to trade an image transfer for lower queue latency.
-CREATE_PIPELINE_TARGET_PER_NODE = 8
-
-
 def _migration_pending_demand_id(sandbox_id: str) -> str:
     return f"__migration__:{sandbox_id}"
 
@@ -179,7 +175,7 @@ def _wake_pending_demand_id(sandbox_id: str) -> str:
 
 
 def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
-    if not bool(spec.get("parkable", spec.get("hibernate"))):
+    if not bool(spec.get("parkable")):
         return ()
     return tuple(
         capability
@@ -193,37 +189,8 @@ def _sandbox_required_capabilities(spec: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _sandbox_request_wakes(path: str, method: str) -> bool:
-    normalized = urlparse(path).path
-    return bool(
-        (method == "POST" and normalized.endswith("/exec"))
-        or (method == "POST" and normalized.endswith("/jobs"))
-        or (method == "POST" and normalized.endswith("/signal"))
-        or (method == "GET" and "/logs/" in normalized and "/jobs/" in normalized)
-        or (method == "POST" and normalized.endswith("/wake"))
-        or (method in {"GET", "PUT"} and normalized.endswith("/files"))
-        or (method == "GET" and normalized.endswith("/ssh"))
-    )
-
-
-def _managed_process_path(
-    path: str,
-    sandbox_id: str,
-) -> tuple[str, str] | None:
-    parts = [unquote(item) for item in urlparse(path).path.split("/") if item]
-    if len(parts) < 4 or parts[:2] != ["v1", "sandboxes"]:
-        return None
-    if parts[2] != sandbox_id or parts[3] != "jobs":
-        return None
-    if len(parts) == 4:
-        return "collection", ""
-    job_id = parts[4]
-    if len(parts) == 5:
-        return "status", job_id
-    if len(parts) == 6 and parts[5] == "signal":
-        return "signal", job_id
-    if len(parts) == 7 and parts[5] == "logs" and parts[6] in {"stdout", "stderr"}:
-        return f"logs:{parts[6]}", job_id
-    return None
+    route = match_sandbox_http_route(method, path)
+    return bool(route is not None and route.wakes)
 
 
 def _sandbox_transport_epoch(
@@ -505,6 +472,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     sandbox_create_limiter: BoundedSemaphore | None
     sandbox_create_busy_sampler: GatewayBusySampler
     max_concurrent_sandbox_creates: int
+    create_target_concurrency_per_node: int
     max_sandbox_resources: ResourceQuantity
     server_version = "ucloud-sandboxes-control-plane/0.1"
 
@@ -1210,11 +1178,11 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 if require_active_resources
                 else ResourceQuantity(disk_mb=source.resources.disk_mb)
             )
-            if requested.disk_mb <= 0 or not requested.fits_within(available):
-                continue
-            if not _node_storage_pressure_allows(heartbeat, requested):
-                continue
-            if not _node_memory_pressure_allows(heartbeat, requested):
+            if requested.disk_mb <= 0 or not _node_can_fit_available(
+                heartbeat,
+                requested,
+                available,
+            ):
                 continue
             candidates.append(heartbeat)
         if not candidates:
@@ -2754,15 +2722,30 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 job_id=route.job_id,
                 node_url=route.node_url,
             )
+            refreshed_available = (
+                _node_available_resources(
+                    refreshed_heartbeat,
+                    self._placement_routes(),
+                )
+                if refreshed_heartbeat is not None
+                else ResourceQuantity()
+            )
+            refreshed_available = replace(
+                refreshed_available,
+                # This request already owns its durable route reservation.
+                disk_mb=refreshed_available.disk_mb + requested.disk_mb,
+            )
             pressure_changed = not bool(
                 refreshed_heartbeat is not None
                 and refreshed_heartbeat.node_url
                 and refreshed_heartbeat.is_fresh(utc_now(), self.heartbeat_ttl_seconds)
                 and not refreshed_heartbeat.draining
                 and refreshed_heartbeat.admission_open
-                and _node_memory_pressure_allows(refreshed_heartbeat, requested)
-                and _node_cpu_pressure_allows(refreshed_heartbeat)
-                and _node_storage_pressure_allows(refreshed_heartbeat, requested)
+                and _node_can_fit_available(
+                    refreshed_heartbeat,
+                    requested,
+                    refreshed_available,
+                )
             )
             if pressure_changed:
                 failure_reason = "node_actual_pressure_changed"
@@ -3590,8 +3573,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             return
 
-        normalized_path = urlparse(path).path
-        request_wakes = _sandbox_request_wakes(path, self.command)
+        sandbox_http_route = match_sandbox_http_route(self.command, path)
+        request_wakes = bool(
+            sandbox_http_route is not None and sandbox_http_route.wakes
+        )
 
         # Placement is durable before provisioning begins. Do not forward
         # tool traffic into a registration that is still planned, quota-ready,
@@ -3635,17 +3620,13 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        managed_path = _managed_process_path(path, sandbox_id)
         transport_reset = False
         lifecycle_payload: dict[str, Any] = {}
         lifecycle_action = (
-            "wake"
-            if self.command == "POST" and normalized_path.endswith("/wake")
-            else (
-                "park"
-                if self.command == "POST" and normalized_path.endswith("/park")
-                else ""
-            )
+            sandbox_http_route.action
+            if sandbox_http_route is not None
+            and sandbox_http_route.action in {"park", "wake"}
+            else ""
         )
         if lifecycle_action:
             try:
@@ -3687,15 +3668,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 return
 
         if (
-            managed_path is not None
-            and managed_path[0] == "status"
-            and self.command == "GET"
+            sandbox_http_route is not None
+            and sandbox_http_route.action == "job_status"
             and (route.state or "unknown").lower()
             in {"parking", "parked", "moving", "restoring", "waking"}
         ):
             cached = self.routing_store.get_managed_process(
                 sandbox_id,
-                managed_path[1],
+                sandbox_http_route.job_id,
                 sandbox_generation=route.generation,
             )
             if cached is None:
@@ -3821,13 +3801,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
         if not self._route_worker_is_fresh(route):
             if (
-                managed_path is not None
-                and managed_path[0] == "status"
-                and self.command == "GET"
+                sandbox_http_route is not None
+                and sandbox_http_route.action == "job_status"
             ):
                 cached = self.routing_store.get_managed_process(
                     sandbox_id,
-                    managed_path[1],
+                    sandbox_http_route.job_id,
                     sandbox_generation=route.generation,
                 )
                 if cached is not None:
@@ -3842,7 +3821,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 SANDBOX_GENERATION_HEADER: str(route.generation),
                 SANDBOX_OPERATION_ID_HEADER: route.delete_operation_id,
             }
-        if self.command == "GET" and normalized_path.endswith("/files"):
+        if sandbox_http_route is not None and sandbox_http_route.action == "files":
             self._stream_proxy_request(
                 route.node_url,
                 self.path,
@@ -3895,9 +3874,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if implicit_wake and 200 <= response.status < 300:
             route = self._commit_implicit_wake(route)
         if (
-            managed_path is not None
-            and managed_path[0] == "status"
-            and self.command == "GET"
+            sandbox_http_route is not None
+            and sandbox_http_route.action == "job_status"
             and response.status in {HTTPStatus.BAD_REQUEST, HTTPStatus.CONFLICT}
             and "lifecycle transition is in progress"
             in str(response.json().get("error") or "").lower()
@@ -3908,22 +3886,26 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             # last durable gateway observation instead of aborting the harness.
             cached = self.routing_store.get_managed_process(
                 sandbox_id,
-                managed_path[1],
+                sandbox_http_route.job_id,
                 sandbox_generation=route.generation,
             )
             if cached is not None:
                 self._write_json({"job": cached.to_dict()})
                 return
         if (
-            managed_path is not None
-            and managed_path[0] in {"collection", "status", "signal"}
+            sandbox_http_route is not None
+            and sandbox_http_route.action
+            in {"job_create", "job_status", "job_signal"}
             and 200 <= response.status < 300
         ):
             response_payload = response.json()
             raw_job = response_payload.get("job")
             try:
                 managed_record = ManagedProcessRecord.from_dict(raw_job)
-                if managed_path[1] and managed_record.job_id != managed_path[1]:
+                if (
+                    sandbox_http_route.job_id
+                    and managed_record.job_id != sandbox_http_route.job_id
+                ):
                     raise ValueError("node returned another managed process")
                 self.routing_store.upsert_managed_process(route, managed_record)
             except (SandboxRouteConflictError, TypeError, ValueError) as exc:
@@ -3933,8 +3915,8 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 )
                 return
         if (
-            self.command == "POST"
-            and path.endswith("/exec")
+            sandbox_http_route is not None
+            and sandbox_http_route.action == "exec"
             and 200 <= response.status < 300
         ):
             session = response.json().get("session")
@@ -4192,6 +4174,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                         available=_node_available_resources(heartbeat, routes),
                         total=heartbeat.total_resources,
                         pressure=node_pressure_score(heartbeat),
+                        heartbeat=heartbeat,
                     )
                     for heartbeat in self._ready_sandbox_heartbeats()
                     if heartbeat.admission_open
@@ -4628,12 +4611,12 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         }
         cached_nodes_have_headroom = any(
             heartbeat.node_id in image_node_ids
-            and state.active_creates < CREATE_PIPELINE_TARGET_PER_NODE
+            and state.active_creates < self.create_target_concurrency_per_node
             for heartbeat, state in candidate_states
         )
         inflight_nodes_have_headroom = any(
             heartbeat.node_id in inflight_image_node_ids
-            and state.active_creates < CREATE_PIPELINE_TARGET_PER_NODE
+            and state.active_creates < self.create_target_concurrency_per_node
             for heartbeat, state in candidate_states
         )
         if image_node_ids and cached_nodes_have_headroom:
@@ -5587,6 +5570,9 @@ def build_server(
     registry_worker_url: str | None = None,
     registry_usage_file: Path | None = None,
     max_concurrent_sandbox_creates: int = DEFAULT_MAX_CONCURRENT_SANDBOX_CREATES,
+    create_target_concurrency_per_node: int = (
+        ScalePolicy().create_target_concurrency_per_node
+    ),
     max_http_request_threads: int = DEFAULT_MAX_GATEWAY_HTTP_REQUEST_THREADS,
     build_context_store_dir: Path | None = None,
     max_sandbox_resources: ResourceQuantity | None = None,
@@ -5612,6 +5598,8 @@ def build_server(
     deployment_id = deployment_id.strip()
     if not deployment_id:
         raise ValueError("deployment id cannot be empty")
+    if create_target_concurrency_per_node < 1:
+        raise ValueError("create target concurrency per node must be positive")
     resolved_telemetry = telemetry or Telemetry.disabled("ucloud-sandbox-gateway")
     store = ControlStateStore(control_state_file)
     routing_store = RoutingStore(routing_file)
@@ -5670,6 +5658,9 @@ def build_server(
         0,
         int(max_concurrent_sandbox_creates),
     )
+    BoundHandler.create_target_concurrency_per_node = int(
+        create_target_concurrency_per_node
+    )
     BoundHandler.max_sandbox_resources = (
         max_sandbox_resources or ScalePolicy().default_node_resources
     )
@@ -5723,29 +5714,9 @@ def _is_sdk_api_request(method: str, path: str) -> bool:
         if method in methods and _single_encoded_path_segment(path, prefix):
             return True
 
-    sandbox_parts = _encoded_path_parts(path, "/v1/sandboxes/")
-    if sandbox_parts is not None:
-        if len(sandbox_parts) == 1:
-            return method == "DELETE"
-        suffix = sandbox_parts[1:]
-        if suffix == ["files"]:
-            return method in {"GET", "PUT"}
-        if suffix == ["ssh"]:
-            return method == "GET"
-        if suffix in (["exec"], ["snapshot"], ["jobs"]):
-            return method == "POST"
-        if len(suffix) == 2 and suffix[0] == "jobs":
-            return method == "GET"
-        if len(suffix) == 3 and suffix[0] == "jobs" and suffix[2] == "signal":
-            return method == "POST"
-        if (
-            len(suffix) == 4
-            and suffix[0] == "jobs"
-            and suffix[2] == "logs"
-            and suffix[3] in {"stdout", "stderr"}
-        ):
-            return method == "GET"
-        return False
+    sandbox_route = match_sandbox_http_route(method, path)
+    if sandbox_route is not None:
+        return sandbox_route.sdk_public
 
     exec_parts = _encoded_path_parts(path, "/v1/exec/")
     if exec_parts is None:
@@ -6225,23 +6196,7 @@ def _node_can_fit_available(
     requested: ResourceQuantity,
     available: ResourceQuantity,
 ) -> bool:
-    if not _has_resource_values(requested):
-        return False
-    if requested.disk_mb > 0 and not has_capability(
-        heartbeat.capabilities,
-        DISK_QUOTA_CAPABILITY,
-    ):
-        return False
-    if not _node_memory_pressure_allows(heartbeat, requested):
-        return False
-    if not _node_cpu_pressure_allows(heartbeat):
-        return False
-    if not _node_storage_pressure_allows(heartbeat, requested):
-        return False
-    # CPU and memory are admitted from fresh runtime pressure on direct nodes.
-    # Keep the route-accounted disk check so concurrent creates cannot outrun
-    # the storage daemon's next heartbeat.
-    return requested.disk_mb <= available.disk_mb
+    return node_accepts_dynamic_request(heartbeat, requested, available)
 
 
 def _node_placement_state(
@@ -6281,69 +6236,6 @@ def _node_placement_state(
             ),
         ),
     )
-
-
-def _node_memory_pressure_allows(
-    heartbeat: NodeHeartbeat,
-    requested: ResourceQuantity,
-) -> bool:
-    """Require one-request headroom and stop on real memory pressure."""
-
-    if heartbeat.runtime_metrics is None:
-        return False
-    metrics = heartbeat.runtime_metrics
-    if (
-        metrics.memory_psi_full_avg10 is not None
-        and metrics.memory_psi_full_avg10 >= 10.0
-    ):
-        return False
-    minimum_headroom_mb = max(2048, requested.memory_mb)
-    if metrics.swap_total_mb > 0:
-        return metrics.memory_available_mb + metrics.swap_free_mb >= minimum_headroom_mb
-    if metrics.memory_total_mb > 0:
-        return metrics.memory_available_mb >= minimum_headroom_mb
-    return True
-
-
-def _node_cpu_pressure_allows(heartbeat: NodeHeartbeat) -> bool:
-    """Use actual CPU pressure as the direct-runtime admission brake."""
-
-    metrics = heartbeat.runtime_metrics
-    if metrics is None:
-        return False
-    if metrics.cpu_percent is not None and metrics.cpu_percent >= 90.0:
-        return False
-    if metrics.cpu_count > 0 and metrics.load_average_1m is not None:
-        return metrics.load_average_1m < metrics.cpu_count * 1.25
-    return True
-
-
-def _node_storage_pressure_allows(
-    heartbeat: NodeHeartbeat,
-    requested: ResourceQuantity,
-) -> bool:
-    """Use daemon authority, rather than route counts, for writable admission."""
-
-    if STORAGE_NATIVE_CAPABILITY not in heartbeat.capabilities:
-        return True
-    metrics = heartbeat.runtime_metrics
-    if metrics is None or metrics.storage_hard_capacity_mb <= 0:
-        return False
-    if metrics.storage_error_volumes > 0:
-        return False
-    if (
-        metrics.storage_ublk_max_devices > 0
-        and metrics.storage_ublk_active_devices >= metrics.storage_ublk_max_devices
-    ):
-        return False
-    maximum = metrics.storage_max_concurrent_operations
-    if maximum > 0 and metrics.storage_waiting_operations >= maximum:
-        return False
-    hard_available = max(
-        0,
-        metrics.storage_hard_capacity_mb - metrics.storage_hard_reserved_mb,
-    )
-    return requested.disk_mb <= hard_available
 
 
 def _node_available_resources(

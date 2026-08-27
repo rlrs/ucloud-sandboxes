@@ -204,6 +204,21 @@ class VmInitTests(unittest.TestCase):
             script,
         )
 
+    def test_provider_runtime_exceptions_have_one_profile_authority(self) -> None:
+        ucloud = vm_init.vm_runtime_profile("ucloud")
+        hetzner = vm_init.vm_runtime_profile("hetzner")
+
+        self.assertEqual(ucloud.state_dir, vm_init.DEFAULT_UCLOUD_NODE_STATE_DIR)
+        self.assertEqual(
+            ucloud.storage_native_max_ublk_devices,
+            vm_init.DEFAULT_UCLOUD_STORAGE_NATIVE_MAX_UBLK_DEVICES,
+        )
+        self.assertEqual(hetzner.state_dir, "")
+        self.assertEqual(
+            hetzner.storage_native_max_ublk_devices,
+            vm_init.DEFAULT_STORAGE_NATIVE_MAX_UBLK_DEVICES,
+        )
+
     def test_authorized_keys_are_rendered_as_inert_shell_values(self) -> None:
         with TemporaryDirectory() as raw_dir:
             injected = Path(raw_dir) / "injected"

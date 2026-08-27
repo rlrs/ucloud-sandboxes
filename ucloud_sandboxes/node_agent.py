@@ -32,6 +32,7 @@ from .http_server import (
     RequestBodyTooLargeError,
     traced_http_request,
 )
+from .http_contract import match_sandbox_http_route
 from .images import (
     DockerImageRuntime,
     ImageBuildConflictError,
@@ -178,21 +179,24 @@ class NodeAgentHandler(BuildContextHttpHandler):
                 }
             )
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/files"):
+        sandbox_route = match_sandbox_http_route("GET", parsed.path)
+        if sandbox_route is not None and sandbox_route.action == "files":
             self._download_file(parsed)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/ssh"):
+        if sandbox_route is not None and sandbox_route.action == "ssh":
             self._sandbox_ssh(parsed.path)
             return
-        managed_path = _managed_process_path(parsed.path)
-        if managed_path is not None and managed_path[0] == "status":
-            self._managed_process_status(managed_path[1], managed_path[2])
+        if sandbox_route is not None and sandbox_route.action == "job_status":
+            self._managed_process_status(
+                sandbox_route.sandbox_id,
+                sandbox_route.job_id,
+            )
             return
-        if managed_path is not None and managed_path[0].startswith("logs:"):
+        if sandbox_route is not None and sandbox_route.action == "job_logs":
             self._managed_process_logs(
-                managed_path[1],
-                managed_path[2],
-                managed_path[0].split(":", 1)[1],
+                sandbox_route.sandbox_id,
+                sandbox_route.job_id,
+                sandbox_route.stream,
                 parsed,
             )
             return
@@ -310,21 +314,24 @@ class NodeAgentHandler(BuildContextHttpHandler):
         ):
             self._publish_parked_sandbox(parsed.path)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/park"):
+        sandbox_route = match_sandbox_http_route("POST", parsed.path)
+        if sandbox_route is not None and sandbox_route.action == "park":
             self._park_sandbox(parsed.path)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/wake"):
+        if sandbox_route is not None and sandbox_route.action == "wake":
             self._wake_sandbox(parsed.path)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/exec"):
+        if sandbox_route is not None and sandbox_route.action == "exec":
             self._start_exec(parsed.path)
             return
-        managed_path = _managed_process_path(parsed.path)
-        if managed_path is not None and managed_path[0] == "collection":
-            self._start_managed_process(managed_path[1])
+        if sandbox_route is not None and sandbox_route.action == "job_create":
+            self._start_managed_process(sandbox_route.sandbox_id)
             return
-        if managed_path is not None and managed_path[0] == "signal":
-            self._signal_managed_process(managed_path[1], managed_path[2])
+        if sandbox_route is not None and sandbox_route.action == "job_signal":
+            self._signal_managed_process(
+                sandbox_route.sandbox_id,
+                sandbox_route.job_id,
+            )
             return
         if parsed.path.startswith("/v1/exec/") and parsed.path.endswith("/stdin"):
             self._write_exec_stdin(parsed.path)
@@ -399,7 +406,8 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if not self.sandboxes_enabled:
             self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
-        if parsed.path.startswith("/v1/sandboxes/") and parsed.path.endswith("/files"):
+        sandbox_route = match_sandbox_http_route("PUT", parsed.path)
+        if sandbox_route is not None and sandbox_route.action == "files":
             self._upload_file(parsed)
             return
         self._write_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -1508,6 +1516,7 @@ def build_direct_node_agent_server(
         )
     service.start()
     manager = DirectNodeRuntime(service)
+    manager.start()
     exec_manager = ExecSessionManager(manager, telemetry=resolved_telemetry)
     image_manager = ImageManager(
         ImageStore(image_file),
@@ -1623,9 +1632,12 @@ def build_direct_node_agent_server(
     class DirectServiceHTTPServer(HighBacklogThreadingHTTPServer):
         def server_close(self) -> None:
             try:
-                service.stop()
+                manager.stop()
             finally:
-                super().server_close()
+                try:
+                    service.stop()
+                finally:
+                    super().server_close()
 
     return DirectServiceHTTPServer((host, port), DirectBoundHandler)
 
@@ -1669,23 +1681,6 @@ def _sandbox_id_from_path(path: str, *, suffix: str = "") -> str:
     if suffix:
         return unquote(path[len(prefix) : -len(suffix)])
     return unquote(path[len(prefix) :])
-
-
-def _managed_process_path(path: str) -> tuple[str, str, str] | None:
-    parts = [unquote(item) for item in path.split("/") if item]
-    if len(parts) < 4 or parts[:2] != ["v1", "sandboxes"] or parts[3] != "jobs":
-        return None
-    sandbox_id = parts[2]
-    if len(parts) == 4:
-        return "collection", sandbox_id, ""
-    job_id = parts[4]
-    if len(parts) == 5:
-        return "status", sandbox_id, job_id
-    if len(parts) == 6 and parts[5] == "signal":
-        return "signal", sandbox_id, job_id
-    if len(parts) == 7 and parts[5] == "logs" and parts[6] in {"stdout", "stderr"}:
-        return f"logs:{parts[6]}", sandbox_id, job_id
-    return None
 
 
 def _image_build_key_from_path(path: str) -> str | None:

@@ -2764,6 +2764,165 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(len(leases_before), 1)
         self.assertEqual(leases_after, leases_before)
 
+    def test_gateway_delete_cancels_staged_migration_before_replay(self) -> None:
+        class MigratingDeleteNode(BaseHTTPRequestHandler):
+            requests: list[tuple[str, str]] = []
+            delete_operation_ids: list[str] = []
+
+            def do_POST(self) -> None:
+                type(self).requests.append(("POST", self.path))
+                self._write_json({"ok": True})
+
+            def do_DELETE(self) -> None:
+                type(self).requests.append(("DELETE", self.path))
+                type(self).delete_operation_ids.append(
+                    self.headers["X-UCloud-Sandbox-Operation-Id"]
+                )
+                self._write_json(
+                    {
+                        "deleted": {
+                            "generation": int(
+                                self.headers["X-UCloud-Sandbox-Generation"]
+                            )
+                        }
+                    }
+                )
+
+            def log_message(self, format: str, *args: object) -> None:
+                del format, args
+
+            def _write_json(self, payload: dict[str, object]) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        with _temporary_root() as raw_path:
+            route_file = raw_path / "routes.sqlite"
+            node = ThreadingHTTPServer(("127.0.0.1", 0), MigratingDeleteNode)
+            with _running_server(node) as node_url:
+                routing_store = RoutingStore(route_file)
+                route = routing_store.upsert_sandbox(
+                    _sandbox_route(
+                        sandbox_id="delete-migrating",
+                        node_id="source-node",
+                        job_id="source-job",
+                        node_url=node_url,
+                        state="parked",
+                        generation=2,
+                        create_operation_id="create-delete-migrating",
+                        spec_hash="d" * 64,
+                    )
+                )
+                migration = routing_store.begin_sandbox_migration(
+                    route,
+                    migration_id="migration-delete-migrating",
+                    destination_node_id="destination-node",
+                    destination_job_id="destination-job",
+                    destination_node_url=node_url,
+                )
+                migration = routing_store.advance_sandbox_migration(
+                    migration.migration_id,
+                    expected_phases={"planned"},
+                    phase="staged",
+                    storage_schema="storage-native-v1",
+                    snapshot_sha256="e" * 64,
+                    source_fenced=True,
+                )
+                assert migration is not None
+                gateway = _gateway_server(raw_path, routing_file=route_file)
+                with _running_server(gateway) as base:
+                    post_heartbeat(
+                        f"{base}/v1/nodes/heartbeat",
+                        build_heartbeat(
+                            job_id=route.job_id,
+                            node_id=route.node_id,
+                            node_url=node_url,
+                            active_sandboxes=0,
+                            capabilities=("sandbox", "disk-quota"),
+                        ),
+                    )
+                    response = self._json_request(
+                        f"{base}/v1/sandboxes/{route.sandbox_id}",
+                        method="DELETE",
+                    )
+                final_route = RoutingStore(route_file).get_sandbox(route.sandbox_id)
+                final_migration = RoutingStore(route_file).get_sandbox_migration(
+                    migration.migration_id
+                )
+
+        self.assertEqual(response["deleted"]["generation"], route.generation)
+        self.assertIsNone(final_route)
+        self.assertIsNotNone(final_migration)
+        assert final_migration is not None
+        self.assertEqual(final_migration.phase, "complete")
+        self.assertEqual(final_migration.error, "cancelled before route commit")
+        self.assertEqual(
+            MigratingDeleteNode.requests,
+            [
+                (
+                    "POST",
+                    "/v1/sandboxes/delete-migrating/migration/abort-import",
+                ),
+                ("POST", "/v1/sandboxes/delete-migrating/migration/abort"),
+                ("DELETE", "/v1/sandboxes/delete-migrating"),
+            ],
+        )
+        self.assertEqual(len(MigratingDeleteNode.delete_operation_ids), 1)
+        self.assertTrue(
+            MigratingDeleteNode.delete_operation_ids[0].startswith("delete-")
+        )
+
+    def test_gateway_delete_removes_detached_route_without_contacting_worker(
+        self,
+    ) -> None:
+        with _temporary_root() as raw_path:
+            route_file = raw_path / "routes.sqlite"
+            routing_store = RoutingStore(route_file)
+            snapshot = _portable_snapshot("delete-detached")
+            route = routing_store.upsert_sandbox(
+                _sandbox_route(
+                    sandbox_id="delete-detached",
+                    node_id="lost-node",
+                    job_id="lost-job",
+                    node_url="http://worker.invalid",
+                    resources=snapshot.manifest.spec.requested_resources(),
+                    spec=snapshot.manifest.spec.to_dict(),
+                    state="parked",
+                    worker_state="detached",
+                    storage_schema="storage-native-v1",
+                    snapshot_manifest_digest=snapshot.publication.manifest_digest,
+                    snapshot_repository=snapshot.publication.repository,
+                    snapshot_tag=snapshot.publication.tag,
+                    storage_snapshot=snapshot.to_dict(),
+                )
+            )
+            migration = routing_store.begin_sandbox_migration(
+                route,
+                migration_id="migration-delete-detached",
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination.invalid",
+            )
+            gateway = _gateway_server(raw_path, routing_file=route_file)
+            with _running_server(gateway) as base:
+                response = self._json_request(
+                    f"{base}/v1/sandboxes/{route.sandbox_id}",
+                    method="DELETE",
+                )
+            final_route = RoutingStore(route_file).get_sandbox(route.sandbox_id)
+            final_migration = RoutingStore(route_file).get_sandbox_migration(
+                migration.migration_id
+            )
+
+        self.assertEqual(response["deleted"]["sandbox_id"], route.sandbox_id)
+        self.assertIsNone(final_route)
+        self.assertIsNotNone(final_migration)
+        assert final_migration is not None
+        self.assertEqual(final_migration.phase, "complete")
+
     def test_gateway_releases_registry_reference_only_after_successful_delete(
         self,
     ) -> None:

@@ -419,6 +419,48 @@ class RoutingStoreTests(unittest.TestCase):
         self.assertEqual(routed[1].node_id, "destination-node")
         self.assertEqual(replayed, routed)
 
+    def test_route_delete_terminalizes_active_migration(self) -> None:
+        with routing_store() as store:
+            source = allocate_sandbox_create(
+                store,
+                sandbox_allocation(
+                    sandbox_id="deleted-mid-migration",
+                    node_id="source-node",
+                    job_id="source-job",
+                    node_url="http://source:8090",
+                    resources=ResourceQuantity(disk_mb=4096),
+                    spec={"id": "deleted-mid-migration", "image": "busybox"},
+                ),
+                spec_hash="a" * 64,
+                create_operation_id="create-operation",
+            )
+            source = set_sandbox_state(store, source, "parked")
+            migration = store.begin_sandbox_migration(
+                source,
+                migration_id="migration-deleted-route",
+                destination_node_id="destination-node",
+                destination_job_id="destination-job",
+                destination_node_url="http://destination:8090",
+            )
+            deleting = store.prepare_sandbox_delete(source.sandbox_id)
+            assert deleting is not None
+
+            removed = store.delete_sandbox_if_current(
+                deleting.sandbox_id,
+                generation=deleting.generation,
+                delete_operation_id=deleting.delete_operation_id,
+            )
+            final_migration = store.get_sandbox_migration(migration.migration_id)
+
+        self.assertIsNotNone(removed)
+        self.assertIsNotNone(final_migration)
+        assert final_migration is not None
+        self.assertEqual(final_migration.phase, "complete")
+        self.assertEqual(
+            final_migration.error,
+            "sandbox deleted before migration completed",
+        )
+
     def test_wake_completion_atomically_marks_destination_waking(self) -> None:
         with routing_store() as store:
             source = allocate_sandbox_create(

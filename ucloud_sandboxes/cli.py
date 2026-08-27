@@ -1276,6 +1276,45 @@ def _post_bounded_json(
         return decoded, response.headers
 
 
+def _delete_bounded_json(
+    base_url: str,
+    path: str,
+    *,
+    bearer_token: str | None,
+    invalid_url_error: str,
+    empty_token_error: str,
+    timeout_seconds: float,
+    response_name: str,
+) -> tuple[dict[str, Any], Any]:
+    base_url = str(base_url).strip().rstrip("/")
+    parsed = urlparse(base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(invalid_url_error)
+    headers = {"Accept": "application/json"}
+    if bearer_token is not None:
+        bearer_token = bearer_token.strip()
+        if not bearer_token:
+            raise ValueError(empty_token_error)
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    inject(headers)
+    req = Request(
+        f"{base_url}{path}",
+        headers=headers,
+        method="DELETE",
+    )
+    with build_opener(_RejectControlRedirects()).open(
+        req,
+        timeout=timeout_seconds,
+    ) as response:
+        body = response.read(_MAX_CONTROL_RESPONSE_BYTES + 1)
+        if len(body) > _MAX_CONTROL_RESPONSE_BYTES:
+            raise ValueError(f"{response_name} response exceeds 1 MiB")
+        decoded = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(decoded, dict):
+            raise ValueError(f"{response_name} response must be a JSON object")
+        return decoded, response.headers
+
+
 def _post_gateway_sandbox_lifecycle(
     gateway_url: str,
     bearer_token: str | None,
@@ -2414,6 +2453,24 @@ def _post_gateway_sandbox_detach(
     )[0]
 
 
+def _delete_gateway_sandbox(
+    gateway_url: str,
+    sandbox_id: str,
+    *,
+    bearer_token: str | None = None,
+    timeout_seconds: float = 3600.0,
+) -> dict[str, Any]:
+    return _delete_bounded_json(
+        gateway_url,
+        f"/v1/sandboxes/{quote(sandbox_id, safe='')}",
+        bearer_token=bearer_token,
+        invalid_url_error="gateway control URL is invalid",
+        empty_token_error="gateway control bearer token cannot be empty",
+        timeout_seconds=timeout_seconds,
+        response_name="gateway sandbox delete replay",
+    )[0]
+
+
 def _drain_response_acknowledges(
     response: dict[str, Any],
     *,
@@ -3146,9 +3203,10 @@ def run_reconcile_cycle(
     drain_results: list[dict[str, Any]] = []
     storage_native_migration_results: list[dict[str, Any]] = []
     storage_native_detach_results: list[dict[str, Any]] = []
+    pending_delete_results: list[dict[str, Any]] = []
     drain_ready_stop_job_ids: list[str] = []
     canceled_drain_job_ids: list[str] = []
-    remaining_detach_budget = max(
+    remaining_storage_cleanup_budget = max(
         0,
         config.autoscaler_max_storage_native_detaches_per_cycle,
     )
@@ -3162,6 +3220,37 @@ def run_reconcile_cycle(
         config.gateway_token_file(),
         "gateway control bearer token",
     )
+    if execution_requested and execution_authorized:
+        pending_delete_routes = sorted(
+            (route for route in sandbox_routes if route.delete_operation_id),
+            key=lambda route: (route.updated_at, route.sandbox_id),
+        )
+        for route in pending_delete_routes[:remaining_storage_cleanup_budget]:
+            delete_error = ""
+            delete_payload: dict[str, Any] = {}
+            try:
+                delete_payload = _delete_gateway_sandbox(
+                    detach_gateway_url,
+                    route.sandbox_id,
+                    bearer_token=gateway_control_bearer_token,
+                )
+            except Exception as exc:
+                # The gateway and node reuse the route's durable delete
+                # operation id, so an ambiguous replay is safe next cycle.
+                delete_error = str(exc)
+            pending_delete_results.append(
+                {
+                    "job_id": route.job_id,
+                    "sandbox_id": route.sandbox_id,
+                    "gateway_url": detach_gateway_url,
+                    "delete_operation_id": route.delete_operation_id,
+                    "request_succeeded": not delete_error,
+                    "deleted": delete_payload.get("deleted"),
+                    "error": delete_error,
+                }
+            )
+            remaining_storage_cleanup_budget -= 1
+    remaining_detach_budget = remaining_storage_cleanup_budget
     if drain_workflow_enabled:
         nodes_by_job_id = {node.job_id: node for node in nodes}
         for job_id in destructive_stop_job_ids:
@@ -3581,6 +3670,7 @@ def run_reconcile_cycle(
             _drain_intent_to_dict(intent) for intent in pending_drain_intents
         ],
         "drainResults": drain_results,
+        "pending_delete_results": pending_delete_results,
         "storage_native_migration_results": storage_native_migration_results,
         "storage_native_detach_results": storage_native_detach_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),

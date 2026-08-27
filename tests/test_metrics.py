@@ -329,6 +329,16 @@ class MetricsTests(unittest.TestCase):
                             "sandbox": {"secret": "must-not-be-persisted"},
                         }
                     ],
+                    "pending_delete_results": [
+                        {
+                            "job_id": "requested-1",
+                            "sandbox_id": "sandbox-delete-1",
+                            "delete_operation_id": "delete-operation-1",
+                            "request_succeeded": True,
+                            "error": "",
+                            "deleted": {"secret": "must-not-be-persisted"},
+                        }
+                    ],
                     "providerOperationResults": [
                         {
                             "operationId": "operation-1",
@@ -381,6 +391,13 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(
             scale_down["storage_detach_attempts"][0]["error"],
             "registry unavailable",
+        )
+        self.assertTrue(
+            scale_down["pending_delete_attempts"][0]["request_succeeded"]
+        )
+        self.assertEqual(
+            scale_down["pending_delete_attempts"][0]["delete_operation_id"],
+            "delete-operation-1",
         )
         self.assertEqual(
             execution["provider_operations"][0]["job_ids"],

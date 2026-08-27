@@ -679,6 +679,16 @@ def _autoscaler_execution_summary(result: dict[str, Any]) -> dict[str, Any]:
                     ("error", "error"),
                 ),
             ),
+            "pending_delete_attempts": _bounded_result_summaries(
+                result.get("pending_delete_results"),
+                (
+                    ("job_id", "job_id"),
+                    ("sandbox_id", "sandbox_id"),
+                    ("delete_operation_id", "delete_operation_id"),
+                    ("request_succeeded", "request_succeeded"),
+                    ("error", "error"),
+                ),
+            ),
         },
     }
 

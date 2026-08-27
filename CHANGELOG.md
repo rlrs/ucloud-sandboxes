@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.5 - 2026-08-27
+
+- Replayed durable sandbox delete intents from the autoscaler so a client does
+  not need to remain connected until cleanup succeeds.
+- Made gateway deletion cancel an uncommitted storage-native migration before
+  retrying the generation-fenced worker delete.
+- Terminalized orphaned migration journals when their sandbox route is deleted,
+  preventing stale migration reservations from surviving cleanup.
+- Added bounded per-cycle pending-delete results to autoscaler observability and
+  verified the complete delete, drain, and provider-stop sequence.
+
 ## 0.5.4 - 2026-08-27
 
 - Added traffic-independent model-relay maintenance so expired requests and

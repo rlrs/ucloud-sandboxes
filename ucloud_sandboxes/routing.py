@@ -1851,6 +1851,19 @@ class RoutingStore:
             ).rowcount
         conn.execute("DELETE FROM pending WHERE sandbox_id = ?", (sandbox_id,))
         conn.execute("DELETE FROM exec_sessions WHERE sandbox_id = ?", (sandbox_id,))
+        conn.execute(
+            """
+            UPDATE sandbox_migrations
+            SET phase = 'complete',
+                updated_at = ?,
+                error = CASE
+                    WHEN error = '' THEN 'sandbox deleted before migration completed'
+                    ELSE error
+                END
+            WHERE sandbox_id = ? AND phase != 'complete'
+            """,
+            (utc_now().isoformat(), sandbox_id),
+        )
         self._terminalize_program_requests_unlocked(
             conn,
             sandbox_id,

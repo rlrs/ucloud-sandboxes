@@ -405,14 +405,25 @@ publication and local delta retain authority until the replacement manifest is
 durable, so a compaction failure blocks detachment and scale-down rather than
 discarding recoverable state.
 
+Durable delete intents are also controller-owned cleanup work. The autoscaler
+replays the oldest pending deletes every cycle. If deletion meets an
+uncommitted storage-native migration, the gateway first aborts the destination
+import and restores the source registration, then reuses the existing
+generation-fenced delete operation. A successful route deletion terminalizes
+any remaining migration journal. This means a client timeout or disconnect
+cannot leave `moving_out` or `import_ready` inventory pinning a worker forever.
+
 The autoscaler derives the gateway address and credentials from
-`deployment.json`. It starts at most
-`autoscaler_max_storage_native_detaches_per_cycle` detach operations. A node is
-not a stop candidate when any remaining route is running, has an incomplete
-identity, is absent from the worker's fresh complete inventory, or the worker
-lacks the publication/detach capability. A failed publication leaves the park
-attached and blocks the stop; only a descriptor durably stored by the gateway
-can authorize eviction.
+`deployment.json`. Each cycle starts at most
+`autoscaler_max_storage_native_detaches_per_cycle` storage cleanup operations:
+pending delete replays consume the budget first and worker detach operations use
+the remainder. Results are recorded as `pending_delete_attempts` and
+`storage_detach_attempts` in the autoscaler execution metrics. A node is not a
+stop candidate when any remaining route is running, has an incomplete identity,
+is absent from the worker's fresh complete inventory, or the worker lacks the
+publication/detach capability. A failed publication leaves the park attached
+and blocks the stop; only a descriptor durably stored by the gateway can
+authorize eviction.
 
 ## Initial operating stance
 

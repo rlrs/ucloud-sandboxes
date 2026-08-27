@@ -1135,6 +1135,142 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stopped["drainReadyStopJobIds"], ["owned"])
         self.assertEqual(stopped["definitelyTerminatedJobIds"], ["owned"])
 
+    def test_reconcile_replays_pending_delete_then_scales_down(self) -> None:
+        delete_calls: list[str] = []
+        terminate_calls: list[tuple[str, ...]] = []
+
+        class SuccessfulStopClient:
+            def __init__(self, _session_store) -> None:
+                pass
+
+            def terminate_jobs(
+                self, _project_id: str, job_ids: tuple[str, ...]
+            ) -> dict:
+                terminate_calls.append(tuple(job_ids))
+                return {"responses": [{"id": job_id} for job_id in job_ids]}
+
+        route = sandbox_route(
+            sandbox_id="delete-pending",
+            node_id="node-owned",
+            job_id="owned",
+            state="parked",
+            delete_operation_id="delete-pending-operation",
+        )
+        with temporary_root() as root:
+            jobs_file = write_jobs(root, owned_node_job(agent_version=True))
+            heartbeat_file = root / "control-state.sqlite"
+
+            def heartbeat(*, token: str = "", inventory=True) -> NodeHeartbeat:
+                entries = (
+                    (
+                        SandboxInventoryEntry(
+                            sandbox_id=route.sandbox_id,
+                            state="parked",
+                            generation=route.generation,
+                            operation_id=route.create_operation_id,
+                            spec_hash=route.spec_hash,
+                        ),
+                    )
+                    if inventory
+                    else ()
+                )
+                return owned_heartbeat(
+                    idle_since=utc_now() - timedelta(minutes=10),
+                    total_resources=ResourceQuantity(
+                        vcpu=2,
+                        memory_mb=6144,
+                        disk_mb=51200,
+                    ),
+                    resources_known=True,
+                    draining=bool(token),
+                    admission_open=not bool(token),
+                    drain_token=token,
+                    activity_epoch=7,
+                    drain_activity_epoch=7 if token else 0,
+                    inventory_complete=True,
+                    inventory=entries,
+                )
+
+            save_heartbeats(heartbeat_file, {"owned": heartbeat()})
+            config = ucloud_config(
+                project_id="project-1",
+                deployment_id="prod-a",
+                ucloud_session_file=str(root / "session.json"),
+                data_root=str(root),
+                policy=ScalePolicy(max_stop_per_cycle=1, scale_down_idle_seconds=0),
+            )
+            args = autoscaler_args(jobs_file, heartbeat_file)
+            state = AutoscalerStateStore(root / "autoscaler-state.sqlite")
+
+            def replay_delete(
+                _gateway_url: str,
+                sandbox_id: str,
+                **_kwargs,
+            ) -> dict:
+                delete_calls.append(sandbox_id)
+                return {"deleted": {"sandbox_id": sandbox_id}}
+
+            def post_drain(
+                _url: str,
+                token: str,
+                *,
+                draining: bool = True,
+                bearer_token: str | None = None,
+            ) -> dict:
+                del bearer_token
+                return {
+                    "drain": {
+                        "draining": draining,
+                        "token": token,
+                        "admission_open": not draining,
+                    }
+                }
+
+            with (
+                patch.object(cli, "UCloudClient", SuccessfulStopClient),
+                patch.object(
+                    cli,
+                    "_delete_gateway_sandbox",
+                    side_effect=replay_delete,
+                ),
+                patch.object(cli, "_post_node_drain", side_effect=post_drain),
+            ):
+                replayed = reconcile(
+                    config,
+                    args,
+                    state,
+                    route_reservations={"owned": (route,)},
+                    sandbox_routes=(route,),
+                )
+                save_heartbeats(
+                    heartbeat_file,
+                    {"owned": heartbeat(inventory=False)},
+                )
+                draining = reconcile(
+                    config,
+                    args,
+                    state,
+                    route_reservations={},
+                )
+                (intent,) = state.pending_drain_intents(deployment_id="prod-a")
+                save_heartbeats(
+                    heartbeat_file,
+                    {"owned": heartbeat(token=intent.token, inventory=False)},
+                )
+                stopped = reconcile(
+                    config,
+                    args,
+                    state,
+                    route_reservations={},
+                )
+
+        self.assertEqual(delete_calls, [route.sandbox_id])
+        self.assertTrue(replayed["pending_delete_results"][0]["request_succeeded"])
+        self.assertEqual(replayed["requestedStopJobIds"], [])
+        self.assertEqual(draining["stopJobIds"], ["owned"])
+        self.assertEqual(stopped["drainReadyStopJobIds"], ["owned"])
+        self.assertEqual(terminate_calls, [("owned",)])
+
     def test_unfenced_execute_fails_closed(self) -> None:
         terminated: list[tuple[str, tuple[str, ...]]] = []
 

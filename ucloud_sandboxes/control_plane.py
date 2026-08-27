@@ -1602,6 +1602,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if migration.phase == "complete":
             self._write_json({"migration": migration.to_dict()})
             return
+        migration, error_message = self._abort_sandbox_migration(migration)
+        if error_message:
+            self._write_json(
+                {
+                    "error": error_message,
+                    "migration": migration.to_dict(),
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        self._write_json({"migration": migration.to_dict()})
+
+    def _abort_sandbox_migration(self, migration):
+        """Roll back an uncommitted migration using its durable journal."""
+
         payload = json.dumps(
             {
                 "snapshot_sha256": migration.snapshot_sha256,
@@ -1623,15 +1639,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             if destination.status >= 400:
                 migration = self._record_migration_error(migration, destination)
-                self._write_json(
-                    {
-                        "error": migration.error,
-                        "migration": migration.to_dict(),
-                        "retryable": True,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                )
-                return
+                return migration, migration.error
         source = self._proxy_request(
             migration.source_node_url,
             (
@@ -1645,15 +1653,7 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         )
         if source.status >= 400:
             migration = self._record_migration_error(migration, source)
-            self._write_json(
-                {
-                    "error": migration.error,
-                    "migration": migration.to_dict(),
-                    "retryable": True,
-                },
-                status=HTTPStatus.SERVICE_UNAVAILABLE,
-            )
-            return
+            return migration, migration.error
         migration = (
             self.routing_store.advance_sandbox_migration(
                 migration.migration_id,
@@ -1663,7 +1663,28 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             )
             or migration
         )
-        self._write_json({"migration": migration.to_dict()})
+        return migration, ""
+
+    def _resolve_sandbox_migrations_for_delete(self, sandbox_id: str) -> str:
+        """Finish or roll back migration journals before replaying deletion."""
+
+        active = [
+            migration
+            for migration in self.routing_store.sandbox_migrations(active_only=True)
+            if migration.sandbox_id == sandbox_id
+        ]
+        for migration in active:
+            if migration.phase in {"routed", "activated"}:
+                migration = self._advance_sandbox_migration(migration)
+                if migration.phase != "complete":
+                    return (
+                        migration.error or "committed sandbox migration is incomplete"
+                    )
+                continue
+            migration, error_message = self._abort_sandbox_migration(migration)
+            if error_message:
+                return error_message
+        return ""
 
     def _registry_usage_health_error(self) -> str:
         store = self.registry_usage_store
@@ -3569,6 +3590,33 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 state="waking",
             )
 
+        if self.command == "DELETE":
+            # A failed worker delete remains a durable gateway intent. Resolve
+            # any migration that owns the worker registration before replaying
+            # that intent; otherwise moving_out/import_ready registrations can
+            # pin a node forever after the original caller stops retrying.
+            route = self.routing_store.prepare_sandbox_delete(sandbox_id) or route
+            migration_error = (
+                self._resolve_sandbox_migrations_for_delete(sandbox_id)
+                if route.worker_state != "detached"
+                else ""
+            )
+            if migration_error:
+                self._write_json(
+                    {
+                        "error": migration_error,
+                        "retryable": True,
+                    },
+                    status=HTTPStatus.SERVICE_UNAVAILABLE,
+                    headers={"X-UCloud-Sandbox-Retryable": "true"},
+                )
+                return
+            current = self.routing_store.get_sandbox_readonly(sandbox_id)
+            if current is None:
+                self._write_json({"deleted": None})
+                return
+            route = current
+
         if self.command == "DELETE" and route.worker_state == "detaching":
             detached, error_message = self._finish_sandbox_detach(route)
             if detached is None:
@@ -3615,7 +3663,6 @@ class ControlPlaneHandler(BuildContextHttpHandler):
 
         extra_headers: dict[str, str] | None = None
         if self.command == "DELETE":
-            route = self.routing_store.prepare_sandbox_delete(sandbox_id) or route
             extra_headers = {
                 SANDBOX_GENERATION_HEADER: str(route.generation),
                 SANDBOX_OPERATION_ID_HEADER: route.delete_operation_id,

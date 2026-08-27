@@ -1445,6 +1445,72 @@ class DirectProvisionerTests(unittest.TestCase):
                 before.activity.activity_revision,
             )
 
+    def test_abort_move_recovers_digest_after_lost_prepare_response(self) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            registration = registry.get(created.spec.id)
+            assert registration is not None
+            moving = registry.begin_move_out(
+                created.spec.id,
+                expected_revision=registration.revision,
+                migration_id="wake:lost-prepare-response",
+                migration_sha256="d" * 64,
+            )
+
+            restored = service.abort_move(
+                created.spec.id,
+                migration_id=moving.migration_id,
+                migration_sha256="",
+            )
+
+            self.assertEqual(restored.spec.id, created.spec.id)
+            durable = registry.get(created.spec.id)
+            assert durable is not None
+            self.assertEqual(durable.phase, "owned")
+            self.assertEqual(durable.migration_id, "")
+            self.assertEqual(durable.migration_sha256, "")
+
+    def test_abort_move_without_digest_still_requires_exact_migration_id(
+        self,
+    ) -> None:
+        with TemporaryDirectory() as raw:
+            root = Path(raw).resolve()
+            provisioner, registry, _, _, _ = self.make(root)
+            service = DirectSandboxService(
+                provisioner,
+                process_runner=FakeProcessRunner(),
+            )
+            created = self.create(service, self.spec())
+            registration = registry.get(created.spec.id)
+            assert registration is not None
+            registry.begin_move_out(
+                created.spec.id,
+                expected_revision=registration.revision,
+                migration_id="wake:owned-by-worker",
+                migration_sha256="e" * 64,
+            )
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "source does not own this prepared migration",
+            ):
+                service.abort_move(
+                    created.spec.id,
+                    migration_id="wake:different-migration",
+                    migration_sha256="",
+                )
+
+            durable = registry.get(created.spec.id)
+            assert durable is not None
+            self.assertEqual(durable.phase, "moving_out")
+            self.assertEqual(durable.migration_id, "wake:owned-by-worker")
+
     def test_try_delete_retires_absent_mismatched_and_busy_lock_entries(self) -> None:
         with TemporaryDirectory() as raw:
             root = Path(raw).resolve()

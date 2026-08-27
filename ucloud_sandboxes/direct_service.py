@@ -834,13 +834,33 @@ class DirectSandboxService:
         migration_id: str,
         migration_sha256: str,
     ) -> SandboxRecord:
-        self._validate_migration_identity(migration_id, migration_sha256)
+        # The gateway durably records a migration before asking the source to
+        # prepare it.  If that prepare response is lost, the gateway still has
+        # the migration id but cannot know the snapshot digest that the worker
+        # fenced locally.  Cancellation must therefore be able to recover that
+        # digest from the exact moving-out registration.  The migration id is
+        # always validated and matched; supplied digests retain the strict
+        # identity check used by every later migration phase.
+        if not OPERATION_ID_RE.fullmatch(migration_id):
+            raise ValueError("migration id is invalid")
+        if migration_sha256:
+            self._validate_migration_identity(migration_id, migration_sha256)
         registration = self.provisioner.registry.get(sandbox_id)
         if registration is None:
             raise DirectWardenError("migration source is absent")
         with self._lock(sandbox_id, registration.sandbox_generation):
             if registration.phase == "owned":
                 return self._record(registration)
+            if not migration_sha256:
+                if (
+                    registration.phase != "moving_out"
+                    or registration.migration_id != migration_id
+                ):
+                    raise DirectWardenError(
+                        "source does not own this prepared migration"
+                    )
+                migration_sha256 = registration.migration_sha256
+                self._validate_migration_identity(migration_id, migration_sha256)
             registration = self.provisioner.registry.abort_move_out(
                 sandbox_id,
                 expected_revision=registration.revision,

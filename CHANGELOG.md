@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.7 - 2026-08-27
+
+- Fixed deletion of migrations whose source prepare response was lost: the
+  source worker can now recover the unknown snapshot digest from its durable
+  moving-out fence while still requiring the exact migration id.
+
 ## 0.5.6 - 2026-08-27
 
 - Fixed deletion of successfully migrated sandboxes: activated imports retain

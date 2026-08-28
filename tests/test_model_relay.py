@@ -17,12 +17,26 @@ from aiohttp import ClientSession, web
 
 from ucloud_sandboxes.model_relay import (
     ACCEPTED_NOTIFIER_KEY,
+    AGENT_LIFECYCLE_METADATA_KEY,
+    MANAGED_AGENT_LIFECYCLE,
     ModelRelayState,
+    RESULT_NOTIFIER_KEY,
+    RelayRespondResult,
+    RelaySqliteStore,
     RelayWorkerResponse,
     STATE_KEY,
     _notify_accepted,
+    _notify_result,
     create_model_relay_app,
 )
+
+
+def _agent_metadata(sandbox_id: str, generation: int) -> dict[str, object]:
+    return {
+        AGENT_LIFECYCLE_METADATA_KEY: MANAGED_AGENT_LIFECYCLE,
+        "sandbox_id": sandbox_id,
+        "sandbox_generation": generation,
+    }
 
 
 class RelayHarness:
@@ -266,7 +280,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         state = ModelRelayState()
         await state.register_rollout(
             "park-cancellation",
-            metadata={"sandbox_id": "sandbox-1", "sandbox_generation": 1},
+            metadata=_agent_metadata("sandbox-1", 1),
         )
         relay_request = await state.enqueue(
             rollout_id="park-cancellation",
@@ -304,6 +318,130 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await state.stats())["counters"]["accepted_notifications"], 1)
         await state.aclose()
 
+    async def test_result_wake_joins_in_progress_park_notification(self) -> None:
+        state = ModelRelayState()
+        token = str(
+            (
+                await state.register_rollout(
+                    "ordered-lifecycle",
+                    _agent_metadata("sandbox-1", 1),
+                )
+            )["registration_token"]
+        )
+        relay_request = await state.enqueue(
+            rollout_id="ordered-lifecycle",
+            endpoint="/v1/responses",
+            body={"model": "m"},
+            headers={},
+        )
+        delivery = (
+            await state.poll(
+                rollout_id="ordered-lifecycle",
+                registration_token=token,
+                timeout_seconds=0,
+                lease_seconds=30,
+            )
+        )[0]
+        park_started = asyncio.Event()
+        release_park = asyncio.Event()
+        wake_started = asyncio.Event()
+        order: list[str] = []
+
+        async def park(_request) -> str:
+            order.append("park-start")
+            park_started.set()
+            await release_park.wait()
+            order.append("park-finish")
+            return "before"
+
+        async def wake(_request) -> str:
+            order.append("wake")
+            wake_started.set()
+            return "after"
+
+        class FakeRequest:
+            app = {
+                STATE_KEY: state,
+                ACCEPTED_NOTIFIER_KEY: park,
+                RESULT_NOTIFIER_KEY: wake,
+            }
+
+        park_task = asyncio.create_task(
+            _notify_accepted(FakeRequest(), relay_request)  # type: ignore[arg-type]
+        )
+        await park_started.wait()
+        response = await state.respond(
+            request_id=delivery.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+            defer_delivery=True,
+        )
+        wake_task = asyncio.create_task(
+            _notify_result(  # type: ignore[arg-type]
+                FakeRequest(),
+                RelayRespondResult(response.request),
+            )
+        )
+        await asyncio.sleep(0)
+        self.assertFalse(wake_started.is_set())
+
+        release_park.set()
+        await asyncio.gather(park_task, wake_task)
+
+        self.assertEqual(order, ["park-start", "park-finish", "wake"])
+        self.assertIsNotNone(relay_request.accepted_notified_at)
+        self.assertIsNotNone(relay_request.wake_notified_at)
+        await state.aclose()
+
+    async def test_completed_result_cannot_be_followed_by_a_late_park(self) -> None:
+        state = ModelRelayState()
+        token = str(
+            (
+                await state.register_rollout(
+                    "late-park",
+                    _agent_metadata("sandbox-1", 1),
+                )
+            )["registration_token"]
+        )
+        relay_request = await state.enqueue(
+            rollout_id="late-park",
+            endpoint="/v1/responses",
+            body={"model": "m"},
+            headers={},
+        )
+        delivery = (
+            await state.poll(
+                rollout_id="late-park",
+                registration_token=token,
+                timeout_seconds=0,
+                lease_seconds=30,
+            )
+        )[0]
+        await state.respond(
+            request_id=delivery.request_id,
+            registration_token=token,
+            lease_id=delivery.lease_id,
+            response=RelayWorkerResponse(200, {"ok": True}),
+        )
+        park_calls = 0
+
+        async def park(_request) -> str:
+            nonlocal park_calls
+            park_calls += 1
+            return "too-late"
+
+        class FakeRequest:
+            app = {
+                STATE_KEY: state,
+                ACCEPTED_NOTIFIER_KEY: park,
+            }
+
+        await _notify_accepted(FakeRequest(), relay_request)  # type: ignore[arg-type]
+
+        self.assertEqual(park_calls, 0)
+        await state.aclose()
+
     async def test_registration_metadata_rejects_aliases_and_coercion(self) -> None:
         state = ModelRelayState()
         for metadata in (
@@ -313,6 +451,13 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.subTest(metadata=metadata), self.assertRaises(web.HTTPBadRequest):
                 await state.register_rollout("strict-metadata", metadata)
+
+        with self.assertRaises(web.HTTPBadRequest) as raised:
+            await state.register_rollout(
+                "missing-agent-contract",
+                {"sandbox_id": "sandbox-1", "sandbox_generation": 1},
+            )
+        self.assertIn("register_agent_rollout", raised.exception.text)
 
     async def test_restart_prunes_completed_byte_budget_before_restore(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -686,7 +831,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 (
                     await state.register_rollout(
                         "durable",
-                        {"sandbox_id": "sandbox-7", "sandbox_generation": 3},
+                        _agent_metadata("sandbox-7", 3),
                     )
                 )["registration_token"]
             )
@@ -741,6 +886,35 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
             ),
         )
 
+    async def test_restart_upgrades_legacy_sandbox_binding_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "relay.sqlite3"
+            store = RelaySqliteStore(state_path)
+            store.save_rollout(
+                {
+                    "rollout_id": "legacy-agent",
+                    "registration_token": "a" * 32,
+                    "metadata": {
+                        "sandbox_id": "sandbox-legacy",
+                        "sandbox_generation": 4,
+                    },
+                    "registered_at": 1.0,
+                }
+            )
+            store.close()
+
+            state = ModelRelayState(state_path=state_path)
+            records = await state.list_rollouts()
+            await state.aclose()
+
+            restored = RelaySqliteStore(state_path)
+            persisted = restored.load_rollouts()
+            restored.close()
+
+        expected = _agent_metadata("sandbox-legacy", 4)
+        self.assertEqual(records[0]["metadata"], expected)
+        self.assertEqual(persisted[0]["metadata"], expected)
+
     async def test_lifecycle_notifications_use_registered_sandbox_generation(
         self,
     ) -> None:
@@ -767,6 +941,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 json={
                     "rollout_id": "lifecycle",
                     "metadata": {
+                        AGENT_LIFECYCLE_METADATA_KEY: MANAGED_AGENT_LIFECYCLE,
                         "sandbox_id": "sandbox-9",
                         "sandbox_generation": 4,
                     },
@@ -836,6 +1011,7 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 await state.register_rollout(
                     "deferred-delivery",
                     metadata={
+                        AGENT_LIFECYCLE_METADATA_KEY: MANAGED_AGENT_LIFECYCLE,
                         "sandbox_id": "sandbox-1",
                         "sandbox_generation": 1,
                     },
@@ -1387,12 +1563,23 @@ class ModelRelayTests(unittest.IsolatedAsyncioTestCase):
                 relay.base_url,
                 worker_token=worker_token,
             ) as client:
-                registration = await client.register_rollout(
-                    rollout_id,
-                    metadata={
-                        "sandbox_id": "sdk-contract-sandbox",
-                        "sandbox_generation": 7,
+                sandbox = type(
+                    "Sandbox",
+                    (),
+                    {
+                        "id": "sdk-contract-sandbox",
+                        "record": {
+                            "generation": 7,
+                            "spec": {
+                                "parkable": True,
+                                "managed_process": True,
+                            },
+                        },
                     },
+                )()
+                registration = await client.register_agent_rollout(
+                    rollout_id,
+                    sandbox,
                 )
                 registration_token = registration["rollout"]["registration_token"]
                 model_call = asyncio.create_task(

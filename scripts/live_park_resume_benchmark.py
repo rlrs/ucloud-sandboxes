@@ -302,7 +302,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                     f"stdout={exec_probe.stdout!r} stderr={exec_probe.stderr!r}"
                 )
             await handle.upload_file("/workspace/counter.py", COUNTER_PROGRAM)
-            job_handle = await handle.start_job(
+            job_handle = await handle.start_agent(
                 ["python", "/workspace/counter.py"],
                 job_id=job_id,
                 working_dir="/workspace",

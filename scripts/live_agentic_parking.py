@@ -636,12 +636,11 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             ):
                 await handle.upload_file(path, content)
 
-            registration = await relay.register_rollout(
+            registration = await relay.register_agent_rollout(
                 rollout_id,
+                handle,
                 metadata={
                     "integration": "live-agentic-parking",
-                    "sandbox_id": sandbox_id,
-                    "sandbox_generation": generation,
                 },
             )
             rollout_registered = True
@@ -777,20 +776,13 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         print(json.dumps({"event": "relay_cycle", **cycle}, sort_keys=True), flush=True)
 
             relay_worker_task = asyncio.create_task(relay_worker())
-            job_start = await gateway_json(
-                session,
-                args.gateway_url,
-                gateway_token,
-                "POST",
-                f"/v1/sandboxes/{sandbox_id}/jobs",
-                payload={
-                    "job_id": managed_job_id,
-                    "argv": ["python", "/workspace/agent.py"],
-                    "cwd": "/workspace",
-                    "env": {"AGENT_RELAY_URL": tunnel, "AGENT_MODEL": model},
-                },
+            managed_job = await handle.start_agent(
+                ["python", "/workspace/agent.py"],
+                job_id=managed_job_id,
+                working_dir="/workspace",
+                env={"AGENT_RELAY_URL": tunnel, "AGENT_MODEL": model},
             )
-            job = job_start["job"]
+            job = {"state": managed_job.record.state}
             while not bool(job.get("state") in {"exited", "signaled", "failed"}):
                 current = await client.get_sandbox(sandbox_id)
                 state = sandbox_state(current)

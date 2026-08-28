@@ -139,13 +139,15 @@ to 32 MiB each. Hop-by-hop headers are removed. Streaming/SSE, HTTP trailers,
 and raw TCP are not implemented by this protocol. An SSE body can be transported
 as buffered bytes, but it is not delivered token-by-token.
 
-Use one tunnel registration per sandbox generation and include trusted
-registration metadata:
+Use one tunnel registration per sandbox generation. For a sandbox-bound
+rollout, use the SDK `register_agent_rollout()` API with the managed sandbox
+handle. The SDK emits the reserved lifecycle binding:
 
 ```json
 {
   "rollout_id": "vf-run-001-sandbox-007",
   "metadata": {
+    "_ucloud_agent_lifecycle": "managed-process-v1",
     "sandbox_id": "sandbox-007",
     "sandbox_generation": 3
   }
@@ -154,6 +156,8 @@ registration metadata:
 
 That binding lets the relay park exactly that generation after durable request
 acceptance and wake its current placement after committing the response.
+Supplying `sandbox_id` manually through generic `register_rollout()` is rejected:
+it cannot prove the sandbox was created in managed-process mode.
 
 ## Worker API
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 
 from aiohttp import web
@@ -202,12 +203,20 @@ class VerifiersRelayIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         relay_url,
                         worker_token=worker_token,
                     ) as sdk:
-                        registration = await sdk.register_rollout(
+                        registration = await sdk.register_agent_rollout(
                             rollout_id,
+                            SimpleNamespace(
+                                id=sandbox_id,
+                                record={
+                                    "generation": sandbox_generation,
+                                    "spec": {
+                                        "parkable": True,
+                                        "managed_process": True,
+                                    },
+                                },
+                            ),
                             metadata={
                                 "integration": "verifiers-null-harness",
-                                "sandbox_id": sandbox_id,
-                                "sandbox_generation": sandbox_generation,
                             },
                         )
                         runtime.relay_tunnel_url = str(

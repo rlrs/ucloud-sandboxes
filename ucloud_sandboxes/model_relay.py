@@ -33,6 +33,8 @@ WORKER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$")
 REGISTRATION_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,127}$")
 SANDBOX_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+AGENT_LIFECYCLE_METADATA_KEY = "_ucloud_agent_lifecycle"
+MANAGED_AGENT_LIFECYCLE = "managed-process-v1"
 DEFAULT_RELAY_REQUEST_TIMEOUT_SECONDS = 3600.0
 DEFAULT_WORKER_POLL_TIMEOUT_SECONDS = 30.0
 DEFAULT_WORKER_LEASE_SECONDS = 600.0
@@ -123,6 +125,11 @@ class RelayRequest:
     headers: dict[str, str]
     created_at: float
     future: asyncio.Future[RelayWorkerResponse]
+    lifecycle_lock: asyncio.Lock = field(
+        default_factory=asyncio.Lock,
+        repr=False,
+        compare=False,
+    )
     expires_at: float | None = None
     payload_bytes: int = 0
     delivered_at: float | None = None
@@ -1206,6 +1213,20 @@ class ModelRelayState:
                 raise ValueError("persisted relay registration time is invalid")
             validate_rollout_id(rollout_id)
             validate_registration_token(registration_token)
+            if (
+                "sandbox_id" in metadata
+                and "sandbox_generation" in metadata
+                and AGENT_LIFECYCLE_METADATA_KEY not in metadata
+            ):
+                # Existing deployments wrote the same generation-fenced
+                # lifecycle binding before it had an explicit contract tag.
+                # Upgrade that durable row once so rollout recovery remains
+                # safe; every new registration must use the managed SDK path.
+                metadata = dict(metadata)
+                metadata[AGENT_LIFECYCLE_METADATA_KEY] = MANAGED_AGENT_LIFECYCLE
+                record = dict(record)
+                record["metadata"] = metadata
+                await _blocking_call(self._store.save_rollout, record)
             _validate_registration_metadata(metadata)
             recovered_rollouts[rollout_id] = record
             recovered_pending[rollout_id] = deque()
@@ -2585,27 +2606,32 @@ async def _notify_accepted(
     notifier = request.app[ACCEPTED_NOTIFIER_KEY]
     if notifier is None or relay_request.sandbox_id is None:
         return
-    if relay_request.accepted_notified_at is not None:
-        return
-
     async def notify_and_persist() -> None:
-        try:
-            transport_epoch = await notifier(relay_request)
-        except Exception:
-            # Parking is an optimization. Once the request has been durably
-            # accepted, failure to park must not turn it into a model-call
-            # failure, but it must remain observable to operators.
-            LOGGER.warning(
-                "model relay failed to park sandbox %s for request %s",
-                relay_request.sandbox_id,
+        async with relay_request.lifecycle_lock:
+            # A fast worker may commit the result before this task wins the
+            # lifecycle lock. Never park after a result is already ready.
+            if (
+                relay_request.accepted_notified_at is not None
+                or relay_request.completed_at is not None
+            ):
+                return
+            try:
+                transport_epoch = await notifier(relay_request)
+            except Exception:
+                # Parking is an optimization. Once the request has been durably
+                # accepted, failure to park must not turn it into a model-call
+                # failure, but it must remain observable to operators.
+                LOGGER.warning(
+                    "model relay failed to park sandbox %s for request %s",
+                    relay_request.sandbox_id,
+                    relay_request.request_id,
+                    exc_info=True,
+                )
+                return
+            await _state(request).mark_accepted_notified(
                 relay_request.request_id,
-                exc_info=True,
+                transport_epoch=transport_epoch,
             )
-            return
-        await _state(request).mark_accepted_notified(
-            relay_request.request_id,
-            transport_epoch=transport_epoch,
-        )
 
     # Checkpointing the caller can destroy this HTTP connection. Do not let
     # that cancellation interrupt the durable lifecycle transition or leave a
@@ -2643,22 +2669,25 @@ async def _notify_result(
         },
         links=((original_request_link,) if original_request_link is not None else ()),
     ):
-        try:
-            wake_transport_epoch = await notifier(relay_request)
-        except Exception as exc:
-            # The result is already committed. A 503 makes the worker retry its
-            # idempotent response POST, which re-attempts only the wake notification.
-            raise web.HTTPServiceUnavailable(
-                text=f"model response committed but sandbox wake failed: {exc}",
-                headers={"Retry-After": "1"},
-            ) from exc
-        if (
-            relay_request.parked_transport_epoch is not None
-            and wake_transport_epoch is not None
-            and relay_request.parked_transport_epoch != wake_transport_epoch
-        ):
-            await _state(request).mark_transport_reset(relay_request.request_id)
-        await _state(request).mark_wake_notified(relay_request.request_id)
+        async with relay_request.lifecycle_lock:
+            if relay_request.wake_notified_at is not None:
+                return
+            try:
+                wake_transport_epoch = await notifier(relay_request)
+            except Exception as exc:
+                # The result is already committed. A 503 makes the worker retry its
+                # idempotent response POST, which re-attempts only the wake notification.
+                raise web.HTTPServiceUnavailable(
+                    text=f"model response committed but sandbox wake failed: {exc}",
+                    headers={"Retry-After": "1"},
+                ) from exc
+            if (
+                relay_request.parked_transport_epoch is not None
+                and wake_transport_epoch is not None
+                and relay_request.parked_transport_epoch != wake_transport_epoch
+            ):
+                await _state(request).mark_transport_reset(relay_request.request_id)
+            await _state(request).mark_wake_notified(relay_request.request_id)
 
 
 def _state(request: web.Request) -> ModelRelayState:
@@ -2971,6 +3000,18 @@ def _validate_registration_metadata(metadata: JsonObject | None) -> None:
     if (sandbox_id is None) != (generation is None):
         raise web.HTTPBadRequest(
             text="sandbox_id and sandbox_generation must be supplied together"
+        )
+    lifecycle = metadata.get(AGENT_LIFECYCLE_METADATA_KEY)
+    if sandbox_id is not None and lifecycle != MANAGED_AGENT_LIFECYCLE:
+        raise web.HTTPBadRequest(
+            text=(
+                "sandbox-bound rollouts require the managed agent lifecycle; "
+                "use the SDK register_agent_rollout() API"
+            )
+        )
+    if sandbox_id is None and lifecycle is not None:
+        raise web.HTTPBadRequest(
+            text="managed agent lifecycle metadata requires a sandbox binding"
         )
 
 

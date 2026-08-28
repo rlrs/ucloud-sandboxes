@@ -54,6 +54,7 @@ from .sandbox import (
     SandboxConflictError,
     SandboxFileTooLargeError,
     SandboxOperation,
+    SandboxSnapshotPublicationPendingError,
     SandboxSpec,
     sandbox_spec_fingerprint,
 )
@@ -741,27 +742,26 @@ class NodeAgentHandler(BuildContextHttpHandler):
             generation = generation_raw
             if generation <= 0:
                 raise ValueError("generation must be positive")
-            service = self._direct_service()
-            if service.storage_native_publication_pending(sandbox_id):
-                self._write_json(
-                    {
-                        "error": "parked snapshot publication is still in progress",
-                        "error_code": "snapshot_publication_pending",
-                        "lifecycle_state": "parked",
-                        "retryable": True,
-                    },
-                    status=HTTPStatus.SERVICE_UNAVAILABLE,
-                    headers={
-                        "Retry-After": "1",
-                        "X-UCloud-Sandbox-Retryable": "true",
-                    },
-                )
-                return
             record = self.manager.wake(
                 sandbox_id,
                 generation=generation,
                 operation_id=operation_id,
             )
+        except SandboxSnapshotPublicationPendingError as exc:
+            self._write_json(
+                {
+                    "error": str(exc),
+                    "error_code": "snapshot_publication_pending",
+                    "lifecycle_state": "parked",
+                    "retryable": True,
+                },
+                status=HTTPStatus.SERVICE_UNAVAILABLE,
+                headers={
+                    "Retry-After": "1",
+                    "X-UCloud-Sandbox-Retryable": "true",
+                },
+            )
+            return
         except SandboxConflictError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             return

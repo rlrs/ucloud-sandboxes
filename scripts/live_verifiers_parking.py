@@ -329,7 +329,7 @@ class UCloudVerifiersRuntime(SubprocessRuntime):
     ) -> ProgramResult:
         if self.handle is None:
             raise RuntimeError("sandbox runtime is not started")
-        self.job = await self.handle.start_job(
+        self.job = await self.handle.start_agent(
             argv,
             job_id=f"verifiers-{uuid4().hex}",
             env=env,
@@ -524,12 +524,11 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 f"{relay_probe.stderr.strip()[-2000:]}"
             )
         async with relay, InterceptionServer() as interception:
-            registration = await relay.register_rollout(
+            registration = await relay.register_agent_rollout(
                 rollout_id,
+                runtime.handle,
                 metadata={
                     "integration": "live-verifiers-parking",
-                    "sandbox_id": sandbox_id,
-                    "sandbox_generation": runtime.generation,
                 },
             )
             rollout_registered = True

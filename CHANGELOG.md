@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.11 - 2026-08-28
+
+- Made park and wake follow AgentEnv's single-flight lifecycle model: concurrent
+  transitions join, then re-evaluate the stable runtime state, and repeated
+  wake calls against an already-running sandbox succeed idempotently even when
+  attached activity is present.
+- Centralized the snapshot-publication wake fence in the node lifecycle owner
+  and required sandbox-bound relay registrations to declare the managed-agent
+  contract, preventing ordinary attached execs from entering agent parking.
+- Updated all first-party parking qualification paths to use `start_agent()`
+  and `register_agent_rollout()` rather than lower-level job or rollout calls.
+
 ## 0.5.10 - 2026-08-28
 
 - Fixed gateway file uploads dropping the request body before proxying to the

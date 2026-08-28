@@ -92,6 +92,10 @@ class SandboxCapacityUnavailableError(RuntimeError):
     """The node cannot currently admit the requested sandbox resources."""
 
 
+class SandboxSnapshotPublicationPendingError(RuntimeError):
+    """A parked sandbox cannot wake until its durable publication completes."""
+
+
 class SandboxFileTooLargeError(ValueError):
     """A sandbox file exceeded the configured download response limit."""
 
@@ -713,9 +717,23 @@ class SandboxLifecycleCoordinator:
         self,
         *sandbox_ids: str,
         allow_shared: bool = False,
+        join_transition: bool = False,
+        transition_timeout_seconds: float | None = None,
     ) -> Iterator[None]:
         ids = tuple(sorted(set(sandbox_ids)))
         with self._condition:
+            if join_transition:
+                completed = self._condition.wait_for(
+                    lambda: not any(
+                        sandbox_id in self._exclusive for sandbox_id in ids
+                    ),
+                    timeout=transition_timeout_seconds,
+                )
+                if not completed:
+                    raise SandboxBusyError(
+                        "timed out waiting for sandbox lifecycle transition: "
+                        + ", ".join(ids)
+                    )
             conflicts = [
                 sandbox_id
                 for sandbox_id in ids

@@ -26,6 +26,7 @@ from .sandbox import (
     SandboxConflictError,
     SandboxLifecycleCoordinator,
     SandboxOperation,
+    SandboxSnapshotPublicationPendingError,
     SandboxRecord,
     SandboxSpec,
     _atomic_write_json,
@@ -241,10 +242,14 @@ class DirectLifecycle:
         sandbox_id: str,
         *,
         allow_shared: bool = False,
+        join_transition: bool = False,
+        transition_timeout_seconds: float | None = None,
     ) -> Iterator[None]:
         with self._coordinator.exclusive(
             sandbox_id,
             allow_shared=allow_shared,
+            join_transition=join_transition,
+            transition_timeout_seconds=transition_timeout_seconds,
         ):
             yield
 
@@ -396,7 +401,14 @@ class DirectNodeRuntime:
         ):
             raise ValueError("park operation id is invalid")
         try:
-            with self.lifecycle.exclusive(sandbox_id):
+            # Join a concurrent park/wake and then re-evaluate the stable
+            # runtime state. This makes exact replays and crossed lifecycle
+            # calls idempotent without weakening the attached-activity fence.
+            with self.lifecycle.exclusive(
+                sandbox_id,
+                join_transition=True,
+                transition_timeout_seconds=60.0,
+            ):
                 return self.service.park(
                     sandbox_id,
                     operation_id=operation_id,
@@ -422,7 +434,20 @@ class DirectNodeRuntime:
             operation_id
         ):
             raise ValueError("wake operation id is invalid")
-        with self.lifecycle.exclusive(sandbox_id):
+        # Waking an already-running sandbox is a successful no-op. Attached
+        # activity is proof that the current runtime is live, not a reason to
+        # reject that idempotent result. We still take the exclusive transition
+        # fence so a concurrent park completes first and is then re-evaluated.
+        with self.lifecycle.exclusive(
+            sandbox_id,
+            allow_shared=True,
+            join_transition=True,
+            transition_timeout_seconds=60.0,
+        ):
+            if self.service.storage_native_publication_pending(sandbox_id):
+                raise SandboxSnapshotPublicationPendingError(
+                    "parked snapshot publication is still in progress"
+                )
             return self.service.wake(
                 sandbox_id,
                 generation=generation,

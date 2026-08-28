@@ -111,7 +111,7 @@ def main() -> int:
                 memory_mb=1024,
                 disk_mb=4096,
                 ttl_seconds=900,
-                labels={"ucloud-sandboxes.smoke": "file-visibility"},
+                labels={"purpose": "file-visibility-smoke"},
             ),
             request_timeout_seconds=args.create_timeout_seconds,
         )

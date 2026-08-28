@@ -3821,7 +3821,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 SANDBOX_GENERATION_HEADER: str(route.generation),
                 SANDBOX_OPERATION_ID_HEADER: route.delete_operation_id,
             }
-        if sandbox_http_route is not None and sandbox_http_route.action == "files":
+        # Only downloads need a streamed response. Upload acknowledgements are
+        # small JSON responses and follow the same buffered proxy path as every
+        # other mutating sandbox request, which carries the already-read body.
+        if (
+            sandbox_http_route is not None
+            and sandbox_http_route.action == "files"
+            and self.command == "GET"
+        ):
             self._stream_proxy_request(
                 route.node_url,
                 self.path,

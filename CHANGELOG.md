@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.10 - 2026-08-28
+
+- Fixed gateway file uploads dropping the request body before proxying to the
+  worker, which had produced empty files while returning HTTP 200.
+- Kept only file downloads on the streaming-response path and routed uploads
+  through the shared body-preserving mutation path.
+- Added a production smoke test covering sandbox creation, PEP 723 upload,
+  exact byte-for-byte read-back, execution, deletion, and cleanup.
+
 ## 0.5.9 - 2026-08-27
 
 - Unified create, wake, exec, and autoscaler admission around measured resource

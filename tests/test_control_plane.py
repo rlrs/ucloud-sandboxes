@@ -3349,6 +3349,89 @@ class ControlPlaneTests(unittest.TestCase):
             )
         )
 
+    def test_gateway_forwards_the_complete_file_upload_body(self) -> None:
+        body = (
+            b"# /// script\n"
+            b"# dependencies = ['requests']\n"
+            b"# ///\n"
+            b"print('visible')\n"
+        )
+        forwarded_requests: list[request.Request] = []
+        response_payload = json.dumps(
+            {
+                "ok": True,
+                "sandbox_id": "file-one",
+                "path": "/workspace/harness.py",
+                "size": len(body),
+            }
+        ).encode("utf-8")
+        remaining_response = bytearray(response_payload)
+
+        class UploadResponse:
+            status = 200
+            headers = {
+                "Content-Type": "application/json",
+                "Content-Length": str(len(response_payload)),
+            }
+
+            def __enter__(self) -> "UploadResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self, size: int | None = None) -> bytes:
+                assert size is not None
+                chunk = bytes(remaining_response[:size])
+                del remaining_response[:size]
+                return chunk
+
+        def open_node(
+            proxied: request.Request,
+            **_kwargs: object,
+        ) -> UploadResponse:
+            forwarded_requests.append(proxied)
+            return UploadResponse()
+
+        with _temporary_root() as root:
+            heartbeat_file, route_file = _seed_gateway_node(
+                root,
+                node_url="http://node.invalid:8090",
+                sandbox_id="file-one",
+            )
+            gateway = _gateway_server(
+                root,
+                heartbeat_file=heartbeat_file,
+                routing_file=route_file,
+            )
+            with _running_server(gateway):
+                host, port = gateway.server_address
+                with patch.object(control_plane, "_open_node_request", open_node):
+                    conn = HTTPConnection(host, port, timeout=5)
+                    try:
+                        conn.request(
+                            "PUT",
+                            (
+                                "/v1/sandboxes/file-one/files"
+                                "?path=/workspace/harness.py"
+                            ),
+                            body=body,
+                            headers={"Content-Type": "application/octet-stream"},
+                        )
+                        response = conn.getresponse()
+                        uploaded = json.loads(response.read().decode("utf-8"))
+                    finally:
+                        conn.close()
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(uploaded["size"], len(body))
+        self.assertEqual(len(forwarded_requests), 1)
+        self.assertEqual(forwarded_requests[0].data, body)
+        self.assertEqual(
+            forwarded_requests[0].get_header("Content-type"),
+            "application/octet-stream",
+        )
+
     def test_content_addressed_context_survives_503_and_streams_to_builder(
         self,
     ) -> None:

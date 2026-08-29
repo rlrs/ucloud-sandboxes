@@ -356,6 +356,20 @@ def _store_build_context(server, archive: bytes) -> dict[str, object]:
 
 
 class ControlPlaneTests(unittest.TestCase):
+    def test_exec_signal_is_available_to_the_public_sdk_route(self) -> None:
+        self.assertTrue(
+            control_plane._is_sdk_api_request(  # noqa: SLF001
+                "POST",
+                "/v1/exec/exec-123/signal",
+            )
+        )
+        self.assertFalse(
+            control_plane._is_sdk_api_request(  # noqa: SLF001
+                "GET",
+                "/v1/exec/exec-123/signal",
+            )
+        )
+
     def test_create_pipeline_target_is_bound_from_configuration(self) -> None:
         with _temporary_root() as root:
             server = _gateway_server(

@@ -89,6 +89,7 @@ Exec uses one sequence-numbered HTTP protocol:
 - `GET /v1/exec/<session-id>/events?after=<sequence>&wait_seconds=<seconds>`
 - `POST /v1/exec/<session-id>/stdin`
 - `POST /v1/exec/<session-id>/close-stdin`
+- `POST /v1/exec/<session-id>/signal`
 
 An exec start accepts a command, environment, working directory, stdin flag,
 and TTY flag. Events use monotonically increasing sequence numbers and bounded

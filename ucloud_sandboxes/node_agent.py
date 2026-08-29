@@ -340,6 +340,9 @@ class NodeAgentHandler(BuildContextHttpHandler):
         if parsed.path.startswith("/v1/exec/") and parsed.path.endswith("/close-stdin"):
             self._close_exec_stdin(parsed.path)
             return
+        if parsed.path.startswith("/v1/exec/") and parsed.path.endswith("/signal"):
+            self._signal_exec(parsed.path)
+            return
         if parsed.path == "/v1/images/build":
             self._build_image()
             return
@@ -1019,6 +1022,18 @@ class NodeAgentHandler(BuildContextHttpHandler):
             session = self.exec_manager.close_stdin(session_id)
         except ValueError as exc:
             self._write_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._write_json({"session": session.to_dict()})
+
+    def _signal_exec(self, path: str) -> None:
+        session_id = self._exec_session_id_from_path(path, suffix="/signal")
+        try:
+            raw = self._read_json_body()
+            if not isinstance(raw, dict) or set(raw) != {"signal"}:
+                raise ValueError("signal payload must contain exactly signal")
+            session = self.exec_manager.signal(session_id, raw["signal"])
+        except (RuntimeError, ValueError) as exc:
+            self._write_exception(exc)
             return
         self._write_json({"session": session.to_dict()})
 

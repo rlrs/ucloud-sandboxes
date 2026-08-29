@@ -5734,7 +5734,7 @@ def _is_sdk_api_request(method: str, path: str) -> bool:
         return False
     if exec_parts[1] == "events":
         return method == "GET"
-    if exec_parts[1] in {"stdin", "close-stdin"}:
+    if exec_parts[1] in {"stdin", "close-stdin", "signal"}:
         return method == "POST"
     return False
 

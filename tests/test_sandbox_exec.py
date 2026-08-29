@@ -172,6 +172,26 @@ class SandboxExecProtocolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "NUL"):
                 spec.validate()
 
+    def test_exec_signal_targets_the_running_process_and_is_idempotent_terminal(
+        self,
+    ) -> None:
+        manager = ExecSessionManager(FakeSandboxManager())
+        process = FakeProcess()
+        session = _install_session(manager, process.stdin)
+        session.process = process
+
+        signaled = manager.signal(session.id, 15)
+        session.status = "failed"
+        session.process = None
+        terminal = manager.signal(session.id, 9)
+
+        self.assertIs(signaled, session)
+        self.assertIs(terminal, session)
+        self.assertEqual(process.signals, [15])
+        for invalid in (0, 65, True):
+            with self.assertRaisesRegex(ValueError, "signal"):
+                manager.signal(session.id, invalid)
+
 
 class FakeLifecycle:
     def __init__(self) -> None:
@@ -242,6 +262,7 @@ class FakeProcess:
         self.stderr = StringIO()
         self.kill_calls = 0
         self.wait_calls = 0
+        self.signals: list[int] = []
 
     def kill(self) -> None:
         self.kill_calls += 1
@@ -249,6 +270,9 @@ class FakeProcess:
     def wait(self) -> int:
         self.wait_calls += 1
         return 1
+
+    def send_signal(self, signal: int) -> None:
+        self.signals.append(signal)
 
 
 def _install_session(

@@ -300,6 +300,22 @@ class ExecSessionManager:
                     ) from exc
             return session
 
+    def signal(self, session_id: str, signal: int) -> ExecSession:
+        if isinstance(signal, bool) or not isinstance(signal, int) or not 1 <= signal <= 64:
+            raise ValueError("signal must be an integer in [1, 64]")
+        with self._lock:
+            session = self._require_session_locked(session_id)
+            process = session.process
+            if session.status in {"exited", "failed"} or process is None:
+                return session
+        try:
+            process.send_signal(signal)
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                f"cannot signal exec session {session_id}: {exc}"
+            ) from exc
+        return session
+
     def _start_process(self, session: ExecSession) -> None:
         try:
             process = subprocess.Popen(

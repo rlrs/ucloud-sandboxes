@@ -224,6 +224,10 @@ The VM-side node agent exposes:
 - `GET /v1/exec/<session-id>/events`
 - `POST /v1/exec/<session-id>/stdin`
 - `POST /v1/exec/<session-id>/close-stdin`
+- `POST /v1/exec/<session-id>/signal`
+
+The signal endpoint accepts `{"signal": 15}` with an integer signal in
+`[1, 64]`. Signaling an already-terminal exec session is idempotent.
 
 `GET /healthz` is public and returns the service identity and package version.
 The `service` value identifies the `control-plane`, `node-agent`,

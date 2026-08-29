@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.12 - 2026-08-29
+
+- Added an authenticated gateway signal endpoint for attached exec sessions,
+  allowing SDK process handles to terminate or kill remote processes without
+  conflating signals with stdin or output streaming.
+
 ## 0.5.11 - 2026-08-28
 
 - Made park and wake follow AgentEnv's single-flight lifecycle model: concurrent

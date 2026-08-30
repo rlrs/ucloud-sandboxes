@@ -253,15 +253,28 @@ while a billed or provider-visible job still exists.
 This weighting applies only to the initial pre-start `SUSPENDED` state. A
 post-start suspension is destructive node loss, contributes neither capacity
 nor a provider-limit slot to replacement planning, and is terminated directly.
-Provider lifecycle evidence and the operation journal keep that classification
-latched if inventory later reports the destroyed instance as running again.
+UCloud's current job state cannot prove VM continuity, so the UCloud adapter
+checks ordered lifecycle history for every managed running instance. Provider
+lifecycle evidence and the operation journal keep the loss classification
+latched if inventory later reports the destroyed instance as running again. A
+lost guest is never drained or sent sandbox/storage cleanup requests; its routes
+are fenced as `node_lost` and its provider job is stopped immediately. Hetzner
+does not enable this UCloud-specific history probe and retains its native server
+lifecycle semantics.
 
 `unreachable_stop_after_seconds` is a separate, conservative eviction lease for
 a running VM whose heartbeat has disappeared. After the lease expires, the VM
-is eligible for provider termination only when it owns no gateway routes and
-its last complete heartbeat inventory was empty, or when it never produced a
-heartbeat at all. Set it to `0` to disable unreachable-node eviction. Fresh
-nodes continue to use the normal drain-token handshake described below.
+is normally eligible for provider termination only when it owns no gateway
+routes and its last complete heartbeat inventory was empty, or when it never
+produced a heartbeat at all. UCloud is the explicit exception: a guest lost
+after reaching `RUNNING` cannot be recovered, and UCloud may expose no later
+suspension update. An expired UCloud heartbeat lease therefore fences the node
+as permanent loss even when its last inventory or gateway routes were non-empty.
+The controller stops the provider job directly, marks those routes `node_lost`,
+and requests replacement capacity; it does not attempt cleanup against the lost
+guest. Hetzner retains the recoverable-host, empty-inventory safeguard. Set the
+timeout to `0` to disable unreachable-node eviction. Fresh nodes continue to use
+the normal drain-token handshake described below.
 
 `scale_down_idle_seconds` prevents the controller from stopping a VM immediately
 after its last sandbox exits. The control plane records when a heartbeat first
@@ -325,6 +338,13 @@ last complete heartbeat inventory was empty, or when it never emitted a
 heartbeat. This proof permits the same journaled provider termination without a
 node acknowledgement. It does not apply to a fresh node, an incomplete last
 inventory, or any node with retained route ownership.
+
+The UCloud adapter deliberately uses a stronger proof at the same lease
+boundary. Because a suspended/reset UCloud guest and its local sandbox storage
+are permanently unrecoverable, lease expiry is durable destructive-node-loss
+proof regardless of the stale inventory. The operation journal latches that
+classification across controller restarts. This provider capability is disabled
+for Hetzner and does not weaken the generic empty-inventory rule.
 
 The journal moves an operation from `prepared` to `uncertain` before making the
 provider call. A crash or timeout leaves that same operation uncertain. A

@@ -132,6 +132,7 @@ from .networking import (
 )
 from .policy import (
     evaluate_scale,
+    unreachable_node_lease_expired,
     unreachable_node_reference,
     unreachable_node_stop_ready,
 )
@@ -2249,7 +2250,7 @@ def cmd_autoscaler(args: argparse.Namespace) -> int:
             if controller_active:
                 destructive_job_ids = {
                     str(job_id)
-                    for job_id in result.get("destructive_power_cycle_job_ids", [])
+                    for job_id in result.get("destructive_node_loss_job_ids", [])
                 }
                 removed_routes = routing_store.delete_sandboxes_for_jobs_with_error(
                     destructive_job_ids,
@@ -2536,12 +2537,45 @@ def _drain_intent_to_dict(intent: DrainIntent) -> dict[str, Any]:
     }
 
 
+def _stop_operation_is_destructive_node_loss(
+    operation: ProviderOperation,
+) -> bool:
+    """Recognize the canonical loss proof and operations from older releases."""
+
+    return bool(
+        operation.kind == "stop"
+        and (
+            operation.request.get("destructiveNodeLoss") is True
+            or operation.request.get("destructivePowerCycle") is True
+        )
+    )
+
+
 def _stop_operation_has_safety_proof(
     provider_state: AutoscalerStateStore,
     operation: ProviderOperation,
 ) -> bool:
     if operation.kind != "stop" or len(operation.target_job_ids) != 1:
         return operation.kind != "stop"
+    if operation.request.get("destructiveNodeLoss") is True:
+        reason = operation.request.get("lossReason")
+        common_proof = bool(
+            isinstance(operation.request.get("routeCount"), int)
+            and int(operation.request["routeCount"]) >= 0
+        )
+        if reason == "post_start_suspension":
+            return bool(
+                common_proof
+                and operation.request.get("postStartSuspensionObserved") is True
+            )
+        if reason == "ucloud_unreachable_lease_expired":
+            return bool(
+                common_proof
+                and operation.request.get("providerKind") == "ucloud"
+                and operation.request.get("unreachableLeaseExpired") is True
+                and str(operation.request.get("unreachableReference") or "").strip()
+            )
+        return False
     if operation.request.get("destructivePowerCycle") is True:
         return bool(
             operation.request.get("postStartSuspensionObserved") is True
@@ -2587,10 +2621,7 @@ def apply_prepared_provider_operations(
     # Python's stable sort retains journal order within both classes.
     prepared_operations.sort(
         key=lambda operation: (
-            0
-            if operation.kind == "stop"
-            and operation.request.get("destructivePowerCycle") is True
-            else 1
+            0 if _stop_operation_is_destructive_node_loss(operation) else 1
         )
     )
     for prepared in prepared_operations:
@@ -2801,15 +2832,21 @@ def run_reconcile_cycle(
     # Provider inventory may omit update history. A powered-off instance may
     # therefore appear running again after its ephemeral guest is replaced.
     # Normalized lost state and our own destructive stop journal are durable hints.
-    # For a stale RUNNING node, retrieve its
-    # full ordered updates once so the later RUNNING report cannot hide the
-    # post-start suspension. A fresh heartbeat is not sufficient evidence of
-    # continuity when its guest epoch differs from an owned route.
+    # Providers whose current state cannot prove guest continuity require the full
+    # ordered history for every managed RUNNING instance. Other providers retain
+    # the narrower stale-heartbeat/route-epoch diagnostic probe.
     loss_latched_job_ids: set[str] = set()
+    loss_latched_reasons: dict[str, str] = {}
+    loss_latched_evidence: dict[str, dict[str, Any]] = {}
     if provider_state is not None:
         for operation in provider_state.list_operations(kind="stop"):
-            if operation.request.get("destructivePowerCycle") is True:
-                loss_latched_job_ids.update(operation.target_job_ids)
+            if not _stop_operation_is_destructive_node_loss(operation):
+                continue
+            reason = str(operation.request.get("lossReason") or "post_start_suspension")
+            loss_latched_job_ids.update(operation.target_job_ids)
+            for job_id in operation.target_job_ids:
+                loss_latched_reasons[job_id] = reason
+                loss_latched_evidence[job_id] = dict(operation.request)
     jobs_by_id = {job.id: job for job in jobs}
     if not getattr(args, "jobs_file", None):
         for job in tuple(jobs):
@@ -2830,12 +2867,22 @@ def run_reconcile_cycle(
                 )
             )
             owns_routes = bool(owned_routes)
+            managed_instance = is_managed_compute_instance(
+                job,
+                config.deployment_id,
+            )
+            continuity_history_required = bool(
+                getattr(provider, "requires_continuity_history", False)
+                and managed_instance
+            )
             should_retrieve_history = bool(
                 job.state == "RUNNING"
                 and not job.is_lost
                 and job.id not in loss_latched_job_ids
-                and owns_routes
-                and (stale_heartbeat or route_epoch_mismatch)
+                and (
+                    continuity_history_required
+                    or (owns_routes and (stale_heartbeat or route_epoch_mismatch))
+                )
             )
             if not should_retrieve_history:
                 continue
@@ -2869,16 +2916,54 @@ def run_reconcile_cycle(
             if job_id not in orphaned_stale_heartbeat_job_ids
         }
 
-    destructive_power_cycle_job_ids = tuple(
-        sorted(job.id for job in jobs if job.id in loss_latched_job_ids or job.is_lost)
+    destructive_loss_reasons: dict[str, str] = {
+        job.id: (
+            loss_latched_reasons.get(job.id, "post_start_suspension")
+            if job.id in loss_latched_job_ids
+            else "post_start_suspension"
+        )
+        for job in jobs
+        if job.id in loss_latched_job_ids or job.is_lost
+    }
+    observed_heartbeats = apply_route_reservations_to_heartbeats(
+        heartbeats,
+        route_reservations or {},
     )
+    observed_nodes = merge_jobs_and_heartbeats(
+        jobs,
+        observed_heartbeats,
+        effective_policy,
+    )
+    unreachable_loss_evidence: dict[str, dict[str, Any]] = {}
+    if getattr(provider, "unreachable_lease_expiry_is_permanent_loss", False):
+        for node in observed_nodes:
+            managed_node = is_managed_compute_instance(
+                node.job,
+                config.deployment_id,
+            )
+            if (
+                not managed_node
+                or node.job_id in destructive_loss_reasons
+                or not unreachable_node_lease_expired(node, effective_policy)
+            ):
+                continue
+            reference = unreachable_node_reference(node)
+            if reference is None:
+                continue
+            destructive_loss_reasons[node.job_id] = "ucloud_unreachable_lease_expired"
+            unreachable_loss_evidence[node.job_id] = {
+                "unreachableReference": reference.isoformat(),
+                "lastHeartbeatPresent": node.heartbeat is not None,
+                "lastKnownActiveSandboxes": node.active_sandboxes,
+            }
+    destructive_node_loss_job_ids = tuple(sorted(destructive_loss_reasons))
     final_heartbeat_job_ids = tuple(
         sorted(job.id for job in jobs if job.is_final and job.id in heartbeats)
     )
     fenced_heartbeat_job_ids = tuple(
         sorted(
             set(final_heartbeat_job_ids)
-            | (set(destructive_power_cycle_job_ids) & set(heartbeats))
+            | (set(destructive_node_loss_job_ids) & set(heartbeats))
         )
     )
     if fenced_heartbeat_job_ids and execution_authorized:
@@ -2893,7 +2978,7 @@ def run_reconcile_cycle(
         route_reservations or {},
     )
     nodes = merge_jobs_and_heartbeats(jobs, heartbeats, effective_policy)
-    destructive_job_id_set = set(destructive_power_cycle_job_ids)
+    destructive_job_id_set = set(destructive_node_loss_job_ids)
     nodes = [
         replace(node, permanently_lost=True)
         if node.job_id in destructive_job_id_set
@@ -2936,7 +3021,7 @@ def run_reconcile_cycle(
     destructive_sandbox_job_ids = {
         node.job_id
         for node in sandbox_nodes
-        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in destructive_job_id_set
     }
     lost_sandbox_routes = tuple(
         route
@@ -3125,12 +3210,12 @@ def run_reconcile_cycle(
     requested_lost_sandbox_job_ids = tuple(
         node.job_id
         for node in sandbox_nodes
-        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in destructive_job_id_set
     )
     requested_lost_builder_job_ids = tuple(
         node.job_id
         for node in builder_nodes
-        if not node.job.is_final and node.job_id in set(destructive_power_cycle_job_ids)
+        if not node.job.is_final and node.job_id in destructive_job_id_set
     )
     lost_sandbox_stop_job_ids, blocked_lost_sandbox_job_ids = (
         partition_safe_stop_job_ids(
@@ -3210,6 +3295,7 @@ def run_reconcile_cycle(
     unreachable_stop_job_ids = tuple(
         job_id
         for job_id in stop_job_ids
+        if job_id not in destructive_stop_job_ids
         if (node := stop_nodes_by_job_id.get(job_id)) is not None
         and unreachable_node_stop_ready(node, effective_policy)
     )
@@ -3233,7 +3319,12 @@ def run_reconcile_cycle(
     )
     if execution_requested and execution_authorized:
         pending_delete_routes = sorted(
-            (route for route in sandbox_routes if route.delete_operation_id),
+            (
+                route
+                for route in sandbox_routes
+                if route.delete_operation_id
+                and route.job_id not in destructive_job_id_set
+            ),
             key=lambda route: (route.updated_at, route.sandbox_id),
         )
         pending_delete_budget = max(
@@ -3610,16 +3701,40 @@ def run_reconcile_cycle(
                     )
                 elif destructively_lost:
                     node = stop_nodes_by_job_id[job_id]
-                    request.update(
-                        {
-                            "destructivePowerCycle": True,
-                            "postStartSuspensionObserved": True,
-                            "routeCount": len(
-                                (route_reservations or {}).get(job_id, ())
-                            ),
-                            "lastKnownActiveSandboxes": node.active_sandboxes,
-                        }
-                    )
+                    loss_reason = destructive_loss_reasons[job_id]
+                    latched_request = loss_latched_evidence.get(job_id)
+                    if latched_request is not None:
+                        # Provider-operation requests are immutable. Route fencing
+                        # and heartbeat removal after the first attempt must not
+                        # mutate the durable proof on a later retry.
+                        request = dict(latched_request)
+                    else:
+                        request.update(
+                            {
+                                "destructiveNodeLoss": True,
+                                "lossReason": loss_reason,
+                                "routeCount": len(
+                                    (route_reservations or {}).get(job_id, ())
+                                ),
+                                "lastKnownActiveSandboxes": node.active_sandboxes,
+                            }
+                        )
+                        if loss_reason == "post_start_suspension":
+                            request["postStartSuspensionObserved"] = True
+                        elif loss_reason == "ucloud_unreachable_lease_expired":
+                            evidence = unreachable_loss_evidence.get(job_id, {})
+                            request.update(
+                                {
+                                    "providerKind": provider.kind,
+                                    "unreachableLeaseExpired": True,
+                                    "unreachableReference": str(
+                                        evidence.get("unreachableReference") or ""
+                                    ),
+                                    "lastHeartbeatPresent": bool(
+                                        evidence.get("lastHeartbeatPresent", False)
+                                    ),
+                                }
+                            )
                 elif drain_intent is None:
                     raise AutoscalerStateError(
                         f"drain-ready job has no durable intent: {job_id}"
@@ -3635,7 +3750,15 @@ def run_reconcile_cycle(
                     f"{role}:{job_id}:unreachable:{request['unreachableReference']}"
                     if unreachable_ready
                     else (
-                        f"{role}:{job_id}:destructive-power-cycle"
+                        (
+                            f"{role}:{job_id}:destructive-power-cycle"
+                            if destructive_loss_reasons[job_id]
+                            == "post_start_suspension"
+                            else (
+                                f"{role}:{job_id}:destructive-node-loss:"
+                                f"{destructive_loss_reasons[job_id]}"
+                            )
+                        )
                         if destructively_lost
                         else f"{role}:{job_id}:{drain_intent.token}"
                     )
@@ -3667,7 +3790,15 @@ def run_reconcile_cycle(
         "unexpectedly_suspended_job_ids": sorted(
             node.job_id for node in (*sandbox_nodes, *builder_nodes) if node.job.is_lost
         ),
-        "destructive_power_cycle_job_ids": list(destructive_power_cycle_job_ids),
+        "destructive_node_loss_job_ids": list(destructive_node_loss_job_ids),
+        # Retained for readers from older SDK/deployment releases. New code must
+        # use the provider-neutral destructive_node_loss_job_ids field above.
+        "destructive_power_cycle_job_ids": list(destructive_node_loss_job_ids),
+        "unreachable_permanent_loss_job_ids": sorted(
+            job_id
+            for job_id, reason in destructive_loss_reasons.items()
+            if reason == "ucloud_unreachable_lease_expired"
+        ),
         "lost_sandbox_ids": [route.sandbox_id for route in lost_sandbox_routes],
         "buildWarmSandboxResources": build_warm_resources.to_dict(),
         "createIntents": [intent.to_dict() for intent in create_intents],
@@ -3692,6 +3823,9 @@ def run_reconcile_cycle(
         "storage_native_detach_results": storage_native_detach_results,
         "prunedFinalHeartbeats": list(final_heartbeat_job_ids),
         "prunedOrphanedStaleHeartbeats": list(orphaned_stale_heartbeat_job_ids),
+        "fencedNodeLossHeartbeats": sorted(
+            set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
+        ),
         "fencedPowerCycleHeartbeats": sorted(
             set(fenced_heartbeat_job_ids) - set(final_heartbeat_job_ids)
         ),
@@ -4800,15 +4934,21 @@ def should_include_job(
 ) -> bool:
     if job.id in include_ids:
         return True
-    if (
-        not config.deployment_id
-        or job.labels.get(DEPLOYMENT_LABEL) != config.deployment_id
-    ):
+    if not is_managed_compute_instance(job, config.deployment_id):
         return False
-    if not provider.instance_is_eligible(job):
-        return False
-    return (
-        job.labels.get(NODE_LABEL) == "true" or job.labels.get(BUILDER_LABEL) == "true"
+    return provider.instance_is_eligible(job)
+
+
+def is_managed_compute_instance(job: ProviderInstance, deployment_id: str) -> bool:
+    """Return whether a provider instance belongs to this managed deployment."""
+
+    return bool(
+        deployment_id
+        and job.labels.get(DEPLOYMENT_LABEL) == deployment_id
+        and (
+            job.labels.get(NODE_LABEL) == "true"
+            or job.labels.get(BUILDER_LABEL) == "true"
+        )
     )
 
 
@@ -5030,7 +5170,7 @@ def print_reconcile(
             print(f"- {job_id} (blocked: worker storage cannot detach safely)")
         else:
             print(f"- {job_id} (blocked: missing matching deployment label)")
-    lost_job_ids = tuple(result.get("destructive_power_cycle_job_ids", []))
+    lost_job_ids = tuple(result.get("destructive_node_loss_job_ids", []))
     print("Destructive node-loss intents:")
     if not lost_job_ids:
         print("- none")

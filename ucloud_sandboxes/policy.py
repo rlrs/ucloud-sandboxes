@@ -1127,6 +1127,30 @@ def incompatible_stop_candidates(
     )
 
 
+def unreachable_node_lease_expired(
+    node: SandboxNode,
+    policy: ScalePolicy,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Return whether a running node exceeded its unreachable heartbeat lease."""
+
+    if now is None:
+        now = utc_now()
+    timeout_seconds = max(0, policy.unreachable_stop_after_seconds)
+    if (
+        timeout_seconds <= 0
+        or node.job.is_final
+        or not node.job.is_running
+        or node.heartbeat_fresh
+    ):
+        return False
+    reference = unreachable_node_reference(node)
+    return bool(
+        reference is not None and (now - reference).total_seconds() >= timeout_seconds
+    )
+
+
 def unreachable_node_stop_ready(
     node: SandboxNode,
     policy: ScalePolicy,
@@ -1143,17 +1167,9 @@ def unreachable_node_stop_ready(
 
     if now is None:
         now = utc_now()
-    timeout_seconds = max(0, policy.unreachable_stop_after_seconds)
-    if (
-        timeout_seconds <= 0
-        or node.job.is_final
-        or not node.job.is_running
-        or node.heartbeat_fresh
-        or node.active_sandboxes != 0
-    ):
+    if not unreachable_node_lease_expired(node, policy, now=now):
         return False
-    reference = unreachable_node_reference(node)
-    if reference is None or (now - reference).total_seconds() < timeout_seconds:
+    if node.active_sandboxes != 0:
         return False
     heartbeat = node.heartbeat
     if heartbeat is None:

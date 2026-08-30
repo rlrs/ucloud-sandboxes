@@ -48,6 +48,8 @@ class HetznerProvider:
     """Translate autoscaler compute operations to Hetzner Cloud servers."""
 
     kind = "hetzner"
+    requires_continuity_history = False
+    unreachable_lease_expiry_is_permanent_loss = False
 
     def __init__(
         self,

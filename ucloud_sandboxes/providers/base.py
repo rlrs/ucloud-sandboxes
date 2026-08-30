@@ -128,6 +128,8 @@ class ComputeProvider(Protocol):
 
     kind: str
     scope_id: str
+    requires_continuity_history: bool
+    unreachable_lease_expiry_is_permanent_loss: bool
 
     def list_instances(self) -> list[ProviderInstance]: ...
 

@@ -442,7 +442,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["active_lease_count"], 1)
 
     @allow_fixture_mutations
-    def test_fresh_replacement_epoch_still_retrieves_power_cycle_history(
+    def test_fresh_ucloud_node_still_retrieves_power_cycle_history(
         self,
     ) -> None:
         retrieve_calls: list[tuple[str, str, bool]] = []
@@ -503,24 +503,24 @@ class CliTests(unittest.TestCase):
             ControlStateStore(heartbeat_path).upsert_heartbeat(
                 build_heartbeat(
                     job_id="replaced-job",
-                    node_id="new-node",
-                    deployment_id="test-deployment",
-                    node_epoch="new-boot",
+                    node_id="stable-node",
+                    deployment_id="prod-a",
+                    node_epoch="stable-boot",
                     active_sandboxes=0,
                     now=utc_now(),
                 )
             )
             route = sandbox_route(
                 sandbox_id="lost-sandbox",
-                node_id="old-node",
+                node_id="stable-node",
                 job_id="replaced-job",
-                node_url="http://old-node:8090",
+                node_url="http://stable-node:8090",
                 resources=ResourceQuantity(vcpu=2, memory_mb=4096, disk_mb=8192),
                 state="running",
                 generation=1,
                 create_operation_id="create-lost",
                 spec_hash="a" * 64,
-                node_epoch="old-boot",
+                node_epoch="stable-boot",
             )
             config = ucloud_config(
                 project_id="project-1",
@@ -553,13 +553,15 @@ class CliTests(unittest.TestCase):
             [("project-1", "replaced-job", True)],
         )
         self.assertEqual(
-            result["destructive_power_cycle_job_ids"],
+            result["destructive_node_loss_job_ids"],
             ["replaced-job"],
         )
         self.assertEqual(result["lost_sandbox_ids"], ["lost-sandbox"])
 
     @allow_fixture_mutations
-    def test_autoscaler_loop_fences_and_removes_power_cycled_node_routes(self) -> None:
+    def test_ucloud_expired_lease_fences_nonempty_node_without_guest_cleanup(
+        self,
+    ) -> None:
         submitted: list[dict] = []
         terminated: list[tuple[str, ...]] = []
 
@@ -607,7 +609,7 @@ class CliTests(unittest.TestCase):
                                     "parameters": {"diskSize": {"value": 2000}},
                                 },
                                 "status": {
-                                    "state": "SUSPENDED",
+                                    "state": "RUNNING",
                                     "startedAt": 1_700_000_100_000,
                                 },
                             }
@@ -633,11 +635,55 @@ class CliTests(unittest.TestCase):
                     generation=1,
                     create_operation_id="create-lost",
                     spec_hash="a" * 64,
+                    delete_operation_id="delete-lost",
                 )
+            )
+            save_heartbeats(
+                root / "control-state.sqlite",
+                {
+                    "lost-job": NodeHeartbeat(
+                        node_id="lost-node",
+                        job_id="lost-job",
+                        deployment_id="prod-a",
+                        updated_at=utc_now() - timedelta(hours=1),
+                        active_sandboxes=1,
+                        node_url="http://lost-node:8090",
+                        agent_version=package_version(),
+                        inventory_complete=True,
+                        inventory=(
+                            SandboxInventoryEntry(
+                                sandbox_id="lost-sandbox",
+                                generation=1,
+                                operation_id="create-lost",
+                                spec_hash="a" * 64,
+                                state="running",
+                                resources=ResourceQuantity(
+                                    vcpu=2,
+                                    memory_mb=4096,
+                                    disk_mb=8192,
+                                ),
+                            ),
+                        ),
+                        used_resources=ResourceQuantity(
+                            vcpu=2,
+                            memory_mb=4096,
+                            disk_mb=8192,
+                        ),
+                    )
+                },
             )
             config_file = write_ucloud_config(root, deployment_id="prod-a")
             output = io.StringIO()
-            with patch.object(cli, "UCloudClient", ReplacementClient):
+            with (
+                patch.object(cli, "UCloudClient", ReplacementClient),
+                patch.object(
+                    cli,
+                    "_delete_gateway_sandbox",
+                    side_effect=AssertionError(
+                        "lost UCloud guest must not receive sandbox deletes"
+                    ),
+                ) as delete_sandbox,
+            ):
                 with redirect_stdout(output):
                     exit_code = cli.main(
                         [
@@ -652,12 +698,19 @@ class CliTests(unittest.TestCase):
                             "json",
                         ]
                     )
+            delete_sandbox.assert_not_called()
             payload = json.loads(output.getvalue())
             routes = RoutingStore(route_file).sandbox_routes_readonly()
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(len(submitted), 1)
         self.assertEqual(terminated, [("lost-job",)])
+        self.assertEqual(
+            payload["unreachable_permanent_loss_job_ids"],
+            ["lost-job"],
+        )
+        self.assertEqual(payload["destructive_node_loss_job_ids"], ["lost-job"])
+        self.assertEqual(payload["unreachableReadyStopJobIds"], [])
         self.assertEqual(routes, [])
         self.assertEqual(
             [item["sandbox_id"] for item in payload["removedRoutes"]],
@@ -1528,7 +1581,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(mismatch["stopJobIds"], ["owned"])
         self.assertEqual(mismatch["drainingJobIds"], ["owned"])
 
-    def test_unreachable_empty_node_uses_durable_stop_proof_without_drain(
+    def test_ucloud_unreachable_node_uses_durable_loss_proof_without_drain(
         self,
     ) -> None:
         terminate_calls: list[tuple[str, ...]] = []
@@ -1577,9 +1630,20 @@ class CliTests(unittest.TestCase):
                 ),
             ):
                 result = reconcile(config, args, state)
+                retried = reconcile(config, args, state)
+                (stop_operation,) = state.list_operations(kind="stop")
 
         self.assertEqual(terminate_calls, [("owned",)])
-        self.assertEqual(result["unreachableReadyStopJobIds"], ["owned"])
+        self.assertEqual(result["unreachableReadyStopJobIds"], [])
+        self.assertEqual(result["destructive_node_loss_job_ids"], ["owned"])
+        self.assertEqual(retried["destructive_node_loss_job_ids"], ["owned"])
+        self.assertEqual(result["unreachable_permanent_loss_job_ids"], ["owned"])
+        self.assertEqual(stop_operation.request["destructiveNodeLoss"], True)
+        self.assertEqual(
+            stop_operation.request["lossReason"],
+            "ucloud_unreachable_lease_expired",
+        )
+        self.assertEqual(stop_operation.request["routeCount"], 0)
         self.assertEqual(result["drainReadyStopJobIds"], [])
         self.assertEqual(result["drainIntents"], [])
         self.assertEqual(result["bootstrapIntents"], [])

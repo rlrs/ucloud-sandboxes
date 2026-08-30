@@ -40,6 +40,14 @@ class UCloudProvider:
     """Translate the provider-neutral autoscaler contract to SDU UCloud."""
 
     kind = "ucloud"
+    # UCloud may report a job RUNNING again after destroying and replacing its
+    # guest. The ordered update history is therefore required to establish
+    # continuity; the current state alone is not authoritative.
+    requires_continuity_history = True
+    # A UCloud guest that disappears after reaching RUNNING cannot be recovered.
+    # Once its heartbeat lease expires, retaining the provider job cannot preserve
+    # its sandbox inventory and must not block replacement capacity.
+    unreachable_lease_expiry_is_permanent_loss = True
 
     def __init__(
         self,

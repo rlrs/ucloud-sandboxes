@@ -27,6 +27,11 @@ class RequestBodyTooLargeError(ValueError):
 
 
 class JsonHttpHandler(BaseHTTPRequestHandler):
+    # All responses emitted by this base class are explicitly framed with a
+    # Content-Length (or close the connection for an unbounded proxy stream),
+    # so HTTP/1.1 keep-alive is safe.  This is important for the gateway's hot
+    # polling paths, where reconnecting for every request is pure overhead.
+    protocol_version = "HTTP/1.1"
     max_json_body_bytes = DEFAULT_MAX_JSON_BODY_BYTES
     telemetry: Telemetry | None = None
 

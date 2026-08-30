@@ -1010,6 +1010,7 @@ dependencies = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
+    { name = "urllib3" },
 ]
 
 [package.dev-dependencies]
@@ -1025,6 +1026,7 @@ requires-dist = [
     { name = "opentelemetry-api", specifier = ">=1.30,<2" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.30,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.30,<2" },
+    { name = "urllib3", specifier = ">=2.2,<3" },
 ]
 
 [package.metadata.requires-dev]

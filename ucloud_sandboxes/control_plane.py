@@ -20,6 +20,9 @@ from urllib import error, request
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from uuid import uuid4
 
+import urllib3
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
+
 from .capabilities import (
     DISK_QUOTA_CAPABILITY,
     HIBERNATE_LOCAL_CAPABILITY,
@@ -162,6 +165,12 @@ METRICS_RESPONSE_CACHE_TTL_SECONDS = 1.0
 REGISTRY_STATUS_CACHE_TTL_SECONDS = 30.0
 REGISTRY_LAYER_METADATA_TIMEOUT_SECONDS = 2.0
 REGISTRY_LAYER_METADATA_CACHE_MAX_ENTRIES = 4096
+REGISTRY_MANIFEST_CACHE_MAX_ENTRIES = 4096
+REGISTRY_IMMUTABLE_MANIFEST_CACHE_TTL_SECONDS = 5 * 60.0
+REGISTRY_MUTABLE_MANIFEST_CACHE_TTL_SECONDS = 5.0
+IMAGE_INVENTORY_CACHE_TTL_SECONDS = 5.0
+NODE_HTTP_POOL_CONNECTIONS_PER_ORIGIN = 128
+NODE_HTTP_POOL_ORIGINS = 64
 # Treat each additional distinct cold image like 256 MiB of missing transfer.
 # For the observed ~1.1 GiB shared TMax base this spreads after roughly four
 # concurrent related pulls instead of concentrating an entire burst on one node.
@@ -384,6 +393,56 @@ class RegistryLayerMetadataCache:
         return key, repository, digest
 
 
+@dataclass(frozen=True)
+class RegistryManifestResolution:
+    digest: str
+    expires_at: float
+
+
+class RegistryManifestResolutionCache:
+    """Bound repeated verification/protection work for managed manifests."""
+
+    def __init__(self, *, max_entries: int = 4096) -> None:
+        self.max_entries = max(1, int(max_entries))
+        self._lock = RLock()
+        self._records: OrderedDict[
+            tuple[str, str], RegistryManifestResolution
+        ] = OrderedDict()
+
+    def get(self, repository: str, reference: str) -> str:
+        key = (repository, reference)
+        now = time.monotonic()
+        with self._lock:
+            record = self._records.get(key)
+            if record is None:
+                return ""
+            if record.expires_at <= now:
+                self._records.pop(key, None)
+                return ""
+            self._records.move_to_end(key)
+            return record.digest
+
+    def put(self, repository: str, reference: str, digest: str) -> None:
+        normalized = normalize_manifest_digest(digest)
+        if not normalized:
+            return
+        immutable = bool(normalize_manifest_digest(reference))
+        ttl_seconds = (
+            REGISTRY_IMMUTABLE_MANIFEST_CACHE_TTL_SECONDS
+            if immutable
+            else REGISTRY_MUTABLE_MANIFEST_CACHE_TTL_SECONDS
+        )
+        key = (repository, reference)
+        with self._lock:
+            self._records[key] = RegistryManifestResolution(
+                digest=normalized,
+                expires_at=time.monotonic() + ttl_seconds,
+            )
+            self._records.move_to_end(key)
+            while len(self._records) > self.max_entries:
+                self._records.popitem(last=False)
+
+
 class GatewaySchedulingBusyError(RuntimeError):
     """Placement serialization is occupied and the caller should retry."""
 
@@ -429,9 +488,12 @@ class ProxiedResponse:
         return decoded if isinstance(decoded, dict) else {}
 
 
-class _RejectNodeRedirects(request.HTTPRedirectHandler):
-    def redirect_request(self, *_args: object, **_kwargs: object) -> None:
-        return None
+_NODE_HTTP_POOL = urllib3.PoolManager(
+    num_pools=NODE_HTTP_POOL_ORIGINS,
+    maxsize=NODE_HTTP_POOL_CONNECTIONS_PER_ORIGIN,
+    block=True,
+    retries=False,
+)
 
 
 def _open_node_request(
@@ -443,7 +505,20 @@ def _open_node_request(
     # Authenticated node calls must never carry the deployment credential to a
     # redirect target selected by a compromised node endpoint.
     if authenticated:
-        return request.build_opener(_RejectNodeRedirects()).open(req, timeout=timeout)
+        try:
+            return _NODE_HTTP_POOL.request(
+                req.get_method(),
+                req.full_url,
+                body=req.data,
+                headers=dict(req.header_items()),
+                redirect=False,
+                retries=False,
+                preload_content=False,
+                pool_timeout=timeout,
+                timeout=urllib3.Timeout(connect=timeout, read=timeout),
+            )
+        except Urllib3HTTPError as exc:
+            raise error.URLError(exc) from exc
     return request.urlopen(req, timeout=timeout)
 
 
@@ -464,6 +539,10 @@ class ControlPlaneHandler(BuildContextHttpHandler):
     registry_status_cache: dict[str, Any] | None
     registry_status_cache_at: float
     registry_status_lock: RLock
+    registry_manifest_cache: RegistryManifestResolutionCache | None = None
+    image_inventory_cache: tuple[dict[str, Any], ...] | None = None
+    image_inventory_cache_at: float = 0.0
+    image_inventory_cache_lock: RLock = RLock()
     metrics_response_cache: bytes | None
     metrics_response_cache_at: float
     metrics_response_lock: RLock
@@ -2147,7 +2226,29 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         self._write_json({"sandboxes": sandboxes, "cached": False})
 
     def _list_images_across_nodes(self) -> None:
-        self._write_json({"images": self._image_records_across_nodes()})
+        handler_cls = type(self)
+        now = time.monotonic()
+        with handler_cls.image_inventory_cache_lock:
+            cached = handler_cls.image_inventory_cache
+            if (
+                cached is not None
+                and now - handler_cls.image_inventory_cache_at
+                <= IMAGE_INVENTORY_CACHE_TTL_SECONDS
+            ):
+                images = [dict(record) for record in cached]
+            else:
+                images = self._image_records_across_nodes()
+                handler_cls.image_inventory_cache = tuple(
+                    dict(record) for record in images
+                )
+                handler_cls.image_inventory_cache_at = time.monotonic()
+        self._write_json({"images": images})
+
+    def _invalidate_image_inventory_cache(self) -> None:
+        handler_cls = type(self)
+        with handler_cls.image_inventory_cache_lock:
+            handler_cls.image_inventory_cache = None
+            handler_cls.image_inventory_cache_at = 0.0
 
     def _image_records_across_nodes(
         self,
@@ -2320,8 +2421,19 @@ class ControlPlaneHandler(BuildContextHttpHandler):
             self.image_manager.store.upsert(ImageRecord.from_dict(raw_image))
         except ValueError:
             pass
+        self._invalidate_image_inventory_cache()
 
     def _managed_registry_manifest_digest(self, image_ref: str) -> str:
+        try:
+            digest = self._resolve_and_protect_managed_manifest(image_ref)
+        except (OSError, ValueError, RegistryRequestError):
+            return ""
+        existing = manifest_digest_from_image_ref(image_ref)
+        if existing and digest != existing:
+            return ""
+        return digest
+
+    def _resolve_and_protect_managed_manifest(self, image_ref: str) -> str:
         existing = manifest_digest_from_image_ref(image_ref)
         if not self.registry_url:
             return existing
@@ -2333,16 +2445,22 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         if coordinates is None:
             return existing
         repository, image_tag = coordinates
+        reference = existing or image_tag
+        cache = self.registry_manifest_cache
+        if cache is not None:
+            cached = cache.get(repository, reference)
+            if cached:
+                return cached
         client = RegistryClient(self.registry_url)
-        try:
-            digest = existing or normalize_manifest_digest(
-                client.manifest_digest(repository, image_tag)
-            )
-            if not digest:
-                return ""
-            client.ensure_digest_protection_tag(repository, digest)
-        except (OSError, ValueError, RegistryRequestError):
+        digest = normalize_manifest_digest(
+            client.manifest_digest(repository, reference)
+        )
+        if not digest or (existing and digest != existing):
             return ""
+        client.ensure_digest_protection_tag(repository, digest)
+        if cache is not None:
+            cache.put(repository, reference, digest)
+            cache.put(repository, digest, digest)
         return digest
 
     def _image_record_with_registry_digest(
@@ -4877,14 +4995,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
         parsed = registry_repository_tag_from_image_ref(tag)
         if parsed is None:
             return False
-        repository, image_tag = parsed
         try:
             recorded_digest = normalize_manifest_digest(
                 str(record.get("manifest_digest") or "")
             )
-            resolved_digest = RegistryClient(self.registry_url).manifest_digest(
-                repository,
-                recorded_digest or image_tag,
+            resolved_digest = self._resolve_and_protect_managed_manifest(
+                image_ref_with_manifest_digest(tag, recorded_digest)
+                if recorded_digest
+                else tag
             )
             if recorded_digest:
                 return normalize_manifest_digest(resolved_digest) != recorded_digest
@@ -5254,10 +5372,14 @@ class ControlPlaneHandler(BuildContextHttpHandler):
                 timeout_seconds=IMAGE_PULL_PROXY_TIMEOUT_SECONDS,
             )
             if not _retryable_image_pull_response(response):
+                if 200 <= response.status < 300:
+                    self._invalidate_image_inventory_cache()
                 return response
             if attempt + 1 < IMAGE_PULL_RETRY_ATTEMPTS:
                 time.sleep(IMAGE_PULL_RETRY_BASE_DELAY_SECONDS * (2**attempt))
         assert response is not None
+        if 200 <= response.status < 300:
+            self._invalidate_image_inventory_cache()
         return response
 
     def _ready_heartbeats(self) -> list[NodeHeartbeat]:
@@ -5648,6 +5770,16 @@ def build_server(
     BoundHandler.registry_status_cache = None
     BoundHandler.registry_status_cache_at = 0.0
     BoundHandler.registry_status_lock = RLock()
+    BoundHandler.registry_manifest_cache = (
+        RegistryManifestResolutionCache(
+            max_entries=REGISTRY_MANIFEST_CACHE_MAX_ENTRIES,
+        )
+        if registry_url
+        else None
+    )
+    BoundHandler.image_inventory_cache = None
+    BoundHandler.image_inventory_cache_at = 0.0
+    BoundHandler.image_inventory_cache_lock = RLock()
     BoundHandler.metrics_response_cache = None
     BoundHandler.metrics_response_cache_at = 0.0
     BoundHandler.metrics_response_lock = RLock()

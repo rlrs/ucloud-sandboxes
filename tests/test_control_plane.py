@@ -1182,6 +1182,117 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIsNone(observed["public_token"])
         self.assertIsNone(observed["proxy_authorization"])
 
+    def test_authenticated_node_requests_reuse_http_connections(self) -> None:
+        client_ports: list[int] = []
+
+        class KeepAliveNode(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self) -> None:
+                client_ports.append(self.client_address[1])
+                body = b'{"ok":true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args: object) -> None:
+                return
+
+        node = ThreadingHTTPServer(("127.0.0.1", 0), KeepAliveNode)
+        pool = control_plane.urllib3.PoolManager(
+            num_pools=1,
+            maxsize=2,
+            block=True,
+            retries=False,
+        )
+        with _running_server(node) as node_url:
+            try:
+                with patch.object(control_plane, "_NODE_HTTP_POOL", pool):
+                    for _ in range(2):
+                        req = request.Request(
+                            f"{node_url}/v1/exec/session/events",
+                            headers={"Authorization": "Bearer node-secret"},
+                        )
+                        with control_plane._open_node_request(
+                            req,
+                            timeout=5,
+                            authenticated=True,
+                        ) as response:
+                            self.assertEqual(response.status, 200)
+                            self.assertEqual(response.read(), b'{"ok":true}')
+            finally:
+                pool.clear()
+
+        self.assertEqual(len(client_ports), 2)
+        self.assertEqual(len(set(client_ports)), 1)
+
+    def test_image_inventory_coalesces_repeated_reads(self) -> None:
+        class CachedHandler(control_plane.ControlPlaneHandler):
+            pass
+
+        CachedHandler.image_inventory_cache = None
+        CachedHandler.image_inventory_cache_at = 0.0
+        CachedHandler.image_inventory_cache_lock = Lock()
+        handler = object.__new__(CachedHandler)
+        loads = 0
+        payloads: list[dict[str, object]] = []
+
+        def load_images() -> list[dict[str, object]]:
+            nonlocal loads
+            loads += 1
+            return [{"id": "image-one", "tag": "busybox:latest"}]
+
+        handler._image_records_across_nodes = load_images
+        handler._write_json = lambda payload: payloads.append(payload)
+
+        handler._list_images_across_nodes()
+        handler._list_images_across_nodes()
+
+        self.assertEqual(loads, 1)
+        self.assertEqual(payloads[0], payloads[1])
+
+    def test_managed_manifest_verification_and_protection_are_cached(self) -> None:
+        digest = "sha256:" + "a" * 64
+        tag = "registry.example/team/image:v1"
+        handler = object.__new__(control_plane.ControlPlaneHandler)
+        handler.registry_url = "http://registry.example"
+        handler.registry_worker_url = ""
+        handler.registry_manifest_cache = (
+            control_plane.RegistryManifestResolutionCache(max_entries=8)
+        )
+        record = {
+            "id": "image-one",
+            "tag": tag,
+            "source": "build:/tmp/context",
+            "state": "available",
+            "pushed": True,
+            "manifest_digest": digest,
+        }
+
+        with (
+            patch.object(
+                control_plane.RegistryClient,
+                "manifest_digest",
+                return_value=digest,
+            ) as resolve,
+            patch.object(
+                control_plane.RegistryClient,
+                "ensure_digest_protection_tag",
+                return_value="ucloud-digest-a",
+            ) as protect,
+        ):
+            self.assertFalse(handler._image_record_missing_registry_manifest(record))
+            first = handler._image_record_with_registry_digest(record)
+            self.assertFalse(handler._image_record_missing_registry_manifest(record))
+            second = handler._image_record_with_registry_digest(record)
+
+        self.assertEqual(first["manifest_digest"], digest)
+        self.assertEqual(second["manifest_digest"], digest)
+        resolve.assert_called_once_with("team/image", digest)
+        protect.assert_called_once_with("team/image", digest)
+
     def test_gateway_stamps_heartbeat_receipt_time_and_enforces_deployment(
         self,
     ) -> None:
